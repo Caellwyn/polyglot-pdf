@@ -120,6 +120,12 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
   revisiting the client signals. (See `standards/voice-and-vad.md`.)
 - **Idle watchdog** closes a form-fill socket after `WS_IDLE_TIMEOUT_SEC` of no
   inbound traffic, sending a graceful `{"type":"idle_timeout"}` first.
+- **"Sections" is canon; "parts" is a distinct level, not a synonym.** The internal
+  section-state vars and the token-log/handshake keys are section-canonical
+  (`polyglot-pdf-gfb.4` + `polyglot-pdf-zun`). The handshake **manifest `parts` key
+  keeps its name because it IS the backend wire contract** -- and its entries are
+  SECTION-shaped, not `FormPart` objects (see Surface contracts, contract 2). Don't
+  name new section state `part` (`standards/terminology.md`, `polyglot-pdf-m3f`).
 
 ## Surface contracts
 
@@ -186,7 +192,9 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
     The drift that DOES silently revert a string to English is a key outside that
     tolerated set -- e.g. a bare ISO-639-1 code whose BCP-47 stem differs
     (`zh` for Chinese, whose accepted stem is `cmn`). Applied in
-    `manifest_service.py:126-127`.
+    `manifest_service.py`: spoken-name overrides at :126-127, option-label
+    overrides at :165-166 (deliberately AFTER `_sanitize_options`, so they hit
+    the model-facing dicts).
   - `show_if`/`require_if` conditions: normalized by TWIN implementations --
     Python `iter_condition_atoms` (`form_models.py:345`) and TS
     `normalizeToComposite`
@@ -208,7 +216,8 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:929`)
 / `getJITHandshakePayload` (DTI, :973), sent by `frontend/src/webFormConnection.ts:595`.
-Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:1012-1230`).
+Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:976`;
+handshake keys parsed :1044-1168).
 **No Pydantic model or TS interface pins this shape** -- every key is read with
 `.get()` and a default, so a renamed key silently degrades (e.g. a dropped
 `kit_id` logs `form_id="unknown"` in the audit trail).
@@ -294,19 +303,27 @@ templates and the prose, not key names. System instruction:
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
 
 Producer: client state `SchemaFormState.fieldValues`
-(`frontend/src/schema-forms/state/schemaFormState.ts:25`, persisted :250-270);
-request assembled in `SchemaForm.tsx:602-672`, which runs every value through
-`unwrapFieldValue` (`frontend/src/schema-forms/utils/fieldValue.ts:77-82`) --
-**dropping `confirmed`/`skipped`/`steered` flags entirely** -- and POSTs
+(`frontend/src/schema-forms/state/schemaFormState.ts:25`, persisted :250-270).
+THREE call sites assemble the request -- download and print
+(`frontend/src/schema-forms/components/SchemaForm.tsx:601-638` and :640-670)
+plus the in-browser preview
+(`frontend/src/pdf-view/FilledPreviewModal.tsx:62`, with its own unwrap loop
+:58-61). All run every value through `unwrapFieldValue`
+(`frontend/src/schema-forms/utils/fieldValue.ts:77-82`) --
+**dropping `confirmed`/`skipped`/`steered` flags entirely** -- and POST
 `{kit_id, pdf_filename, field_values, form_schema}`
-(`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`).
+(`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`). A payload-shape change
+made against only one call site silently misses the other two.
 Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-45`).
 
 - **The backend fills from the CLIENT-SUBMITTED `form_schema`**, typed
   `Dict[str, Any]` -- no `FormSchema` validation runs at fill time, the kit
   store is consulted only for the PDF bytes (:68), and the extraction-time
-  `acroform.json` ledger is never read on this path (its only consumer is
-  `backend/services/widget_picker.py`, editor tooling). *Breaks:* a stale or
+  `acroform.json` ledger is never read on this path -- its readers all live on
+  the editor/publish surface (`_load_kit_dump`,
+  `backend/routes/editor_kit_routes.py:393-396`, called from the lint routes
+  and the mark-complete promotion gate at :1571, feeding the pure-function
+  checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
@@ -328,7 +345,8 @@ The chain: Gemini `confirm_field` tool -> backend request
 (`request_coordinator.py:314-319`) -> client verifies it has a usable value and
 acks (`webFormConnection.ts:1705+`, reply built :2908-2927 -- `reason` is a fixed
 category token, never a field value) -> backend logs ONLY on a positive ack
-(`callback_handler.py:944-956` guards on `recorded`). Event shape (NO PII, no
+(the `recorded` guard at `callback_handler.py:914`; the `log_field_confirmation`
+call it protects at :944-956). Event shape (NO PII, no
 `value` key anywhere): `backend/utils/confirmation_logger.py:270-285` --
 `{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
 field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL
@@ -338,9 +356,3 @@ identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
 handshake (`schemaFormState.ts:1049-1063`) -- see contract 2. *Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).
-- **"Sections" is canon; "parts" is a distinct level, not a synonym.** The internal
-  section-state vars and the token-log/handshake keys are section-canonical
-  (`polyglot-pdf-gfb.4` + `polyglot-pdf-zun`). The handshake **manifest `parts` key
-  keeps its name because it IS the backend wire contract** -- and its entries are
-  SECTION-shaped, not `FormPart` objects (see Surface contracts, contract 2). Don't
-  name new section state `part` (`standards/terminology.md`, `polyglot-pdf-m3f`).
