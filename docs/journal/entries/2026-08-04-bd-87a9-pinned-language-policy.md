@@ -142,10 +142,16 @@ the next reconnect snapped it back.
 
 It survived every previous sweep *because* it is not a comment. I had been
 grepping for stale documentation, and this is code. The SI now says the language
-is fixed for the whole form and tells the model to point a user who asks at the
-"clear form" button -- a useful answer rather than an impossible one. +136 chars
-(0.8%), recorded in si-reduction.md, and pinned by a test that asserts the
-superseded sentence is GONE, not merely that the new one is present.
+is fixed for the whole form and tells the model that a user who asks would need
+to start over -- a useful answer rather than an impossible one. It describes the
+clear-form control by what it DOES and never names it, because the on-screen
+label is translated (see the round-6 section below; the first version of this
+clause quoted the English label and had to be fixed). Pinned by a test asserting
+the superseded sentence is GONE, not merely that the new one is present.
+
+Final SI cost, measured at HEAD rather than mid-round: 17,178 -> 17,555 chars
+(+377, +2.2%), matching si-reduction.md. An earlier draft of this paragraph said
+"+136 (0.8%)" -- the round-5 figure, taken before round 6 rewrote the clause.
 
 Both reviewers filed it independently in the same round (bd o1k9 / nl6v, both now
 closed), which is the argument for the two-independent-passes gate: they had
