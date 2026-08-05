@@ -124,6 +124,45 @@ as a change: `full_schema or schema` truthiness (the reviewer's low-confidence
 nit) -- switched to `is not None` anyway while fixing the same lines, since it
 is the consistent idiom.
 
+**Fresh-eyes round 2 (Opus clearing round): GAPS-FOUND (5), all resolved.** It
+independently re-ran the round-1 mutations rather than trusting the report, then
+found a second rubric FAIL:
+
+1. ADOPTED (criterion 2 FAIL): **"never blocks" was unpinned at the gate that
+   can block.** The lint-level test asserts `severity == SEVERITY_WARNING` --
+   which pins the LABEL, not the behavior. `set_editor_kit_status` 409s on any
+   lint ERROR and never sees that assertion, so the reviewer flipped the
+   severity to ERROR and watched all 132 editor tests stay green while every
+   edition-less custom form became un-publishable -- exactly the firm-tier
+   breakage the maintainer overruled. Fixed with a route-level test that
+   publishes an edition-less kit and asserts 200; verified it fails under that
+   same severity flip.
+2+5. ADOPTED: a dead local (`edition_date = self._edition_date`, read by
+   nothing) sat three lines above the constructor that deliberately uses
+   `self._`, inviting a future "simplification" straight back into the round-1
+   bug. And the guard's second disjunct (`or self._edition_date is None`) was
+   defended only by a comment -- the reviewer replaced the guard with the weaker
+   form the comment argues against and all 24 tests stayed green. Both resolved
+   by **removing** the disjunct: the marker is now computed only when
+   `full_schema` is present.
+3. RESOLVED BY THAT SIMPLIFICATION (reviewer filed `polyglot-pdf-n41r`, closed
+   inline): the disjunct was the only path by which a SECTION-derived
+   fingerprint could be pinned. A session that never receives a full_schema now
+   keeps `edition_date` None -- "not recorded" is honest; a one-section digest
+   masquerading as the form's revision is not.
+4. DEFERRED (reviewer filed `polyglot-pdf-d95y`): the legacy non-JIT handshake
+   never sends `kit_id`, so those confirmations record null. Genuinely separate
+   (a different transport's payload builder), left open.
+
+**A fixture that omitted `full_schema` hid the whole question.** Tightening the
+guard broke three tests -- correctly. Production sends `full_schema` on BOTH
+handshake shapes (`schemaFormState.ts:953` legacy, `:1028` JIT); my fixtures
+omitted it, so they had been exercising a shape no client produces. Fixed the
+fixtures rather than loosening the code, and added
+`test_edition_marker_is_stable_across_a_reconnect` -- because recomputing on
+every reconnect is only safe if the same schema yields the same marker, and
+mid-form reconnects are routine (Gemini's ~10-minute cap).
+
 ## Lessons
 
 - **A `-k`-filtered run is iteration, never evidence.** I reported "21 passing"

@@ -332,19 +332,25 @@ class FormFillingService:
         # mid-session, the opposite of "pins a revision", and every confirmation
         # after section 1 lost its kit.
         #
-        # The edition marker is computed ONLY on a client (re)connect, which is
-        # the only caller that supplies full_schema. Guarding on `edition_date
-        # is not None` alone is NOT enough: the section schema still yields a
-        # (wrong) fingerprint from its own fields, which would overwrite the
-        # session's real one.
+        # The edition marker is computed ONLY on a client (re)connect -- the one
+        # caller that supplies full_schema. Guarding merely on "not already set"
+        # would NOT be enough: the section schema still yields a fingerprint from
+        # its own single section, which would overwrite the session's real
+        # whole-form marker. A reconnect recomputes from the same full schema and
+        # so yields the same marker (pinned by
+        # test_edition_marker_is_stable_across_a_reconnect).
+        #
+        # A session that never receives a full_schema (a pre-p68s client) keeps
+        # edition_date None rather than pinning a section-derived digest --
+        # deliberate: "not recorded" is honest, a one-section fingerprint
+        # masquerading as the form's revision is not (bd polyglot-pdf-n41r).
         if kit_id is not None:
             self._kit_id = kit_id
-        if full_schema is not None or self._edition_date is None:
+        if full_schema is not None:
             self._edition_date = _resolve_edition_marker(
                 schema.get("form_metadata", {}).get("edition_date") if schema else None,
-                full_schema if full_schema is not None else schema,
+                full_schema,
             )
-        edition_date = self._edition_date
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
         self._form_session_id = form_session_id or session_id

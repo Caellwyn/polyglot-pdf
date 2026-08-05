@@ -1082,6 +1082,39 @@ def test_status_flip_preserves_other_metadata(client):
 # polyglot-pdf-7jmy, which needs a manifest/wire change to carry it.
 
 
+def test_a_kit_with_no_edition_date_can_still_be_published(client):
+    """A custom form MUST stay publishable (bd polyglot-pdf-47r3, maintainer call).
+
+    The audit-identity lint rule is a WARNING precisely so a firm's own intake
+    sheet -- which has no government edition date -- is not blocked; the record
+    falls back to a content fingerprint instead.
+
+    This asserts the BEHAVIOR at the gate that can actually block, not the
+    severity label. The lint-level test (test_missing_edition_date_warns_but_
+    never_blocks) pins the label, but set_editor_kit_status 409s on ANY lint
+    ERROR and never sees that assertion -- an Opus review proved a severity flip
+    to ERROR left all 132 tests in this file green while making every
+    edition-less kit un-publishable.
+    """
+    c, _store, root = client
+    schema = {
+        **VALID_SCHEMA,
+        "form_metadata": {"title": "Acme Intake", "version": "unknown"},
+    }
+    assert "edition_date" not in schema["form_metadata"]
+    _make_kit(root, "acme-intake", status="draft", schema=schema)
+
+    r = c.post(
+        "/api/editor/kits/acme-intake/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "acme-intake" / "metadata.json").read_text())
+    assert meta["status"] == "complete"
+
+
 def test_promotion_stamps_the_publish_date(client):
     c, _store, root = client
     _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA)

@@ -58,6 +58,22 @@ def _jit_handshake(**overrides) -> dict:
             "parts": [],
         },
         "first_field_schema": {"id": "name", "name": "Full Name", "type": "text"},
+        # The real client ALWAYS sends full_schema on both handshake shapes
+        # (schemaFormState.ts:953 legacy / :1028 JIT) -- it is the secretary's
+        # whole-form catalog (bd p68s). The edition marker is resolved from it,
+        # so a fixture omitting it does not represent production traffic.
+        "full_schema": {
+            "form_metadata": {
+                "title": "Application for IRS Individual Taxpayer Identification Number",
+                "form_number": "W-7",
+                "edition_date": "12/2024",
+            },
+            "fields": [
+                {"id": "name", "name": "Full Name", "type": "text"},
+                {"id": "reason", "type": "select",
+                 "options": [{"value": "a"}, {"value": "b"}]},
+            ],
+        },
         "loaded_field_ids": [],
         "form_title": "Application for IRS Individual Taxpayer Identification Number",
         "form_number": "W-7",
@@ -66,6 +82,27 @@ def _jit_handshake(**overrides) -> dict:
         "current_values": {},
     }
     handshake.update(overrides)
+    return handshake
+
+
+def _with_edition(edition_date, **overrides) -> dict:
+    """A handshake whose FULL SCHEMA carries the given edition (or none).
+
+    The marker is resolved from full_schema (the whole-form catalog), never the
+    per-section schema -- a section-derived fingerprint would change as the user
+    moves through the form. Tests that vary the edition must therefore vary it
+    here, not in the top-level handshake key.
+    """
+    handshake = _jit_handshake(**overrides)
+    metadata = dict(handshake["full_schema"]["form_metadata"])
+    if edition_date is None:
+        metadata.pop("edition_date", None)
+    else:
+        metadata["edition_date"] = edition_date
+    handshake["full_schema"] = {
+        **handshake["full_schema"], "form_metadata": metadata,
+    }
+    handshake["edition_date"] = edition_date
     return handshake
 
 
@@ -153,8 +190,8 @@ def test_edition_date_distinguishes_revisions_of_one_form(ws_client):
     A form filled against the 12/2024 edition and one filled after a 2026
     revision must not read identically in the trail.
     """
-    old = _jit_handshake(edition_date="12/2024")
-    revised = _jit_handshake(edition_date="03/2026")
+    old = _with_edition("12/2024")
+    revised = _with_edition("03/2026")
 
     identity = _run_handshakes_identity(ws_client, [old, revised])
 
@@ -182,6 +219,29 @@ def test_edition_date_survives_a_title_and_number_less_handshake(ws_client):
         "kit_id": "w7",  # kit_id rides its own argument, not form_metadata
         "edition_date": "12/2024",  # survives as the sole form_metadata key
     }]
+
+
+def test_edition_marker_is_stable_across_a_reconnect(ws_client):
+    """A reconnect must not DRIFT the marker (Opus review on 47r3).
+
+    Each (re)connect supplies full_schema and so recomputes the marker. That is
+    only safe if the same full schema yields the same value -- otherwise a
+    mid-form reconnect (Gemini's ~10-minute session cap makes these routine)
+    would silently record two different 'revisions' for one sitting. Uses a
+    FINGERPRINT kit (no government edition), which is the case that recomputes
+    rather than echoing a literal date.
+    """
+    fss = "fss_reconnect_marker"
+    handshakes = [
+        _with_edition(None, form_session_id=fss),
+        _with_edition(None, form_session_id=fss, resume=True),
+        _with_edition(None, form_session_id=fss, resume=True),
+    ]
+
+    markers = [i["edition_date"] for i in _run_handshakes_identity(ws_client, handshakes)]
+
+    assert all(m is not None and m.startswith("sha256:") for m in markers), markers
+    assert len(set(markers)) == 1, f"marker drifted across reconnects: {markers}"
 
 
 def test_older_client_omitting_kit_and_edition_degrades_cleanly(ws_client):
