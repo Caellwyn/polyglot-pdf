@@ -37,8 +37,9 @@
 import type { FormField, FieldReview, FieldReviewStatus } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 import { checkFieldComplete } from './validation';
-import { currentIdentity, needsGuidanceAck, staleFieldIds }
+import { GUIDANCE_STALE_RULE, currentIdentity, needsGuidanceAck, staleFieldIds }
   from './guidanceStaleness';
+import { findingFingerprint } from './lintFindings';
 
 // The status a row/icon actually shows, after layering human review over the
 // automatic derivation. 'followup' is the human-flagged state; the other three
@@ -56,22 +57,29 @@ export function getReview(field: FormField): FieldReview {
 }
 
 /**
- * Set (or clear) a field's review status, returning a NEW field. Writing
- * 'unreviewed' with no note (and no guidance ack) drops the _review key
- * entirely so a field an editor reset to neutral serializes clean (no
- * dangling {status:'unreviewed'}).
+ * Rebuild a field's _review record from explicit slot values -- THE one place
+ * the record is reassembled (sprint-18 C1, bd polyglot-pdf-o7y9).
  *
- * The guidance ack (bd anim) is PRESERVED across a status write: it is a
- * separate assertion ("I read the guidance and it still fits the current
- * content") that a status change neither confirms nor withdraws. Rebuilding
- * _review without it silently un-acked a field on the ORDINARY flow -- tick
- * the ack box, then mark reviewed_correct -- re-raising the amber gate with
- * no visible cause (fresh-eyes, closeout round 2).
+ * The record carries FOUR slots: status, note, guidance_ack_sha1, and
+ * seen_fingerprints. Every writer routes through here so a writer can never
+ * silently drop a slot it does not know about -- the three-slot hand-rebuild
+ * dropping the ack on an ordinary status write is a recorded past bug
+ * (fresh-eyes, bd anim closeout round 2), and this helper is the structural
+ * fix rather than a per-writer convention. A fully-neutral record (unreviewed,
+ * no note, no ack, no fingerprints) drops the _review key entirely so a field
+ * an editor reset to neutral serializes clean.
  */
-export function withReviewStatus(field: FormField, status: FieldReviewStatus): FormField {
-  const note = field._review?.note;
-  const ack = field._review?.guidance_ack_sha1;
-  if (status === 'unreviewed' && !note && !ack) {
+function rebuildReview(
+  field: FormField,
+  slots: {
+    status: FieldReviewStatus;
+    note?: string;
+    ack?: string;
+    seen?: string[];
+  },
+): FormField {
+  const { status, note, ack, seen } = slots;
+  if (status === 'unreviewed' && !note && !ack && seen === undefined) {
     const { _review, ...rest } = field;
     return rest;
   }
@@ -81,34 +89,77 @@ export function withReviewStatus(field: FormField, status: FieldReviewStatus): F
       status,
       ...(note ? { note } : {}),
       ...(ack ? { guidance_ack_sha1: ack } : {}),
+      ...(seen !== undefined ? { seen_fingerprints: seen } : {}),
     },
   };
+}
+
+/** The current slot values of a field's _review, for a writer to preserve
+ * whatever it is not itself changing. */
+function currentSlots(field: FormField): {
+  note?: string; ack?: string; seen?: string[];
+} {
+  return {
+    note: field._review?.note,
+    ack: field._review?.guidance_ack_sha1,
+    seen: Array.isArray(field._review?.seen_fingerprints)
+      ? field._review?.seen_fingerprints
+      : undefined,
+  };
+}
+
+/**
+ * Set (or clear) a field's review status, returning a NEW field. Writing
+ * 'unreviewed' with no other populated slot drops the _review key entirely so
+ * a field an editor reset to neutral serializes clean (no dangling
+ * {status:'unreviewed'}).
+ *
+ * The guidance ack (bd anim) is PRESERVED across a status write: it is a
+ * separate assertion ("I read the guidance and it still fits the current
+ * content") that a status change neither confirms nor withdraws. Rebuilding
+ * _review without it silently un-acked a field on the ORDINARY flow -- tick
+ * the ack box, then mark reviewed_correct -- re-raising the amber gate with
+ * no visible cause (fresh-eyes, closeout round 2).
+ *
+ * `currentFindings` (sprint-18 C1): marking reviewed_correct is the SIGN-OFF,
+ * and the STATUS WRITER is the single owner of the seen_fingerprints slot --
+ * the sign-off stamps the fingerprints of every finding anchored to the field
+ * right now (which is what makes a LATER finding demote the field back to
+ * needs-review, the timeliness rule), and any transition AWAY from
+ * reviewed_correct clears the stamp (it records a sign-off that no longer
+ * exists; keeping it would leave a reset-to-neutral field serializing dirty).
+ * Pass the field's current lint findings; with none in hand (degraded lint,
+ * no report yet) the stamp is the empty set, so findings that surface later
+ * are honestly NEW relative to this review. The note and ack writers preserve
+ * the slot verbatim.
+ */
+export function withReviewStatus(
+  field: FormField,
+  status: FieldReviewStatus,
+  currentFindings?: LintFinding[],
+): FormField {
+  const { note, ack } = currentSlots(field);
+  const nextSeen = status === 'reviewed_correct'
+    ? (currentFindings ?? []).map(findingFingerprint)
+    : undefined;
+  return rebuildReview(field, { status, note, ack, seen: nextSeen });
 }
 
 /**
  * Set (or clear) a field's review note, returning a NEW field. A whitespace-only
  * note counts as empty (so it never lands as a "   " tooltip); an empty note on
- * an otherwise-neutral field (no status, no guidance ack) drops the _review key
- * so it serializes clean. The note is stored AS TYPED (internal spacing
- * preserved) once it has real content. The guidance ack survives a note edit
- * for the same reason it survives a status write (see withReviewStatus).
+ * an otherwise-neutral field drops the _review key so it serializes clean. The
+ * note is stored AS TYPED (internal spacing preserved) once it has real
+ * content. The guidance ack and the sign-off fingerprints survive a note edit
+ * for the same reason they survive a status write (see withReviewStatus).
  */
 export function withReviewNote(field: FormField, note: string): FormField {
   const status = getReview(field).status;
-  const ack = field._review?.guidance_ack_sha1;
+  const { ack, seen } = currentSlots(field);
   const hasContent = note.trim().length > 0;
-  if (status === 'unreviewed' && !hasContent && !ack) {
-    const { _review, ...rest } = field;
-    return rest;
-  }
-  return {
-    ...field,
-    _review: {
-      status,
-      ...(hasContent ? { note } : {}),
-      ...(ack ? { guidance_ack_sha1: ack } : {}),
-    },
-  };
+  return rebuildReview(field, {
+    status, note: hasContent ? note : undefined, ack, seen,
+  });
 }
 
 /**
@@ -118,33 +169,53 @@ export function withReviewNote(field: FormField, note: string): FormField {
  * backend reports for the field's CONTENT RIGHT NOW -- storing that (never the
  * frozen bake-time hash, which does not move when a human edits) is what makes
  * a LATER edit re-raise the gate instead of one click becoming a permanent
- * waiver. Returns a NEW field; clearing
- * drops the key (and the whole _review record when nothing else remains) so it
- * serializes clean.
+ * waiver. Returns a NEW field; clearing drops the key (and the whole _review
+ * record when nothing else remains) so it serializes clean.
  */
 export function withGuidanceAck(
   field: FormField,
   currentIdentity: string | undefined,
   acknowledged: boolean,
 ): FormField {
-  const current = field._review;
+  const status = getReview(field).status;
+  const { note, ack, seen } = currentSlots(field);
   if (!acknowledged || !currentIdentity) {
-    if (!current?.guidance_ack_sha1) return field;
-    const { guidance_ack_sha1, ...restReview } = current;
-    if (restReview.status === 'unreviewed' && !restReview.note) {
-      const { _review, ...rest } = field;
-      return rest as FormField;
-    }
-    return { ...field, _review: restReview };
+    if (!ack) return field;
+    return rebuildReview(field, { status, note, ack: undefined, seen });
   }
-  return {
-    ...field,
-    _review: {
-      status: current?.status ?? 'unreviewed',
-      ...(current?.note ? { note: current.note } : {}),
-      guidance_ack_sha1: currentIdentity,
-    },
-  };
+  return rebuildReview(field, { status, note, ack: currentIdentity, seen });
+}
+
+/**
+ * The timeliness rule (sprint-18 C1, decision 3): has any finding anchored to
+ * this field appeared SINCE its reviewed_correct sign-off? Compared by
+ * fingerprint (rule + field + path-sans-identity, message excluded) against
+ * the seen_fingerprints the sign-off stamped. An EFFECTIVE-status derivation,
+ * never a stored write -- exactly like the ack gate.
+ *
+ * A sign-off with NO seen_fingerprints slot predates the slot's existence:
+ * those are grandfathered (no demotion) rather than mass-demoted the day this
+ * ships -- the same fail-open the guidance gate takes when it has nothing to
+ * pin against. Every sign-off from now on stamps the slot (empty set
+ * included), so the rule is live for all new reviews.
+ */
+export function newFindingsSinceReview(
+  field: FormField,
+  findings?: LintFinding[],
+): boolean {
+  if (getReview(field).status !== 'reviewed_correct') return false;
+  const seen = field._review?.seen_fingerprints;
+  if (!Array.isArray(seen)) return false; // pre-slot sign-off: grandfathered
+  const seenSet = new Set(seen);
+  // The guidance-staleness rule is EXCLUDED: the ack gate is that rule's sole
+  // owner (its whole design is confirm-or-rewrite, bd anim), and the ack
+  // writer deliberately preserves seen_fingerprints -- so counting the stale
+  // finding here made sign-off-then-drift-then-ack a DEAD END (permanently
+  // amber, no control able to clear it; the ack checkbox was the one exit
+  // and it never touches this slot -- Opus outer review, pass 5). The three
+  // rendering surfaces exclude the rule for the same one-owner reason.
+  return (findings ?? []).some(f =>
+    f.rule !== GUIDANCE_STALE_RULE && !seenSet.has(findingFingerprint(f)));
 }
 
 /**
@@ -161,12 +232,18 @@ export function withGuidanceAck(
  * still be fine, and confirming it is a human judgment, not a defect to fix.
  * This is the same principle as the g63j amendment one layer on -- green means
  * a human said so ABOUT THE CURRENT CONTENT.
+ *
+ * `newSinceReview` (sprint-18 C1) is the timeliness rule's flag, derived by
+ * newFindingsSinceReview: a finding that appeared after the sign-off demotes
+ * the field to the same amber band, for the same reason -- the sign-off never
+ * covered it.
  */
 export function effectiveStatus(
   field: FormField,
   hasLintError = false,
   pageCount?: number,
   needsGuidanceAck = false,
+  newSinceReview = false,
 ): EffectiveStatus {
   const auto = checkFieldComplete(field, pageCount);
   // Red always wins -- a broken field cannot be signed off.
@@ -174,9 +251,10 @@ export function effectiveStatus(
 
   const review = getReview(field).status;
   if (review === 'needs_followup') return 'followup';
-  // An un-acknowledged drift demotes even an explicit reviewed_correct: the
-  // sign-off was given for different content.
-  if (needsGuidanceAck) return 'review';
+  // An un-acknowledged drift -- or a finding newer than the sign-off --
+  // demotes even an explicit reviewed_correct: the sign-off was given for
+  // different content.
+  if (needsGuidanceAck || newSinceReview) return 'review';
   if (review === 'reviewed_correct') return 'complete';
 
   // unreviewed -> ALWAYS amber (bd g63j). Green is a human's word, not the
@@ -187,13 +265,13 @@ export function effectiveStatus(
 }
 
 /**
- * The two booleans every findings-driven status call needs, derived ONCE.
- * Both statusFromFindings and isReviewTargetFromFindings go through here, so
- * the "how do findings become a lint-error flag and a gate flag" recipe has a
+ * The three booleans every findings-driven status call needs, derived ONCE.
+ * statusFromFindings, isCountedReviewed and isReviewTargetFromFindings all go
+ * through here, so the "how do findings become gate flags" recipe has a
  * single definition (Opus outer review, pass 2).
  */
 function gateFlags(field: FormField, findings?: LintFinding[]): {
-  hasLintError: boolean; ackPending: boolean;
+  hasLintError: boolean; ackPending: boolean; newSinceReview: boolean;
 } {
   return {
     hasLintError: (findings ?? []).some(f => f.severity === 'ERROR'),
@@ -202,6 +280,7 @@ function gateFlags(field: FormField, findings?: LintFinding[]): {
       staleFieldIds(findings),
       currentIdentity(findings, field.id),
     ),
+    newSinceReview: newFindingsSinceReview(field, findings),
   };
 }
 
@@ -228,53 +307,99 @@ export function statusFromFindings(
   findings?: LintFinding[],
   pageCount?: number,
 ): EffectiveStatus {
-  const { hasLintError, ackPending } = gateFlags(field, findings);
-  return effectiveStatus(field, hasLintError, pageCount, ackPending);
+  const { hasLintError, ackPending, newSinceReview } = gateFlags(field, findings);
+  return effectiveStatus(field, hasLintError, pageCount, ackPending, newSinceReview);
 }
 
 /**
- * Whether a field is a "review target" -- something the "Next to review" jump
- * should stop on and a work-remaining count should include. Everything except a
- * settled green field: errors, auto-amber, and human-flagged follow-ups all
- * count; a reviewed_correct field does NOT (bd polyglot-pdf-u8t6).
- */
-export function isReviewTarget(
-  field: FormField,
-  hasLintError = false,
-  pageCount?: number,
-  needsGuidanceAck = false,
-): boolean {
-  // Must pass the guidance gate through too (bd anim): a reviewed_correct
-  // field with un-acknowledged stale guidance renders amber via
-  // effectiveStatus, so the review-jump has to STOP on it -- otherwise "next
-  // to review: nothing left" would lie about a row the author can plainly see
-  // is flagged.
-  return effectiveStatus(field, hasLintError, pageCount, needsGuidanceAck)
-    !== 'complete';
-}
-
-/**
- * isReviewTarget, derived from the RAW findings -- the review-jump's twin of
- * statusFromFindings (bd polyglot-pdf-l7u0).
+ * The checkFieldComplete ERROR classes NO backend lint rule covers yet:
  *
- * The row icon and the "next to review" jump must agree about the same field:
- * a jump that skips a row the author can plainly see is amber reports "nothing
- * left to review" while flagged rows sit on screen. Before this, FieldList
- * routed its icon through statusFromFindings but re-assembled the two booleans
- * by hand for the jump -- identical results today, but a change to the gate's
- * inputs would land on one path and not the other, which is the same
- * two-surfaces-disagree defect one layer in.
+ *   - a CHOICE field (select/radio/checkbox_group) with options where
+ *     neither the field nor every option names a PDF widget. The ledger's
+ *     field-backing rule exempts choice types (identity legitimately lives
+ *     per option), and the widget-claim rules need a non-empty claim to fire
+ *     -- so this genuinely unfillable shape earns a red row with no
+ *     count-excluding lint ERROR (Opus fresh-eyes round 2; verified against
+ *     schema_lint);
+ *   - a field with no id or no type at all (hand-edited/drifted kits; no
+ *     lint rule names it -- Opus outer review, pass 1).
+ *
+ * Derived from the SCHEMA alone, so the server can compute the identical
+ * clause (the predicate's both-sides rule holds). Retire the choice-mapping
+ * half once the backend rule ships (bd polyglot-pdf-xuub).
+ */
+function hasUncoveredStructuralError(field: FormField): boolean {
+  if (!field.id || !field.type) return true;
+  const isChoice = field.type === 'select' || field.type === 'radio'
+    || field.type === 'checkbox_group';
+  const options = field.options ?? [];
+  if (!isChoice || options.length === 0 || field.pdf_field_name) return false;
+  return options.some(o => !o.pdf_field_name);
+}
+
+/**
+ * THE pinned count predicate (sprint-18 C1, decision 2): a field counts as
+ * REVIEWED exactly when its human sign-off is current --
+ *
+ *   _review.status == reviewed_correct,
+ *   AND not demoted by the guidance-ack gate,
+ *   AND not demoted by the timeliness rule (no finding newer than the
+ *       sign-off's seen_fingerprints),
+ *   AND no uncovered structural error (the narrow schema-derived clause
+ *       above -- a stand-in until the backend rules ship),
+ *   AND no lint ERROR anchored to the field.
+ *
+ * Inputs the client and the server both possess (_review + lint findings +
+ * the schema itself), so both sides compute the identical number.
+ * checkFieldComplete otherwise LEAVES this predicate: its client-only error
+ * band stays the advisory WHY-list and icon input (a field red for a
+ * lint-covered reason is excluded by the lint clause, not by
+ * checkFieldComplete).
+ */
+export function isCountedReviewed(
+  field: FormField,
+  findings?: LintFinding[],
+): boolean {
+  if (getReview(field).status !== 'reviewed_correct') return false;
+  if (hasUncoveredStructuralError(field)) return false;
+  const { hasLintError, ackPending, newSinceReview } = gateFlags(field, findings);
+  return !hasLintError && !ackPending && !newSinceReview;
+}
+
+/**
+ * Whether a field is a "review target" -- something the "to review" count
+ * includes and the review-jump stops on. Defined as the exact complement of
+ * isCountedReviewed, so the strip's M, the jump, and the reviewed count are
+ * one predicate by construction: M review targets + N reviewed = T total,
+ * always (sprint-18 C1, decision 2).
  */
 export function isReviewTargetFromFindings(
   field: FormField,
   findings?: LintFinding[],
-  pageCount?: number,
 ): boolean {
-  // Shares gateFlags with statusFromFindings, then hands off to isReviewTarget
-  // rather than re-stating its `!== 'complete'` rule. Forking either would be
-  // the same duplicate-definition shape this bead set out to remove, one level
-  // down (Opus outer review, pass 2) -- and it keeps isReviewTarget a live
-  // production path rather than a test-only export.
-  const { hasLintError, ackPending } = gateFlags(field, findings);
-  return isReviewTarget(field, hasLintError, pageCount, ackPending);
+  return !isCountedReviewed(field, findings);
+}
+
+/**
+ * The strip's counts (sprint-18 C1): `reviewed` over the pinned predicate,
+ * `toReview` its exact complement, `total` every non-quarantined field
+ * (ignored fields live outside fields[] by construction, so they are outside
+ * the denominator by construction too). No "resolved" count -- resolving a
+ * finding moves a field between these two buckets, nothing else.
+ */
+export function reviewCounts(
+  fields: FormField[],
+  findingsByField: Map<string, LintFinding[]> | undefined,
+): { reviewed: number; toReview: number; total: number; percentage: number } {
+  let reviewed = 0;
+  for (const field of fields) {
+    if (isCountedReviewed(field, findingsByField?.get(field.id))) reviewed++;
+  }
+  const total = fields.length;
+  return {
+    reviewed,
+    toReview: total - reviewed,
+    total,
+    percentage: total > 0 ? Math.round((reviewed / total) * 100) : 0,
+  };
 }

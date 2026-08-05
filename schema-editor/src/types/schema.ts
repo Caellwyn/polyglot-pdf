@@ -13,6 +13,25 @@ export interface FormSchema {
   // stored at _bakeoff.authoring.option_translation.flags (bd polyglot-pdf-9djc),
   // so dropping this key would silently erase the human-review worklist.
   _bakeoff?: Record<string, any>;
+  // Editor-owned review state for FORM-LEVEL findings (sprint-18 C1, bd
+  // polyglot-pdf-o7y9) -- the schema-level sibling of FormField._review. A
+  // finding with no field anchor (schema-wide coverage, kit-level flags, dump
+  // widget claims) cannot be covered by any field's sign-off, so the pinned
+  // Form row offers the ONE standalone dismiss in the editor; a dismissal
+  // stores the finding's fingerprint here (WARNING-severity findings only --
+  // an ERROR blocks the publish gate regardless, so hiding it would recreate
+  // the confident-strip-then-409 lie). The stored key is CONTENT-bearing
+  // (lintFindings.dismissalKey = the finding's fingerprint plus a hash of its
+  // message), so a dismissal covers exactly the finding a human read and a
+  // CHANGED message re-raises it. That is deliberately wider than the
+  // timeliness fingerprint, which excludes the message: several form-level
+  // rules carry all their content in the message at one fixed path, so a
+  // message-independent key let one click hide a growing problem forever
+  // ("12 of 40 fields" staying dismissed at 300) and hide sibling findings
+  // the human never saw (help-details-not-contained, one per paragraph).
+  // Round-trips like _review: draft save/lint store the raw dict verbatim and
+  // the publish gate validates without re-storing.
+  _form_review?: { dismissed_fingerprints?: string[] };
 }
 
 export interface FormMetadata {
@@ -135,6 +154,18 @@ export interface FieldReview {
   // content, a LATER edit mismatches it and re-raises the gate -- an
   // acknowledgment is not a permanent waiver.
   guidance_ack_sha1?: string;
+  // The fingerprints of every lint finding anchored to this field at the
+  // moment it was signed off reviewed_correct (sprint-18 C1, bd
+  // polyglot-pdf-o7y9). Fingerprint = rule + field + path-sans-identity --
+  // the MESSAGE is deliberately excluded so a copy-pass rewording never
+  // re-raises reviewed fields. Single writer: only the sign-off stamps it
+  // (withReviewStatus -> reviewed_correct); every other _review writer
+  // preserves it verbatim. A finding whose fingerprint is NOT in this set is
+  // NEW since the review, and demotes the field back to needs-review as an
+  // effective-status derivation (never a stored write). Absent on fields
+  // reviewed before this slot existed -- those are grandfathered (no
+  // demotion) rather than mass-demoted on ship.
+  seen_fingerprints?: string[];
 }
 
 export type FieldType =

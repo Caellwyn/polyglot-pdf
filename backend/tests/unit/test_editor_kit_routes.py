@@ -880,6 +880,133 @@ def test_lint_never_4xxs_on_a_malformed_draft(client):
     assert any(f["rule"] == "condition-malformed" for f in body["findings"])
 
 
+# --- POST /kits/{id}/lint: kit-scoped lint with the persisted dump ----------
+# (sprint-18 C1, bd polyglot-pdf-o7y9): the editor strip for an OPEN kit must
+# lint with the SAME inputs as the /status promotion gate -- schema + the kit's
+# acroform.json -- or the two dump-gated rules stay structurally invisible to
+# the strip and a confident 100% can still 409 at the gate.
+
+# Two fields claiming ONE dump widget: the dump-widget-multiclaim ERROR fires
+# only when the dump is passed to lint_schema, which is exactly the difference
+# between the dumpless /lint route and this kit-scoped one.
+_MULTICLAIM_DRAFT = {
+    "source": "pdf",
+    "form_metadata": {"title": "T", "version": "unknown"},
+    "sections": [],
+    "fields": [
+        {"id": "a", "type": "text", "pdf_field_name": "form1[0].shared[0]",
+         "spoken_name": "a", "help": {"instructions": "Enter A."}},
+        {"id": "b", "type": "text", "pdf_field_name": "form1[0].shared[0]",
+         "spoken_name": "b", "help": {"instructions": "Enter B."}},
+    ],
+}
+
+_MULTICLAIM_DUMP = {"fields": [{"name": "form1[0].shared[0]"}]}
+
+
+def test_kit_lint_is_token_gated_and_404s_unknown_kits(client):
+    c, _store, _root = client
+    assert c.post(
+        "/api/editor/kits/i-90/lint", json={"fields": []},
+    ).status_code == 401
+    assert c.post(
+        "/api/editor/kits/no-such-kit/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": []},
+    ).status_code == 404
+
+
+def test_kit_lint_surfaces_the_dump_gated_error_the_dumpless_route_cannot(client):
+    # The C1 exit criterion's backend half: the same draft lints CLEAN of
+    # widget-claim findings through the dumpless route but reports the
+    # dump-widget-multiclaim ERROR through the kit-scoped route -- the same
+    # lint_schema(schema, dump) inputs the /status promotion gate uses.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=_MULTICLAIM_DRAFT)
+    _run(store.put_json_artifact("i-90", _MULTICLAIM_DUMP, "acroform.json"))
+
+    dumpless = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert dumpless.status_code == 200
+    assert not any(
+        f["rule"] == "dump-widget-multiclaim"
+        for f in dumpless.json()["findings"]
+    )
+
+    scoped = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert scoped.status_code == 200
+    body = scoped.json()
+    multi = [f for f in body["findings"] if f["rule"] == "dump-widget-multiclaim"]
+    assert multi and multi[0]["severity"] == "ERROR"
+    assert body["errorCount"] >= 1
+
+
+def test_kit_lint_without_a_dump_degrades_to_the_dumpless_rules(client):
+    # A pre-v96b kit has no acroform.json: the kit-scoped route must then agree
+    # with the dumpless route (and with the gate, which degrades identically).
+    c, _store, root = client
+    _make_kit(root, "old-kit", schema=_MULTICLAIM_DRAFT)
+    scoped = c.post(
+        "/api/editor/kits/old-kit/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    dumpless = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert scoped.status_code == dumpless.status_code == 200
+    assert scoped.json() == dumpless.json()
+
+
+def test_kit_lint_502s_on_a_transient_dump_read_failure(client, monkeypatch):
+    # A FAILED dump read must not silently downgrade the lint to dump-blind
+    # with a 200 the strip presents as authoritative (the confident-clean
+    # state the route exists to end) -- it 502s like the metadata read, which
+    # the strip renders as its "checks did not run" degraded state (Opus
+    # outer review, pass 4). A MISSING dump (pre-v96b kit) still degrades to
+    # the dumpless rules, pinned by the degradation test above.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=_MULTICLAIM_DRAFT)
+
+    async def _boom(_kit_id, _name):
+        raise FormKitStoreError("gcs blip")
+
+    monkeypatch.setattr(store, "load_json_artifact", _boom)
+    r = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert r.status_code == 502
+
+
+def test_kit_lint_lints_the_posted_schema_not_the_stored_one(client):
+    # The strip lints what is ON SCREEN (possibly unsaved), never the stored
+    # copy: post a draft that differs from the stored schema and confirm the
+    # findings describe the posted one.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=VALID_SCHEMA)
+    _run(store.put_json_artifact("i-90", _MULTICLAIM_DUMP, "acroform.json"))
+    r = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert r.status_code == 200
+    assert any(
+        f["rule"] == "dump-widget-multiclaim" for f in r.json()["findings"]
+    )
+
+
 # --- POST /repair: one-click Repair-all (bd polyglot-pdf-zgln, P5.3b) ---------
 
 # A draft with a repairable defect: duplicate/invalid option values that repair

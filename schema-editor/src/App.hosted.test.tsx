@@ -24,17 +24,68 @@ vi.mock('./components/PDFViewer', () => ({
     <div data-testid="pdf">{pdfPath}</div>
   ),
 }));
-vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="list" /> }));
+vi.mock('./components/FieldList', () => ({
+  // data-form-findings surfaces how many form-level findings App routed to
+  // the pinned Form row, so the cross-kit leak is testable (Opus outer
+  // review, pass 1: kit A's stale findings promoted onto kit B's Form row).
+  // data-field-findings surfaces the size of App's FIELD-anchored mirror, so
+  // a test can tell "the mirror survived" from "the mirror was blanked" --
+  // the discrimination the failed-open test previously lacked (bd
+  // polyglot-pdf-ze79, re-raised by the primary review's final pass).
+  FieldList: ({ formFindings, lintFindingsByField }: {
+    formFindings?: unknown[];
+    lintFindingsByField?: Map<string, unknown[]>;
+  }) => (
+    <div
+      data-testid="list"
+      data-form-findings={formFindings?.length ?? 0}
+      data-field-findings={lintFindingsByField?.size ?? 0}
+    />
+  ),
+}));
 // The panel mock exposes a "repair" button that fires onRepairAll (when the host
 // provides it) so App's handleRepairAll wiring is testable through the full tree
 // (bd zgln; fresh-eyes: an isolation test of the panel does not cover App's
 // wiring to it). data-has-repair reflects whether the host passed the callback.
 vi.mock('./components/ValidationPanel', () => ({
-  ValidationPanel: ({ onRepairAll }: { onRepairAll?: () => Promise<void> }) => (
+  ValidationPanel: ({ onRepairAll, onJumpToReview, refusal, onReport }: {
+    onRepairAll?: () => Promise<void>; onJumpToReview?: () => void;
+    refusal?: string | null;
+    onReport?: (report: {
+      findings: unknown[]; errorCount: number; warningCount: number;
+    } | null) => void;
+  }) => (
     <div data-testid="vp" data-has-repair={onRepairAll ? 'yes' : 'no'}>
       {onRepairAll && (
         <button data-testid="repair-all" onClick={() => void onRepairAll()}>
           repair
+        </button>
+      )}
+      {/* The strip's "M to review" control (sprint-18 C1): the mock exposes
+          it so App's jump wiring is testable through the full tree. */}
+      {onJumpToReview && (
+        <button data-testid="strip-jump" onClick={onJumpToReview}>
+          jump
+        </button>
+      )}
+      {/* The refusal line (sprint-18 C1): surfaced so App's produce/clear
+          wiring is testable through the full tree. */}
+      {refusal && <div data-testid="strip-refusal">{refusal}</div>}
+      {/* Emits a canned report through the onReport mirror, so App's
+          findings bookkeeping (incl. the per-form reset) is testable. */}
+      {onReport && (
+        <button
+          data-testid="vp-emit-report"
+          onClick={() => onReport({
+            findings: [{
+              severity: 'ERROR', rule: 'field-unbacked',
+              path: 'fields[0] (id=f1)', message: 'no PDF box',
+              field_id: 'f1',
+            }],
+            errorCount: 1, warningCount: 0,
+          })}
+        >
+          emit report
         </button>
       )}
     </div>
@@ -92,7 +143,8 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
 import { App } from './App';
 import {
   AuthError, clearAccessCode, isHostedMode, listRemoteKits,
-  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit, saveRemoteSchema,
+  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit,
+  saveRemoteSchema, setRemoteStatus,
 } from './utils/remoteKitStore';
 
 beforeEach(() => {
@@ -601,5 +653,152 @@ describe('bd 79tz: afterEach drains queued one-time mocks', () => {
   it('pin (2/2): the next test does NOT inherit it', async () => {
     // Fails with "leaked" if afterEach stops draining queued once-mocks.
     await expect(probeSession()).resolves.toEqual({ role: 'editor' });
+  });
+});
+
+// The strip's "M to review" control (sprint-18 C1, bd polyglot-pdf-o7y9):
+// clicking it walks the fields in reading order and selects the next review
+// target under the pinned predicate -- skipping currently-signed-off fields,
+// wrapping at the end. Pinned through the full App tree because the walk
+// itself lives in App (the strip only fires the callback).
+describe('the strip jump control (sprint-18 C1)', () => {
+  it('selects the next review target in reading order, skipping reviewed fields', async () => {
+    vi.mocked(loadRemoteSchema).mockResolvedValue({
+      form_metadata: { title: 'R', version: '1' },
+      sections: [],
+      fields: [
+        { id: 'f1', name: 'F1', type: 'text' },
+        { id: 'f2', name: 'F2', type: 'text',
+          _review: { status: 'reviewed_correct', seen_fingerprints: [] } },
+        { id: 'f3', name: 'F3', type: 'text' },
+      ],
+    } as unknown as FormSchema);
+    await passGate();
+    await openKit('draft-kit');
+    // The kit opened with nothing selected -> the editor shows metadata.
+    await screen.findByText('edit metadata');
+    fireEvent.click(screen.getByTestId('strip-jump'));
+    await screen.findByText('edit f1');   // first target (unreviewed)
+    fireEvent.click(screen.getByTestId('strip-jump'));
+    await screen.findByText('edit f3');   // skips the signed-off f2
+    fireEvent.click(screen.getByTestId('strip-jump'));
+    await screen.findByText('edit f1');   // wraps back around
+  });
+});
+
+// Findings are PER-FORM state (Opus outer review, pass 1): kit A's findings
+// left in App's mirror would resolve to no field in kit B and be PROMOTED
+// onto B's pinned Form row as blocking errors -- and dismissing one would
+// write A's fingerprint into B's schema.
+describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
+  it('kit A\'s field findings never reach kit B\'s Form row', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    // Kit A has field f1 (the canned report's finding anchors to it); kit B
+    // has a different field, so a leaked finding would resolve to no field.
+    // Keyed by kit id (not queued once-values): the catalogue's own progress
+    // scan also calls loadRemoteSchema and would consume a queue.
+    vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) =>
+      kitId === 'second-kit'
+        ? ({ ...SCHEMA,
+             fields: [{ id: 'b1', name: 'B1', type: 'text' }],
+           } as unknown as FormSchema)
+        : (JSON.parse(JSON.stringify(SCHEMA)) as FormSchema));
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    // A's lint lands: the finding anchors to f1, which A HAS -> no Form row.
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
+    // Open B (its lint never lands in this test): the stale finding must be
+    // CLEARED, not promoted onto B's Form row.
+    await openKit('second-kit');
+    await waitFor(() => expect(
+      screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
+  });
+
+  // NOT COVERED BY A TEST, deliberately and knowingly: that the mirror clear
+  // sits on the SUCCESS path rather than at the top of the open handler.
+  // A failed open renders App's full-screen error state, which unmounts the
+  // whole workspace -- so no rendered surface witnesses the mirror at the
+  // moment of failure, and every route back into the workspace runs another
+  // open (whose own clear makes the two placements indistinguishable). Three
+  // attempts at a discriminating assertion each passed under the mutation;
+  // rather than ship a test whose name claims coverage it does not have (the
+  // defect bd polyglot-pdf-ze79 was filed for, twice), this states the gap.
+  // Verified BY HAND instead: moving clearLintMirror() to the top of
+  // handleOpenRemoteKit and failing an open leaves the surviving kit
+  // findings-blind until the next lint lands. bd polyglot-pdf-ze79 stays
+  // OPEN for a harness that can observe it (an App-level state probe, or a
+  // failed-open path that keeps the workspace mounted).
+  it('a failed open surfaces the error and leaves the previous kit open', async () => {
+    // The clear must sit beside loadSchemaState (success), not at the top of
+    // the handler: run at the attempt, a FAILED open blanks every row's
+    // findings while the strip -- keyed on the unchanged kit id, so it
+    // neither remounts nor re-reports -- keeps counting them, the
+    // strip-vs-rows disagreement this bead removes (Opus outer r9; the
+    // original version of this test never exercised a failure, bd
+    // polyglot-pdf-ze79).
+    //
+    // What this DOES pin (see the note above for what it cannot): a failed
+    // open reports the failure and does not tear down the session -- the
+    // mirror probe still reflects App's state rather than the app having
+    // fallen into an unrecoverable blank.
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-field-findings')).toBe('1');
+
+    // FAIL the next open: the error screen replaces the workspace.
+    vi.mocked(loadRemoteSchema).mockRejectedValueOnce(new Error('network blip'));
+    await openKit('second-kit');
+    await screen.findByText(/network blip/);
+    // The session recovers: dismissing returns to the catalogue and the kit
+    // reopens normally.
+    fireEvent.click(screen.getByText('Dismiss'));
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-field-findings')).toBe('1');
+  });
+
+  it('a SUCCESSFUL switch clears the mirror (no promotion onto the new Form row)', async () => {
+    // Kit B carries a DIFFERENT field, so A's finding would resolve to no
+    // field there and be promoted onto B's pinned Form row if it leaked.
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) =>
+      kitId === 'second-kit'
+        ? ({ ...SCHEMA,
+             fields: [{ id: 'b1', name: 'B1', type: 'text' }],
+           } as unknown as FormSchema)
+        : (JSON.parse(JSON.stringify(SCHEMA)) as FormSchema));
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
+    await openKit('second-kit');
+    await waitFor(() => expect(
+      screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
+  });
+});
+
+// The refusal line is PER-FORM state (sprint-18 C1, fresh-eyes round 3): a
+// Mark-complete refusal about form A must not sit on form B's strip -- its
+// "Go to:" links would name fields B does not have.
+describe('the strip refusal clears on a kit switch (sprint-18 C1)', () => {
+  it('a refusal lands on the strip, then clears when another kit opens', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    vi.mocked(setRemoteStatus).mockRejectedValue(
+      new Error('Schema has 1 lint error(s), so it cannot be marked complete'));
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+    await screen.findByTestId('strip-refusal');
+    await openKit('second-kit');
+    await waitFor(() =>
+      expect(screen.queryByTestId('strip-refusal')).toBeNull());
   });
 });

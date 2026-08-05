@@ -30,6 +30,15 @@ interface RemoteCatalogueProps {
    * "Show form cards" toggle, so the header gives its space to the editor.
    */
   defaultExpanded?: boolean;
+  /**
+   * Mirror a Mark-complete server refusal (publish gate 409/422, translation
+   * coverage) up to the host, which homes it on the bottom strip's
+   * refusal/error line with field links (sprint-18 C1, decision 1). Called
+   * with null when a later status flip succeeds. The card's own inline error
+   * stays -- the strip line is the home NEXT TO the counts the refusal
+   * contradicts.
+   */
+  onStatusRefusal?: (detail: string | null) => void;
 }
 
 interface RemoteKitProgress {
@@ -59,7 +68,7 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   onOpenKit, selectedKitId, role, onAuthError, liveProgress,
-  defaultExpanded = false,
+  defaultExpanded = false, onStatusRefusal,
 }) => {
   const [kits, setKits] = React.useState<RemoteKitEntry[]>([]);
   // bd tynm: the card grid is collapsed by default behind a compact selector
@@ -230,6 +239,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
+    // The strip's refusal line describes the OPEN kit only. The compact
+    // selector gates status actions to the open kit, but the EXPANDED card
+    // grid offers Mark complete on every schema-bearing card -- so a refusal
+    // about kit B must never land on (or clear) open kit A's strip, where
+    // its "Go to:" links would name B's fields (Opus outer review, pass 3;
+    // the same gate FormCatalogue's local cards got in pass 2).
+    const mirrorsToStrip = kit.id === selectedKitId;
+    if (mirrorsToStrip) onStatusRefusal?.(null);
     if (status === 'complete') setCompletingId(kit.id);
     try {
       const result = await setRemoteStatus(kit.id, status);
@@ -256,12 +273,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         onAuthError?.();
         return;
       }
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      const detail = err instanceof Error ? err.message : 'Failed to update status';
+      setError(detail);
+      // A refused completion of the OPEN kit also lands on the strip's
+      // refusal line (sprint-18 C1): the refusal renders next to the counts
+      // it contradicts, with click-to-focus links for any "(id=x)" the gate
+      // names. A refusal about a DIFFERENT kit stays on its card only.
+      if (status === 'complete' && mirrorsToStrip) onStatusRefusal?.(detail);
       setBusy(false);
     } finally {
       setCompletingId(null);
     }
-  }, [refresh, onAuthError]);
+  }, [refresh, onAuthError, onStatusRefusal, selectedKitId]);
 
   // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
   // ANY selected kit (no open involved -- unlike the status actions, which
@@ -378,12 +401,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         .reduce((n, e) => n + e.options_updated, 0);
       const failed = report.failedLanguages;
       // Verify/rectify gate flags (bd 9djc): persisted server-side, so after
-      // the reload below the ValidationPanel lists them -- the notice just
-      // points the author there.
+      // the reload below the lint pass re-emits them and they render at their
+      // option rows in the field editor (sprint-18 C1 -- the warnings pane
+      // that used to list them is gone). The notice points the author there.
       const flagCount = report.flags?.length ?? 0;
       const flagNote = flagCount
         ? `; ${flagCount} translation flag${flagCount === 1 ? '' : 's'} to ` +
-          'review (open the kit -- the validation panel lists them)'
+          'review (open the kit -- flagged fields are marked in the list, ' +
+          'and each flag shows on its answer choice in the field editor)'
         : '';
       if (!report.changed && flagCount === 0) {
         setNotice(`"${kit.id}" option labels are already fully translated.`);
@@ -391,7 +416,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         // No label changed, but the verify gate still flagged translations
         // (reachable on a force re-bake that reproduces identical values):
         // the backend persisted the flags into provenance, so point at the
-        // panel and reload the stored schema like any other change.
+        // flagged rows and reload the stored schema like any other change.
         setNotice(
           `"${kit.id}" option labels are already fully translated` +
           flagNote + '.',

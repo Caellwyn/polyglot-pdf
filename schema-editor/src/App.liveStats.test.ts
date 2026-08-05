@@ -2,7 +2,7 @@
  * liveStats honours the guidance-ack gate (bd anim, Opus round 4).
  *
  * The catalogue bar's live % is computed by App's liveStats; its second
- * argument (the lint findings) is what lets getCompletionStats exclude a
+ * argument (the lint findings) is what lets reviewCounts exclude a
  * reviewed_correct field whose guidance drifted un-acknowledged. This pins
  * the FUNCTION including that wiring; the two JSX call sites are pinned by
  * the TYPE -- `lintFindings` is a required parameter precisely so the
