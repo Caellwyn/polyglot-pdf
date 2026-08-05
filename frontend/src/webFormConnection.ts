@@ -436,8 +436,8 @@ export class WebFormConnection {
 
       try {
         const socket = new WebSocket(finalUrl);
-        // ArrayBuffer delivery, NOT the "blob" default (bd polyglot-pdf-s7uf,
-        // Opus outer review): a Blob frame forces an async arrayBuffer() decode
+        // ArrayBuffer delivery, NOT the "blob" default (bd polyglot-pdf-s7uf):
+        // a Blob frame forces an async arrayBuffer() decode
         // in handleAudioFrame, and onmessage does not wait for the previous
         // handler's promise -- so audio frames could be PARKED on their decode
         // while a later synchronous control message (e.g. `interrupted`)
@@ -761,7 +761,7 @@ export class WebFormConnection {
           // the model is about to speak a NEW generation on this connection.
           console.log('[WebFormConnection] [interrupt] Gemini generation interrupted; draining stale audio');
           this.audioQueue = [];
-          // Mirror the section-switch drain exactly (Opus outer review): the
+          // Mirror the section-switch drain exactly: the
           // pump flag must reset with the queue, or a future async change to
           // processAudioQueue could strand it true and starve all later audio.
           this.isProcessingAudio = false;

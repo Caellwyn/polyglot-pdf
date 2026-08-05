@@ -514,8 +514,8 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// Capture the drain epoch BEFORE the awaitable section: a chunk parked
 			// on the resume() await when a drain (resetPlaybackClock /
 			// flushAudioQueue) lands belongs to the DEAD generation and must not
-			// schedule after the drain returns (Opus fresh-eyes gap 3, bd s7uf).
-			// SCOPE (Opus outer review): the suspended-resume window only opens on
+			// schedule after the drain returns (bd s7uf).
+			// SCOPE: the suspended-resume window only opens on
 			// the manual-VAD tentative-pause path -- native VAD never suspends, so
 			// there this guard is a no-op by design. The native-VAD ordering
 			// hazard lives a layer up and is owned by the WS
@@ -650,17 +650,16 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	function resetPlaybackClock(): void {
 		// Invalidate chunks parked on an await inside playAudio (the
 		// suspended-context resume window): they belong to the generation being
-		// drained (Opus fresh-eyes gap 3, bd s7uf).
+		// drained (bd s7uf).
 		playbackEpoch++
 
 		// Stop all active audio sources. Swap in a NARROWED onended first:
 		// stop() delivers onended on a LATER task (no synchronous flag can
-		// suppress it -- the old isFlushing gate was dead code for exactly that
-		// reason), so a drained source must carry a handler that keeps the
+		// suppress it), so a drained source must carry a handler that keeps the
 		// clock-repair responsibility -- playbackTime catch-up when the context
 		// clock moved past a stale cursor, e.g. across a suspended window --
 		// but never fires window.vffOnAudioPlaybackEnd: a drained source is not
-		// a natural playback end (Opus outer review, both passes). Array
+		// a natural playback end. Array
 		// cleanup is unnecessary here (the array is cleared below).
 		activeAudioSources.forEach(source => {
 			try {
