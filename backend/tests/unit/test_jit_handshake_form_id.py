@@ -272,6 +272,58 @@ def test_older_client_still_yields_the_REAL_edition_from_full_schema(ws_client):
     assert identity[0]["edition_date"] == "12/2024"  # from full_schema, NOT a digest
 
 
+def test_per_section_edition_wins_over_full_schema(ws_client):
+    """The per-section schema's edition takes PRECEDENCE (bd kdrz, round-4 pin).
+
+    Round 3 chose this order deliberately and documented why, but nothing pinned
+    it -- a reviewer inverted the precedence and all 26 tests still passed. That
+    is exactly how the kdrz degradation shipped: an intentional decision with no
+    test defending it. So this makes the two sources DISAGREE and asserts which
+    one wins.
+
+    Why per-section first: it is the schema the client is actually rendering and
+    answering against, so it names the revision the user truly saw. full_schema
+    is the whole-form catalogue and is the FALLBACK for a client that does not
+    send the handshake key at all.
+
+    (In production today the two cannot disagree -- the frontend derives both
+    from one `state.schema` object -- so this is a specification test, not a
+    reproduction of a live case.)
+    """
+    handshake = _jit_handshake(edition_date="03/2026")  # per-section says 03/2026
+    handshake["full_schema"] = {
+        **handshake["full_schema"],
+        "form_metadata": {
+            **handshake["full_schema"]["form_metadata"],
+            "edition_date": "12/2024",  # full_schema disagrees
+        },
+    }
+
+    identity = _run_handshakes_identity(ws_client, [handshake])
+
+    assert identity[0]["edition_date"] == "03/2026"
+
+
+def test_malformed_form_metadata_does_not_kill_the_session(ws_client):
+    """A non-dict form_metadata must not raise (round-4 review).
+
+    websocket_routes validates only that full_schema IS a dict, never the nested
+    form_metadata, so an unguarded .get() there would raise AttributeError
+    inside start_session and drop the WebSocket. Degrade to the fingerprint
+    instead.
+    """
+    handshake = _jit_handshake()
+    handshake.pop("edition_date")
+    handshake["full_schema"] = {
+        **handshake["full_schema"],
+        "form_metadata": "12/2024",  # a STRING, not a dict
+    }
+
+    identity = _run_handshakes_identity(ws_client, [handshake])
+
+    assert identity[0]["edition_date"].startswith("sha256:")
+
+
 def test_fingerprint_is_used_only_when_no_edition_exists_anywhere(ws_client):
     """The digest is the LAST resort, not the first (bd kdrz).
 

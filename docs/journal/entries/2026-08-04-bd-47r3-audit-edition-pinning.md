@@ -198,6 +198,36 @@ than run. Its reasoning traced correctly against the code, but that is weaker
 than rounds 1-2, which actually ran them -- worth noting rather than treating
 all three rounds as equivalent.
 
+**Fresh-eyes round 4 (Opus): both criteria PASS, GAPS-FOUND (2), both fixed.**
+This round EXECUTED all four mandated mutations (round 3 could not reach a venv;
+the prompt handed round 4 the main-repo interpreter path).
+
+1. ADOPTED -- **the precedence I chose in round 3 was completely unpinned.** The
+   reviewer's own novel mutation inverted it (full_schema before per-section)
+   and **all 26 tests passed**. That is precisely how the kdrz degradation
+   shipped: an intentional decision documented in a 12-line comment with no
+   test defending it. Fixed by
+   `test_per_section_edition_wins_over_full_schema`, which makes the two sources
+   DISAGREE and asserts which wins -- verified to fail under the inversion.
+   (The reviewer also traced that the two cannot disagree in production today,
+   since the frontend derives both from one `state.schema` object, so this is a
+   specification test rather than a live-bug reproduction.)
+2. ADOPTED -- the new `full_schema.get("form_metadata")` read was not
+   type-guarded, unlike the `schema` read two lines above. A malformed payload
+   whose `form_metadata` is a string or list raises `AttributeError` inside
+   `start_session` and kills the WS session; `websocket_routes` validates only
+   that `full_schema` itself is a dict, never the nested key. Both reads now go
+   through one isinstance-guarded helper; pinned by
+   `test_malformed_form_metadata_does_not_kill_the_session`.
+
+Filed by the reviewer, NOT folded in: `polyglot-pdf-8x56` -- the fingerprint
+hashes only field id + type + option values, so it is blind to `validation`
+blocks, `required` flips, and `pdf_field_name` remaps. Measured on the shipped
+W-7: 27 of 53 fields carry a `validation` block that the marker cannot see. A
+real quality gap, but the criterion requires only that *a* revision be pinned
+(one is), and widening the hash changes every marker already recorded -- so it
+belongs in its own bead, not this one.
+
 ## Lessons
 
 - **A `-k`-filtered run is iteration, never evidence.** I reported "21 passing"
@@ -220,6 +250,13 @@ all three rounds as equivalent.
   looks like a style call; here it decided whether firms with proprietary forms
   could publish at all. The 23 failing fixtures were the signal that the rule
   was mis-scoped, not that the fixtures needed editing.
+- **A deliberate decision needs a test that makes its alternatives FAIL.** The
+  precedence order got a 12-line comment explaining why it was chosen and no
+  test defending it -- so inverting it passed 26 tests. A comment records
+  intent; only a test where the two options produce DIFFERENT observable results
+  enforces it. The general form: if a choice's inputs never disagree in the
+  current fixtures, the choice is untested no matter how many tests touch that
+  code. Construct the disagreement deliberately.
 - **A test can PIN a bug as correct.** Twice in this bead I wrote an assertion
   that matched what the code did rather than what it should do: first
   `edition_date is None` for a legacy client (when the fallback exists precisely

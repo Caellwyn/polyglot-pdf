@@ -355,11 +355,16 @@ class FormFillingService:
             # away an agency edition we were handed and recorded a fingerprint
             # instead, which is strictly weaker evidence. The fingerprint stays
             # the last resort, for kits that genuinely have no edition.
-            declared_edition = (
-                (schema.get("form_metadata") or {}).get("edition_date") if schema else None
-            )
-            if not (isinstance(declared_edition, str) and declared_edition.strip()):
-                declared_edition = (full_schema.get("form_metadata") or {}).get("edition_date")
+            # Both reads are isinstance-guarded: a malformed payload whose
+            # form_metadata is a string/list would otherwise raise AttributeError
+            # inside .get() and kill the WS session. websocket_routes only
+            # validates that full_schema itself is a dict, never the nested key.
+            def _declared_edition(source: dict | None) -> str | None:
+                metadata = source.get("form_metadata") if isinstance(source, dict) else None
+                value = metadata.get("edition_date") if isinstance(metadata, dict) else None
+                return value if isinstance(value, str) and value.strip() else None
+
+            declared_edition = _declared_edition(schema) or _declared_edition(full_schema)
             self._edition_date = _resolve_edition_marker(declared_edition, full_schema)
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
