@@ -443,11 +443,15 @@ export class WebFormConnection {
         // while a later synchronous control message (e.g. `interrupted`)
         // executed first. That inversion let a dead generation's tail chunks
         // slip past the interrupted drain and re-schedule after it. With
-        // arraybuffer delivery the handler takes no await and messages process
-        // in WIRE ORDER -- which is also the ordering guarantee that makes the
-        // `interrupted` drain correct without a correlation token (Gemini
-        // emits interrupted BEFORE the next generation's audio, so everything
-        // scheduled at drain time is by construction the dead generation's).
+        // arraybuffer delivery the AUDIO path takes no await, so audio frames
+        // and the (fully synchronous) `interrupted` case process in WIRE
+        // ORDER -- the guarantee that makes the drain correct without a
+        // correlation token (Gemini emits interrupted BEFORE the next
+        // generation's audio, so everything scheduled at drain time is by
+        // construction the dead generation's). SCOPE: this covers the audio +
+        // interrupted pair only; other switch cases are async and may
+        // interleave -- do not add an await to handleAudioFrame's ArrayBuffer
+        // branch or to the interrupted case without revisiting this.
         socket.binaryType = 'arraybuffer';
         this.ws = socket;
 
