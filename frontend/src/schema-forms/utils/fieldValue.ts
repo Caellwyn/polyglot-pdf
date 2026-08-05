@@ -70,9 +70,11 @@ export function readFieldEntryWithAlias(
  *  - Reconcile per LOGICAL FIELD, collapsing the `p1_grp` / `p1_grp[]` alias
  *    pair into one decision, so a union can never resurrect a deleted variant.
  *    The surviving key is the one the SCHEMA declares when `knownFieldIds` is
- *    supplied (callers should always supply it); otherwise it falls back to the
- *    winning side's variant. Getting that choice wrong is destructive, not
- *    cosmetic -- see the note on `schemaIds` below.
+ *    supplied (callers should always supply it); otherwise it is the key of the
+ *    WINNING entry -- derived from the winner, never computed separately, or the
+ *    two can disagree and the answer lands under a variant no exact-key reader
+ *    sees. Getting that choice wrong is destructive, not cosmetic -- see the note
+ *    on `schemaIds` below.
  *  - Within a field, the entry with the newer `lastModified` wins (the field the
  *    type comment calls "Timestamp for conflict resolution"). updateField and
  *    markFieldSkipped both stamp it; confirmField deliberately does NOT, because
@@ -94,10 +96,12 @@ export function readFieldEntryWithAlias(
  *    exists only in memory stays visible to the confirm handler's usable-value
  *    gate and the skip handler's already-filled guard.
  *  - An entry present on only one side is kept as-is.
- *  - The SAME newer-stamp rule applies WITHIN one side when it illegally holds
- *    both variants (see pickWithinSide) -- otherwise a fresher hollow write would
- *    lose to a staler answer on one side while winning across sides, which is the
- *    same data resolving two different ways.
+ *  - The ordering rule and the marker carry live in ONE helper each (`firstWins`,
+ *    `mergeEntries`), shared by the cross-side comparison AND the intra-side
+ *    collapse (`pickWithinSide`). Three review rounds found those two paths
+ *    drifting apart a cell at a time -- stamps, then dated-vs-undated, then equal
+ *    stamps and the marker carry -- each time letting the same data resolve two
+ *    different ways. Sharing the helpers makes that structurally impossible.
  */
 export function reconcileFieldValues(
   persisted: Record<string, FieldValue>,
@@ -105,9 +109,6 @@ export function reconcileFieldValues(
   knownFieldIds?: Iterable<string>
 ): Record<string, FieldValue> {
   const baseKeyOf = (k: string) => (k.endsWith('[]') ? k.slice(0, -2) : k);
-  const stampOf = (e: FieldValue | undefined) =>
-    typeof e?.lastModified === 'number' ? e.lastModified : undefined;
-
   // The SCHEMA's own field ids, when the caller can supply them. Collapsing an
   // alias pair means keeping one key and dropping the other, and that choice is
   // only safe if the surviving key is the one the schema uses: SchemaForm.tsx,
@@ -141,27 +142,28 @@ export function reconcileFieldValues(
     const memoryKey = inMemory[base] !== undefined ? base
       : inMemory[bracket] !== undefined ? bracket : undefined;
 
-    const persistedEntry = pickWithinSide(persisted, base, bracket, persistedKey);
-    const memoryEntry = pickWithinSide(inMemory, base, bracket, memoryKey);
+    const persistedPick = pickWithinSide(persisted, base, bracket, persistedKey);
+    const memoryPick = pickWithinSide(inMemory, base, bracket, memoryKey);
 
-    if (persistedEntry === undefined && memoryEntry === undefined) continue;
+    if (persistedPick === undefined && memoryPick === undefined) continue;
 
-    // Prefer the SCHEMA's own variant when we know it; otherwise keep the key
-    // the winning side used (the pre-schema-aware behaviour).
+    // Prefer the SCHEMA's own variant when we know it; otherwise keep the key of
+    // the WINNING entry -- never a key derived separately, or the two can
+    // disagree and the answer lands under a variant no exact-key reader sees.
     const preferred = schemaKeyFor(base, bracket);
 
     // Present on one side only -- keep it under the key that side used.
-    if (memoryEntry === undefined) {
-      out[preferred ?? (persistedKey as string)] = persistedEntry as FieldValue;
+    if (persistedPick === undefined) {
+      out[preferred ?? memoryPick!.key] = memoryPick!.entry;
       continue;
     }
-    if (persistedEntry === undefined) {
-      out[preferred ?? (memoryKey as string)] = memoryEntry;
+    if (memoryPick === undefined) {
+      out[preferred ?? persistedPick.key] = persistedPick.entry;
       continue;
     }
 
-    const persistedStamp = stampOf(persistedEntry);
-    const memoryStamp = stampOf(memoryEntry);
+    const persistedEntry = persistedPick.entry;
+    const memoryEntry = memoryPick.entry;
 
     // Which side wins, and the merge, are BOTH delegated to the shared helpers
     // below -- the same ones pickWithinSide uses. Three review rounds found the
@@ -175,7 +177,7 @@ export function reconcileFieldValues(
       persistedWins ? memoryEntry : persistedEntry
     );
 
-    out[preferred ?? ((persistedWins ? persistedKey : memoryKey) as string)] =
+    out[preferred ?? (persistedWins ? persistedPick.key : memoryPick.key)] =
       merged as FieldValue;
   }
 
@@ -203,20 +205,29 @@ function pickWithinSide(
   base: string,
   bracket: string,
   presentKey: string | undefined
-): FieldValue | undefined {
+): { entry: FieldValue; key: string } | undefined {
   if (presentKey === undefined) return undefined;
   const a = map[base];
   const b = map[bracket];
   if (a === undefined || b === undefined) {
-    return readFieldEntryWithAlias(map, presentKey);
+    const only = readFieldEntryWithAlias(map, presentKey);
+    return only === undefined ? undefined : { entry: only, key: presentKey };
   }
   // Both variants present on this ONE side. Resolve with the SAME rule and the
   // SAME marker carry as the cross-side comparison -- `a` (the bare key) plays
   // the "first" role, mirroring persisted-wins on an equal stamp. Using
   // readFieldEntryWithAlias here instead would be meaningful-wins, which ignores
   // stamps entirely and silently reverts a fresh skip.
+  // Return the KEY alongside the entry. Deriving the key separately (by presence
+  // precedence) let it diverge from the entry actually chosen: a bracketed winner
+  // got written under the BARE key, which is the live-but-invisible failure this
+  // whole collapse exists to prevent (getProgress and isSectionValid index
+  // fieldValues[field.id] exactly).
   const aWins = firstWins(a, b);
-  return mergeEntries(aWins ? a : b, aWins ? b : a);
+  return {
+    entry: mergeEntries(aWins ? a : b, aWins ? b : a) as FieldValue,
+    key: aWins ? base : bracket,
+  };
 }
 
 /**

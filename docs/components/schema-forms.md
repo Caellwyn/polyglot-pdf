@@ -154,7 +154,9 @@ It resolves
   merge can never resurrect a key `updateField` deleted on migration — that
   resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).
   **The surviving key is the one the SCHEMA declares**, which is why callers pass
-  the schema's field ids. `SchemaForm`, `getProgress` and `isSectionValid` all
+  the schema's field ids; with no schema to consult it is the key of the *winning
+  entry*, derived from the winner rather than computed separately (computing it
+  separately let a bracketed winner land under the bare key). `SchemaForm`, `getProgress` and `isSectionValid` all
   index `fieldValues[field.id]` exactly, and a shipped kit really does use
   bracketed ids (`adult_intake_demo_schema.json`: `race[]`, `reason[]`,
   `risk_concerns[]` and three more) — so re-keying `race[]` → `race` would leave

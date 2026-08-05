@@ -539,6 +539,25 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect((out['p1_grp'] as any).steered).toBe(true);
     });
 
+    it('the surviving KEY follows the winning ENTRY, with no schema to fall back on', () => {
+      // The key used to be derived separately, by presence precedence, so a
+      // BRACKETED winner was written under the BARE key -- the answer live but
+      // invisible to getProgress/isSectionValid, which index fieldValues[field.id]
+      // exactly. The schema override masked it for declared fields; this pins the
+      // FALLBACK (a stray key from an older deploy, a renamed field, or a caller
+      // that omits the ids).
+      const out = reconcileFieldValues(
+        {
+          'race': { value: null, skipped: true, confirmed: true, lastModified: 100 },
+          'race[]': { value: ['Asian'], lastModified: 300 },
+        } as any,
+        {} as any,
+        []
+      );
+      expect(Object.keys(out)).toEqual(['race[]']);
+      expect(out['race[]'].value).toEqual(['Asian']);
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one
