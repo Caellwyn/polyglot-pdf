@@ -133,22 +133,21 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
     expect(ctx.sources[0].stop).toHaveBeenCalledTimes(1)
     // Drained sources carry a NARROWED onended (Opus outer review, both
     // passes): when the browser delivers the stop()-triggered onended on its
-    // later task, it must (a) never fire the playback-end watchdog -- a drain
-    // is not a natural end -- but (b) still repair the scheduling clock if the
-    // context clock moved past the stale cursor (the suspended-window case).
+    // later task, it must NEVER fire the playback-end watchdog -- a drain is
+    // not a natural end, and the array is already empty so the original
+    // handler's all-sources-done branch would fire it. (The handler's other
+    // responsibility, the playbackTime catch-up, is kept as defense-in-depth
+    // but is behaviorally redundant by construction: playAudio's
+    // startAt = max(playbackTime, now + 0.01) floor yields identical
+    // scheduling for a stale-past cursor, and getPlaybackBacklog clamps at 0
+    // -- so only the suppression half is assertable.)
     const endSpy = vi.fn()
     ;(globalThis as any).window.vffOnAudioPlaybackEnd = endSpy
     try {
-      ctx.currentTime = 9
       ctx.sources[0].onended?.()
       expect(endSpy).not.toHaveBeenCalled()
-      // Clock repaired: the next chunk schedules at the advanced clock.
-      await mgr.playAudio(pcmChunk())
-      const after = ctx.sources[ctx.sources.length - 1]
-      expect(after.startedAt as number).toBeGreaterThanOrEqual(9)
     } finally {
       delete (globalThis as any).window.vffOnAudioPlaybackEnd
-      ctx.currentTime = 0
     }
 
     await mgr.playAudio(pcmChunk())
