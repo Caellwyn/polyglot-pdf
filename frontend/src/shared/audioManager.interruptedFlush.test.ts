@@ -34,8 +34,12 @@ class FakeAudioContext {
   destination = {}
   sources: FakeSource[] = []
   constructor() { FakeAudioContext.instances.push(this) }
-  createBuffer(_ch: number, len: number, _rate: number) {
-    return { getChannelData: () => ({ set: () => {} }), length: len }
+  createBuffer(_ch: number, len: number, rate: number) {
+    return {
+      getChannelData: () => ({ set: () => {} }),
+      length: len,
+      duration: len / rate,
+    }
   }
   createBufferSource() {
     const s = new FakeSource()
@@ -62,6 +66,16 @@ function pcmChunk(): ArrayBuffer {
   return b.buffer
 }
 
+// A chunk long enough to move the scheduling cursor by `seconds` of audio
+// (PCM16 mono @ 24 kHz => 48000 bytes/second). First bytes are control chars
+// so decodeGeminiFrame passes it through raw.
+function pcmChunkSeconds(seconds: number): ArrayBuffer {
+  const b = new Uint8Array(Math.round(seconds * 24000) * 2)
+  b[0] = 1
+  b[1] = 2
+  return b.buffer
+}
+
 describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
   beforeEach(() => {
     FakeAudioContext.instances = []
@@ -85,20 +99,74 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
   })
 
   it('resets the scheduling clock to now (no stale future cursor)', async () => {
+    // The cursor must ACCUMULATE past currentTime for this test to bite:
+    // startAt = max(playbackTime, now + 0.01), so with a near-zero cursor the
+    // now-term dominates and the reset is unobservable (the original form of
+    // this test was vacuous -- Opus fresh-eyes gap 1). Three 1-second chunks
+    // at currentTime=0 push the cursor to ~3s of queued backlog.
+    const mgr = createAudioManager()
+    await mgr.playAudio(pcmChunkSeconds(1))
+    await mgr.playAudio(pcmChunkSeconds(1))
+    await mgr.playAudio(pcmChunkSeconds(1))
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.sources.length).toBe(3)
+    // Backlog established: the third chunk is scheduled far in the future.
+    expect(ctx.sources[2].startedAt as number).toBeGreaterThan(1.5)
+
+    mgr.resetPlaybackClock()
+
+    await mgr.playAudio(pcmChunkSeconds(1))
+    const next = ctx.sources[3]
+    // Scheduled at ~now (currentTime=0), NOT behind the dead ~3s backlog.
+    expect(next.startedAt).not.toBeNull()
+    expect(next.startedAt as number).toBeLessThan(1)
+  })
+
+  it('clears the tracked source array (a second drain does not re-stop old sources)', async () => {
+    // Pins the activeAudioSources clear (Opus fresh-eyes gap 2): if the array
+    // leaked, the SECOND drain would call stop() on the first source again.
     const mgr = createAudioManager()
     await mgr.playAudio(pcmChunk())
     const ctx = FakeAudioContext.instances[0]
 
-    // Simulate time passing while a long backlog was queued, then interrupt.
-    ctx.currentTime = 7
     mgr.resetPlaybackClock()
+    expect(ctx.sources[0].stop).toHaveBeenCalledTimes(1)
 
     await mgr.playAudio(pcmChunk())
-    const next = ctx.sources[1]
-    // Scheduled at ~now, not at the old accumulated cursor position.
-    expect(next.startedAt).not.toBeNull()
-    expect(next.startedAt as number).toBeGreaterThanOrEqual(7)
-    expect(next.startedAt as number).toBeLessThan(8)
+    mgr.resetPlaybackClock()
+    // First source stopped exactly once across BOTH drains; second stopped once.
+    expect(ctx.sources[0].stop).toHaveBeenCalledTimes(1)
+    expect(ctx.sources[1].stop).toHaveBeenCalledTimes(1)
+    // And speaking state cleared by the drain.
+    expect(mgr.isSpeaking()).toBe(false)
+  })
+
+  it('drops a chunk parked on the suspended-context resume when a drain intervenes', async () => {
+    // The residual race (Opus fresh-eyes gap 3): a chunk awaiting ctx.resume()
+    // when the drain lands belongs to the DEAD generation and must not
+    // schedule after the drain returns.
+    const mgr = createAudioManager()
+    await mgr.playAudio(pcmChunk()) // creates the context
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.sources.length).toBe(1)
+
+    ctx.state = 'suspended'
+    let releaseResume!: () => void
+    ctx.resume = vi.fn(() => new Promise<void>((r) => {
+      releaseResume = () => { ctx.state = 'running'; r() }
+    }))
+
+    const parked = mgr.playAudio(pcmChunk()) // parks on the resume() await
+    mgr.resetPlaybackClock()                  // drain lands while parked
+    releaseResume()
+    await parked
+
+    // The parked chunk was dropped -- no new source scheduled after the drain.
+    expect(ctx.sources.length).toBe(1)
+
+    // And a FRESH chunk (new generation) still plays normally afterward.
+    await mgr.playAudio(pcmChunk())
+    expect(ctx.sources.length).toBe(2)
   })
 
   it('flushAudioQueue still BLOCKS until resumePlayback (delegation intact)', async () => {
