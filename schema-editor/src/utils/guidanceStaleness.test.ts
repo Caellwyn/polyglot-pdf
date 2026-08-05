@@ -258,7 +258,8 @@ describe('needsAckFieldIds (the completion counters aggregation)', () => {
     const findings = [hexFinding('phone', 'abc123'),
                       hexFinding('other', 'beef22')];
     // `phone` is stale and un-acked -> in. `other` is stale but acked for its
-    // current identity -> out. The set is what getCompletionStats consumes.
+    // current identity -> out. Same per-field gate the completion counters
+    // apply (isCountedReviewed calls needsGuidanceAck, sprint-18 C1).
     expect([...needsAckFieldIds([unacked, acked], findings)]).toEqual(['phone']);
   });
 

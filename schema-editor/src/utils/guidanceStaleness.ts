@@ -142,11 +142,13 @@ export function needsGuidanceAck(
 
 /**
  * Whole-schema aggregation of needsGuidanceAck: the ids of every field whose
- * guidance drifted and has no acknowledgment for its CURRENT content. This is
- * what the completion counters consume (getCompletionStats), so the kit-wide
- * "% reviewed" can never report a field complete while its row sits amber
- * behind the gate -- the progress figure and the FieldList icons must tell the
- * same story (bd anim fresh-eyes finding, closeout round 1).
+ * guidance drifted and has no acknowledgment for its CURRENT content. The
+ * completion counters now apply the same per-field gate directly
+ * (reviewStatus.isCountedReviewed calls needsGuidanceAck inside reviewCounts,
+ * sprint-18 C1), so the kit-wide "% reviewed" can never report a field
+ * complete while its row sits amber behind the gate -- the progress figure and
+ * the FieldList icons must tell the same story (bd anim fresh-eyes finding,
+ * closeout round 1).
  */
 export function needsAckFieldIds(
   fields: FormField[] | undefined,
