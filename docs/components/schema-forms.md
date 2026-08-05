@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-31 (bd polyglot-pdf-v437: the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
+*Last updated: 2026-08-05 (bd polyglot-pdf-uw3w / 3irc / qim7: `fieldValues` has two independent writers -- the React UI and WebFormConnection -- reconciled per logical field by `reconcileFieldValues`; see "Two writers, one map" below).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -77,6 +77,40 @@ interface FieldValue {
 > rides the next validator payload and the (stateless) backend suppresses re-steering
 > it. See [../standards/validation-delegation.md](../standards/validation-delegation.md)
 > (contracts 2/3).
+
+> **`lastModified`** is load-bearing, not decorative: it is the tiebreaker for the
+> two-writer problem below. `updateField` and `markFieldSkipped` stamp it;
+> `confirmField` deliberately does **not**, because confirming changes only
+> confirmation metadata and never the value, so the value's timestamp must stay put.
+
+### Two writers, one map: reconciling `fieldValues`
+
+`fieldValues` has **two independent writers**. The React UI (`SchemaForm.tsx`
+`handleFieldChange` / `handleFieldSkip`) persists through `SchemaFormStateManager`
+and never touches `WebFormConnection`'s in-memory `this.state`; the voice layer
+holds `this.state` across turns. Any connection handler ending in
+`SchemaFormStateManager.save(this.state)` can therefore persist a stale in-memory
+copy over an on-screen edit.
+
+`reconcileFieldValues` (`utils/fieldValue.ts`) is the single arbiter, called at the
+three handlers that save state — `handleSessionReady`, `handleConfirmFieldRequest`,
+`handleSkipFieldRequest` (bd `polyglot-pdf-qim7` / `uw3w` / `3irc`). It resolves
+**per logical field**, not per raw key:
+
+- The newer `lastModified` wins; a stamped entry beats an unstamped one.
+- `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
+  merge can never resurrect a key `updateField` deleted on migration — that
+  resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).
+- A same-millisecond tie falls back to "meaningful entry wins" (the
+  `readFieldEntryWithAlias` precedent), so a typed answer is never lost to a
+  same-ms empty. `Date.now()` is coarser than the AI-write → on-screen-edit gap,
+  so ties are a real case.
+- An entry present on only one side is kept, so an in-memory-only value stays
+  visible to the confirm handler's usable-value gate and the skip handler's
+  already-filled guard (bd `polyglot-pdf-pjws`).
+
+Never merge these maps with a raw key union (`{...persisted, ...inMemory}`) — that
+makes the in-memory side win unconditionally and reintroduces all three bugs.
 
 > **Terminology gotcha:** the frontend's `confirmationMethod` enum is
 > `ai_voice` / `manual_edit`, but the **backend** `confirm_field` tool +
