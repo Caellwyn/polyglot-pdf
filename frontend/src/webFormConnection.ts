@@ -869,7 +869,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -1030,6 +1031,22 @@ export class WebFormConnection {
   /**
    * Handle field_update from AI
    */
+  /**
+   * The schema's own field ids, for reconcileFieldValues' alias collapse.
+   *
+   * Collapsing a `p1_grp` / `p1_grp[]` pair means keeping one key and dropping
+   * the other, and that is only safe if the surviving key is the one the SCHEMA
+   * declares -- SchemaForm.tsx, getProgress and isSectionValid all index
+   * `fieldValues[field.id]` exactly. A shipped kit really does use bracketed ids
+   * (adult_intake_demo_schema.json: race[], reason[], risk_concerns[] and three
+   * more), so without this a reconcile could re-key `race[]` -> `race` and leave
+   * the answer live but invisible: blank on screen, progress down, and a
+   * required section that no longer validates.
+   */
+  private schemaFieldIds(): string[] {
+    return this.state?.schema?.fields?.map(f => f.id) ?? [];
+  }
+
   private handleFieldUpdate(message: any): void {
     const { updates } = message;
 
@@ -1052,7 +1069,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -1189,7 +1207,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -1819,7 +1838,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -1859,7 +1879,8 @@ export class WebFormConnection {
         ...persistedAtEntry,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -2176,7 +2197,8 @@ export class WebFormConnection {
         ...persistedAtEntry,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -2577,7 +2599,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -2658,7 +2681,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }
@@ -3814,7 +3838,8 @@ export class WebFormConnection {
         ...this.state,
         fieldValues: reconcileFieldValues(
           persistedBeforeUpdate.fieldValues,
-          this.state.fieldValues
+          this.state.fieldValues,
+          this.schemaFieldIds()
         ),
       };
     }

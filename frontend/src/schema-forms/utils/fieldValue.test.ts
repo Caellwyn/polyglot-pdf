@@ -389,6 +389,47 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect(out.f.steered).toBe(true);
     });
 
+    it('keeps the SCHEMA-ID key when the schema id is the BRACKETED variant', () => {
+      // A shipped kit really does use bracketed ids
+      // (adult_intake_demo_schema.json: race[], reason[], risk_concerns[] +3).
+      // Collapsing the pair must keep the key the SCHEMA declares -- SchemaForm,
+      // getProgress and isSectionValid all index fieldValues[field.id] EXACTLY,
+      // so re-keying `race[]` -> `race` leaves the answer live but INVISIBLE:
+      // blank on screen, progress down, required section no longer validating.
+      // (A stray bare `race` entry arises in practice from markFieldSkipped,
+      // which writes the model-supplied id with no alias fallback.)
+      const memory = {
+        'race[]': { value: ['White'], lastModified: 100 },
+        'race': { value: null, skipped: true, lastModified: 200 },
+      } as any;
+      const persisted = {
+        'race[]': { value: ['Asian'], lastModified: 300 },
+        'race': { value: null, skipped: true, lastModified: 200 },
+      } as any;
+
+      const out = reconcileFieldValues(persisted, memory, ['race[]']);
+      expect(Object.keys(out)).toEqual(['race[]']);
+      expect(out['race[]'].value).toEqual(['Asian']);
+    });
+
+    it('keeps the SCHEMA-ID key when the schema id is the BARE variant', () => {
+      const out = reconcileFieldValues(
+        { 'p1_grp[]': { value: ['b'], lastModified: 300 } } as any,
+        { 'p1_grp': { value: ['a'], lastModified: 100 } } as any,
+        ['p1_grp']
+      );
+      expect(Object.keys(out)).toEqual(['p1_grp']);
+      expect(out['p1_grp'].value).toEqual(['b']);
+    });
+
+    it('without a schema, falls back to the winning key (unchanged behaviour)', () => {
+      const out = reconcileFieldValues(
+        { 'p1_grp[]': { value: ['b'], lastModified: 300 } } as any,
+        { 'p1_grp': { value: ['a'], lastModified: 100 } } as any
+      );
+      expect(Object.keys(out)).toEqual(['p1_grp[]']);
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one

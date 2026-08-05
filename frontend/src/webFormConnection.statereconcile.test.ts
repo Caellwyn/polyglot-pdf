@@ -163,7 +163,14 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
    */
   function uiWrites(fieldId: string, value: unknown): void {
     const persisted = SchemaFormStateManager.load()
-    SchemaFormStateManager.updateField(persisted as any, fieldId, value as any)
+    // Mirror SchemaForm.tsx handleFieldChange EXACTLY: a manual edit is
+    // auto-confirmed. Omitting these options leaves `confirmed: undefined`,
+    // which is the branch the tie's marker-carry gates on -- so an unfaithful
+    // helper would exercise a path production never takes.
+    SchemaFormStateManager.updateField(persisted as any, fieldId, value as any, {
+      confirmed: true,
+      confirmationMethod: 'manual_edit',
+    })
   }
 
   function persistedEntry(fieldId: string): any {

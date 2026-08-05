@@ -69,9 +69,10 @@ export function readFieldEntryWithAlias(
  * RULES.
  *  - Reconcile per LOGICAL FIELD, collapsing the `p1_grp` / `p1_grp[]` alias
  *    pair into one decision, so a union can never resurrect a deleted variant.
- *    The winning entry is re-keyed under whichever variant the winning side
- *    used, and the losing variant is dropped -- mirroring updateField's priorKey
- *    cleanup.
+ *    The surviving key is the one the SCHEMA declares when `knownFieldIds` is
+ *    supplied (callers should always supply it); otherwise it falls back to the
+ *    winning side's variant. Getting that choice wrong is destructive, not
+ *    cosmetic -- see the note on `schemaIds` below.
  *  - Within a field, the entry with the newer `lastModified` wins (the field the
  *    type comment calls "Timestamp for conflict resolution"). updateField and
  *    markFieldSkipped both stamp it; confirmField deliberately does NOT, because
@@ -96,11 +97,29 @@ export function readFieldEntryWithAlias(
  */
 export function reconcileFieldValues(
   persisted: Record<string, FieldValue>,
-  inMemory: Record<string, FieldValue>
+  inMemory: Record<string, FieldValue>,
+  knownFieldIds?: Iterable<string>
 ): Record<string, FieldValue> {
   const baseKeyOf = (k: string) => (k.endsWith('[]') ? k.slice(0, -2) : k);
   const stampOf = (e: FieldValue | undefined) =>
     typeof e?.lastModified === 'number' ? e.lastModified : undefined;
+
+  // The SCHEMA's own field ids, when the caller can supply them. Collapsing an
+  // alias pair means keeping one key and dropping the other, and that choice is
+  // only safe if the surviving key is the one the schema uses: SchemaForm.tsx,
+  // getProgress and isSectionValid all index fieldValues[field.id] EXACTLY. A
+  // shipped kit really does use bracketed ids (adult_intake_demo_schema.json has
+  // race[], reason[], risk_concerns[] and three more), so re-keying `race[]` ->
+  // `race` would leave the answer live but invisible: the field renders blank,
+  // progress drops, and a required section stops validating.
+  const schemaIds = knownFieldIds ? new Set(knownFieldIds) : undefined;
+  /** The variant the schema actually declares, when we can tell. */
+  const schemaKeyFor = (base: string, bracket: string): string | undefined => {
+    if (!schemaIds) return undefined;
+    if (schemaIds.has(base)) return base;
+    if (schemaIds.has(bracket)) return bracket;
+    return undefined;
+  };
 
   // Group both maps by logical field so an alias pair resolves as ONE decision.
   const baseKeys = new Set<string>();
@@ -127,13 +146,17 @@ export function reconcileFieldValues(
 
     if (persistedEntry === undefined && memoryEntry === undefined) continue;
 
+    // Prefer the SCHEMA's own variant when we know it; otherwise keep the key
+    // the winning side used (the pre-schema-aware behaviour).
+    const preferred = schemaKeyFor(base, bracket);
+
     // Present on one side only -- keep it under the key that side used.
     if (memoryEntry === undefined) {
-      out[persistedKey as string] = persistedEntry as FieldValue;
+      out[preferred ?? (persistedKey as string)] = persistedEntry as FieldValue;
       continue;
     }
     if (persistedEntry === undefined) {
-      out[memoryKey as string] = memoryEntry;
+      out[preferred ?? (memoryKey as string)] = memoryEntry;
       continue;
     }
 
@@ -192,12 +215,22 @@ export function reconcileFieldValues(
       if (winner?.steered === undefined && loser.steered !== undefined) {
         carried.steered = loser.steered;
       }
+      // `skipped` is load-bearing the same way `confirmed` is: isSectionValid
+      // and getProgress both honour it, so dropping it would un-satisfy a
+      // section the user deliberately skipped past.
+      if ((winner as FieldValue & { skipped?: boolean })?.skipped === undefined) {
+        const loserSkipped = (loser as FieldValue & { skipped?: boolean }).skipped;
+        if (loserSkipped !== undefined) {
+          (carried as { skipped?: boolean }).skipped = loserSkipped;
+        }
+      }
       if (Object.keys(carried).length > 0) {
         merged = { ...(winner as FieldValue), ...carried };
       }
     }
 
-    out[(persistedWins ? persistedKey : memoryKey) as string] = merged as FieldValue;
+    out[preferred ?? ((persistedWins ? persistedKey : memoryKey) as string)] =
+      merged as FieldValue;
   }
 
   return out;

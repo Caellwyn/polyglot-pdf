@@ -140,6 +140,13 @@ It resolves
 - `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
   merge can never resurrect a key `updateField` deleted on migration — that
   resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).
+  **The surviving key is the one the SCHEMA declares**, which is why callers pass
+  the schema's field ids. `SchemaForm`, `getProgress` and `isSectionValid` all
+  index `fieldValues[field.id]` exactly, and a shipped kit really does use
+  bracketed ids (`adult_intake_demo_schema.json`: `race[]`, `reason[]`,
+  `risk_concerns[]` and three more) — so re-keying `race[]` → `race` would leave
+  the answer live but invisible: blank on screen, progress down, required section
+  no longer validating.
 - A same-millisecond tie goes to the **persisted** side. `Date.now()` is coarser
   than the AI-write → on-screen-edit gap, so ties are a real case, and *both*
   directions are unsafe if the stale in-memory copy wins: a typed answer gets
