@@ -188,6 +188,15 @@ def main() -> int:
                     types.Part.from_bytes(data=audio, mime_type="audio/wav"),
                     _STT_PROMPT,
                 ],
+                # Vertex enables thinking BY DEFAULT on 2.5-flash; unbounded
+                # thinking tokens dwarf the answer and bust the cost estimate
+                # (experimentation skill Gate 2; same pattern as
+                # text_ai_gemini.py's ThinkingConfig plumb). Transcription
+                # needs no reasoning: budget 0, temperature 0.
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                ),
             )
             stt_text = (resp.text or "").strip()
         except Exception as exc:  # noqa: BLE001 -- report, don't crash the sweep
