@@ -199,8 +199,13 @@ instructive: the first version PASSED against known-bad code, because its
 method-boundary regex also matched `if (` and reset the tracking one line after
 the capture. A guard that silently passes is worse than no guard, so it is
 mutation-verified in both directions — it fails on the reverted fix, naming the
-exact line, and passes on the real source. Round 6 then defeated it once more by
-renaming through an intermediate variable, so it now follows ALIASES too.
+exact line, and passes on the real source. Round 6 then defeated it by renaming
+through an intermediate variable, so it learned to follow ALIASES -- and round 7
+defeated THAT by packing two alias assignments onto one physical line, since the
+tracker only inspected the first match per line. It now scans every match and
+iterates to a fixpoint. Three rounds, three successful attacks on the same guard:
+worth stating plainly that a source-level heuristic is a backstop, not a proof,
+and the behavioural tests are what actually pin the behaviour.
 
 Both out-of-scope sites were folded in rather than left as filed beads: shipping a
 change titled "one owner for `fieldValues`" while knowingly leaving more writers

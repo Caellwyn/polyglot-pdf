@@ -142,12 +142,24 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
 
       // Follow ALIASES: `const b = a` where `a` is a tracked local makes `b`
       // tracked too, inheriting its staleness. Without this, renaming through an
-      // intermediate silently defeats the check -- the reviewer demonstrated
-      // exactly that against the switchToSection fix.
-      const alias = raw.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*(?:\?\?|;|$)/)
-      if (alias && pendingLocals.has(alias[2])) {
-        pendingLocals.set(alias[1], pendingLocals.get(alias[2]) as number)
-        if (sawAwaitSince.has(alias[2])) sawAwaitSince.add(alias[1])
+      // intermediate silently defeats the check -- two review rounds defeated
+      // earlier versions exactly that way, the second by packing TWO alias
+      // assignments onto one physical line. So scan EVERY match on the line
+      // (matchAll, not match) and iterate to a fixpoint, rather than looking at
+      // the first assignment only.
+      for (let pass = 0; pass < 5; pass++) {
+        let grew = false
+        for (const alias of raw.matchAll(
+          /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*(?:\?\?|;|,|\)|$)/g
+        )) {
+          const [, target, source] = alias
+          if (pendingLocals.has(source) && !pendingLocals.has(target)) {
+            pendingLocals.set(target, pendingLocals.get(source) as number)
+            if (sawAwaitSince.has(source)) sawAwaitSince.add(target)
+            grew = true
+          }
+        }
+        if (!grew) break
       }
 
       if (/\bawait\b/.test(raw)) {
