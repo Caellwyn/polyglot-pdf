@@ -158,9 +158,11 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
   just missing UI behavior.
 - **Load-bearing keys** (producer = `form_models.py` field; consumers listed):
   - `id`: keyed into the secretary index
-    (`backend/services/secretary_context.py:69`) and the frontend manifest lookup
-    (`frontend/src/schema-forms/utils/manifestUtils.ts:63`). Duplicate ids
-    silently drop a field (dict overwrite); an unknown id returns `undefined`.
+    (`backend/services/secretary_context.py:69`) and the frontend
+    manifest-generation lookup
+    (`frontend/src/schema-forms/utils/manifestUtils.ts:63`,
+    `schema.fields.find` by id). Duplicate ids silently drop a field (dict
+    overwrite); an unknown id returns `undefined`.
   - `pdf_field_name` (field- and option-level): consumed only by the fill route
     (`backend/routes/pdf_fill_routes.py:115-117`, options :434-442). Missing =
     field silently absent from the filled PDF.
@@ -179,9 +181,12 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
     invisible-to-UI text straight to the model.
   - `label_translations` / `spoken_name_translations`: baked keyed on
     **lowercase spoken-language name** (`backend/services/option_translation.py:209`),
-    read back with the same convention at session time (:110; applied in
-    `manifest_service.py:126-127`). A key-convention drift (e.g. BCP-47 codes)
-    silently reverts that string to English.
+    read back at session time via `_kit_translation` (:110), which also tolerates
+    the language's short code and full BCP-47 code, case-insensitively (:89-107).
+    The drift that DOES silently revert a string to English is a key outside that
+    tolerated set -- e.g. a bare ISO-639-1 code whose BCP-47 stem differs
+    (`zh` for Chinese, whose accepted stem is `cmn`). Applied in
+    `manifest_service.py:126-127`.
   - `show_if`/`require_if` conditions: normalized by TWIN implementations --
     Python `iter_condition_atoms` (`form_models.py:345`) and TS
     `normalizeToComposite`
