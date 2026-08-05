@@ -46,6 +46,27 @@ UTTERANCES = [
     ("spell_joshua.wav", "J. O. S. H. U. A."),
     ("spell_johnson.wav", "J. O. H. N. S. O. N."),
     ("confirm_no.wav", "no that's wrong"),
+    # bd 0rpu Stage 1: the W-7 desync-attribution sequence (driver_w7_desync.mjs).
+    # Pre-name fields mirror the failing 2026-08-05 session; the 1b names are
+    # DELIBERATELY DISTINCT from the 1a names (Maria/Jose/Smith vs
+    # John/Joshua/Johnson) so an acoustic loop of a PREVIOUS spelling is
+    # detectable -- identical names would mask a wrong-field read-back. The
+    # post-name fields give the run non-name read-backs AFTER the eviction
+    # lands, de-confounding eviction timing from the checkbox->names
+    # transition (maintainer-flagged confound, 2026-08-05).
+    ("answer_new_itin.wav", "I am applying for a new ITIN."),
+    ("answer_reason_spouse.wav", "I am the spouse of a U S citizen."),
+    ("answer_usperson.wav",
+     "Loretta Johnson, five five five, one two, one two one two."),
+    ("spell_maria.wav", "M. A. R. I. A."),
+    ("spell_jose.wav", "J. O. S. E."),
+    ("spell_smith.wav", "S. M. I. T. H."),
+    ("answer_street.wav", "one two three Main Street."),
+    ("answer_city.wav", "Austin, Texas, United States."),
+    ("answer_foreign_street.wav", "Avenida Reforma one hundred."),
+    ("answer_foreign_city.wav", "Mexico City, Mexico."),
+    ("answer_dob.wav", "January first, nineteen ninety."),
+    ("answer_country_birth.wav", "Mexico."),
     # Section-2 numeric value for the multi-section scenario (bd polyglot-pdf-8k8):
     # a 5-digit ZIP that fits p1_line6f_zipcode (max_length 5). Expected filled
     # value "12345".
