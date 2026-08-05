@@ -134,6 +134,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// awaits it instead of starting a duplicate setup.
 	let arming: Promise<void> | null = null
 	let playbackTime = 0
+	// Bumped by every drain (resetPlaybackClock, hence also flushAudioQueue):
+	// playAudio captures it before its awaitable section and drops the chunk if
+	// a drain intervened -- the suspended-context resume window otherwise lets a
+	// dead generation's chunk schedule AFTER the drain (bd s7uf, Opus fresh-eyes).
+	let playbackEpoch = 0
 	let playbackChunkCount = 0 // Track playback chunks for debugging
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
 	// Live mic-energy subscriber (bd polyglot-pdf-s3zv). The worklet posts a
@@ -507,10 +512,22 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 			const ctx = nodes.playbackContext
 
+			// Capture the drain epoch BEFORE the awaitable section: a chunk parked
+			// on the resume() await when a drain (resetPlaybackClock /
+			// flushAudioQueue) lands belongs to the DEAD generation and must not
+			// schedule after the drain returns (Opus fresh-eyes gap 3, bd s7uf).
+			const epochAtStart = playbackEpoch
+
 			// Resume context if suspended (browser autoplay policy)
 			if (ctx.state === 'suspended') {
 				console.log('[AudioManager] [pause] Resuming suspended AudioContext')
 				await ctx.resume()
+			}
+
+			// Re-check after the await: a drain incremented the epoch (and/or set
+			// the block) while this chunk was parked -- drop it.
+			if (playbackBlocked || epochAtStart !== playbackEpoch) {
+				return
 			}
 
 			// Decode audio data
@@ -625,6 +642,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 * delegates here after setting the block.
 	 */
 	function resetPlaybackClock(): void {
+		// Invalidate chunks parked on an await inside playAudio (the
+		// suspended-context resume window): they belong to the generation being
+		// drained (Opus fresh-eyes gap 3, bd s7uf).
+		playbackEpoch++
+
 		// Set flag to suppress onended callbacks during flush
 		isFlushing = true
 
