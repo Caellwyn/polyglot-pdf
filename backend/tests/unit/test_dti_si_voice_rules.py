@@ -84,7 +84,31 @@ def test_dti_si_does_not_offer_a_mid_session_language_switch():
     # The model is told the language is fixed...
     assert "the session language is fixed for the whole form" in si
     # ...and given something useful to SAY when asked, rather than a refusal.
-    assert "'clear form' button" in si
+    assert "the button that clears the form and starts a new session" in si
+
+
+def test_dti_si_does_not_name_the_clear_form_button_in_english():
+    # bd polyglot-pdf-s863's lesson, applied to the new pinned-language clause:
+    # the overlay's clear-form button is TRANSLATED per session language
+    # (frontend/src/demo/overlayTranslations.ts -- a Spanish user sees "Borrar
+    # formulario"), so an English label quoted in the SI would have the model
+    # name a button that does not exist on the user's screen. That is the exact
+    # failure s863 fixed for the disclaimer's Agree button by threading the
+    # client's TRANSLATED label through {agree_button_label}.
+    #
+    # There is no such placeholder on this path (the clause is static SI, not a
+    # per-turn template), so the rule is to describe the control by what it DOES
+    # and never assert a label. Caught by the 2nd Opus outer review, which noted
+    # the first version of this clause quoted 'clear form' AND that the test
+    # pinned that English literal.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "'clear form' button" not in si
+    assert "clear form" not in si.lower().replace(
+        "the button that clears the form", ""
+    )
+    # The model is told explicitly not to invent or anglicize a label.
+    assert "never invent a label for it" in si
+    assert "the on-screen label is translated" in si
 
 
 def test_initiating_templates_carry_unmistakably():

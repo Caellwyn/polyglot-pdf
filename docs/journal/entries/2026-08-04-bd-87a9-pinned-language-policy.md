@@ -182,7 +182,34 @@ through a heredoc mangled it a fourth time, which is a fair measure of how durab
 the habit is. Write/Edit exist for this; a heredoc is only safe for text with no
 backslashes.
 
-**The policy is now enforced, not just described.** Both reviewers noted that a
+**Round 6: my own fixes had bugs, and the guard watched the wrong thing.** The
+round that was meant to be the last found two real defects in the round-5 work:
+
+- The SI clause I wrote to fix the policy quoted the English label `'clear form'`
+  -- but that button is translated per session language (a Spanish user sees
+  "Borrar formulario"). That is precisely the defect bd polyglot-pdf-s863 already
+  fixed for the disclaimer's Agree button, and my new test *pinned the English
+  literal*. There is no `{...}` placeholder on this path (static SI, not a
+  per-turn template), so the clause now describes the control by what it DOES and
+  explicitly forbids inventing or anglicizing a label.
+- The enforcement guard watched the two state-manager MUTATORS, but the pinned
+  value can be written by plain assignment -- and the disclaimer-accept path in
+  both overlays already does exactly that. A switcher written that way touched
+  neither mutator and passed every case. The guard now watches the FIELD in any
+  write form and asserts the COMPLETE list of eight legitimate write sites, so a
+  new writer anywhere fails and names itself. An earlier version had also
+  allowlisted all of `connection.ts` -- the one file most likely to regrow the
+  switcher.
+
+Three attempts to write this guard, three evasions found by reviewers: a rename,
+a whole-file allowlist, and a direct assignment. Each time I had guarded the shape
+of the code I deleted rather than the property I wanted. The property is "the pin
+is written only before the form starts"; everything else was a proxy for it, and
+every proxy had a hole. Worth remembering when the next invariant needs a test:
+name the property first, then find the narrowest thing that is true if and only if
+the property holds.
+
+ Both reviewers noted that a
 re-added switcher would break no test -- documentation alone had already failed
 once here, so `pinned-language-policy.test.ts` pins two things: the surviving
 `change_spoken_language` sender carries a language byte-identical to the persisted

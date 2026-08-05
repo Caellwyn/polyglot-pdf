@@ -133,7 +133,11 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
         const slice = code.slice(m.index, m.index + 400)
         const lang = /spoken_language:\s*([^,\r\n]+)/.exec(slice)
         const expr = lang && lang[1] ? lang[1].trim() : '<missing>'
-        if (!/state\.selectedLanguage/.test(expr)) {
+        // EQUALS a pinned-state read, not merely CONTAINS one: a substring test
+        // accepts `language || state.selectedLanguage`, where the caller's value
+        // always wins and the pinned read is a never-taken fallback (2nd Opus
+        // outer review demonstrated exactly that).
+        if (!/^(this\.)?state\.selectedLanguage$/.test(expr)) {
           const name = file.split(/[\\/]/).pop()
           offenders.push(`${name}: spoken_language: ${expr}`)
         }
@@ -163,32 +167,71 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
     // -- `readDisclaimer` in shared/connection.ts, setting the initial pin as the
     // user accepts the disclaimer. A second writer is a switcher by definition,
     // whatever it is named.
-    const WRITERS =
-      /SchemaFormStateManager\s*\.\s*(setSelectedLanguage|acceptDisclaimer)\s*\(/
-    const ALLOWED = new Set(['connection.ts'])
-    const offenders: string[] = []
-    let writeSites = 0
+    // Watch the FIELD, not the mutators. Two earlier versions of this guard were
+    // defeated in review: one allowlisted the whole of connection.ts (the file
+    // the deleted switcher lived in), and one scanned only for
+    // `setSelectedLanguage`/`acceptDisclaimer` calls -- but the pinned value can
+    // be written by plain assignment, and the disclaimer-accept path in BOTH
+    // overlays already does exactly that (`state.selectedLanguage = ...` then
+    // `save(state)`). A switcher written that way touched neither mutator and
+    // passed every case.
+    //
+    // So scan for any production write to the field itself, in any form:
+    // assignment, an object-literal key, or a mutator call. The complete list is
+    // asserted below, which also documents where the pin legitimately comes from.
+    // Scoped to writes that reach PERSISTED state. React props
+    // (`selectedLanguage={x}`), local `useState` setters and type declarations
+    // are not writes to the pin and are excluded, or the list would be noise.
+    const WRITERS = new RegExp(
+      [
+        // `<something>.selectedLanguage = ...` -- the direct-assignment shape
+        // the overlays' disclaimer-accept path uses.
+        String.raw`\w\.selectedLanguage\s*=[^=]`,
+        // A state object built with the field as a literal key.
+        String.raw`selectedLanguage\s*:\s*(language|selectedLanguage|loadOnboardingState)`,
+        // ...or through the state manager's mutators.
+        String.raw`SchemaFormStateManager\s*\.\s*(setSelectedLanguage|acceptDisclaimer)\s*\(`,
+      ].join('|')
+    )
+    const writeSites: string[] = []
 
     for (const file of productionSources()) {
       const name = file.split(/[\\/]/).pop() as string
       const lines = codeOnly(readFileSync(file, 'utf8')).split(/\r?\n/)
       for (const line of lines) {
         if (!WRITERS.test(line)) continue
-        writeSites += 1
-        if (ALLOWED.has(name)) continue
-        offenders.push(`${name}: ${line.trim().slice(0, 80)}`)
+        writeSites.push(`${name}: ${line.trim().slice(0, 80)}`)
       }
     }
 
-    // The entry-flow write is the one sanctioned writer; if it disappears this
-    // test must not silently become a no-op.
-    expect(writeSites, 'the entry-flow language write vanished').toBeGreaterThan(0)
+    // Exactly one: `readDisclaimer` in shared/connection.ts. Asserting the LIST
+    // (not just the count) means the message names the offender, and a moved
+    // write site is surfaced rather than silently swapped.
+    // The COMPLETE set, asserted as a list so the failure message names the new
+    // writer and a MOVED site is surfaced rather than silently swapped. Every
+    // entry here is an ENTRY-FLOW write (the disclaimer accept, the onboarding
+    // restore) or the state manager's own implementation. None of them is
+    // reachable mid-form, which is the property that makes the language pinned.
     expect(
-      offenders,
-      'something other than the entry flow writes the session language -- it is ' +
-        'PINNED per session and may only be set once, as the user accepts the ' +
-        'disclaimer (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md)'
-    ).toEqual([])
+      writeSites,
+      'the set of places that WRITE the session language changed -- it is PINNED ' +
+        'per session and is set by the ENTRY flow only (the disclaimer accept / ' +
+        'onboarding restore). A new writer elsewhere is a switcher whatever it is ' +
+        'named (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md)'
+    ).toEqual([
+      // The disclaimer-accept path in each overlay -- direct assignment, which
+      // is why this guard watches the FIELD and not the state-manager mutators.
+      'VoiceOverlay.tsx: state.selectedLanguage = selectedLanguage',
+      'VoiceOverlayMobile.tsx: state.selectedLanguage = selectedLanguage',
+      // The state manager's own implementation + the onboarding restore.
+      'schemaFormState.ts: existing.selectedLanguage = onboardingLanguage;',
+      'schemaFormState.ts: selectedLanguage: loadOnboardingState().language ?? undefined,',
+      'schemaFormState.ts: parsed.selectedLanguage = undefined;',
+      'schemaFormState.ts: selectedLanguage: language,',
+      'schemaFormState.ts: selectedLanguage: language,',
+      // readDisclaimer's initial pin.
+      'connection.ts: SchemaFormStateManager.setSelectedLanguage(currentState, language);',
+    ])
   })
 
   it('no production source declares the removed switching helpers', () => {
