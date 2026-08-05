@@ -1614,7 +1614,12 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Update selected language (for language change after disclaimer)
+   * Pin the session's selected language.
+   *
+   * NOT a mid-session switch: the spoken language is pinned for the whole form
+   * (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md). Both production
+   * callers set the INITIAL pin (the disclaimer-accept path and readDisclaimer);
+   * changing language means a new session.
    */
   static setSelectedLanguage(
     state: SchemaFormState,

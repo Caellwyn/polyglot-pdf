@@ -136,7 +136,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `validation_result` | websocket_routes.py (section_complete / form_complete / validate_windows arms, async) | B / jnjj.17 (B5), async since W1 / bd polyglot-pdf-xbl2, REPORT-ONLY since W3 / bd polyglot-pdf-pr3i. The validator verdict for a boundary: `{type, conflicts}` (clean = `[]`). W3: this is REPORT-ONLY -- it no longer injects a steer; a conflict is a CANDIDATE the client ENQUEUES into its validatorFindingsQueue and drains via `drain_findings`. Each conflict now also carries a `field_names` id->name rider for the drain payload. Pushed from a background task AFTER the boundary's `*_ack`. Payload shape -> [validation-delegation.md](validation-delegation.md) (F3, contract 1). |
 | `disclaimer_read_initiated` | websocket_routes.py:470 | Disclaimer read started; carries `language`. |
 | `language_changed` | websocket_routes.py:535 | Fill language changed. |
-| `spoken_language_changed` | websocket_routes.py:550 | Spoken language changed. |
+| `spoken_language_changed` | websocket_routes.py | Ack of the re-assertion opener; the language did NOT change (see `change_spoken_language`). |
 | `pong` | websocket_routes.py:355 | Liveness reply to a client `ping`; echoes `ts`. |
 | `stats` | websocket_routes.py:357 | Reply to a client `stats` request (`{message: "ok"}`). |
 | `error` | many sites | Error with `code` (+ `reason`/`message`). |

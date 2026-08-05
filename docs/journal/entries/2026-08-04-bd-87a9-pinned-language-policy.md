@@ -110,6 +110,28 @@ Ironically `form_filling_service.py:593` already said "SESSION-START ONLY --
 mid-session language changes are not a supported flow". The codebase contradicted
 itself before this PR; I had simply never looked at all of it at once.
 
+**Round 4: the README was telling readers to try the unsupported thing.** My
+"repo-wide grep" still missed three survivors, because I searched for the
+phrasings *I* had used. The README says "changing languages mid-session" and
+"real-time switching" -- neither matches "mid-session language change". Reviewer A
+found them by thinking about how the claim could be worded rather than how I had
+worded it. One was the repo's front-door quick-test steps, instructing a reader to
+do the exact thing the PR declares unsupported; another was a Working Features
+bullet claiming the capability outright.
+
+So the round-3 lesson was right in method and wrong in execution: a grep is only
+as complete as its list of phrasings. The durable version is to search for the
+CONCEPT from several angles (the message name, the feature name, the user action,
+the noun and the verb forms) and to have someone else generate phrasings too.
+
+**The enforcement test now guards the invariant, not two names.** Both reviewers
+showed the source scan could be evaded by RENAMING the switcher. The scan now
+checks every `change_spoken_language` send site and requires its `spoken_language`
+to come from `state.selectedLanguage` -- a renamed switcher fails, because what is
+banned is a caller-supplied language, not a spelling. The name-based check is kept
+as a second, narrower test so a verbatim restore is caught at declaration. All
+three cases are mutation-verified, including the rename evasion.
+
 **The policy is now enforced, not just described.** Both reviewers noted that a
 re-added switcher would break no test -- documentation alone had already failed
 once here, so `pinned-language-policy.test.ts` pins two things: the surviving
