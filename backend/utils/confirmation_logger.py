@@ -146,12 +146,88 @@ def _submit_firestore_write(event: dict) -> None:
 ConfirmationMethod = Literal["verbal", "manual"]
 
 
+def resolve_edition_marker(
+    edition_date: Optional[str], schema: Optional[dict]
+) -> Optional[str]:
+    """Return the revision marker to record, best source first.
+
+    bd polyglot-pdf-47r3. A disputed filing needs to pin WHICH revision of the
+    form the client confirmed against.
+
+    1. `edition_date` -- the GOVERNMENT's own revision marker ("12/2024"). The
+       right answer for an official form, and the only one an agency recognizes.
+    2. A short fingerprint of the kit's field structure (`sha256:<12 hex>`).
+       A CUSTOM form -- a firm's proprietary intake sheet, which the firm-tier
+       epic exists to support -- has no government edition, and refusing to
+       record anything would leave those confirmations unable to pin any
+       revision at all. Not human-readable, but stable for a given revision and
+       CHANGING when the form changes, which is the property that matters:
+       "was this the same version of the form the client saw?".
+
+    The fingerprint covers field ids + types + option values (the answerable
+    shape of the form), not labels or guidance prose: a typo fix in help text
+    must not read as a different revision, while adding/removing/retyping a
+    field or changing an option's value must.
+
+    A THIRD, better source for case 2 is coming: an author-supplied version
+    (prefilled with the publish date) plus the marked-complete date, per epic
+    bd polyglot-pdf-7jmy. Those live in kit METADATA, which neither the client
+    nor this code path currently receives -- reaching them means a manifest/wire
+    change or a per-connect storage read, so they are deliberately deferred to
+    that epic. `editor_kit_routes` already stamps `metadata.published_at` on
+    promotion (shipped here), so the data accumulates until it can be surfaced.
+
+    Returns None when there is neither an edition_date nor a usable schema.
+    """
+    if isinstance(edition_date, str) and edition_date.strip():
+        return edition_date.strip()
+    if not isinstance(schema, dict):
+        return None
+
+    fields = schema.get("fields")
+    if not isinstance(fields, list):
+        return None
+
+    import hashlib
+    import json as _json
+
+    shape = []
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        options = field.get("options")
+        option_values = (
+            sorted(
+                str(o.get("value"))
+                for o in options
+                if isinstance(o, dict) and o.get("value") is not None
+            )
+            if isinstance(options, list)
+            else []
+        )
+        shape.append([
+            str(field.get("id") or ""),
+            str(field.get("type") or ""),
+            option_values,
+        ])
+    shape.sort()
+    if not shape:
+        return None
+
+    digest = hashlib.sha256(
+        _json.dumps(shape, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return f"sha256:{digest[:12]}"
+
+
 def log_field_confirmation(
     form_id: str,
     form_session_id: str,
     field_id: str,
     field_name: Optional[str],
     confirmation_method: ConfirmationMethod,
+    kit_id: Optional[str] = None,
+    edition_date: Optional[str] = None,
 ) -> None:
     """
     Log field confirmation event (NO PII).
@@ -162,6 +238,18 @@ def log_field_confirmation(
         field_id: Field identifier (e.g., "p1_line1_aliennumber")
         field_name: Human-readable field name (e.g., "Alien Registration Number")
         confirmation_method: How field was confirmed
+        kit_id: Kit identifier (e.g., "w7") -- the UNIQUE kit key. form_id is a
+            form NUMBER and is not unique: two kits can share it (a standard
+            W-7 and a firm-specific variant), so only kit_id distinguishes
+            them in the record (bd polyglot-pdf-47r3).
+        edition_date: The form's government edition (e.g., "12/2024"). Agencies
+            revise forms and enforce edition dates, so a disputed filing must be
+            able to answer "which edition did the client confirm against?".
+            Sourced from form_metadata.edition_date, NOT form_metadata.version --
+            `version` is a schema-authoring field whose values differ in meaning
+            per kit ("v9_conformant", "draft") and would be misleading here.
+        Both default to None so an older client that omits the handshake keys
+        degrades to the pre-47r3 record shape rather than erroring.
 
     CRITICAL: This function MUST NEVER receive or log actual field values or PII.
 
@@ -170,6 +258,8 @@ def log_field_confirmation(
             "timestamp": "2025-11-18T20:30:45.123Z",
             "event": "field_confirmed",
             "form_id": "I-90",
+            "kit_id": "i-90",
+            "edition_date": "01/20/25",
             "form_session_id": "fss_abc123_xyz789",
             "field_id": "p1_line1_aliennumber",
             "field_name": "Alien Registration Number",
@@ -183,6 +273,11 @@ def log_field_confirmation(
         "timestamp": timestamp,
         "event": "field_confirmed",
         "form_id": form_id,
+        # Kit identity + government edition (bd polyglot-pdf-47r3). Always
+        # present as keys so every record has a uniform shape; None on an older
+        # client that does not send them.
+        "kit_id": kit_id,
+        "edition_date": edition_date,
         "form_session_id": form_session_id,
         "field_id": field_id,
         "field_name": field_name or field_id,

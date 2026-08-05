@@ -16,6 +16,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { SchemaFormStateManager } from './schemaFormState'
+import { saveOnboardingState, clearOnboardingState } from '../onboardingStorage'
 import type { FormSchema, FieldValue } from '../types/schema'
 
 describe('SchemaFormStateManager', () => {
@@ -516,6 +517,42 @@ describe('SchemaFormStateManager', () => {
       // Identifier and human label must stay separate keys: collapsing them
       // would write a prose title where the audit expects an identifier.
       expect(payload.form_number).not.toBe(payload.form_title)
+    })
+
+    it('sends kit_id and edition_date on the JIT handshake (bd 47r3)', () => {
+      // A form NUMBER identifies neither WHICH kit (two kits can share one --
+      // a standard W-7 and a firm-specific variant) nor WHICH government
+      // edition the client confirmed against. Both ride the handshake so the
+      // confirmation audit trail can name the exact revision.
+      saveOnboardingState({ formId: 'i-90', language: 'English' })
+      const schema = createTestSchema()
+      const withEdition = {
+        ...schema,
+        form_metadata: { ...schema.form_metadata, edition_date: '01/20/25' },
+      }
+      const state = SchemaFormStateManager.init(withEdition)
+
+      const payload = SchemaFormStateManager.getJITHandshakePayload(state, 'English')
+
+      expect(payload.kit_id).toBe('i-90')
+      expect(payload.edition_date).toBe('01/20/25')
+    })
+
+    it('sends kit_id/edition_date as null when unavailable (bd 47r3)', () => {
+      // A custom form legitimately has no government edition; the backend then
+      // falls back to a content fingerprint rather than recording nothing.
+      clearOnboardingState()
+      const schema = createTestSchema()
+      const noEdition = {
+        ...schema,
+        form_metadata: { ...schema.form_metadata, edition_date: undefined as any },
+      }
+      const state = SchemaFormStateManager.init(noEdition)
+
+      const payload = SchemaFormStateManager.getJITHandshakePayload(state, 'English')
+
+      expect(payload.kit_id).toBeNull()
+      expect(payload.edition_date).toBeNull()
     })
 
     it('sends form_number as null when the schema has no form_number (bd n0em)', () => {

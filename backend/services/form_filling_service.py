@@ -12,6 +12,9 @@ from datetime import datetime
 from backend.config import Settings, get_settings
 from backend.ports.live_ai_port import ILiveAI
 from backend.services import guidance_contract
+from backend.utils.confirmation_logger import (
+    resolve_edition_marker as _resolve_edition_marker,
+)
 from backend.utils.language_codes import bcp47_codes_for_spoken_language
 from .field_utils import (
     build_fields_from_schema,
@@ -128,6 +131,10 @@ class FormFillingService:
         # _switch_to_section_locked can thread it into the rebuilt CallbackHandler
         # without needing to re-derive it from the handshake -- bd rwjy).
         self._form_session_id: Optional[str] = None
+        # Kit identity + government edition for the audit trail (bd
+        # polyglot-pdf-47r3), stored for the same reason as _form_session_id.
+        self._kit_id: Optional[str] = None
+        self._edition_date: Optional[str] = None
         # Resume flag: True when the handshake carried resume:true (mid-section
         # reconnect). Suppresses the greeting in send_initiating_message so Gemini
         # resumes silently rather than re-introducing the form/section.
@@ -233,6 +240,7 @@ class FormFillingService:
         current_values: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
         form_session_id: Optional[str] = None,
+        kit_id: Optional[str] = None,
         current_section_id: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
@@ -301,6 +309,27 @@ class FormFillingService:
         # Extract form_id here so it can be passed to CallbackHandler (confirmation
         # audit logging guard requires both ids at construction time, bd rwjy).
         form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+        # Kit identity + government EDITION for the audit trail (bd
+        # polyglot-pdf-47r3). form_id alone identifies neither which KIT was used
+        # (two kits can share a form number) nor which EDITION the client
+        # confirmed against (agencies revise forms and enforce edition dates).
+        # edition_date rides form_metadata like form_number; kit_id is not a
+        # form_metadata key (it names the kit, not the form) so it arrives as an
+        # argument. Both stored so _switch_to_section_locked can thread them into
+        # the rebuilt CallbackHandler without re-deriving them.
+        # A CUSTOM form (a firm's own intake sheet -- the firm-tier epic's case)
+        # has no government edition date, so resolve_edition_marker falls back to
+        # a fingerprint of the kit's field structure: not a date, but stable per
+        # revision and changing when the form changes, which is what a disputed
+        # filing needs. Prefer the FULL schema for the fingerprint -- the
+        # per-section/JIT `schema` carries only one field, so hashing it would
+        # yield a different marker per section of the same form.
+        edition_date = _resolve_edition_marker(
+            schema.get("form_metadata", {}).get("edition_date") if schema else None,
+            full_schema or schema,
+        )
+        self._kit_id = kit_id
+        self._edition_date = edition_date
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
         self._form_session_id = form_session_id or session_id
@@ -313,6 +342,8 @@ class FormFillingService:
             send_transcript=send_transcript,
             form_id=form_id,
             form_session_id=self._form_session_id,
+            kit_id=kit_id,
+            edition_date=edition_date,
         )
 
         # Inject tool handler methods into callback handler

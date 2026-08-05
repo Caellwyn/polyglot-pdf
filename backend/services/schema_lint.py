@@ -979,6 +979,7 @@ def lint_schema(
     _emit_translation_flags(schema, out)
     _emit_guidance_flags(schema, out)
     _check_guidance_identity_drift(schema, out)
+    _check_audit_identity(schema, out)
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
@@ -988,6 +989,48 @@ def lint_schema(
     _check_field_backing(fields, schema, dump, out)
 
     return out
+
+
+def _check_audit_identity(schema: Dict[str, Any], out: List[LintFinding]) -> None:
+    """Surface a missing government edition -- as a WARNING, never a gate.
+
+    bd polyglot-pdf-47r3. Every confirmation event records form_number +
+    edition_date (plus the kit key) so a disputed filing can answer WHICH form
+    and WHICH revision the client confirmed against.
+
+    Deliberately NOT an ERROR (maintainer call, 2026-08-04): a custom form --
+    a firm's own proprietary intake sheet, which the firm-tier epic
+    (polyglot-pdf-02ye) exists to support -- legitimately has no government
+    edition date. Blocking publish would make the product unusable for exactly
+    those customers. The audit record instead falls back to the kit's content
+    fingerprint (see confirmation_logger.resolve_edition_marker), so a record
+    ALWAYS pins some verifiable revision; this warning just tells an author that
+    a government form appears to be missing its real edition.
+
+    Only fires when form_metadata EXISTS but omits edition_date -- a schema with
+    no form_metadata at all is a fixture/draft shape, not an authoring mistake
+    worth flagging.
+
+    Not checked here: cross-copy consistency. `frontend/public/form-kits/` is
+    gitignored BUILD OUTPUT (`generate-form-manifest.ts` does an `fs.cp` from
+    `form-kits/` on every build), so there is only one source of truth to lint --
+    a stale value there is overwritten by the next build, not a second copy to
+    reconcile.
+    """
+    meta = schema.get("form_metadata")
+    if not isinstance(meta, dict):
+        return
+
+    edition = meta.get("edition_date")
+    if not isinstance(edition, str) or not edition.strip():
+        out.append(LintFinding(
+            SEVERITY_WARNING, "audit-identity-no-edition",
+            "$.form_metadata.edition_date",
+            "this kit declares no government edition date, so its confirmation "
+            "records fall back to a content fingerprint instead of naming the "
+            "edition -- set form_metadata.edition_date (e.g. \"12/2024\") if "
+            "this is an official form; ignore it for a custom/in-house form",
+        ))
 
 
 def _emit_guidance_flags(schema: Dict[str, Any], out: List[LintFinding]) -> None:
