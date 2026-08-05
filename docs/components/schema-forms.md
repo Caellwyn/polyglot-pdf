@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-31 (bd polyglot-pdf-v437: the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed FieldType count to 13 and corrected the mobile-overlay breakpoint to describe its 700/820 dead-zone hysteresis, not a flat 768px rule; the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -103,7 +103,11 @@ fallback (bd polyglot-pdf-55jg); production continuous sessions show no nav bloc
 all. The Submit button is hidden for now because there is no downstream submission
 target (bd polyglot-pdf-rvac) -- re-add it in the nav block when a real target
 exists. It also mounts the voice overlay
-(desktop `VoiceOverlay` / mobile `VoiceOverlayMobile`, `window.innerWidth <= 768`)
+(desktop `VoiceOverlay` / mobile `VoiceOverlayMobile`, classified via a debounced
+dead-zone hysteresis -- a flat 768px threshold at initial mount only, then a
+700px/820px dead-zone band on later resizes so a width oscillating between them
+keeps whatever mode is already active, bd polyglot-pdf-6vo -- which exists to stop
+a resize-driven Gemini-session-restart loop)
 and the PDF print/download buttons, and creates the shared mic `MediaStream` +
 `ConnectionManager` once the stream is ready. It also renders, with no flag gate
 (the preview UI is cut over, bd `polyglot-pdf-v437`) -- the toggle always, the
@@ -209,5 +213,5 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`clear()` is silent** — no `schemaFormStateChange`; refresh the UI yourself.
 - **sections, not parts** — `parts?` is optional/legacy on the schema; navigation
   is section-based, with load-time migration of the old `*Part*` keys.
-- **`signature`/`address_group`/`table` are stubs** — don't assume all 12
+- **`signature`/`address_group`/`table` are stubs** — don't assume all 13
   `FieldType`s render.

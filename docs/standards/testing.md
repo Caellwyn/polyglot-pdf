@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-07-17 (bd polyglot-pdf-1rgr: schema-editor CI job now runs a `tsc --noEmit` typecheck step, mirroring frontend's).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -71,10 +71,11 @@ The backend suite is organized **by directory**, not by marker:
   on each coroutine test (there is no `asyncio_mode = auto`; the marker is
   required). Dep pins: `pytest==7.4.3`, `pytest-asyncio==0.21.1`, `httpx==0.28.1`
   (`backend/requirements.txt`).
-- **The `external` marker** gates tests that hit the **real Gemini Live API**
-  (currently just `backend/tests/contract/test_live_ai_gemini_integration.py`, via a
-  module-level `pytestmark = pytest.mark.external`). It needs live credentials and
-  costs tokens — deselect it in the default loop with `-m "not external"`.
+- **The `external` marker** gates tests that hit the **real Gemini Live API** --
+  currently `backend/tests/contract/test_live_ai_gemini_integration.py` and
+  `test_tool_contracts.py` (both set a module-level
+  `pytestmark = pytest.mark.external`). It needs live credentials and costs
+  tokens — deselect it in the default loop with `-m "not external"`.
 - **Hermetic logs.** `backend/tests/conftest.py` has one autouse fixture that
   redirects `CONFIRMATION_LOG_DIR` to a per-test `tmp_path`, so confirmation-audit
   tests don't dirty the repo's real `logs/confirmations/` tree. Keep new tests that
@@ -142,11 +143,23 @@ navigation-confirmation), and contexts — run `vitest run` for the current coun
 
 ## E2E + manual testing
 
-There is **no automated E2E suite yet.** Writing a repeatable one is tracked by
-`polyglot-pdf-277` (*full I-90 form completion across all field types* — all 6 field
-types, the confirmation workflow, idle-timeout/reconnect, and PDF
-generation/download, verified end-to-end at least twice, failures triaged into new
-beads). The native-vs-manual-VAD smoke test is `polyglot-pdf-333`.
+An automated E2E harness covers the voice form-fill loop --
+[`tests/e2e/voice-harness/`](../../tests/e2e/voice-harness/) (see the
+[`voice-harness`](../../.claude/skills/voice-harness/SKILL.md) skill), shipped as
+`polyglot-pdf-g8w`. It drives the real frontend (Chrome) against a local backend
+and the real Gemini Live API, injecting committed 16 kHz PCM16 WAV fixtures
+through a dev-gated in-app hook (`window.__VFF_TEST_INJECT`) and asserting on
+concrete outcomes -- field value, confirmed flag, advance -- for the cycle
+"Gemini asks a field -> audio answer -> field fills -> audio confirm -> Gemini
+advances." It is agent-driven (the agent is the runner, via the `preview_*`
+Chrome tools), not a `pytest`/CI-collected suite.
+
+It does not yet cover a full I-90 completion across all 6 field types,
+idle-timeout/reconnect, and PDF generation in one pass -- that broader sweep is
+tracked by open bead `polyglot-pdf-277` (*full I-90 form completion across all
+field types*, verified end-to-end at least twice, failures triaged into new
+beads). The native-vs-manual-VAD smoke test shipped as `polyglot-pdf-333`
+(closed).
 
 Manual debug runbooks exist for the PDF-fill path — `DEBUG_PDF_FILLING.md` /
 `test-pdf-filling.md` at the repo root (wrapped-value symptoms, `field_count=0`,

@@ -2,10 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: added the `require_auth` HTTP
-dependency gating `/api/fill-pdf` + `/api/form-kits{,/{kit_id}/schema}`; the
-kit-PDF GET stays deliberately public). Prior: 2026-07-05 (bd polyglot-pdf-mpoe
-staleness sweep). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected testing section to reflect AuthContext.test.tsx coverage of AuthContext and ProtectedRoute; only Login remains untested).*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -142,5 +139,8 @@ The WS auth gate is covered indirectly: the integration tests patch
 without a live token. The HTTP gate is covered directly:
 `backend/tests/unit/test_http_route_auth.py` pins the 401s on
 fill-pdf/form-kits/schema, the deliberate NON-gate on the kit-PDF GET, and the
-`VFF_DISABLE_AUTH` bypass. There are **no frontend tests** for `AuthContext` /
-`Login` / `ProtectedRoute` yet. See [../standards/testing.md](../standards/testing.md).
+`VFF_DISABLE_AUTH` bypass. `frontend/src/contexts/AuthContext.test.tsx` covers
+`AuthContext` (the authorized_emails allowlist gate, sign-in/out/reset delegation,
+the loading lifecycle, and the test-harness bypass) and `ProtectedRoute` (both gate
+states). There are no tests yet for `Login` (the form/UI component itself).
+See [../standards/testing.md](../standards/testing.md).

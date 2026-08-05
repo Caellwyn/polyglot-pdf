@@ -1,12 +1,11 @@
 # Beads setup (prerequisite for the swarm tooling)
 
-*Last updated: <DATE>.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: removed swarm_init.py references; updated beads URLs; fixed config.yaml guidance to sync.remote).*
 
 The swarm scripts (`bd_safe.py`, `closeout_housekeeping.py`, etc.) and the
-`/closeout` skill all assume [beads](https://github.com/steveyegge/beads)
+`/closeout` skill all assume [beads](https://github.com/gastownhall/beads)
 (`bd`) is installed and wired to this repo's remote. This doc is the one-time
-per-machine + per-clone setup. `scripts/swarm_init.py` runs a preflight that
-points you here if anything is missing.
+per-machine + per-clone setup.
 
 > Generalized from a working project's setup notes. The traps below were all
 > hit for real -- they are not hypothetical.
@@ -16,7 +15,7 @@ points you here if anything is missing.
 ### 1. Install the `bd` binary
 
 Beads is a single Go binary, not a Python/npm package -- the kit can't vendor
-it. Install from the beads releases (https://github.com/steveyegge/beads) and
+it. Install from the beads releases (https://github.com/gastownhall/beads) and
 confirm it's on PATH:
 
 ```
@@ -51,7 +50,8 @@ git config beads.role maintainer
 **Trap:** `bd init --contributor` creates a parallel store at
 `~/.beads-planning/` and an `additional:` entry in `.beads/config.yaml`.
 Symptom: `bd dep add` fails with "issue not found" / "must resolve to the same
-store." Keep `.beads/config.yaml` with only `repos.primary: "."`.
+store." Keep `.beads/config.yaml` with only `sync.remote:` pointing to your
+GitHub repository (do not add multi-repo `repos.primary` configuration).
 
 ## Per-clone (once per checkout of this repo)
 
@@ -88,10 +88,10 @@ git ls-remote https://github.com/OWNER/REPO.git HEAD
 
 ### 3. Confirm the bd-prime hooks are installed
 
-`swarm_init.py` installs `.claude/settings.json` with `SessionStart` +
-`PreCompact` hooks that run `bd prime`. These are load-bearing: they inject the
-beads workflow context every session. If you merged the kit into an existing
-`.claude/settings.json`, confirm both hooks are present.
+The kit includes `.claude/settings.json` pre-configured with `SessionStart` +
+`PreCompact` hooks (via `beads_remote_bootstrap.py` and `bd_prime.py`) that
+inject the beads workflow context every session. If you merged the kit into an
+existing `.claude/settings.json`, confirm both hooks are present.
 
 ## Sync architecture (how it works)
 
@@ -125,5 +125,5 @@ does the bracketing for you. Pull at session start before any read, too.
 - **Don't `bd bootstrap` from inside a worktree** -- it creates a per-worktree
   store that breaks inheritance. Bootstrap from the main repo dir only.
 
-See https://github.com/steveyegge/beads/blob/main/docs/SYNC_CONCEPTS.md for the
+See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for the
 beads-side details.

@@ -1,15 +1,14 @@
 # Stateless architecture
 
-*Last updated: 2026-07-17 (bd polyglot-pdf-ow1e: noted the schema-data-only boundary example -- the process-level option-label translation cache stores form labels/translations, never user field values; see [../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md](../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md)). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the secretary's request-use-discard pattern into the Rules section; verified accurate against current code otherwise). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: dropped stale bead-status parentheticals from hipaa-pii-policy.md and logging-and-cost.md links).*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 
 The load-bearing invariant of polyglot-pdf: **the client is the single source of
 truth for form field values; the backend is stateless with respect to them.**
 Cross-cutting -- read before adding any server-side storage, cache, or log that
-might touch field data. Related: [`hipaa-pii-policy.md`](hipaa-pii-policy.md)
-(planned, `polyglot-pdf-b11`), [`terminology.md`](terminology.md) (form-session
-vs session).
+might touch field data. Related: [`hipaa-pii-policy.md`](hipaa-pii-policy.md),
+[`terminology.md`](terminology.md) (form-session vs session).
 
 ## The invariant
 
@@ -96,7 +95,7 @@ durability is a property of the form-session (client-side), never the WS session
   form + language -- never a user's field values, so it does not breach this
   rule. Anything keyed by or containing a USER'S data would.)
 - **Never log field values / PII / PHI server-side.** Log ids, types, counts,
-  timings (see [`logging-and-cost.md`](logging-and-cost.md), planned `polyglot-pdf-m8s`).
+  timings (see [`logging-and-cost.md`](logging-and-cost.md)).
 - **Treat `current_values` as ephemeral context, not storage.** It's an input to
   prompt-building, consumed and dropped within the connection.
 - **The request-use-discard pattern for any handler that needs current field

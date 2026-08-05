@@ -1,8 +1,8 @@
 # Risk rating
 
-**Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
+**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: added text_ai_gemini.py as High-risk and corrected the "only" google-genai-importer claim). See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
@@ -63,7 +63,7 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 
 | File | Why high |
 |------|----------|
-| `backend/adapters/live_ai_gemini.py` | The only non-test `google-genai` importer; the Gemini Live adapter (criterion 1). Drives all tool calls and spends tokens (criterion 3). |
+| `backend/adapters/live_ai_gemini.py` | A `google-genai` importer (see also `text_ai_gemini.py` below); the Gemini Live adapter (criterion 1). Drives all tool calls and spends tokens (criterion 3). |
 | `backend/ports/live_ai_port.py` | The AI port contract the adapter implements and the routes depend on (criterion 2 + the genai boundary). |
 | `backend/routes/websocket_routes.py` | The WS session handshake/routing contract -- the wire format the client rebuilds context from (criterion 2). |
 | `backend/routes/pdf_fill_routes.py` | Fills/renders the PDF the user signs; a bug corrupts the legal artifact (criterion 3). |
@@ -71,6 +71,7 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 | `backend/services/callback_handler.py` | The PII/PHI logging path (field IDs, spoken-name labels) -- the policy surface (criterion 3). |
 | `backend/services/form_kits.py` | The form-kit definitions PDF filling and schema forms both build on (criterion 2 + 3). |
 | `backend/models/form_models.py` | The shared form/field schema crossing the adapter, routes, and client wire (criterion 2); imported by the matcher/validation/field-utils path. (Tool declarations live in `config.py#TOOL_DECLARATIONS`; its sibling `conditional_vocabulary.py` is rated Med below.) |
+| `backend/adapters/text_ai_gemini.py` | The secretary text-model adapter; a `google-genai` importer (criterion 1) and spends tokens on secretary queries (criterion 3). |
 
 ### Med
 

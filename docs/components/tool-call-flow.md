@@ -2,13 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-07-22 (bd polyglot-pdf-djnk: validation-error responses carry an explicit DISCARD-the-rejected-value instruction so a rejected value is never re-used on the next field; see [../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md](../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md)). Prior: 2026-07-16 (bd polyglot-pdf-f7h7: the stored-value echo is success-branch-only -- the error branch, incl. a collapsed multi-field call, carries no `stored_values`. Same-day bd polyglot-pdf-h7wx: update_form_fields success responses carry the stored-value echo (`stored_values` + message line) the model reads its confirmation back from; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is deprecated section-reset-fallback, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
-`skip_field` to the tool table + count -- a voice skip of a required field the
-user cannot answer, distinct from N/A; it mirrors confirm_field's round-trip).
-Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth
-tool `ask_secretary` to the tool table and tool count; the rest of the
-confirm/update round-trip descriptions verified accurate against current code).
-See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: added the `switch_to_field` tool row to the table; validation-error responses carry an explicit DISCARD-the-rejected-value instruction so a rejected value is never re-used on the next field).*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -33,6 +27,7 @@ was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
 | `switch_section` (DEPRECATED) | Navigate to another section -- section-reset fallback only; dropped from the tool set in production continuous mode (bd polyglot-pdf-55jg) | `section_identifier` |
 | `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |
+| `switch_to_field` | Jump to one specific field so it becomes current (correction/revisit path, distinct from switch_section) (bd polyglot-pdf-jnjj.36) | `field` |
 
 ## Inbound: how a tool call reaches the backend
 

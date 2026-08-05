@@ -2,10 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-08-04 (bd polyglot-pdf-5e6a: Vertex-only production --
-a deployed AI Studio path now fails startup with no override; 3.1 A/B is
-local-only until Vertex GA). Prior: 2026-08-03 (bd polyglot-pdf-z2is
-fail-closed guard), 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: Vertex-only production enforced; 3.1 A/B remains local-only until Vertex GA).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in

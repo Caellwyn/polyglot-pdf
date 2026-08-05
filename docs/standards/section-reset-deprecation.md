@@ -2,13 +2,13 @@
 
 **Tracks:** backend/config.py backend/services/callback_handler.py backend/services/form_filling_service.py backend/services/request_coordinator.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts frontend/src/shared/connection.ts frontend/src/demo/VoiceOverlay.tsx
 
-*Last updated: 2026-07-12*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: removed stale line number from switch_to_field row to match table's file+symbol citation style).*
 
 ## Status: DEPRECATED but LIVE
 
 **Continuous-DTI is the production law of the land** (`CONTINUOUS_SESSION` +
 `USE_DTI`, both default `true` -- see CLAUDE.md and
-[`sprint_11_continuous-dti-law_plan.md`](../sprint_11_continuous-dti-law_plan.md)).
+[`sprint_11_continuous-dti-law_plan.md`](../archive/sprint_11_continuous-dti-law_plan.md)).
 Section-reset -- the older flow that chops the form into sections and restarts
 the Gemini session at each section boundary -- is **dead in production** but
 **kept as a fallback** in case continuous-DTI hits an unsolvable issue. It is
@@ -54,7 +54,7 @@ consumer is also retired.
 |------|--------|--------------------|
 | `backend/services/form_filling_service.py` | `switch_to_section` (note the **TO**) + `_switch_to_section_locked` | The shared session-restart primitive: BOTH the manual WS switch and the AI-initiated switch call it, and it is also the mechanism behind continuous-mode's GoAway/1011 reconnect and the harness's baseline arm. Retiring section-reset does not retire this call path. |
 | `backend/services/ai_context.py` | The legacy full-SI renderer branch (`section_list` / the non-DTI format branch) | Consumed by `measure_form_session_costs.py --arm section-reset`, the cost/measurement harness's baseline instrument. Needed to keep measuring the alternative arm. |
-| `backend/config.py` | `switch_to_field` tool declaration (~line 495) and its SI text | A distinct, LIVE field-level navigation tool (secretary jumps + corrections), unrelated to section-reset. |
+| `backend/config.py` | `switch_to_field` tool declaration and its SI text | A distinct, LIVE field-level navigation tool (secretary jumps + corrections), unrelated to section-reset. |
 | `backend/services/form_filling_service.py` `_build_tool_declarations` | The continuous-mode gate that drops `switch_section` from the declared tools | This is the CONTINUOUS-mode routing gate itself, not the section-reset body it routes away from. |
 | (repo-wide) | Any `if continuousSessionEnabled` / continuous-mode guard | The guards are live routing logic; only the section-reset body they route away from is deprecated. |
 | (repo-wide) | The manifest-first "jit" transport (`handshake_jit`, `jit_mode`, `buildContinuousManifest`) | This is continuous-DTI's carrier, not section-reset. |

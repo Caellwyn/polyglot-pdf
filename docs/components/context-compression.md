@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-07-12 (continuous-DTI is the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, not a candidate, validated by the jnjj.25 cost gate + the G3 correctness gate). The section-reset comparison below is the DEPRECATED fallback (bd polyglot-pdf-55jg). Prior 2026-07-06, bd polyglot-pdf-x8rt: the sliding-window shipped as continuous-session mode -- ctu8 validated window 3500; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified), so `_build_live_config` clamps the derived/configured trigger into range and re-asserts window < trigger after the clamp.
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed the TRIGGER_MARGIN_TOKENS default (1500, not 600) and its derivation; removed the stale "untested 5000/4400" caveat now that `ctu8` and `polyglot-pdf-7872` are both closed and the shipped margin retunes to the validated 5000/3500; shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3), since client-owned rehydration already covers reconnects. Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified), so `_build_live_config` clamps the derived/configured trigger into range and re-asserts window < trigger after the clamp.
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -31,7 +31,7 @@ the authoritative SDK reference ([../genai_docs/README.md](../genai_docs/README.
 the original exploration plan
 ([../archive/sprint_4_sliding-window-context_plan.md](../archive/sprint_4_sliding-window-context_plan.md)),
 and the go/no-go brief that came out of it
-([../sliding-window-go-no-go-brief.md](../sliding-window-go-no-go-brief.md)).
+([../archive/sliding-window-go-no-go-brief.md](../archive/sliding-window-go-no-go-brief.md)).
 
 ## Why -- and what compression actually buys us
 
@@ -152,7 +152,7 @@ per-form** (below); the static token values are the override:
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
 | `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (lifts the I-90's ~1601 ESTIMATED floor to the validated ~2200 window, which clears the ~1978 MEASURED floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `600` (window `~2200` -> trigger `~2800`) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (window `~2200` -> trigger `~3700` pre-clamp -> clamped/retuned to the validated `5000`/`3500` pair; see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -186,13 +186,13 @@ floor+headroom window (~2200) under a 5000 trigger makes each eviction chop
 guidance DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
 post-eviction; wider windows stayed coherent). The retune preserves the
 derivation's margin semantic: only ~margin tokens are evicted per cycle.
-**CAVEAT: the retuned I-90 derive pair (5000/4400) is an untested interim** --
-the only live-validated coherent configuration is the explicit 5000/3500 (the
-clean 30-question continuous run, 2026-07-05); `ctu8`'s sweep must validate or
-replace the retuned value before the DTI+compression flags flip on. The old
-2800/2200 "winning calibration" numbers were measured on AI Studio before this
-bound existed on the connect path; any sweep (`ctu8`) must place triggers at
->= 5000 and sweep the WINDOW as the independent variable.
+With `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` at its shipped default (`1500`,
+bd polyglot-pdf-7872), the retune lands on the explicit **5000/3500** pair --
+the configuration `ctu8`'s sweep live-validated (the clean 30-question
+continuous run, 2026-07-05), not the earlier untested 5000/4400 interim (that
+was what the old `600` margin default retuned to). The old 2800/2200 "winning
+calibration" numbers were measured on AI Studio before the `[5000, 128000]`
+bound existed on the connect path and no longer apply.
 
 The floor is the **rendered (filled) SI plus the tool declarations** -- both
 unevictable, both re-billed every turn -- NOT the SI template alone.
@@ -257,43 +257,18 @@ connection. Both were resolved separately from compression:
   client so it can reconnect ahead of the close. See
   [websocket-routing.md](websocket-routing.md) ("GoAway"). The reconnect POLICY
   (acting on the signal) is a follow-up (`l3a.2`).
-- **Session resumption -- adopt for UNINTENTIONAL disconnects only** (`wnt`). The
-  decision turns on the CAUSE of the reconnect:
-  - **Unintentional** (network drop / `GoAway`) -- the WebSocket genuinely closed and
-    the client AUTO-reconnects. Here we WANT the context kept, so resume the same
-    Gemini session. First connect opts in by setting
-    `LiveConnectConfig.session_resumption = SessionResumptionConfig()` (handle=None);
-    the server then emits `LiveServerSessionResumptionUpdate` messages -- capture
-    `new_handle`, store it CLIENT-side (`sessionStorage`), and pass it back via
-    `SessionResumptionConfig(handle=...)` on the auto-reconnect handshake. The
-    reconnect is then truly invisible (same context), not merely de-greeted.
-  - **Intentional reset** -- a fresh session is the POINT (clear context AND bound
-    cost -- see above). Covers two shapes: (a) a SERVER-side restart that keeps the
-    WebSocket open (section switch `finalize`->`start_session`; the Level-3
-    idle-FAREWELL `restart_gemini_session`), and (b) a CLIENT-side WS close+reopen
-    that is still intentional -- the section advance via
-    `webFormConnection.startSection`/`switchToSection`. Never pass a handle on any
-    of these.
-
-  **The correct hook (verified):** the handle must ride ONLY `handleOpen`'s
-  auto-reconnect handshake -- the same `resume:true` path gated on `hasConnectedOnce`
-  (`webFormConnection.ts`). `startSection`/`switchToSection` deliberately BYPASS
-  `handleOpen` (it early-returns while `isSectionSwitching`) and send their own
-  handshake, so they get a fresh session for free as long as the handle is attached
-  to the `handleOpen` path and nowhere else. (Do NOT key it on "client- vs
-  server-initiated" -- `startSection` is a client-initiated reconnect that must NOT
-  carry a handle.)
-
-  Stateless invariant holds (handle lives client-side; backend stores nothing).
-  `vmxx`'s `is_reconnect` RESUME override stays as the FALLBACK when no valid handle
-  exists (expired >2h, or first connect). Open implementation edges (for the impl
-  bead): (1) an unintentional reconnect carries both a handle AND the client's
-  current form-state handshake; if the handle is stale relative to form state, prefer
-  the fresh handshake as source of truth (the handle restores conversational
-  continuity, not form state); (2) the idle-TIMEOUT watchdog (distinct from the
-  farewell) closes the WS and requires a MANUAL user reconnect -- treat that like a
-  fresh start (no handle / vmxx fallback), since the user re-initiated and the handle
-  is likely expired. Decided here; implementation is a separate bead (`l3a.3`).
+- **Session resumption -- designed, then rejected** (bd polyglot-pdf-l3a.3,
+  wont-do, 2026-06-15). A design existed to adopt `session_resumption` for
+  unintentional disconnects only (network drop / `GoAway`), resuming the same
+  Gemini session via a client-stored handle instead of reconnecting fresh. The
+  maintainer reversed course: reconnect already rebuilds full context from the
+  client-owned handshake (field values + section state replay via
+  `sessionStorage`), so a handle would only add non-deterministic
+  conversational/prosodic continuity across an involuntary drop -- a marginal
+  UX gain not worth the adapter+frontend+stateless-boundary handle-plumbing.
+  `session_resumption` is not implemented anywhere in this codebase; the
+  fresh-reconnect path (`vmxx`'s `is_reconnect` RESUME override) is the only
+  mechanism, for every reconnect cause.
 
 ## What compression replaced -- and what it must not touch
 

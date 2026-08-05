@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/beads_remote_bootstrap.py scripts/bd_prime.py
 
-*Last updated: 2026-06-15. Reviewed for the 5k32 windowless-spawn PR: both tracked scripts gained a `creationflags=` arg (via `swarm_config.windowless_creationflags()` / an inlined equivalent in the bootstrap's `run()`) that suppresses the Windows git.exe console-window storm, but no bootstrap behavior this doc describes changed. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: softened the migration-range claim, trimmed stamp and bead-ID narrative). Both tracked scripts carry a `creationflags=` arg (via `swarm_config.windowless_creationflags()` / an inlined equivalent in the bootstrap's `run()`) that suppresses the Windows git.exe console-window storm -- see [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md).*
 
 How a fresh **remote / web / ephemeral** Claude Code session gets a working beads
 (`bd`) database. Local long-lived checkouts never need this — they already hold a
@@ -105,7 +105,8 @@ untouched (this self-heal is for disposable remote/web containers only).
    distinguishes either from the real live store. The script wipes any such
    empty / partial / stale DB before cloning.
 2. **Hydrate** over the authenticated proxy origin (`sync.remote` neutralised, then
-   restored). This already advances the clone through migrations 41→46.
+   restored). This already advances the clone through bd's forward migrations to
+   the current schema level.
 3. **Repair the dolt-ignored tables** (whenever any is **missing** — gated on the
    tables, not on whether bd opens; bd polyglot-pdf-080y): read `dolt_ignore`, expand
    its (possibly-glob) patterns against a throwaway `bd init`, and recreate **every**
@@ -118,7 +119,7 @@ untouched (this self-heal is for disposable remote/web containers only).
    `dolt` CLI: PATH → cached download → latest release download → `go install`, in
    that order, cached under the gitignored `.beads/.cache/`; if none is obtainable,
    the script **warns that writes may fail** rather than reporting a silent success.
-4. **Reconcile onto the ref** (the bd polyglot-pdf-0q8 fix): once bd opens a
+4. **Reconcile onto the ref** (stale-seed fix, bd polyglot-pdf-0q8): once bd opens a
    populated DB, compare the working branch's issue count to the fetched ref
    (`origin/main`). If the working branch is a **stale JSONL seed** (fewer issues
    than the ref, on an unrelated root), `dolt reset --hard origin/main` rebases the
@@ -129,7 +130,7 @@ untouched (this self-heal is for disposable remote/web containers only).
    no common ancestor. The same reconcile also runs on the **already-hydrated
    refresh path**, so a container hydrated *before* this fix self-heals on its next
    session when its `bd dolt pull` fails with "no common ancestor."
-5. **Sync over the LIVE proxy** (the bd polyglot-pdf-j47 fix): bd's *dolt-native*
+5. **Sync over the LIVE proxy** (proxy-sync fix, bd polyglot-pdf-j47): bd's *dolt-native*
    pull can fail (`Error 1105: no remote`) or hang (~180s) against the proxy --
    it defaults to the unreachable public `sync.remote` github URL, and the dolt
    remote baked into the snapshot points at a dead, rotated port. So the script
@@ -138,7 +139,7 @@ untouched (this self-heal is for disposable remote/web containers only).
    when dolt-native sync does not), then a **bounded** `bd dolt pull` (no silent
    180s hang) before reconciling. This runs on both the fresh and the
    already-hydrated paths.
-6. **Freshness gate -- FAIL LOUD** (bd polyglot-pdf-j47): the original bug was
+6. **Freshness gate -- FAIL LOUD** (fail-loud gate, same fix): the original bug was
    *silent* -- a false `hydrated (30 issues). Done.` printed over a stale JSONL
    snapshot, so the agent had no signal to distrust `bd ready`. The gate uses the
    reachable anchor `git ls-remote origin refs/dolt/data`: if that live ref exists

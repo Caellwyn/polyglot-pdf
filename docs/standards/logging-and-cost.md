@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-5c2h-structured-token-stdout-emit.md](../journal/entries/2026-07-09-bd-5c2h-structured-token-stdout-emit.md) for closeout details.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected compression-epic citation from l3a to x8rt/7872, with link to shipped default in context-compression.md).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -55,10 +55,11 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 
 > **Why cost matters here.** The Gemini Live API re-bills the *entire accumulated
 > context* on every turn, and native audio accrues ~25 tokens/sec (see
-> `docs/genai_docs/` live-api-best-practices + bead `polyglot-pdf-l3a`). Long
-> sessions get expensive fast — the motivation for the context-compression epic
-> (`polyglot-pdf-l3a`). The cumulative cost in `token_usage.jsonl` is the baseline
-> that work measures against.
+> `docs/genai_docs/` live-api-best-practices). Long sessions get expensive fast —
+> the motivation for the sliding-window compression that ships by default today
+> (see [../components/context-compression.md](../components/context-compression.md),
+> bd `polyglot-pdf-x8rt` / `polyglot-pdf-7872`). The cumulative cost in
+> `token_usage.jsonl` is the baseline that work measures against.
 
 > **MEASURED COST INVARIANT (do not re-derive from the rate table — this is
 > counterintuitive and was expensive to establish).** On the **2.5** native-audio

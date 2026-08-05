@@ -1,6 +1,6 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: 2026-05-30. This file documents the doc SYSTEM (current state); it is itself a tier-1 doc.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3). This file documents the doc SYSTEM (current state); it is itself a tier-2 doc, reached via [`INDEX.md`](INDEX.md).*
 
 This project organizes its docs for **progressive discovery**: a small always-loaded core points at on-demand docs, so an agent (or human) loads only what the task needs and context stays lean. This file explains the system and the discipline that keeps it from rotting. It is the most transferable artifact in the claude-swarm-kit -- the structure below works for any codebase.
 
@@ -43,7 +43,11 @@ The checker is **warn-only** as a pre-commit hook and a **CI gate** via `tests/t
 ### 3. Current-state-only rule
 
 Tier-1 and tier-2 docs describe CURRENT STATE ONLY:
-- No `Previously: <date>` chains on stamps.
+- No `Previously: <date>` chains on stamps -- and no synonym chains either
+  (`Prior:`, stacked prior-update summaries). The stamp is ONE line; the
+  mechanical checker's regex only catches the `Previously:` spelling, but the
+  rule covers the pattern, not the keyword (2026-08-05 audit: `Prior:` chains
+  had quietly accumulated on a dozen docs).
 - No `## Update history` / `## Recent sprint history` / `## Changelog` sections.
 - No "Sprint NN did X" narrative threaded through body prose.
 

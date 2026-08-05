@@ -1,6 +1,6 @@
 # Planning doctrine: SPEAR, exit rubrics, and model tiering
 
-*Last updated: 2026-07-04.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: cite guarded auto-merge bead 16pj which shipped the doctrine, not h2r.3 which is traceability).*
 
 How a feature gets scoped, planned, executed, assessed, and resolved here. This
 doc is the conceptual home; three skills are its mechanical encodings --
@@ -37,8 +37,10 @@ planning exists to prevent.
 
 Every bead traces to a **maintainer-approved plan** -- the scope-of-record that
 authorized the work. This is what makes "implement the maintainer's choices, never
-invent" checkable, and it is the prerequisite for widening autonomy (R4's guarded
-auto-merge; bd `polyglot-pdf-h2r.3`). Two halves:
+invent" checkable. This traceability is the foundation for autonomy controls like
+guarded auto-merge (bd `polyglot-pdf-16pj`, shipped PR #301; see the
+[`CLAUDE.md` escalation section](../../CLAUDE.md#escalation-vs-autonomy) for live doctrine).
+Two halves:
 
 - **The link is machine-readable: every epic that traces to a sprint plan carries
   a `plan:` metadata pointer** to that plan file (e.g. `plan:

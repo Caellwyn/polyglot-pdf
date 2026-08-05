@@ -26,7 +26,7 @@ When you need to prove "data is flowing," log a length or a type — never the v
 |---------|------|--------|
 | Confirmation audit | `backend/utils/confirmation_logger.py` | **Safe** — logs `field_id` + `confirmation_method` + counts only; explicit "never the actual values." The bd z2is Firestore mirror (`confirmation_events` collection, deployed envs) persists the SAME metadata-only event dicts — no value field exists to leak, pinned by an allowlist test on the exact document keys. See [confirmation-and-audit.md](confirmation-and-audit.md). |
 | Token / cost | `backend/utils/token_file_logger.py` | **Safe** — token counts + costs only. See [logging-and-cost.md](logging-and-cost.md). |
-| Event schemas | `backend/utils/log_schemas.py` + `structured_logger.py` | **Safe by shape** — `TypedDict`s with no value field (`field_id` carries the comment "NEVER include field values!"). `StructuredLogger` consumes them but emits nothing yet (its one non-test reference is a dead import). See [logging-and-cost.md](logging-and-cost.md). |
+| Event schemas | `backend/utils/log_schemas.py` + `structured_logger.py` | **Safe by shape** — `TypedDict`s with no value field (`field_id` carries the comment "NEVER include field values!"). `StructuredLogger` IS live: `live_ai_gemini.py` calls `get_structured_logger().log_gemini_api_response(...)` per turn to emit token/cost counts as a JSON line to stdout (bd polyglot-pdf-5c2h) -- safe because the schema has no value slot, not because it's unused. See [logging-and-cost.md](logging-and-cost.md). |
 | Frontend metrics | `frontend/src/shared/metrics.ts` | **Safe** — barge-in / VAD timing metrics held in memory and exposed only on `window.__VFF_METRICS__` for the local tuning UI; never transmitted to the backend or any third party. Header: "NO PII - Only timing and operational metrics." |
 | Dev file logger | `backend/utils/dev_file_logger.py` | **Gated** -- with one historical escape hatch now closed. MAY write field values / Gemini messages / tool args, but the FILE sink (`_write_to_file`) is a no-op unless `backend/.env.DEV` exists. `.env*` files are gitignored + dockerignored, so production containers never enable it. Acceptable for local debugging; NEVER ship a container with `.env.DEV`. **bd polyglot-pdf-2m9** added more sinks under the SAME gate: per-turn audio rollups (frame/byte counts -- no audio bytes), session/turn lifecycle, `event_shape` probes (booleans + transcription **lengths**, never text), and -- when `SEND_TRANSCRIPT` is on locally -- input/output **transcription text** (PHI). **bd polyglot-pdf-p84m** closed the one UN-gated sub-sink: `log_error`'s "always output to terminal" write ran regardless of the gate and interpolated `error_message` (= `str(e)`, which can embed a field value) -> Cloud Logging. The terminal line now carries only the `error_type`; the full message stays in the gated file. Lesson: a single un-gated write *inside* an otherwise-gated logger defeats the gate -- audit every sink, not just the module flag (see [the entry](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md)). |
 | Dev console ingest | `backend/routes/dev_console_routes.py` (`POST /dev/console-log`) | **Gated.** Receives the browser console mirror (bd polyglot-pdf-2m9) and writes it via the dev file logger. Console lines MAY contain PHI, so the route returns **404 unless `DEV_LOGGING_ENABLED`** (the `.env.DEV` marker) -- prod never accepts it -- and the frontend (`devConsoleCapture.ts`) only POSTs to a **localhost** backend, never cloud. |
@@ -54,8 +54,9 @@ per-file `GUARDED_FILES` tests, `test_no_pii_logging_anywhere_in_backend` sweeps
 EVERY non-test / non-probe / non-script backend `.py` with the same detectors, so
 a value-handling logger in a brand-new module is covered the moment it lands — no
 `GUARDED_FILES` edit required (`polyglot-pdf-uov.15`). The sweep self-checks that
-it scanned `>5` files so a broken path glob fails loudly rather than passing
-vacuously. The remaining blind spot is the **sink/shape**, not the file set: only
+it scanned `>=20` files (the backend has ~40 production modules; the floor is a
+gross-undercount tripwire, not a tight bound) so a broken path glob fails loudly
+rather than passing vacuously. The remaining blind spot is the **sink/shape**, not the file set: only
 two shapes are detected (kwargs in `_log.*` calls + `print()` f-strings), so a
 leak via a different sink (`logging.getLogger`, `sys.stderr.write`) still would
 not be caught. Keep new logging on `_log.*` with redacted (`*_length`/`*_count`)
@@ -65,7 +66,7 @@ The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed i
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: added the disclaimer-acceptance
-row -- client_ip dropped; noted the confirmation Firestore mirror carries the
-same metadata-only shape). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness
-sweep). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected the sweep
+self-check floor to `>=20` and confirmed StructuredLogger is live, not a dead
+import; retains the bd polyglot-pdf-z2is disclaimer-acceptance row and
+confirmation Firestore mirror note).*

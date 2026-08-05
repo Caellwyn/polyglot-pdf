@@ -2,11 +2,11 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-04 (bd polyglot-pdf-5e6a: Vertex-only production --
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: USE_DTI/CONTINUOUS_SESSION
+default flipped to true, main.py load_dotenv line fix, jpe cleanup already shipped,
+deploy-new.sh mentioned). Vertex is the only production path (bd polyglot-pdf-5e6a):
 the ALLOW_AI_STUDIO override was removed; a deployed AI Studio path now fails
-startup outright). Prior: 2026-08-03 (bd polyglot-pdf-z2is:
-CONFIRMATION_FIRESTORE_ENABLED sink env, HTTP auth-gate note on
-VFF_DISABLE_AUTH), 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
+startup outright.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -23,7 +23,7 @@ so all callers share a single instance (it was rebuilt per call before
 `load_dotenv()` *before* importing config, so any `backend/.env` populates
 `os.environ` ahead of that first cached build, and the `Settings` fields that
 call `os.getenv(...)` pick it up. (The `get_settings` docstring still says ".env
-in later phases" — that's stale; `main.py:7` already does it.) Because the result
+in later phases" — that's stale; `main.py:10` already does it.) Because the result
 is cached, a test that mutates `os.environ` and wants a fresh read must call
 `get_settings.cache_clear()` (most tests instead monkeypatch the module attribute,
 which bypasses the cache).
@@ -52,7 +52,8 @@ which bypasses the cache).
 | `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier — `false` → 2.5 standard (default for its audio-path behavior), `true` → 3.1 premium (**LOCAL-ONLY**: 3.1 exists only on AI Studio, and the Vertex-only startup guard cannot catch this flip — the premium id resolves before the `VERTEXAI` branch, so a deployed service starts then `1008`s at connect. Deploy 3.1 only once GA on Vertex. Opt-in; now tool-call-reliable since the untyped-param fix, `bd polyglot-pdf-wpw.4`). See [ai-models.md](../standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Pin an exact model string; **non-empty wins** over `USE_PREMIUM_MODEL` (resolved in `Settings._resolve_model`). |
 | `DISABLE_MODEL_THINKING` | `true` | Turn off model "thinking" tokens on the live session (the form-fill loop needs no chain-of-thought; thinking bills at the output rate). When on and the model is 2.5-family, the connect config carries `thinking_config={"thinking_budget": 0}`; 3.1 (different `thinking_level` field) is left at default. Effect on native-audio Live is unverified upstream, so safe-if-ignored. See [voice-ai.md](voice-ai.md). |
-| `USE_DTI` | `false` | Dynamic Turn Injection -- the shipped reduced-SI mode (the demo deploy runs `USE_DTI=true`). A thin-principal SI carrying only the static backbone; the CURRENT field's guidance rides the initiating message and each next field's guidance rides the `confirm_field` tool response, instead of dumping the section's fields into the SI. `false` -> the legacy full-SI fallback (`SYSTEM_INSTRUCTION` with the whole current-section field dump). DTI is carried over the manifest-first handshake transport (`handshake_jit` / `jit_mode`). See [schema-forms.md](schema-forms.md), [websocket-routing.md](websocket-routing.md), and [../standards/si-reduction.md](../standards/si-reduction.md). |
+| `USE_DTI` | `true` | Dynamic Turn Injection -- the shipped reduced-SI mode (code default flipped to `true` by bd `polyglot-pdf-7872` on 2026-07-11; `deploy-demo.sh` no longer needs to set it). A thin-principal SI carrying only the static backbone; the CURRENT field's guidance rides the initiating message and each next field's guidance rides the `confirm_field` tool response, instead of dumping the section's fields into the SI. `false` -> the legacy full-SI fallback (`SYSTEM_INSTRUCTION` with the whole current-section field dump). DTI is carried over the manifest-first handshake transport (`handshake_jit` / `jit_mode`). See [schema-forms.md](schema-forms.md), [websocket-routing.md](websocket-routing.md), and [../standards/si-reduction.md](../standards/si-reduction.md). |
+| `CONTINUOUS_SESSION` | `true` | Runs the whole form as one Gemini Live session bounded by context-window compression, instead of resetting the session per section (code default flipped to `true` alongside `USE_DTI` by bd `polyglot-pdf-7872`). Requires `USE_DTI`: if `CONTINUOUS_SESSION` is on and `USE_DTI` is off, `Settings` forces `USE_DTI` on and logs a warning rather than serve the inconsistent combination. `false` -> the legacy per-section-reset flow (used as the measurement-harness baseline). See [context-compression.md](context-compression.md). |
 | `DISABLE_GEMINI_VAD` | `false` (env-overridable) | `false` → native mode (Gemini's automatic VAD detects turns); `true` → manual mode (the client drives turn-taking with `activity_start/end`). See [voice-and-vad.md](../standards/voice-and-vad.md). |
 
 ## Form-kit storage (`FORM_KITS_MODE`)
@@ -151,8 +152,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 > doc; it predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
 > dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it (the
 > only remaining reference is a stale comment in `callback_handler.py:194`); the
-> real gate is the `.env.DEV` marker above. The stale comment is tracked for
-> cleanup under bd `polyglot-pdf-jpe`.
+> real gate is the `.env.DEV` marker above. The comment at
+> `callback_handler.py:445-448` already documents this correctly (it explicitly
+> calls out `VFF_DEV_LOGGING` as dead config) -- fixed under bd `polyglot-pdf-jpe`.
 
 ## Deployment (local/manual — no CI)
 
@@ -165,7 +167,9 @@ Two Firebase/GCP projects, both running a Cloud Run service named
 | **production** | `polyglot-forms-919f2` (`.firebaserc` `default`/`prod`) | `deploy-production.sh` | `https://polyglot-forms-919f2.web.app` |
 
 Both delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
-stages):
+stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
+a brand-new Cloud Run service by name -- not part of the regular update flow the
+two channel scripts use.
 
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
