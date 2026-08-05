@@ -104,7 +104,19 @@ ack-gate box is its rendering). The round-2 reviewer also filed two
 out-of-scope beads itself: polyglot-pdf-2dlb (strip jump dead-click for a
 field whose section_id names no section) and polyglot-pdf-z9u7
 (instructions-rectified/-ungrounded-dropped use a bare .help path).
-Rejected/deferred: none rejected.
+Round 3 (Opus) found 4 more, all adopted: (1) the refusal line and the
+review filter were per-form state that survived a kit switch -- a refusal
+naming form A's fields (with dead links) sat on form B's strip; every
+open/close path now resets both (resetPerFormReviewUi). (2) The header
+chip's scroll used a combined document-order selector, so it always
+landed on the advisory banner instead of the property anchor; it now
+prefers [data-embedded-finding], banner as fallback, and the test asserts
+WHICH element scrolled. (3) A shipped RemoteCatalogue notice still told
+authors "the validation panel lists them"; reworded to the flagged
+option rows, with the old phrase pinned absent. (4) An options[]-anchored
+finding on a field whose type never renders the Options block (backend
+lint checks options on every field) was counted by the chip but rendered
+nowhere; those now fall to the banner. Rejected/deferred: none rejected.
 
 ## Lessons
 

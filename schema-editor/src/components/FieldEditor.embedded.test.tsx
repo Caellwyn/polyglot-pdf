@@ -134,6 +134,30 @@ describe('findings render at the property they concern (s18 C1)', () => {
     expect(screen.queryByTestId('embedded-findings-option-0')).toBeNull();
   });
 
+  it('an option finding on a field whose Options block never renders falls to the banner', () => {
+    // Backend lint checks options[] on EVERY field regardless of type, but
+    // the editor's Options block renders only for select/radio/
+    // checkbox_group -- without the fallback such a finding was counted by
+    // the chip yet rendered nowhere (fresh-eyes round 3).
+    const textWithOptions: FormField = {
+      ...TEXT_FIELD,
+      options: [{ label: 'A', value: 'Bad Value!' }],
+    } as unknown as FormField;
+    const optionError: LintFinding = {
+      severity: 'ERROR', rule: 'option-value-slug',
+      path: 'fields[0] (id=phone).options[0]',
+      message: 'the value is not in the required format',
+      field_id: 'phone',
+    };
+    render(
+      <FieldEditor field={textWithOptions} schema={makeSchema(textWithOptions)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[optionError]} />,
+    );
+    expect(screen.queryByTestId('embedded-findings-option-0')).toBeNull();
+    expect(screen.getByTestId('field-problems'))
+      .toHaveTextContent('not in the required format');
+  });
+
   it('keeps field-anchored findings in the banner (their only home)', () => {
     render(
       <FieldEditor field={TEXT_FIELD} schema={makeSchema(TEXT_FIELD)}
@@ -143,9 +167,13 @@ describe('findings render at the property they concern (s18 C1)', () => {
       .toHaveTextContent('this field names no PDF box');
   });
 
-  it('the header chip counts the findings and scrolls to the first one', () => {
+  it('the header chip counts the findings and scrolls to a PROPERTY anchor, not the banner', () => {
     const scrollSpy = vi.fn();
     window.HTMLElement.prototype.scrollIntoView = scrollSpy;
+    // TEXT_FIELD has no spoken position, so the advisory banner renders above
+    // every anchor -- the scroll must still land on the property-anchored
+    // finding, never be swallowed by the banner (fresh-eyes round 3: a
+    // combined document-order selector always hit the banner first).
     render(
       <FieldEditor field={TEXT_FIELD} schema={makeSchema(TEXT_FIELD)}
         onUpdateField={vi.fn()} authorTier
@@ -154,7 +182,9 @@ describe('findings render at the property they concern (s18 C1)', () => {
     const chip = screen.getByTestId('field-findings-chip');
     expect(chip).toHaveTextContent('2 to fix'); // one ERROR -> red wording
     fireEvent.click(chip);
-    expect(scrollSpy).toHaveBeenCalled();
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+    const scrolled = scrollSpy.mock.instances[0] as HTMLElement;
+    expect(scrolled.getAttribute('data-embedded-finding')).toBe('instructions');
   });
 
   it('renders no chip for a clean field', () => {

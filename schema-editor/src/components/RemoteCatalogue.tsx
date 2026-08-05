@@ -393,12 +393,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         .reduce((n, e) => n + e.options_updated, 0);
       const failed = report.failedLanguages;
       // Verify/rectify gate flags (bd 9djc): persisted server-side, so after
-      // the reload below the ValidationPanel lists them -- the notice just
-      // points the author there.
+      // the reload below the lint pass re-emits them and they render at their
+      // option rows in the field editor (sprint-18 C1 -- the warnings pane
+      // that used to list them is gone). The notice points the author there.
       const flagCount = report.flags?.length ?? 0;
       const flagNote = flagCount
         ? `; ${flagCount} translation flag${flagCount === 1 ? '' : 's'} to ` +
-          'review (open the kit -- the validation panel lists them)'
+          'review (open the kit -- flagged fields are marked in the list, ' +
+          'and each flag shows on its answer choice in the field editor)'
         : '';
       if (!report.changed && flagCount === 0) {
         setNotice(`"${kit.id}" option labels are already fully translated.`);
@@ -406,7 +408,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         // No label changed, but the verify gate still flagged translations
         // (reachable on a force re-bake that reproduces identical values):
         // the backend persisted the flags into provenance, so point at the
-        // panel and reload the stored schema like any other change.
+        // flagged rows and reload the stored schema like any other change.
         setNotice(
           `"${kit.id}" option labels are already fully translated` +
           flagNote + '.',

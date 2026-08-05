@@ -30,8 +30,9 @@ vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="li
 // (bd zgln; fresh-eyes: an isolation test of the panel does not cover App's
 // wiring to it). data-has-repair reflects whether the host passed the callback.
 vi.mock('./components/ValidationPanel', () => ({
-  ValidationPanel: ({ onRepairAll, onJumpToReview }: {
+  ValidationPanel: ({ onRepairAll, onJumpToReview, refusal }: {
     onRepairAll?: () => Promise<void>; onJumpToReview?: () => void;
+    refusal?: string | null;
   }) => (
     <div data-testid="vp" data-has-repair={onRepairAll ? 'yes' : 'no'}>
       {onRepairAll && (
@@ -46,6 +47,9 @@ vi.mock('./components/ValidationPanel', () => ({
           jump
         </button>
       )}
+      {/* The refusal line (sprint-18 C1): surfaced so App's produce/clear
+          wiring is testable through the full tree. */}
+      {refusal && <div data-testid="strip-refusal">{refusal}</div>}
     </div>
   ),
 }));
@@ -101,7 +105,8 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
 import { App } from './App';
 import {
   AuthError, clearAccessCode, isHostedMode, listRemoteKits,
-  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit, saveRemoteSchema,
+  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit,
+  saveRemoteSchema, setRemoteStatus,
 } from './utils/remoteKitStore';
 
 beforeEach(() => {
@@ -640,5 +645,24 @@ describe('the strip jump control (sprint-18 C1)', () => {
     await screen.findByText('edit f3');   // skips the signed-off f2
     fireEvent.click(screen.getByTestId('strip-jump'));
     await screen.findByText('edit f1');   // wraps back around
+  });
+});
+
+// The refusal line is PER-FORM state (sprint-18 C1, fresh-eyes round 3): a
+// Mark-complete refusal about form A must not sit on form B's strip -- its
+// "Go to:" links would name fields B does not have.
+describe('the strip refusal clears on a kit switch (sprint-18 C1)', () => {
+  it('a refusal lands on the strip, then clears when another kit opens', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    vi.mocked(setRemoteStatus).mockRejectedValue(
+      new Error('Schema has 1 lint error(s), so it cannot be marked complete'));
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+    await screen.findByTestId('strip-refusal');
+    await openKit('second-kit');
+    await waitFor(() =>
+      expect(screen.queryByTestId('strip-refusal')).toBeNull());
   });
 });

@@ -184,6 +184,14 @@ export const App: React.FC = () => {
   // The latest server refusal (publish gate / translation coverage), homed on
   // the strip's refusal line (decision 1: no refusal is ever homeless).
   const [publishRefusal, setPublishRefusal] = React.useState<string | null>(null);
+  // Both are PER-FORM state, so every open/close path resets them alongside
+  // selectedFieldId/viewMode -- a refusal naming form A's fields (with dead
+  // "Go to:" links) must not sit on form B's strip, and A's review filter
+  // must not narrow B's list (fresh-eyes round 3).
+  const resetPerFormReviewUi = React.useCallback(() => {
+    setReviewFilterActive(false);
+    setPublishRefusal(null);
+  }, []);
   // The fields in reading order -- sections as listed, then orphans -- the
   // same order the FieldList renders, so the strip's jump and the list's own
   // "Next to review" walk one order.
@@ -273,6 +281,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     // A new form means a new destination -- drop the prior file handle so the
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
@@ -294,7 +303,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState]);
+  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi]);
 
   // Open a kit from the catalogue (bd b0pe): read its schema from the directory
   // handle and build a blob URL for its PDF, then drive the existing schema +
@@ -313,6 +322,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
@@ -349,7 +359,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState]);
+  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi]);
 
   // A remote call answered 401 mid-session (rotated/revoked code): drop back to
   // the access gate. The gate re-probes the stored code, finds it dead, clears
@@ -407,6 +417,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]);
     setViewMode('edit');
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     fileHandleRef.current = null; // hosted mode never saves via a file handle
     localEntryRef.current = null;  // hosted reloads go through the remote store
     try {
@@ -450,7 +461,7 @@ export const App: React.FC = () => {
     } finally {
       if (seq === openSeqRef.current) setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
+  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired, resetPerFormReviewUi]);
 
   // Guard a folder switch: returns false to ABORT when the user declines to
   // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
@@ -477,6 +488,7 @@ export const App: React.FC = () => {
     setSavingToKit(false);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     clearSchema();
     fileHandleRef.current = null;
     localEntryRef.current = null;
@@ -484,7 +496,7 @@ export const App: React.FC = () => {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
     }
-  }, [clearSchema]);
+  }, [clearSchema, resetPerFormReviewUi]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {

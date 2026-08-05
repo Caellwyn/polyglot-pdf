@@ -601,7 +601,7 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     expect(onOpenKit).not.toHaveBeenCalled();
   });
 
-  it('points the author at the validation panel when the bake flags translations (bd 9djc)', async () => {
+  it('points the author at the flagged option rows when the bake flags translations (bd 9djc, re-homed by s18 C1)', async () => {
     vi.mocked(translateRemoteKitOptions).mockResolvedValue({
       ...REPORT,
       flags: [
@@ -619,10 +619,15 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     fireEvent.click(screen.getByText('Translate options'));
     await waitFor(() => expect(
       screen.getByText(/2 translation flags to review/)).toBeInTheDocument());
-    expect(screen.getByText(/validation panel/)).toBeInTheDocument();
+    // The pane is gone (s18 C1): the notice must send the author to where
+    // flags now render -- the field list rows + the option in the editor --
+    // and must NOT mention the removed panel.
+    expect(screen.getByText(/shows on its answer choice in the field editor/))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/validation panel/)).toBeNull();
   });
 
-  it('still points at the panel and reloads when flags arrive without label changes (bd 9djc)', async () => {
+  it('still surfaces the flags and reloads when they arrive without label changes (bd 9djc)', async () => {
     // Reachable on a force re-bake that reproduces identical values: the
     // backend persists the flags (changed=false, flags non-empty), so the
     // notice must not read as a pure no-op and the open kit must reload.

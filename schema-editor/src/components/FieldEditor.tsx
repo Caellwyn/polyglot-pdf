@@ -744,6 +744,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   };
   const optionValues = (field.options ?? []).map(o =>
     o.value !== undefined ? String(o.value) : undefined);
+  // The Options block below renders only for these types -- an option bucket
+  // on any OTHER options-carrying field (backend lint checks options[] on
+  // every field regardless of type) would be counted by the chip yet render
+  // nowhere, the same homeless class the Form-row fix closed (fresh-eyes
+  // round 3). Those findings fall to the banner instead.
+  const optionsBlockRenders = field.type === 'select'
+    || field.type === 'radio' || field.type === 'checkbox_group';
   for (const f of lintFindings ?? []) {
     // Scope to THIS field: the sole caller passes a pre-scoped array, but the
     // prop type invites a whole-schema list, and anchoring another field's
@@ -757,9 +764,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
       // The token may be an option INDEX (schema_lint's option rules) or an
       // option VALUE (the translation-flag writers) -- resolveOptionIndex
       // disambiguates per rule. An unresolvable token (option gone mid-edit,
-      // ambiguous value) falls back to the field bucket rather than
-      // rendering nowhere or at a wrong row.
-      const idx = a.optionToken !== undefined
+      // ambiguous value) -- or a field whose Options block never renders --
+      // falls back to the field bucket rather than rendering nowhere or at a
+      // wrong row.
+      const idx = optionsBlockRenders && a.optionToken !== undefined
         ? resolveOptionIndex(optionValues, f, a.optionToken)
         : undefined;
       if (idx !== undefined) {
@@ -813,9 +821,15 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 }`}
                 title="Jump to the first finding on this field"
                 onClick={() => {
-                  rootRef.current
-                    ?.querySelector('[data-embedded-finding], [data-testid="field-problems"]')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  // Prefer a property-anchored finding; the advisory banner is
+                  // only the fallback. A combined selector resolved in DOCUMENT
+                  // order, and the banner (rendered above every anchor, often
+                  // for advisory reasons the chip did not count) swallowed the
+                  // scroll whenever it existed (fresh-eyes round 3).
+                  const target =
+                    rootRef.current?.querySelector('[data-embedded-finding]')
+                    ?? rootRef.current?.querySelector('[data-testid="field-problems"]');
+                  target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }}
               >
                 {anchoredErrorTotal > 0
