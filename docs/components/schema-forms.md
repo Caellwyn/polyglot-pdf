@@ -136,7 +136,10 @@ enforced in a test rather than trusted to a convention.
 It resolves
 **per logical field**, not per raw key:
 
-- The newer `lastModified` wins; a stamped entry beats an unstamped one.
+- The newer `lastModified` wins; a stamped entry beats an unstamped one. The same
+  rule applies *within* one side when it holds both alias variants — otherwise a
+  fresher hollow write (a skip, or the user clearing a field) would lose to a
+  staler answer on one side while winning across sides.
 - `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
   merge can never resurrect a key `updateField` deleted on migration — that
   resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).

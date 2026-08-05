@@ -438,12 +438,47 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect((out.f as any).skipped).toBe(true);
     });
 
+    it('within ONE side, a FRESHER hollow write beats a staler answer', () => {
+      // The intra-side collapse must use the SAME rule as the cross-side one.
+      // readFieldEntryWithAlias alone is "meaningful wins", which ignores
+      // lastModified -- so a fresh skip (markFieldSkipped writes the exact key
+      // with no alias cleanup, so both variants can coexist on one side) would
+      // lose to a stale answer AND be re-marked confirmed, never re-prompting.
+      // The identical data split across the two SIDES already resolved by stamp,
+      // so this closes a contradiction between two branches of one function.
+      const out = reconcileFieldValues(
+        {
+          'p1_grp': { value: null, skipped: true, confirmed: true, lastModified: 9000 },
+          'p1_grp[]': { value: ['a'], lastModified: 10 },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(out['p1_grp'].value).toBeNull();
+      expect((out['p1_grp'] as any).skipped).toBe(true);
+    });
+
+    it('within ONE side, a fresher ANSWER still beats a staler hollow entry', () => {
+      const out = reconcileFieldValues(
+        {
+          'p1_grp': { value: null, skipped: true, lastModified: 10 },
+          'p1_grp[]': { value: ['a'], lastModified: 9000 },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(out['p1_grp'].value).toEqual(['a']);
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one
       // that survives -- not the hollow exact-key one.
       const out = reconcileFieldValues(
         {
+          // Stamps deliberately AGREE with meaningful-wins here; the inverted
+          // arrangement is covered by the two cases above, which is what makes
+          // this fixture non-vacuous as a pair rather than on its own.
           [bare]: { value: null, lastModified: 100 },
           [bracket]: { value: ['real'], confirmed: true, lastModified: 300 },
         } as any,

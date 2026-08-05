@@ -94,6 +94,10 @@ export function readFieldEntryWithAlias(
  *    exists only in memory stays visible to the confirm handler's usable-value
  *    gate and the skip handler's already-filled guard.
  *  - An entry present on only one side is kept as-is.
+ *  - The SAME newer-stamp rule applies WITHIN one side when it illegally holds
+ *    both variants (see pickWithinSide) -- otherwise a fresher hollow write would
+ *    lose to a staler answer on one side while winning across sides, which is the
+ *    same data resolving two different ways.
  */
 export function reconcileFieldValues(
   persisted: Record<string, FieldValue>,
@@ -137,12 +141,8 @@ export function reconcileFieldValues(
     const memoryKey = inMemory[base] !== undefined ? base
       : inMemory[bracket] !== undefined ? bracket : undefined;
 
-    const persistedEntry = persistedKey === undefined
-      ? undefined
-      : readFieldEntryWithAlias(persisted, persistedKey);
-    const memoryEntry = memoryKey === undefined
-      ? undefined
-      : readFieldEntryWithAlias(inMemory, memoryKey);
+    const persistedEntry = pickWithinSide(persisted, base, bracket, persistedKey);
+    const memoryEntry = pickWithinSide(inMemory, base, bracket, memoryKey);
 
     if (persistedEntry === undefined && memoryEntry === undefined) continue;
 
@@ -239,6 +239,41 @@ export function reconcileFieldValues(
   }
 
   return out;
+}
+
+/**
+ * Resolve ONE side that (illegally) holds both `p1_grp` and `p1_grp[]`.
+ *
+ * `readFieldEntryWithAlias` alone is wrong here: its rule is "meaningful entry
+ * wins", which IGNORES lastModified, so a fresher HOLLOW write -- a skip, or the
+ * user clearing the field -- loses to a staler answer. That is the uw3w harm
+ * (worse for a skip, since markFieldSkipped also sets confirmed:true, so the
+ * revived value never re-prompts), and it contradicted how the SAME data
+ * resolves when the two variants happen to land on opposite sides, where the
+ * cross-side rule below compares stamps.
+ *
+ * So: when both variants are present on one side and BOTH are dated, the newer
+ * wins -- the same rule the cross-side comparison uses. Otherwise fall back to
+ * the established meaningful-wins precedence, which is right when there is no
+ * ordering information to use.
+ */
+function pickWithinSide(
+  map: Record<string, FieldValue>,
+  base: string,
+  bracket: string,
+  presentKey: string | undefined
+): FieldValue | undefined {
+  if (presentKey === undefined) return undefined;
+  const a = map[base];
+  const b = map[bracket];
+  if (a !== undefined && b !== undefined) {
+    const sa = typeof a.lastModified === 'number' ? a.lastModified : undefined;
+    const sb = typeof b.lastModified === 'number' ? b.lastModified : undefined;
+    if (sa !== undefined && sb !== undefined && sa !== sb) {
+      return sa > sb ? a : b;
+    }
+  }
+  return readFieldEntryWithAlias(map, presentKey);
 }
 
 /** Structural equality for FieldValue.value, including checkbox-group arrays. */
