@@ -215,6 +215,27 @@ per schema at $.fields, rendered on the Form row), but its remedy read
 "Write spoken instructions for this field" -- naming a field that does
 not exist on that row; reworded to address the listed fields.
 
+Opus outer review, primary pass 8: 3 findings, all adopted. The two
+correctness ones share a root cause -- POSITION leaking into finding
+identity. (1) The backend path embeds the field's array index
+(`fields[3] (id=x)`), so ignoring or reordering any earlier field shifted
+every later index and falsely demoted every later signed-off field: the
+mass re-review wave the message-exclusion rule exists to prevent,
+re-entering through the path. The fingerprint now normalizes
+`fields[]/sections[]/parts[]` indices away (the `(id=X)` token beside
+them IS the identity); `options[i]` is deliberately kept, being the only
+thing that identifies which choice a finding is about. (2) Pass 7's
+fallback ordinal was GLOBAL, so fixing an unrelated finding shifted every
+later one (false demotion) and let a new finding inherit a retired
+ordinal (missed demotion -- the original bug still reachable); the
+discriminator is now content-derived (a hash of the message) plus a
+per-(field,message) occurrence counter for genuinely duplicated
+messages. Mutation-verified with the reviewer's own scenarios, including
+re-deriving after an edit -- the step the pass-7 test omitted, which is
+why it passed a broken implementation. (3) stripIdentitySuffix was
+end-anchored (a silent-failure shape this repo has shipped before); it
+now matches the token anywhere.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:

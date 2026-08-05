@@ -143,15 +143,35 @@ export function ruleLabel(rule: string): string {
   return rule ? RULE_LABELS[rule] ?? rule : '';
 }
 
-// The trailing identity token the guidance-staleness finding carries in its
-// path (`fields (id=X).help[identity:<sha1>]`). The hash moves on EVERY
-// material edit, so a fingerprint that included it would change constantly --
-// the ack gate (guidance_ack_sha1) already owns identity currency, so the
-// fingerprint strips it and stays stable per rule+field.
-const IDENTITY_SUFFIX_RE = /\[identity:[0-9a-f]+\]$/;
+// The identity token the guidance-staleness finding carries in its path
+// (`fields (id=X).help[identity:<sha1>]`). The hash moves on EVERY material
+// edit, so a fingerprint that included it would change constantly -- the ack
+// gate (guidance_ack_sha1) already owns identity currency, so the fingerprint
+// strips it and stays stable per rule+field. Deliberately NOT end-anchored:
+// an end-anchored marker stops working the moment the backend appends a
+// segment after the token, and its failure is silent (every guidance
+// fingerprint would churn per edit, re-demoting reviewed fields) -- this repo
+// has shipped that exact shape of regression before (Opus outer review,
+// pass 8).
+const IDENTITY_TOKEN_RE = /\[identity:[0-9a-f]+\]/g;
 
 export function stripIdentitySuffix(path: string): string {
-  return (path || '').replace(IDENTITY_SUFFIX_RE, '');
+  return (path || '').replace(IDENTITY_TOKEN_RE, '');
+}
+
+// POSITIONAL array indices in a finding path (`fields[3] (id=x)`,
+// `sections[0] (id=y)`). They are NOT identity: the `(id=X)` token beside
+// them is. Removing or reordering an earlier field shifts every later index,
+// so a fingerprint carrying them made one "Ignore" click falsely demote an
+// arbitrary number of correctly-reviewed fields -- the mass re-review wave
+// the message-exclusion rule exists to prevent, re-entering through the path
+// (Opus outer review, pass 8). The `options[i]` index is NOT stripped: it has
+// no id token beside it, so it is the only thing identifying which choice a
+// finding is about.
+const CONTAINER_INDEX_RE = /\b(fields|sections|parts)\[\d+\]/g;
+
+export function stripContainerIndices(path: string): string {
+  return (path || '').replace(CONTAINER_INDEX_RE, '$1[]');
 }
 
 /**
@@ -166,7 +186,8 @@ export function stripIdentitySuffix(path: string): string {
  * real cases).
  */
 export function findingFingerprint(f: LintFinding): string {
-  return `${f.rule}|${f.field_id ?? ''}|${stripIdentitySuffix(f.path)}`;
+  const path = stripContainerIndices(stripIdentitySuffix(f.path));
+  return `${f.rule}|${f.field_id ?? ''}|${path}`;
 }
 
 /**

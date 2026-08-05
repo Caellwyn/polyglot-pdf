@@ -46,12 +46,43 @@ describe('findingFingerprint', () => {
       .not.toBe(findingFingerprint(a));
   });
 
-  it('strips the trailing identity token so a content edit does not move it', () => {
+  it('strips the identity token so a content edit does not move it', () => {
     expect(stripIdentitySuffix('fields (id=x).help[identity:abc123]'))
       .toBe('fields (id=x).help');
-    // Only a TRAILING identity token strips -- an embedded look-alike stays.
-    expect(stripIdentitySuffix('fields (id=x[identity:aa]).help'))
-      .toBe('fields (id=x[identity:aa]).help');
+    // NOT end-anchored (Opus outer review, pass 8): a backend change that
+    // appends a segment after the token must not silently resume churning
+    // every guidance fingerprint on each edit.
+    expect(stripIdentitySuffix('fields (id=x).help[identity:abc123].extra'))
+      .toBe('fields (id=x).help.extra');
+  });
+
+  it('is STABLE when an earlier field is removed (positional index stripped)', () => {
+    // The `(id=X)` token is the identity; `fields[i]` is not. One Ignore
+    // click shifts every later index, and a fingerprint carrying it falsely
+    // demoted every later signed-off field -- the mass re-review wave the
+    // message exclusion exists to prevent, re-entering through the path
+    // (Opus outer review, pass 8).
+    const before = f({
+      rule: 'help-details-oversize', field_id: 'target',
+      path: 'fields[1] (id=target).help.details',
+    });
+    const after = f({
+      rule: 'help-details-oversize', field_id: 'target',
+      path: 'fields[0] (id=target).help.details',   // an earlier field went away
+    });
+    expect(findingFingerprint(after)).toBe(findingFingerprint(before));
+    // Section-anchored findings get the same treatment...
+    expect(findingFingerprint(f({ path: 'sections[3] (id=sec_a)', field_id: 'sec_a' })))
+      .toBe(findingFingerprint(f({ path: 'sections[0] (id=sec_a)', field_id: 'sec_a' })));
+    // ...but an OPTION index is real identity (no id token beside it), so it
+    // must still distinguish one answer choice from another.
+    expect(findingFingerprint(f({ path: 'fields[0] (id=x).options[1]', field_id: 'x' })))
+      .not.toBe(findingFingerprint(f({ path: 'fields[0] (id=x).options[2]', field_id: 'x' })));
+  });
+
+  it('still distinguishes two DIFFERENT fields (the id token survives)', () => {
+    expect(findingFingerprint(f({ path: 'fields[0] (id=a)', field_id: 'a' })))
+      .not.toBe(findingFingerprint(f({ path: 'fields[0] (id=b)', field_id: 'b' })));
   });
 });
 

@@ -85,27 +85,55 @@ interface ValidationPanelProps {
 // This ruleset is deliberately lighter AND emits rule:'' for every finding, so
 // any rule the UI keys on by id (the guidance-staleness ack gate) is invisible
 // here. Treat reaching this path as degraded, not equivalent.
+// A short, stable discriminator derived from a fallback finding's CONTENT.
+//
+// The fallback has no backend rule id, so without this every finding on a
+// field fingerprints identically (rule + field + path, message excluded) and
+// the timeliness demotion silently never fires there (Opus outer review,
+// pass 7). A positional ordinal fixed that but introduced two new bugs --
+// removing an unrelated finding shifts every later ordinal (false demotion)
+// and lets a different finding inherit a retired one (missed demotion; pass
+// 8). Hashing the message makes the discriminator move only when the finding
+// itself changes, which is precisely what the timeliness rule wants.
+//
+// Note this is the ONE place a fallback fingerprint tracks message text: on
+// the backend path the message is excluded because a copy pass rewrites it,
+// but the fallback's messages are authored in-repo (validation.ts) and are
+// this ruleset's only distinguishing content.
+function localFindingKey(message: string): string {
+  let h = 5381;
+  for (let i = 0; i < message.length; i++) {
+    h = ((h << 5) + h + message.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
+
 function localLintReport(schema: FormSchema): LintReport {
-  const findings: LintFinding[] = validateSchema(schema).map((e, i) => ({
+  // Occurrence counter per (field, message): two IDENTICAL messages on one
+  // field (validateSchema can emit the same complaint for each duplicate of
+  // a repeated id) must stay distinguishable, and the counter is scoped to
+  // that pair -- so it does not move when an unrelated finding elsewhere is
+  // fixed, unlike the global ordinal it replaces.
+  const seenCount = new Map<string, number>();
+  const findings: LintFinding[] = validateSchema(schema).map((e) => {
+    const key = `${e.field_id}#${localFindingKey(e.message)}`;
+    const n = seenCount.get(key) ?? 0;
+    seenCount.set(key, n + 1);
+    return {
     // validateSchema does not carry the backend rule ids; the embedded
     // surfaces render the message as-is (no RULE_LABELS prefix) by tagging it
     // with a sentinel treated as label-less.
     severity: e.type === 'error' ? 'ERROR' : 'WARNING',
     rule: '',
-    // The path carries an ORDINAL so each finding fingerprints distinctly
-    // (rule + field + path, message excluded): with a bare field id every
-    // finding on a field collapsed to one fingerprint, so fixing error A and
-    // getting a different error B on the same field never re-raised the
-    // timeliness demotion -- the field stayed signed-off green (Opus outer
-    // review, pass 7). The ordinal is stable for a given schema because
-    // validateSchema walks fields/sections deterministically.
-    path: `${e.field_id}#${i}`,
+    // Content-keyed, NOT positional -- see localFindingKey.
+    path: n === 0 ? key : `${key}~${n}`,
     message: e.message,
     // e.field_id is a field id for field-level errors and a section/_metadata
     // id otherwise; only real field ids focus, but the string is a safe target
     // (App's setSelectedFieldId simply no-ops for a non-field id).
     field_id: e.field_id || null,
-  }));
+    };
+  });
   const errorCount = findings.filter((f) => f.severity === 'ERROR').length;
   return { findings, errorCount, warningCount: findings.length - errorCount };
 }

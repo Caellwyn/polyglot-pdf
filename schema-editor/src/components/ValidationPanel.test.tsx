@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import type { FormSchema } from '../types/schema';
 import type { LintReport } from '../utils/remoteKitStore';
+import { findingFingerprint } from '../utils/lintFindings';
 
 const lintSchema = vi.fn(
   (_schema: FormSchema, _kitId?: string): Promise<LintReport> =>
@@ -256,6 +257,56 @@ describe('degraded-mode notices + auth (carried from the pane)', () => {
   // bd polyglot-pdf-cpiw exit criterion 2: a reduced ruleset must SAY it is
   // reduced -- and this matters MORE now that the counts derive from field
   // statuses (a failed lint must never read as "reviewed and clean").
+  it('keys each fallback finding by CONTENT, so an unrelated fix does not move it', async () => {
+    // A positional ordinal made an unrelated finding's disappearance shift
+    // every later one (false demotion) and let a different finding inherit a
+    // retired ordinal (missed demotion -- the original bug, still reachable).
+    // Content keying moves a fingerprint only when the finding changes
+    // (Opus outer review, pass 8).
+    hostedMode = false;
+    backendReachable = false;
+    const onReport = vi.fn();
+    // Two fields, each with a bad section reference. Field 'a' additionally
+    // duplicates an id, so it owns an EARLIER finding than 'b'.
+    const twoFields = {
+      form_metadata: { title: 'T', version: '1', form_number: 'X' },
+      sections: [],
+      fields: [
+        { id: 'a', name: 'A', type: 'text', section_id: 'ghost' },
+        { id: 'a', name: 'A', type: 'text', section_id: 'ghost' },
+        { id: 'b', name: 'B', type: 'text', section_id: 'ghost' },
+      ],
+    } as unknown as FormSchema;
+    const { rerender } = render(
+      <ValidationPanel schema={twoFields} onSelectField={() => {}} onReport={onReport} />);
+    await waitFor(() => expect(onReport).toHaveBeenCalled());
+    const first = onReport.mock.calls[onReport.mock.calls.length - 1][0] as LintReport;
+    const bBefore = first.findings.filter(x => x.field_id === 'b').map(findingFingerprint);
+    expect(bBefore.length).toBeGreaterThan(0);
+
+    // Fix field a's duplicate id -- nothing about b changed.
+    onReport.mockClear();
+    const fixed = {
+      ...twoFields,
+      fields: [
+        { id: 'a', name: 'A', type: 'text', section_id: 'ghost' },
+        { id: 'b', name: 'B', type: 'text', section_id: 'ghost' },
+      ],
+    } as unknown as FormSchema;
+    rerender(
+      <ValidationPanel schema={fixed} onSelectField={() => {}} onReport={onReport} />);
+    await waitFor(() => expect(onReport).toHaveBeenCalled());
+    const second = onReport.mock.calls[onReport.mock.calls.length - 1][0] as LintReport;
+    const bAfter = second.findings.filter(x => x.field_id === 'b').map(findingFingerprint);
+    // b's fingerprints are UNCHANGED -> a field signed off on b stays reviewed.
+    expect(bAfter).toEqual(bBefore);
+    // ...and 'a' keeps ONE fingerprint per distinct finding across the edit
+    // (a discriminator that collapses them would satisfy the equality above
+    // vacuously -- the missed-demotion half of the same bug).
+    const aBefore = first.findings.filter(x => x.field_id === 'a');
+    expect(new Set(aBefore.map(findingFingerprint)).size).toBe(aBefore.length);
+  });
+
   it('gives each fallback finding a DISTINCT fingerprint path (timeliness still works)', async () => {
     // The fingerprint excludes the message, so a bare field-id path made
     // every local finding on a field collapse to one key: fix error A, get
