@@ -109,7 +109,10 @@ def _letters(text: str) -> str:
         letters = re.findall(r"[A-Za-z]", chunk)
         # Only count it as a spell-out if every token in the chunk was a single
         # letter (the regex guarantees separators between single letters).
-        if len(letters) >= 2:
+        # Minimum THREE letters: two-letter dotted abbreviations ("U.S.",
+        # "e.g.") are normal prose, not spell-outs, and produced a false
+        # AUDIO_TEXT_DESYNC on the smoke run (option label "U.S. citizen").
+        if len(letters) >= 3:
             out.append("".join(letters).upper())
     return "".join(out)
 
