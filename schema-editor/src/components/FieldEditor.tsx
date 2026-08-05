@@ -66,9 +66,11 @@ interface FieldEditorProps {
   // box to a group. Optional -- provided only in hosted author mode on an open
   // kit; when absent the picker is not offered (local mode has no backend dump).
   onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
-  // Backend lint findings anchored to THIS field (lifted from the
-  // ValidationPanel's report by App), shown as a banner so the author sees why
-  // a field is flagged while editing it (bd polyglot-pdf-0x10.6).
+  // Backend lint findings anchored to THIS field (lifted from the strip's
+  // report by App), rendered at the PROPERTY each one names -- Instructions,
+  // an option row, the condition builders -- with the banner as the home for
+  // the field-anchored residue (sprint-18 C1; formerly all-banner, bd
+  // polyglot-pdf-0x10.6).
   lintFindings?: LintFinding[];
   // The loaded PDF's page count (bd polyglot-pdf-g63j) so the flagged-reasons
   // banner can name a field claiming a page the document does not have.

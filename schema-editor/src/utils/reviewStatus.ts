@@ -37,7 +37,7 @@
 import type { FormField, FieldReview, FieldReviewStatus } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 import { checkFieldComplete } from './validation';
-import { currentIdentity, needsGuidanceAck, staleFieldIds }
+import { GUIDANCE_STALE_RULE, currentIdentity, needsGuidanceAck, staleFieldIds }
   from './guidanceStaleness';
 import { findingFingerprint } from './lintFindings';
 
@@ -207,7 +207,15 @@ export function newFindingsSinceReview(
   const seen = field._review?.seen_fingerprints;
   if (!Array.isArray(seen)) return false; // pre-slot sign-off: grandfathered
   const seenSet = new Set(seen);
-  return (findings ?? []).some(f => !seenSet.has(findingFingerprint(f)));
+  // The guidance-staleness rule is EXCLUDED: the ack gate is that rule's sole
+  // owner (its whole design is confirm-or-rewrite, bd anim), and the ack
+  // writer deliberately preserves seen_fingerprints -- so counting the stale
+  // finding here made sign-off-then-drift-then-ack a DEAD END (permanently
+  // amber, no control able to clear it; the ack checkbox was the one exit
+  // and it never touches this slot -- Opus outer review, pass 5). The three
+  // rendering surfaces exclude the rule for the same one-owner reason.
+  return (findings ?? []).some(f =>
+    f.rule !== GUIDANCE_STALE_RULE && !seenSet.has(findingFingerprint(f)));
 }
 
 /**

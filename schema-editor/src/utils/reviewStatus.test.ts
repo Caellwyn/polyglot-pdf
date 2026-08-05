@@ -234,6 +234,26 @@ describe('seen_fingerprints + the timeliness demotion (s18 C1, decision 3)', () 
     expect(signedBlind._review?.seen_fingerprints).toEqual([]);
     expect(newFindingsSinceReview(signedBlind, [finding('f1')])).toBe(true);
   });
+
+  it('the STALENESS finding never demotes via timeliness -- the ack gate owns it', () => {
+    // Sign-off-then-drift-then-ack is the anim gate's core scenario. The ack
+    // writer preserves seen_fingerprints, so counting the stale finding in
+    // the timeliness rule made the ack a dead end: permanently amber, no
+    // control able to clear it (Opus outer review, pass 5).
+    const staleFinding = finding('f1', {
+      rule: 'guidance-identity-stale',
+      path: 'fields (id=f1).help[identity:abc123]',
+    });
+    const signed = withReviewStatus(completeField(), 'reviewed_correct', []);
+    // Drift arrives after the sign-off; the reviewer ticks the ack box.
+    const acked = withGuidanceAck(signed, 'abc123', true);
+    expect(newFindingsSinceReview(acked, [staleFinding])).toBe(false);
+    expect(statusFromFindings(acked, [staleFinding])).toBe('complete');
+    expect(isCountedReviewed(acked, [staleFinding])).toBe(true);
+    // UN-acked drift still demotes -- through the ack gate, as designed.
+    expect(statusFromFindings(signed, [staleFinding])).toBe('review');
+    expect(isCountedReviewed(signed, [staleFinding])).toBe(false);
+  });
 });
 
 describe('_review writers carry all four slots (s18 C1 preservation contract)', () => {

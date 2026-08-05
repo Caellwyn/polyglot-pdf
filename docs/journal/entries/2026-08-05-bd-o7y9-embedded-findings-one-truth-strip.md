@@ -185,6 +185,17 @@ reviewer filed bd polyglot-pdf-caed (a field with section_id set but
 listed in no section renders in no list yet counts as a review target --
 pre-existing, made visible by the count-as-control).
 
+Opus outer review, primary pass 5: 1 correctness gap + 2 stale comments,
+all adopted. The gap: the timeliness rule counted the guidance-staleness
+finding, but the ack writer preserves seen_fingerprints -- so
+sign-off-then-drift-then-ack (the anim gate's core scenario) dead-ended
+permanently amber with no control able to clear it. The staleness rule
+is now EXCLUDED from the timeliness comparison (the ack gate is its sole
+owner, matching the three rendering surfaces), mutation-verified with
+the reviewer's exact reproduction as the test. Comments: remoteKitStore's
+flags doc and FieldEditor's lintFindings prop doc still described the
+removed pane/banner; both reworded.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:

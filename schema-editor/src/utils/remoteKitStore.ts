@@ -532,7 +532,8 @@ export interface TranslateOptionsReport {
   // Verify/rectify gate flags from THIS bake (bd polyglot-pdf-9djc), LintFinding-
   // shaped (severity always WARNING). The backend also persists them into the
   // stored schema's _bakeoff provenance, where the lint route re-emits them --
-  // so after the post-translate reload the ValidationPanel shows the same rows.
+  // so after the post-translate reload they render at their option rows in
+  // the field editor (sprint-18 C1; the pane that used to list them is gone).
   flags: LintFinding[];
   errorCount: number;
   warningCount: number;
