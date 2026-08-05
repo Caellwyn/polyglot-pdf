@@ -86,6 +86,23 @@ const REVEAL_SCHEMA: FormSchema = {
   sections: [{ id: 's1', label: 'S1', order: 1, fields: ['trigger', 'revealed'] }],
 } as unknown as FormSchema
 
+// A schema whose field id is the BRACKETED variant -- the shape that really
+// ships (adult_intake_demo_schema.json has six such ids).
+const BRACKET_SCHEMA: FormSchema = {
+  source: 'web',
+  fields: [
+    {
+      id: 'race[]',
+      name: 'Race',
+      spoken_name: 'Race',
+      type: 'checkbox_group',
+      options: [{ value: 'Asian', label: 'Asian' }, { value: 'White', label: 'White' }],
+      validation: { required: false },
+    },
+  ],
+  sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race[]'] }],
+} as unknown as FormSchema
+
 function lastWs(): MockWebSocket {
   return MockWebSocket.instances[MockWebSocket.instances.length - 1]
 }
@@ -448,6 +465,42 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
       .filter((a: any) => typeof a === 'string')
       .filter((s: string) => s.includes('Cannot update'))
     expect(refusals).toHaveLength(0)
+  })
+
+  it('the alias collapse keeps the SCHEMA-ID key, driven through a real handler', async () => {
+    // The unit tests pass an id array straight to reconcileFieldValues, so they
+    // pin the FUNCTION but not the WIRING: neutering schemaFieldIds() to []
+    // left the whole suite green. This drives a real handler instead.
+    //
+    // If the collapse lands on the bare `race` instead of the schema's `race[]`,
+    // the answer stays live under a key nothing reads -- SchemaForm, getProgress
+    // and isSectionValid all index fieldValues[field.id] exactly -- so the field
+    // renders blank and a required section stops validating.
+    const conn = new WebFormConnection(BRACKET_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // A bare-key entry alongside the bracketed one -- the shape markFieldSkipped
+    // produces when the model drops the bracket.
+    const seeded = SchemaFormStateManager.load()
+    SchemaFormStateManager.updateField(seeded as any, 'race[]', ['Asian'] as any, {
+      confirmed: true, confirmationMethod: 'manual_edit',
+    })
+    const withBare = SchemaFormStateManager.load()!
+    withBare.fieldValues['race'] = { value: null, skipped: true, lastModified: 1 } as any
+    SchemaFormStateManager.save(withBare)
+
+    // Any reconciling handler will do; session_ready is the simplest.
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'session_ready', session_id: 'sess-2' }),
+    })
+    await flush()
+
+    const keys = Object.keys(SchemaFormStateManager.load()!.fieldValues)
+      .filter(k => k.startsWith('race'))
+    expect(keys).toEqual(['race[]'])
+    expect(SchemaFormStateManager.load()!.fieldValues['race[]'].value).toEqual(['Asian'])
   })
 
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {

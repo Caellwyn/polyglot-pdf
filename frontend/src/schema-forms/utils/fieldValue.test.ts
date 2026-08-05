@@ -430,6 +430,14 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect(Object.keys(out)).toEqual(['p1_grp[]']);
     });
 
+    it('carries the skipped marker too (isSectionValid / getProgress honour it)', () => {
+      const out = reconcileFieldValues(
+        { f: { value: null, lastModified: 600 } } as any,
+        { f: { value: null, skipped: true, lastModified: 600 } } as any
+      );
+      expect((out.f as any).skipped).toBe(true);
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one

@@ -164,11 +164,14 @@ It resolves
 - An entry present on only one side is kept, so an in-memory-only value stays
   visible to the confirm handler's usable-value gate and the skip handler's
   already-filled guard (bd `polyglot-pdf-pjws`).
-- The winner decides the VALUE, but sticky markers (`confirmed`, `steered`) carry
-  across from the losing side **when both sides agree on the value**. `confirmField`
-  sets `confirmed` without bumping `lastModified`, so at a tie the loser can be the
-  only side holding it, and dropping it would cause a spurious re-ask. The
-  same-value condition matters: a marker must never follow a *different* answer.
+- The winner decides the VALUE, but sticky markers (`confirmed`, `confirmedAt`,
+  `confirmationMethod`, `steered`, `skipped`) carry across from the losing side
+  **when both sides agree on the value**. `confirmField` sets `confirmed` without
+  bumping `lastModified`, so the loser can be the only side holding it, and
+  dropping it would cause a spurious re-ask; `skipped` is load-bearing the same
+  way, since `isSectionValid` and `getProgress` both honour it. The gate is value
+  agreement, not a stamp tie: a marker describes the answer it was attached to, so
+  it may follow that answer but must never follow a *different* one.
 
 Never merge these maps with a raw key union (`{...persisted, ...inMemory}`) — that
 makes the in-memory side win unconditionally and reintroduces all three bugs.

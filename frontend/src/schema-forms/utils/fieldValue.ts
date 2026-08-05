@@ -195,13 +195,18 @@ export function reconcileFieldValues(
     const loser = persistedWins ? memoryEntry : persistedEntry;
 
     // The winner decides the VALUE. But confirmation/skip/steer markers are
-    // sticky metadata that a same-millisecond tie must not silently discard:
-    // confirmField sets `confirmed` WITHOUT bumping lastModified, so at a tie the
-    // losing side can be the only one holding it, and dropping it would cause a
-    // spurious re-ask of an already-confirmed field (dev's key union happened to
-    // preserve it, so losing it here would be a regression). Only carry a marker
-    // ACROSS when the two sides agree on the value -- otherwise the marker
-    // belongs to a different answer and must not follow the new one.
+    // sticky metadata that must not be silently discarded: confirmField sets
+    // `confirmed` WITHOUT bumping lastModified, so the losing side can be the
+    // only one holding it, and dropping it would cause a spurious re-ask of an
+    // already-confirmed field (the old key union happened to preserve it, so
+    // losing it here would be a regression).
+    //
+    // The gate is VALUE AGREEMENT, not a stamp tie -- deliberately. A marker
+    // describes the answer it was attached to, so it may follow that answer
+    // across a reconcile no matter which side is newer, and must NEVER follow a
+    // DIFFERENT answer (that would mark a value confirmed nobody confirmed, the
+    // uw3w harm). Stamp equality is neither necessary nor sufficient for that,
+    // so it is not consulted here.
     let merged = winner;
     if (loser && sameValue(winner?.value, loser.value)) {
       const carried: Partial<FieldValue> = {};

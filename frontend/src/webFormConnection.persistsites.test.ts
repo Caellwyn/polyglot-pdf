@@ -214,4 +214,29 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
     // never when the reconcile was.
     expect(uses).toBe(9)
   })
+
+  it('every reconcileFieldValues call passes (persisted, in-memory, schemaIds)', () => {
+    // A COUNT alone is satisfied by nine calls with the arguments swapped --
+    // reconcileFieldValues(this.state.fieldValues, persisted.fieldValues) would
+    // invert the whole tie rule at that handler and keep the count at nine. It is
+    // also satisfied by nine calls that omit the schema ids, which is the wiring
+    // that keeps a bracketed schema id from being re-keyed away. So pin the
+    // ARGUMENT SHAPE, not just the number of calls.
+    const calls = SRC.split('reconcileFieldValues(').slice(1)
+    expect(calls).toHaveLength(9)
+    for (const [i, tail] of calls.entries()) {
+      // Take up to the CLOSING paren of the call, not the first `)` -- the third
+      // argument is itself a call (`this.schemaFieldIds()`), so a naive
+      // indexOf(')') truncates the arg list right before the thing being checked.
+      const args = tail.slice(0, tail.indexOf('\n        )'))
+      // 1st arg is the PERSISTED map, 2nd is the in-memory one. Order matters:
+      // swapping them inverts persisted-wins into in-memory-wins.
+      expect(args, `call ${i + 1} argument order`).toMatch(
+        /persisted[A-Za-z]*\.fieldValues\s*,\s*this\.state\.fieldValues/
+      )
+      // 3rd arg is the schema's ids -- without it the alias collapse can drop
+      // the schema-id key (see schemaFieldIds()).
+      expect(args, `call ${i + 1} schema ids`).toContain('this.schemaFieldIds()')
+    }
+  })
 })

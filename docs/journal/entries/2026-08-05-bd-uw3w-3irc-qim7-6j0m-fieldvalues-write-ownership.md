@@ -211,6 +211,49 @@ Both out-of-scope sites were folded in rather than left as filed beads: shipping
 change titled "one owner for `fieldValues`" while knowingly leaving more writers
 unreconciled would have been misleading.
 
+## What the Opus outer review added (and what it overturned)
+
+After the fresh-eyes loop cleared, the Opus outer review ran three rounds and
+found things six Sonnet rounds had not. Two are worth recording.
+
+**A stale READ is as damaging as a stale write.** `handleFieldUpdate`'s
+availability gate calls `shouldShowField` against `this.state.fieldValues`, and
+the `updateField` chokepoint's reconcile sits TWO FRAMES BELOW it. So when a user
+answered a trigger field on screen, a dependent field whose `show_if` that
+satisfies read as unavailable on the stale copy and the AI fill was REFUSED
+outright -- the value never stored, and the model told *"do not retry until
+then"*, making the field unfillable for the turn. Reproduced before fixing. The
+whole enumeration up to that point had been framed as *persist* sites, which is
+precisely why it was blind to read sites; both handlers now reconcile at entry.
+
+**An earlier round's "unreachable" was wrong, and the fix was a live regression.**
+Round 1 dismissed the both-alias-variants case because "no shipped kit has a
+bracketed field id." Both halves were false:
+`frontend/public/adult_intake_demo_schema.json` ships six (`race[]`, `reason[]`,
+`risk_concerns[]`, and three more), and the both-variants state is produced by
+ordinary runtime code -- `markFieldSkipped` writes the MODEL-SUPPLIED field id
+with no alias fallback and no `priorKey` cleanup, so a skip that drops the
+bracket writes a second key alongside the bracketed one. The collapse then
+re-keyed onto the *winning side's* variant, which could DELETE the schema-id key:
+the answer survives in content under a key nothing reads (`SchemaForm`,
+`getProgress`, `isSectionValid` all index `fieldValues[field.id]` exactly), so
+the field renders blank, progress drops, and a required section stops validating.
+The old key union never did that -- so this PR would have shipped a regression
+inside the very bead (`3irc`) that owns the one-entry invariant. The reconcile is
+now schema-aware and keeps the declared variant.
+
+The lesson worth keeping: **"unreachable" claims need the same evidence standard
+as bug claims.** The dismissal was plausible, cheap to check, and wrong -- one
+grep of the shipped schemas would have settled it.
+
+**And a coverage lesson.** The third round found that both headline fixes --
+the schema-aware re-key and the `skipped` carry -- had NO behavioural coverage:
+neutering `schemaFieldIds()` to `[]` left all 1290 tests green. The unit tests
+passed id arrays straight to the helper, pinning the FUNCTION while leaving the
+WIRING unpinned, and the guard test only counted `reconcileFieldValues(`
+occurrences. Both now have tests driven through a real handler, each
+mutation-verified against exactly the mutation that previously slipped through.
+
 ## `6j0m`: root cause found, no code change needed
 
 The bead reported a whole cluster of overlay/schema-form tests failing only in
@@ -241,6 +284,14 @@ defect.
 
 The bead's practical warning -- that the frontend suite is not a trustworthy
 pre-PR gate for those files -- is retired.
+
+**One honest caveat.** Across the many full-suite runs this branch accumulated, a
+SINGLE run failed one file and then did not reproduce across the eight runs
+either side of it. So the cluster failure the bead measured (6-9 files, every
+run) is genuinely gone, but the suite is not provably 100% deterministic -- there
+is a residual, much rarer flake that this work did not chase. That is a different
+animal from what the bead described and is not worth blocking on; noting it so a
+future reader who hits one red run does not conclude the fix regressed.
 
 ## Doc note
 
