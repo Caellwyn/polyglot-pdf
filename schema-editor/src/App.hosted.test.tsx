@@ -28,8 +28,19 @@ vi.mock('./components/FieldList', () => ({
   // data-form-findings surfaces how many form-level findings App routed to
   // the pinned Form row, so the cross-kit leak is testable (Opus outer
   // review, pass 1: kit A's stale findings promoted onto kit B's Form row).
-  FieldList: ({ formFindings }: { formFindings?: unknown[] }) => (
-    <div data-testid="list" data-form-findings={formFindings?.length ?? 0} />
+  // data-field-findings surfaces the size of App's FIELD-anchored mirror, so
+  // a test can tell "the mirror survived" from "the mirror was blanked" --
+  // the discrimination the failed-open test previously lacked (bd
+  // polyglot-pdf-ze79, re-raised by the primary review's final pass).
+  FieldList: ({ formFindings, lintFindingsByField }: {
+    formFindings?: unknown[];
+    lintFindingsByField?: Map<string, unknown[]>;
+  }) => (
+    <div
+      data-testid="list"
+      data-form-findings={formFindings?.length ?? 0}
+      data-field-findings={lintFindingsByField?.size ?? 0}
+    />
   ),
 }));
 // The panel mock exposes a "repair" button that fires onRepairAll (when the host
@@ -705,7 +716,21 @@ describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
       screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
   });
 
-  it('a FAILED open leaves the findings mirror intact (clear is on success)', async () => {
+  // NOT COVERED BY A TEST, deliberately and knowingly: that the mirror clear
+  // sits on the SUCCESS path rather than at the top of the open handler.
+  // A failed open renders App's full-screen error state, which unmounts the
+  // whole workspace -- so no rendered surface witnesses the mirror at the
+  // moment of failure, and every route back into the workspace runs another
+  // open (whose own clear makes the two placements indistinguishable). Three
+  // attempts at a discriminating assertion each passed under the mutation;
+  // rather than ship a test whose name claims coverage it does not have (the
+  // defect bd polyglot-pdf-ze79 was filed for, twice), this states the gap.
+  // Verified BY HAND instead: moving clearLintMirror() to the top of
+  // handleOpenRemoteKit and failing an open leaves the surviving kit
+  // findings-blind until the next lint lands. bd polyglot-pdf-ze79 stays
+  // OPEN for a harness that can observe it (an App-level state probe, or a
+  // failed-open path that keeps the workspace mounted).
+  it('a failed open surfaces the error and leaves the previous kit open', async () => {
     // The clear must sit beside loadSchemaState (success), not at the top of
     // the handler: run at the attempt, a FAILED open blanks every row's
     // findings while the strip -- keyed on the unchanged kit id, so it
@@ -714,34 +739,28 @@ describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
     // original version of this test never exercised a failure, bd
     // polyglot-pdf-ze79).
     //
-    // Observed through the FORM-ROW count: kit A's finding is anchored to a
-    // field A HAS, so with the mirror intact it is field-level (0 form-level
-    // findings). If a failed open blanked the mirror, the surviving editor
-    // would render findings-blind -- so we assert the mirror still drives a
-    // FIELD-anchored finding by re-selecting A's field and seeing the
-    // editor's own findings chip.
+    // What this DOES pin (see the note above for what it cannot): a failed
+    // open reports the failure and does not tear down the session -- the
+    // mirror probe still reflects App's state rather than the app having
+    // fallen into an unrecoverable blank.
     vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
     await passGate();
     await openKit('draft-kit');
     await screen.findByTestId('pdf');
     fireEvent.click(screen.getByTestId('vp-emit-report'));
-    // The mirror holds a finding anchored to f1 (a field kit A has).
-    expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
+    expect(screen.getByTestId('list').getAttribute('data-field-findings')).toBe('1');
 
-    // Now FAIL the next open. App shows its error state; the previously
-    // open kit's findings must not have been cleared underneath it.
+    // FAIL the next open: the error screen replaces the workspace.
     vi.mocked(loadRemoteSchema).mockRejectedValueOnce(new Error('network blip'));
     await openKit('second-kit');
     await screen.findByText(/network blip/);
-    // Recover: dismissing returns to the catalogue, and re-opening kit A
-    // succeeds. If the mirror had been blanked at the ATTEMPT, this open's
-    // own clear would be indistinguishable -- so the assertion that matters
-    // is that the failed attempt did not itself throw the app into a
-    // findings-blind state, which the error screen + clean recovery show.
+    // The session recovers: dismissing returns to the catalogue and the kit
+    // reopens normally.
     fireEvent.click(screen.getByText('Dismiss'));
-    await waitFor(() =>
-      expect(screen.queryByText(/network blip/)).not.toBeInTheDocument());
-    expect(loadRemoteSchema).toHaveBeenCalledWith('second-kit');
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-field-findings')).toBe('1');
   });
 
   it('a SUCCESSFUL switch clears the mirror (no promotion onto the new Form row)', async () => {

@@ -20,8 +20,15 @@ export interface FormSchema {
   // Form row offers the ONE standalone dismiss in the editor; a dismissal
   // stores the finding's fingerprint here (WARNING-severity findings only --
   // an ERROR blocks the publish gate regardless, so hiding it would recreate
-  // the confident-strip-then-409 lie). Fingerprints exclude the message, so a
-  // reworded finding stays dismissed; a rule/path shift re-raises it.
+  // the confident-strip-then-409 lie). The stored key is CONTENT-bearing
+  // (lintFindings.dismissalKey = the finding's fingerprint plus a hash of its
+  // message), so a dismissal covers exactly the finding a human read and a
+  // CHANGED message re-raises it. That is deliberately wider than the
+  // timeliness fingerprint, which excludes the message: several form-level
+  // rules carry all their content in the message at one fixed path, so a
+  // message-independent key let one click hide a growing problem forever
+  // ("12 of 40 fields" staying dismissed at 300) and hide sibling findings
+  // the human never saw (help-details-not-contained, one per paragraph).
   // Round-trips like _review: draft save/lint store the raw dict verbatim and
   // the publish gate validates without re-storing.
   _form_review?: { dismissed_fingerprints?: string[] };

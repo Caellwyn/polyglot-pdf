@@ -309,6 +309,38 @@ polyglot-pdf-ze79 (the "failed open" test never exercised a failure and
 would have stayed green through a revert of the fix it documents); bd
 polyglot-pdf-y056 stays open (out of scope).
 
+FINAL confirmation round (both reviews re-run on the identical commit after
+the second reviewer's blocker was fixed): both verified the two fixes hold,
+and BOTH scored all three exit criteria PASS. Neither returned a clean
+verdict, and both independently filed the SAME root issue (bd
+polyglot-pdf-q3rm; the second reviewer's finding 1): liveStats moved to
+reviewCounts while both catalogue scans stayed on getCompletionStats, so
+one kit's card can read 0% open and 100% closed. That is a real regression
+introduced here, and it sits exactly on the plan's C1/C4 seam -- decision 2
+assigns the catalogue percentage to C4 -- so closing it means either
+expanding this bead's scope or shipping a known drift. ESCALATED to the
+maintainer rather than decided (a plan-direction call, CLAUDE.md step 2).
+
+Fixed in this round: the _form_review doc comment stated the exact inverse
+of what the dismissal key now does (it said fingerprints exclude the
+message; they now include a content hash by design). That is the one
+comment describing an ON-DISK contract, so a reader trusting it would have
+"restored" the message-independent key and silently re-opened the hole the
+fix closed.
+
+NOT fixed, recorded honestly rather than papered over: bd polyglot-pdf-ze79
+is REOPENED with its real findings. The failed-open test still does not
+discriminate -- moving clearLintMirror() to the top of the open handler
+leaves every App test green. Three attempts at an assertion failed, all for
+one structural reason: a failed open unmounts the workspace behind App's
+error screen, so nothing rendered witnesses the mirror at the moment of
+failure, and every route back runs another open whose own clear hides the
+difference. The behavior is correct (verified BY HAND under the mutation);
+the coverage claim was not. The test was renamed to what it actually pins
+and the gap is stated in-file, because shipping a third non-discriminating
+test under a confident name would have repeated the exact defect ze79 was
+filed for.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:
