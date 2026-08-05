@@ -8,7 +8,12 @@
     - Backend  : uvicorn backend.main:app on http://localhost:8000
                  (port 8000 is what the frontend's dev WS URL defaults to:
                  ws://localhost:8000/ws/fill -- see frontend/src/shared/config.ts)
-    - Frontend : vite dev server on http://localhost:5173 (npm run dev)
+    - Frontend : vite dev server on http://localhost:5173, started with
+                 `--mode demo` + a process-env VITE_WS_URL pointing at the LOCAL
+                 backend. Both are load-bearing: without --mode demo the
+                 Firebase config is undefined and the SPA renders a BLANK WHITE
+                 SCREEN; without the WS override it would silently talk to the
+                 DEPLOYED backend instead of the one this script just started.
 
   Local dev runs on VERTEX by default (ADC + GOOGLE_CLOUD_PROJECT), so ALL local
   spend lands on the ONE Vertex billing account -- never AI Studio (bd
@@ -296,11 +301,41 @@ try {
 
 $FrontendProc = $null
 if (-not $BackendOnly) {
-    Write-Host "Starting frontend (vite dev :5173)..." -ForegroundColor Cyan
+    # --mode demo is LOAD-BEARING, not a preference: plain `npm run dev` loads
+    # only .env/.env.local/.env.development, NONE of which exist here, so every
+    # VITE_FIREBASE_* var is undefined and the SPA dies on
+    # "auth/invalid-api-key" -- a BLANK WHITE SCREEN with no server-side clue.
+    # `--mode demo` makes vite read the committed frontend/.env.demo, which
+    # carries the Firebase web config. dev-local.sh has always done this; this
+    # script did not, which is why it rendered nothing (maintainer 2026-08-05).
+    #
+    # VITE_WS_URL must be a PROCESS env var, not a .env entry: vite's precedence
+    # is `.env.[mode]` > `.env.local`, so under --mode demo a .env.local CANNOT
+    # override .env.demo's CLOUD RUN WS url. Without this override the SPA would
+    # come up looking fine while talking to the DEPLOYED backend -- so a local
+    # backend change (or a temperature sweep) would appear to do nothing.
+    #
+    # build:worklet first: plain `vite` has no worklet build hook, and the audio
+    # worklet is required for the mic path.
+    $LocalWsUrl = 'ws://127.0.0.1:8000/ws/fill'
+    Write-Host "Starting frontend (vite :5173, --mode demo, WS -> $LocalWsUrl)..." -ForegroundColor Cyan
     $FrontendDir = Join-Path $RepoRoot 'frontend'
-    # npm is resolved from PATH; run 'npm run dev' (the schema-forms voice SPA).
-    $FrontendProc = Start-Process -FilePath 'npm.cmd' -ArgumentList @('run', 'dev') `
-        -WorkingDirectory $FrontendDir -PassThru -NoNewWindow
+    $PriorWsUrl = [Environment]::GetEnvironmentVariable('VITE_WS_URL', 'Process')
+    Set-Item -Path 'Env:VITE_WS_URL' -Value $LocalWsUrl
+    try {
+        # Worklet build is a prerequisite, so run it to completion first.
+        & 'npm.cmd' 'run' 'build:worklet' --prefix $FrontendDir 2>&1 | Out-Host
+        $FrontendProc = Start-Process -FilePath 'npm.cmd' `
+            -ArgumentList @('run', 'dev', '--', '--mode', 'demo') `
+            -WorkingDirectory $FrontendDir -PassThru -NoNewWindow
+    } finally {
+        # The child already inherited VITE_WS_URL; restore this shell.
+        if ($null -eq $PriorWsUrl) {
+            Remove-Item -Path 'Env:VITE_WS_URL' -ErrorAction SilentlyContinue
+        } else {
+            Set-Item -Path 'Env:VITE_WS_URL' -Value $PriorWsUrl
+        }
+    }
 }
 
 Write-Host ""
