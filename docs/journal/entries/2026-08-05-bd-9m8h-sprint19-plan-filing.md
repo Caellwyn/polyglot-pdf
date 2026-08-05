@@ -37,6 +37,21 @@ supersede case); rubrics + bead tree approved 2026-08-05.
   sprint=19 metadata. Ready set verified: w3zw, lo88, kkos (the three
   disjoint-surface entry points).
 
+Fresh-eyes assess (Step 5.5): round 1 Sonnet NO-GAPS; round 2 (mandatory Opus
+clearing round) GAPS-FOUND (5) -- all five adopted and fixed in the plan +
+tracker: (1) the private-kit serving seam (normalize_manifest emits static
+paths; vccy now owns path emission + header-carrying viewer fetches); (2)
+static pipeline must filter the byte COPY, not just index.json
+(copyKitsToPublic is a blanket fs.cp); (3) archive marker resolved from the
+SUPERSEDED revision's own schema so fingerprint-era confirmation records stay
+retrievable; (4) 7jmy rubric #5 verify step corrected to the GCS-mode gating
+path (local mode is deliberately ungated -- change logged on the epic bead);
+(5) guarded-delete's existence query surfaced in confirmation_logger.py
+(6x1j surfaces updated, making the serialization rationale accurate). Nothing
+rejected or deferred; no out-of-scope beads filed by the reviewers. The
+terminal verdict is the Opus re-review of the fixed diff, recorded in the PR
+body and merge ping.
+
 Research findings that shaped the design (recorded in the plan): kit storage is
 single-slot per kit_id with destructive overwrite-in-place; confirmation
 records carry kit_id + edition marker but no storage address; the static

@@ -59,14 +59,18 @@ stable across revisions, so firm allowlists never churn on republish.
 
 - **Revision archive.** On promotion to complete when a complete revision with
   a different schema already exists, copy the current schema + metadata to
-  `<kit_id>/_archive/<marker>/` (marker = resolved edition marker:
-  edition_date, else author_version, else fingerprint; collision-suffixed by
-  published_at). Works local + GCS; `list_kit_files` already ignores paths
-  nested deeper than `<kit>/<file>`, so archives stay out of the editor
-  catalogue for free. Retrieval: `load_archived_schema(kit_id, marker)` plus
-  an operator script (sibling of `scripts/read_confirmations.py`) that takes a
-  confirmation record's kit_id + marker and returns the exact schema,
-  current-or-archived.
+  `<kit_id>/_archive/<marker>/`. The marker is resolved FROM THE SUPERSEDED
+  REVISION'S OWN schema (its edition_date, else its author_version, else its
+  fingerprint; collision-suffixed by published_at) -- so a fingerprint-era
+  revision archives under the exact `sha256:` marker its old confirmation
+  records already carry, and those records stay retrievable even after the kit
+  later gains an author_version. Works local + GCS; `list_kit_files` already
+  ignores paths nested deeper than `<kit>/<file>`, so archives stay out of the
+  editor catalogue for free. Retrieval: `load_archived_schema(kit_id, marker)`
+  plus an operator script (sibling of `scripts/read_confirmations.py`) that
+  takes a confirmation record's kit_id + marker and returns the exact schema,
+  current-or-archived; for a `sha256:` marker it may additionally fall back to
+  recomputing fingerprints over the current + archived schemas.
 - **Statuses become `draft | complete | unpublished`.** Unpublished is hidden
   like draft but WRITE-LOCKED like complete (draft is editable, and editing a
   superseded revision would corrupt the bytes the audit trail references);
@@ -108,17 +112,30 @@ stable across revisions, so firm allowlists never churn on republish.
   kit-PDF GET stays open for public kits and gates for private ones
   (test_form_kit_pdf_is_deliberately_public is updated deliberately, not
   broken).
+- **Private-kit SERVING seam (the third piece the form_kit_routes.py revisit
+  comment names).** Today `normalize_manifest` always emits schemaPath/pdfPath
+  as STATIC Hosting paths and the viewer fetches them verbatim -- so a private
+  kit excluded from the bundle would be unloadable by its own firm. The
+  kit-scoping bead therefore also changes path emission for PRIVATE kits to the
+  authenticated backend routes (`/api/form-kits/<id>/schema` + `.../pdf`) and
+  makes the viewer's fetches header-carrying on those paths (the schema fetch
+  already attaches the Bearer token; the PDF/viewer path needs the
+  fetch-with-header -> blob URL form). Public kits keep the static paths
+  unchanged.
 - **Firm identity propagation.** The firm_id claim rides the existing
   require_auth decoded claims and the WS ?token= verify; threaded into the
   fill session the way kit_id was in 47r3. `log_form_session_start`/`_end`
   (defined, currently zero callers) finally get wired from
   `_handle_fill_session` and gain firm_id; `log_field_confirmation` gains
   firm_id. Per-firm usage = Firestore queries keyed by firm_id.
-- **Static pipeline.** `generate-form-manifest.ts` filters to
-  status=complete AND visibility=public -- which also closes the existing
-  hole where DRAFT kits ship publicly in the Hosting bundle. Private kits
-  exist only in GCS and are served exclusively through authenticated backend
-  routes.
+- **Static pipeline.** `generate-form-manifest.ts` restricts BOTH of its
+  outputs to status=complete AND visibility=public: the index.json listing AND
+  the byte copy into frontend/public/form-kits (today `copyKitsToPublic` is a
+  blanket recursive `fs.cp` that ignores the descriptor list -- filtering only
+  the index would still ship the bytes). This also closes the existing hole
+  where DRAFT kits ship publicly in the Hosting bundle. Private kits exist
+  only in GCS and are served through the authenticated backend routes via the
+  serving seam above.
 - **Deferred (filed as blocked children).** Magic-link minting + EntryGate +
   fragment routing; per-jti/per-firm rate limits + per-session cost ceiling
   (required before the FIRST PUBLIC LINK, which does not exist until
@@ -135,7 +152,7 @@ stable across revisions, so firm allowlists never churn on republish.
 | 2 | A confirmation record naming a superseded revision (kit_id + marker) still retrieves the EXACT schema JSON it confirmed against, via a documented operator step | Replace a kit's schema, then run the retrieval script with the old record's kit_id + marker; diff against the pre-replace schema |
 | 3 | Publishing a kit with no government edition_date requires an author version (prefilled with the current date, previous value shown), and subsequent confirmation events carry that marker instead of a bare fingerprint | Publish a no-edition kit in the editor; inspect the modal, then a logged event doc |
 | 4 | Hard delete is REFUSED (with an unpublish suggestion) for any kit with confirmation records, and succeeds -- removing storage -- for a kit with none, only after an explicit confirmation modal | Seed one confirmation event for kit A: DELETE returns 409. Kit B (no events): DELETE removes the prefix from the store |
-| 5 | Unpublish removes a kit from the client manifest without deleting files, blocks schema edits while unpublished, and is reversible through the normal publish gate | Local flow: unpublish -> manifest empty, files present, PUT schema -> 409; republish -> visible again |
+| 5 | Unpublish removes a kit from the client manifest without deleting files, blocks schema edits while unpublished, and is reversible through the normal publish gate | Against the GCS-mode gating path (enforce_complete_on_public_reads -- local mode is deliberately ungated and serves drafts, so a local curl cannot show the hiding): unpublish -> manifest omits the kit, files present, PUT schema -> 409; republish -> visible again |
 
 ### Epic 02ye -- firm tier
 
@@ -157,7 +174,7 @@ confirmation_logger.py are hubs); cross-epic ordering edge 7jmy.2 -> 02ye.2.
 | revision-archive | Archive-on-republish in the store + retrieval helper + operator script | backend/services/form_kits.py, scripts/ (retrieval script) | 7jmy #2 |
 | lifecycle-statuses | `unpublished` status (write-locked, hidden, reversible) + replace-current cross-kit publish + editor UI | backend/routes/editor_kit_routes.py, backend/routes/form_kit_routes.py, schema-editor/src/components/RemoteCatalogue.tsx, schema-editor/src/utils/remoteKitStore.ts | 7jmy #1, #5 |
 | author-version | author_version field + modal version box (prefill/normalize/show-previous) + marker precedence + lint update | backend/models/form_models.py, backend/utils/confirmation_logger.py, backend/services/schema_lint.py, schema-editor publish-modal component | 7jmy #3 |
-| guarded-delete | DELETE route + kit_id-keyed confirmation existence query + confirm modal UI | backend/routes/editor_kit_routes.py (delete route), schema-editor catalogue delete UI | 7jmy #4 |
+| guarded-delete | DELETE route + kit_id-keyed confirmation existence query (lands in confirmation_logger.py) + confirm modal UI | backend/routes/editor_kit_routes.py (delete route), backend/utils/confirmation_logger.py, schema-editor catalogue delete UI | 7jmy #4 |
 
 Ordering: revision-archive -> lifecycle-statuses -> author-version ->
 guarded-delete (blocks edges; the latter two could in principle run
@@ -169,7 +186,7 @@ serial).
 | Bead | Scope | Surfaces | Inherits |
 |------|-------|----------|----------|
 | firms-store | firms collection model + FirmsService + firestore.rules deny block + bootstrap/claim-stamping admin script | backend/services/firms.py (new), firestore.rules, scripts/ (admin script, new) | 02ye #1 |
-| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
+| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (normalize_manifest path emission -> backend routes; header-carrying viewer fetches) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
 | static-scoping | Static pipeline filters to complete + public (closes the draft leak) | frontend/scripts/generate-form-manifest.ts | 02ye #2 (static half) |
 | firm-telemetry | firm_id threading (claims -> WS session) + wire log_form_session_start/end + firm_id on confirmation events | backend/routes/websocket_routes.py, backend/utils/confirmation_logger.py | 02ye #3 |
 | magic-links (BLOCKED) | Per-firm API key + link minting + EntryGate + fragment routing (settled design) | frontend/src/schema-forms/, backend auth | deferred until first paying firm |
