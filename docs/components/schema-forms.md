@@ -93,8 +93,9 @@ holds `this.state` across turns. Any connection handler ending in
 copy over an on-screen edit.
 
 `reconcileFieldValues` (`utils/fieldValue.ts`) is the single arbiter, called at the
-three handlers that save state — `handleSessionReady`, `handleConfirmFieldRequest`,
-`handleSkipFieldRequest` (bd `polyglot-pdf-qim7` / `uw3w` / `3irc`). It resolves
+four handlers that save state — `handleSessionReady`, `handleConfirmFieldRequest`,
+`handleSkipFieldRequest`, `handleSectionSwitched` (bd `polyglot-pdf-qim7` / `uw3w` /
+`3irc` / `tare`). It resolves
 **per logical field**, not per raw key:
 
 - The newer `lastModified` wins; a stamped entry beats an unstamped one.
@@ -107,7 +108,12 @@ three handlers that save state — `handleSessionReady`, `handleConfirmFieldRequ
   blanked by a skip, **and** a value the user cleared gets revived (and marked
   confirmed) by a confirm. A "meaningful entry wins" tie-break only covers the
   first — the cleared-value direction has the stale side holding the meaningful
-  entry — so the durable side wins outright instead.
+  entry — so the durable side wins outright instead. A tie between two *different*
+  meaningful values therefore resolves arbitrarily; that is safe only because it
+  is unreachable, since every connection write goes through `updateField`, which
+  stamps `lastModified` **and** saves in one step (so an equal stamp means both
+  sides hold the same write). **Adding a path that mutates
+  `this.state.fieldValues` without persisting would break that assumption.**
 - An entry present on only one side is kept, so an in-memory-only value stays
   visible to the confirm handler's usable-value gate and the skip handler's
   already-filled guard (bd `polyglot-pdf-pjws`).

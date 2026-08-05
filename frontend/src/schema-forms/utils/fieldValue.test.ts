@@ -321,6 +321,24 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       ).toBe('');
     });
 
+    it('a both-meaningful tie takes the persisted side (same-write case)', () => {
+      // Documents the ONE case the persisted-wins tie-break resolves
+      // arbitrarily: both sides meaningful with an identical stamp. It is safe
+      // because it is not reachable with DIFFERENT values through any call
+      // site -- every connection write goes through
+      // SchemaFormStateManager.updateField, which stamps lastModified AND
+      // save()s in the same step, so an identical stamp means the two sides
+      // hold the SAME write. There is no code path that mutates
+      // this.state.fieldValues without persisting it. If one is ever added,
+      // this rule needs revisiting and this test is where to start.
+      expect(
+        reconcileFieldValues(
+          { f: { value: 'same-write', lastModified: 700 } } as any,
+          { f: { value: 'same-write', lastModified: 700 } } as any
+        ).f.value
+      ).toBe('same-write');
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one

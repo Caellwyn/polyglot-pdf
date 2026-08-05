@@ -82,6 +82,12 @@ export function readFieldEntryWithAlias(
  *  - On a same-millisecond TIE the PERSISTED side wins. Both tie directions are
  *    unsafe if the stale in-memory copy wins, so this is not a "meaningful entry
  *    wins" rule -- see the tie branch below for why that only covers one of them.
+ *    This does mean a tie between two DIFFERENT meaningful values resolves
+ *    arbitrarily (persisted). That is safe only because it is unreachable: every
+ *    connection write goes through updateField, which stamps lastModified AND
+ *    save()s in one step, so an equal stamp means both sides hold the same
+ *    write. Adding a path that mutates this.state.fieldValues WITHOUT persisting
+ *    would break that assumption and this rule would need revisiting.
  *  - When NEITHER side is stamped, the in-memory entry wins. This preserves the
  *    conservative pre-existing direction (bd polyglot-pdf-pjws) so an entry that
  *    exists only in memory stays visible to the confirm handler's usable-value

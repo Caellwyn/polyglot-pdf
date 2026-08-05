@@ -256,6 +256,26 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
 
   // ---- bd polyglot-pdf-qim7 -------------------------------------------------
 
+  it('section_switched does not persist stale in-memory state over a concurrent UI write', async () => {
+    // A section switch is a ROUND-TRIP (prepare_section_switch out,
+    // section_switched back) and the handler ends in a bare save(this.state),
+    // so an on-screen edit landing inside that window would be reverted.
+    const { conn, ws } = await connected()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'old' } }) })
+    await flush()
+
+    uiWrites('p1_a', 'typed during switch')
+    expect(persistedEntry('p1_a').value).toBe('typed during switch')
+
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'section_switched', section_number: 1 }),
+    })
+    await flush()
+
+    expect(persistedEntry('p1_a').value).toBe('typed during switch')
+  })
+
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {
     const { conn, ws } = await connected()
 

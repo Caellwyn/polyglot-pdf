@@ -1770,7 +1770,22 @@ export class WebFormConnection {
       this.callbacks.onSectionChanged();
     }
 
-    // Also save the updated state
+    // Also save the updated state -- reconciled first, for the same reason as
+    // the confirm/skip/session_ready handlers (bd polyglot-pdf-uw3w / qim7).
+    // This is a bare save(this.state), so on a stale in-memory copy it reverts
+    // anything written outside this object since the last sync. The window is
+    // real: a section switch is a round-trip (handlePrepareSectionSwitchRequest
+    // out, section_switched back), and an on-screen edit can land inside it.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
     SchemaFormStateManager.save(this.state);
   }
 
