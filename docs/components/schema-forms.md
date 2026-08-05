@@ -143,7 +143,14 @@ It resolves
 - The newer `lastModified` wins; a stamped entry beats an unstamped one; an equal
   stamp goes to the more authoritative side. The ordering rule and the marker
   carry each live in exactly ONE helper (`firstWins`, `mergeEntries`), used by
-  both the cross-side comparison and the intra-side collapse. That is deliberate:
+  both the cross-side comparison and the intra-side collapse — but the
+  **no-ordering-information** case is an explicit argument, because the two
+  callers genuinely differ. Across sides the two maps are two copies of one
+  field's *history*, so a stamped blanking is a real later decision and the
+  in-memory side is the conservative default (bd `pjws`). Within one side the two
+  variants are not a history — they are one answer plus a stray key — so the
+  entry that actually holds an answer must survive; importing the cross-side
+  default there let a dated hollow entry destroy a real confirmed answer. That is deliberate:
   three review rounds found the intra-side path drifting from the cross-side one
   a cell at a time — first stamps, then dated-vs-undated, then equal stamps and
   the marker carry — each time letting a fresher hollow write (a skip, or the

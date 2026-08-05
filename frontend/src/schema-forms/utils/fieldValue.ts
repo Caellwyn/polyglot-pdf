@@ -171,7 +171,9 @@ export function reconcileFieldValues(
     // then equal stamps and the marker carry), so the rule now lives in ONE
     // place and divergence is structurally impossible rather than a thing to
     // remember.
-    const persistedWins = firstWins(persistedEntry, memoryEntry);
+    // 'second' on no information -> the in-memory entry wins, the conservative
+    // pre-existing direction (bd polyglot-pdf-pjws).
+    const persistedWins = firstWins(persistedEntry, memoryEntry, 'second');
     const merged = mergeEntries(
       persistedWins ? persistedEntry : memoryEntry,
       persistedWins ? memoryEntry : persistedEntry
@@ -223,7 +225,11 @@ function pickWithinSide(
   // got written under the BARE key, which is the live-but-invisible failure this
   // whole collapse exists to prevent (getProgress and isSectionValid index
   // fieldValues[field.id] exactly).
-  const aWins = firstWins(a, b);
+  // 'meaningful' on no information: the two variants here are ONE answer plus a
+  // stray key, not two versions of a history, so the entry that actually holds
+  // an answer must survive. Using the cross-side default instead let an
+  // undated bracketed hollow entry destroy a real confirmed answer.
+  const aWins = firstWins(a, b, 'meaningful');
   return {
     entry: mergeEntries(aWins ? a : b, aWins ? b : a) as FieldValue,
     key: aWins ? base : bracket,
@@ -239,16 +245,28 @@ function pickWithinSide(
  * the PERSISTED map cross-side (the durable path both writers share), and the
  * bare key intra-side.
  */
-function firstWins(first: FieldValue | undefined, second: FieldValue | undefined): boolean {
+function firstWins(
+  first: FieldValue | undefined,
+  second: FieldValue | undefined,
+  noInfo: 'first' | 'second' | 'meaningful'
+): boolean {
   const sf = typeof first?.lastModified === 'number' ? first.lastModified : undefined;
   const ss = typeof second?.lastModified === 'number' ? second.lastModified : undefined;
   if (sf !== undefined && ss !== undefined) return sf >= ss;
-  if (sf !== undefined) return true;
-  if (ss !== undefined) return false;
-  // Neither dated: keep the pre-existing conservative direction (bd
-  // polyglot-pdf-pjws) -- cross-side that means the in-memory entry, which is
-  // `second` there, so `first` loses.
-  return false;
+  if (sf !== undefined && entryHasValue(first)) return true;
+  if (ss !== undefined && entryHasValue(second)) return false;
+  // Only ONE side is dated, and it is HOLLOW. A hollow dated entry does beat a
+  // real undated one across sides (a skip is a deliberate blanking, and the
+  // cross-side pair is two copies of one field's history). Within one side the
+  // two variants are not a history -- they are one answer plus a stray key -- so
+  // destroying the answer there would be pure loss. Hence the caller decides.
+  if (sf !== undefined || ss !== undefined) {
+    if (noInfo === 'meaningful') return entryHasValue(first) || !entryHasValue(second);
+    return sf !== undefined;
+  }
+  // NEITHER is dated: no ordering information at all.
+  if (noInfo === 'meaningful') return entryHasValue(first) || !entryHasValue(second);
+  return noInfo === 'first';
 }
 
 /**

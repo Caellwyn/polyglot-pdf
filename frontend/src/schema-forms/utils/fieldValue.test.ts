@@ -474,24 +474,8 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect(out['p1_grp'].value).toEqual(['a']);
     });
 
-    it('within ONE side, a DATED entry beats an UNDATED one (both directions)', () => {
-      // The fallback hole: handling only the both-dated case left a fresh
-      // stamped skip losing to an UNDATED stale answer here, while winning
-      // across sides -- the same contradiction, one branch deeper. Undated
-      // entries are ordinary (lastModified is optional, and pre-stamping state
-      // has none).
-      const skipWins = reconcileFieldValues(
-        {
-          'p1_grp': { value: null, skipped: true, confirmed: true, lastModified: 9000 },
-          'p1_grp[]': { value: ['a'] },
-        } as any,
-        {} as any,
-        ['p1_grp']
-      );
-      expect(skipWins['p1_grp'].value).toBeNull();
-      expect((skipWins['p1_grp'] as any).skipped).toBe(true);
-
-      // and the mirror image: the DATED answer beats the undated hollow entry.
+    it('within ONE side, a DATED ANSWER beats an undated hollow entry', () => {
+      // Dated-beats-undated holds when the DATED side carries an answer.
       const answerWins = reconcileFieldValues(
         {
           'p1_grp': { value: null, skipped: true },
@@ -501,6 +485,29 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
         ['p1_grp']
       );
       expect(answerWins['p1_grp'].value).toEqual(['a']);
+    });
+
+    it('within ONE side, a dated HOLLOW entry does NOT destroy an undated answer', () => {
+      // The deliberate limit on dated-beats-undated, and the correction to an
+      // earlier version of this suite which asserted the opposite.
+      //
+      // ACROSS sides a dated hollow entry SHOULD win: the two maps are two
+      // copies of one field's history, so a stamped blanking is a real, later
+      // decision. WITHIN one side the two variants are not a history -- they are
+      // one answer plus a stray key (markFieldSkipped used to leave one) -- so
+      // letting an undated-vs-dated comparison blank the only real answer is
+      // pure loss, with no later decision behind it. Undated entries are
+      // ordinary: updateField's FieldValue-object branch does not stamp,
+      // lastModified is optional, and pre-stamping state has none.
+      const out = reconcileFieldValues(
+        {
+          'p1_grp': { value: ['a'], confirmed: true },
+          'p1_grp[]': { value: null, skipped: true, lastModified: 9000 },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(out['p1_grp'].value).toEqual(['a']);
     });
 
     it('within ONE side at EQUAL stamps, the skip survives (not meaningful-wins)', () => {
@@ -556,6 +563,48 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       );
       expect(Object.keys(out)).toEqual(['race[]']);
       expect(out['race[]'].value).toEqual(['Asian']);
+    });
+
+    it('within ONE side with NO ordering information, the real answer survives', () => {
+      // The cross-side "no information -> in-memory wins" default is about two
+      // copies of one field's HISTORY. Intra-side the pair is one answer plus a
+      // stray key, so importing that default let an undated hollow bracketed
+      // entry destroy a real confirmed answer. Undated entries are ordinary:
+      // updateField's FieldValue-object branch does not stamp, lastModified is
+      // optional, and pre-stamping state has none.
+      const bothUndated = reconcileFieldValues(
+        { 'race': { value: ['White'], confirmed: true }, 'race[]': { value: null } } as any,
+        {} as any,
+        ['race']
+      );
+      expect(bothUndated['race'].value).toEqual(['White']);
+      expect(bothUndated['race'].confirmed).toBe(true);
+
+      // and the nastier shape: only the HOLLOW side is dated.
+      const hollowDated = reconcileFieldValues(
+        {
+          'race': { value: ['White'], confirmed: true },
+          'race[]': { value: null, lastModified: 5 },
+        } as any,
+        {} as any,
+        ['race']
+      );
+      expect(hollowDated['race'].value).toEqual(['White']);
+    });
+
+    it('but a fresher DATED skip still beats a staler dated answer intra-side', () => {
+      // The guard above must not undo the deliberate-blanking case: when BOTH
+      // are dated there IS ordering information, and the newer write wins.
+      const out = reconcileFieldValues(
+        {
+          'race': { value: null, skipped: true, lastModified: 9000 },
+          'race[]': { value: ['a'], lastModified: 10 },
+        } as any,
+        {} as any,
+        ['race']
+      );
+      expect(out['race'].value).toBeNull();
+      expect((out['race'] as any).skipped).toBe(true);
     });
 
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
