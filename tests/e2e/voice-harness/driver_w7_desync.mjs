@@ -134,7 +134,7 @@ async function main() {
 
   const PACING = process.env.VFF_PACING || 'default';
   log(`running W-7 sequence (pacing: ${PACING})`);
-  await page.evaluate((stepList, pacing) => {
+  await page.evaluate(({ stepList, pacing }) => {
     window.__vffSeqReport = null;
     const H = window.__VFF_HARNESS;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -206,7 +206,7 @@ async function main() {
     })().catch((e) => {
       window.__vffSeqReport = { steps: [], done: true, error: String(e && e.message) };
     });
-  }, steps, PACING);
+  }, { stepList: steps, pacing: PACING });
 
   // 15 fields x ~60s worst case + slack.
   const deadline = Date.now() + 20 * 60 * 1000;
