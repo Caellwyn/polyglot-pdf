@@ -116,7 +116,14 @@ authors "the validation panel lists them"; reworded to the flagged
 option rows, with the old phrase pinned absent. (4) An options[]-anchored
 finding on a field whose type never renders the Options block (backend
 lint checks options on every field) was counted by the chip but rendered
-nowhere; those now fall to the banner. Rejected/deferred: none rejected.
+nowhere; those now fall to the banner. Round 4 (Opus) CLEARED the rubric
+(all three exit criteria PASS, zero rubric gaps, round-3 fixes verified
+holding) with three non-rubric findings: the HostedGuide's stale
+"Validation & Progress panel" copy (the reviewer filed bd
+polyglot-pdf-hnce; fixed inline in this PR, which closes it), and two
+true nits deferred to a chore bead per the nit convention -- the strip's
+form-wide jump vs the list's search lens, and the local-mode double lint
+while the folder handshake resolves. Rejected: none.
 
 ## Lessons
 
