@@ -180,7 +180,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let blockedDiscardCount = 0
 
 	// Flag to suppress onended callbacks during flush (prevents spurious watchdog triggers)
-	let isFlushing = false
 
 	// Track if Gemini is currently speaking (for barge-in detection)
 	let geminiIsSpeaking = false
@@ -598,11 +597,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				// Only mark as not speaking if no more active sources
 				if (activeAudioSources.length === 0) {
 					geminiIsSpeaking = false
-					
+
 					// CRITICAL: Only notify activity watchdog when ALL chunks finished playing naturally
-					// Do NOT fire callback during flush (barge-in) - that would spam the watchdog
-					// This is used for Level 3 farewell disconnect timing (100ms audio silence detection)
-					if (!isFlushing && window.vffOnAudioPlaybackEnd) {
+					// Do NOT fire callback during flush (barge-in) -- a drained source never
+					// reaches this handler at all (the drain swaps in a narrowed onended),
+					// so this fires only for natural playback ends. Used for Level 3
+					// farewell disconnect timing (100ms audio silence detection).
+					if (window.vffOnAudioPlaybackEnd) {
 						window.vffOnAudioPlaybackEnd()
 					}
 				}
@@ -652,19 +653,23 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		// drained (Opus fresh-eyes gap 3, bd s7uf).
 		playbackEpoch++
 
-		// Set flag to suppress onended callbacks during flush
-		isFlushing = true
-
-		// Stop all active audio sources. Detach onended FIRST: stop() delivers
-		// onended on a LATER task, when isFlushing is already false again -- so
-		// without the detach every drained source would fire
-		// window.vffOnAudioPlaybackEnd, and under native VAD that is every
-		// barge-in (Opus outer review). A drained source is not a playback end;
-		// detaching keeps useGeminiSpeaking's documented "flush fires no end
-		// event" contract true.
+		// Stop all active audio sources. Swap in a NARROWED onended first:
+		// stop() delivers onended on a LATER task (no synchronous flag can
+		// suppress it -- the old isFlushing gate was dead code for exactly that
+		// reason), so a drained source must carry a handler that keeps the
+		// clock-repair responsibility -- playbackTime catch-up when the context
+		// clock moved past a stale cursor, e.g. across a suspended window --
+		// but never fires window.vffOnAudioPlaybackEnd: a drained source is not
+		// a natural playback end (Opus outer review, both passes). Array
+		// cleanup is unnecessary here (the array is cleared below).
 		activeAudioSources.forEach(source => {
 			try {
-				source.onended = null
+				source.onended = () => {
+					const ctx = nodes.playbackContext
+					if (ctx && playbackTime < ctx.currentTime) {
+						playbackTime = ctx.currentTime
+					}
+				}
 				source.stop()
 				source.disconnect()
 			} catch (e) {
@@ -681,9 +686,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		}
 
 		geminiIsSpeaking = false
-
-		// Clear flag after flush completes
-		isFlushing = false
 	}
 
 	/**
