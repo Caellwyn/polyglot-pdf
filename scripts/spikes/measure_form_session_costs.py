@@ -1680,6 +1680,20 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
             "all_in_usd": round(voice_usd + text_usd, 6),
             "voice_usd": voice_usd,
             "text_usd": text_usd,
+            # bd polyglot-pdf-89mt: split the text sidecar by CALLER. "text_usd"
+            # lumps the secretary, the per-window lite validator and the W6 pro
+            # pass into one number, but they are three separate product
+            # decisions with three different cost profiles -- and bd
+            # polyglot-pdf-jma2 is about to delete one of them. Costing a form
+            # needs them apart.
+            "text_usd_by_caller": {
+                caller: round(sum(r["usd"] for r in text_rows
+                                  if (r.get("caller") or "") == caller), 6)
+                for caller in sorted({(r.get("caller") or "") for r in text_rows})
+            },
+            # The fixed-overhead term of A + B*n: the greeting turn, priced
+            # before any question is asked.
+            "greeting_usd": meta.get("greeting_cost_usd"),
             "voice_tokens": voice_tokens,
             "wall_clock_s": meta.get("wall_clock_s"),
             "steps": len(rows),
@@ -1867,6 +1881,23 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
     s.VAD_PREFIX_PADDING_MS = None
     s.VAD_SILENCE_DURATION_MS = None
     return s
+
+
+def _price_delta(d: dict, rates: dict) -> dict:
+    """Price one CounterTracker delta. Shared by the per-QUESTION CSV row and
+    the per-TURN meta record so the two can never drift apart (bd 89mt)."""
+    ti = d["_session_text_input_tokens"]
+    ai = d["_session_audio_input_tokens"]
+    to = d["_session_text_output_tokens"]
+    ao = d["_session_audio_output_tokens"]
+    return {
+        "text_in_cost": ti * rates["text_input"],
+        "audio_in_cost": ai * rates["audio_input"],
+        "text_out_cost": to * rates["text_output"],
+        "audio_out_cost": ao * rates["audio_output"],
+        "total_cost": (ti * rates["text_input"] + ai * rates["audio_input"]
+                       + to * rates["text_output"] + ao * rates["audio_output"]),
+    }
 
 
 class CounterTracker:
@@ -2421,13 +2452,32 @@ async def run(args) -> int:
             return 2
 
         tracker = CounterTracker(adapter)
+        # bd polyglot-pdf-89mt: a SECOND, independent tracker at turn
+        # granularity. It must be separate -- delta_and_advance() consumes the
+        # delta, so a single tracker read at both the turn and question
+        # boundaries would leave the question rows reading zero.
+        turn_tracker = CounterTracker(adapter)
+        _cum_cost = {"v": 0.0}
         last_total = 0
 
         # Production greeting: initiating message, then the greeting turn.
         await service.send_initiating_message(spoken_language, client.next_hint() or "")
         last_total = await _wait_turn(adapter, last=last_total)
         meta["greeting_tokens"] = tracker.snapshot()["_session_total_tokens"]
+        # The GREETING is fixed overhead -- the 'A' in A + B*n. Price it on its
+        # own before either tracker's base is reset, so it is never silently
+        # folded into question 1 (bd 89mt).
+        _greet_snap = tracker.snapshot()
+        meta["greeting_cost_usd"] = round(_price_delta(_greet_snap, rates)["total_cost"], 6)
+        meta["greeting_breakdown"] = {
+            "text_in": _greet_snap["_session_text_input_tokens"],
+            "audio_in": _greet_snap["_session_audio_input_tokens"],
+            "text_out": _greet_snap["_session_text_output_tokens"],
+            "audio_out": _greet_snap["_session_audio_output_tokens"],
+        }
+        _cum_cost["v"] = meta["greeting_cost_usd"]
         tracker.base = tracker.snapshot()
+        turn_tracker.base = turn_tracker.snapshot()
         # bd jnjj.39 (Codex PR #246): each question's window STARTS where the previous
         # one ended, not when we begin speaking this answer -- the AI's PROMPT for
         # this field is emitted at the tail of the prior turn (q1's prompt is in the
@@ -2455,8 +2505,30 @@ async def run(args) -> int:
             new_total = await _wait_turn(adapter, last=last_total)
             stalled = new_total == last_total
             last_total = new_total
+            # bd polyglot-pdf-89mt: record this turn's OWN modality split + cost,
+            # labelled with the field it was focused on. The per-question CSV
+            # cannot answer "what did turn 3 of question 12 cost" and carries no
+            # field id at all, so the cost-vs-turn curve -- the thing that shows
+            # whether compression/eviction actually levels per-turn cost off
+            # rather than growing without bound -- was not derivable from any
+            # artifact this harness wrote. Cumulative_cost_usd makes every
+            # truncation available from ONE run: the cost of the first k fields
+            # is just the running sum at that field's last turn.
+            _td = turn_tracker.delta_and_advance()
+            _tc = _price_delta(_td, rates)
+            _cum_cost["v"] += _tc["total_cost"]
             meta["turns"].append({
                 "q": current_q["n"], "label": label, "stalled": stalled,
+                "field_id": current_q.get("field_id"),
+                "text_in": _td["_session_text_input_tokens"],
+                "audio_in": _td["_session_audio_input_tokens"],
+                "text_out": _td["_session_text_output_tokens"],
+                "audio_out": _td["_session_audio_output_tokens"],
+                "total_tokens": _td["_session_total_tokens"],
+                "cost_usd": round(_tc["total_cost"], 6),
+                "cumulative_cost_usd": round(_cum_cost["v"], 6),
+                "prompt_tokens": (usage_dumps[-1].get("prompt")
+                                  if usage_dumps else None),
                 "latency_s": (round(client.first_audio_at - t_end, 3)
                               if client.first_audio_at and client.first_audio_at > t_end
                               else None)})
@@ -2636,6 +2708,11 @@ async def run(args) -> int:
             current_q["n"] = i
             is_event = "event" in q
             fid = q.get("field_id") if not is_event else None
+            # bd polyglot-pdf-89mt: carry the field id (or the event name) into
+            # current_q so each per-turn record is LABELLED with what it was
+            # focused on. Without this the turns.csv field_id column is blank
+            # and the cost curve cannot be read against the form.
+            current_q["field_id"] = fid or q.get("event") or ""
             f_sec = ((client.schema_fields[fid].get("section_id") or "section-1")
                      if fid else None)
 
@@ -2960,6 +3037,25 @@ async def run(args) -> int:
         w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
         w.writeheader()
         w.writerows(rows)
+    # bd polyglot-pdf-89mt: a PER-TURN csv beside the per-question one. This is
+    # the cost-vs-turn graph: one row per model turn, labelled with the field it
+    # was focused on, carrying that turn's own tokens/cost plus the running
+    # total. Two things fall out of it that the per-question CSV cannot give:
+    #   1. EVERY truncation from ONE run -- the cost of a form that stopped at
+    #      field k is cumulative_cost_usd at k's last turn, so a "shorter form"
+    #      needs no separate run.
+    #   2. Whether per-turn cost LEVELS OFF once context compression/eviction
+    #      starts evicting, or grows without bound. prompt_tokens per turn is
+    #      the curve to plot; eviction shows as a sawtooth, not a ramp.
+    turns_path = out_dir / f"{base_name}.turns.csv"
+    _turn_cols = ["turn", "q", "field_id", "label", "stalled", "prompt_tokens",
+                  "text_in", "audio_in", "text_out", "audio_out",
+                  "total_tokens", "cost_usd", "cumulative_cost_usd", "latency_s"]
+    with turns_path.open("w", newline="", encoding="utf-8") as fh:
+        tw = csv.DictWriter(fh, fieldnames=_turn_cols, extrasaction="ignore")
+        tw.writeheader()
+        for _i, _t in enumerate(meta.get("turns") or [], start=1):
+            tw.writerow({"turn": _i, **_t})
     meta["auto_apply_fids"] = [aa["field_id"]
                                for aa in (SCHEMAS[args.schema].get("auto_apply") or [])]
     (out_dir / f"{base_name}.meta.json").write_text(
@@ -2969,6 +3065,7 @@ async def run(args) -> int:
     (out_dir / f"{base_name}.summary.json").write_text(
         json.dumps(summary, indent=2, default=str), encoding="utf-8")
     print(f"\nwrote {csv_path}")
+    print(f"wrote {turns_path}")
     print(f"wrote {out_dir / (base_name + '.meta.json')}")
     print(f"wrote {out_dir / (base_name + '.summary.json')}")
     print(f"all-in: ${summary['headline']['all_in_usd']} "
