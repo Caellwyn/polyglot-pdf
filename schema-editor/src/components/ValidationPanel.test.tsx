@@ -453,6 +453,23 @@ describe('the refusal/error line (s18 C1, decision 1)', () => {
     render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
     expect(screen.queryByTestId('strip-refusal')).toBeNull();
   });
+
+  it('a token naming a NON-field (a section) renders no Go-to link', () => {
+    // to-review-pending anchors at `sections[i] (id=sec_to_review_x)`, and
+    // its raw path lands in the 409 detail; a link to a section id would
+    // silently re-select an unrelated field through the vanish-recovery
+    // (Opus outer review, pass 6). Only ids resolving to a real field link.
+    const onSelectField = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={onSelectField}
+        refusal={'Schema has 2 lint error(s): [to-review-pending] sections[0] '
+          + '(id=sec_to_review_misc): re-file these; [x] fields[1] (id=dep): y'}
+        onDismissRefusal={() => {}} />,
+    );
+    // The real field links; the section id does not.
+    expect(screen.getByRole('button', { name: 'dep' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'sec_to_review_misc' })).toBeNull();
+  });
 });
 
 describe('refusalFieldIds', () => {
@@ -461,6 +478,13 @@ describe('refusalFieldIds', () => {
       'errors: [a] fields[0] (id=alpha): x; [b] fields[1] (id=beta): y; '
       + 'and again (id=alpha)',
     )).toEqual(['alpha', 'beta']);
+  });
+
+  it('parses with the backend\'s own token width, not a narrower id grammar', () => {
+    // The raw parse mirrors schema_lint's `\(id=(.*?)\)`; the STRIP filters
+    // against real fields before rendering, so width here is safe and a
+    // future exotic id cannot silently lose its link (Opus outer r6).
+    expect(refusalFieldIds('a (id=my.field) b')).toEqual(['my.field']);
   });
 
   it('finds nothing in a refusal with no field tokens', () => {

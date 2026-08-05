@@ -196,6 +196,14 @@ the reviewer's exact reproduction as the test. Comments: remoteKitStore's
 flags doc and FieldEditor's lintFindings prop doc still described the
 removed pane/banner; both reworded.
 
+Opus outer review, primary pass 6: 2 findings (both the refusal line's
+Go-to links -- bd ytfx re-derived as in-scope), adopted inline: the links
+now render only for ids that resolve to a real field (a section-anchored
+to-review-pending token silently re-selected an unrelated field via the
+vanish-recovery), and the raw parse widened to the backend's own token
+width so the filter, not a narrower regex fork, is the gate. This PR
+therefore closes bd ytfx too. Mutation-verified.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:

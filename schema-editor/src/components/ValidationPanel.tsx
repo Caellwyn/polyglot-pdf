@@ -108,13 +108,19 @@ function localLintReport(schema: FormSchema): LintReport {
 // request, not fifteen (exported for the debounce test).
 export const LINT_DEBOUNCE_MS = 400;
 
-// Field ids a server refusal names inline as "(id=x)" (the same token the
-// lint paths carry, formatted by the backend's gate message). Rendered as
-// click-to-focus links on the refusal line.
+// Ids a server refusal names inline as "(id=x)" (the same token the lint
+// paths carry, formatted by the backend's gate message). Raw parse only --
+// the strip filters the result against schema.fields before rendering links,
+// because the token can name a SECTION (to-review-pending anchors at
+// `sections[i] (id=sec_to_review_x)`) and a link to a non-field would
+// silently mis-navigate through the selection recovery (Opus outer review,
+// pass 6; the same resolves-to-a-field rule formLevelFindings applies). The
+// char class is the backend's own `(id=(.*?))` width, not a narrower fork of
+// the id grammar (bd h76m.11 centralized that parse in Python).
 export function refusalFieldIds(refusal: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  const re = /\(id=([A-Za-z0-9_][A-Za-z0-9_-]*)\)/g;
+  const re = /\(id=([^)]+)\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(refusal)) !== null) {
     if (!seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
@@ -384,21 +390,29 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         >
           <span className="flex-1">
             {refusal}
-            {onSelectField && refusalFieldIds(refusal).length > 0 && (
-              <span className="block mt-0.5">
-                Go to:{' '}
-                {refusalFieldIds(refusal).map((fid) => (
-                  <button
-                    key={fid}
-                    type="button"
-                    className="font-mono underline mr-2"
-                    onClick={() => onSelectField(fid)}
-                  >
-                    {fid}
-                  </button>
-                ))}
-              </span>
-            )}
+            {onSelectField && (() => {
+              // Only ids that resolve to a REAL field become links: a
+              // section-anchored token would mis-navigate (Opus outer
+              // review, pass 6 -- the refusalFieldIds doc has the trace).
+              const linkable = refusalFieldIds(refusal)
+                .filter(fid => schema.fields.some(f => f.id === fid));
+              if (linkable.length === 0) return null;
+              return (
+                <span className="block mt-0.5">
+                  Go to:{' '}
+                  {linkable.map((fid) => (
+                    <button
+                      key={fid}
+                      type="button"
+                      className="font-mono underline mr-2"
+                      onClick={() => onSelectField(fid)}
+                    >
+                      {fid}
+                    </button>
+                  ))}
+                </span>
+              );
+            })()}
           </span>
           {onDismissRefusal && (
             <button
