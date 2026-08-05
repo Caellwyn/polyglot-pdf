@@ -723,7 +723,23 @@ async def lint_editor_kit_schema(
     except FormKitStoreError as exc:
         _log.error("editor_kit_lint_meta_failed", kit_id=kit_id, error=str(exc))
         raise HTTPException(status_code=502, detail="Unable to read kit") from exc
-    dump_data = await _load_kit_dump(store, kit_id)
+    # The dump read does NOT go through _load_kit_dump here: that helper
+    # swallows transient store failures into "no dump", which on THIS route
+    # would silently downgrade the lint to dump-blind and return a 200 the
+    # strip presents as authoritative -- the exact confident-clean state the
+    # route exists to end (Opus outer review, pass 4). A missing dump is the
+    # legitimate pre-v96b case; a FAILED read is a 502 the strip renders as
+    # its "checks did not run" degraded state.
+    try:
+        raw_dump = await store.load_json_artifact(kit_id, _ACROFORM_ARTIFACT)
+        dump_data: Optional[dict] = raw_dump if isinstance(raw_dump, dict) else None
+    except FormKitNotFound:
+        dump_data = None
+    except FormKitStoreError as exc:
+        _log.error("editor_kit_lint_dump_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to read the kit's PDF form data"
+        ) from exc
     if meta is None and dump_data is None:
         raise HTTPException(status_code=404, detail=f"Kit {kit_id} not found")
     findings = lint_schema(schema, dump_data)

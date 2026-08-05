@@ -200,9 +200,12 @@ describe('the staleness finding renders ONLY at the gate box (bd hii0, re-homed 
     const acked = {
       ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
     } as FormField;
+    // A FIELD-anchored warning (no property suffix -> the banner is its
+    // home). A bare `.help` path now anchors at the Instructions box, per
+    // the guidance verify-loop flags' real paths (Opus outer review, pass 4).
     const otherWarning: LintFinding = {
-      severity: 'WARNING', rule: 'help-details-oversize',
-      path: 'fields (id=phone).help', message: 'details are oversize',
+      severity: 'WARNING', rule: 'show-if-cycle',
+      path: 'fields (id=phone)', message: 'details are oversize',
       field_id: 'phone',
     };
     const anError: LintFinding = {

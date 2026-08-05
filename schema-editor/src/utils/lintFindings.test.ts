@@ -63,6 +63,11 @@ describe('propertyAnchor', () => {
     expect(anchor('fields[0] (id=x).help.instructions').kind).toBe('instructions');
     expect(anchor('fields (id=x).help[identity:abc]').kind).toBe('instructions');
     expect(anchor('fields[0] (id=x).help.details').kind).toBe('details');
+    // The guidance verify-loop flags write a BARE `.help` path
+    // (enrich_instructions.py); their remedies point at the Instructions
+    // box, so that is their anchor -- and the lookahead must not swallow
+    // `.help.details` (Opus outer review, pass 4).
+    expect(anchor('fields (id=x).help').kind).toBe('instructions');
   });
 
   it('carries the raw option token -- index OR value, never pre-parsed', () => {

@@ -196,7 +196,15 @@ export function propertyAnchor(f: LintFinding): FindingAnchor {
   // in principle embed a look-alike substring, so split on the token first.
   const idToken = path.indexOf(')');
   const suffix = idToken >= 0 ? path.slice(idToken + 1) : path;
-  if (/\.help\.instructions\b/.test(suffix) || /\.help\[identity:/.test(suffix)) {
+  // A BARE `.help` (no sub-key) is the guidance verify-loop flags' path
+  // (enrich_instructions.py writes instructions-rectified /
+  // -ungrounded-dropped / -enrich-unavailable at `fields (id=X).help`); their
+  // remedies all point at the Instructions box, so that is their anchor
+  // (Opus outer review, pass 4; bd z9u7 tracks the writers emitting precise
+  // paths). The lookahead keeps `.help.details` falling through to its own
+  // branch below.
+  if (/\.help\.instructions\b/.test(suffix) || /\.help\[identity:/.test(suffix)
+      || /\.help(?![.[])/.test(suffix)) {
     return { kind: 'instructions' };
   }
   if (/\.help\.details\b/.test(suffix)) return { kind: 'details' };

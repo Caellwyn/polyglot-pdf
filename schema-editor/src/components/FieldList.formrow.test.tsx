@@ -214,6 +214,35 @@ describe('the review filter (the strip count secondary action, s18 C1)', () => {
     expect(onClearReviewFilter).toHaveBeenCalled();
   });
 
+  it('force-expands collapsed sections so the filter cannot hide its own targets', () => {
+    // Opus outer review, pass 4: with the review filter active, a section
+    // the user collapsed earlier stayed collapsed -- hiding review targets
+    // under a note claiming "Showing only fields needing review".
+    const s1Field = completeField('alpha');
+    const s2Field = { ...completeField('beta'), section_id: 'sec-2' } as FormField;
+    const schema = {
+      ...schemaWith([s1Field]),
+      sections: [
+        { id: 'sec-1', label: 'Section 1', order: 1, fields: ['alpha'] },
+        { id: 'sec-2', label: 'Section 2', order: 2, fields: ['beta'] },
+      ],
+      fields: [s1Field, s2Field],
+    } as unknown as FormSchema;
+    const { rerender } = render(
+      <FieldList schema={schema} selectedFieldId={null} onSelectField={vi.fn()} />,
+    );
+    // Collapse Section 2 while no filter is active.
+    fireEvent.click(screen.getByRole('button', { name: /Section 2/ }));
+    expect(screen.queryByText('beta')).toBeNull();
+    // Activate the review filter: beta (unreviewed) is a target and MUST be
+    // visible despite the stale collapse.
+    rerender(
+      <FieldList schema={schema} selectedFieldId={null} onSelectField={vi.fn()}
+        reviewFilterActive />,
+    );
+    expect(screen.getByText('beta')).toBeInTheDocument();
+  });
+
   it('renders every field (and no note) when the filter is off', () => {
     const reviewed = completeField('done', {
       _review: { status: 'reviewed_correct', seen_fingerprints: [] },

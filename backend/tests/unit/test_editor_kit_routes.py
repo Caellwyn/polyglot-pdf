@@ -967,6 +967,28 @@ def test_kit_lint_without_a_dump_degrades_to_the_dumpless_rules(client):
     assert scoped.json() == dumpless.json()
 
 
+def test_kit_lint_502s_on_a_transient_dump_read_failure(client, monkeypatch):
+    # A FAILED dump read must not silently downgrade the lint to dump-blind
+    # with a 200 the strip presents as authoritative (the confident-clean
+    # state the route exists to end) -- it 502s like the metadata read, which
+    # the strip renders as its "checks did not run" degraded state (Opus
+    # outer review, pass 4). A MISSING dump (pre-v96b kit) still degrades to
+    # the dumpless rules, pinned by the degradation test above.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=_MULTICLAIM_DRAFT)
+
+    async def _boom(_kit_id, _name):
+        raise FormKitStoreError("gcs blip")
+
+    monkeypatch.setattr(store, "load_json_artifact", _boom)
+    r = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert r.status_code == 502
+
+
 def test_kit_lint_lints_the_posted_schema_not_the_stored_one(client):
     # The strip lints what is ON SCREEN (possibly unsaved), never the stored
     # copy: post a draft that differs from the stored schema and confirm the

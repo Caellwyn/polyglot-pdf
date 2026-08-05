@@ -169,6 +169,22 @@ now guards both catalogues, mutation-verified. The reviewer filed bd
 polyglot-pdf-ytfx (refusal Go-to links can name a SECTION id from
 to-review-pending's 409 text -- narrower, separable, out of the rubric).
 
+Opus outer review, primary pass 4: 3 findings, all adopted. (1) The
+review filter did not force-expand sections, so a stale collapse hid the
+filter's own targets under the "showing only fields needing review" note
+-- search and the review filter now share the force-expand/guard/badge
+behavior. (2) The guidance verify-loop flags (instructions-rectified /
+-ungrounded-dropped / -enrich-unavailable) write a bare ".help" path and
+fell to the banner; propertyAnchor now anchors bare .help at the
+Instructions box (the client half of bd z9u7, which stays open for the
+writers to emit precise paths). (3) A transient acroform.json read
+failure silently downgraded the kit-scoped lint to a dump-blind 200; the
+route now 502s on a FAILED dump read (missing dump still degrades
+legitimately), so the strip shows its honest degraded state. The
+reviewer filed bd polyglot-pdf-caed (a field with section_id set but
+listed in no section renders in no list yet counts as a review target --
+pre-existing, made visible by the count-as-control).
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:

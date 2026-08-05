@@ -187,10 +187,14 @@ export const FieldList: React.FC<FieldListProps> = ({
   };
 
   const toggleSection = (sectionId: string) => {
-    // While filtering, every section is force-expanded so matches are visible;
-    // a chevron click must not silently mutate the persisted expansion state
-    // (that would collapse a section unexpectedly once the filter is cleared).
-    if (searchQuery.trim()) return;
+    // While filtering (search OR the review filter), every section is
+    // force-expanded so matches are visible; a chevron click must not
+    // silently mutate the persisted expansion state (that would collapse a
+    // section unexpectedly once the filter is cleared). The review filter
+    // shares the guard (Opus outer review, pass 4): a collapsed section
+    // hiding its own review targets under "Showing only fields needing
+    // review" defeats the overview the filter exists to give.
+    if (searchQuery.trim() || reviewFilterActive) return;
     setExpandedSections(prev => {
       const next = new Set(prev);
       if (next.has(sectionId)) {
@@ -781,9 +785,12 @@ export const FieldList: React.FC<FieldListProps> = ({
         {/* Render sections */}
         {schema.sections.map(section => {
           const fields = sectionedFields.get(section.id) || [];
-          // While filtering (search or review filter), hide empty sections.
-          if ((isFiltering || reviewFilterActive) && fields.length === 0) return null;
-          const isExpanded = isFiltering || expandedSections.has(section.id);
+          // While filtering (search or review filter), hide empty sections
+          // and force-expand the rest -- a stale collapse must not hide the
+          // filter's own targets (Opus outer review, pass 4).
+          const filtering = isFiltering || reviewFilterActive;
+          if (filtering && fields.length === 0) return null;
+          const isExpanded = filtering || expandedSections.has(section.id);
           // Total resolved fields in this section, independent of the filter
           // (matches the non-filtered count badge so it does not jump on clear).
           const totalFieldCount = section.fields.filter(id => fieldsById.has(id)).length;
@@ -809,7 +816,7 @@ export const FieldList: React.FC<FieldListProps> = ({
               {/* Section Header */}
               <button
                 className={`w-full flex items-center gap-2 p-2 text-left transition-colors ${
-                  isFiltering ? 'cursor-default'
+                  filtering ? 'cursor-default'
                     : needsReview ? 'hover:bg-amber-100' : 'hover:bg-gray-50'
                 }`}
                 onClick={() => toggleSection(section.id)}
@@ -838,7 +845,7 @@ export const FieldList: React.FC<FieldListProps> = ({
                   </span>
                 )}
                 <span className="text-xs text-gray-500">
-                  {isFiltering ? `(${fields.length}/${totalFieldCount})` : `(${totalFieldCount})`}
+                  {filtering ? `(${fields.length}/${totalFieldCount})` : `(${totalFieldCount})`}
                 </span>
               </button>
 
