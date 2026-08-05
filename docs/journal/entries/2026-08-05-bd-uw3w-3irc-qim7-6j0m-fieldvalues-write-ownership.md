@@ -69,9 +69,22 @@ decided the winner.
 
 That is a real production case, not a test artifact -- and the first
 implementation resolved ties toward in-memory, i.e. toward the stale side in
-exactly the scenario these beads are about. Ties now fall back to "meaningful
-entry wins" (the `readFieldEntryWithAlias` precedent), so a typed answer is never
-lost to a same-millisecond empty. The handler tests install a monotonic
+exactly the scenario these beads are about.
+
+The first correction used "meaningful entry wins" (the `readFieldEntryWithAlias`
+precedent). **The pre-PR fresh-eyes review caught that this only fixes half the
+problem**, and it was right: that rule covers `persisted 'Real Answer'` vs
+`in-memory ''` (a skip would blank the answer), but NOT the reverse --
+`persisted ''` (the user cleared it) vs `in-memory 'WRONG'`, where the stale side
+is the meaningful one. That reverse tie is uw3w's case 1 exactly: a confirm would
+revive the stale value and mark it confirmed, so it never re-prompts and prints
+on the PDF. Reproduced before fixing.
+
+Ties now go to the PERSISTED side outright -- it is the side written through
+`SchemaFormStateManager`, the durable path both writers share, whereas
+`this.state` is a per-object copy that goes stale precisely because the UI never
+touches it. An in-memory-only entry is unaffected: it never reaches the tie
+branch, since the one-sided case keeps it. The handler tests install a monotonic
 `Date.now()` so they exercise the reconcile RULE instead of racing the clock.
 
 ### Scope call on `handleSessionReady`
@@ -88,8 +101,8 @@ Three separate mutations, each isolating a different claim:
 
 | Mutation | Result |
 |---|---|
-| revert `reconcileFieldValues` to the raw key union | **9 fail** -- all three beads' regressions |
-| flip ONLY the same-millisecond tie-break | **exactly 1 fails** -- the tie case |
+| revert `reconcileFieldValues` to the raw key union | **10 fail** -- all three beads' regressions |
+| restore the asymmetric "meaningful entry wins" tie-break | **exactly 1 fails** -- the reverse-tie case |
 | remove the `handleSessionReady` refresh | **exactly 1 fails** -- the `qim7` case |
 
 The `pjws` in-memory-only test correctly stayed green under the first mutation
@@ -103,7 +116,7 @@ full-suite runs -- 9 failures on clean `dev`, a varying failing set, opaque
 `Error: STACK_TRACE_ERROR` from `@vitest/runner`.
 
 It does not reproduce. Measured on this branch and on clean `origin/dev`:
-1270/1270 and 1257/1257 respectively, green across seven runs, plus
+1271/1271 (1270 before the review round added a case) and 1257/1257 respectively, green across seven runs, plus
 `--poolOptions.forks.singleFork=true` (which also **rules out cross-file
 module-state bleed**, the bead's leading suspect) and `maxForks=22` (rules out
 worker contention).

@@ -296,16 +296,46 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       ).toBe('memory');
     });
 
-    it('on a same-millisecond TIE a real answer beats a hollow entry', () => {
+    it('on a same-millisecond TIE the PERSISTED side wins, in BOTH directions', () => {
       // Date.now() is coarser than the AI-write -> on-screen-edit gap, so this
-      // tie is a real production case. It must not silently hand the field to
-      // the stale in-memory side and blank a typed answer.
+      // tie is a real production case, and BOTH directions are unsafe if the
+      // stale in-memory side wins.
+
+      // Direction 1: a typed answer must not be blanked by a same-ms empty.
       expect(
         reconcileFieldValues(
           { f: { value: 'Real Answer', lastModified: 500 } } as any,
           { f: { value: '', lastModified: 500 } } as any
         ).f.value
       ).toBe('Real Answer');
+
+      // Direction 2 (bd polyglot-pdf-uw3w case 1): a value the user CLEARED must
+      // not be revived by a stale in-memory value at a tie. A "meaningful entry
+      // wins" tie-break would get this one WRONG -- 'WRONG' is the meaningful
+      // side here, and it is the stale one.
+      expect(
+        reconcileFieldValues(
+          { f: { value: '', lastModified: 500 } } as any,
+          { f: { value: 'WRONG', lastModified: 500 } } as any
+        ).f.value
+      ).toBe('');
+    });
+
+    it('collapses to ONE entry even when a side holds BOTH key variants', () => {
+      // A single side illegally holding both variants must still resolve to one
+      // entry, and the entry that actually carries the answer must be the one
+      // that survives -- not the hollow exact-key one.
+      const out = reconcileFieldValues(
+        {
+          [bare]: { value: null, lastModified: 100 },
+          [bracket]: { value: ['real'], confirmed: true, lastModified: 300 },
+        } as any,
+        {} as any
+      );
+      const keys = Object.keys(out).filter(k => k.startsWith('p1_grp'));
+      expect(keys).toHaveLength(1);
+      expect(out[keys[0]].value).toEqual(['real']);
+      expect(out[keys[0]].confirmed).toBe(true);
     });
 
     it('collapses an []-alias pair to exactly ONE entry (got6 invariant)', () => {

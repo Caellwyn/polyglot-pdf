@@ -79,6 +79,9 @@ export function readFieldEntryWithAlias(
  *    value's timestamp correctly stays put.
  *  - A stamped entry beats an unstamped one: a write we can date is provably
  *    newer than one of unknown age.
+ *  - On a same-millisecond TIE the PERSISTED side wins. Both tie directions are
+ *    unsafe if the stale in-memory copy wins, so this is not a "meaningful entry
+ *    wins" rule -- see the tie branch below for why that only covers one of them.
  *  - When NEITHER side is stamped, the in-memory entry wins. This preserves the
  *    conservative pre-existing direction (bd polyglot-pdf-pjws) so an entry that
  *    exists only in memory stays visible to the confirm handler's usable-value
@@ -139,15 +142,19 @@ export function reconcileFieldValues(
         // SAME-MILLISECOND TIE. Date.now() is coarser than the gap between an AI
         // write and the on-screen edit that follows it, so a tie is a real
         // production case, not just a test artifact -- and it must NOT default to
-        // the in-memory side, which is the stale one in exactly the scenario
-        // these beads are about. Fall back to the established "meaningful entry
-        // wins" precedent (readFieldEntryWithAlias): an entry carrying an answer
-        // beats a hollow one, so a typed answer is never lost to a same-ms empty.
-        // If both or neither carry an answer the tie is genuinely unresolvable --
-        // keep in-memory, preserving the conservative pre-existing direction.
-        const persistedMeaningful = entryHasValue(persistedEntry);
-        const memoryMeaningful = entryHasValue(memoryEntry);
-        persistedWins = persistedMeaningful && !memoryMeaningful;
+        // the in-memory side, which is the stale one in exactly the scenarios
+        // these beads are about. BOTH tie directions are unsafe:
+        //   - persisted 'Real Answer' vs in-memory ''    -> a skip would blank it
+        //   - persisted '' (user cleared) vs in-memory 'WRONG' -> a confirm would
+        //     revive the stale value AND mark it confirmed, so it never
+        //     re-prompts and prints on the PDF (bd polyglot-pdf-uw3w case 1)
+        // A "meaningful entry wins" rule only covers the first, so PERSISTED wins
+        // the tie outright: it is the side written through SchemaFormStateManager,
+        // the durable path BOTH writers share, whereas this.state is a per-object
+        // copy that goes stale precisely because the UI never touches it. An
+        // entry that exists only in memory is unaffected -- it never reaches this
+        // branch (the one-sided case above keeps it).
+        persistedWins = true;
       }
     } else if (persistedStamp !== undefined) {
       persistedWins = true;   // dated beats undated

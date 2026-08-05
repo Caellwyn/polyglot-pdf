@@ -101,10 +101,13 @@ three handlers that save state — `handleSessionReady`, `handleConfirmFieldRequ
 - `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
   merge can never resurrect a key `updateField` deleted on migration — that
   resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).
-- A same-millisecond tie falls back to "meaningful entry wins" (the
-  `readFieldEntryWithAlias` precedent), so a typed answer is never lost to a
-  same-ms empty. `Date.now()` is coarser than the AI-write → on-screen-edit gap,
-  so ties are a real case.
+- A same-millisecond tie goes to the **persisted** side. `Date.now()` is coarser
+  than the AI-write → on-screen-edit gap, so ties are a real case, and *both*
+  directions are unsafe if the stale in-memory copy wins: a typed answer gets
+  blanked by a skip, **and** a value the user cleared gets revived (and marked
+  confirmed) by a confirm. A "meaningful entry wins" tie-break only covers the
+  first — the cleared-value direction has the stale side holding the meaningful
+  entry — so the durable side wins outright instead.
 - An entry present on only one side is kept, so an in-memory-only value stays
   visible to the confirm handler's usable-value gate and the skip handler's
   already-filled guard (bd `polyglot-pdf-pjws`).
