@@ -11,16 +11,18 @@ body invariants that, if broken, would silently change how the skill runs:
     inline, per the plan).
   - It must reference the deterministic scripts it wraps (the three step-2
     scripts + check_doc_freshness), so a rename without a skill update is caught.
-  - It must encode the Claude-only review flow (2026-07-08): a Sonnet/Haiku
-    fresh-eyes inner loop (pre-PR, looped to NO-GAPS) and an Opus-5 outer review
-    (two independent clearing passes), then open a non-draft PR and make the merge
-    decision: auto-merge a routine low-risk PR that reviewed CLEAN, else ping the
-    maintainer for a consequence-bearing one (bd 16pj). There is NO external
+  - It must encode the Claude-only review flow (2026-07-08; layers differentiated
+    2026-08-05, bd ofh6 + 0arm): a Sonnet/Haiku fresh-eyes inner loop (pre-PR,
+    looped to NO-GAPS at its routed model -- no Opus round there) and then exactly
+    ONE looped Opus-5 outer cross-surface review, whose single NO-GAPS is the gate.
+    Only a BEHAVIORAL fix voids that clear. Then open a non-draft PR and make the
+    merge decision: auto-merge a routine low-risk PR that reviewed CLEAN, else ping
+    the maintainer for a consequence-bearing one (bd 16pj). There is NO external
     reviewer -- the `@codex review` trigger, `pr_review_watcher.py`, and
     `requested_reviewers` are dead path. NO drafts and NO ready-flip. Regression
     guards assert the old "hard stop before `gh pr create`" wording, the
-    draft/ready-flip wording, AND the old blanket "never run `gh pr merge`" ban are
-    all gone.
+    draft/ready-flip wording, the old blanket "never run `gh pr merge`" ban, AND
+    the retired two-independent-clearing-passes gate are all gone.
 """
 
 import pathlib
@@ -143,16 +145,22 @@ def test_no_draft_pr(body):
 
 
 def test_outer_review_loops_until_clean(body):
-    # The Opus-5 outer review is not one-shot: fix -> re-spawn until two
-    # independent Opus passes both clear (NO-GAPS on the identical diff). Assert
-    # against the BODY so the operative loop instruction is pinned. Review is
-    # entirely Claude-based -- there is NO external reviewer and NO bot-trigger.
+    # The Opus-5 outer review is not one-shot: fix -> re-spawn until it clears.
+    # Since 2026-08-05 (bd ofh6) the gate is ONE clearing pass, not two, and only
+    # a BEHAVIORAL fix voids that clear. Assert against the BODY so the operative
+    # loop instruction is pinned. Review is entirely Claude-based -- there is NO
+    # external reviewer and NO bot-trigger.
     lo = body.lower()
     assert "opus" in lo, "skill body must name the Opus-5 outer reviewer"
     assert re.search(r"(until|loop)[^\n]*(clean|no-gaps)", lo), \
         "skill body must loop the outer review until it clears"
-    assert "two independent" in lo, \
-        "skill must require two independent Opus clearing passes"
+    # The duplicate confirming pass is RETIRED -- its return would silently
+    # reinstate the 3x-Opus cost this change removed (bd ofh6).
+    assert "two independent" not in lo, \
+        "the two-independent-clearing-passes gate was retired 2026-08-05 (bd ofh6)"
+    # Pin the replacement rule positively, so deleting it is caught too.
+    assert "behavioral" in lo, \
+        "skill must state that only a BEHAVIORAL fix voids the outer clear"
     # Regression guard: the retired external-reviewer triggers must NOT be the
     # active mechanism. `@codex review`, `requested_reviewers`, and
     # `pr_review_watcher.py` may appear ONLY in an explicit retired/dead-path/
@@ -192,6 +200,16 @@ def test_merge_endpoint_is_auto_merge_or_ping(body):
     assert "gh pr ready" not in body
 
 
-def test_mentions_fresh_eyes_review(skill_text):
+def test_mentions_both_reviewers(skill_text):
+    # The two pre-PR layers have DIFFERENT jobs and DIFFERENT agent files
+    # (bd 0arm, 2026-08-05): the inner fresh-eyes assessor owns the local diff
+    # and enumerates changed contracts; the outer cross-surface reviewer owns
+    # the blast radius. Pin BOTH paths so a rename -- or a silent collapse back
+    # to one shared agent -- is caught.
     assert "fresh-eyes" in skill_text.lower()
     assert ".claude/agents/fresh-eyes-reviewer.md" in skill_text
+    assert ".claude/agents/cross-surface-reviewer.md" in skill_text
+    # The handoff between them is load-bearing: without the enumeration the
+    # outer reviewer re-derives what the cheap tier already produced.
+    assert "changed contracts" in skill_text.lower(), \
+        "skill must carry the inner->outer Changed-contracts handoff"

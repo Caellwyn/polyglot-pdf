@@ -15,9 +15,10 @@ Step 5.5.b (item 1) captures the printed name and passes it to the fresh-eyes
 subagent (``model: <picked>``) for the EARLY rounds. On a small diff the cheap
 model does the first pass; the fresh-eyes prompt's self-escalation clause (the
 JUDGMENT half of arm B) lets a Haiku run bump itself back to Sonnet when the
-change is risky despite being short. (The FINAL clearing round is forced to Opus
-by the closeout loop regardless of this router's output -- bd polyglot-pdf-dgoa,
-clause 5; this router governs the early rounds only.) The split is deliberate:
+change is risky despite being short. (This router governs the WHOLE inner loop:
+its verdict is terminal at the picked model. Opus is not part of the inner loop
+at all -- the single Opus pass is the separate outer cross-surface review in
+closeout Step 5.6, which this router never routes.) The split is deliberate:
 
   - **This script makes NO risk judgment.** Size is the only signal. Adding a
     "is this risky?" check here would force an extra expensive orchestrator
