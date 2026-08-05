@@ -503,6 +503,42 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect(answerWins['p1_grp'].value).toEqual(['a']);
     });
 
+    it('within ONE side at EQUAL stamps, the skip survives (not meaningful-wins)', () => {
+      // The cell that stayed green through three rounds. Cross-side resolves an
+      // equal-stamp pair as persisted-wins; intra-side used to fall through to
+      // meaningful-wins, reverting a fresh skip to the answer AND dropping the
+      // skipped flag -- so the field re-prompted and printed the un-skipped value.
+      // Equal stamps are a real production case (Date.now() is coarser than the
+      // AI-write -> on-screen-edit gap).
+      const out = reconcileFieldValues(
+        {
+          'p1_grp': { value: null, skipped: true, confirmed: true, lastModified: 500 },
+          'p1_grp[]': { value: ['a'], lastModified: 500 },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(out['p1_grp'].value).toBeNull();
+      expect((out['p1_grp'] as any).skipped).toBe(true);
+    });
+
+    it('within ONE side, sticky markers carry from the losing variant too', () => {
+      // The cross-side path carries confirmed/steered/skipped from an
+      // equal-valued loser; the intra-side path used to discard them, so the
+      // same spurious re-ask happened whenever the pair sat on one side.
+      const out = reconcileFieldValues(
+        {
+          'p1_grp': { value: ['a'], lastModified: 300 },
+          'p1_grp[]': { value: ['a'], confirmed: true, steered: true, lastModified: 100 },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(out['p1_grp'].value).toEqual(['a']);
+      expect(out['p1_grp'].confirmed).toBe(true);
+      expect((out['p1_grp'] as any).steered).toBe(true);
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one

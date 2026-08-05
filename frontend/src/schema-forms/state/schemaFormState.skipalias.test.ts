@@ -92,6 +92,22 @@ describe('markFieldSkipped []-alias handling (bd polyglot-pdf-8c97)', () => {
     expect(after.fieldValues['p1_grp'].steered).toBe(true)
   })
 
+  it('clears the validation error under the PRIOR key too', () => {
+    // The alias resolution deletes the stale variant; an error recorded against
+    // that key would otherwise outlive the entry it describes.
+    let state: any = SchemaFormStateManager.init(schema())
+    state = {
+      ...state,
+      fieldValues: { 'p1_grp[]': { value: ['a'], lastModified: 100 } },
+      validationErrors: { 'p1_grp[]': 'Required' },
+    }
+
+    const after = SchemaFormStateManager.markFieldSkipped(state, 'p1_grp', 'ai_voice')
+
+    expect(Object.keys(after.validationErrors)).not.toContain('p1_grp[]')
+    expect(Object.keys(after.validationErrors)).not.toContain('p1_grp')
+  })
+
   it('a skip with NO prior entry under either variant still records one entry', () => {
     const state: any = SchemaFormStateManager.init(schema())
 

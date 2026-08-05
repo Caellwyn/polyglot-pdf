@@ -140,12 +140,16 @@ enforced in a test rather than trusted to a convention.
 It resolves
 **per logical field**, not per raw key:
 
-- The newer `lastModified` wins; a stamped entry beats an unstamped one. **Both
-  halves** of that rule apply *within* one side too, when it holds both alias
-  variants — otherwise a fresher hollow write (a skip, or the user clearing a
-  field) would lose to a staler answer on one side while winning across sides.
-  Handling only the both-dated case leaves the same contradiction one branch
-  deeper, since `lastModified` is optional and pre-stamping state has none.
+- The newer `lastModified` wins; a stamped entry beats an unstamped one; an equal
+  stamp goes to the more authoritative side. The ordering rule and the marker
+  carry each live in exactly ONE helper (`firstWins`, `mergeEntries`), used by
+  both the cross-side comparison and the intra-side collapse. That is deliberate:
+  three review rounds found the intra-side path drifting from the cross-side one
+  a cell at a time — first stamps, then dated-vs-undated, then equal stamps and
+  the marker carry — each time letting a fresher hollow write (a skip, or the
+  user clearing a field) lose to a staler answer on one side while winning across
+  sides. Sharing the helpers makes that divergence structurally impossible rather
+  than something to remember.
 - `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
   merge can never resurrect a key `updateField` deleted on migration — that
   resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).

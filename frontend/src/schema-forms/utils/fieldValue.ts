@@ -163,76 +163,17 @@ export function reconcileFieldValues(
     const persistedStamp = stampOf(persistedEntry);
     const memoryStamp = stampOf(memoryEntry);
 
-    let persistedWins: boolean;
-    if (persistedStamp !== undefined && memoryStamp !== undefined) {
-      if (persistedStamp !== memoryStamp) {
-        persistedWins = persistedStamp > memoryStamp;
-      } else {
-        // SAME-MILLISECOND TIE. Date.now() is coarser than the gap between an AI
-        // write and the on-screen edit that follows it, so a tie is a real
-        // production case, not just a test artifact -- and it must NOT default to
-        // the in-memory side, which is the stale one in exactly the scenarios
-        // these beads are about. BOTH tie directions are unsafe:
-        //   - persisted 'Real Answer' vs in-memory ''    -> a skip would blank it
-        //   - persisted '' (user cleared) vs in-memory 'WRONG' -> a confirm would
-        //     revive the stale value AND mark it confirmed, so it never
-        //     re-prompts and prints on the PDF (bd polyglot-pdf-uw3w case 1)
-        // A "meaningful entry wins" rule only covers the first, so PERSISTED wins
-        // the tie outright: it is the side written through SchemaFormStateManager,
-        // the durable path BOTH writers share, whereas this.state is a per-object
-        // copy that goes stale precisely because the UI never touches it. An
-        // entry that exists only in memory is unaffected -- it never reaches this
-        // branch (the one-sided case above keeps it).
-        persistedWins = true;
-      }
-    } else if (persistedStamp !== undefined) {
-      persistedWins = true;   // dated beats undated
-    } else {
-      persistedWins = false;  // undated persisted, or neither dated -> in-memory
-    }
-
-    const winner = persistedWins ? persistedEntry : memoryEntry;
-    const loser = persistedWins ? memoryEntry : persistedEntry;
-
-    // The winner decides the VALUE. But confirmation/skip/steer markers are
-    // sticky metadata that must not be silently discarded: confirmField sets
-    // `confirmed` WITHOUT bumping lastModified, so the losing side can be the
-    // only one holding it, and dropping it would cause a spurious re-ask of an
-    // already-confirmed field (the old key union happened to preserve it, so
-    // losing it here would be a regression).
-    //
-    // The gate is VALUE AGREEMENT, not a stamp tie -- deliberately. A marker
-    // describes the answer it was attached to, so it may follow that answer
-    // across a reconcile no matter which side is newer, and must NEVER follow a
-    // DIFFERENT answer (that would mark a value confirmed nobody confirmed, the
-    // uw3w harm). Stamp equality is neither necessary nor sufficient for that,
-    // so it is not consulted here.
-    let merged = winner;
-    if (loser && sameValue(winner?.value, loser.value)) {
-      const carried: Partial<FieldValue> = {};
-      if (winner?.confirmed === undefined && loser.confirmed !== undefined) {
-        carried.confirmed = loser.confirmed;
-        if (winner?.confirmedAt === undefined) carried.confirmedAt = loser.confirmedAt;
-        if (winner?.confirmationMethod === undefined) {
-          carried.confirmationMethod = loser.confirmationMethod;
-        }
-      }
-      if (winner?.steered === undefined && loser.steered !== undefined) {
-        carried.steered = loser.steered;
-      }
-      // `skipped` is load-bearing the same way `confirmed` is: isSectionValid
-      // and getProgress both honour it, so dropping it would un-satisfy a
-      // section the user deliberately skipped past.
-      if ((winner as FieldValue & { skipped?: boolean })?.skipped === undefined) {
-        const loserSkipped = (loser as FieldValue & { skipped?: boolean }).skipped;
-        if (loserSkipped !== undefined) {
-          (carried as { skipped?: boolean }).skipped = loserSkipped;
-        }
-      }
-      if (Object.keys(carried).length > 0) {
-        merged = { ...(winner as FieldValue), ...carried };
-      }
-    }
+    // Which side wins, and the merge, are BOTH delegated to the shared helpers
+    // below -- the same ones pickWithinSide uses. Three review rounds found the
+    // intra-side path drifting from this one (stamps, then dated-vs-undated,
+    // then equal stamps and the marker carry), so the rule now lives in ONE
+    // place and divergence is structurally impossible rather than a thing to
+    // remember.
+    const persistedWins = firstWins(persistedEntry, memoryEntry);
+    const merged = mergeEntries(
+      persistedWins ? persistedEntry : memoryEntry,
+      persistedWins ? memoryEntry : persistedEntry
+    );
 
     out[preferred ?? ((persistedWins ? persistedKey : memoryKey) as string)] =
       merged as FieldValue;
@@ -266,24 +207,73 @@ function pickWithinSide(
   if (presentKey === undefined) return undefined;
   const a = map[base];
   const b = map[bracket];
-  if (a !== undefined && b !== undefined) {
-    const sa = typeof a.lastModified === 'number' ? a.lastModified : undefined;
-    const sb = typeof b.lastModified === 'number' ? b.lastModified : undefined;
-    // Mirror the cross-side rule EXACTLY, including "dated beats undated".
-    // Handling only the both-dated case would leave the same contradiction in
-    // the fallback: a fresh stamped skip losing to an UNDATED stale answer here,
-    // while winning across sides. Undated entries are ordinary -- lastModified is
-    // optional on FieldValue, and any state persisted before the stamping writers
-    // landed has none.
-    if (sa !== undefined && sb !== undefined) {
-      if (sa !== sb) return sa > sb ? a : b;
-    } else if (sa !== undefined) {
-      return a;
-    } else if (sb !== undefined) {
-      return b;
-    }
+  if (a === undefined || b === undefined) {
+    return readFieldEntryWithAlias(map, presentKey);
   }
-  return readFieldEntryWithAlias(map, presentKey);
+  // Both variants present on this ONE side. Resolve with the SAME rule and the
+  // SAME marker carry as the cross-side comparison -- `a` (the bare key) plays
+  // the "first" role, mirroring persisted-wins on an equal stamp. Using
+  // readFieldEntryWithAlias here instead would be meaningful-wins, which ignores
+  // stamps entirely and silently reverts a fresh skip.
+  const aWins = firstWins(a, b);
+  return mergeEntries(aWins ? a : b, aWins ? b : a);
+}
+
+/**
+ * Does `first` beat `second`? The single ordering rule, used for both the
+ * cross-side comparison and the intra-side collapse.
+ *
+ * Newer `lastModified` wins; a dated entry beats an undated one; an equal or
+ * absent stamp goes to `first`. Callers put the more authoritative side first:
+ * the PERSISTED map cross-side (the durable path both writers share), and the
+ * bare key intra-side.
+ */
+function firstWins(first: FieldValue | undefined, second: FieldValue | undefined): boolean {
+  const sf = typeof first?.lastModified === 'number' ? first.lastModified : undefined;
+  const ss = typeof second?.lastModified === 'number' ? second.lastModified : undefined;
+  if (sf !== undefined && ss !== undefined) return sf >= ss;
+  if (sf !== undefined) return true;
+  if (ss !== undefined) return false;
+  // Neither dated: keep the pre-existing conservative direction (bd
+  // polyglot-pdf-pjws) -- cross-side that means the in-memory entry, which is
+  // `second` there, so `first` loses.
+  return false;
+}
+
+/**
+ * The winner decides the VALUE; sticky markers carry from the loser when the two
+ * agree on the value.
+ *
+ * `confirmField` sets `confirmed` WITHOUT bumping `lastModified`, so the loser
+ * can be the only side holding it, and dropping it would cause a spurious re-ask
+ * of an already-confirmed field. `skipped` is load-bearing the same way
+ * (`isSectionValid` and `getProgress` both honour it).
+ *
+ * The gate is VALUE AGREEMENT, not a stamp tie -- deliberately. A marker
+ * describes the answer it was attached to, so it may follow that answer no
+ * matter which side is newer, and must NEVER follow a DIFFERENT answer (that
+ * would mark a value confirmed nobody confirmed -- the uw3w harm).
+ */
+function mergeEntries(
+  winner: FieldValue | undefined,
+  loser: FieldValue | undefined
+): FieldValue | undefined {
+  if (!winner || !loser || !sameValue(winner.value, loser.value)) return winner;
+
+  type Sticky = FieldValue & { skipped?: boolean };
+  const w = winner as Sticky;
+  const l = loser as Sticky;
+  const carried: Partial<Sticky> = {};
+
+  if (w.confirmed === undefined && l.confirmed !== undefined) {
+    carried.confirmed = l.confirmed;
+    if (w.confirmedAt === undefined) carried.confirmedAt = l.confirmedAt;
+    if (w.confirmationMethod === undefined) carried.confirmationMethod = l.confirmationMethod;
+  }
+  if (w.steered === undefined && l.steered !== undefined) carried.steered = l.steered;
+  if (w.skipped === undefined && l.skipped !== undefined) carried.skipped = l.skipped;
+
+  return Object.keys(carried).length > 0 ? { ...w, ...carried } : winner;
 }
 
 /** Structural equality for FieldValue.value, including checkbox-group arrays. */

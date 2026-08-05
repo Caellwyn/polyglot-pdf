@@ -1304,8 +1304,13 @@ export class SchemaFormStateManager {
     };
 
     // A skipped field is intentionally empty -- clear any stale validation error.
-    if (newState.validationErrors[fieldId]) {
-      const { [fieldId]: _removed, ...rest } = newState.validationErrors;
+    // Clear it under the PRIOR key too: now that the alias is resolved above, an
+    // error recorded against the variant we just deleted would otherwise outlive
+    // the entry it describes.
+    if (newState.validationErrors[fieldId] || newState.validationErrors[priorKey]) {
+      const rest = { ...newState.validationErrors };
+      delete rest[fieldId];
+      delete rest[priorKey];
       newState.validationErrors = rest;
     }
 
