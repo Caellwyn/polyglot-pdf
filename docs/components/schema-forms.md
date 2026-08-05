@@ -103,6 +103,10 @@ handler-level auditing missed it. The others are `handleSessionReady`,
 `handleDrainFindingsResult`, `handleValidationResult`, and `handleFormUpdated`
 (bd `polyglot-pdf-qim7` / `uw3w` / `3irc` / `tare` / `6iwn`).
 
+`markFieldSkipped` resolves the `[]`-alias and deletes the stale variant, exactly
+as `updateField` does — it was the last remaining producer of the both-variants
+state the reconcile then had to arbitrate (bd `polyglot-pdf-8c97`).
+
 `handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot
 wholesale at entry (bd `polyglot-pdf-ezg2`), so its write cannot be stale.
 
@@ -136,10 +140,12 @@ enforced in a test rather than trusted to a convention.
 It resolves
 **per logical field**, not per raw key:
 
-- The newer `lastModified` wins; a stamped entry beats an unstamped one. The same
-  rule applies *within* one side when it holds both alias variants — otherwise a
-  fresher hollow write (a skip, or the user clearing a field) would lose to a
-  staler answer on one side while winning across sides.
+- The newer `lastModified` wins; a stamped entry beats an unstamped one. **Both
+  halves** of that rule apply *within* one side too, when it holds both alias
+  variants — otherwise a fresher hollow write (a skip, or the user clearing a
+  field) would lose to a staler answer on one side while winning across sides.
+  Handling only the both-dated case leaves the same contradiction one branch
+  deeper, since `lastModified` is optional and pre-stamping state has none.
 - `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
   merge can never resurrect a key `updateField` deleted on migration — that
   resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).

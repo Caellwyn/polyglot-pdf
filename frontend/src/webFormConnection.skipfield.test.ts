@@ -169,7 +169,15 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
       'p1_uscis_number'
     )
     expect(entry?.value).toEqual(['x'])
-    expect(entry?.skipped).toBeFalsy()
+    // Assert the SHADOW separately, across BOTH variants. Checking `skipped` on
+    // the alias-read alone is not enough: that read is meaningful-wins, so it
+    // would return the real ['x'] entry (skipped undefined) even if a hollow
+    // skipped entry HAD been written beside it -- passing while the exact data
+    // loss this test is named for occurred.
+    const fv = (conn as any).state.fieldValues
+    for (const k of ['p1_uscis_number', 'p1_uscis_number[]']) {
+      expect(fv[k]?.skipped, `${k} must not be skip-shadowed`).toBeFalsy()
+    }
   })
 
   it('acks recorded:false for an unknown field id', async () => {

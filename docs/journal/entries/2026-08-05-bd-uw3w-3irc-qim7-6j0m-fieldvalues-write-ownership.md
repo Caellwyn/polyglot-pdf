@@ -1,6 +1,6 @@
 ---
 date: 2026-08-05
-beads: [polyglot-pdf-uw3w, polyglot-pdf-3irc, polyglot-pdf-qim7, polyglot-pdf-6j0m, polyglot-pdf-tare, polyglot-pdf-6iwn]
+beads: [polyglot-pdf-uw3w, polyglot-pdf-3irc, polyglot-pdf-qim7, polyglot-pdf-6j0m, polyglot-pdf-tare, polyglot-pdf-6iwn, polyglot-pdf-8c97]
 tags: [frontend, schema-forms, state, voice, testing, flake]
 surfaces:
   - frontend/src/schema-forms/utils/fieldValue.ts
@@ -253,6 +253,30 @@ passed id arrays straight to the helper, pinning the FUNCTION while leaving the
 WIRING unpinned, and the guard test only counted `reconcileFieldValues(`
 occurrences. Both now have tests driven through a real handler, each
 mutation-verified against exactly the mutation that previously slipped through.
+
+**One rule, everywhere (bd `8c97`).** A later round found `reconcileFieldValues`
+carrying TWO contradictory rules: across the two sides it compared
+`lastModified`, but *within* one side holding both alias variants it used
+meaningful-wins and ignored stamps. So a fresher hollow write -- a skip, or the
+user clearing a field -- lost to a staler answer on one side while winning across
+sides, and since `markFieldSkipped` also sets `confirmed: true`, the revived value
+would never re-prompt. The first fix handled only the both-dated case, which left
+the identical contradiction one branch deeper (`lastModified` is optional, so
+undated entries are ordinary); the rule now mirrors the cross-side one in full,
+including "dated beats undated".
+
+The better fix was upstream: `markFieldSkipped` was the LAST producer of the
+both-variants state -- it wrote its exact key with no alias fallback and, unlike
+`updateField`, never deleted the stale variant. It now does both, so the
+arbitration is a backstop rather than a load-bearing path.
+
+That round also caught two tests that looked like coverage and were not: the
+inverse intra-side case passes under either rule (kept, but now labelled as a
+non-regression check rather than a stamp pin), and a `skipfield` assertion I had
+rewritten to read through `readFieldEntryWithAlias` -- which is meaningful-wins,
+so it would return the real answer and pass even if a hollow skipped entry HAD
+been written beside it, blind to the exact shadow the test is named for. It now
+asserts across both variants explicitly.
 
 ## `6j0m`: root cause found, no code change needed
 

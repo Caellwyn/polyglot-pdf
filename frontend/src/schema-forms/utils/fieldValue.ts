@@ -269,8 +269,18 @@ function pickWithinSide(
   if (a !== undefined && b !== undefined) {
     const sa = typeof a.lastModified === 'number' ? a.lastModified : undefined;
     const sb = typeof b.lastModified === 'number' ? b.lastModified : undefined;
-    if (sa !== undefined && sb !== undefined && sa !== sb) {
-      return sa > sb ? a : b;
+    // Mirror the cross-side rule EXACTLY, including "dated beats undated".
+    // Handling only the both-dated case would leave the same contradiction in
+    // the fallback: a fresh stamped skip losing to an UNDATED stale answer here,
+    // while winning across sides. Undated entries are ordinary -- lastModified is
+    // optional on FieldValue, and any state persisted before the stamping writers
+    // landed has none.
+    if (sa !== undefined && sb !== undefined) {
+      if (sa !== sb) return sa > sb ? a : b;
+    } else if (sa !== undefined) {
+      return a;
+    } else if (sb !== undefined) {
+      return b;
     }
   }
   return readFieldEntryWithAlias(map, presentKey);

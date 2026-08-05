@@ -1270,21 +1270,36 @@ export class SchemaFormStateManager {
     fieldId: string,
     method: 'ai_voice' | 'manual_edit' = 'manual_edit'
   ): SchemaFormState {
-    const prior = state.fieldValues[fieldId];
+    // Resolve the `[]`-alias like updateField does, and drop the stale variant.
+    // Without this, a skip whose id drops (or adds) the bracket writes a SECOND
+    // key beside the existing one -- breaking the got6 one-entry invariant and
+    // making this the only remaining producer of the both-variants state that
+    // reconcileFieldValues then has to arbitrate (bd polyglot-pdf-8c97).
+    const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+    const priorKey = state.fieldValues[fieldId] !== undefined
+      ? fieldId
+      : (state.fieldValues[aliasKey] !== undefined ? aliasKey : fieldId);
+    const prior = state.fieldValues[priorKey];
+
+    const nextFieldValues = {
+      ...state.fieldValues,
+      [fieldId]: {
+        ...prior,
+        value: null,
+        skipped: true,
+        confirmed: true,
+        confirmedAt: new Date().toISOString(),
+        confirmationMethod: method,
+        lastModified: Date.now(),
+      },
+    };
+    if (priorKey !== fieldId) {
+      delete nextFieldValues[priorKey];
+    }
+
     const newState = {
       ...state,
-      fieldValues: {
-        ...state.fieldValues,
-        [fieldId]: {
-          ...prior,
-          value: null,
-          skipped: true,
-          confirmed: true,
-          confirmedAt: new Date().toISOString(),
-          confirmationMethod: method,
-          lastModified: Date.now(),
-        },
-      },
+      fieldValues: nextFieldValues,
       lastUpdated: Date.now(),
     };
 

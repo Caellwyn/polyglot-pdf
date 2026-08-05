@@ -459,6 +459,10 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
     });
 
     it('within ONE side, a fresher ANSWER still beats a staler hollow entry', () => {
+      // NOTE this direction is NOT stamp-discriminating on its own -- under the
+      // old meaningful-wins rule the hollow exact key also fell through to the
+      // meaningful alias and returned ['a']. It is kept as a non-regression
+      // check; the stamp rule itself is pinned by the two cases around it.
       const out = reconcileFieldValues(
         {
           'p1_grp': { value: null, skipped: true, lastModified: 10 },
@@ -468,6 +472,35 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
         ['p1_grp']
       );
       expect(out['p1_grp'].value).toEqual(['a']);
+    });
+
+    it('within ONE side, a DATED entry beats an UNDATED one (both directions)', () => {
+      // The fallback hole: handling only the both-dated case left a fresh
+      // stamped skip losing to an UNDATED stale answer here, while winning
+      // across sides -- the same contradiction, one branch deeper. Undated
+      // entries are ordinary (lastModified is optional, and pre-stamping state
+      // has none).
+      const skipWins = reconcileFieldValues(
+        {
+          'p1_grp': { value: null, skipped: true, confirmed: true, lastModified: 9000 },
+          'p1_grp[]': { value: ['a'] },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(skipWins['p1_grp'].value).toBeNull();
+      expect((skipWins['p1_grp'] as any).skipped).toBe(true);
+
+      // and the mirror image: the DATED answer beats the undated hollow entry.
+      const answerWins = reconcileFieldValues(
+        {
+          'p1_grp': { value: null, skipped: true },
+          'p1_grp[]': { value: ['a'], lastModified: 9000 },
+        } as any,
+        {} as any,
+        ['p1_grp']
+      );
+      expect(answerWins['p1_grp'].value).toEqual(['a']);
     });
 
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
