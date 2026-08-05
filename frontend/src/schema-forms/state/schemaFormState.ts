@@ -1294,6 +1294,12 @@ export class SchemaFormStateManager {
       : (state.fieldValues[aliasKey] !== undefined ? aliasKey : fieldId);
     const prior = state.fieldValues[priorKey];
 
+    // NOTE the asymmetry with confirmField, which writes to the RESOLVED key:
+    // this writes to the REQUESTED one. Safe because both callers only ever pass
+    // a SCHEMA id -- handleSkipFieldRequest rejects anything else as
+    // `unknown_field` (exact `f.id === field_id`), and the UI passes `field.id`
+    // -- so the requested key IS the schema key. If a caller is ever added that
+    // can pass a non-schema variant, write to priorKey instead.
     const nextFieldValues = {
       ...state.fieldValues,
       [fieldId]: {

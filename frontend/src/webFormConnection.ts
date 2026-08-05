@@ -867,6 +867,13 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
           this.state.fieldValues,
@@ -1067,6 +1074,13 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
           this.state.fieldValues,
@@ -1205,6 +1219,13 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
           this.state.fieldValues,
@@ -1836,6 +1857,13 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
           this.state.fieldValues,
@@ -2606,6 +2634,13 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
           this.state.fieldValues,
@@ -2688,6 +2723,13 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
           this.state.fieldValues,
@@ -3845,6 +3887,13 @@ export class WebFormConnection {
     if (persistedBeforeUpdate) {
       this.state = {
         ...this.state,
+        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
+        // blur handler persists it through SchemaFormStateManager without
+        // touching this.state, so a one-key merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale -- the
+        // connection never writes it, so there is nothing of ours to preserve.
+        validationErrors: persistedBeforeUpdate.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedBeforeUpdate.fieldValues,
           this.state.fieldValues,

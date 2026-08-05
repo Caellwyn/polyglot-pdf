@@ -531,6 +531,11 @@ export function evaluateAtomicCondition(
   fields?: FormField[],
 ): boolean {
   // Bug Fix: Unwrap FieldValue object before comparing
+  // Exact-key read. Safe today: no shipped kit keys a show_if/require_if on a
+  // BRACKETED field id, and reconcileFieldValues consolidates an alias pair
+  // onto the schema's variant. If a kit ever adds such a conditional, this
+  // needs readFieldEntryWithAlias -- otherwise the trigger reads undefined and
+  // the dependent field silently never shows.
   const triggerValue = unwrapFieldValue(fieldValues[condition.field]);
 
   // A v2 checkbox_group's selected set is ALWAYS a string[] by the time it

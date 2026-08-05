@@ -544,6 +544,25 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
     expect(SchemaFormStateManager.load()!.fieldValues['race[]'].confirmed).toBe(true)
   })
 
+  it('a UI-written validationErrors entry survives a reconciling handler', async () => {
+    // validationErrors is a THIRD map the UI owns alone -- SchemaForm.tsx's blur
+    // handler persists it without touching this.state. A fieldValues-only merge
+    // reverted it, so an error raised during the window vanished and
+    // isSectionValid stopped blocking on a genuinely invalid field.
+    const { conn, ws } = await connected()
+
+    const persisted = SchemaFormStateManager.load()
+    SchemaFormStateManager.setValidationError(persisted as any, 'p1_a', 'Required')
+    expect(SchemaFormStateManager.load()!.validationErrors['p1_a']).toBe('Required')
+
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'session_ready', session_id: 'sess-2', jit_mode_enabled: true }),
+    })
+    await flush()
+
+    expect(SchemaFormStateManager.load()!.validationErrors['p1_a']).toBe('Required')
+  })
+
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {
     const { conn, ws } = await connected()
 
