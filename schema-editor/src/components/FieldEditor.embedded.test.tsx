@@ -260,6 +260,26 @@ describe('the timeliness demotion has a reachable EXIT (Opus outer r9)', () => {
       .toEqual([findingFingerprint(instructionsFinding)]);
   });
 
+  it('offers NO re-confirm while a lint ERROR is on the field (it would no-op)', () => {
+    // Red wins over the timeliness clause in both effectiveStatus and
+    // isCountedReviewed, so re-stamping would change nothing visible -- a
+    // success-shaped no-op (Opus outer review, pass 10). An ERROR is fixed,
+    // not confirmed away.
+    const newError: LintFinding = {
+      severity: 'ERROR', rule: 'field-unbacked',
+      path: 'fields[0] (id=phone)', message: 'this field names no PDF box',
+      field_id: 'phone',
+    };
+    render(
+      <FieldEditor field={signedOff} schema={makeSchema(signedOff)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[newError]} />,
+    );
+    // The field IS demoted-and-red...
+    expect(statusFromFindings(signedOff, [newError])).toBe('error');
+    // ...and no re-confirm button is offered.
+    expect(screen.queryByTestId('reconfirm-review')).toBeNull();
+  });
+
   it('shows no re-confirm control when the sign-off is still current', () => {
     const current: FormField = {
       ...TEXT_FIELD,

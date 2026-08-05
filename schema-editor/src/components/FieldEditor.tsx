@@ -338,7 +338,16 @@ const FieldReviewEditor: React.FC<{
   // effective status is amber while the STORED status still reads
   // reviewed_correct (the demotion is a derivation, never a stored write).
   // Drives the re-confirm control below (Opus outer review, pass 9).
-  const staleSignoff = newFindingsSinceReview(field, lintFindings);
+  //
+  // NOT offered while a lint ERROR is anchored to the field (pass 10): red
+  // wins over the timeliness clause in effectiveStatus AND in
+  // isCountedReviewed, so re-stamping there would change nothing visible --
+  // a success-shaped no-op that teaches the reviewer the control is
+  // unreliable. An ERROR is fixed, never confirmed away.
+  const hasErrorFinding = (lintFindings ?? [])
+    .some(f => f.field_id === field.id && f.severity === 'ERROR');
+  const staleSignoff = !hasErrorFinding
+    && newFindingsSinceReview(field, lintFindings);
 
   const handleStatusChange = (value: string) => {
     setIgnoreError(null);

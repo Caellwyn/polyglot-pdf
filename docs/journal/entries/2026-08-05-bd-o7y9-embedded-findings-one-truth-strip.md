@@ -272,6 +272,17 @@ itself is not possible in jsdom (fireEvent.change dispatches
 unconditionally, unlike a browser's no-event-on-unchanged-value), so the
 test pins the precondition plus the new control instead.
 
+Opus outer review, primary pass 10: ALL THREE rubric criteria PASS, all
+five pass-9 fixes verified holding (the reviewer executed the fingerprint
+and anchor logic against the real backend emission paths). One finding,
+filed by the reviewer as bd polyglot-pdf-uzf4 and fixed here rather than
+deferred: the pass-9 re-confirm button had no severity filter, so it also
+rendered on fields carrying a lint ERROR -- where red wins over the
+timeliness clause in both effectiveStatus and isCountedReviewed, making
+the click a success-shaped no-op. The control is now offered only when no
+ERROR is anchored to the field (an error is fixed, never confirmed away).
+This PR therefore also closes bd uzf4.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:
