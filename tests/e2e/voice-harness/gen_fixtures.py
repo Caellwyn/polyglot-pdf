@@ -36,6 +36,16 @@ from gtts import gTTS
 UTTERANCES = [
     ("digits_1234567.wav", "one two three four five six seven"),
     ("confirm_yes.wav", "yes that's correct"),
+    # Spelled-name sequence for the text/audio desync attribution (bd
+    # polyglot-pdf-0rpu, plan Stage 0d): the exact three names from the failing
+    # 2026-08-05 session. Letters are dot-separated so gTTS voices them as
+    # individual letter names ("jay. oh. aitch. en."), matching how a user
+    # spells aloud. The follow-up "no" lets a scenario exercise the re-spell
+    # loop the failing session hit.
+    ("spell_john.wav", "J. O. H. N."),
+    ("spell_joshua.wav", "J. O. S. H. U. A."),
+    ("spell_johnson.wav", "J. O. H. N. S. O. N."),
+    ("confirm_no.wav", "no that's wrong"),
     # Section-2 numeric value for the multi-section scenario (bd polyglot-pdf-8k8):
     # a 5-digit ZIP that fits p1_line6f_zipcode (max_length 5). Expected filled
     # value "12345".

@@ -529,6 +529,15 @@ export function createConnectionManager(
 		},
 		onFieldUpdate: (updates) => {
 			console.log('[VFF Connection] [tool] Tool call: update_form_fields (' + updates.length + ' field(s))')
+			// Playback-backlog snapshot at tool-response time (bd polyglot-pdf-0rpu):
+			// if a wrong read-back is heard, a large aheadSec here means STALE
+			// CLIENT audio was still queued (client-side fault); ~0 means the audio
+			// came fresh from the model (model-side fault). Console lines are
+			// captured into the dev JSONL by the console-log forwarder.
+			if (audioManager) {
+				const backlog = audioManager.getPlaybackBacklog()
+				console.log('[VFF Audio] backlog at form_updated ' + JSON.stringify(backlog))
+			}
 
 			// Log each update attempt for debugging
 			updates.forEach(update => {

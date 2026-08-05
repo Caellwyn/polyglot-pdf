@@ -360,6 +360,21 @@ class Settings(BaseModel):
 	LIVE_DEV_TRANSCRIPTS: bool = (
 		os.getenv("LIVE_DEV_TRANSCRIPTS", "false").lower() == "true"
 	)
+	# LOCAL-DEV-ONLY per-generation output-audio capture (bd polyglot-pdf-0rpu).
+	# Dumps the model's OUTPUT audio, one WAV per generation, to
+	# backend/logs/audio_out/ -- the ground-truth artifact for the text/audio
+	# desync investigation: if the wrong letters are INSIDE the generated WAV the
+	# defect is model-side; if the WAV is correct but the user heard wrong, it is
+	# client-side playback. Scored against the text track by
+	# scripts/spikes/stt_readback_diff.py.
+	#
+	# PRIVACY: output audio is the user's form values spoken aloud -- PHI, same
+	# class as transcripts. The adapter double-gates this on DEV_LOGGING_ENABLED
+	# (the gitignored backend/.env.DEV marker, which cannot exist on Cloud Run),
+	# so it cannot turn on in a deployed service even if the env var is set.
+	LIVE_DEV_AUDIO_DUMP: bool = (
+		os.getenv("LIVE_DEV_AUDIO_DUMP", "false").lower() == "true"
+	)
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
 	# the secretary (lite text model) translates the form's option labels into

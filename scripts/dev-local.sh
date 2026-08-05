@@ -46,8 +46,19 @@
 #     then compare spoken_by_model against the neighbouring tool_response's
 #     stored_values.
 #
-#   Combined sweep:
-#     LIVE_TEMPERATURE=0.4 LIVE_DEV_TRANSCRIPTS=true ./scripts/dev-local.sh
+#   LIVE_DEV_AUDIO_DUMP=true ./scripts/dev-local.sh
+#     Dump the model's OUTPUT audio, one WAV per generation, to
+#     backend/logs/audio_out/gemini_<date>/ -- the ground truth for the
+#     text/audio desync (bd 0rpu): wrong letters INSIDE the WAV = model-side;
+#     WAV correct but heard wrong = client-side playback. Score against the
+#     text track with:
+#       backend/.venv/Scripts/python.exe scripts/spikes/stt_readback_diff.py \
+#         --audio-dir backend/logs/audio_out/gemini_<date> \
+#         --jsonl backend/logs/gemini_<date>.jsonl
+#     PHI: same .env.DEV double-gate as transcripts.
+#
+#   Combined sweep (the bd 0rpu attribution setup):
+#     LIVE_TEMPERATURE=0.4 LIVE_DEV_TRANSCRIPTS=true LIVE_DEV_AUDIO_DUMP=true ./scripts/dev-local.sh
 #
 #   PRIVACY: both are additionally gated backend-side on backend/.env.DEV
 #   (gitignored, never deployed), so neither can turn on in a deployed service
@@ -226,6 +237,7 @@ start_backend() {
     SEND_TRANSCRIPT="${SEND_TRANSCRIPT:-true}" \
     LIVE_TEMPERATURE="${LIVE_TEMPERATURE:-}" \
     LIVE_DEV_TRANSCRIPTS="${LIVE_DEV_TRANSCRIPTS:-false}" \
+    LIVE_DEV_AUDIO_DUMP="${LIVE_DEV_AUDIO_DUMP:-false}" \
     "$VENV_PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload ) &
   PIDS+=("$!")
 }

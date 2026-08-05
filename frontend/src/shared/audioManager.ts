@@ -54,6 +54,13 @@ export interface AudioManager {
 	// loop) rather than a subscription, because the only consumer is an avatar
 	// that already animates per-frame.
 	getOutputEnergy: () => number
+	// Diagnostic snapshot of the playback backlog (bd polyglot-pdf-0rpu): how far
+	// ahead of "now" the scheduling cursor sits (seconds of already-scheduled,
+	// not-yet-played audio), how many sources are still live, and whether
+	// playback is blocked. Read at tool-response time to attribute a wrong
+	// read-back: large aheadSec = stale CLIENT audio playing late; ~0 = whatever
+	// was heard came fresh from the model.
+	getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean }
 	destroy: () => void
 }
 
@@ -216,6 +223,17 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 * feed either into the same visualisation. Returns 0 when nothing is playing,
 	 * so a consumer polling every frame does not need its own silence check.
 	 */
+	// Diagnostic playback-backlog snapshot (bd polyglot-pdf-0rpu). Pure read --
+	// no side effects; safe to call from any handler.
+	function getPlaybackBacklog(): { aheadSec: number; activeSources: number; blocked: boolean } {
+		const ctx = nodes.playbackContext
+		return {
+			aheadSec: ctx ? Math.max(0, playbackTime - ctx.currentTime) : 0,
+			activeSources: activeAudioSources.length,
+			blocked: playbackBlocked,
+		}
+	}
+
 	function getOutputEnergy(): number {
 		if (!geminiIsSpeaking || !outputAnalyser || !outputBuf) return 0
 		outputAnalyser.getByteTimeDomainData(outputBuf)
@@ -907,6 +925,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setNativeVad,
 		setEnergyCallback,
 		getOutputEnergy,
+		getPlaybackBacklog,
 		destroy,
 	}
 }
