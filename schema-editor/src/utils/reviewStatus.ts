@@ -304,6 +304,26 @@ export function statusFromFindings(
 }
 
 /**
+ * The one checkFieldComplete ERROR class NO backend lint rule covers yet: a
+ * CHOICE field (select/radio/checkbox_group) with options where neither the
+ * field nor every option names a PDF widget. The ledger's field-backing rule
+ * exempts choice types (identity legitimately lives per option), and the
+ * widget-claim rules need a non-empty claim to fire -- so this genuinely
+ * unfillable shape earns a red row with no count-excluding lint ERROR (Opus
+ * fresh-eyes round 2; verified against schema_lint). Derived from the SCHEMA
+ * alone, so the server can compute the identical clause (the predicate's
+ * both-sides rule holds). Retire this once the backend rule ships (bd filed
+ * at closeout, see the journal entry).
+ */
+function hasUncoveredMappingError(field: FormField): boolean {
+  const isChoice = field.type === 'select' || field.type === 'radio'
+    || field.type === 'checkbox_group';
+  const options = field.options ?? [];
+  if (!isChoice || options.length === 0 || field.pdf_field_name) return false;
+  return options.some(o => !o.pdf_field_name);
+}
+
+/**
  * THE pinned count predicate (sprint-18 C1, decision 2): a field counts as
  * REVIEWED exactly when its human sign-off is current --
  *
@@ -311,21 +331,23 @@ export function statusFromFindings(
  *   AND not demoted by the guidance-ack gate,
  *   AND not demoted by the timeliness rule (no finding newer than the
  *       sign-off's seen_fingerprints),
- *   AND no lint ERROR anchored to the field.
+ *   AND no lint ERROR anchored to the field,
+ *   AND no uncovered structural mapping error (the narrow schema-derived
+ *       clause above -- a stand-in until the backend rule ships).
  *
- * Inputs the client and the server both possess (_review + lint findings), so
- * both sides compute the identical number. checkFieldComplete deliberately
- * LEAVES this predicate: its client-only error band stays the advisory
- * WHY-list and icon input, but no longer excludes a field from the count (its
- * genuinely structural checks are backend lint rules -- decision 2; a field
- * red for a client-only reason still shows red in the row while counting
- * reviewed, a named corner accepted with the pinning).
+ * Inputs the client and the server both possess (_review + lint findings +
+ * the schema itself), so both sides compute the identical number.
+ * checkFieldComplete otherwise LEAVES this predicate: its client-only error
+ * band stays the advisory WHY-list and icon input (a field red for a
+ * lint-covered reason is excluded by the lint clause, not by
+ * checkFieldComplete).
  */
 export function isCountedReviewed(
   field: FormField,
   findings?: LintFinding[],
 ): boolean {
   if (getReview(field).status !== 'reviewed_correct') return false;
+  if (hasUncoveredMappingError(field)) return false;
   const { hasLintError, ackPending, newSinceReview } = gateFlags(field, findings);
   return !hasLintError && !ackPending && !newSinceReview;
 }

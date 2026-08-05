@@ -13,6 +13,7 @@ import {
   isFindingDismissable,
   isFindingDismissed,
   propertyAnchor,
+  resolveOptionIndex,
   ruleLabel,
   stripIdentitySuffix,
   visibleFormFindings,
@@ -64,17 +65,44 @@ describe('propertyAnchor', () => {
     expect(anchor('fields[0] (id=x).help.details').kind).toBe('details');
   });
 
-  it('maps option paths with their index', () => {
+  it('carries the raw option token -- index OR value, never pre-parsed', () => {
     expect(anchor('fields[0] (id=x).options[2]'))
-      .toEqual({ kind: 'options', optionIndex: 2 });
-    expect(anchor('fields[0] (id=x).options[0].label_translations.spanish'))
-      .toEqual({ kind: 'options', optionIndex: 0 });
+      .toEqual({ kind: 'options', optionToken: '2' });
+    expect(anchor('fields[0] (id=x).options[married].label_translations.spanish'))
+      .toEqual({ kind: 'options', optionToken: 'married' });
   });
 
   it('maps condition paths and defaults the rest to the field', () => {
     expect(anchor('fields[3] (id=x).show_if').kind).toBe('conditions');
     expect(anchor('fields[3] (id=x).require_if.all_of[0]').kind).toBe('conditions');
     expect(anchor('fields[3] (id=x)').kind).toBe('field');
+  });
+});
+
+describe('resolveOptionIndex (two producer conventions, Opus round 2)', () => {
+  // i-90's real shape: numeric option VALUES that are NOT their indices.
+  const values = ['2', '3', '4'];
+  const lintRule = f({ rule: 'option-value-slug', field_id: 'x' });
+  const translationRule = f({ rule: 'translation-drift-unresolved', field_id: 'x' });
+
+  it('a translation flag resolves its token as an option VALUE', () => {
+    // Value '2' lives at index 0 -- a digits-mean-index read anchored it at
+    // index 2 (the option whose value is '4'), the wrong row.
+    expect(resolveOptionIndex(values, translationRule, '2')).toBe(0);
+    expect(resolveOptionIndex(values, translationRule, '4')).toBe(2);
+  });
+
+  it('a lint option rule resolves its token as an INDEX', () => {
+    expect(resolveOptionIndex(values, lintRule, '2')).toBe(2);
+    expect(resolveOptionIndex(values, lintRule, '0')).toBe(0);
+  });
+
+  it('an unresolvable token yields undefined (fall back, never a wrong row)', () => {
+    expect(resolveOptionIndex(values, translationRule, 'ghost')).toBeUndefined();
+    expect(resolveOptionIndex(values, lintRule, '9')).toBeUndefined();
+    // an out-of-range index-convention token that matches a VALUE tiebreaks
+    // to the value rather than rendering nowhere
+    expect(resolveOptionIndex(values, lintRule, '4')).toBe(2);
   });
 });
 
@@ -97,9 +125,20 @@ describe('the Form row standalone dismiss (s18 C1, decision 1)', () => {
     path: "widget 'form1[0].y[0]'",
   });
 
-  it('formLevelFindings keeps only the field-less findings', () => {
+  it('formLevelFindings keeps everything no field ROW can carry', () => {
     const anchored = f({ field_id: 'a', path: 'fields[0] (id=a)' });
-    expect(formLevelFindings([coverage, anchored])).toEqual([coverage]);
+    // A section-anchored finding (the publish-blocking to-review-pending
+    // ERROR carries a SECTION id in its field_id) resolves to no field, so
+    // it belongs to the Form row -- keying on the raw field_id string made
+    // it render NOWHERE (Opus round 2).
+    const sectionAnchored = f({
+      severity: 'ERROR', rule: 'to-review-pending',
+      path: 'sections[0] (id=sec_to_review_misc)',
+      field_id: 'sec_to_review_misc',
+    });
+    const fields = [{ id: 'a' }];
+    expect(formLevelFindings([coverage, anchored, sectionAnchored], fields))
+      .toEqual([coverage, sectionAnchored]);
   });
 
   it('a WARNING dismisses and stays dismissed under a reworded message', () => {

@@ -129,6 +129,34 @@ describe('reviewStatus review targets (the pinned count predicate, s18 C1)', () 
     expect(isCountedReviewed(signedSeeing, lintError)).toBe(false);
   });
 
+  it('an unmapped CHOICE field never counts reviewed (the uncovered-rule clause)', () => {
+    // A radio/checkbox_group/select whose field AND options all lack a PDF
+    // widget is genuinely unfillable, yet NO backend lint rule errors on it
+    // (the ledger exempts choice types; claim rules need a non-empty claim).
+    // Without this clause the strip read a confident 100% beside a red row
+    // (Opus fresh-eyes round 2). Schema-derived, so the server can compute
+    // the identical clause.
+    const unmappedChoice = completeField({
+      type: 'radio', pdf_field_name: undefined,
+      options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }],
+    } as Partial<FormField>);
+    const signed = withReviewStatus(unmappedChoice, 'reviewed_correct', []);
+    expect(isCountedReviewed(signed, [])).toBe(false);
+    expect(isReviewTargetFromFindings(signed, [])).toBe(true);
+    expect(reviewCounts([signed], undefined))
+      .toEqual({ reviewed: 0, toReview: 1, total: 1, percentage: 0 });
+    // A properly mapped choice field (options carry widgets) is unaffected.
+    const mappedChoice = completeField({
+      type: 'radio', pdf_field_name: undefined,
+      options: [
+        { label: 'A', value: 'a', pdf_field_name: 'A[0]' },
+        { label: 'B', value: 'b', pdf_field_name: 'B[0]' },
+      ],
+    } as Partial<FormField>);
+    expect(isCountedReviewed(
+      withReviewStatus(mappedChoice, 'reviewed_correct', []), [])).toBe(true);
+  });
+
   it('a CLIENT-only error no longer excludes a signed-off field from the count (decision 2)', () => {
     // checkFieldComplete leaves the count: the pinned predicate reads _review
     // + lint findings only, inputs the server also possesses. The row icon

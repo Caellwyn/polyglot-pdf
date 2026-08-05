@@ -90,6 +90,34 @@ describe('findings render at the property they concern (s18 C1)', () => {
     expect(bannerText).not.toContain('unrecognized comparison');
   });
 
+  it('anchors a translation flag by option VALUE, not index (Opus round 2)', () => {
+    // The translation-flag writers put the option's VALUE in the path token;
+    // with numeric values ('2' at index 0, like i-90's height field) a
+    // digits-mean-index read anchored the flag at the wrong option row.
+    const numericValues: FormField = {
+      ...CHOICE_FIELD,
+      options: [
+        { label: 'Two', value: '2', pdf_field_name: 'A[0]' },
+        { label: 'Three', value: '3', pdf_field_name: 'B[0]' },
+        { label: 'Four', value: '4', pdf_field_name: 'C[0]' },
+      ],
+    } as unknown as FormField;
+    const flag: LintFinding = {
+      severity: 'WARNING', rule: 'translation-drift-unresolved',
+      path: 'fields[0] (id=race).options[2].label_translations.spanish',
+      message: 'translation needs human review',
+      field_id: 'race',
+    };
+    render(
+      <FieldEditor field={numericValues} schema={makeSchema(numericValues)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[flag]} />,
+    );
+    // Value '2' is INDEX 0 -- the flag renders at option 0, not option 2.
+    expect(screen.getByTestId('embedded-findings-option-0'))
+      .toHaveTextContent('needs human review');
+    expect(screen.queryByTestId('embedded-findings-option-2')).toBeNull();
+  });
+
   it('anchors an option finding at its option row', () => {
     const optionFinding: LintFinding = {
       severity: 'ERROR', rule: 'option-value-slug',

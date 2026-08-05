@@ -172,13 +172,22 @@ export function findingFingerprint(f: LintFinding): string {
  *
  *   instructions  fields (id=x).help.instructions / .help[identity:...]
  *   details       fields (id=x).help.details
- *   options       fields (id=x).options[2] (optionIndex carries the 2)
+ *   options       fields (id=x).options[<token>] -- see resolveOptionIndex
  *   conditions    fields (id=x).show_if / .require_if (any depth)
  *   field         anything else (the field itself: backing, review state...)
+ *
+ * The options token is carried RAW (a string), never pre-parsed as an index:
+ * the backend has TWO producers with different conventions -- schema_lint's
+ * option rules write the option's INDEX (`options[2]`), while the
+ * translation-flag writers put the option's VALUE there
+ * (option_translation.py: `options[<value>].label_translations.<lang>`), and
+ * real kits have numeric option VALUES ('2'..'8' on i-90's height field), so
+ * a digits-mean-index assumption anchored those flags at the wrong option
+ * row (Opus fresh-eyes round 2). resolveOptionIndex disambiguates per rule.
  */
 export interface FindingAnchor {
   kind: 'instructions' | 'details' | 'options' | 'conditions' | 'field';
-  optionIndex?: number;
+  optionToken?: string;
 }
 
 export function propertyAnchor(f: LintFinding): FindingAnchor {
@@ -191,16 +200,58 @@ export function propertyAnchor(f: LintFinding): FindingAnchor {
     return { kind: 'instructions' };
   }
   if (/\.help\.details\b/.test(suffix)) return { kind: 'details' };
-  const opt = /\.options\[(\d+)\]/.exec(suffix);
-  if (opt) return { kind: 'options', optionIndex: Number(opt[1]) };
+  const opt = /\.options\[([^\]]+)\]/.exec(suffix);
+  if (opt) return { kind: 'options', optionToken: opt[1] };
   if (/\.(show_if|require_if)\b/.test(suffix)) return { kind: 'conditions' };
   return { kind: 'field' };
 }
 
-/** Schema-level findings: no field anchor, so no field's review can cover
- * them. These render on the pinned Form row at the top of the field list. */
-export function formLevelFindings(findings: LintFinding[] | undefined): LintFinding[] {
-  return (findings ?? []).filter(f => f && !f.field_id);
+/**
+ * Resolve an options[<token>] anchor token to the option INDEX it names, or
+ * undefined when it resolves to no option (the caller falls back to the
+ * field bucket rather than pointing at a wrong row).
+ *
+ * Two producer conventions exist (see propertyAnchor): the translation-flag
+ * family keys on the option VALUE; schema_lint's option rules key on the
+ * INDEX. Rule-aware resolution, with a value match as the tiebreak for an
+ * index-convention token that is out of range -- pointing a reviewer at the
+ * WRONG option row is the failure mode this exists to end, so ambiguity
+ * resolves toward "no anchor" over a guess.
+ */
+export function resolveOptionIndex(
+  optionValues: Array<string | undefined>,
+  finding: LintFinding,
+  token: string,
+): number | undefined {
+  const byValue = optionValues.findIndex(v => v !== undefined && String(v) === token);
+  if (finding.rule.startsWith('translation-')) {
+    return byValue >= 0 ? byValue : undefined;
+  }
+  if (/^\d+$/.test(token)) {
+    const idx = Number(token);
+    if (idx < optionValues.length) return idx;
+  }
+  return byValue >= 0 ? byValue : undefined;
+}
+
+/** Schema-level findings: everything no FIELD row can carry, so no field's
+ * review can cover them. These render on the pinned Form row at the top of
+ * the field list.
+ *
+ * Keys on "resolves to no field in fields[]", NOT "has no field_id string"
+ * (Opus fresh-eyes round 2): the backend's field_id extraction parses ANY
+ * `(id=...)` token, so a section-anchored finding -- the publish-blocking
+ * to-review-pending ERROR carries `sections[i] (id=sec_to_review_x)` -- and
+ * a finding pinned to a quarantined (ignored) field both arrive with a
+ * field_id that matches no rendered row. Under the removed pane they were
+ * still listed; keying on the raw string made them render NOWHERE, the
+ * confident-strip-then-409 failure relocated. The Form row is their home. */
+export function formLevelFindings(
+  findings: LintFinding[] | undefined,
+  fields: Array<{ id: string }> | undefined,
+): LintFinding[] {
+  const ids = new Set((fields ?? []).map(f => f.id));
+  return (findings ?? []).filter(f => f && (!f.field_id || !ids.has(f.field_id)));
 }
 
 function dismissedSet(schema: FormSchema): Set<string> {
@@ -241,13 +292,14 @@ export function withFormFindingDismissed(
   };
 }
 
-/** The form-level findings the pinned Form row actually shows: schema-level,
- * minus dismissed WARNINGs. ERRORs always show. */
+/** The form-level findings the pinned Form row actually shows: schema-level
+ * (nothing in fields[] can carry them), minus dismissed WARNINGs. ERRORs
+ * always show. */
 export function visibleFormFindings(
   schema: FormSchema, findings: LintFinding[] | undefined,
 ): LintFinding[] {
   const dismissed = dismissedSet(schema);
-  return formLevelFindings(findings).filter(
+  return formLevelFindings(findings, schema.fields).filter(
     f => f.severity === 'ERROR' || !dismissed.has(findingFingerprint(f)),
   );
 }

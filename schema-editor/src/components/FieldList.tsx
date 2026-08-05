@@ -1,6 +1,6 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
-import { currentIdentity, needsGuidanceAck, staleFieldIds }
+import { GUIDANCE_STALE_RULE, currentIdentity, needsGuidanceAck, staleFieldIds }
   from '../utils/guidanceStaleness';
 import { checkFieldComplete } from '../utils/validation';
 import { getReview, isReviewTargetFromFindings, statusFromFindings }
@@ -294,9 +294,13 @@ export const FieldList: React.FC<FieldListProps> = ({
   // pane is gone, so the ROW is where a finding announces itself -- a count
   // chip (red when any ERROR, amber otherwise) beside the id, with the
   // messages on hover. Clicking the row opens the field, where each finding
-  // renders at the property it concerns.
+  // renders at the property it concerns. The staleness rule is excluded to
+  // MATCH the FieldEditor's chip (Opus round 2): its rendering is the ack
+  // gate box + the amber status icon, and counting it here while the editor
+  // chip omits it made the two surfaces disagree about the same field.
   const renderFindingBadge = (field: FormField) => {
-    const findings = lintFindingsByField?.get(field.id) ?? [];
+    const findings = (lintFindingsByField?.get(field.id) ?? [])
+      .filter(f => f.rule !== GUIDANCE_STALE_RULE);
     if (findings.length === 0) return null;
     const errors = findings.filter(f => f.severity === 'ERROR').length;
     return (

@@ -80,8 +80,31 @@ timeliness rule -- is what it pins.
 Deferred/known-corner notes: the live-browser drive was skipped (port
 3001 held by a non-preview process on this machine); behavior is covered
 by the component/App suites, and the epic's later children (C4/C2) drive
-the same surfaces. Fresh-eyes triage breakdown is recorded below once the
-assess loop completes.
+the same surfaces.
+
+Fresh-eyes assess loop: round 1 (Sonnet) found 2 gaps, both adopted --
+the FieldEditor chip's error count was not scoped to its field
+(regression test added), and the onStatusRefusal producers had no tests
+(added to both catalogue suites). Round 2 (Opus) found 3 gaps + 1
+consistency finding, all adopted: (1) propertyAnchor assumed options[N]
+holds an index, but the translation-flag writers put the option VALUE
+there -- numeric values (real on i-90/f1040) anchored flags at the wrong
+option row; fixed with a rule-aware resolveOptionIndex. (2) A finding
+whose field_id names a NON-field (the publish-blocking to-review-pending
+ERROR carries a section id) rendered nowhere; formLevelFindings now keys
+on "resolves to no field", homing those on the Form row. (3) The pinned
+predicate could read 100% beside a red row for an unmapped CHOICE field
+(no field-level name, unmapped options) because NO backend lint rule
+covers that class -- the plan's C12-promotion precondition never
+happened; a narrow schema-derived stand-in clause excludes it from the
+count, and bd polyglot-pdf-xuub is filed to promote the real backend rule
+and retire the clause. (4) The FieldList row badge counted the staleness
+finding while the FieldEditor chip excluded it; both now exclude it (the
+ack-gate box is its rendering). The round-2 reviewer also filed two
+out-of-scope beads itself: polyglot-pdf-2dlb (strip jump dead-click for a
+field whose section_id names no section) and polyglot-pdf-z9u7
+(instructions-rectified/-ungrounded-dropped use a bare .help path).
+Rejected/deferred: none rejected.
 
 ## Lessons
 

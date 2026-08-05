@@ -93,6 +93,27 @@ describe('the pinned Form row (s18 C1, decision 1)', () => {
     expect(onDismissFormFinding).toHaveBeenCalledWith(coverageWarning);
   });
 
+  it('a section-anchored blocking ERROR has the Form row as its home (Opus round 2)', () => {
+    // to-review-pending carries a SECTION id in field_id, so no field row can
+    // show it; the host routes it here via visibleFormFindings' resolves-to-
+    // no-field rule. Under the removed pane it was listed; rendering it
+    // nowhere would re-create the confident-strip-then-409.
+    const sectionError: LintFinding = {
+      severity: 'ERROR', rule: 'to-review-pending',
+      path: 'sections[0] (id=sec_to_review_misc)',
+      message: 'these fields still need re-filing into a real section',
+      field_id: 'sec_to_review_misc',
+    };
+    render(
+      <FieldList schema={schemaWith([completeField('a')])}
+        selectedFieldId={null} onSelectField={vi.fn()}
+        formFindings={[sectionError]} />,
+    );
+    const row = screen.getByTestId('form-findings-row');
+    expect(row).toHaveTextContent('1 to fix');
+    expect(row).toHaveTextContent('still need re-filing');
+  });
+
   it('renders no row at all when there are no form-level findings', () => {
     render(
       <FieldList schema={schemaWith([completeField('a')])}
@@ -122,6 +143,24 @@ describe('per-row finding flags (s18 C1)', () => {
     expect(flag).toHaveTextContent('2');
     expect(flag.className).toContain('bg-red-100');
     expect(screen.queryByTestId('field-flag-b')).toBeNull();
+  });
+
+  it('excludes the staleness rule from the badge, matching the editor chip (Opus round 2)', () => {
+    // The staleness finding's rendering is the ack-gate box + the amber
+    // status icon; counting it in the row badge while the FieldEditor chip
+    // omits it made the two surfaces disagree about the same field.
+    const byField = new Map<string, LintFinding[]>([
+      ['a', [{
+        severity: 'WARNING', rule: 'guidance-identity-stale',
+        path: 'fields (id=a).help[identity:abc123]',
+        message: 'guidance may be out of date', field_id: 'a',
+      }]],
+    ]);
+    render(
+      <FieldList schema={schemaWith([completeField('a')])} selectedFieldId={null}
+        onSelectField={vi.fn()} lintFindingsByField={byField} />,
+    );
+    expect(screen.queryByTestId('field-flag-a')).toBeNull();
   });
 });
 

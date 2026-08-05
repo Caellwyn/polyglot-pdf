@@ -20,7 +20,7 @@ import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
   from '../utils/reviewStatus';
 import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
   from '../utils/guidanceStaleness';
-import { propertyAnchor, ruleLabel, RULE_REMEDIES }
+import { propertyAnchor, resolveOptionIndex, ruleLabel, RULE_REMEDIES }
   from '../utils/lintFindings';
 import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
@@ -742,7 +742,8 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     instructions: [], details: [], conditions: [], field: [],
     byOption: new Map(),
   };
-  const optionCount = field.options?.length ?? 0;
+  const optionValues = (field.options ?? []).map(o =>
+    o.value !== undefined ? String(o.value) : undefined);
   for (const f of lintFindings ?? []) {
     // Scope to THIS field: the sole caller passes a pre-scoped array, but the
     // prop type invites a whole-schema list, and anchoring another field's
@@ -753,12 +754,18 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     if (f.rule === GUIDANCE_STALE_RULE) continue;
     const a = propertyAnchor(f);
     if (a.kind === 'options') {
-      // An option index the field no longer has (stale report mid-edit) falls
-      // back to the field bucket rather than rendering nowhere.
-      if (a.optionIndex !== undefined && a.optionIndex < optionCount) {
-        const bucket = anchored.byOption.get(a.optionIndex);
+      // The token may be an option INDEX (schema_lint's option rules) or an
+      // option VALUE (the translation-flag writers) -- resolveOptionIndex
+      // disambiguates per rule. An unresolvable token (option gone mid-edit,
+      // ambiguous value) falls back to the field bucket rather than
+      // rendering nowhere or at a wrong row.
+      const idx = a.optionToken !== undefined
+        ? resolveOptionIndex(optionValues, f, a.optionToken)
+        : undefined;
+      if (idx !== undefined) {
+        const bucket = anchored.byOption.get(idx);
         if (bucket) bucket.push(f);
-        else anchored.byOption.set(a.optionIndex, [f]);
+        else anchored.byOption.set(idx, [f]);
       } else {
         anchored.field.push(f);
       }
