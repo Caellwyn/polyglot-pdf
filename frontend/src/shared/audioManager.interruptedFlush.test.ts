@@ -137,10 +137,10 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
     // not a natural end, and the array is already empty so the original
     // handler's all-sources-done branch would fire it. (The handler's other
     // responsibility, the playbackTime catch-up, is kept as defense-in-depth
-    // but is behaviorally redundant by construction: playAudio's
-    // startAt = max(playbackTime, now + 0.01) floor yields identical
-    // scheduling for a stale-past cursor, and getPlaybackBacklog clamps at 0
-    // -- so only the suppression half is assertable.)
+    // but is behaviorally redundant by construction: playbackTime's only
+    // consumer is playAudio's startAt = max(playbackTime, now + 0.01), and
+    // every past-cursor value loses that max identically -- so only the
+    // suppression half is assertable.)
     const endSpy = vi.fn()
     ;(globalThis as any).window.vffOnAudioPlaybackEnd = endSpy
     try {
