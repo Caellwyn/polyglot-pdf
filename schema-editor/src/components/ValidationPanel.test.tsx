@@ -181,6 +181,24 @@ describe('the kit-scoped lint round-trip (s18 C1)', () => {
     await waitFor(() => expect(lintSchema).toHaveBeenCalledTimes(2),
       { timeout: 2000 });
   });
+
+  it('a kitId transition lints INSTANTLY (no dump-blind debounce window)', () => {
+    // Local mode: the first lint fires dump-less before the same-folder
+    // handshake resolves; when the kit id arrives, the kit-scoped re-lint
+    // must not ride the debounce -- the strip would sit confidently blind to
+    // the dump-gated rules for the window (Opus outer review, pass 2).
+    const { rerender } = render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} />,
+    );
+    expect(lintSchema).toHaveBeenCalledTimes(1);
+    expect(lintSchema).toHaveBeenLastCalledWith(SCHEMA, undefined);
+    rerender(
+      <ValidationPanel schema={SCHEMA} kitId="i-90" onSelectField={() => {}} />,
+    );
+    // Synchronous: the kit-scoped lint fired immediately, not after 400ms.
+    expect(lintSchema).toHaveBeenCalledTimes(2);
+    expect(lintSchema).toHaveBeenLastCalledWith(SCHEMA, 'i-90');
+  });
 });
 
 describe('degraded-mode notices + auth (carried from the pane)', () => {

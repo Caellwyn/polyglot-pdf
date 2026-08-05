@@ -265,7 +265,14 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
-    onStatusRefusal?.(null);
+    // The strip's refusal line describes the OPEN form only. Unlike the
+    // hosted catalogue (whose status actions render solely on the open
+    // kit's card), local mode offers Mark complete on EVERY card -- so a
+    // refusal about kit B must never land on (or clear) the strip below
+    // open kit A, where its "Go to:" links would select unrelated fields
+    // (Opus outer review, pass 2).
+    const mirrorsToStrip = kit.id === selectedKitId;
+    if (mirrorsToStrip) onStatusRefusal?.(null);
     // Completion is the PUBLISH gate, so it must go through the server whenever
     // we can reach it (bd polyglot-pdf-rh5v). The backend runs six checks --
     // PDF present, schema validates, extraction_info, v2 stamp, lint clean --
@@ -313,14 +320,15 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       setNotice(null);
       const detail = err instanceof Error ? err.message : 'Failed to update status';
       setError(detail);
-      // A refused completion also lands on the strip's refusal line (sprint-18
-      // C1): the refusal renders next to the counts it contradicts, with
-      // click-to-focus links for any "(id=x)" the gate names.
-      if (status === 'complete') onStatusRefusal?.(detail);
+      // A refused completion of the OPEN kit also lands on the strip's
+      // refusal line (sprint-18 C1): the refusal renders next to the counts
+      // it contradicts, with click-to-focus links for any "(id=x)" the gate
+      // names. A refusal about a DIFFERENT kit stays on its card only.
+      if (status === 'complete' && mirrorsToStrip) onStatusRefusal?.(detail);
     } finally {
       setBusy(false);
     }
-  }, [root, refresh, serverActionsOk, onStatusRefusal]);
+  }, [root, refresh, serverActionsOk, onStatusRefusal, selectedKitId]);
 
   // Single-kit deploy (bd polyglot-pdf-ipzh). `deployTarget` is null until the
   // dev-only host endpoint answers, so the button never renders in a static or

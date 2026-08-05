@@ -144,6 +144,22 @@ bucketFindingsByField. (6) The uncovered-structural-error clause now also
 covers a field with no id/type, and the disabled jump tooltip says
 "reviewed" instead of "complete". Regression tests for 1-4 and 6.
 
+Opus outer review, primary pass 2 (re-run on the fixed diff): 3 findings,
+all adopted. (1) Local mode offers Mark complete on EVERY card (hosted
+gates it to the open kit), so a refusal about kit B mirrored onto open
+kit A's strip -- and its Go-to links, via the rename-recovery re-point,
+could silently select an unrelated field of A; the mirror is now scoped
+to the open kit (a non-open kit's refusal stays on its card). (2) The
+kit-scoped lint's existence check used _load_meta_or_404, whose
+list_kit_files lists EVERY blob under form-kits/ on GCS -- a whole-bucket
+LIST per lint on the editor's hottest route; replaced with two direct
+reads (metadata + dump; both absent = 404). (3) The kitId transition
+(undefined -> id when the local folder handshake resolves) rode the
+debounce, leaving the strip dump-blind for the window; a kit change now
+lints instantly. The reviewer also filed bd polyglot-pdf-kk74
+(EDITOR_GUIDE.md still documents the removed pane -- out of scope, bd
+hnce covered only HostedGuide).
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:

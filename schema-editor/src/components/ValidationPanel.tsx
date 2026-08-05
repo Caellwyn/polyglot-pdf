@@ -175,6 +175,12 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   // pass 1). The monotonic seq guard already discards stale RESULTS; the
   // debounce stops the REQUESTS.
   const firstLintRef = React.useRef(true);
+  // A kitId TRANSITION also lints instantly: in local mode the first lint
+  // fires dump-less (undefined) before the same-folder handshake resolves,
+  // and riding the debounce for the kit-scoped re-lint would leave the strip
+  // dump-blind -- confidently clean of the widget-claim rules -- for the
+  // debounce window plus a round trip (Opus outer review, pass 2).
+  const lastKitIdRef = React.useRef(kitId);
   React.useEffect(() => {
     if (!backendAvailable) {
       // Synchronous, network-free: no staleness window, no failure path.
@@ -217,7 +223,9 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       .finally(() => {
         if (seq === seqRef.current) setLinting(false);
       });
-    if (firstLintRef.current) {
+    const kitChanged = lastKitIdRef.current !== kitId;
+    lastKitIdRef.current = kitId;
+    if (firstLintRef.current || kitChanged) {
       firstLintRef.current = false;
       void run();
       return;

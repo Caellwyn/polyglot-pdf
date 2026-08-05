@@ -710,9 +710,22 @@ async def lint_editor_kit_schema(
         )
     store = get_form_kit_store()
     # 404 for an unknown kit rather than silently linting dump-less: a typo'd
-    # kit id must not masquerade as a legitimate no-dump kit.
-    await _load_meta_or_404(store, kit_id)
+    # kit id must not masquerade as a legitimate no-dump kit. Existence is
+    # probed with TWO direct reads (metadata + dump), NOT _load_meta_or_404:
+    # that helper answers "does the kit exist" via list_kit_files, which on
+    # the GCS store lists EVERY blob under form-kits/ -- a whole-bucket LIST
+    # on the editor's hottest route, growing with total kit count (Opus outer
+    # review). Every onboarded kit has metadata.json, so metadata-or-dump
+    # present <=> the kit exists; both absent <=> 404. A transient store
+    # failure on the metadata read surfaces as 502 via FormKitStoreError.
+    try:
+        meta = await store.load_metadata(kit_id)
+    except FormKitStoreError as exc:
+        _log.error("editor_kit_lint_meta_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(status_code=502, detail="Unable to read kit") from exc
     dump_data = await _load_kit_dump(store, kit_id)
+    if meta is None and dump_data is None:
+        raise HTTPException(status_code=404, detail=f"Kit {kit_id} not found")
     findings = lint_schema(schema, dump_data)
     out = [LintFindingOut(**f.as_dict()) for f in findings]
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
