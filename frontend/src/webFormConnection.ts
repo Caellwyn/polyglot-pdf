@@ -1037,6 +1037,26 @@ export class WebFormConnection {
       return;
     }
 
+    // Reconcile before READING, not just before writing (bd polyglot-pdf-uw3w /
+    // qim7). The availability gate below calls shouldShowField against
+    // this.state.fieldValues, and the updateField chokepoint's own reconcile
+    // sits TWO FRAMES BELOW it -- too late. On a stale copy a field whose
+    // show_if is satisfied by a trigger the user answered ON SCREEN reads as
+    // unavailable, so the fill is REFUSED outright: the value is never stored
+    // and the model is told "do not retry until then", making the field
+    // unfillable for the turn. A stale READ is as damaging as a stale write
+    // here.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
+
     // Apply updates to state
     const updatedFields: Array<{ fieldId: string; value: any }> = [];
     const lockedFields: Array<{ fieldId: string; field: any; reason: string; readOnly: boolean }> = [];
@@ -1157,20 +1177,25 @@ export class WebFormConnection {
       return;
     }
 
+    // Reconcile at HANDLER ENTRY, before any read or write (bd polyglot-pdf-uw3w
+    // / qim7). This must not sit inside the JIT branch below: the value-applying
+    // path further down reads this.state.fieldValues regardless of whether a
+    // next_field_schema was sent, and markFieldSchemaLoaded spreads this.state --
+    // fieldValues included -- and save()s it. A stale READ here is as damaging as
+    // a stale write: the availability gate can refuse a fill outright.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
+
     // Handle JIT mode: mark next field as loaded if schema provided
     if (nextFieldSchema && nextFieldSchema.id) {
-      // Reconcile before writing: markFieldSchemaLoaded spreads this.state --
-      // fieldValues included -- and save()s it (bd polyglot-pdf-uw3w / qim7).
-      const persistedBeforeLoad = SchemaFormStateManager.load();
-      if (persistedBeforeLoad) {
-        this.state = {
-          ...this.state,
-          fieldValues: reconcileFieldValues(
-            persistedBeforeLoad.fieldValues,
-            this.state.fieldValues
-          ),
-        };
-      }
       this.state = SchemaFormStateManager.markFieldSchemaLoaded(this.state, nextFieldSchema.id);
     }
 

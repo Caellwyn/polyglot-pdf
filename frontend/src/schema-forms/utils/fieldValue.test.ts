@@ -356,6 +356,39 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       expect(out[keys[0]].value).toBeNull();
     });
 
+    it('a tie CARRIES the confirmed marker the losing side alone holds', () => {
+      // confirmField sets `confirmed` WITHOUT bumping lastModified, so at a tie
+      // the losing side can be the only one holding it. Dropping it would cause a
+      // spurious re-ask of an already-confirmed field -- and dev's key union
+      // happened to preserve it, so losing it here would be a REGRESSION.
+      const out = reconcileFieldValues(
+        { f: { value: 'x', lastModified: 200 } } as any,
+        { f: { value: 'x', lastModified: 200, confirmed: true, confirmationMethod: 'ai_voice' } } as any
+      );
+      expect(out.f.value).toBe('x');
+      expect(out.f.confirmed).toBe(true);
+      expect(out.f.confirmationMethod).toBe('ai_voice');
+    });
+
+    it('does NOT carry a marker across when the two sides disagree on the value', () => {
+      // The marker belongs to the OTHER answer -- carrying it would mark a value
+      // confirmed that nobody confirmed, which is exactly the uw3w harm.
+      const out = reconcileFieldValues(
+        { f: { value: 'cleared-to-this', lastModified: 300 } } as any,
+        { f: { value: 'DIFFERENT', lastModified: 100, confirmed: true } } as any
+      );
+      expect(out.f.value).toBe('cleared-to-this');
+      expect(out.f.confirmed).toBeUndefined();
+    });
+
+    it('a tie carries the steered marker too (W4 re-arm bound)', () => {
+      const out = reconcileFieldValues(
+        { f: { value: 'x', lastModified: 400 } } as any,
+        { f: { value: 'x', lastModified: 400, steered: true } } as any
+      );
+      expect(out.f.steered).toBe(true);
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one

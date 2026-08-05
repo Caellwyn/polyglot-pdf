@@ -68,6 +68,24 @@ const SCHEMA: FormSchema = {
   sections: [{ id: 's1', label: 'S1', order: 1, fields: ['p1_a', 'p1_name', 'p1_grp'] }],
 } as unknown as FormSchema
 
+// A field REVEALED by another field's answer -- the availability-gate case.
+const REVEAL_SCHEMA: FormSchema = {
+  source: 'web',
+  fields: [
+    { id: 'trigger', name: 'trigger', spoken_name: 'Trigger', type: 'text' },
+    {
+      id: 'revealed',
+      name: 'revealed',
+      spoken_name: 'Revealed',
+      type: 'text',
+      hidden: true,
+      validation: { required: true },
+      show_if: { field: 'trigger', operator: 'is_not_empty' },
+    },
+  ],
+  sections: [{ id: 's1', label: 'S1', order: 1, fields: ['trigger', 'revealed'] }],
+} as unknown as FormSchema
+
 function lastWs(): MockWebSocket {
   return MockWebSocket.instances[MockWebSocket.instances.length - 1]
 }
@@ -393,6 +411,36 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
 
     expect(persistedEntry('p1_name')).toBeDefined()
     expect(persistedEntry('p1_name').value).toBe('typed during switch_field')
+  })
+
+  it('an AI fill is NOT refused when its show_if trigger was answered ON SCREEN', async () => {
+    // The availability gate (shouldShowField) READS this.state.fieldValues, and
+    // the updateField chokepoint's reconcile sits two frames BELOW it. On a stale
+    // copy the trigger answer is invisible, the dependent field reads as
+    // unavailable, and the fill is REFUSED: the value is never stored and the
+    // model is told "do not retry until then" -- unfillable for the turn.
+    // A stale READ is as damaging as a stale write here.
+    const conn = new WebFormConnection(REVEAL_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // The user answers the trigger ON SCREEN only -- the connection never sees it.
+    const persisted = SchemaFormStateManager.load()
+    SchemaFormStateManager.updateField(persisted as any, 'trigger', 'yes' as any)
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { revealed: 'an answer' } }) })
+    await flush()
+
+    // The fill must LAND, not be refused.
+    expect(persistedEntry('revealed')).toBeDefined()
+    expect(persistedEntry('revealed').value).toBe('an answer')
+
+    const refusals = ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .filter((s: string) => s.includes('Cannot update'))
+    expect(refusals).toHaveLength(0)
   })
 
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {

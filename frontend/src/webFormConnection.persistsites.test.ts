@@ -196,15 +196,22 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
     expect(SRC).toContain('reconcileFieldValues')
     const uses = LINES.filter(l => isCode(l) && l.includes('reconcileFieldValues(')).length
     // session_ready, confirm, skip, section_switched, drain_findings_result,
-    // validation_result, form_updated, and updateField -- the CHOKEPOINT every
-    // AI fill and manual edit funnels through (its persisting call sits two
-    // frames below the handler, so a handler-level audit does not see it).
+    // validation_result, form_updated, field_update, and updateField -- the
+    // CHOKEPOINT every AI fill and manual edit funnels through (its persisting
+    // call sits two frames below the handler, so a handler-level audit does not
+    // see it).
+    //
+    // field_update and form_updated reconcile at HANDLER ENTRY, not just before
+    // their writes: their availability gate READS this.state.fieldValues, and on
+    // a stale copy a field whose show_if is satisfied by an on-screen answer
+    // reads as unavailable, so the fill is REFUSED and the model is told not to
+    // retry. A stale read is as damaging as a stale write there.
     //
     // handleSwitchFieldRequest is deliberately NOT here: it adopts the persisted
     // snapshot wholesale at entry (bd polyglot-pdf-ezg2), so its pinField write
     // cannot be stale. A reconcile there was added and then removed as dead code
     // -- mutation showed the test only failed when the ENTRY REFRESH was removed,
     // never when the reconcile was.
-    expect(uses).toBe(8)
+    expect(uses).toBe(9)
   })
 })

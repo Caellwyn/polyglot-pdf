@@ -168,14 +168,47 @@ export function reconcileFieldValues(
       persistedWins = false;  // undated persisted, or neither dated -> in-memory
     }
 
-    if (persistedWins) {
-      out[persistedKey as string] = persistedEntry;
-    } else {
-      out[memoryKey as string] = memoryEntry;
+    const winner = persistedWins ? persistedEntry : memoryEntry;
+    const loser = persistedWins ? memoryEntry : persistedEntry;
+
+    // The winner decides the VALUE. But confirmation/skip/steer markers are
+    // sticky metadata that a same-millisecond tie must not silently discard:
+    // confirmField sets `confirmed` WITHOUT bumping lastModified, so at a tie the
+    // losing side can be the only one holding it, and dropping it would cause a
+    // spurious re-ask of an already-confirmed field (dev's key union happened to
+    // preserve it, so losing it here would be a regression). Only carry a marker
+    // ACROSS when the two sides agree on the value -- otherwise the marker
+    // belongs to a different answer and must not follow the new one.
+    let merged = winner;
+    if (loser && sameValue(winner?.value, loser.value)) {
+      const carried: Partial<FieldValue> = {};
+      if (winner?.confirmed === undefined && loser.confirmed !== undefined) {
+        carried.confirmed = loser.confirmed;
+        if (winner?.confirmedAt === undefined) carried.confirmedAt = loser.confirmedAt;
+        if (winner?.confirmationMethod === undefined) {
+          carried.confirmationMethod = loser.confirmationMethod;
+        }
+      }
+      if (winner?.steered === undefined && loser.steered !== undefined) {
+        carried.steered = loser.steered;
+      }
+      if (Object.keys(carried).length > 0) {
+        merged = { ...(winner as FieldValue), ...carried };
+      }
     }
+
+    out[(persistedWins ? persistedKey : memoryKey) as string] = merged as FieldValue;
   }
 
   return out;
+}
+
+/** Structural equality for FieldValue.value, including checkbox-group arrays. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+  return a === b;
 }
 
 /**

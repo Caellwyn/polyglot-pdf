@@ -106,6 +106,15 @@ handler-level auditing missed it. The others are `handleSessionReady`,
 `handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot
 wholesale at entry (bd `polyglot-pdf-ezg2`), so its write cannot be stale.
 
+**A stale READ is as damaging as a stale write.** `handleFieldUpdate` and
+`handleFormUpdated` reconcile at HANDLER ENTRY, not merely before their writes,
+because their availability gate calls `shouldShowField` against
+`this.state.fieldValues`. On a stale copy, a field whose `show_if` is satisfied by
+a trigger the user answered *on screen* reads as unavailable, so the AI fill is
+REFUSED outright — the value is never stored and the model is told "do not retry
+until then", making the field unfillable for the turn. The `updateField`
+chokepoint's own reconcile sits two frames below that gate, which is too late.
+
 There is a **second staleness shape** that reconciling `this.state` does not
 cover: `const s = load()` … `await` … `mutator(s)`. Here the local snapshot goes
 stale across the await and the mutator persists it. `switchToSection` had exactly
@@ -148,6 +157,11 @@ It resolves
 - An entry present on only one side is kept, so an in-memory-only value stays
   visible to the confirm handler's usable-value gate and the skip handler's
   already-filled guard (bd `polyglot-pdf-pjws`).
+- The winner decides the VALUE, but sticky markers (`confirmed`, `steered`) carry
+  across from the losing side **when both sides agree on the value**. `confirmField`
+  sets `confirmed` without bumping `lastModified`, so at a tie the loser can be the
+  only side holding it, and dropping it would cause a spurious re-ask. The
+  same-value condition matters: a marker must never follow a *different* answer.
 
 Never merge these maps with a raw key union (`{...persisted, ...inMemory}`) — that
 makes the in-memory side win unconditionally and reintroduces all three bugs.
