@@ -2155,9 +2155,21 @@ async def run(args) -> int:
             form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
             form_id=f"INTAKE-{args.schema.upper()}")
         adapter._log = _LogTap(adapter._log, log_sink, _INFO_EVENTS)
+        # bd polyglot-pdf-89mt: capture the CACHED-token fields too. The Live
+        # cost path (live_ai_gemini._cost_for_turn) prices every prompt token at
+        # the full input rate and never reads cached_content_token_count -- so
+        # if the Live API does report a cache hit, every number this harness
+        # produces is an OVER-estimate by an unknown amount. Recording the raw
+        # field here is what makes that answerable instead of assumed: a run
+        # whose cached counts are all None/0 says Live does not report caching;
+        # non-zero counts say our pricing table is missing a discount row.
+        # traffic_type distinguishes provisioned vs on-demand on Vertex.
         adapter._on_raw_usage = lambda u: usage_dumps.append({
             "prompt": getattr(u, "prompt_token_count", None),
-            "total": getattr(u, "total_token_count", None)})
+            "total": getattr(u, "total_token_count", None),
+            "cached": getattr(u, "cached_content_token_count", None),
+            "traffic_type": str(getattr(u, "traffic_type", None) or ""),
+        })
 
         # Text sidecar (bd polyglot-pdf-eh1h): wire the REAL TextAIGemini so
         # the secretary tool + validator run in-session, exactly as production
@@ -2899,6 +2911,28 @@ async def run(args) -> int:
 
     prompts = [d["prompt"] or 0 for d in usage_dumps]
     meta["prompt_curve"] = prompts
+    # bd polyglot-pdf-89mt: persist the CACHED-token evidence. Without this the
+    # observer above collects cached counts and then drops them on the floor --
+    # the run would burn real money and answer nothing about caching.
+    #
+    # cache_summary is the headline: if `reported` is False, the Live API never
+    # populated cached_content_token_count and our full-rate pricing is correct.
+    # If it is True with non-zero totals, the Live cost path is MISSING a
+    # discount and every figure this harness has ever produced is an
+    # over-estimate (live_ai_gemini._cost_for_turn prices all prompt tokens at
+    # the full input rate; GEMINI_PRICING_BY_FAMILY has no cached row).
+    cached_vals = [d.get("cached") for d in usage_dumps]
+    cached_nums = [c for c in cached_vals if isinstance(c, (int, float))]
+    meta["cached_curve"] = cached_vals
+    meta["traffic_types"] = sorted({d.get("traffic_type", "") for d in usage_dumps} - {""})
+    meta["cache_summary"] = {
+        "reported": any(c is not None for c in cached_vals),
+        "events": len(usage_dumps),
+        "events_with_cached_field": sum(1 for c in cached_vals if c is not None),
+        "events_with_nonzero_cache": sum(1 for c in cached_nums if c > 0),
+        "total_cached_tokens": sum(cached_nums),
+        "total_prompt_tokens": sum(prompts),
+    }
     meta["eviction_drops"] = [[i + 2, prompts[i], prompts[i + 1]]
                               for i in range(len(prompts) - 1)
                               if prompts[i + 1] < prompts[i] - 50]
