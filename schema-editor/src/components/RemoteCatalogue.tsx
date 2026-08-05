@@ -4,7 +4,7 @@ import {
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type EditorRole, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
-import { getCompletionStats } from '../utils/validation';
+import { reviewCounts } from '../utils/reviewStatus';
 import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
 
 interface RemoteCatalogueProps {
@@ -165,10 +165,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       if (seq !== refreshSeq.current) return;
       setKits(entries);
       setProgress({});
-      // Review % per kit: load each schema and reuse getCompletionStats -- the
-      // SAME definition the editor + local catalogue use, so the numbers can
-      // never disagree. Client-side on purpose: a server-side re-implementation
-      // of checkFieldComplete would drift. Fine at current catalogue scale.
+      // Review % per kit: load each schema and reuse reviewCounts -- THE pinned
+      // count predicate App.liveStats uses for the open kit, so a card's scanned
+      // % and its live % can never disagree (bd polyglot-pdf-q3rm: they briefly
+      // ran different predicates and the same kit showed two numbers). The scan
+      // has no lint report, so the lint clause is honestly gate-blind here
+      // (findings = undefined), exactly like liveStats before findings arrive.
+      // Client-side on purpose: a server-side re-implementation would drift.
+      // Fine at current catalogue scale.
       const withSchema = entries.filter((e) => e.hasSchema);
       // A 401 during this scan (code revoked between the list call and the
       // per-kit fetches) is an AUTH state, not a broken schema -- it must
@@ -191,10 +195,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           if (!schema || !fieldsOk) {
             return [e.id, { reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null }] as const;
           }
-          const stats = getCompletionStats(schema);
+          const stats = reviewCounts(schema.fields, undefined);
           return [e.id, {
             reviewPercent: stats.percentage,
-            completeFields: stats.complete,
+            completeFields: stats.reviewed,
             totalFields: stats.total,
             schemaError: false,
             version: versionInfoFromSchema(schema),

@@ -1,11 +1,13 @@
 /**
  * Unit tests for the D3 catalogue review-progress metric (bd polyglot-pdf-vl3o).
- * The per-form metric reuses getCompletionStats (% of fields complete); the
+ * The per-form metric reuses reviewCounts -- the pinned count predicate
+ * App.liveStats computes for the open kit (bd polyglot-pdf-q3rm) -- and the
  * aggregate summary counts complete / in-progress / awaiting-extraction kits.
  */
 import { describe, it, expect } from 'vitest';
 import { summarizeCatalogue, readKitProgress, type CatalogueEntry } from './formKitDirectory';
-import type { FormField } from '../types/schema';
+import { liveStats } from '../App';
+import type { FormField, FormSchema } from '../types/schema';
 
 // A minimal CatalogueEntry; dirHandle is only touched when hasSchema is true and
 // readKitProgress loads it, so the progress tests below supply a stub handle.
@@ -22,12 +24,10 @@ function entry(partial: Partial<CatalogueEntry> & { id: string }): CatalogueEntr
   };
 }
 
-// A schema fixture whose fields are a mix of complete and incomplete. A field is
-// "complete" per checkFieldComplete when it has id/type/pdf_field_name, a
-// spoken_name, and non-placeholder help.instructions.
-// A field counted as COMPLETE by getCompletionStats. Since bd g63j that means
-// human sign-off (_review.reviewed_correct) -- the progress figure reports how
-// much a person has reviewed, not how much the machine failed to fault.
+// A field counted as REVIEWED by reviewCounts: human sign-off
+// (_review.reviewed_correct, the bd g63j rule -- the progress figure reports
+// how much a person has reviewed, not how much the machine failed to fault)
+// with no structural error and, in this findings-less scan, no lint gate.
 function completeField(id: string): FormField {
   return {
     id, name: id, type: 'text', pdf_field_name: id, read_only: false,
@@ -120,7 +120,7 @@ describe('readKitProgress', () => {
   });
 
   it('flags schemaError (does not throw) for a structurally malformed schema', async () => {
-    // Valid JSON but no `fields` array -> getCompletionStats would throw. Must be
+    // Valid JSON but no `fields` array -> reviewCounts would throw. Must be
     // swallowed so it cannot reject the catalogue-wide Promise.all (fresh-eyes
     // finding: a single bad schema would otherwise wipe every progress bar), and
     // flagged schemaError so the UI distinguishes it from a pre-extraction kit
@@ -131,7 +131,7 @@ describe('readKitProgress', () => {
   });
 
   it('flags schemaError for a non-array fields value (iterable but invalid)', async () => {
-    // Codex finding: `fields: "abc"` is iterable, so getCompletionStats would NOT
+    // Codex finding: `fields: "abc"` is iterable, so the stats scan would NOT
     // throw -- it would report a bogus % with schemaError=false. The Array.isArray
     // guard must catch this and surface it as a broken schema.
     const prog = await readKitProgress(
@@ -143,7 +143,7 @@ describe('readKitProgress', () => {
 
   it('flags schemaError for a fields array of non-objects', async () => {
     // Codex round 3: `fields: ["abc"]` is an array, so Array.isArray passes, but
-    // getCompletionStats would read props off the strings without throwing and
+    // reviewCounts would read props off the strings without throwing and
     // report a bogus %. Every entry must be an object.
     const prog = await readKitProgress(
       entryServingSchema('k', { form_metadata: { form_number: 'T' }, fields: ['abc', 1] }),
@@ -154,7 +154,7 @@ describe('readKitProgress', () => {
 
   it('flags schemaError for array-valued field entries (typeof [] === object)', async () => {
     // Codex round 4: `fields: [[]]` -- entries are arrays, which pass a bare
-    // typeof==='object' check. getCompletionStats reads props off them without
+    // typeof==='object' check. reviewCounts reads props off them without
     // throwing -> bogus 0%. The guard must also reject arrays.
     const prog = await readKitProgress(
       entryServingSchema('k', { form_metadata: { form_number: 'T' }, fields: [[]] }),
@@ -171,5 +171,33 @@ describe('readKitProgress', () => {
     );
     expect(prog.reviewPercent).toBe(0);
     expect(prog.totalFields).toBe(0);
+  });
+});
+
+describe('the scan and the open kit share ONE count predicate (bd polyglot-pdf-q3rm)', () => {
+  it('a reviewed_correct field with no pdf_field_name counts identically in both', async () => {
+    // THE divergence this bead fixes: checkFieldComplete ERRORs a text field
+    // with no pdf_field_name, so the old getCompletionStats scan excluded it
+    // while App.liveStats' reviewCounts counted it (a non-choice field with no
+    // widget mapping is not a structural error; flagging the missing mapping
+    // is the lint layer's job). The same kit showed 100% while open and 0%
+    // after a refresh. One predicate now: both sides must report the SAME
+    // number, and the sign-off counts.
+    const schema = {
+      source: 'pdf', form_metadata: { form_number: 'T-1' }, parts: [], sections: [],
+      fields: [{
+        id: 'unmapped', name: 'U', type: 'text', read_only: false,
+        spoken_name: 'u', help: { instructions: 'Fill this in.' },
+        _review: { status: 'reviewed_correct' },
+      }],
+    };
+    const prog = await readKitProgress(entryServingSchema('k', schema));
+    const live = liveStats(schema as unknown as FormSchema, []);
+    expect(prog.reviewPercent).toBe(live.percent);
+    expect(prog.completeFields).toBe(live.complete);
+    expect(prog.totalFields).toBe(live.total);
+    // Pin the direction too: the shared predicate COUNTS the sign-off (the old
+    // scan's 0% was the bug, not the live 100%).
+    expect(prog.reviewPercent).toBe(100);
   });
 });

@@ -82,12 +82,29 @@ describe('RemoteCatalogue', () => {
 
   it('computes review progress from each kit schema (shared definition)', async () => {
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
-    // The one-field schema is incomplete -> 0% bars on both schema kits.
+    // The one-field schema is unreviewed -> 0% bars on both schema kits.
     await waitFor(() => expect(screen.getAllByText('0%').length).toBe(2));
     expect(vi.mocked(loadRemoteSchema)).toHaveBeenCalledWith('done-kit');
     expect(vi.mocked(loadRemoteSchema)).toHaveBeenCalledWith('draft-kit');
     // The schemaless kit is never fetched.
     expect(vi.mocked(loadRemoteSchema)).not.toHaveBeenCalledWith('fresh-kit');
+  });
+
+  it('scans with the pinned reviewCounts predicate, not checkFieldComplete (bd q3rm)', async () => {
+    // A signed-off text field with NO pdf_field_name: checkFieldComplete
+    // ERRORs it, so the old getCompletionStats scan showed 0% while the open
+    // kit's liveStats (reviewCounts) showed 100% -- the same card flipped
+    // between two numbers. The scan must count the sign-off (the missing
+    // widget mapping is the lint layer's job, which a scan honestly lacks).
+    vi.mocked(loadRemoteSchema).mockResolvedValue({
+      fields: [{
+        id: 'f1', name: 'F1', type: 'text', spoken_name: 'f',
+        help: { instructions: 'x' }, _review: { status: 'reviewed_correct' },
+      }],
+      sections: [],
+    } as never);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getAllByText('100%').length).toBe(2));
   });
 
   it('marks a draft complete via the server and refreshes', async () => {
