@@ -324,12 +324,27 @@ class FormFillingService:
         # filing needs. Prefer the FULL schema for the fingerprint -- the
         # per-section/JIT `schema` carries only one field, so hashing it would
         # yield a different marker per section of the same form.
-        edition_date = _resolve_edition_marker(
-            schema.get("form_metadata", {}).get("edition_date") if schema else None,
-            full_schema or schema,
-        )
-        self._kit_id = kit_id
-        self._edition_date = edition_date
+        # PRESERVE both across the internal section-switch restart, exactly as
+        # _full_schema does above (fresh-eyes on 47r3). _switch_to_section_locked
+        # re-enters start_session with the NEW SECTION's schema and NO kit_id /
+        # full_schema. Overwriting here reset kit_id to None and recomputed the
+        # fingerprint from a single-field section schema -- the marker CHANGED
+        # mid-session, the opposite of "pins a revision", and every confirmation
+        # after section 1 lost its kit.
+        #
+        # The edition marker is computed ONLY on a client (re)connect, which is
+        # the only caller that supplies full_schema. Guarding on `edition_date
+        # is not None` alone is NOT enough: the section schema still yields a
+        # (wrong) fingerprint from its own fields, which would overwrite the
+        # session's real one.
+        if kit_id is not None:
+            self._kit_id = kit_id
+        if full_schema is not None or self._edition_date is None:
+            self._edition_date = _resolve_edition_marker(
+                schema.get("form_metadata", {}).get("edition_date") if schema else None,
+                full_schema if full_schema is not None else schema,
+            )
+        edition_date = self._edition_date
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
         self._form_session_id = form_session_id or session_id
@@ -342,8 +357,12 @@ class FormFillingService:
             send_transcript=send_transcript,
             form_id=form_id,
             form_session_id=self._form_session_id,
-            kit_id=kit_id,
-            edition_date=edition_date,
+            # The PRESERVED values (self._*), not the local args: on the internal
+            # section-switch restart the args are None, and passing them would
+            # rebuild the handler without the kit/edition the session started
+            # with -- same reason form_session_id is threaded from self.
+            kit_id=self._kit_id,
+            edition_date=self._edition_date,
         )
 
         # Inject tool handler methods into callback handler

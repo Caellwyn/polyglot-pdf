@@ -91,6 +91,39 @@ revisions stay in storage but leave the manifest (so an old confirmation record
 still points at a schema that EXISTS), and hard delete is refused when
 confirmation records exist for that kit (offer unpublish instead).
 
+**Fresh-eyes round 1 (Sonnet): GAPS-FOUND (2 rubric FAILs + 2 notes), all
+adopted.** The reviewer reproduced a real bug empirically rather than arguing
+it:
+
+`_switch_to_section_locked` re-enters `start_session` with the NEW SECTION's
+schema and no `kit_id` / `full_schema`. My assignments were UNCONDITIONAL, so on
+every section switch `kit_id` reset to `None` and the fingerprint was recomputed
+from a single-field section schema. For any multi-section form -- the normal
+case -- every confirmation after section 1 lost its kit, and the "pinned"
+revision marker CHANGED mid-session. Both exit criteria therefore failed.
+
+The sting: the correct pattern sat three lines above my code
+(`if full_schema is not None: self._full_schema = full_schema`), added for
+exactly this trap, and an existing test
+(`test_switch_to_section_preserves_form_session_id_in_callback_handler`, bd
+`rwjy`) guards the identical failure for `form_session_id`. I copied the
+*intent* -- my own comment said the values were "stored so
+`_switch_to_section_locked` can thread them" -- without the *mechanism* that
+intent requires, which made the comment false.
+
+Fixed: preserve `kit_id` when the caller supplies none; recompute the edition
+marker ONLY when `full_schema` is present (a client (re)connect). Guarding on
+`edition_date is not None` alone was NOT enough -- the section schema still
+yields a wrong fingerprint from its own fields. The CallbackHandler now receives
+`self._kit_id` / `self._edition_date`, not the local args. Two regression tests
+mirror the `rwjy` precedent; both fail under a reverting mutation.
+
+Also adopted: the docs asserted a stronger guarantee than the code delivered
+(now true, and the session-spanning behavior is stated explicitly). Not adopted
+as a change: `full_schema or schema` truthiness (the reviewer's low-confidence
+nit) -- switched to `is not None` anyway while fixing the same lines, since it
+is the consistent idiom.
+
 ## Lessons
 
 - **A `-k`-filtered run is iteration, never evidence.** I reported "21 passing"
@@ -113,6 +146,14 @@ confirmation records exist for that kit (offer unpublish instead).
   looks like a style call; here it decided whether firms with proprietary forms
   could publish at all. The 23 failing fixtures were the signal that the rule
   was mis-scoped, not that the fixtures needed editing.
+- **When adding a field beside one that is deliberately PRESERVED, copy the
+  preservation, not just the placement.** `start_session` is re-entered by the
+  internal section-switch restart with partial arguments, so anything assigned
+  unconditionally there silently resets mid-session. `_full_schema` and
+  `_form_session_id` both carry guards for this; I put my fields next to them
+  and assigned unconditionally. The tell was available in my own comment, which
+  claimed a persistence the code did not implement -- a comment describing
+  behavior the lines below do not produce is worth re-reading as a bug report.
 
 ## Doc freshness
 

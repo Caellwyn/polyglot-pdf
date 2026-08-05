@@ -89,6 +89,16 @@ per-kit semantics into a legal record. Both keys are always written (as `null`
 when unavailable) so every record has a uniform shape and a missing value reads
 as "not recorded" rather than as a different edition.
 
+**Both are established once per form-session and PRESERVED across section
+switches.** The internal section-switch restart re-enters `start_session` with
+only the new section's schema, so `FormFillingService` keeps `self._kit_id` /
+`self._edition_date` rather than re-deriving them (same pattern as
+`_form_session_id` and `_full_schema`). Without that, `kit_id` reset to `null`
+after section 1 and the fingerprint was recomputed from a single-section schema
+-- so the "pinned" marker changed mid-session, which is the opposite of pinning
+(caught in review on bd `polyglot-pdf-47r3`; pinned by
+`test_switch_to_section_preserves_kit_id_and_edition_in_callback_handler`).
+
 ### Kits with no government edition
 
 A **custom form** -- a firm's own intake sheet, which the firm-tier epic
