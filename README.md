@@ -79,7 +79,7 @@ where we prove it first.
 - ✅ Schema-driven form filling; continuous single-session flow is the default
   (`CONTINUOUS_SESSION` + `USE_DTI`), with the legacy per-section reset flow kept
   as an env-flippable fallback
-- ✅ 17 spoken languages, chosen at session start and pinned for the whole form
+- ✅ 18 spoken languages, chosen at session start and pinned for the whole form
   (mid-conversation switching is not supported -- see
   [docs/standards/voice-and-vad.md](docs/standards/voice-and-vad.md))
 - ✅ Stateless backend architecture (HIPAA compliant)

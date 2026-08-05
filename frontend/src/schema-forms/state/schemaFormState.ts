@@ -1617,9 +1617,11 @@ export class SchemaFormStateManager {
    * Pin the session's selected language.
    *
    * NOT a mid-session switch: the spoken language is pinned for the whole form
-   * (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md). Both production
-   * callers set the INITIAL pin (the disclaimer-accept path and readDisclaimer);
-   * changing language means a new session.
+   * (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md). Exactly ONE
+   * production caller sets the initial pin -- `readDisclaimer` in
+   * shared/connection.ts, as the user accepts the disclaimer. Changing language
+   * means a new session. A second caller would be a switcher by definition, and
+   * pinned-language-policy.test.ts fails if one appears.
    */
   static setSelectedLanguage(
     state: SchemaFormState,

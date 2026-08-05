@@ -132,6 +132,56 @@ banned is a caller-supplied language, not a spelling. The name-based check is ke
 as a second, narrower test so a verbatim restore is caught at declaration. All
 three cases are mutation-verified, including the rename evasion.
 
+**Round 5 found the one that actually mattered: the SYSTEM INSTRUCTION.** Five
+rounds of sweeping comments and docs, and the shipped SI still told the model
+*"only the user's explicit request to switch changes the session language."* That
+is not prose a human reads -- it is instruction the model acts on. If a user asked
+to switch, the model would comply while the ASR bias, the option-label overrides
+and both initiating templates all stayed pinned to the original language, until
+the next reconnect snapped it back.
+
+It survived every previous sweep *because* it is not a comment. I had been
+grepping for stale documentation, and this is code. The SI now says the language
+is fixed for the whole form and tells the model to point a user who asks at the
+"clear form" button -- a useful answer rather than an impossible one. +136 chars
+(0.8%), recorded in si-reduction.md, and pinned by a test that asserts the
+superseded sentence is GONE, not merely that the new one is present.
+
+Both reviewers filed it independently in the same round (bd o1k9 / nl6v, both now
+closed), which is the argument for the two-independent-passes gate: they had
+converged on comment residue for three rounds, and the one with runtime effect
+still needed two sets of eyes to surface.
+
+**The enforcement test needed a third guard.** A reviewer showed the send-site
+scan could be evaded by a switcher that PERSISTS the caller's language first and
+then sends `state.selectedLanguage` -- which is exactly the deleted function's own
+shape, so my journal's claim that "a renamed switcher fails" was false for the one
+shape that matters. The fix moves upstream: only the entry flow may WRITE the
+pinned language (`setSelectedLanguage` has exactly one production caller). A
+second writer is a switcher by definition, whatever it is named. Mutation-verified
+against that exact evasion.
+
+**Two process scars from this round, both mine.**
+
+First: I used `git checkout origin/dev -- .` inside the worktree to test whether a
+suite flake predated the branch. That pulled ~20 unrelated files from dev into the
+tree on top of a stash pop, producing merge conflicts and a mess that looked, for
+a moment, like lost work. Nothing was lost -- every real change was either
+committed or in the stash -- but the recovery cost several careful steps, and the
+`git reset --hard` reflex I reached for was (correctly) blocked as destructive.
+The right way to answer "does this flake predate my branch?" is to stash, test,
+and pop -- never to pull another ref's files into a dirty tree. Recovery was
+`git checkout HEAD -- .`, unstage-and-delete the strays, then pop.
+
+Second: I mangled the same test file three times by writing TypeScript through a
+Python heredoc, where backslash escapes (newline, word-boundary, whitespace) are
+interpreted before they ever reach the file. Once it silently produced a file with
+a literal newline inside a regex and the suite reported "0 tests" rather than an
+error -- a broken file that looks like a clean run. Writing *this very paragraph*
+through a heredoc mangled it a fourth time, which is a fair measure of how durable
+the habit is. Write/Edit exist for this; a heredoc is only safe for text with no
+backslashes.
+
 **The policy is now enforced, not just described.** Both reviewers noted that a
 re-added switcher would break no test -- documentation alone had already failed
 once here, so `pinned-language-policy.test.ts` pins two things: the surviving

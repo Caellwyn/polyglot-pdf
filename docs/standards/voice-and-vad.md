@@ -331,6 +331,11 @@ Two independent language axes — don't conflate them:
 **Mid-conversation language switching is NOT supported.** The spoken language is
 chosen once, before the form starts, and held for every turn of that session:
 
+- The **system instruction** tells the model the language is fixed for the whole
+  form, and to answer a user who asks to switch by pointing them at the "clear
+  form" button. (It previously said the opposite -- "only the user's explicit
+  request to switch changes the session language" -- which told the model to
+  honor a switch the app cannot service; bd polyglot-pdf-87a9.)
 - The user picks it in `LanguageSelectionModal` — a one-time entry gate, bound only
   to `handleInitialLanguageSelect` in both overlays.
 - It is pinned into the per-connect Gemini config (the ASR `language_codes` bias,

@@ -151,6 +151,46 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
     ).toEqual([])
   })
 
+  it('only the entry flow WRITES the pinned language', () => {
+    // Closes an evasion a reviewer demonstrated against the send-site check
+    // above: a renamed switcher that PERSISTS the caller's language FIRST and
+    // only then sends `state.selectedLanguage` passes it, because by that point
+    // state has already been changed. That is exactly the shape of the deleted
+    // `changeSpokenLanguage`, so guarding the send alone is not enough.
+    //
+    // The durable invariant sits upstream: the pinned value may only be WRITTEN
+    // by the entry flow. `setSelectedLanguage` has exactly ONE production caller
+    // -- `readDisclaimer` in shared/connection.ts, setting the initial pin as the
+    // user accepts the disclaimer. A second writer is a switcher by definition,
+    // whatever it is named.
+    const WRITERS =
+      /SchemaFormStateManager\s*\.\s*(setSelectedLanguage|acceptDisclaimer)\s*\(/
+    const ALLOWED = new Set(['connection.ts'])
+    const offenders: string[] = []
+    let writeSites = 0
+
+    for (const file of productionSources()) {
+      const name = file.split(/[\\/]/).pop() as string
+      const lines = codeOnly(readFileSync(file, 'utf8')).split(/\r?\n/)
+      for (const line of lines) {
+        if (!WRITERS.test(line)) continue
+        writeSites += 1
+        if (ALLOWED.has(name)) continue
+        offenders.push(`${name}: ${line.trim().slice(0, 80)}`)
+      }
+    }
+
+    // The entry-flow write is the one sanctioned writer; if it disappears this
+    // test must not silently become a no-op.
+    expect(writeSites, 'the entry-flow language write vanished').toBeGreaterThan(0)
+    expect(
+      offenders,
+      'something other than the entry flow writes the session language -- it is ' +
+        'PINNED per session and may only be set once, as the user accepts the ' +
+        'disclaimer (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md)'
+    ).toEqual([])
+  })
+
   it('no production source declares the removed switching helpers', () => {
     // Belt to the invariant's braces: the two historical names stay banned, so a
     // verbatim restore of the deleted code is caught at its declaration, before
