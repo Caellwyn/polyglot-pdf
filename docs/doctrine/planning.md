@@ -133,13 +133,21 @@ volume work. Expensive models **never bug-hunt or grep.**
 
 | Tier | Models | Where |
 |------|--------|-------|
-| **Decision gates** | Fable / Opus | **Plan** (scope, rubric, MECE decomposition, the How-pushback), **Assess** (the orchestrator's pre-PR rubric scorecard + gap/nit triage), **escalation + Resolve judgment** (the orchestrator's judgment calls, incl. the merge decision -- auto-merge or ping). |
-| **Execution** | Sonnet | Building a bead's changes; the fresh-eyes assessor pass. |
-| **Search + mechanical** | Haiku / Explore | Codebase ground-truth fan-out, file location, mechanical glue (the `closeout-runner` tail). |
+| **Decision gates** | Fable / Opus | **Plan** (scope, rubric, MECE decomposition, the How-pushback), **Assess** (the orchestrator's pre-PR rubric scorecard + gap/nit triage), the **outer cross-surface review** (ONE looped Opus pass -- tracing changed contracts into untouched consumers), **escalation + Resolve judgment** (the orchestrator's judgment calls, incl. the merge decision -- auto-merge or ping). |
+| **Execution** | Sonnet | Building a bead's changes; the **inner** fresh-eyes assessor pass (rubric scoring + local in-diff bug hunt + enumerating changed contracts). |
+| **Search + mechanical** | Haiku / Explore | Codebase ground-truth fan-out, file location, the inner assessor on small diffs (<= ~80 changed lines, routed by `pick_review_model.py`), mechanical glue (the `closeout-runner` tail). |
 
 The orchestrator **never greps** -- it delegates search to Explore/Haiku and
 keeps the conclusion, not the file dumps. Spending Opus tokens on a `grep` is the
 exact waste the tiering exists to prevent.
+
+**The review layers apply this rule to themselves** (bd `polyglot-pdf-ofh6`,
+2026-08-05). The inner loop is cheap-tier work -- scoring a rubric and reading a
+diff for local correctness -- so it runs on Sonnet/Haiku and its `NO-GAPS` is
+terminal there. Opus gets **one** pass, spent on the job the cheap tiers
+demonstrably cannot do: following changed contracts out into files the diff never
+touched. The earlier flow ran three serial Opus passes on the *same* prompt, which
+is precisely the "expensive model bug-hunting" this table forbids.
 
 ## Parallel execution
 
@@ -162,7 +170,7 @@ Assess is a **recursive adversarial fresh-eyes loop run BEFORE the PR opens**
 (not after), scoring the produced changes against the rubric. The assessor's
 mandate is gap-exhaustion -- "find every place the changes do NOT meet the
 criteria" -- never approval-seeking. The full procedure (the closeout Step 5.5
-scorecard, the inner fresh-eyes loop, and the Opus-5 outer review -- both
-Claude, no external reviewer) lives in [`review-flow.md`](review-flow.md). Resolve ends in the merge
+scorecard, the inner fresh-eyes loop, and the single Opus-5 outer cross-surface
+review -- both Claude, no external reviewer) lives in [`review-flow.md`](review-flow.md). Resolve ends in the merge
 decision: a routine low-risk PR that reviewed CLEAN auto-merges, a
 consequence-bearing one is the maintainer's merge (bd `polyglot-pdf-16pj`).
