@@ -80,9 +80,18 @@ async def test_success_response_echoes_canonical_stored_value():
     # must read back exactly what the client stores.
     assert resp.get("stored_values") == {"p1_line1_aliennumber": "12345678"}
     # The message repeats the stored value inline (message text is what the
-    # model most reliably attends to) plus the read-THIS-back instruction.
-    assert "12345678" in resp.get("message", "")
-    assert "Read THIS stored value back" in resp.get("message", "")
+    # model most reliably attends to) plus the read-back instruction.
+    msg = resp.get("message", "")
+    assert "12345678" in msg
+    # The imperative must NAME THE VALUE, not point at it with a pronoun (bd
+    # polyglot-pdf-0rpu). The old wording was "Read THIS stored value back",
+    # where THIS sat a clause away from the value behind a field id and quoting
+    # -- and a logged session shows the model handed 'Smith' here and saying
+    # "You said Jose", i.e. resolving the referent to something else entirely.
+    assert "Read '12345678' back" in msg
+    # ...and names must be spelled out, which is where a mishearing becomes a
+    # wrong legal name.
+    assert "spell it out letter by letter" in msg
 
 
 @pytest.mark.asyncio

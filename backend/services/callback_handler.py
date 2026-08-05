@@ -1782,12 +1782,32 @@ class CallbackHandler:
             }
             if applied_values:
                 tool_response["stored_values"] = applied_values
+                # Name the VALUE directly in the imperative -- do NOT write
+                # "read THIS value back" (bd polyglot-pdf-0rpu, maintainer
+                # 2026-08-05). "THIS" is a referent the model has to resolve
+                # inside a multi-thousand-token context, and it sat one clause
+                # away from the value behind a field id and quoting
+                # ("Stored value: name_1b_last = 'Smith'. Read THIS ...").
+                # A LOGGED session shows the model handed 'Smith' here and
+                # saying "You said Jose" -- a value from two fields earlier --
+                # so it answered from conversational memory rather than
+                # resolving the referent. Interpolating the value into the
+                # imperative removes the indirection at ~the same token cost.
+                # The spelling clause is here rather than only in the SI for the
+                # same reason: the read-back instruction is most reliably obeyed
+                # at the point of use, and names spoken as words (not letters)
+                # are where a mishearing becomes a wrong legal name.
                 stored_str = "; ".join(
                     f"{fid} = {val!r}" for fid, val in applied_values.items()
                 )
+                spoken_values = " and ".join(
+                    f"{val!r}" for val in applied_values.values()
+                )
                 tool_response["message"] = (
                     f"Fields updated successfully. Stored value: {stored_str}. "
-                    f"Read THIS stored value back to the user for confirmation."
+                    f"Read {spoken_values} back to the user for confirmation. "
+                    f"If it is a name, spell it out letter by letter in the "
+                    f"session language."
                 )
 
         _log.info("-" * 80)

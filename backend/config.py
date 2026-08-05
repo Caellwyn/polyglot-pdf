@@ -334,6 +334,32 @@ class Settings(BaseModel):
 	# must confirm the session connects; set LIVE_VOICE_NAME="" to fall back to
 	# the API default if it 1007s.
 	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Iapetus")
+	# LOCAL-DEV-ONLY sampling temperature for the Live session (bd
+	# polyglot-pdf-0rpu). EMPTY by default = do not send it at all, so the
+	# deployed service keeps Google's default (1.0) unchanged.
+	#
+	# The adapter DOUBLE-GATES this on DEV_LOGGING_ENABLED (the gitignored
+	# backend/.env.DEV marker, which cannot exist on Cloud Run), so setting this
+	# env var in a deploy has NO effect -- deliberately. The maintainer's call:
+	# a temperature slider is a prototyping tool, not a production knob.
+	#
+	# Range: sweep 0.3-0.6. NEVER 0 on native audio -- googleapis/js-genai#1578
+	# reports runaway/no-audio output and a 1011 session close at temperature 0.
+	# The adapter rejects <=0 and >2 rather than passing them through.
+	LIVE_TEMPERATURE: str = os.getenv("LIVE_TEMPERATURE", "")
+	# LOCAL-DEV-ONLY transcript capture (bd polyglot-pdf-0rpu). Turning this on
+	# makes the adapter request input+output transcription so the dev JSONL log
+	# records WHAT WAS SAID, not just the tool calls -- without it, a voice bug
+	# can only be diagnosed by inference (three rounds were spent on 0rpu for
+	# exactly this reason).
+	#
+	# PRIVACY (maintainer directive 2026-08-05: "It's important for privacy that
+	# they are turned off for deploy"): transcripts are PHI. The adapter gates
+	# this on DEV_LOGGING_ENABLED too, so it cannot turn on in a deployed
+	# service even if the env var is set. See docs/standards/hipaa-pii-policy.md.
+	LIVE_DEV_TRANSCRIPTS: bool = (
+		os.getenv("LIVE_DEV_TRANSCRIPTS", "false").lower() == "true"
+	)
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
 	# the secretary (lite text model) translates the form's option labels into
