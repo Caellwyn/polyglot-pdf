@@ -239,7 +239,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
-    onStatusRefusal?.(null);
+    // The strip's refusal line describes the OPEN kit only. The compact
+    // selector gates status actions to the open kit, but the EXPANDED card
+    // grid offers Mark complete on every schema-bearing card -- so a refusal
+    // about kit B must never land on (or clear) open kit A's strip, where
+    // its "Go to:" links would name B's fields (Opus outer review, pass 3;
+    // the same gate FormCatalogue's local cards got in pass 2).
+    const mirrorsToStrip = kit.id === selectedKitId;
+    if (mirrorsToStrip) onStatusRefusal?.(null);
     if (status === 'complete') setCompletingId(kit.id);
     try {
       const result = await setRemoteStatus(kit.id, status);
@@ -268,15 +275,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       }
       const detail = err instanceof Error ? err.message : 'Failed to update status';
       setError(detail);
-      // A refused completion also lands on the strip's refusal line (sprint-18
-      // C1): the refusal renders next to the counts it contradicts, with
-      // click-to-focus links for any "(id=x)" the gate names.
-      if (status === 'complete') onStatusRefusal?.(detail);
+      // A refused completion of the OPEN kit also lands on the strip's
+      // refusal line (sprint-18 C1): the refusal renders next to the counts
+      // it contradicts, with click-to-focus links for any "(id=x)" the gate
+      // names. A refusal about a DIFFERENT kit stays on its card only.
+      if (status === 'complete' && mirrorsToStrip) onStatusRefusal?.(detail);
       setBusy(false);
     } finally {
       setCompletingId(null);
     }
-  }, [refresh, onAuthError, onStatusRefusal]);
+  }, [refresh, onAuthError, onStatusRefusal, selectedKitId]);
 
   // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
   // ANY selected kit (no open involved -- unlike the status actions, which

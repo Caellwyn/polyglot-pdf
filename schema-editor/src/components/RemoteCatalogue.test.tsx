@@ -137,19 +137,21 @@ describe('RemoteCatalogue', () => {
       expect(screen.getByText(/does not validate/)).toBeInTheDocument());
   });
 
-  it('mirrors a Mark-complete refusal up through onStatusRefusal, and clears it on the next attempt (s18 C1)', async () => {
+  it('mirrors the OPEN kit\'s Mark-complete refusal up through onStatusRefusal, and clears it on the next attempt (s18 C1)', async () => {
     // The producer side of the strip's refusal line (decision 1): a refused
-    // completion reaches the host with the server's detail; a later attempt
-    // clears the stale refusal first (null) before the call runs.
+    // completion of the OPEN kit reaches the host with the server's detail;
+    // a later attempt clears the stale refusal first (null) before the call.
     const onStatusRefusal = vi.fn();
     vi.mocked(setRemoteStatus).mockRejectedValueOnce(
       new Error('Schema has 1 lint error(s), so it cannot be marked complete'),
     );
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
-      selectedKitId={null} role="editor" onStatusRefusal={onStatusRefusal} />);
+      selectedKitId="draft-kit" role="editor" onStatusRefusal={onStatusRefusal} />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Mark complete'));
+    // The OPEN kit's Mark complete renders twice (compact selector + its own
+    // card); both drive the same kit, so either button exercises the mirror.
+    fireEvent.click(screen.getAllByText('Mark complete')[0]);
     await waitFor(() => expect(onStatusRefusal).toHaveBeenCalledWith(
       expect.stringContaining('cannot be marked complete')));
     // Called with null FIRST on entry (stale refusal cleared before the call).
@@ -157,10 +159,32 @@ describe('RemoteCatalogue', () => {
 
     // The retry succeeds (the once-rejection is spent): only the clear fires.
     onStatusRefusal.mockClear();
-    fireEvent.click(screen.getByText('Mark complete'));
+    fireEvent.click(screen.getAllByText('Mark complete')[0]);
     await waitFor(() => expect(screen.getByText(/marked complete/)).toBeInTheDocument());
     expect(onStatusRefusal).toHaveBeenCalledWith(null);
     expect(onStatusRefusal).not.toHaveBeenCalledWith(expect.stringContaining('cannot'));
+  });
+
+  it('a refusal about a NON-open kit never reaches the strip (Opus outer r3)', async () => {
+    // The EXPANDED card grid offers Mark complete on every schema-bearing
+    // card, so a refusal about another kit must stay on its card -- mirrored
+    // onto the open kit's strip, its "Go to:" links would name fields the
+    // open kit does not have (same gate FormCatalogue's local cards carry).
+    const onStatusRefusal = vi.fn();
+    vi.mocked(setRemoteStatus).mockRejectedValue(
+      new Error('refused: fields (id=other_field)'),
+    );
+    // done-kit is the OPEN kit; draft-kit's card is the one clicked.
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+      selectedKitId="done-kit" role="editor" onStatusRefusal={onStatusRefusal} />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Mark complete'));
+    // The refused call ran for the NON-open kit...
+    await waitFor(() => expect(setRemoteStatus)
+      .toHaveBeenCalledWith('draft-kit', 'complete'));
+    // ...but the strip mirror was never touched (no clear, no detail).
+    expect(onStatusRefusal).not.toHaveBeenCalled();
   });
 
   it('routes a 401 to onAuthError instead of the error banner', async () => {

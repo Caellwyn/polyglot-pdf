@@ -265,12 +265,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
-    // The strip's refusal line describes the OPEN form only. Unlike the
-    // hosted catalogue (whose status actions render solely on the open
-    // kit's card), local mode offers Mark complete on EVERY card -- so a
-    // refusal about kit B must never land on (or clear) the strip below
-    // open kit A, where its "Go to:" links would select unrelated fields
-    // (Opus outer review, pass 2).
+    // The strip's refusal line describes the OPEN form only. Both catalogues
+    // offer Mark complete on non-open cards (this one everywhere; the hosted
+    // one in its expanded grid) -- so a refusal about kit B must never land
+    // on (or clear) the strip below open kit A, where its "Go to:" links
+    // would select unrelated fields (Opus outer review, passes 2 + 3; the
+    // hosted twin carries the identical gate).
     const mirrorsToStrip = kit.id === selectedKitId;
     if (mirrorsToStrip) onStatusRefusal?.(null);
     // Completion is the PUBLISH gate, so it must go through the server whenever

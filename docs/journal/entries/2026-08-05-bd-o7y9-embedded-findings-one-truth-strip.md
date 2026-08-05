@@ -160,6 +160,15 @@ lints instantly. The reviewer also filed bd polyglot-pdf-kk74
 (EDITOR_GUIDE.md still documents the removed pane -- out of scope, bd
 hnce covered only HostedGuide).
 
+Opus outer review, primary pass 3: 1 finding, adopted -- the pass-2
+refusal-mirror gate was applied only to the LOCAL catalogue; the hosted
+catalogue's EXPANDED card grid also offers Mark complete on every card
+(only its compact selector is open-kit-gated), so the same cross-kit
+refusal leak existed on the production path. The identical open-kit gate
+now guards both catalogues, mutation-verified. The reviewer filed bd
+polyglot-pdf-ytfx (refusal Go-to links can name a SECTION id from
+to-review-pending's 409 text -- narrower, separable, out of the rubric).
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:
