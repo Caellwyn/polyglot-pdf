@@ -116,7 +116,9 @@ def _letters(text: str) -> str:
         # Known acronyms are PROSE the two tracks legitimately render
         # differently ("I-T-I-N" spoken vs "ITIN" written -- Run A gen 1
         # false positive). Never count them as spell-outs.
-        if seq in {"ITIN", "SSN", "IRS", "USA", "ZIP", "VAD"}:
+        if seq in {"ITIN", "SSN", "IRS", "USA", "ZIP", "VAD", "APO", "PO"}:
+            # APO: "a P.O. box" bleeds the article into a 3-letter run
+            # (Run B2 gen 12 false positive).
             continue
         if len(letters) >= 3:
             out.append(seq)
