@@ -1,12 +1,12 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-04 (bd polyglot-pdf-5e6a: Vertex-only production -- the
+*Last updated: 2026-08-05 (bd polyglot-pdf-o7y9: the editor lint route pair --
+the kit-scoped form lints with the kit's persisted AcroForm dump, the same
+inputs as the promotion gate). See
+[journal/entries/2026-08-05-bd-o7y9-embedded-findings-one-truth-strip.md](journal/entries/2026-08-05-bd-o7y9-embedded-findings-one-truth-strip.md).
+Also current: bd polyglot-pdf-5e6a (Vertex-only production -- the
 ALLOW_AI_STUDIO override is REMOVED and a deployed AI Studio path fails startup;
 see [journal/entries/2026-08-04-bd-n0em-5e6a-zeqt-audit-formid-vertex-only-devfix.md](journal/entries/2026-08-04-bd-n0em-5e6a-zeqt-audit-formid-vertex-only-devfix.md)).
-Prior: 2026-08-03 (bd polyglot-pdf-z2is: HTTP auth gates on
-fill-pdf/form-kits, the deliberately-public kit-PDF GET, and the
-CONFIRMATION_FIRESTORE_ENABLED sink). See
-[journal/entries/2026-08-03-bd-z2is-p0-prod-readiness.md](journal/entries/2026-08-03-bd-z2is-p0-prod-readiness.md).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
@@ -81,6 +81,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |
 | PUT | `/api/editor/kits/{kit_id}/schema` | Save an edited schema back to the store (lenient draft save). Token-gated. |
+| POST | `/api/editor/lint`, `/api/editor/kits/{kit_id}/lint` | Lint the POSTED (possibly-unsaved) schema over the single Python ruleset (`backend/services/schema_lint.py`). The kit-scoped form additionally loads the kit's persisted `acroform.json` dump -- the SAME inputs as the `/status` promotion gate -- so the editor strip sees the dump-gated widget-claim rules live (sprint-18 C1, bd o7y9); the dumpless form remains for schemas with no kit identity. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/status` | Flip draft/complete; promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |

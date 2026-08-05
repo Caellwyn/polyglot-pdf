@@ -97,10 +97,15 @@ assess loop completes.
 
 ## Doc freshness
 
-No components/ doc tracks the schema-editor surface (no
+docs/technical_guide.md bumped: its route table gained the editor lint
+pair (/api/editor/lint + the new kit-scoped /api/editor/kits/{id}/lint)
+since it tracks backend/routes/*.py and this branch changed
+editor_kit_routes.py. The freshness checker's other two STALE flags
+(standards/voice-and-vad.md, standards/ws-protocol.md) track files this
+branch did NOT touch -- pre-existing staleness, reviewed and left. No
+components/ doc tracks the schema-editor surface (no
 docs/components/schema-editor.md exists); docs/INDEX.md and the sprint-18
-plan already describe this child and were left as-is. No standards doc
-tracks the changed files.
+plan already describe this child and were left as-is.
 
 ## Files touched
 
