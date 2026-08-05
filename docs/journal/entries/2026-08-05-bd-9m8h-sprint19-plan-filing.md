@@ -1,0 +1,67 @@
+---
+date: 2026-08-05
+bead: polyglot-pdf-9m8h
+title: "Sprint 19 plan doc + INDEX row + epic pointers (7jmy+02ye)"
+sprint: 19
+tags: [doctrine]
+---
+
+## Trigger
+
+The maintainer asked for a single /plan-epic run covering both open epics
+polyglot-pdf-02ye (firm tier) and polyglot-pdf-7jmy (kit lifecycle), per 7jmy's
+own instruction ("Plan these together or make the seam explicit"). The SPEAR
+Scope+Plan cycle ran in-session: research fan-out over the auth/firm surfaces,
+the kit publish/catalogue surfaces, and the confirmation-audit trail; How
+challenges surfaced; two product calls put to the maintainer and confirmed
+(firm identity via firm_id custom claim only; same-kit republish always
+archives + replaces, with a "replace current" control only for the cross-kit
+supersede case); rubrics + bead tree approved 2026-08-05.
+
+## What shipped
+
+- docs/sprint_19_firm-tier-kit-lifecycle_plan.md -- the approved plan: Why,
+  settled decisions, design (revision archive under <kit_id>/_archive/<marker>/,
+  draft|complete|unpublished statuses, form_metadata.author_version with marker
+  precedence edition_date > author_version > fingerprint, guarded hard delete
+  keyed on a kit_id equality query over confirmation_events; firms/{firm_id}
+  Firestore collection, firm_id custom claim, two-axis kit visibility, static
+  bundle filtered to complete+public), the two exit rubrics, the bead tree, and
+  the explicit out-of-scope list.
+- docs/INDEX.md -- active-sprints row for sprint 19.
+- Beads filed and wired (tracker, not this diff): 7jmy children w3zw ->
+  6dz0 -> xzw5 -> 6x1j (serial; editor_kit_routes + confirmation_logger are
+  hub files); 02ye children lo88, vccy, kkos, xwlt + deferred ugm6 (magic
+  links) and ik7e (rate limits + cost ceiling); cross-epic edge 6dz0 -> vccy;
+  both epics carry plan=docs/sprint_19_firm-tier-kit-lifecycle_plan.md and
+  sprint=19 metadata. Ready set verified: w3zw, lo88, kkos (the three
+  disjoint-surface entry points).
+
+Research findings that shaped the design (recorded in the plan): kit storage is
+single-slot per kit_id with destructive overwrite-in-place; confirmation
+records carry kit_id + edition marker but no storage address; the static
+Hosting bundle ships EVERY kit including drafts (no status filter in
+generate-form-manifest.ts) -- the draft leak is closed by the static-scoping
+bead; no rate-limiting or cost-ceiling code exists anywhere (the limits bead is
+new infrastructure, deliberately deferred with magic links).
+
+## Lessons
+
+- Sprint 18 (epic polyglot-pdf-4qul) is concurrently reworking the /status
+  promotion route (translation bake moves out). Two active sprints now touch
+  editor_kit_routes.py's status transition -- the sprint-19 lifecycle beads
+  carry an explicit check-4qul-state-at-claim-time note. Planning epics
+  together made this collision visible before any code was written.
+
+## Doc freshness
+
+- docs/INDEX.md bumped (new active-sprint row). No component/standards docs
+  touched -- this is a planning-only change; the docs the child beads will
+  affect (auth.md, pdf-filling.md, confirmation-and-audit.md) get their bumps
+  when those beads ship.
+
+## Files touched
+
+- docs/sprint_19_firm-tier-kit-lifecycle_plan.md (new)
+- docs/INDEX.md (active-sprints row)
+- docs/journal/entries/2026-08-05-bd-9m8h-sprint19-plan-filing.md (this entry)
