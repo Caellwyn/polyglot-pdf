@@ -280,6 +280,28 @@ describe('the timeliness demotion has a reachable EXIT (Opus outer r9)', () => {
     expect(screen.queryByTestId('reconfirm-review')).toBeNull();
   });
 
+  it('never stamps ANOTHER field\'s fingerprints into this field (2nd review)', () => {
+    // The sign-off is the one WRITE path here; an unscoped findings list
+    // would persist zip's fingerprint into phone's seen_fingerprints,
+    // permanently masking a later phone finding that happens to match it.
+    const zipFinding: LintFinding = {
+      severity: 'WARNING', rule: 'help-details-oversize',
+      path: 'fields[1] (id=zip).help.details', message: 'zip details oversize',
+      field_id: 'zip',
+    };
+    const onUpdateField = vi.fn();
+    render(
+      <FieldEditor field={signedOff} schema={makeSchema(signedOff)}
+        onUpdateField={onUpdateField} authorTier
+        lintFindings={[instructionsFinding, zipFinding]} />,
+    );
+    fireEvent.click(screen.getByTestId('reconfirm-review'));
+    const updated = onUpdateField.mock.calls[0][0] as FormField;
+    // Only phone's own finding is stamped.
+    expect(updated._review?.seen_fingerprints)
+      .toEqual([findingFingerprint(instructionsFinding)]);
+  });
+
   it('shows no re-confirm control when the sign-off is still current', () => {
     const current: FormField = {
       ...TEXT_FIELD,

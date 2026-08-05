@@ -349,6 +349,28 @@ function dismissedSet(schema: FormSchema): Set<string> {
   return new Set(Array.isArray(raw) ? raw.filter(x => typeof x === 'string') : []);
 }
 
+/**
+ * The key a form-level DISMISSAL is stored under -- always content-bearing,
+ * unlike the timeliness fingerprint.
+ *
+ * The two paths need different widths (second confirming review). Timeliness
+ * excludes the message so a copy-pass rewording cannot mass-demote reviewed
+ * fields. But a DISMISSAL is a permanent, human-made "I have seen this and
+ * accept it", and several form-level rules carry their entire content in the
+ * message at ONE fixed path:
+ *   - help-instructions-missing ($.fields): "12 of 40 fields have no spoken
+ *     guidance yet (a, b, c)" -- dismissing at 12 would hide it at 300;
+ *   - translation-coverage (coverage.<lang>): the same shape per language;
+ *   - help-details-not-contained ($.form_metadata.details): emitted once PER
+ *     PARAGRAPH, all sharing rule+path+null field_id -- so one dismissal hid
+ *     every sibling, including ones the human never saw.
+ * Keying the dismissal on the content means a dismissal covers exactly the
+ * finding that was actually read, and a changed/grown problem re-raises.
+ */
+function dismissalKey(f: LintFinding): string {
+  return `${findingFingerprint(f)}|${contentDiscriminator(f.message)}`;
+}
+
 /** WARNING-severity form-level findings can be standalone-dismissed; an ERROR
  * blocks the publish gate regardless, so hiding it would just recreate the
  * confident-strip-then-409 lie the pane removal exists to end. */
@@ -357,20 +379,21 @@ export function isFindingDismissable(f: LintFinding): boolean {
 }
 
 export function isFindingDismissed(schema: FormSchema, f: LintFinding): boolean {
-  return dismissedSet(schema).has(findingFingerprint(f));
+  return dismissedSet(schema).has(dismissalKey(f));
 }
 
 /**
  * Record a standalone dismissal of a form-level WARNING, returning a NEW
  * schema. A non-dismissable (ERROR) or already-dismissed finding returns the
- * schema unchanged. The stored key is the fingerprint, so a reworded message
- * stays dismissed while a rule/path shift re-raises the row.
+ * schema unchanged. The stored key is the CONTENT-bearing dismissalKey (see
+ * its doc): a dismissal covers exactly the finding the human read, so a
+ * grown or changed problem re-raises rather than staying hidden forever.
  */
 export function withFormFindingDismissed(
   schema: FormSchema, f: LintFinding,
 ): FormSchema {
   if (!isFindingDismissable(f)) return schema;
-  const fp = findingFingerprint(f);
+  const fp = dismissalKey(f);
   const current = dismissedSet(schema);
   if (current.has(fp)) return schema;
   return {
@@ -390,6 +413,6 @@ export function visibleFormFindings(
 ): LintFinding[] {
   const dismissed = dismissedSet(schema);
   return formLevelFindings(findings, schema.fields).filter(
-    f => f.severity === 'ERROR' || !dismissed.has(findingFingerprint(f)),
+    f => f.severity === 'ERROR' || !dismissed.has(dismissalKey(f)),
   );
 }

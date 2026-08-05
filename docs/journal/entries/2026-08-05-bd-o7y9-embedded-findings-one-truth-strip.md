@@ -283,6 +283,32 @@ the click a success-shaped no-op. The control is now offered only when no
 ERROR is anchored to the field (an error is fixed, never confirmed away).
 This PR therefore also closes bd uzf4.
 
+SECOND independent confirming review (the two-reviewer gate): scored all
+three criteria PASS but found a real BLOCKER the primary missed, which is
+exactly why the second pass exists. The dismiss path shared
+findingFingerprint with the timeliness path, but the two want opposite
+widths: timeliness must EXCLUDE the message (a copy-pass rewording must
+not mass-demote), while a DISMISSAL is a permanent human "I read this and
+accept it" -- and several form-level rules carry their whole content in
+the message at one fixed path. So dismissing "12 of 40 fields have no
+guidance" hid it forever at 300, and help-details-not-contained (emitted
+once PER PARAGRAPH, all sharing rule+path+null field_id) had one
+dismissal hide every sibling the human never saw. Dismissals now key on a
+content-bearing dismissalKey; the accepted cost is that a pure rewording
+of a form-level WARNING re-asks once on ONE row, which is far cheaper
+than hiding a grown problem. Second finding, also fixed: FieldReviewEditor
+mixed scoped and unscoped uses of the lintFindings prop -- and it is the
+one WRITE path (the sign-off stamps seen_fingerprints), so an unscoped
+list would have persisted another field's fingerprints and permanently
+masked a later genuine finding; it now scopes once and uses that
+everywhere. The reviewer also filed three beads, two of them against MY
+OWN tests, both fixed here: bd polyglot-pdf-d0vy (the hand-tally
+fixture's stamped fingerprint did not match what findingFingerprint
+produces, so the test did not isolate the ERROR clause it claimed) and bd
+polyglot-pdf-ze79 (the "failed open" test never exercised a failure and
+would have stayed green through a revert of the fix it documents); bd
+polyglot-pdf-y056 stays open (out of scope).
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:

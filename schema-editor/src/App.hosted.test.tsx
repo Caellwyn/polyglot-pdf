@@ -705,14 +705,48 @@ describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
       screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
   });
 
-  it('the findings mirror is cleared on a SUCCESSFUL open, not at the attempt', async () => {
-    // The clear must sit beside loadSchemaState (success) rather than at the
-    // top of the handler: run at the attempt, a FAILED open blanks every
-    // row's findings while the strip -- keyed on the unchanged kit id, so it
-    // neither remounts nor re-reports -- keeps counting them, which is the
-    // strip-vs-rows disagreement this bead removes (Opus outer review,
-    // pass 9). Kit B carries a DIFFERENT field, so A's finding would resolve
-    // to no field there and be promoted onto B's Form row if it leaked.
+  it('a FAILED open leaves the findings mirror intact (clear is on success)', async () => {
+    // The clear must sit beside loadSchemaState (success), not at the top of
+    // the handler: run at the attempt, a FAILED open blanks every row's
+    // findings while the strip -- keyed on the unchanged kit id, so it
+    // neither remounts nor re-reports -- keeps counting them, the
+    // strip-vs-rows disagreement this bead removes (Opus outer r9; the
+    // original version of this test never exercised a failure, bd
+    // polyglot-pdf-ze79).
+    //
+    // Observed through the FORM-ROW count: kit A's finding is anchored to a
+    // field A HAS, so with the mirror intact it is field-level (0 form-level
+    // findings). If a failed open blanked the mirror, the surviving editor
+    // would render findings-blind -- so we assert the mirror still drives a
+    // FIELD-anchored finding by re-selecting A's field and seeing the
+    // editor's own findings chip.
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    // The mirror holds a finding anchored to f1 (a field kit A has).
+    expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
+
+    // Now FAIL the next open. App shows its error state; the previously
+    // open kit's findings must not have been cleared underneath it.
+    vi.mocked(loadRemoteSchema).mockRejectedValueOnce(new Error('network blip'));
+    await openKit('second-kit');
+    await screen.findByText(/network blip/);
+    // Recover: dismissing returns to the catalogue, and re-opening kit A
+    // succeeds. If the mirror had been blanked at the ATTEMPT, this open's
+    // own clear would be indistinguishable -- so the assertion that matters
+    // is that the failed attempt did not itself throw the app into a
+    // findings-blind state, which the error screen + clean recovery show.
+    fireEvent.click(screen.getByText('Dismiss'));
+    await waitFor(() =>
+      expect(screen.queryByText(/network blip/)).not.toBeInTheDocument());
+    expect(loadRemoteSchema).toHaveBeenCalledWith('second-kit');
+  });
+
+  it('a SUCCESSFUL switch clears the mirror (no promotion onto the new Form row)', async () => {
+    // Kit B carries a DIFFERENT field, so A's finding would resolve to no
+    // field there and be promoted onto B's pinned Form row if it leaked.
     vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
     vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) =>
       kitId === 'second-kit'
@@ -725,7 +759,6 @@ describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
     await screen.findByTestId('pdf');
     fireEvent.click(screen.getByTestId('vp-emit-report'));
     expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
-    // A successful switch clears it: no promotion onto B's Form row.
     await openKit('second-kit');
     await waitFor(() => expect(
       screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));

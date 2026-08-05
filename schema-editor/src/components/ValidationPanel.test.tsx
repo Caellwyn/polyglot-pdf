@@ -91,9 +91,17 @@ describe('the strip is ONE line of status-derived counts (s18 C1)', () => {
     const fields = [
       { id: 'a', name: 'A', type: 'text', spoken_name: 'a',
         _review: { status: 'reviewed_correct', seen_fingerprints: [] } },
+      // The stamp must be what findingFingerprint ACTUALLY produces for b's
+      // ERROR (container indices are normalized away), or the timeliness
+      // clause fires too and the test stops isolating the ERROR clause it
+      // claims to pin (bd polyglot-pdf-d0vy, second confirming review).
       { id: 'b', name: 'B', type: 'text', spoken_name: 'b',
         _review: { status: 'reviewed_correct',
-                   seen_fingerprints: ['field-unbacked|b|fields[1] (id=b)'] } },
+                   seen_fingerprints: [findingFingerprint({
+                     severity: 'ERROR', rule: 'field-unbacked',
+                     path: 'fields[1] (id=b)', field_id: 'b',
+                     message: 'no PDF box',
+                   })] } },
       { id: 'c', name: 'C', type: 'text', spoken_name: 'c' },
     ];
     const schema = { ...SCHEMA, fields } as unknown as FormSchema;

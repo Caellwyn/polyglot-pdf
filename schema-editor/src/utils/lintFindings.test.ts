@@ -221,13 +221,21 @@ describe('the Form row standalone dismiss (s18 C1, decision 1)', () => {
       .toEqual([coverage, sectionAnchored]);
   });
 
-  it('a WARNING dismisses and stays dismissed under a reworded message', () => {
+  it('a WARNING dismisses, and a CHANGED message re-raises it', () => {
+    // The dismiss path deliberately diverges from the timeliness path
+    // (second confirming review). Timeliness excludes the message so a
+    // copy-pass rewording cannot mass-demote reviewed fields; a DISMISSAL is
+    // a permanent human "I read this and accept it", and several form-level
+    // rules carry their whole content in the message -- so it must re-raise
+    // when the content changes. Accepted cost: a pure rewording of a
+    // form-level WARNING re-asks once, on ONE row, which is far cheaper than
+    // hiding a grown problem forever.
     const next = withFormFindingDismissed(SCHEMA, coverage);
     expect(next).not.toBe(SCHEMA);
     expect(isFindingDismissed(next, coverage)).toBe(true);
     const reworded = { ...coverage, message: 'totally new copy' };
-    expect(isFindingDismissed(next, reworded)).toBe(true);
-    // ...but a different rule/path re-raises.
+    expect(isFindingDismissed(next, reworded)).toBe(false);
+    // ...and a different rule/path is likewise untouched.
     expect(isFindingDismissed(next, unclaimed)).toBe(false);
   });
 
@@ -243,6 +251,39 @@ describe('the Form row standalone dismiss (s18 C1, decision 1)', () => {
     schema = withFormFindingDismissed(schema, unclaimed);
     expect(visibleFormFindings(schema, [coverage, unclaimed, multiclaim]))
       .toEqual([multiclaim]);
+  });
+
+  it('a dismissal covers the finding READ, not the rule forever (2nd review)', () => {
+    // Several form-level rules carry their whole content in the MESSAGE at
+    // one fixed path: help-instructions-missing ("12 of 40 fields..."),
+    // translation-coverage, and help-details-not-contained (emitted once PER
+    // PARAGRAPH, all sharing rule+path+null field_id). Keying the dismissal
+    // on the message-independent fingerprint meant one click hid a GROWING
+    // problem forever, and hid sibling findings the human never saw.
+    const at12 = f({
+      rule: 'help-instructions-missing', path: '$.fields',
+      message: '12 of 40 fields have no spoken guidance yet (a, b, c)',
+    });
+    const at300 = f({
+      rule: 'help-instructions-missing', path: '$.fields',
+      message: '300 of 400 fields have no spoken guidance yet (a, b, c)',
+    });
+    const dismissed = withFormFindingDismissed(SCHEMA, at12);
+    expect(isFindingDismissed(dismissed, at12)).toBe(true);
+    expect(isFindingDismissed(dismissed, at300)).toBe(false);
+    expect(visibleFormFindings(dismissed, [at300])).toEqual([at300]);
+
+    // Sibling paragraphs of help-details-not-contained stay independent.
+    const para1 = f({
+      rule: 'help-details-not-contained', path: '$.form_metadata.details',
+      message: 'paragraph 1 is not a verbatim quote',
+    });
+    const para2 = f({
+      rule: 'help-details-not-contained', path: '$.form_metadata.details',
+      message: 'paragraph 2 is not a verbatim quote',
+    });
+    const oneDismissed = withFormFindingDismissed(SCHEMA, para1);
+    expect(visibleFormFindings(oneDismissed, [para1, para2])).toEqual([para2]);
   });
 
   it('dismissing is idempotent and never grows the stored list', () => {

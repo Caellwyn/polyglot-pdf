@@ -344,10 +344,20 @@ const FieldReviewEditor: React.FC<{
   // isCountedReviewed, so re-stamping there would change nothing visible --
   // a success-shaped no-op that teaches the reviewer the control is
   // unreliable. An ERROR is fixed, never confirmed away.
-  const hasErrorFinding = (lintFindings ?? [])
-    .some(f => f.field_id === field.id && f.severity === 'ERROR');
+  // Scoped ONCE and used for every read AND write below: the prop type
+  // invites a whole-schema list, and this is the one WRITE path (the sign-off
+  // stamps seen_fingerprints), so an unscoped list would persist another
+  // field's fingerprints here -- permanently masking a genuine later finding
+  // that happens to match one. The read paths in this file were hardened the
+  // same way in earlier rounds; this closes the last seam (second confirming
+  // review).
+  const ownFindings = React.useMemo(
+    () => (lintFindings ?? []).filter(f => f.field_id === field.id),
+    [lintFindings, field.id],
+  );
+  const hasErrorFinding = ownFindings.some(f => f.severity === 'ERROR');
   const staleSignoff = !hasErrorFinding
-    && newFindingsSinceReview(field, lintFindings);
+    && newFindingsSinceReview(field, ownFindings);
 
   const handleStatusChange = (value: string) => {
     setIgnoreError(null);
@@ -367,7 +377,7 @@ const FieldReviewEditor: React.FC<{
       return;
     }
     onUpdateField(
-      withReviewStatus(field, value as FieldReviewStatus, lintFindings));
+      withReviewStatus(field, value as FieldReviewStatus, ownFindings));
   };
 
   return (
@@ -418,7 +428,7 @@ const FieldReviewEditor: React.FC<{
               className="btn-sm btn-primary mt-1"
               data-testid="reconfirm-review"
               onClick={() => onUpdateField(
-                withReviewStatus(field, 'reviewed_correct', lintFindings))}
+                withReviewStatus(field, 'reviewed_correct', ownFindings))}
             >
               I have seen these -- still reviewed
             </button>
