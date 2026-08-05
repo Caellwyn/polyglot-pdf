@@ -112,8 +112,14 @@ def _letters(text: str) -> str:
         # Minimum THREE letters: two-letter dotted abbreviations ("U.S.",
         # "e.g.") are normal prose, not spell-outs, and produced a false
         # AUDIO_TEXT_DESYNC on the smoke run (option label "U.S. citizen").
+        seq = "".join(letters).upper()
+        # Known acronyms are PROSE the two tracks legitimately render
+        # differently ("I-T-I-N" spoken vs "ITIN" written -- Run A gen 1
+        # false positive). Never count them as spell-outs.
+        if seq in {"ITIN", "SSN", "IRS", "USA", "ZIP", "VAD"}:
+            continue
         if len(letters) >= 3:
-            out.append("".join(letters).upper())
+            out.append(seq)
     return "".join(out)
 
 
