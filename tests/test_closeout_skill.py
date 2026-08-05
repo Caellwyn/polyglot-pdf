@@ -159,8 +159,28 @@ def test_outer_review_loops_until_clean(body):
     assert "two independent" not in lo, \
         "the two-independent-clearing-passes gate was retired 2026-08-05 (bd ofh6)"
     # Pin the replacement rule positively, so deleting it is caught too.
-    assert "behavioral" in lo, \
-        "skill must state that only a BEHAVIORAL fix voids the outer clear"
+    # A bare `"behavioral" in lo` is too weak: the word appears ~7 times across
+    # the body, so mutating ONLY the operative Step-5.6 sentence leaves such a
+    # check green. Pin the CLAIM -- "only a behavioral fix invalidates/voids a
+    # clear" -- not merely the presence of the word.
+    assert re.search(
+        r"only a\s+\*{0,2}behavioral\*{0,2}\s+fix[^.\n]*(invalidates|voids)[^.\n]*clear",
+        lo,
+    ), "skill must state that ONLY a behavioral fix invalidates the outer clear"
+    # ...and the other half of the rule: a NON-behavioral fix must NOT re-spawn.
+    # This is the actual cost saving (bd ofh6) -- without it, filing a bead or
+    # writing a journal sentence re-runs a full Opus pass, which is what pushed
+    # reviewers to fix nits inline instead of filing them.
+    #
+    # Pin the OPERATIVE sentence, not just the phrase: "non-behavioral" appears
+    # at three legitimate sites (the Step-5.6 carve-out bullet, its tie-breaker
+    # example, and the Step-5.6 NO-GAPS branch), so a loose search stays green
+    # when the carve-out bullet alone is deleted. Require the bullet's own claim.
+    assert re.search(r"non-behavioral[^.\n]*clear\s+stands", lo), \
+        ("skill must state that a NON-behavioral fix leaves the clear STANDING "
+         "(the carve-out bullet in Step 5.6, not merely the word elsewhere)")
+    assert re.search(r"non-behavioral[^\n]*do not re-spawn", lo), \
+        "the carve-out must explicitly say NOT to re-spawn on a non-behavioral fix"
     # Regression guard: the retired external-reviewer triggers must NOT be the
     # active mechanism. `@codex review`, `requested_reviewers`, and
     # `pr_review_watcher.py` may appear ONLY in an explicit retired/dead-path/
