@@ -50,8 +50,16 @@ infrastructure in Claude sessions, see the bead), polyglot-pdf-r7k4 (remove
 the now-dead needsAckFieldIds aggregation, whose last documented consumer was
 getCompletionStats's needsAck parameter).
 
-Review record: filled in at closeout -- fresh-eyes loop + Opus outer review
-per docs/doctrine/review-flow.md; see the PR for the scorecard.
+Review record: fresh-eyes round 1 (Sonnet) returned zero gaps (its one
+doc-only finding -- a stale getCompletionStats line in the sprint plan -- it
+filed itself as bd polyglot-pdf-ipci); the mandatory Opus final round
+confirmed NO-GAPS. The Opus outer review then cleared with TWO independent
+NO-GAPS passes on the identical final diff; both reviewers independently
+re-ran the mutation verification on the new tests (both directions) and
+re-ran the schema-editor suite + typecheck themselves. Adopt/reject/defer:
+nothing to adopt (zero code findings across all four passes); deferred items
+are the pre-filed beads (5uoj, r7k4, ipci). Backend suite at closeout: 1595
+passed, matching the C1-merge baseline.
 
 ## Lessons
 
