@@ -1293,6 +1293,14 @@ export function createConnectionManager(
 				sendActivityEnd: () => manager.sendActivityEnd(),
 				isNativeVad: () => manager.isNativeVad(),
 				getLastNextField: () => lastNextField,
+				// bd 0rpu round 2: playback-backlog read for the pacing arms. The
+				// POLITE arm injects only after the model's audio has drained
+				// (aheadSec ~0); the RUDE arm injects mid-speech (aheadSec high).
+				// Pure read, same dev double-gate as the rest of this hook.
+				getPlaybackBacklog: () =>
+					audioManager
+						? audioManager.getPlaybackBacklog()
+						: { aheadSec: 0, activeSources: 0, blocked: false },
 				// bd polyglot-pdf-o1c: same-page-rerun-safe field clear. Route through
 				// SchemaFormStateManager.save (fires schemaFormStateChange so SchemaForm's
 				// React state reloads), then refresh BOTH this closure's `state` and the

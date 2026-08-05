@@ -16,6 +16,10 @@
  *   VFF_BACKEND_WS     (default ws://127.0.0.1:8001/ws/fill)
  *   VFF_PLAYWRIGHT_DIR (node_modules dir holding playwright, if out-of-repo)
  *   VFF_W7_STEPS       (optional: run only the first N steps -- smoke mode)
+ *   VFF_PACING         (optional: 'polite' waits for the model's playback
+ *                       backlog to drain before each injection; 'rude' waits
+ *                       for the model to be MID-SPEECH and barges in; default
+ *                       is the original fixed-sleep pacing)
  *
  * Usage: node tests/e2e/voice-harness/driver_w7_desync.mjs
  * Exit 0 = every step filled AND confirmed; 2 = partial; 1 = crash.
@@ -128,13 +132,37 @@ async function main() {
 
   await clickButton(page, /I Agree/, 'disclaimer I Agree');
 
-  log('running W-7 sequence');
-  await page.evaluate((stepList) => {
+  const PACING = process.env.VFF_PACING || 'default';
+  log(`running W-7 sequence (pacing: ${PACING})`);
+  await page.evaluate((stepList, pacing) => {
     window.__vffSeqReport = null;
     const H = window.__VFF_HARNESS;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    async function confirmOnce(fieldId) {
+    // Pacing arms (bd 0rpu round 2). POLITE waits for the model's playback
+    // backlog to fully drain before speaking (no interruptions possible);
+    // RUDE waits until the model is demonstrably MID-SPEECH and barges in.
+    async function paceBeforeInject(rec, key) {
+      const hook = window.__VFF_TEST_INJECT;
+      if (!hook || !hook.getPlaybackBacklog || pacing === 'default') return;
+      const t0 = Date.now();
+      if (pacing === 'polite') {
+        let calm = 0;
+        while (Date.now() - t0 < 25000 && calm < 3) {
+          calm = hook.getPlaybackBacklog().aheadSec < 0.15 ? calm + 1 : 0;
+          await sleep(300);
+        }
+      } else if (pacing === 'rude') {
+        while (Date.now() - t0 < 20000
+               && hook.getPlaybackBacklog().aheadSec < 0.6) {
+          await sleep(120);
+        }
+      }
+      if (rec) rec[key] = hook.getPlaybackBacklog().aheadSec;
+    }
+
+    async function confirmOnce(fieldId, rec) {
+      await paceBeforeInject(rec, 'backlogAtYes');
       await H.injectUtterance(window.__vffYes);
       const c = await H.waitForConfirmed(fieldId, { timeoutMs: 30000 });
       if (c.met) return c;
@@ -147,12 +175,13 @@ async function main() {
       const rec = { fieldId, fixture, tStart: Date.now(), retries: 0 };
       for (let attempt = 0; attempt < 2; attempt++) {
         if (attempt) { rec.retries++; await sleep(2000); }
+        await paceBeforeInject(rec, 'backlogAtAnswer');
         await H.injectUtterance(window.__vffBufs[fixture]);
         const f = await H.waitForFieldValue(fieldId, { timeoutMs: 35000 });
         if (!f.met) continue;
         rec.value = f.value && (f.value.domValue != null ? f.value.domValue : f.value.ssValue);
         rec.tFill = Date.now();
-        const c = await confirmOnce(fieldId);
+        const c = await confirmOnce(fieldId, rec);
         if (c.met) {
           rec.confirmed = true;
           rec.tConfirm = Date.now();
@@ -177,7 +206,7 @@ async function main() {
     })().catch((e) => {
       window.__vffSeqReport = { steps: [], done: true, error: String(e && e.message) };
     });
-  }, steps);
+  }, steps, PACING);
 
   // 15 fields x ~60s worst case + slack.
   const deadline = Date.now() + 20 * 60 * 1000;
