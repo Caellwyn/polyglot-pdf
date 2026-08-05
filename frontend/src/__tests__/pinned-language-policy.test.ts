@@ -216,11 +216,15 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
       lines.forEach((line, i) => {
         if (!WRITERS.test(line)) return
         if (NOT_A_WRITE.test(line)) return
-        // 1-based line number, so two textually IDENTICAL writes (the bodies of
-        // acceptDisclaimer and setSelectedLanguage are the same line) are
-        // distinguishable -- otherwise a site could move between them and the
-        // list would still match, defeating the point of asserting a list.
-        writeSites.push(`${name}:${i + 1}: ${line.trim().slice(0, 70)}`)
+        // Per-file ORDINAL, not an absolute line number. Two writes in this set
+        // are textually identical (the bodies of acceptDisclaimer and
+        // setSelectedLanguage), so they need distinguishing -- but pinning
+        // absolute lines makes the baseline churn on every unrelated edit above
+        // them, which it did on the first rebase after this test landed. The
+        // ordinal keeps identical lines apart while surviving line drift; a NEW
+        // writer still changes the list, which is the property being guarded.
+        const nth = writeSites.filter(w => w.startsWith(`${name}#`)).length + 1
+        writeSites.push(`${name}#${nth}: ${line.trim().slice(0, 70)}`)
       })
     }
 
@@ -238,18 +242,18 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
     ).toEqual([
       // The disclaimer-accept path in each overlay -- direct assignment, which
       // is why this guard watches the FIELD and not the state-manager mutators.
-      'VoiceOverlay.tsx:735: state.selectedLanguage = selectedLanguage',
-      'VoiceOverlayMobile.tsx:405: state.selectedLanguage = selectedLanguage',
+      'VoiceOverlay.tsx#1: state.selectedLanguage = selectedLanguage',
+      'VoiceOverlayMobile.tsx#1: state.selectedLanguage = selectedLanguage',
       // The state manager's own implementation + the onboarding restore. The
       // two `selectedLanguage: language,` lines are acceptDisclaimer's and
       // setSelectedLanguage's bodies -- identical text, distinguished by line.
-      'schemaFormState.ts:57: existing.selectedLanguage = onboardingLanguage;',
-      'schemaFormState.ts:80: selectedLanguage: loadOnboardingState().language ?? undefined,',
-      'schemaFormState.ts:135: parsed.selectedLanguage = undefined;',
-      'schemaFormState.ts:1009: selectedLanguage: language,',
-      'schemaFormState.ts:1024: selectedLanguage: language,',
+      'schemaFormState.ts#1: existing.selectedLanguage = onboardingLanguage;',
+      'schemaFormState.ts#2: selectedLanguage: loadOnboardingState().language ?? undefined,',
+      'schemaFormState.ts#3: parsed.selectedLanguage = undefined;',
+      'schemaFormState.ts#4: selectedLanguage: language,',
+      'schemaFormState.ts#5: selectedLanguage: language,',
       // readDisclaimer's initial pin.
-      'connection.ts:643: SchemaFormStateManager.setSelectedLanguage(currentState, language);',
+      'connection.ts#1: SchemaFormStateManager.setSelectedLanguage(currentState, language);',
     ])
   })
 
