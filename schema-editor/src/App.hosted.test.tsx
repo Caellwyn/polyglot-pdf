@@ -24,15 +24,25 @@ vi.mock('./components/PDFViewer', () => ({
     <div data-testid="pdf">{pdfPath}</div>
   ),
 }));
-vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="list" /> }));
+vi.mock('./components/FieldList', () => ({
+  // data-form-findings surfaces how many form-level findings App routed to
+  // the pinned Form row, so the cross-kit leak is testable (Opus outer
+  // review, pass 1: kit A's stale findings promoted onto kit B's Form row).
+  FieldList: ({ formFindings }: { formFindings?: unknown[] }) => (
+    <div data-testid="list" data-form-findings={formFindings?.length ?? 0} />
+  ),
+}));
 // The panel mock exposes a "repair" button that fires onRepairAll (when the host
 // provides it) so App's handleRepairAll wiring is testable through the full tree
 // (bd zgln; fresh-eyes: an isolation test of the panel does not cover App's
 // wiring to it). data-has-repair reflects whether the host passed the callback.
 vi.mock('./components/ValidationPanel', () => ({
-  ValidationPanel: ({ onRepairAll, onJumpToReview, refusal }: {
+  ValidationPanel: ({ onRepairAll, onJumpToReview, refusal, onReport }: {
     onRepairAll?: () => Promise<void>; onJumpToReview?: () => void;
     refusal?: string | null;
+    onReport?: (report: {
+      findings: unknown[]; errorCount: number; warningCount: number;
+    } | null) => void;
   }) => (
     <div data-testid="vp" data-has-repair={onRepairAll ? 'yes' : 'no'}>
       {onRepairAll && (
@@ -50,6 +60,23 @@ vi.mock('./components/ValidationPanel', () => ({
       {/* The refusal line (sprint-18 C1): surfaced so App's produce/clear
           wiring is testable through the full tree. */}
       {refusal && <div data-testid="strip-refusal">{refusal}</div>}
+      {/* Emits a canned report through the onReport mirror, so App's
+          findings bookkeeping (incl. the per-form reset) is testable. */}
+      {onReport && (
+        <button
+          data-testid="vp-emit-report"
+          onClick={() => onReport({
+            findings: [{
+              severity: 'ERROR', rule: 'field-unbacked',
+              path: 'fields[0] (id=f1)', message: 'no PDF box',
+              field_id: 'f1',
+            }],
+            errorCount: 1, warningCount: 0,
+          })}
+        >
+          emit report
+        </button>
+      )}
     </div>
   ),
 }));
@@ -645,6 +672,37 @@ describe('the strip jump control (sprint-18 C1)', () => {
     await screen.findByText('edit f3');   // skips the signed-off f2
     fireEvent.click(screen.getByTestId('strip-jump'));
     await screen.findByText('edit f1');   // wraps back around
+  });
+});
+
+// Findings are PER-FORM state (Opus outer review, pass 1): kit A's findings
+// left in App's mirror would resolve to no field in kit B and be PROMOTED
+// onto B's pinned Form row as blocking errors -- and dismissing one would
+// write A's fingerprint into B's schema.
+describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
+  it('kit A\'s field findings never reach kit B\'s Form row', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    // Kit A has field f1 (the canned report's finding anchors to it); kit B
+    // has a different field, so a leaked finding would resolve to no field.
+    // Keyed by kit id (not queued once-values): the catalogue's own progress
+    // scan also calls loadRemoteSchema and would consume a queue.
+    vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) =>
+      kitId === 'second-kit'
+        ? ({ ...SCHEMA,
+             fields: [{ id: 'b1', name: 'B1', type: 'text' }],
+           } as unknown as FormSchema)
+        : (JSON.parse(JSON.stringify(SCHEMA)) as FormSchema));
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    // A's lint lands: the finding anchors to f1, which A HAS -> no Form row.
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
+    // Open B (its lint never lands in this test): the stale finding must be
+    // CLEARED, not promoted onto B's Form row.
+    await openKit('second-kit');
+    await waitFor(() => expect(
+      screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
   });
 });
 

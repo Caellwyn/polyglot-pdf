@@ -75,16 +75,18 @@ export const FieldList: React.FC<FieldListProps> = ({
   const ignoredEntries = React.useMemo(() => getIgnoredFields(schema), [schema]);
   const [ignoredExpanded, setIgnoredExpanded] = React.useState(false);
   // The pinned Form row (sprint-18 C1): schema-level findings, collapsed to a
-  // badge until opened. Auto-open once when an ERROR-severity form finding
-  // first appears -- an ERROR blocks the publish gate, so it must not hide
-  // behind an unopened chevron.
+  // badge until opened. Auto-open whenever the ERROR count CHANGES to
+  // non-zero -- an ERROR blocks the publish gate, so it must not hide behind
+  // an unopened chevron. A user collapse holds only while the count is
+  // unchanged: a NEW error re-opens the row (the once-per-lifetime latch this
+  // replaces kept the row shut for every error after the first -- Opus outer
+  // review, pass 1; the component is additionally keyed per form by App, so
+  // the state never survives a kit switch).
   const [formRowExpanded, setFormRowExpanded] = React.useState(false);
   const formErrorCount = (formFindings ?? [])
     .filter(f => f.severity === 'ERROR').length;
-  const hadFormErrorRef = React.useRef(false);
   React.useEffect(() => {
-    if (formErrorCount > 0 && !hadFormErrorRef.current) setFormRowExpanded(true);
-    hadFormErrorRef.current = formErrorCount > 0;
+    if (formErrorCount > 0) setFormRowExpanded(true);
   }, [formErrorCount]);
   // Grouping UI is active only when the parent wired the merge callbacks.
   const groupingEnabled = !!onToggleGroupSelection;
@@ -604,7 +606,7 @@ export const FieldList: React.FC<FieldListProps> = ({
           disabled={!hasReviewTarget}
           title={hasReviewTarget
             ? 'Jump to the next field needing attention (N). Arrow keys move; Esc deselects.'
-            : 'Every visible field is complete -- nothing left to review.'}
+            : 'Every visible field is reviewed -- nothing left to review.'}
           className="shrink-0 px-2 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-default"
         >
           Next to review

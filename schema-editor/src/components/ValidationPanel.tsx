@@ -2,6 +2,7 @@ import React from 'react';
 import type { FormSchema } from '../types/schema';
 import { validateSchema } from '../utils/validation';
 import { reviewCounts } from '../utils/reviewStatus';
+import { bucketFindingsByField } from '../utils/lintFindings';
 import {
   AuthError,
   hasBackend,
@@ -102,6 +103,11 @@ function localLintReport(schema: FormSchema): LintReport {
   return { findings, errorCount, warningCount: findings.length - errorCount };
 }
 
+// How long an edit must settle before the next lint round-trip fires. Short
+// enough that findings feel live; long enough that typing a sentence is one
+// request, not fifteen (exported for the debounce test).
+export const LINT_DEBOUNCE_MS = 400;
+
 // Field ids a server refusal names inline as "(id=x)" (the same token the
 // lint paths carry, formatted by the backend's gate message). Rendered as
 // click-to-focus links on the refusal line.
@@ -139,18 +145,11 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
 
   // The counts derive from _review + the current findings ONLY -- both already
   // in hand -- so a confirm/fix moves them in the SAME render pass, no lint
-  // round trip in between (C1 exit criterion 1). The findings map mirrors
-  // App's bucketing so the strip and the rows read one recipe.
-  const findingsByField = React.useMemo(() => {
-    const map = new Map<string, LintFinding[]>();
-    for (const f of report?.findings ?? []) {
-      if (!f.field_id) continue;
-      const bucket = map.get(f.field_id);
-      if (bucket) bucket.push(f);
-      else map.set(f.field_id, [f]);
-    }
-    return map;
-  }, [report]);
+  // round trip in between (C1 exit criterion 1). The SHARED
+  // bucketFindingsByField is the one bucketing definition App's mirror also
+  // uses, so the strip and the rows can never bucket differently.
+  const findingsByField = React.useMemo(
+    () => bucketFindingsByField(report?.findings), [report]);
   const counts = React.useMemo(
     () => reviewCounts(schema.fields, findingsByField),
     [schema.fields, findingsByField],
@@ -168,6 +167,14 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   // drops rule ids, which is why the guidance-staleness gate silently never
   // fired in local mode before bd cpiw: GUIDANCE_STALE_RULE never matched.
   const seqRef = React.useRef(0);
+  // First lint per mount fires IMMEDIATELY (the component is keyed per form,
+  // so every opened form lints at once); subsequent re-lints are debounced.
+  // Without the debounce every keystroke re-fired the round trip -- now a
+  // kit-scoped route that also loads the AcroForm dump from the store, i.e.
+  // a metered read per keystroke on the hosted path (Opus outer review,
+  // pass 1). The monotonic seq guard already discards stale RESULTS; the
+  // debounce stops the REQUESTS.
+  const firstLintRef = React.useRef(true);
   React.useEffect(() => {
     if (!backendAvailable) {
       // Synchronous, network-free: no staleness window, no failure path.
@@ -178,7 +185,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
     }
     const seq = ++seqRef.current;
     setLinting(true);
-    lintSchema(schema, kitId ?? undefined)
+    const run = () => lintSchema(schema, kitId ?? undefined)
       .then((r) => {
         if (seq !== seqRef.current) return;
         setReport(r);
@@ -210,6 +217,13 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       .finally(() => {
         if (seq === seqRef.current) setLinting(false);
       });
+    if (firstLintRef.current) {
+      firstLintRef.current = false;
+      void run();
+      return;
+    }
+    const timer = window.setTimeout(() => void run(), LINT_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
   }, [schema, kitId, backendAvailable, hosted, onAuthError]);
 
   // Mirror each fresh report up to the host (App feeds it to the field list

@@ -72,6 +72,14 @@ describe('propertyAnchor', () => {
       .toEqual({ kind: 'options', optionToken: 'married' });
   });
 
+  it('matches the widget-claim rule\'s " option[j]" spelling too (Opus outer r1)', () => {
+    // field-claim-unresolvable emits `fields[i] (id=X) option[j]` -- space,
+    // singular. The dotted-plural-only regex sent this per-option ERROR to
+    // the generic banner with no hint of which option is broken.
+    expect(anchor('fields[3] (id=race) option[1]'))
+      .toEqual({ kind: 'options', optionToken: '1' });
+  });
+
   it('maps condition paths and defaults the rest to the field', () => {
     expect(anchor('fields[3] (id=x).show_if').kind).toBe('conditions');
     expect(anchor('fields[3] (id=x).require_if.all_of[0]').kind).toBe('conditions');

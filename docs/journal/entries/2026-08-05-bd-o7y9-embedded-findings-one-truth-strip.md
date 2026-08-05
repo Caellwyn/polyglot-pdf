@@ -121,9 +121,28 @@ nowhere; those now fall to the banner. Round 4 (Opus) CLEARED the rubric
 holding) with three non-rubric findings: the HostedGuide's stale
 "Validation & Progress panel" copy (the reviewer filed bd
 polyglot-pdf-hnce; fixed inline in this PR, which closes it), and two
-true nits deferred to a chore bead per the nit convention -- the strip's
-form-wide jump vs the list's search lens, and the local-mode double lint
-while the folder handshake resolves. Rejected: none.
+true nits deferred to bd polyglot-pdf-z5r6 per the nit convention -- the
+strip's form-wide jump vs the list's search lens, and the local-mode
+double lint while the folder handshake resolves. Rejected: none.
+
+Opus outer review, primary pass 1: 6 findings, all adopted. (1) Lint
+findings were not per-form state: kit A's findings left in App's mirror
+resolved to no field in kit B and were PROMOTED onto B's Form row -- and
+dismissing one wrote A's fingerprint into B's schema; the per-form reset
+now clears the mirror, and the strip + field list are keyed per form so
+their internal state (last report, Form-row expansion, search) resets on
+switch. (2) The Form row's auto-expand was a once-per-lifetime latch; it
+now re-opens whenever the ERROR count changes to non-zero. (3)
+field-claim-unresolvable's " option[j]" path spelling (space, singular)
+never matched the option-anchor regex, sending the per-option mapping
+ERROR to the generic banner; the regex now accepts both spellings. (4)
+The re-lint fired per keystroke against the kit-scoped route (a store
+dump read each time on hosted); re-lints are now debounced 400ms with the
+first lint per form instant. (5) The findings-bucketing loop existed as
+two hand-copies (App + strip); extracted to one shared
+bucketFindingsByField. (6) The uncovered-structural-error clause now also
+covers a field with no id/type, and the disabled jump tooltip says
+"reviewed" instead of "complete". Regression tests for 1-4 and 6.
 
 ## Lessons
 

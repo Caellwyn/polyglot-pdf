@@ -159,6 +159,28 @@ describe('the kit-scoped lint round-trip (s18 C1)', () => {
     await waitFor(() =>
       expect(lintSchema).toHaveBeenCalledWith(SCHEMA, undefined));
   });
+
+  it('debounces re-lints: rapid edits do not fire a request per keystroke', async () => {
+    // The kit-scoped route loads the AcroForm dump from the store, so a
+    // round trip per keystroke is metered read amplification on the hosted
+    // path (Opus outer review, pass 1). The FIRST lint per mount fires
+    // instantly; subsequent schema changes coalesce behind the debounce.
+    const { rerender } = render(
+      <ValidationPanel schema={SCHEMA} kitId="i-90" onSelectField={() => {}} />,
+    );
+    expect(lintSchema).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 5; i++) {
+      rerender(
+        <ValidationPanel schema={{ ...SCHEMA }} kitId="i-90"
+          onSelectField={() => {}} />,
+      );
+    }
+    // Five rapid edits, zero additional synchronous calls.
+    expect(lintSchema).toHaveBeenCalledTimes(1);
+    // The trailing debounced lint eventually fires exactly once for the batch.
+    await waitFor(() => expect(lintSchema).toHaveBeenCalledTimes(2),
+      { timeout: 2000 });
+  });
 });
 
 describe('degraded-mode notices + auth (carried from the pane)', () => {

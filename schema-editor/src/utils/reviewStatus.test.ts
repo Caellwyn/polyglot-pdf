@@ -155,6 +155,12 @@ describe('reviewStatus review targets (the pinned count predicate, s18 C1)', () 
     } as Partial<FormField>);
     expect(isCountedReviewed(
       withReviewStatus(mappedChoice, 'reviewed_correct', []), [])).toBe(true);
+    // A field with no id or type at all (hand-edited kit) is likewise never
+    // counted reviewed -- no lint rule names that class either (Opus outer
+    // review, pass 1).
+    const idless = completeField({ id: '' } as Partial<FormField>);
+    expect(isCountedReviewed(
+      withReviewStatus(idless, 'reviewed_correct', []), [])).toBe(false);
   });
 
   it('a CLIENT-only error no longer excludes a signed-off field from the count (decision 2)', () => {

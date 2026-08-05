@@ -304,18 +304,24 @@ export function statusFromFindings(
 }
 
 /**
- * The one checkFieldComplete ERROR class NO backend lint rule covers yet: a
- * CHOICE field (select/radio/checkbox_group) with options where neither the
- * field nor every option names a PDF widget. The ledger's field-backing rule
- * exempts choice types (identity legitimately lives per option), and the
- * widget-claim rules need a non-empty claim to fire -- so this genuinely
- * unfillable shape earns a red row with no count-excluding lint ERROR (Opus
- * fresh-eyes round 2; verified against schema_lint). Derived from the SCHEMA
- * alone, so the server can compute the identical clause (the predicate's
- * both-sides rule holds). Retire this once the backend rule ships (bd filed
- * at closeout, see the journal entry).
+ * The checkFieldComplete ERROR classes NO backend lint rule covers yet:
+ *
+ *   - a CHOICE field (select/radio/checkbox_group) with options where
+ *     neither the field nor every option names a PDF widget. The ledger's
+ *     field-backing rule exempts choice types (identity legitimately lives
+ *     per option), and the widget-claim rules need a non-empty claim to fire
+ *     -- so this genuinely unfillable shape earns a red row with no
+ *     count-excluding lint ERROR (Opus fresh-eyes round 2; verified against
+ *     schema_lint);
+ *   - a field with no id or no type at all (hand-edited/drifted kits; no
+ *     lint rule names it -- Opus outer review, pass 1).
+ *
+ * Derived from the SCHEMA alone, so the server can compute the identical
+ * clause (the predicate's both-sides rule holds). Retire the choice-mapping
+ * half once the backend rule ships (bd polyglot-pdf-xuub).
  */
-function hasUncoveredMappingError(field: FormField): boolean {
+function hasUncoveredStructuralError(field: FormField): boolean {
+  if (!field.id || !field.type) return true;
   const isChoice = field.type === 'select' || field.type === 'radio'
     || field.type === 'checkbox_group';
   const options = field.options ?? [];
@@ -331,9 +337,9 @@ function hasUncoveredMappingError(field: FormField): boolean {
  *   AND not demoted by the guidance-ack gate,
  *   AND not demoted by the timeliness rule (no finding newer than the
  *       sign-off's seen_fingerprints),
- *   AND no lint ERROR anchored to the field,
- *   AND no uncovered structural mapping error (the narrow schema-derived
- *       clause above -- a stand-in until the backend rule ships).
+ *   AND no uncovered structural error (the narrow schema-derived clause
+ *       above -- a stand-in until the backend rules ship),
+ *   AND no lint ERROR anchored to the field.
  *
  * Inputs the client and the server both possess (_review + lint findings +
  * the schema itself), so both sides compute the identical number.
@@ -347,7 +353,7 @@ export function isCountedReviewed(
   findings?: LintFinding[],
 ): boolean {
   if (getReview(field).status !== 'reviewed_correct') return false;
-  if (hasUncoveredMappingError(field)) return false;
+  if (hasUncoveredStructuralError(field)) return false;
   const { hasLintError, ackPending, newSinceReview } = gateFlags(field, findings);
   return !hasLintError && !ackPending && !newSinceReview;
 }

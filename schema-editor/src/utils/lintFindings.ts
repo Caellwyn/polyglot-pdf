@@ -200,7 +200,13 @@ export function propertyAnchor(f: LintFinding): FindingAnchor {
     return { kind: 'instructions' };
   }
   if (/\.help\.details\b/.test(suffix)) return { kind: 'details' };
-  const opt = /\.options\[([^\]]+)\]/.exec(suffix);
+  // Two producer spellings: `.options[<token>]` (the option rules + the
+  // translation flags) AND ` option[<j>]` -- space-separated, singular -- from
+  // the widget-claim rule (schema_lint's field-claim-unresolvable emits
+  // `fields[i] (id=X) option[j]`). Both anchor at the option row; matching
+  // only the dotted plural sent the per-option mapping ERROR to the generic
+  // banner with no hint of WHICH option is broken (Opus outer review, pass 1).
+  const opt = /[. ]options?\[([^\]]+)\]/.exec(suffix);
   if (opt) return { kind: 'options', optionToken: opt[1] };
   if (/\.(show_if|require_if)\b/.test(suffix)) return { kind: 'conditions' };
   return { kind: 'field' };
@@ -232,6 +238,27 @@ export function resolveOptionIndex(
     if (idx < optionValues.length) return idx;
   }
   return byValue >= 0 ? byValue : undefined;
+}
+
+/**
+ * Bucket findings by the field they anchor to (field-less findings are
+ * skipped -- they are the Form row's, via formLevelFindings). THE one
+ * definition: App's mirror and the strip's counts both consume this, so the
+ * two can never bucket differently (Opus outer review, pass 1: two
+ * hand-copies of this loop were the same duplicate-definition seam gateFlags
+ * closed one layer down).
+ */
+export function bucketFindingsByField(
+  findings: LintFinding[] | undefined,
+): Map<string, LintFinding[]> {
+  const map = new Map<string, LintFinding[]>();
+  for (const f of findings ?? []) {
+    if (!f.field_id) continue;
+    const bucket = map.get(f.field_id);
+    if (bucket) bucket.push(f);
+    else map.set(f.field_id, [f]);
+  }
+  return map;
 }
 
 /** Schema-level findings: everything no FIELD row can carry, so no field's

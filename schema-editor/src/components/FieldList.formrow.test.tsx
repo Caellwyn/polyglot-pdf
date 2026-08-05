@@ -78,6 +78,36 @@ describe('the pinned Form row (s18 C1, decision 1)', () => {
     expect(row).toHaveTextContent('claimed by more than one field');
   });
 
+  it('a NEW error re-opens a user-collapsed row (no once-per-lifetime latch)', () => {
+    // Opus outer review, pass 1: the old latch expanded only on the FIRST
+    // error ever seen by the component instance, so a collapse hid every
+    // subsequent blocking error behind the chevron.
+    const secondError: LintFinding = {
+      severity: 'ERROR', rule: 'to-review-pending',
+      path: 'sections[0] (id=sec_to_review_misc)',
+      message: 'fields still need re-filing',
+      field_id: 'sec_to_review_misc',
+    };
+    const { rerender } = render(
+      <FieldList schema={schemaWith([completeField('a')])}
+        selectedFieldId={null} onSelectField={vi.fn()}
+        formFindings={[multiclaimError]} />,
+    );
+    // Auto-expanded; the user collapses it.
+    fireEvent.click(screen.getByRole('button', { name: /Form/ }));
+    expect(screen.getByTestId('form-findings-row'))
+      .not.toHaveTextContent('claimed by more than one field');
+    // A NEW error arrives -> the row re-opens and shows both.
+    rerender(
+      <FieldList schema={schemaWith([completeField('a')])}
+        selectedFieldId={null} onSelectField={vi.fn()}
+        formFindings={[multiclaimError, secondError]} />,
+    );
+    const row = screen.getByTestId('form-findings-row');
+    expect(row).toHaveTextContent('2 to fix');
+    expect(row).toHaveTextContent('still need re-filing');
+  });
+
   it('offers Dismiss for a WARNING but never for an ERROR', () => {
     const onDismissFormFinding = vi.fn();
     render(

@@ -42,7 +42,9 @@ import {
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
 import { isReviewTargetFromFindings, reviewCounts } from './utils/reviewStatus';
-import { visibleFormFindings, withFormFindingDismissed } from './utils/lintFindings';
+import {
+  bucketFindingsByField, visibleFormFindings, withFormFindingDismissed,
+} from './utils/lintFindings';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
 import {
   recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
@@ -73,15 +75,9 @@ export function liveStats(
   // ONE count predicate (sprint-18 C1, decision 2): the catalogue bar's live %
   // computes the same reviewCounts the bottom strip shows -- reviewed_correct,
   // not demoted by the ack gate or the timeliness rule, no field lint ERROR --
-  // so the two surfaces can never disagree about the open kit.
-  const byField = new Map<string, LintFinding[]>();
-  for (const f of lintFindings ?? []) {
-    if (!f.field_id) continue;
-    const bucket = byField.get(f.field_id);
-    if (bucket) bucket.push(f);
-    else byField.set(f.field_id, [f]);
-  }
-  const s = reviewCounts(schema.fields, byField);
+  // over the same shared bucketing, so the two surfaces can never disagree
+  // about the open kit.
+  const s = reviewCounts(schema.fields, bucketFindingsByField(lintFindings));
   return {
     percent: s.percentage, complete: s.reviewed, total: s.total,
     version: versionInfoFromSchema(schema),
@@ -153,16 +149,8 @@ export const App: React.FC = () => {
   const handleLintReport = React.useCallback((report: LintReport | null) => {
     setLintFindings(report?.findings ?? []);
   }, []);
-  const lintFindingsByField = React.useMemo(() => {
-    const map = new Map<string, LintFinding[]>();
-    for (const f of lintFindings) {
-      if (!f.field_id) continue;
-      const bucket = map.get(f.field_id);
-      if (bucket) bucket.push(f);
-      else map.set(f.field_id, [f]);
-    }
-    return map;
-  }, [lintFindings]);
+  const lintFindingsByField = React.useMemo(
+    () => bucketFindingsByField(lintFindings), [lintFindings]);
   // Form-level findings (no field anchor) for the pinned Form row at the top
   // of the field list -- minus standalone-dismissed WARNINGs (sprint-18 C1).
   const formFindings = React.useMemo(
@@ -184,13 +172,20 @@ export const App: React.FC = () => {
   // The latest server refusal (publish gate / translation coverage), homed on
   // the strip's refusal line (decision 1: no refusal is ever homeless).
   const [publishRefusal, setPublishRefusal] = React.useState<string | null>(null);
-  // Both are PER-FORM state, so every open/close path resets them alongside
-  // selectedFieldId/viewMode -- a refusal naming form A's fields (with dead
-  // "Go to:" links) must not sit on form B's strip, and A's review filter
-  // must not narrow B's list (fresh-eyes round 3).
+  // All three are PER-FORM state, so every open/close path resets them
+  // alongside selectedFieldId/viewMode -- a refusal naming form A's fields
+  // (with dead "Go to:" links) must not sit on form B's strip, A's review
+  // filter must not narrow B's list, and A's FINDINGS must not leak onto B:
+  // visibleFormFindings promotes any finding whose id resolves to no field
+  // onto the pinned Form row, so stale findings from A would render as B's
+  // form-level errors -- and dismissing one would write A's fingerprint into
+  // B's schema (Opus outer review, pass 1). The strip and field list are
+  // additionally KEYED per form below, so their internal state (last lint
+  // report, Form-row expansion, search) resets with the switch.
   const resetPerFormReviewUi = React.useCallback(() => {
     setReviewFilterActive(false);
     setPublishRefusal(null);
+    setLintFindings([]);
   }, []);
   // The fields in reading order -- sections as listed, then orphans -- the
   // same order the FieldList renders, so the strip's jump and the list's own
@@ -1520,6 +1515,12 @@ export const App: React.FC = () => {
             </div>
             <div className="flex-1 overflow-hidden">
               <FieldList
+                // Remount per form (same idiom as PreviewPane): the list's
+                // local state -- search, section expansion, the Form row's
+                // expand/collapse -- is per-form, and a survived collapse
+                // latch hid the NEXT kit's blocking form ERROR behind an
+                // unopened chevron (Opus outer review, pass 1).
+                key={selectedKitId ?? selectedForm.schemaPath}
                 schema={schema}
                 selectedFieldId={selectedFieldId}
                 onSelectField={setSelectedFieldId}
@@ -1645,6 +1646,11 @@ export const App: React.FC = () => {
           count line; findings themselves render at their fields. */}
       {schema && (
         <ValidationPanel
+          // Remount per form: the strip's last lint REPORT is per-form state
+          // (keep-last-report-on-blip is for a transient failure on the SAME
+          // form, never for carrying form A's findings across a switch --
+          // Opus outer review, pass 1).
+          key={selectedKitId ?? selectedForm?.schemaPath ?? 'no-form'}
           schema={schema}
           // Kit-scope the lint only when server actions are trusted for this
           // kit (hosted, or a local folder that passed the same-folder
