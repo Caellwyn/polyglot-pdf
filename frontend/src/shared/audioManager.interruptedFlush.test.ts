@@ -131,6 +131,10 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
 
     mgr.resetPlaybackClock()
     expect(ctx.sources[0].stop).toHaveBeenCalledTimes(1)
+    // Drained sources must fire NO playback-end events: onended is detached
+    // before stop() (its delivery lands after isFlushing already cleared, so
+    // the flag cannot suppress it -- Opus outer review finding 4).
+    expect(ctx.sources[0].onended).toBeNull()
 
     await mgr.playAudio(pcmChunk())
     mgr.resetPlaybackClock()

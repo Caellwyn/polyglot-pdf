@@ -436,6 +436,19 @@ export class WebFormConnection {
 
       try {
         const socket = new WebSocket(finalUrl);
+        // ArrayBuffer delivery, NOT the "blob" default (bd polyglot-pdf-s7uf,
+        // Opus outer review): a Blob frame forces an async arrayBuffer() decode
+        // in handleAudioFrame, and onmessage does not wait for the previous
+        // handler's promise -- so audio frames could be PARKED on their decode
+        // while a later synchronous control message (e.g. `interrupted`)
+        // executed first. That inversion let a dead generation's tail chunks
+        // slip past the interrupted drain and re-schedule after it. With
+        // arraybuffer delivery the handler takes no await and messages process
+        // in WIRE ORDER -- which is also the ordering guarantee that makes the
+        // `interrupted` drain correct without a correlation token (Gemini
+        // emits interrupted BEFORE the next generation's audio, so everything
+        // scheduled at drain time is by construction the dead generation's).
+        socket.binaryType = 'arraybuffer';
         this.ws = socket;
 
         this.ws.onopen = () => {
@@ -744,6 +757,10 @@ export class WebFormConnection {
           // the model is about to speak a NEW generation on this connection.
           console.log('[WebFormConnection] [interrupt] Gemini generation interrupted; draining stale audio');
           this.audioQueue = [];
+          // Mirror the section-switch drain exactly (Opus outer review): the
+          // pump flag must reset with the queue, or a future async change to
+          // processAudioQueue could strand it true and starve all later audio.
+          this.isProcessingAudio = false;
           if (this.callbacks.onInterrupted) {
             this.callbacks.onInterrupted();
           }
