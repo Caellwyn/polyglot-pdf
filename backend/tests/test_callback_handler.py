@@ -736,3 +736,31 @@ class TestThinkingIndicator:
         assert _processing_sends(mock_websocket) == [
             {"type": "agent_processing", "processing": True}
         ]
+
+
+class TestInterrupted:
+    """on_interrupted forwards a Gemini barge-in interruption (bd polyglot-pdf-s7uf)."""
+
+    @pytest.mark.asyncio
+    async def test_on_interrupted_forwards_ws_message(
+        self, callback_handler, mock_websocket
+    ):
+        await callback_handler.on_interrupted()
+        mock_websocket.send_json.assert_awaited_once_with({"type": "interrupted"})
+
+    @pytest.mark.asyncio
+    async def test_on_interrupted_swallows_send_failure(
+        self, callback_handler, mock_websocket
+    ):
+        # A WS send failure must never crash the session loop.
+        mock_websocket.send_json.side_effect = RuntimeError("ws closed")
+        await callback_handler.on_interrupted()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_on_interrupted_noop_without_websocket(self, mock_coordinator):
+        handler = CallbackHandler(
+            websocket=None,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        await handler.on_interrupted()  # must not raise

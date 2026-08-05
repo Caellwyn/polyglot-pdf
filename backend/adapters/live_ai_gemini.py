@@ -383,6 +383,13 @@ class LiveAIGemini(ILiveAI):
         # backend only DETECTS + FORWARDS -- the client owns the reconnect (it owns
         # the stateless reconnect path), so no server-side session state is added.
         self._on_go_away = None
+        # Fired when Gemini reports the current generation was INTERRUPTED by a
+        # barge-in (bd polyglot-pdf-s7uf / 0rpu Stage 2). The client schedules
+        # received audio on a session-lifetime playback cursor, so without this
+        # forward it keeps playing the dead generation's tail after the model
+        # already stopped -- the reason barge-in "does not work" from the user's
+        # standpoint. Same discipline as on_go_away: DETECT + FORWARD only.
+        self._on_interrupted = None
         # Fired when the Gemini session ends by a SPONTANEOUS drop (e.g. a 1011
         # "Input data processing failed" close) -- NOT an intentional finalize and
         # NOT a section-switch shutdown (bd polyglot-pdf-ppfy). Without this the
@@ -761,6 +768,7 @@ class LiveAIGemini(ILiveAI):
         on_audio=None,
         on_tool_call=None,
         on_go_away=None,
+        on_interrupted=None,
         on_session_dropped=None,
         on_user_activity=None,
         on_processing_done=None,
@@ -774,6 +782,9 @@ class LiveAIGemini(ILiveAI):
         Callbacks should be async callables. They will be awaited when invoked.
         on_go_away is optional (bd polyglot-pdf-c5t): older callers that do not
         pass it leave GoAway detection logged-only, with no forward.
+        on_interrupted is optional (bd polyglot-pdf-s7uf): fired on a Gemini
+        barge-in interruption; callers that omit it leave the interruption
+        logged-only (the pre-Stage-2 behavior).
         on_user_activity is optional (bd polyglot-pdf-l3a.4): fired on a native-VAD
         input transcription (a real user turn); callers that omit it leave input
         transcription unsurfaced.
@@ -785,6 +796,7 @@ class LiveAIGemini(ILiveAI):
         self._on_audio = on_audio
         self._on_tool_call = on_tool_call
         self._on_go_away = on_go_away
+        self._on_interrupted = on_interrupted
         self._on_session_dropped = on_session_dropped
         self._on_user_activity = on_user_activity
         # bd polyglot-pdf-wpw.5: fired when the agent turn is done (interrupt or
@@ -2479,6 +2491,19 @@ class LiveAIGemini(ILiveAI):
                                                     await self._on_processing_done()
                                                 except Exception:
                                                     self._log.warning("on_processing_done_callback_error")
+
+                                            # Forward the interruption to the client (bd
+                                            # polyglot-pdf-s7uf / 0rpu Stage 2): the client
+                                            # schedules audio on a session-lifetime cursor and
+                                            # keeps playing the dead generation's tail unless
+                                            # told to flush. Errors swallowed -- a send failure
+                                            # never crashes the receive loop (same discipline
+                                            # as on_go_away).
+                                            if self._on_interrupted is not None:
+                                                try:
+                                                    await self._on_interrupted()
+                                                except Exception:
+                                                    self._log.warning("on_interrupted_callback_error")
 
                                             # Skip further processing of this event
                                             continue

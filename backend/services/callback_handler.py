@@ -387,6 +387,25 @@ class CallbackHandler:
                 _log.warning("websocket_go_away_send_failed",
                              error=str(e), session_id=self._session_id)
 
+    async def on_interrupted(self) -> None:
+        """Forward a Gemini barge-in interruption to the client (bd polyglot-pdf-s7uf).
+
+        Gemini stops generating the moment the user barges in, but the client
+        schedules received audio on a session-lifetime playback cursor -- without
+        this relay it keeps playing the dead generation's unplayed tail, which is
+        why barge-in feels broken on auto-VAD. The client flushes its playback
+        queues on this message. No payload: the event itself is the signal.
+        Errors are swallowed so a send failure never crashes the session loop
+        (same discipline as on_go_away).
+        """
+        # Identity check, not truthiness -- see on_go_away.
+        if self._websocket is not None:
+            try:
+                await self._websocket.send_json({"type": "interrupted"})
+            except Exception as e:
+                _log.warning("websocket_interrupted_send_failed",
+                             error=str(e), session_id=self._session_id)
+
     async def on_session_dropped(self) -> None:
         """Forward a spontaneous Gemini drop to the client (bd polyglot-pdf-ppfy).
 
