@@ -192,3 +192,48 @@ NEXT DISCRIMINATING EXPERIMENTS (cheap):
 - Surgical fix candidate: interruption-TRIGGERED text re-anchor (inject current
   field + stored value as text only after an interruption event) -- precise,
   cheap, harness-measurable.
+
+## ROUND 2 (2026-08-05, second $5): PTT + pacing arms -- MECHANISM CONFIRMED
+
+| Arm | Mode | Mid-gen interrupts | REAL divergences (hand-adjudicated) |
+|---|---|---|---|
+| P-B | PTT + compression, default pacing | 2 (of 26 interrupt events -- PTT interrupts land mostly post-generation) | 0 |
+| POLITE | native VAD, inject only after playback drains | 3 (collisions with silence-triggered re-prompts) | 2: "J-O-H-U-A, Jose" (corrupt JOSHUA blend at the Jose field) + "Lorena" (Loretta corrupted, truncated) |
+| RUDE | native VAD, deliberate mid-speech barge-ins | 11 | 2: **"J-O-H-N, Joshua?"** (the maintainer's verbatim original report) + "J-O-H-N Johnson?" |
+
+Cross-run total: every real divergence in ~150 scored generations across 6 runs
+sits on a mid-generation interruption; ZERO on cleanly-completed generations.
+Letters/utterance false-positive classes catalogued: seq-window offset under
+slow pacing, acronyms, format strings (YYYY-MM-DD), near-silent WAVs.
+
+MECHANISM (established): interrupting an in-flight generation corrupts the
+audio head's acoustic continuation state. The corruption (a) manifests most
+visibly in precision spell-backs -- the previous name's letter sequence blends
+onto the current name word -- and (b) PERSISTS across generations (Run A's
+phantom replayed verbatim 5 minutes later), so the exposure can be minutes
+after the triggering interrupt.
+
+THE MAINTAINER'S SESSIONS, RECONCILED: their smoking-gun session logged one
+interrupt at 06:27:19 (options recital); wrong read-backs began at 06:28:17 --
+when the FIRST SPELL-BACKS started. Interrupt -> persistent corruption ->
+exposed at spelling time. The eviction at 06:28:02 was coincidental (four
+harness runs with evictions and no mid-gen interrupts stayed clean).
+
+BONUS FINDING (UX): under fast pacing the model SKIPS spell-backs entirely
+(zero spelled read-backs in runs B1/B2); under drained pacing it spells
+reliably. Pace pressure suppresses the instructed verification behavior.
+
+FIX LADDER (final form):
+1. Stage 2 client interrupted-forwarding + playback flush (barge-in becomes
+   honest; removes the stale-tail the user hears).
+2. Server-side INTERRUPT-TRIGGERED text re-anchor: on each interrupted event,
+   inject a one-line text grounding (current field + stored value) before the
+   next generation. Directly targets the corrupted-continuation state; the
+   RUDE arm is its ready-made regression test.
+3. Product/pacing: the verification read-back should be allowed to finish;
+   barge-in during spell-back is the highest-risk moment (and the re-anchor
+   catches it when users do it anyway).
+4. Upstream report -- now with an ON-DEMAND repro recipe (RUDE arm), verbatim
+   signature utterances, WAVs, and the persistence evidence.
+5. Compression: unchanged (exonerated as trigger; keep the 38% saving).
+6. Slim SI: unblocked; proceed on its own merits.
