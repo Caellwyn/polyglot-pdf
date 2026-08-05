@@ -32,6 +32,7 @@ saves stay lenient (work-in-progress is allowed to be incomplete).
 
 import asyncio
 import fnmatch
+import hashlib
 import hmac
 import json
 import os
@@ -69,6 +70,7 @@ from backend.services.option_translation import (
     bake_label_translations,
     translation_coverage_summary,
 )
+from backend.services.publish_readiness import publish_readiness
 from backend.services.schema_lint import (
     SEVERITY_ERROR, SEVERITY_WARNING, lint_schema,
 )
@@ -184,6 +186,31 @@ class StoreHandshakeResponse(BaseModel):
     reason: Optional[str] = None
 
 
+class ReadinessStamp(BaseModel):
+    """A kit's recorded review progress (sprint-18 C4, bd polyglot-pdf-g687).
+
+    Written into metadata.json at save/publish by publish_readiness -- the SAME
+    function the editor strip mirrors and the publish gate refuses on -- so the
+    catalogue card reports a stored answer instead of re-deriving its own.
+
+    `verified` is False when the counts were computed WITHOUT a usable lint
+    report: the numbers are then honest-but-unchecked and the card must render
+    the verify hint, never a confident percentage. `schemaSha1` scopes the stamp
+    to the schema it measured, so an out-of-band edit reads as stale rather than
+    as truth.
+    """
+
+    reviewed: int
+    toReview: int
+    total: int
+    errors: int
+    percent: int
+    ready: bool
+    verified: bool
+    schemaSha1: str
+    stampedAt: Optional[str] = None
+
+
 class EditorKitInfo(BaseModel):
     """One kit as the editor catalogue sees it -- mirrors the local editor's
     CatalogueEntry (schema-editor formKitDirectory.ts) minus the directory
@@ -197,6 +224,9 @@ class EditorKitInfo(BaseModel):
     hasPdf: bool
     schemaFile: str
     pdfFile: str
+    # Absent when the kit has never been saved since C4 shipped (or its stamp
+    # is unreadable) -- the card then shows the verify hint, not a percentage.
+    readiness: Optional[ReadinessStamp] = None
 
 
 class EditorKitListResponse(BaseModel):
@@ -409,6 +439,114 @@ async def _load_kit_dump(store, kit_id: str) -> Optional[dict]:
     return dump if isinstance(dump, dict) else None
 
 
+# --------------------------------------------------------------------------- #
+# Readiness stamps (sprint-18 C4, bd polyglot-pdf-g687)
+# --------------------------------------------------------------------------- #
+#
+# The catalogue used to answer "how much of this kit is reviewed?" by re-reading
+# every kit's schema and recomputing -- so the number depended on WHICH surface
+# last computed it. Now a SAVE records the answer in metadata.json and the
+# catalogue reads that stamp. The counts come from publish_readiness, the same
+# function the strip mirrors and (C2) the publish gate will refuse on.
+#
+# `verified` is the honesty bit. It is True only when the counts were computed
+# against a real lint report; when lint could not run, the stamp still records
+# what it knows but marks itself unverified, and the card renders the
+# "not fully checked" hint instead of a confident percentage (decision 4). A
+# stamp is also only meaningful for the schema it measured, so it carries that
+# schema's hash: a kit edited out of band (hand-edited JSON, a git checkout)
+# has a stamp whose hash no longer matches, which reads as stale, not as truth.
+
+_READINESS_KEY = "readiness"
+
+
+def _readiness_out(meta: Optional[dict]):
+    """Parse a kit's stored readiness stamp into the wire model, or None.
+
+    Tolerant on purpose: a hand-edited, truncated, or older-shaped stamp yields
+    None (the card falls back to the verify hint) rather than 502-ing a whole
+    catalogue listing over one bad kit -- the same "one malformed kit must not
+    hide the rest" rule the listing already follows for metadata.
+    """
+    raw = (meta or {}).get(_READINESS_KEY)
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return ReadinessStamp(
+            reviewed=int(raw["reviewed"]),
+            toReview=int(raw["toReview"]),
+            total=int(raw["total"]),
+            errors=int(raw["errors"]),
+            percent=int(raw["percent"]),
+            ready=bool(raw["ready"]),
+            verified=bool(raw["verified"]),
+            schemaSha1=str(raw["schema_sha1"]),
+            stampedAt=raw.get("stamped_at"),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _schema_hash(schema: dict) -> str:
+    """A stable content hash of the schema the stamp measured.
+
+    Canonical JSON (sorted keys, no incidental whitespace) so re-serializing an
+    unchanged schema cannot alter the hash. Its ONLY job is equality against a
+    later read, so a fast digest is right; this is not a security boundary.
+    """
+    blob = json.dumps(schema, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=True, default=str)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
+
+
+def _readiness_stamp(schema: dict, findings, verified: bool) -> dict:
+    """The metadata.json `readiness` block for a saved schema."""
+    verdict = publish_readiness(schema, findings)
+    return {
+        **verdict.counts.as_dict(),
+        "ready": verdict.ready,
+        "verified": bool(verified),
+        "schema_sha1": _schema_hash(schema),
+        "stamped_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def _stamp_readiness(store, kit_id: str, schema: dict,
+                           meta: Optional[dict]) -> Optional[dict]:
+    """Compute and persist a kit's readiness stamp; return the stamp.
+
+    Best-effort BY DESIGN: a stamp is a display/gate convenience, never the
+    user's work. If lint or the metadata write fails, the SAVE it rides along
+    with must still succeed -- losing an editor's schema edit because a
+    progress number could not be computed would be a far worse bug than a card
+    that shows the verify hint until the next save. A lint failure degrades to
+    an UNVERIFIED stamp (honest: counts without a checked lint report) rather
+    than to no stamp at all.
+    """
+    try:
+        dump = await _load_kit_dump(store, kit_id)
+        findings = lint_schema(schema, dump)
+        verified = True
+    except Exception:  # noqa: BLE001 -- see the docstring: never fail the save
+        _log.warning("editor_readiness_lint_failed", kit_id=kit_id, exc_info=True)
+        findings = []
+        verified = False
+    try:
+        stamp = _readiness_stamp(schema, findings, verified)
+        await store.put_metadata(kit_id, {**(meta or {}), _READINESS_KEY: stamp})
+    except Exception:  # noqa: BLE001 -- see the docstring: never fail the save
+        # Deliberately broad, and load-bearing rather than defensive: the schema
+        # is ALREADY written by the time this runs, so ANY exception escaping
+        # here would turn a successful save into a 500 the editor reports as
+        # "save failed" -- the human then re-saves or, worse, believes their
+        # work was lost. Catching only FormKitStoreError left every other
+        # failure (a store lacking put_metadata, an unserializable stamp) doing
+        # exactly that; caught by test_put_schema_refuses_published_kit.
+        _log.warning("editor_readiness_stamp_failed", kit_id=kit_id, exc_info=True)
+        return None
+    return stamp
+
+
 @router.get("/session", response_model=EditorSessionResponse)
 async def editor_session(
     role: Annotated[str, Depends(require_editor_role)],
@@ -516,6 +654,9 @@ async def list_editor_kits(
                 hasPdf=pdf_file in names,
                 schemaFile=schema_file,
                 pdfFile=pdf_file,
+                # Rides along on the metadata this loop already read -- no extra
+                # per-kit fetch (sprint-18 C4).
+                readiness=_readiness_out(meta),
             )
         )
     _log.info("editor_kits_listed", count=len(kits), role=role)
@@ -641,9 +782,17 @@ async def save_editor_kit_schema(
     except FormKitStoreError as exc:
         _log.error("editor_schema_save_failed", kit_id=kit_id, error=str(exc))
         raise HTTPException(status_code=502, detail="Unable to save schema") from exc
+    # Stamp the saved schema's readiness (sprint-18 C4). AFTER the schema write
+    # and deliberately non-fatal: the save is the editor's work, the stamp is a
+    # display convenience, so a stamp failure leaves the card showing the verify
+    # hint rather than losing the edit.
+    stamp = await _stamp_readiness(store, kit_id, schema, meta)
     _log.info("editor_schema_saved", kit_id=kit_id, role=role,
-              field_count=len(schema.get("fields", [])))
-    return {"ok": True, "schemaFile": schema_file}
+              field_count=len(schema.get("fields", [])),
+              readiness_percent=(stamp or {}).get("percent"),
+              readiness_verified=(stamp or {}).get("verified"))
+    return {"ok": True, "schemaFile": schema_file,
+            **({"readiness": stamp} if stamp else {})}
 
 
 @router.post("/lint", response_model=LintResponse)
@@ -1569,9 +1718,8 @@ async def set_editor_kit_status(
         # present -- this closes the dump-only widget-claim rule at the promotion
         # gate too (a missing dump degrades to the dump-less rules, never blocks).
         dump_data = await _load_kit_dump(store, kit_id)
-        lint_errors = [
-            f for f in lint_schema(schema, dump_data) if f.severity == SEVERITY_ERROR
-        ]
+        gate_findings = lint_schema(schema, dump_data)
+        lint_errors = [f for f in gate_findings if f.severity == SEVERITY_ERROR]
         if lint_errors:
             # Cap the finding list BEFORE appending the "and N more" tail so
             # a long list can never truncate away the count of what was
@@ -1629,6 +1777,15 @@ async def set_editor_kit_status(
     # version is the field that will carry edit intent.
     if body.status == "complete":
         next_meta["published_at"] = datetime.now(timezone.utc).isoformat()
+        # Re-stamp readiness from the RELOADED schema this transition just
+        # gated on (sprint-18 C4). The gate's own lint findings are reused --
+        # re-linting here could only produce a DIFFERENT answer than the gate
+        # just acted on, which is precisely the two-definitions bug this bead
+        # exists to end. Folded into the single metadata write below rather
+        # than issuing a second one.
+        next_meta[_READINESS_KEY] = _readiness_stamp(
+            schema, gate_findings, verified=True,
+        )
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:

@@ -509,6 +509,43 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_put_schema_survives_a_failing_readiness_stamp(client, monkeypatch):
+    """A stamp failure must NEVER fail the save (sprint-18 C4).
+
+    The schema is already written by the time the stamp runs, so an exception
+    escaping the stamp turns a successful save into a 500 the editor reports as
+    "save failed" -- and the human re-saves, or believes the work was lost. This
+    pins the whole failure class, not one exception type: the first version
+    caught only FormKitStoreError and 500'd on an AttributeError from a store
+    without put_metadata.
+    """
+    c, _store, _root = client
+    store = _PublishedStore(status="draft")
+
+    calls = {"n": 0}
+
+    async def boom(kit_id, metadata):
+        calls["n"] += 1
+        raise RuntimeError("stamp write exploded")
+
+    store.put_metadata = boom  # type: ignore[attr-defined]
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+
+    r = c.put(
+        "/api/editor/kits/live-kit/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a"}]},
+    )
+    # The SAVE succeeded and the schema landed...
+    assert r.status_code == 200
+    assert store.saved is not None
+    # ...the stamp was attempted and swallowed...
+    assert calls["n"] == 1
+    # ...and the response simply omits readiness (the card shows the verify
+    # hint) rather than reporting a number the store never recorded.
+    assert "readiness" not in r.json()
+
+
 def test_put_schema_refuses_published_kit(client, monkeypatch):
     # Saving over a COMPLETE kit would go live instantly -- refuse with the
     # revert-first message; the store write must never be reached.
@@ -749,7 +786,15 @@ def test_put_schema_roundtrip(client):
         json=edited,
     )
     assert r.status_code == 200
-    assert r.json() == {"ok": True, "schemaFile": "schema.json"}
+    body = r.json()
+    assert body["ok"] is True
+    assert body["schemaFile"] == "schema.json"
+    # The save also stamps readiness (sprint-18 C4, bd polyglot-pdf-g687): one
+    # unreviewed field -> 0%, and `verified` because lint ran.
+    assert body["readiness"]["total"] == 1
+    assert body["readiness"]["reviewed"] == 0
+    assert body["readiness"]["percent"] == 0
+    assert body["readiness"]["verified"] is True
     # The saved edit is re-readable through the read route (the round trip).
     back = c.get("/api/editor/kits/i-90/schema", headers={"X-Editor-Token": "edit-tok"})
     assert back.json() == edited
