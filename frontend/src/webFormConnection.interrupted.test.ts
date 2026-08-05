@@ -51,6 +51,49 @@ describe('WebFormConnection interrupted dispatch (bd polyglot-pdf-s7uf)', () => 
     expect(fired).toBe(1)
   })
 
+  it('resets the audio pump flag with the queue (mirrors the section-switch drain)', async () => {
+    const conn = new WebFormConnection(SCHEMA, { onInterrupted: () => {} })
+    ;(conn as any).audioQueue = [new ArrayBuffer(4)]
+    ;(conn as any).isProcessingAudio = true
+
+    await (conn as any).handleMessage(msg({ type: 'interrupted' }))
+
+    expect((conn as any).isProcessingAudio).toBe(false)
+  })
+
+  it('requests arraybuffer WS delivery so audio frames cannot reorder past the drain', async () => {
+    // Wire-order guarantee (Opus outer review): a Blob frame's async decode
+    // lets a later synchronous `interrupted` execute FIRST, so tail chunks
+    // parked on the decode slip past the drain. ArrayBuffer delivery removes
+    // the await; messages process in wire order.
+    class RecordingWebSocket {
+      static last: RecordingWebSocket | null = null
+      binaryType = 'blob'
+      readyState = 0
+      onopen: (() => void) | null = null
+      onmessage: ((e: unknown) => void) | null = null
+      onerror: ((e: unknown) => void) | null = null
+      onclose: ((e: unknown) => void) | null = null
+      constructor(public url: string) { RecordingWebSocket.last = this }
+      send(_d: unknown) {}
+      close() {}
+    }
+    const realWS = global.WebSocket
+    // @ts-expect-error -- test double
+    global.WebSocket = RecordingWebSocket
+    try {
+      const conn = new WebFormConnection(SCHEMA)
+      const p = conn.connect('wss://example/ws/fill')
+      const sock = RecordingWebSocket.last!
+      expect(sock.binaryType).toBe('arraybuffer')
+      sock.readyState = 1
+      sock.onopen?.()
+      await p
+    } finally {
+      global.WebSocket = realWS
+    }
+  })
+
   it('still clears the queue when no onInterrupted is registered', async () => {
     const conn = new WebFormConnection(SCHEMA)
     ;(conn as any).audioQueue = [new ArrayBuffer(4)]

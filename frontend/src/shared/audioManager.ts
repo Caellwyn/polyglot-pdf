@@ -534,6 +534,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// on the resume() await when a drain (resetPlaybackClock /
 			// flushAudioQueue) lands belongs to the DEAD generation and must not
 			// schedule after the drain returns (Opus fresh-eyes gap 3, bd s7uf).
+			// SCOPE (Opus outer review): the suspended-resume window only opens on
+			// the manual-VAD tentative-pause path -- native VAD never suspends, so
+			// there this guard is a no-op by design. The native-VAD ordering
+			// hazard lives a layer up and is owned by the WS
+			// binaryType='arraybuffer' wire-order guarantee (webFormConnection).
 			const epochAtStart = playbackEpoch
 
 			// Resume context if suspended (browser autoplay policy)
@@ -668,9 +673,16 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		// Set flag to suppress onended callbacks during flush
 		isFlushing = true
 
-		// Stop all active audio sources
+		// Stop all active audio sources. Detach onended FIRST: stop() delivers
+		// onended on a LATER task, when isFlushing is already false again -- so
+		// without the detach every drained source would fire
+		// window.vffOnAudioPlaybackEnd, and under native VAD that is every
+		// barge-in (Opus outer review). A drained source is not a playback end;
+		// detaching keeps useGeminiSpeaking's documented "flush fires no end
+		// event" contract true.
 		activeAudioSources.forEach(source => {
 			try {
+				source.onended = null
 				source.stop()
 				source.disconnect()
 			} catch (e) {
