@@ -328,6 +328,73 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
     expect(persistedEntry('p1_name').value).toBe('typed during drain')
   })
 
+  it('a second field_update does not DROP a field typed on screen in between', async () => {
+    // THE HOT PATH. Every AI fill goes through field_update ->
+    // applyAiValueWithValidation -> this.updateField -> the state manager, which
+    // persists this.state.fieldValues. The persisting call is two frames deep, so
+    // a handler-level audit does not see it. Without a reconcile at that
+    // chokepoint the second fill DROPS the on-screen field outright -- it was
+    // never in the connection's map at all.
+    const { conn, ws } = await connected()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'v1' } }) })
+    await flush()
+
+    uiWrites('p1_name', 'typed between fills')
+    expect(persistedEntry('p1_name').value).toBe('typed between fills')
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'v2' } }) })
+    await flush()
+
+    expect(persistedEntry('p1_name')).toBeDefined()
+    expect(persistedEntry('p1_name').value).toBe('typed between fills')
+    // and the AI's own write still landed
+    expect(persistedEntry('p1_a').value).toBe('v2')
+  })
+
+  it('validation_result does not persist stale state over a concurrent UI write', async () => {
+    const { conn, ws } = await connected()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'v' } }) })
+    await flush()
+
+    uiWrites('p1_name', 'typed during validation')
+
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'validation_result',
+        conflicts: [{ field_ids: ['p1_a'], reason: 'mismatch', field_names: { p1_a: 'Field A' } }],
+      }),
+    })
+    await flush()
+
+    expect(persistedEntry('p1_name')).toBeDefined()
+    expect(persistedEntry('p1_name').value).toBe('typed during validation')
+  })
+
+  it('switch_field does not persist stale state over a concurrent UI write', async () => {
+    // This handler adopts the persisted snapshot wholesale at entry
+    // (bd polyglot-pdf-ezg2), so its pinField write is already safe without a
+    // reconcile. The test pins the BEHAVIOUR so that stays true if the entry
+    // refresh is ever narrowed. Note the message key is `field` (an identifier
+    // resolved by name), not `field_id` -- with the wrong key the handler takes
+    // its unknown_field early return and the test passes vacuously.
+    const { conn, ws } = await connected()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'v' } }) })
+    await flush()
+
+    uiWrites('p1_name', 'typed during switch_field')
+
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'Field A', request_id: 'sf-1' }),
+    })
+    await flush()
+
+    expect(persistedEntry('p1_name')).toBeDefined()
+    expect(persistedEntry('p1_name').value).toBe('typed during switch_field')
+  })
+
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {
     const { conn, ws } = await connected()
 

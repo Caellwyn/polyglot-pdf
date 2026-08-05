@@ -95,11 +95,16 @@ copy over an on-screen edit.
 **Every `SchemaFormStateManager` mutator spread-replaces the whole state and calls
 `save()` internally**, so *any* of them invoked on a stale `this.state` persists
 that stale copy. `reconcileFieldValues` (`utils/fieldValue.ts`) is the single
-arbiter, called at every handler that can reach one:
-`handleSessionReady`, `handleConfirmFieldRequest`, `handleSkipFieldRequest`,
-`handleSectionSwitched`, `handleDrainFindingsResult`, `handleValidationResult`,
-`handleSwitchFieldRequest`, `handleFormUpdated` (bd `polyglot-pdf-qim7` / `uw3w` /
-`3irc` / `tare` / `6iwn`).
+arbiter. The most important call site is **`WebFormConnection.updateField` — the
+chokepoint every AI fill and manual edit funnels through**; its persisting call
+sits two frames below the message handler, which is why five rounds of
+handler-level auditing missed it. The others are `handleSessionReady`,
+`handleConfirmFieldRequest`, `handleSkipFieldRequest`, `handleSectionSwitched`,
+`handleDrainFindingsResult`, `handleValidationResult`, and `handleFormUpdated`
+(bd `polyglot-pdf-qim7` / `uw3w` / `3irc` / `tare` / `6iwn`).
+
+`handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot
+wholesale at entry (bd `polyglot-pdf-ezg2`), so its write cannot be stale.
 
 There is a **second staleness shape** that reconciling `this.state` does not
 cover: `const s = load()` … `await` … `mutator(s)`. Here the local snapshot goes

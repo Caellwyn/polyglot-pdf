@@ -140,6 +140,16 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
         sawAwaitSince.delete(cap[1])
       }
 
+      // Follow ALIASES: `const b = a` where `a` is a tracked local makes `b`
+      // tracked too, inheriting its staleness. Without this, renaming through an
+      // intermediate silently defeats the check -- the reviewer demonstrated
+      // exactly that against the switchToSection fix.
+      const alias = raw.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*(?:\?\?|;|$)/)
+      if (alias && pendingLocals.has(alias[2])) {
+        pendingLocals.set(alias[1], pendingLocals.get(alias[2]) as number)
+        if (sawAwaitSince.has(alias[2])) sawAwaitSince.add(alias[1])
+      }
+
       if (/\bawait\b/.test(raw)) {
         for (const name of pendingLocals.keys()) sawAwaitSince.add(name)
       }
@@ -159,8 +169,16 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
   it('reconcileFieldValues is actually imported and used at multiple sites', () => {
     expect(SRC).toContain('reconcileFieldValues')
     const uses = LINES.filter(l => isCode(l) && l.includes('reconcileFieldValues(')).length
-    // One per reconciled handler: session_ready, confirm, skip, section_switched,
-    // drain_findings_result, validation_result, switch_field, form_updated.
+    // session_ready, confirm, skip, section_switched, drain_findings_result,
+    // validation_result, form_updated, and updateField -- the CHOKEPOINT every
+    // AI fill and manual edit funnels through (its persisting call sits two
+    // frames below the handler, so a handler-level audit does not see it).
+    //
+    // handleSwitchFieldRequest is deliberately NOT here: it adopts the persisted
+    // snapshot wholesale at entry (bd polyglot-pdf-ezg2), so its pinField write
+    // cannot be stale. A reconcile there was added and then removed as dead code
+    // -- mutation showed the test only failed when the ENTRY REFRESH was removed,
+    // never when the reconcile was.
     expect(uses).toBe(8)
   })
 })

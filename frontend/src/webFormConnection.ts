@@ -2324,18 +2324,9 @@ export class WebFormConnection {
     // skipped), so the hint, the DTI drip, and any stall-recovery all point at
     // it. A pin on an already-CONFIRMED field is dormant until the model
     // updates the value (which resets confirmed) -- the correction flow.
-    // Reconcile before writing: pinField spreads this.state -- fieldValues
-    // included -- and save()s it (bd polyglot-pdf-uw3w / qim7).
-    const persistedBeforePin = SchemaFormStateManager.load();
-    if (persistedBeforePin) {
-      this.state = {
-        ...this.state,
-        fieldValues: reconcileFieldValues(
-          persistedBeforePin.fieldValues,
-          this.state.fieldValues
-        ),
-      };
-    }
+    // No reconcile needed before pinField (which spreads this.state and save()s
+    // it): this handler already ADOPTED the persisted snapshot wholesale at
+    // entry above (bd polyglot-pdf-ezg2), so this.state cannot be stale here.
     this.state = SchemaFormStateManager.pinField(this.state, fieldId);
 
     // Move UI focus immediately (the same callback the next-field flow uses).
@@ -3773,6 +3764,35 @@ export class WebFormConnection {
     const isManualEdit = !confirmed && emit;
     const finalConfirmed = confirmed || isManualEdit;
     const confirmationMethod = confirmed ? 'ai_voice' : (isManualEdit ? 'manual_edit' : undefined);
+
+    // Reconcile before writing (bd polyglot-pdf-uw3w / qim7). This is the
+    // CHOKEPOINT for field writes -- every AI fill (handleFieldUpdate,
+    // handleFormUpdated -> applyAiValueWithValidation) and every manual edit
+    // funnels through here -- and SchemaFormStateManager.updateField spreads
+    // this.state, fieldValues included, and save()s it. Without this, a routine
+    // second AI fill DROPS a field the user typed on screen in between: the
+    // connection object never saw that field, so it is not in the map that gets
+    // persisted (total loss, not staleness).
+    //
+    // Reconciling HERE rather than at each calling handler is deliberate: the
+    // persisting call is two frames deep, so it is invisible to a handler-level
+    // audit -- five review rounds of enumerating handlers by hand missed it.
+    // It is also SAFE here specifically because the write below stamps
+    // lastModified, so this call's own entry always wins its own reconcile.
+    // (The same reconcile could NOT be pushed down into
+    // SchemaFormStateManager.save(): confirmField deliberately does not bump
+    // lastModified, so a reconcile there would tie, prefer the persisted entry,
+    // and silently drop confirmed:true on every confirmation.)
+    const persistedBeforeUpdate = SchemaFormStateManager.load();
+    if (persistedBeforeUpdate) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedBeforeUpdate.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
 
     this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, {
       confirmed: finalConfirmed,
