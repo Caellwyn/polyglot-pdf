@@ -256,6 +256,32 @@ describe('degraded-mode notices + auth (carried from the pane)', () => {
   // bd polyglot-pdf-cpiw exit criterion 2: a reduced ruleset must SAY it is
   // reduced -- and this matters MORE now that the counts derive from field
   // statuses (a failed lint must never read as "reviewed and clean").
+  it('gives each fallback finding a DISTINCT fingerprint path (timeliness still works)', async () => {
+    // The fingerprint excludes the message, so a bare field-id path made
+    // every local finding on a field collapse to one key: fix error A, get
+    // error B, and the field stayed signed-off green (Opus outer review,
+    // pass 7). The ordinal keeps them distinct.
+    hostedMode = false;
+    backendReachable = false;
+    const onReport = vi.fn();
+    // Two errors on the SAME field: a duplicate id and a bad section ref.
+    const local = {
+      form_metadata: { title: 'T', version: '1', form_number: 'X' },
+      sections: [],
+      fields: [
+        { id: 'dup', name: 'D', type: 'text', section_id: 'ghost_section' },
+        { id: 'dup', name: 'D', type: 'text', section_id: 'ghost_section' },
+      ],
+    } as unknown as FormSchema;
+    render(<ValidationPanel schema={local} onSelectField={() => {}} onReport={onReport} />);
+    await waitFor(() => expect(onReport).toHaveBeenCalled());
+    const calls = onReport.mock.calls;
+    const report = calls[calls.length - 1][0] as LintReport;
+    const onDup = report.findings.filter(f => f.field_id === 'dup');
+    expect(onDup.length).toBeGreaterThan(1);
+    expect(new Set(onDup.map(f => f.path)).size).toBe(onDup.length);
+  });
+
   it('says so visibly when only the reduced client-side rules ran', async () => {
     hostedMode = false;
     backendReachable = false;

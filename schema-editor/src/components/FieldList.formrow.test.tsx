@@ -63,7 +63,11 @@ describe('the pinned Form row (s18 C1, decision 1)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Form/ }));
     expect(row).toHaveTextContent('No spoken guidance yet');
     expect(row).toHaveTextContent('12 fields have no spoken guidance yet');
-    expect(row).toHaveTextContent('Write spoken instructions for this field.');
+    // The rule is a schema-level AGGREGATE, so its remedy addresses the
+    // listed fields -- "this field" named a field that does not exist on
+    // the Form row (Opus outer review, pass 7).
+    expect(row).toHaveTextContent('Write spoken instructions for each of the fields listed.');
+    expect(row).not.toHaveTextContent('for this field.');
   });
 
   it('auto-expands when an ERROR-severity form finding appears', () => {

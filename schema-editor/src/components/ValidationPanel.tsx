@@ -86,13 +86,20 @@ interface ValidationPanelProps {
 // any rule the UI keys on by id (the guidance-staleness ack gate) is invisible
 // here. Treat reaching this path as degraded, not equivalent.
 function localLintReport(schema: FormSchema): LintReport {
-  const findings: LintFinding[] = validateSchema(schema).map((e) => ({
+  const findings: LintFinding[] = validateSchema(schema).map((e, i) => ({
     // validateSchema does not carry the backend rule ids; the embedded
     // surfaces render the message as-is (no RULE_LABELS prefix) by tagging it
     // with a sentinel treated as label-less.
     severity: e.type === 'error' ? 'ERROR' : 'WARNING',
     rule: '',
-    path: e.field_id,
+    // The path carries an ORDINAL so each finding fingerprints distinctly
+    // (rule + field + path, message excluded): with a bare field id every
+    // finding on a field collapsed to one fingerprint, so fixing error A and
+    // getting a different error B on the same field never re-raised the
+    // timeliness demotion -- the field stayed signed-off green (Opus outer
+    // review, pass 7). The ordinal is stable for a given schema because
+    // validateSchema walks fields/sections deterministically.
+    path: `${e.field_id}#${i}`,
     message: e.message,
     // e.field_id is a field id for field-level errors and a section/_metadata
     // id otherwise; only real field ids focus, but the string is a safe target

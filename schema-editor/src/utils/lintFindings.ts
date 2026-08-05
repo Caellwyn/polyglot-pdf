@@ -119,7 +119,11 @@ export const RULE_REMEDIES: Record<string, string> = {
   'translation-ambiguous-source': 'Add context or a glossary entry for this source text.',
   'translation-mechanical': 'Fix the translation as described in the message.',
   'translation-coverage': 'Re-run the translation pass to fill the missing strings.',
-  'help-instructions-missing': 'Write spoken instructions for this field.',
+  // AGGREGATE rule: schema_lint emits it once per schema at path "$.fields"
+  // with no field anchor, so it renders on the pinned Form row and its
+  // remedy must address the listed fields, not "this field" (Opus outer
+  // review, pass 7).
+  'help-instructions-missing': 'Write spoken instructions for each of the fields listed.',
   'help-instructions-too-long': 'Shorten the instructions and move detail into Details.',
   'help-instructions-label-restatement': 'Rewrite the instructions to add real guidance, or clear them.',
   'help-instructions-screen-ref': 'Rewrite the instructions to say the requirement in words.',

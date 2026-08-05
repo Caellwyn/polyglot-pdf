@@ -204,6 +204,17 @@ vanish-recovery), and the raw parse widened to the backend's own token
 width so the filter, not a narrower regex fork, is the gate. This PR
 therefore closes bd ytfx too. Mutation-verified.
 
+Opus outer review, primary pass 7: 2 findings, both adopted and
+mutation-verified. (1) In the no-backend fallback every finding on a
+field shared one fingerprint (rule '' + a bare field-id path, message
+excluded), so fixing error A and getting error B on the same field never
+re-raised the timeliness demotion -- the field stayed signed-off green.
+The fallback path now carries an ordinal, keeping each finding distinct.
+(2) help-instructions-missing is a schema-level AGGREGATE (one finding
+per schema at $.fields, rendered on the Form row), but its remedy read
+"Write spoken instructions for this field" -- naming a field that does
+not exist on that row; reworded to address the listed fields.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:
