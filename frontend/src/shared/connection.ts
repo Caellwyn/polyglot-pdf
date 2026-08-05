@@ -100,7 +100,6 @@ export interface ConnectionManager {
 	// so the new overlay must re-arm. No-ops if already recording (bd nlfc).
 	rearmAudioCapture: () => Promise<void>
 	changeFillLanguage: (language: string) => Promise<void>
-	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
 	readDisclaimer: (language: string, disclaimerText: string) => void  // Read disclaimer in specified language
 	// Section management (schema-based navigation)
 	switchToFirstSection: (language: string) => Promise<void>  // Switch to first section (used after disclaimer acceptance)
@@ -1044,31 +1043,14 @@ export function createConnectionManager(
 			}
 		},
 
-		changeSpokenLanguage(language: string, nextFieldHint: string) {
-			// Save language to state
-			const currentState = SchemaFormStateManager.load();
-			if (currentState) {
-				// If disclaimer not yet accepted, this is the initial language selection
-				if (!currentState.disclaimerAccepted) {
-					SchemaFormStateManager.acceptDisclaimer(currentState, language);
-				} else {
-					// Language change after disclaimer acceptance
-					SchemaFormStateManager.setSelectedLanguage(currentState, language);
-				}
-			}
-
-			// Send spoken language change message to backend
-			if (connection && connection.getStatus() === 'connected') {
-				connection.send({
-					type: 'change_spoken_language',
-					spoken_language: language,
-					next_field_hint: nextFieldHint
-				})
-				console.log('[VFF Connection] [check] Sent spoken language change to backend:', language)
-			} else {
-				console.warn('[VFF Connection] Cannot change spoken language - not connected')
-			}
-		},
+		// NOTE: no changeSpokenLanguage() here by design. The spoken language is
+		// PINNED for the whole form -- set once at session start and held for
+		// every turn; changing it means a NEW session ('clear form' -> language
+		// modal). This manager used to expose a changeSpokenLanguage() that swapped
+		// it on a live session; it had no production caller and was removed
+		// (bd polyglot-pdf-87a9). The `change_spoken_language` WS message still
+		// exists, but its ONLY live sender is webFormConnection's reconnect opener,
+		// which RE-ASSERTS the same pinned language after a socket teardown.
 
 		readDisclaimer(language: string, disclaimerText: string) {
 			// Save language to state (disclaimer being read = about to accept)

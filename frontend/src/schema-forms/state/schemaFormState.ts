@@ -1614,7 +1614,16 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Update selected language (for language change after disclaimer)
+   * Pin the session's selected language.
+   *
+   * NOT a mid-session switch: the spoken language is pinned for the whole form
+   * (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md). This mutator's one
+   * production caller is `readDisclaimer` in shared/connection.ts; the overlays'
+   * disclaimer-accept path writes `state.selectedLanguage` DIRECTLY instead, so
+   * the pin has several entry-flow writers, not one. All of them run before the
+   * form starts -- none is reachable mid-form, which is what makes the language
+   * pinned. `pinned-language-policy.test.ts` asserts the complete list, so a new
+   * writer anywhere fails a test.
    */
   static setSelectedLanguage(
     state: SchemaFormState,

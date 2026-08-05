@@ -1,5 +1,16 @@
 # Reconnection Flow Summary
 
+> **STALE ON ONE POINT (2026-08-04, bd polyglot-pdf-87a9).** This document lists
+> "user changes language" as a reconnect trigger. Mid-conversation spoken-language
+> switching is **not supported**: the language is PINNED per session and changing
+> it requires a new session ("clear form" -> language modal). The UI paths that
+> appeared to switch language were dead code and have been removed. The
+> `change_spoken_language` message survives, but its only live sender is the
+> reconnect opener RE-ASSERTING the same pinned language. Everything else here
+> about the reconnect flow still holds. See
+> [docs/standards/voice-and-vad.md](docs/standards/voice-and-vad.md).
+
+
 ## Current State (What's Already Working)
 
 ### ✅ Frontend computes correct `initial_field_hint`

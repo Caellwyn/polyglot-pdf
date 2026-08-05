@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-16 (bd polyglot-pdf-yo5t: new "Pause / unpause" section -- the debounced post-unpause level-1 re-prompt, its cancel/fire guards, and the recovery_prompt channel's first production caller; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
+*Last updated: 2026-08-04 (bd polyglot-pdf-87a9: the spoken language is PINNED per session -- a new SPEC section under "fill-language vs spoken-language" states that mid-conversation switching is unsupported, that the ONLY change path is a new session ("clear form" -> language modal), and that `change_spoken_language` is now a misnomer whose only live sender is the reconnect opener re-asserting the SAME pinned language. The dead UI switchers (`handleLanguageChange` in both overlays, `connectionManager.changeSpokenLanguage`) were removed.) Prior: 2026-07-16 (bd polyglot-pdf-yo5t: new "Pause / unpause" section -- the debounced post-unpause level-1 re-prompt, its cancel/fire guards, and the recovery_prompt channel's first production caller; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -322,9 +322,52 @@ Two independent language axes — don't conflate them:
 
 - **fill-language** — the language values are written into the form in. Changed via
   `change_fill_language` (`service.change_fill_language`); defaults to `English`.
-- **spoken-language** — the language Gemini *converses* in. Changed via
-  `change_spoken_language`, which makes the backend send an *initiating message* so
-  Gemini greets and resumes in the new language.
+- **spoken-language** — the language Gemini *converses* in. **PINNED for the whole
+  form.** See the rule below; the two axes differ here, and that asymmetry is
+  deliberate: fill-language is data, spoken-language is session config.
+
+### SPEC: the spoken language is pinned per session (maintainer policy)
+
+**Mid-conversation language switching is NOT supported.** The spoken language is
+chosen once, before the form starts, and held for every turn of that session:
+
+- The **system instruction** tells the model the language is fixed for the whole
+  form, and to answer a user who asks to switch by explaining they would need to
+  start over via the control that clears the form. **The SI describes that
+  control by what it DOES and must never name it** -- the on-screen label is
+  translated per session language (`frontend/src/demo/overlayTranslations.ts`;
+  Spanish shows "Borrar formulario"), so an English label in the SI would have
+  the model name a button the user cannot see. That is the bd polyglot-pdf-s863
+  defect, which the disclaimer path solves differently -- by threading the
+  client's TRANSLATED label through `{agree_button_label}`. There is no such
+  placeholder here (this clause is static SI, not a per-turn template), hence the
+  describe-don't-name rule.
+  (The SI previously said the opposite of the whole policy -- "only the user's
+  explicit request to switch changes the session language" -- which told the
+  model to honor a switch the app cannot service; bd polyglot-pdf-87a9.)
+- The user picks it in `LanguageSelectionModal` — a one-time entry gate, bound only
+  to `handleInitialLanguageSelect` in both overlays.
+- It is pinned into the per-connect Gemini config (the ASR `language_codes` bias,
+  `backend/utils/language_codes.py`) and into the system instruction, at session
+  start. The model is expected to hold it for the entire form.
+- **The only way to change it is a NEW session:** "clear form", then choose again
+  in the modal.
+
+So a session's spoken language never changes after it starts. Code that assumes
+otherwise is wrong, not merely unused.
+
+**`change_spoken_language` is a misnomer for what it now does.** The WS message
+survives, but its ONLY live sender is `webFormConnection`'s reconnect opener
+(`webFormConnection.ts`, the `session_ready` path), which **re-asserts the SAME
+pinned language** after a socket teardown — a section switch or a reconnect drops
+the Gemini session, and the opener re-establishes the language and the current
+field. It is a re-assertion, not a switch. The backend handler
+(`websocket_routes.py`) correspondingly re-sends the initiating message.
+
+The UI paths that once switched language on a live session
+(`handleLanguageChange` in both overlays, `connectionManager.changeSpokenLanguage`)
+were **removed** in bd polyglot-pdf-87a9: they were wired to nothing, but their
+presence implied a supported flow that does not exist.
 
 ## Hallucination reduction
 

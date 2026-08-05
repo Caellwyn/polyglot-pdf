@@ -107,7 +107,6 @@ function makeMockManager() {
     stopRecording: vi.fn(),
     isRecording: vi.fn(() => false),
     changeFillLanguage: vi.fn(async () => {}),
-    changeSpokenLanguage: vi.fn(),
     readDisclaimer: vi.fn(),
     startSection: vi.fn(async () => {}),
     switchToSection: vi.fn(async () => {}),

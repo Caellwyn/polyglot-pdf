@@ -79,7 +79,9 @@ where we prove it first.
 - ✅ Schema-driven form filling; continuous single-session flow is the default
   (`CONTINUOUS_SESSION` + `USE_DTI`), with the legacy per-section reset flow kept
   as an env-flippable fallback
-- ✅ 18+ spoken languages with real-time switching
+- ✅ 18 spoken languages, chosen at session start and pinned for the whole form
+  (mid-conversation switching is not supported -- see
+  [docs/standards/voice-and-vad.md](docs/standards/voice-and-vad.md))
 - ✅ Stateless backend architecture (HIPAA compliant)
 - ✅ WebSocket real-time communication (`/ws/fill`)
 - ✅ Voice tool-call loop with 7 tools (fill, confirm, form status, skip,
@@ -176,7 +178,8 @@ Frontend available at: <http://localhost:5173>
 5. Gemini will greet you and ask for the first field
 6. Speak naturally: "My ID is 12345" or manually type values
 7. Watch fields auto-fill with confirmation!
-8. Try switching sections or changing languages mid-session
+8. Try switching sections (to change language, clear the form and start a new
+   session -- the spoken language is pinned per session)
 
 > The convenience launcher [`scripts/dev-local.ps1`](scripts/dev-local.ps1) (or
 > the `/run-local` skill) starts the backend + frontend together; pass

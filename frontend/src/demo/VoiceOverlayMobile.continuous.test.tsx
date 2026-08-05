@@ -84,7 +84,6 @@ function makeManager() {
     isPaused: vi.fn(() => false),
     startRecording: vi.fn(async () => {}),
     getStatus: vi.fn(() => 'connected'),
-    changeSpokenLanguage: vi.fn(),
     isSendingMicAudio: vi.fn(() => false),
   } as any
 }
