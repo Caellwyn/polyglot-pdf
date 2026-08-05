@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -841,7 +841,38 @@ export class WebFormConnection {
     // back -- the in-memory-vs-persisted divergence the opener diagnostic
     // exists to surface (the state-staleness hypothesis, bd polyglot-pdf-xp4q)
     // is only observable here.
-    const storageDisclaimerAtEntry = !!SchemaFormStateManager.load()?.disclaimerAccepted;
+    const persistedAtEntry = SchemaFormStateManager.load();
+    const storageDisclaimerAtEntry = !!persistedAtEntry?.disclaimerAccepted;
+
+    // Refresh before writing (bd polyglot-pdf-qim7). The three mutators below
+    // (setSessionId / setJitMode / setContinuousSession) each spread this.state
+    // and save() it, so on a stale in-memory copy this handler PERSISTS that copy
+    // over anything written outside this object since the last sync -- most
+    // realistically a field value the user typed on screen, which SchemaForm.tsx's
+    // handleFieldChange persists through SchemaFormStateManager without ever
+    // touching this.state. Same stale-write class the confirm and skip handlers
+    // refresh against (bd polyglot-pdf-pjws), on the reconnect path: session_ready
+    // is routine (idle-timeout reconnect, network drop, section switch).
+    //
+    // fieldValues are reconciled per field rather than replaced wholesale, for
+    // the same reason as those handlers -- an entry that exists only in memory
+    // (written by a tool call whose save has not landed) must survive.
+    //
+    // Scope is deliberately fieldValues ONLY, not a whole-state adopt: the
+    // field-1 opener diagnostic below compares this.state.disclaimerAccepted
+    // against the persisted value at entry to surface in-memory-vs-storage
+    // staleness (bd polyglot-pdf-xp4q). Adopting persisted state wholesale would
+    // force those two to agree and silently destroy that signal. fieldValues is
+    // the map with two independent writers, so it is the map that needs merging.
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
@@ -1761,31 +1792,23 @@ export class WebFormConnection {
     // -- bd polyglot-pdf-87a9. The stale-write class is real either way, and is
     // what this refresh fixes.)
     //
-    // fieldValues are MERGED with in-memory winning, NOT replaced. The rest of
-    // this handler is gated on the field holding a usable VALUE, and a plain
+    // fieldValues are RECONCILED per field (last-writer-wins on lastModified),
+    // not replaced and not key-unioned -- see reconcileFieldValues. A plain
     // overwrite could drop an entry that exists only in memory, turning a
-    // legitimate confirm into a spurious 'no_value' refusal that the
-    // loop-breaker escalates into a re-prompt.
-    //
-    // This merge is deliberately CONSERVATIVE, not correct-in-general: where the
-    // two maps disagree it preserves dev's existing behavior (this handler read
-    // `this.state` unconditionally before), so the pjws language fix does not
-    // also change which field VALUE wins. It does NOT make the divergence safe.
-    // SchemaForm.tsx's handleFieldChange is a real production writer that
-    // persists through SchemaFormStateManager without touching this object, so
-    // an on-screen edit can lose to a stale in-memory entry here -- pre-existing
-    // on dev, out of scope for these beads, and filed as bd polyglot-pdf-uw3w
-    // (with the `[]`-alias resurrection it enables as bd polyglot-pdf-3irc).
-    // Fixing the write-ownership properly is that bead's job, not a side effect
-    // of a language fix.
+    // legitimate confirm into a spurious 'no_value' refusal that the loop-breaker
+    // escalates into a re-prompt; a key union would let a stale in-memory entry
+    // revive a value the user cleared on screen (bd polyglot-pdf-uw3w) and
+    // resurrect a deleted `[]`-alias key (bd polyglot-pdf-3irc). The reconcile
+    // keeps the in-memory-only entry visible while letting a NEWER on-screen edit
+    // win, and collapses each alias pair to one entry.
     const persistedAtEntry = SchemaFormStateManager.load();
     if (persistedAtEntry) {
       this.state = {
         ...persistedAtEntry,
-        fieldValues: {
-          ...persistedAtEntry.fieldValues,
-          ...this.state.fieldValues,
-        },
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
       };
     }
 
@@ -2085,31 +2108,24 @@ export class WebFormConnection {
     // SchemaFormStateManager.save(this.state), so on a stale in-memory copy it
     // does not merely read wrong values, it PERSISTS them: a skip landing after
     // it reverts whatever was written outside this object since the last sync.
-    // A skip is as routine a per-turn tool call as a confirm; both final Opus
-    // outer reviews found this sibling path independently. (Originally written
-    // up as a language-clobber; mid-session language switching is unsupported --
-    // bd polyglot-pdf-87a9 -- but the stale-write class is real regardless.)
+    // A skip is as routine a per-turn tool call as a confirm.
     //
-    // fieldValues are MERGED, not replaced, and in-memory wins. Everything below
-    // is gated on a DATA-LOSS guard (markFieldSkipped BLANKS the value), and a
-    // plain overwrite would drop an entry that exists only in memory, letting a
-    // skip through on a field the guard would have refused (pinned by
-    // webFormConnection.skipfield.test.ts, which caught exactly that).
-    //
-    // Same caveat as the confirm handler above: this is CONSERVATIVE, preserving
-    // dev's behavior where the maps disagree, not a fix for the divergence. The
-    // opposite direction has its own failure -- an on-screen edit persisted by
-    // SchemaForm.tsx can lose to a stale in-memory entry, so a skip can still
-    // blank a real answer. Pre-existing on dev and out of scope here; filed as
-    // bd polyglot-pdf-uw3w / polyglot-pdf-3irc.
+    // fieldValues are RECONCILED per field (last-writer-wins on lastModified) --
+    // see reconcileFieldValues. Everything below is gated on a DATA-LOSS guard
+    // (markFieldSkipped BLANKS the value): a plain overwrite would drop an entry
+    // that exists only in memory, letting a skip through on a field the guard
+    // would have refused (pinned by webFormConnection.skipfield.test.ts), while a
+    // key union would let a STALE in-memory empty mask an answer the user just
+    // typed on screen, so the guard passes and the skip blanks it
+    // (bd polyglot-pdf-uw3w). The reconcile keeps both directions safe.
     const persistedAtEntry = SchemaFormStateManager.load();
     if (persistedAtEntry) {
       this.state = {
         ...persistedAtEntry,
-        fieldValues: {
-          ...persistedAtEntry.fieldValues,
-          ...this.state.fieldValues,
-        },
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
       };
     }
 

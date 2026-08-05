@@ -10,6 +10,7 @@ import {
   unwrapToString,
   unwrapToBoolean,
   readFieldEntryWithAlias,
+  reconcileFieldValues,
 } from './fieldValue';
 import type { FieldValue } from '../types/schema';
 
@@ -245,6 +246,91 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
 
     it('returns undefined when neither key exists', () => {
       expect(readFieldEntryWithAlias({} as any, bracket)).toBeUndefined();
+    });
+  });
+
+  describe('reconcileFieldValues (bd polyglot-pdf-uw3w / 3irc / qim7)', () => {
+    const bare = 'p1_grp';
+    const bracket = 'p1_grp[]';
+
+    it('the NEWER lastModified wins, in both directions', () => {
+      expect(
+        reconcileFieldValues(
+          { f: { value: 'persisted-new', lastModified: 200 } } as any,
+          { f: { value: 'memory-old', lastModified: 100 } } as any
+        ).f.value
+      ).toBe('persisted-new');
+
+      expect(
+        reconcileFieldValues(
+          { f: { value: 'persisted-old', lastModified: 100 } } as any,
+          { f: { value: 'memory-new', lastModified: 200 } } as any
+        ).f.value
+      ).toBe('memory-new');
+    });
+
+    it('keeps an entry that exists on only ONE side (the in-memory-only case)', () => {
+      const out = reconcileFieldValues(
+        { a: { value: 'only-persisted' } } as any,
+        { b: { value: 'only-memory' } } as any
+      );
+      expect(out.a.value).toBe('only-persisted');
+      expect(out.b.value).toBe('only-memory');
+    });
+
+    it('a dated entry beats an undated one', () => {
+      expect(
+        reconcileFieldValues(
+          { f: { value: 'dated', lastModified: 5 } } as any,
+          { f: { value: 'undated' } } as any
+        ).f.value
+      ).toBe('dated');
+    });
+
+    it('with NEITHER side dated, in-memory wins (conservative pre-existing direction)', () => {
+      expect(
+        reconcileFieldValues(
+          { f: { value: 'persisted' } } as any,
+          { f: { value: 'memory' } } as any
+        ).f.value
+      ).toBe('memory');
+    });
+
+    it('on a same-millisecond TIE a real answer beats a hollow entry', () => {
+      // Date.now() is coarser than the AI-write -> on-screen-edit gap, so this
+      // tie is a real production case. It must not silently hand the field to
+      // the stale in-memory side and blank a typed answer.
+      expect(
+        reconcileFieldValues(
+          { f: { value: 'Real Answer', lastModified: 500 } } as any,
+          { f: { value: '', lastModified: 500 } } as any
+        ).f.value
+      ).toBe('Real Answer');
+    });
+
+    it('collapses an []-alias pair to exactly ONE entry (got6 invariant)', () => {
+      // The persisted side migrated the value to the bare key (updateField
+      // deleted the bracketed variant); a key union would resurrect it.
+      const out = reconcileFieldValues(
+        { [bare]: { value: ['b'], lastModified: 200 } } as any,
+        { [bracket]: { value: ['a'], lastModified: 100 } } as any
+      );
+      const keys = Object.keys(out).filter(k => k.startsWith('p1_grp'));
+      expect(keys).toHaveLength(1);
+      expect(out[keys[0]].value).toEqual(['b']);
+    });
+
+    it('re-keys the winner under the variant the WINNING side used', () => {
+      const out = reconcileFieldValues(
+        { [bare]: { value: ['old'], lastModified: 100 } } as any,
+        { [bracket]: { value: ['new'], lastModified: 200 } } as any
+      );
+      expect(Object.keys(out).filter(k => k.startsWith('p1_grp'))).toEqual([bracket]);
+      expect(out[bracket].value).toEqual(['new']);
+    });
+
+    it('returns an empty map when both sides are empty', () => {
+      expect(reconcileFieldValues({} as any, {} as any)).toEqual({});
     });
   });
 });

@@ -50,6 +50,122 @@ export function readFieldEntryWithAlias(
 }
 
 /**
+ * Reconcile the persisted fieldValues map with an in-memory copy that may have
+ * diverged, resolving each field to a single winning entry.
+ *
+ * WHY THIS EXISTS. WebFormConnection holds `this.state` across turns while the
+ * React UI (SchemaForm.tsx handleFieldChange / handleFieldSkip) writes through
+ * SchemaFormStateManager WITHOUT touching that object -- two independent writers
+ * of the same map. Handlers that end in save(this.state) therefore persist their
+ * in-memory copy over anything the UI wrote since the last sync. The previous
+ * guard was a raw key union (`{...persisted, ...inMemory}`), which made the
+ * in-memory side win UNCONDITIONALLY and had two failure modes:
+ *   - a value the user cleared on screen was revived (and then confirmed, so it
+ *     never re-prompted and printed on the PDF) -- bd polyglot-pdf-uw3w;
+ *   - a key union re-added an `[]`-alias key that updateField had deliberately
+ *     DELETED on migration, leaving two live entries for one field and breaking
+ *     the one-entry invariant -- bd polyglot-pdf-got6 / bd polyglot-pdf-3irc.
+ *
+ * RULES.
+ *  - Reconcile per LOGICAL FIELD, collapsing the `p1_grp` / `p1_grp[]` alias
+ *    pair into one decision, so a union can never resurrect a deleted variant.
+ *    The winning entry is re-keyed under whichever variant the winning side
+ *    used, and the losing variant is dropped -- mirroring updateField's priorKey
+ *    cleanup.
+ *  - Within a field, the entry with the newer `lastModified` wins (the field the
+ *    type comment calls "Timestamp for conflict resolution"). updateField and
+ *    markFieldSkipped both stamp it; confirmField deliberately does NOT, because
+ *    confirming changes only confirmation metadata, never the value -- so the
+ *    value's timestamp correctly stays put.
+ *  - A stamped entry beats an unstamped one: a write we can date is provably
+ *    newer than one of unknown age.
+ *  - When NEITHER side is stamped, the in-memory entry wins. This preserves the
+ *    conservative pre-existing direction (bd polyglot-pdf-pjws) so an entry that
+ *    exists only in memory stays visible to the confirm handler's usable-value
+ *    gate and the skip handler's already-filled guard.
+ *  - An entry present on only one side is kept as-is.
+ */
+export function reconcileFieldValues(
+  persisted: Record<string, FieldValue>,
+  inMemory: Record<string, FieldValue>
+): Record<string, FieldValue> {
+  const baseKeyOf = (k: string) => (k.endsWith('[]') ? k.slice(0, -2) : k);
+  const stampOf = (e: FieldValue | undefined) =>
+    typeof e?.lastModified === 'number' ? e.lastModified : undefined;
+
+  // Group both maps by logical field so an alias pair resolves as ONE decision.
+  const baseKeys = new Set<string>();
+  for (const k of Object.keys(persisted)) baseKeys.add(baseKeyOf(k));
+  for (const k of Object.keys(inMemory)) baseKeys.add(baseKeyOf(k));
+
+  const out: Record<string, FieldValue> = {};
+
+  for (const base of baseKeys) {
+    const bracket = base + '[]';
+    // The key each side actually used for this field. A side that (illegally)
+    // holds both variants is read through the established alias precedence.
+    const persistedKey = persisted[base] !== undefined ? base
+      : persisted[bracket] !== undefined ? bracket : undefined;
+    const memoryKey = inMemory[base] !== undefined ? base
+      : inMemory[bracket] !== undefined ? bracket : undefined;
+
+    const persistedEntry = persistedKey === undefined
+      ? undefined
+      : readFieldEntryWithAlias(persisted, persistedKey);
+    const memoryEntry = memoryKey === undefined
+      ? undefined
+      : readFieldEntryWithAlias(inMemory, memoryKey);
+
+    if (persistedEntry === undefined && memoryEntry === undefined) continue;
+
+    // Present on one side only -- keep it under the key that side used.
+    if (memoryEntry === undefined) {
+      out[persistedKey as string] = persistedEntry as FieldValue;
+      continue;
+    }
+    if (persistedEntry === undefined) {
+      out[memoryKey as string] = memoryEntry;
+      continue;
+    }
+
+    const persistedStamp = stampOf(persistedEntry);
+    const memoryStamp = stampOf(memoryEntry);
+
+    let persistedWins: boolean;
+    if (persistedStamp !== undefined && memoryStamp !== undefined) {
+      if (persistedStamp !== memoryStamp) {
+        persistedWins = persistedStamp > memoryStamp;
+      } else {
+        // SAME-MILLISECOND TIE. Date.now() is coarser than the gap between an AI
+        // write and the on-screen edit that follows it, so a tie is a real
+        // production case, not just a test artifact -- and it must NOT default to
+        // the in-memory side, which is the stale one in exactly the scenario
+        // these beads are about. Fall back to the established "meaningful entry
+        // wins" precedent (readFieldEntryWithAlias): an entry carrying an answer
+        // beats a hollow one, so a typed answer is never lost to a same-ms empty.
+        // If both or neither carry an answer the tie is genuinely unresolvable --
+        // keep in-memory, preserving the conservative pre-existing direction.
+        const persistedMeaningful = entryHasValue(persistedEntry);
+        const memoryMeaningful = entryHasValue(memoryEntry);
+        persistedWins = persistedMeaningful && !memoryMeaningful;
+      }
+    } else if (persistedStamp !== undefined) {
+      persistedWins = true;   // dated beats undated
+    } else {
+      persistedWins = false;  // undated persisted, or neither dated -> in-memory
+    }
+
+    if (persistedWins) {
+      out[persistedKey as string] = persistedEntry;
+    } else {
+      out[memoryKey as string] = memoryEntry;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Type guard to check if a value is a FieldValue object
  */
 export function isFieldValue(value: any): value is FieldValue {
