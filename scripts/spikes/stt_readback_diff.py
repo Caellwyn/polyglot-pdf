@@ -191,6 +191,11 @@ def main() -> int:
         # The generation's own transcript: seq within [lo, hi].
         text_track = "".join(t for s, t in transcripts if lo <= s <= hi)
 
+        # Near-silent / tiny WAVs make the STT model echo the prompt back
+        # instead of transcribing (P-B gen 3 artifact) -- skip them.
+        if _wav_seconds(wav_path) < 0.4:
+            results.append({**d, "verdict": "TRIVIAL_WAV"})
+            continue
         audio = wav_path.read_bytes()
         try:
             resp = client.models.generate_content(
