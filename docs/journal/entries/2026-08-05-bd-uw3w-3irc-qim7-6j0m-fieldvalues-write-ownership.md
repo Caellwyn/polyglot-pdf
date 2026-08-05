@@ -1,6 +1,6 @@
 ---
 date: 2026-08-05
-beads: [polyglot-pdf-uw3w, polyglot-pdf-3irc, polyglot-pdf-qim7, polyglot-pdf-6j0m]
+beads: [polyglot-pdf-uw3w, polyglot-pdf-3irc, polyglot-pdf-qim7, polyglot-pdf-6j0m, polyglot-pdf-tare, polyglot-pdf-6iwn]
 tags: [frontend, schema-forms, state, voice, testing, flake]
 surfaces:
   - frontend/src/schema-forms/utils/fieldValue.ts
@@ -108,6 +108,39 @@ Three separate mutations, each isolating a different claim:
 The `pjws` in-memory-only test correctly stayed green under the first mutation
 (the union preserves that direction), which is the evidence that the reconcile
 did not simply invert the old bias.
+
+## What the review rounds added
+
+Three fresh-eyes rounds ran pre-PR, and each found something real. Worth recording
+because the pattern is instructive: the first fix was correct in direction and
+wrong in the details, twice.
+
+- **Round 1** caught that the tie-break was asymmetric (see above) -- it protected
+  the blank-a-typed-answer direction but not the revive-a-cleared-value one, which
+  is uw3w's own case 1.
+- **Round 2** caught a FOURTH `save(this.state)` site, `handleSectionSwitched`,
+  with no reconcile. Folded in (bd `tare`): a section switch is a round-trip and an
+  on-screen edit can land inside it. Round 2 also flagged that a tie between two
+  DIFFERENT meaningful values resolves arbitrarily. That one was kept after
+  tracing it: every connection write goes through a stamp-and-save step, so an
+  equal stamp means both sides hold the same write. The rule stayed; the comment
+  and doc were corrected, because they had overstated the guarantee.
+- **Round 3** caught a FIFTH site, `handleDrainFindingsResult`, and this was the
+  worst of them: `markFieldsSteered` REBUILDS the whole `fieldValues` map from
+  `this.state`, so a field the connection object has never seen -- one typed on
+  screen during the validator drain round-trip -- is dropped OUTRIGHT, not merely
+  reverted to a stale value. The mutation test fails with `expected undefined to
+  be defined`, which is the signature of total loss rather than staleness. Folded
+  in as bd `6iwn`.
+
+Round 3 also noticed that `markFieldsSteered` set `steered` WITHOUT stamping
+`lastModified` -- which quietly broke the invariant the tie-break leans on, since
+an unstamped write loses to any stamped one and the steer marker would be
+discarded, defeating W4's re-arm bound. It now stamps.
+
+Both out-of-scope sites were folded in rather than left as filed beads: shipping a
+change titled "one owner for `fieldValues`" while knowingly leaving two more
+writers unreconciled would have been misleading.
 
 ## `6j0m`: root cause found, no code change needed
 

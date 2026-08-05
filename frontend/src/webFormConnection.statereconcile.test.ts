@@ -276,6 +276,35 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
     expect(persistedEntry('p1_a').value).toBe('typed during switch')
   })
 
+  it('drain_findings_result does not DROP a field written on screen mid-drain', async () => {
+    // The validator drain is a round-trip (validation_result -> drain_findings ->
+    // drain_findings_result) and markFieldsSteered rebuilds the whole fieldValues
+    // map from this.state, so a field this object has never seen is dropped
+    // OUTRIGHT here, not merely staled -- the worst version of the two-writer bug.
+    const { conn, ws } = await connected()
+
+    // The AI fills p1_a, so a finding has something to steer about.
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'a value' } }) })
+    await flush()
+
+    // The user types into a DIFFERENT field on screen, mid-drain. The connection
+    // object has never seen p1_name at all.
+    uiWrites('p1_name', 'typed mid-drain')
+    expect(persistedEntry('p1_name').value).toBe('typed mid-drain')
+
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'drain_findings_result',
+        conflicts: [{ field_ids: ['p1_a'], reason: 'mismatch', field_names: { p1_a: 'Field A' } }],
+      }),
+    })
+    await flush()
+
+    // The on-screen field must still exist -- this asserts presence, not just value.
+    expect(persistedEntry('p1_name')).toBeDefined()
+    expect(persistedEntry('p1_name').value).toBe('typed mid-drain')
+  })
+
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {
     const { conn, ws } = await connected()
 

@@ -2585,6 +2585,26 @@ export class WebFormConnection {
       // maybeEmitValidateWindows, not the drain.)
       return;
     }
+    // Reconcile before writing, same rule as the confirm/skip/session_ready/
+    // section-switch handlers (bd polyglot-pdf-uw3w / qim7). Both mutators below
+    // persist a whole fieldValues copy taken from this.state, so on a stale
+    // in-memory copy they do not merely revert a field written outside this
+    // object -- markFieldsSteered rebuilds the map from this.state.fieldValues,
+    // so a field this object has never seen (typed on screen during the drain
+    // round-trip) is dropped outright, not just staled. The window is a routine
+    // validator round-trip: validation_result -> drain_findings ->
+    // drain_findings_result.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
+
     const steeredIds: string[] = [];
     for (const c of delivered) {
       const ids = c && Array.isArray(c.field_ids) ? c.field_ids : [];

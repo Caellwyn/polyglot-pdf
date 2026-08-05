@@ -93,9 +93,9 @@ holds `this.state` across turns. Any connection handler ending in
 copy over an on-screen edit.
 
 `reconcileFieldValues` (`utils/fieldValue.ts`) is the single arbiter, called at the
-four handlers that save state — `handleSessionReady`, `handleConfirmFieldRequest`,
-`handleSkipFieldRequest`, `handleSectionSwitched` (bd `polyglot-pdf-qim7` / `uw3w` /
-`3irc` / `tare`). It resolves
+**five** handlers that save state — `handleSessionReady`, `handleConfirmFieldRequest`,
+`handleSkipFieldRequest`, `handleSectionSwitched`, `handleDrainFindingsResult`
+(bd `polyglot-pdf-qim7` / `uw3w` / `3irc` / `tare` / `6iwn`). It resolves
 **per logical field**, not per raw key:
 
 - The newer `lastModified` wins; a stamped entry beats an unstamped one.
@@ -110,10 +110,12 @@ four handlers that save state — `handleSessionReady`, `handleConfirmFieldReque
   first — the cleared-value direction has the stale side holding the meaningful
   entry — so the durable side wins outright instead. A tie between two *different*
   meaningful values therefore resolves arbitrarily; that is safe only because it
-  is unreachable, since every connection write goes through `updateField`, which
-  stamps `lastModified` **and** saves in one step (so an equal stamp means both
-  sides hold the same write). **Adding a path that mutates
-  `this.state.fieldValues` without persisting would break that assumption.**
+  is unreachable, since every connection write stamps `lastModified` **and** saves
+  in one step (so an equal stamp means both sides hold the same write).
+  `markFieldsSteered` stamps for exactly this reason — an unstamped write would
+  lose to any stamped one and the steer marker would be silently discarded.
+  **Adding a path that mutates `this.state.fieldValues` without stamping and
+  persisting would break that assumption.**
 - An entry present on only one side is kept, so an in-memory-only value stays
   visible to the confirm handler's usable-value gate and the skip handler's
   already-filled guard (bd `polyglot-pdf-pjws`).

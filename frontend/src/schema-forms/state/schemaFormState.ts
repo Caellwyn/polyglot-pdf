@@ -1430,7 +1430,12 @@ export class SchemaFormStateManager {
       const fv = fieldValues[key];
       if (!fv) continue; // no entry to mark under either variant
       if (fv.steered === true) continue; // already marked
-      fieldValues[key] = { ...fv, steered: true };
+      // Stamp lastModified like every other fieldValues writer. This is a real
+      // write to the entry, and reconcileFieldValues resolves the two-writer
+      // divergence on that stamp -- an unstamped write loses to any stamped one
+      // ("dated beats undated"), which would silently discard the steer marker
+      // and defeat W4's re-arm bound.
+      fieldValues[key] = { ...fv, steered: true, lastModified: Date.now() };
       changed = true;
     }
     if (!changed) return state;
