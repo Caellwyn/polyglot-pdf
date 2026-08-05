@@ -59,6 +59,14 @@ new infrastructure, deliberately deferred with magic links).
   touched -- this is a planning-only change; the docs the child beads will
   affect (auth.md, pdf-filling.md, confirmation-and-audit.md) get their bumps
   when those beads ship.
+- The freshness checker flagged ~20 docs stale against tracked-file mtimes;
+  those mtimes are worktree checkout times, and none of the flagged docs track
+  files this docs-only branch changed -- left as-is per the
+  already-stale-before-you rule.
+- Beads housekeeping: no orphans; three stale in_progress beads (dft1, ggla --
+  the deployment-track session's active work at 1 day; 52qm.1 at 3 days)
+  deliberately left untouched -- they belong to other work streams and
+  transitioning them from here risks a claim collision.
 
 ## Files touched
 
