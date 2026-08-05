@@ -179,34 +179,51 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
     // So scan for any production write to the field itself, in any form:
     // assignment, an object-literal key, or a mutator call. The complete list is
     // asserted below, which also documents where the pin legitimately comes from.
-    // Scoped to writes that reach PERSISTED state. React props
-    // (`selectedLanguage={x}`), local `useState` setters and type declarations
-    // are not writes to the pin and are excluded, or the list would be noise.
+    // Match the FIELD ON THE LEFT, never the value on the right. Four earlier
+    // versions of this guard were each defeated in review, and every failure had
+    // the same cause: they enumerated shapes (two function names; then a
+    // whole-file allowlist; then two mutator calls; then a fixed set of
+    // right-hand identifiers). Any new spelling walked past. `{ ...cur,
+    // selectedLanguage: newLang }` defeated the previous one purely because
+    // `newLang` was not in the list.
+    //
+    // So: any line that assigns to `.selectedLanguage` or uses it as an
+    // object-literal key is a write, whatever the source expression is.
     const WRITERS = new RegExp(
       [
-        // `<something>.selectedLanguage = ...` -- the direct-assignment shape
-        // the overlays' disclaimer-accept path uses.
-        String.raw`\w\.selectedLanguage\s*=[^=]`,
-        // A state object built with the field as a literal key.
-        String.raw`selectedLanguage\s*:\s*(language|selectedLanguage|loadOnboardingState)`,
-        // ...or through the state manager's mutators.
-        String.raw`SchemaFormStateManager\s*\.\s*(setSelectedLanguage|acceptDisclaimer)\s*\(`,
+        // `<anything>.selectedLanguage = ...` (not `==`/`===`).
+        String.raw`\.selectedLanguage\s*=[^=]`,
+        // ...and the bracket-key form of the same write.
+        String.raw`\[\s*['"\`]selectedLanguage['"\`]\s*\]\s*=[^=]`,
+        // `selectedLanguage: <anything>` as an object-literal key -- excluding a
+        // TYPE annotation (`selectedLanguage: string`) and a JSX prop, neither of
+        // which writes the pin.
+        String.raw`selectedLanguage\s*:\s*(?!string\b|number\b|boolean\b)[^;=]`,
+        // ...and the state manager's mutators, however they are referenced.
+        String.raw`\.(setSelectedLanguage|acceptDisclaimer)\s*\(`,
       ].join('|')
     )
+    // JSX props (`selectedLanguage={x}`), local useState setters and TYPE
+    // declarations (`selectedLanguage: string;` in an interface) are not writes
+    // to the persisted pin; drop them so the list is signal, not noise.
+    const NOT_A_WRITE =
+      /selectedLanguage=\{|setSelectedLanguage\]|useState|selectedLanguage\??\s*:\s*(string|number|boolean)\b/
     const writeSites: string[] = []
 
     for (const file of productionSources()) {
       const name = file.split(/[\\/]/).pop() as string
       const lines = codeOnly(readFileSync(file, 'utf8')).split(/\r?\n/)
-      for (const line of lines) {
-        if (!WRITERS.test(line)) continue
-        writeSites.push(`${name}: ${line.trim().slice(0, 80)}`)
-      }
+      lines.forEach((line, i) => {
+        if (!WRITERS.test(line)) return
+        if (NOT_A_WRITE.test(line)) return
+        // 1-based line number, so two textually IDENTICAL writes (the bodies of
+        // acceptDisclaimer and setSelectedLanguage are the same line) are
+        // distinguishable -- otherwise a site could move between them and the
+        // list would still match, defeating the point of asserting a list.
+        writeSites.push(`${name}:${i + 1}: ${line.trim().slice(0, 70)}`)
+      })
     }
 
-    // Exactly one: `readDisclaimer` in shared/connection.ts. Asserting the LIST
-    // (not just the count) means the message names the offender, and a moved
-    // write site is surfaced rather than silently swapped.
     // The COMPLETE set, asserted as a list so the failure message names the new
     // writer and a MOVED site is surfaced rather than silently swapped. Every
     // entry here is an ENTRY-FLOW write (the disclaimer accept, the onboarding
@@ -221,16 +238,18 @@ describe('pinned-language policy (bd polyglot-pdf-87a9)', () => {
     ).toEqual([
       // The disclaimer-accept path in each overlay -- direct assignment, which
       // is why this guard watches the FIELD and not the state-manager mutators.
-      'VoiceOverlay.tsx: state.selectedLanguage = selectedLanguage',
-      'VoiceOverlayMobile.tsx: state.selectedLanguage = selectedLanguage',
-      // The state manager's own implementation + the onboarding restore.
-      'schemaFormState.ts: existing.selectedLanguage = onboardingLanguage;',
-      'schemaFormState.ts: selectedLanguage: loadOnboardingState().language ?? undefined,',
-      'schemaFormState.ts: parsed.selectedLanguage = undefined;',
-      'schemaFormState.ts: selectedLanguage: language,',
-      'schemaFormState.ts: selectedLanguage: language,',
+      'VoiceOverlay.tsx:735: state.selectedLanguage = selectedLanguage',
+      'VoiceOverlayMobile.tsx:405: state.selectedLanguage = selectedLanguage',
+      // The state manager's own implementation + the onboarding restore. The
+      // two `selectedLanguage: language,` lines are acceptDisclaimer's and
+      // setSelectedLanguage's bodies -- identical text, distinguished by line.
+      'schemaFormState.ts:57: existing.selectedLanguage = onboardingLanguage;',
+      'schemaFormState.ts:80: selectedLanguage: loadOnboardingState().language ?? undefined,',
+      'schemaFormState.ts:135: parsed.selectedLanguage = undefined;',
+      'schemaFormState.ts:1009: selectedLanguage: language,',
+      'schemaFormState.ts:1024: selectedLanguage: language,',
       // readDisclaimer's initial pin.
-      'connection.ts: SchemaFormStateManager.setSelectedLanguage(currentState, language);',
+      'connection.ts:643: SchemaFormStateManager.setSelectedLanguage(currentState, language);',
     ])
   })
 

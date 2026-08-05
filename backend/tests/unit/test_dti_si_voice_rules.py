@@ -102,13 +102,16 @@ def test_dti_si_does_not_name_the_clear_form_button_in_english():
     # the first version of this clause quoted 'clear form' AND that the test
     # pinned that English literal.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "'clear form' button" not in si
-    assert "clear form" not in si.lower().replace(
-        "the button that clears the form", ""
-    )
-    # The model is told explicitly not to invent or anglicize a label.
+    # ALLOWLIST FIRST (repo scar tissue: banning a word is one synonym from
+    # defeat -- 'Reset Form' / 'ClearForm' / a translated label would all slip a
+    # bare blacklist). The load-bearing assertions are that the SI carries the
+    # describe-don't-name RULE, which holds whatever label someone might add:
+    assert "Describe that button by what it DOES" in si
     assert "never invent a label for it" in si
     assert "the on-screen label is translated" in si
+    # ...THEN no residue: the specific literal this test was written for must be
+    # gone, so a regression to the exact prior wording is still caught.
+    assert "'clear form' button" not in si
 
 
 def test_initiating_templates_carry_unmistakably():

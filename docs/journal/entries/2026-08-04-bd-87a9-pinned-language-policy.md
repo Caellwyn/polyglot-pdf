@@ -248,6 +248,27 @@ places asserting the opposite. The journal keeps its original text plus a
 correction block (it is a historical record); the code comments were rewritten
 outright (they are current-state).
 
+**Round 7, and the guard finally holds.** Reviewers found a FIFTH evasion shape (a
+bracket-key write, `st["selectedLanguage"] = x`) plus two more of my own errors:
+the SI size figure I recorded was stale by 241 chars, because I rewrote the clause
+in round 6 and reused the round-5 number -- in the very doc whose job is tracking
+SI size against the per-turn cost invariant. And the tier-2 SPEC still described
+the SI as "pointing them at the clear form button", omitting the
+describe-don't-name rule that makes the fix correct, so anyone re-implementing
+from the spec would have reintroduced the s863 defect.
+
+The guard now matches the FIELD with any right-hand side -- assignment,
+bracket-key, object-literal, and mutator forms -- and asserts the eight legitimate
+write sites WITH LINE NUMBERS, because two of them are textually identical and a
+site could otherwise move between them undetected. Five evasion shapes tested,
+five caught: rename, spread, `Object.assign`, aliased manager, bracket key.
+
+The English-label test went from a blacklist to allowlist-first, per this repo's
+own scar tissue ("banning a word is one synonym from defeat"). It pins the RULE
+-- describe it by what it does, never invent a label, the on-screen label is
+translated -- which holds whatever label someone adds, plus a no-residue check on
+the original literal. Verified: swapping in "'Reset Form' button" now fails.
+
 ## Doc freshness
 
 - **Bumped `docs/standards/voice-and-vad.md`** -- the standard whose `Tracks:`

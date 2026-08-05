@@ -332,10 +332,19 @@ Two independent language axes — don't conflate them:
 chosen once, before the form starts, and held for every turn of that session:
 
 - The **system instruction** tells the model the language is fixed for the whole
-  form, and to answer a user who asks to switch by pointing them at the "clear
-  form" button. (It previously said the opposite -- "only the user's explicit
-  request to switch changes the session language" -- which told the model to
-  honor a switch the app cannot service; bd polyglot-pdf-87a9.)
+  form, and to answer a user who asks to switch by explaining they would need to
+  start over via the control that clears the form. **The SI describes that
+  control by what it DOES and must never name it** -- the on-screen label is
+  translated per session language (`frontend/src/demo/overlayTranslations.ts`;
+  Spanish shows "Borrar formulario"), so an English label in the SI would have
+  the model name a button the user cannot see. That is the bd polyglot-pdf-s863
+  defect, which the disclaimer path solves differently -- by threading the
+  client's TRANSLATED label through `{agree_button_label}`. There is no such
+  placeholder here (this clause is static SI, not a per-turn template), hence the
+  describe-don't-name rule.
+  (The SI previously said the opposite of the whole policy -- "only the user's
+  explicit request to switch changes the session language" -- which told the
+  model to honor a switch the app cannot service; bd polyglot-pdf-87a9.)
 - The user picks it in `LanguageSelectionModal` — a one-time entry gate, bound only
   to `handleInitialLanguageSelect` in both overlays.
 - It is pinned into the per-connect Gemini config (the ASR `language_codes` bias,
