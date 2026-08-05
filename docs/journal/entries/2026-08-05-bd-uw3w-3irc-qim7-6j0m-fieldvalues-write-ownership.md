@@ -138,9 +138,33 @@ Round 3 also noticed that `markFieldsSteered` set `steered` WITHOUT stamping
 an unstamped write loses to any stamped one and the steer marker would be
 discarded, defeating W4's re-arm bound. It now stamps.
 
+- **Round 4** caught a SIXTH, `handleValidationResult` -> `enqueueValidatorFindings`,
+  on an even wider window (the validator round-trip can take seconds).
+
+At that point the per-round pattern was the real finding: four rounds, four more
+sites. So instead of patching the sixth and waiting for a seventh, I enumerated
+every persist path exhaustively. The honest picture is that **every**
+`SchemaFormStateManager` mutator spread-replaces the whole state and saves, so
+*any* of them on a stale `this.state` clobbers `fieldValues`. That turned up two
+more unreconciled sites nobody had flagged (`pinField` in
+`handleSwitchFieldRequest`, `markFieldSchemaLoaded` in `handleFormUpdated`) --
+eight reconciled handlers in total.
+
+The obvious consolidation -- reconcile inside `save()` itself -- was tried and
+REJECTED on evidence: `confirmField` deliberately does not bump `lastModified`
+(it changes only confirmation metadata, never the value), so a reconcile there
+sees a tie, prefers the persisted entry, and silently drops `confirmed: true` on
+every confirmation. Probed it; the flag vanished. That would have been far worse
+than the bug being fixed.
+
+So the durable guard is a source-level **allowlist** test
+(`webFormConnection.persistsites.test.ts`) asserting the COMPLETE set of persist
+sites. A newly-added one fails by default rather than waiting for a review round
+to notice. Mutation-verified by adding a seventh site and watching it fail.
+
 Both out-of-scope sites were folded in rather than left as filed beads: shipping a
-change titled "one owner for `fieldValues`" while knowingly leaving two more
-writers unreconciled would have been misleading.
+change titled "one owner for `fieldValues`" while knowingly leaving more writers
+unreconciled would have been misleading.
 
 ## `6j0m`: root cause found, no code change needed
 

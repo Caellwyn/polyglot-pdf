@@ -1159,6 +1159,18 @@ export class WebFormConnection {
 
     // Handle JIT mode: mark next field as loaded if schema provided
     if (nextFieldSchema && nextFieldSchema.id) {
+      // Reconcile before writing: markFieldSchemaLoaded spreads this.state --
+      // fieldValues included -- and save()s it (bd polyglot-pdf-uw3w / qim7).
+      const persistedBeforeLoad = SchemaFormStateManager.load();
+      if (persistedBeforeLoad) {
+        this.state = {
+          ...this.state,
+          fieldValues: reconcileFieldValues(
+            persistedBeforeLoad.fieldValues,
+            this.state.fieldValues
+          ),
+        };
+      }
       this.state = SchemaFormStateManager.markFieldSchemaLoaded(this.state, nextFieldSchema.id);
     }
 
@@ -2312,6 +2324,18 @@ export class WebFormConnection {
     // skipped), so the hint, the DTI drip, and any stall-recovery all point at
     // it. A pin on an already-CONFIRMED field is dormant until the model
     // updates the value (which resets confirmed) -- the correction flow.
+    // Reconcile before writing: pinField spreads this.state -- fieldValues
+    // included -- and save()s it (bd polyglot-pdf-uw3w / qim7).
+    const persistedBeforePin = SchemaFormStateManager.load();
+    if (persistedBeforePin) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedBeforePin.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
     this.state = SchemaFormStateManager.pinField(this.state, fieldId);
 
     // Move UI focus immediately (the same callback the next-field flow uses).
@@ -2524,6 +2548,24 @@ export class WebFormConnection {
         field_names: (c.field_names && typeof c.field_names === 'object') ? c.field_names : {},
       });
     }
+    // Reconcile before writing, same rule as the other save sites
+    // (bd polyglot-pdf-uw3w / qim7). enqueueValidatorFindings spreads this.state
+    // -- fieldValues included -- and save()s it, so a stale in-memory copy is
+    // persisted over anything written outside this object. The window here is
+    // WIDE: validation_result arrives asynchronously after a backend validator
+    // round-trip, so an on-screen edit made while it is in flight would be
+    // reverted, or dropped outright if this object never saw that field.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues
+        ),
+      };
+    }
+
     const before = this.state.validatorFindingsQueue.length;
     this.state = SchemaFormStateManager.enqueueValidatorFindings(this.state, findings);
     // Cancel the parked switch (if any): stay in-section to let the steer play out.
@@ -2807,6 +2849,15 @@ export class WebFormConnection {
     // snapshot -- confirmField/markFieldSchemaLoaded etc. all spread-replace rather
     // than mutate in place). A settled window's region cannot become unsettled, so
     // once marked sent it stays sent.
+    //
+    // NOTE this save() persists fieldValues too, so it carries the same
+    // stale-write risk as the handlers that reconcile explicitly
+    // (bd polyglot-pdf-uw3w / qim7). It does NOT reconcile here because it is not
+    // an entry point: all four callers (handleSessionReady,
+    // handleConfirmFieldRequest, handleSkipFieldRequest, sendManualFieldUpdate)
+    // reconcile or refresh this.state earlier in the SAME synchronous run, with
+    // no intervening await. Keep that true -- a new caller that has not
+    // reconciled must reconcile before calling this.
     if (sentIndices.length > 0) {
       this.state = {
         ...this.state,

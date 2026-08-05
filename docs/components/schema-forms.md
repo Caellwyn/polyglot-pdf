@@ -92,10 +92,27 @@ holds `this.state` across turns. Any connection handler ending in
 `SchemaFormStateManager.save(this.state)` can therefore persist a stale in-memory
 copy over an on-screen edit.
 
-`reconcileFieldValues` (`utils/fieldValue.ts`) is the single arbiter, called at the
-**five** handlers that save state — `handleSessionReady`, `handleConfirmFieldRequest`,
-`handleSkipFieldRequest`, `handleSectionSwitched`, `handleDrainFindingsResult`
-(bd `polyglot-pdf-qim7` / `uw3w` / `3irc` / `tare` / `6iwn`). It resolves
+**Every `SchemaFormStateManager` mutator spread-replaces the whole state and calls
+`save()` internally**, so *any* of them invoked on a stale `this.state` persists
+that stale copy. `reconcileFieldValues` (`utils/fieldValue.ts`) is the single
+arbiter, called at every handler that can reach one:
+`handleSessionReady`, `handleConfirmFieldRequest`, `handleSkipFieldRequest`,
+`handleSectionSwitched`, `handleDrainFindingsResult`, `handleValidationResult`,
+`handleSwitchFieldRequest`, `handleFormUpdated` (bd `polyglot-pdf-qim7` / `uw3w` /
+`3irc` / `tare` / `6iwn`).
+
+`webFormConnection.persistsites.test.ts` pins that list as an **allowlist** — a
+newly-added persist site fails there by default. Four successive review rounds
+each found one more unreconciled handler, which is why the enumeration is
+enforced in a test rather than trusted to a convention.
+
+> **Why not just reconcile inside `save()`?** Because `confirmField` deliberately
+> does not bump `lastModified` — it changes only confirmation metadata — so a
+> reconcile there would see a tie, prefer the persisted entry, and silently drop
+> `confirmed: true` on every confirmation. Verified by probe. Hence per-call-site
+> reconciles.
+
+It resolves
 **per logical field**, not per raw key:
 
 - The newer `lastModified` wins; a stamped entry beats an unstamped one.
