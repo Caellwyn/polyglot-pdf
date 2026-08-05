@@ -44,17 +44,22 @@ at that moment) or `turn_complete` (transcript-gated, races the playback tail).
 ## Verification
 
 - 6 backend tests (adapter fires once / None-safe / callback-error swallowed;
-  handler forwards / swallows send failure / no-websocket noop) + 6 vitest
-  (dispatch clears queue + fires callback + no idle-timeout flag;
-  resetPlaybackClock does NOT block the next chunk + resets the clock;
-  flushAudioQueue still blocks until resumePlayback). Four mutations applied,
-  each reddened exactly its guard, all restored to green.
+  handler forwards / swallows send failure / no-websocket noop) + 10 vitest
+  (dispatch clears queue + pump flag + fires callback + no idle-timeout flag;
+  arraybuffer WS delivery pinned; resetPlaybackClock does NOT block the next
+  chunk, resets the clock against a real ~3s backlog, clears the source
+  array, detaches onended, and drops a chunk parked on the suspended-resume
+  await; flushAudioQueue still blocks until resumePlayback). Seven mutations
+  applied across the review rounds, each reddened exactly its guard, all
+  restored to green.
 - Full suites: backend 1600 passed (+ contract 89 after the ws-protocol row),
   frontend 1265/1265.
 - Live E2E (the 0rpu RUDE barge-in harness arm on the patched stack): PASS
   15/15 fields; 27 interrupts fired, 27 forwarded, 0 send failures. Measured
   drain: playback backlog at field updates fell from mean 1.10s (6/15 over 1s,
-  pre-fix run) to 0.27s (1/15) under identical barge-in pressure.
+  pre-fix run) to 0.27s with the first drain fix and 0.14s with the final
+  bundle (the arraybuffer wire-order fix removed the reordered tail chunks),
+  under identical barge-in pressure.
 
 ## Notes
 

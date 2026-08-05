@@ -254,7 +254,7 @@ early-return).
 > `interrupted` message (above) is what drains the client. Barge-in latency is
 > Gemini's interrupt round-trip rather than instant; measured on the RUDE
 > harness arm, the drain cut stale playback backlog at field updates from mean
-> 1.10s to 0.27s (bd s7uf).
+> 1.10s to 0.14s (bd s7uf; the wire-order fix is part of that bundle).
 
 There's a barge-in **grace period**: tool calls arriving within
 `BARGE_IN_GRACE_PERIOD_MS` (150ms, a constant in
