@@ -1106,6 +1106,31 @@ describe('FormCatalogue -- run extraction', () => {
       expect(meta.status).toBe('draft');
     });
 
+    it('mirrors the refusal up through onStatusRefusal for the strip line (s18 C1)', async () => {
+      // The producer side of the strip's refusal/error line (decision 1): a
+      // refused completion reaches the host (cleared to null first on entry).
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 409,
+        json: async () => ({ detail: '16 of 17 translations complete' }),
+      } as unknown as Response));
+      const onStatusRefusal = vi.fn();
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null}
+        serverActionsOk onStatusRefusal={onStatusRefusal} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('I-90');
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      await waitFor(() => expect(onStatusRefusal).toHaveBeenCalledWith(
+        expect.stringContaining('16 of 17 translations complete')));
+      expect(onStatusRefusal.mock.calls[0]).toEqual([null]);
+    });
+
     it('falls back to a local write with NO backend, and says it was unchecked', async () => {
       const root = mockRoot([
         mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),

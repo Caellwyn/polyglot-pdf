@@ -136,6 +136,26 @@ describe('findings render at the property they concern (s18 C1)', () => {
     );
     expect(screen.queryByTestId('field-findings-chip')).toBeNull();
   });
+
+  it('the chip is scoped to THIS field -- another field\'s ERROR cannot redden it', () => {
+    // The prop type invites a whole-schema list; the chip's count and its
+    // red/amber banding must ignore off-field findings exactly as the
+    // bucketing loop does (fresh-eyes round 1: an unscoped severity count
+    // rendered "1 to fix" red for a field carrying only a WARNING).
+    const otherFieldError: LintFinding = {
+      severity: 'ERROR', rule: 'field-unbacked',
+      path: 'fields[1] (id=zip)', message: 'zip names no PDF box',
+      field_id: 'zip',
+    };
+    render(
+      <FieldEditor field={TEXT_FIELD} schema={makeSchema(TEXT_FIELD)}
+        onUpdateField={vi.fn()} authorTier
+        lintFindings={[instructionsFinding, otherFieldError]} />,
+    );
+    const chip = screen.getByTestId('field-findings-chip');
+    expect(chip).toHaveTextContent('1 notice'); // amber wording, count of 1
+    expect(chip.className).toContain('bg-amber-100');
+  });
 });
 
 describe('the sign-off stamps the current findings (s18 C1, decision 3)', () => {

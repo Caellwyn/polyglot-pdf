@@ -772,8 +772,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     anchored.instructions.length + anchored.details.length
     + anchored.conditions.length
     + [...anchored.byOption.values()].reduce((n, b) => n + b.length, 0);
+  // Scoped to THIS field like the bucketing loop above -- an unscoped count
+  // let another field's ERROR turn this field's chip red ("N to fix") when a
+  // caller passes a multi-field list (fresh-eyes round 1).
   const anchoredErrorTotal = (lintFindings ?? [])
-    .filter(f => f.rule !== GUIDANCE_STALE_RULE && f.severity === 'ERROR').length;
+    .filter(f => f.field_id === field.id
+      && f.rule !== GUIDANCE_STALE_RULE && f.severity === 'ERROR').length;
   const anchoredTotal = embeddedCount + anchored.field.length;
 
   return (

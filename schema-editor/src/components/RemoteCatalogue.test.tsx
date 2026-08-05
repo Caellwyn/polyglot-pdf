@@ -137,6 +137,32 @@ describe('RemoteCatalogue', () => {
       expect(screen.getByText(/does not validate/)).toBeInTheDocument());
   });
 
+  it('mirrors a Mark-complete refusal up through onStatusRefusal, and clears it on the next attempt (s18 C1)', async () => {
+    // The producer side of the strip's refusal line (decision 1): a refused
+    // completion reaches the host with the server's detail; a later attempt
+    // clears the stale refusal first (null) before the call runs.
+    const onStatusRefusal = vi.fn();
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(
+      new Error('Schema has 1 lint error(s), so it cannot be marked complete'),
+    );
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+      selectedKitId={null} role="editor" onStatusRefusal={onStatusRefusal} />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() => expect(onStatusRefusal).toHaveBeenCalledWith(
+      expect.stringContaining('cannot be marked complete')));
+    // Called with null FIRST on entry (stale refusal cleared before the call).
+    expect(onStatusRefusal.mock.calls[0]).toEqual([null]);
+
+    // The retry succeeds (the once-rejection is spent): only the clear fires.
+    onStatusRefusal.mockClear();
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() => expect(screen.getByText(/marked complete/)).toBeInTheDocument());
+    expect(onStatusRefusal).toHaveBeenCalledWith(null);
+    expect(onStatusRefusal).not.toHaveBeenCalledWith(expect.stringContaining('cannot'));
+  });
+
   it('routes a 401 to onAuthError instead of the error banner', async () => {
     vi.mocked(listRemoteKits).mockRejectedValue(new AuthError());
     const onAuthError = vi.fn();
