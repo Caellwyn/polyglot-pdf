@@ -23,7 +23,8 @@ so the stale tail compounds the riskiest moment in the conversation.
 
 The `interrupted` event now travels the same detect-and-forward chain as
 `go_away`: adapter `_on_interrupted` callback (fired in the interrupted block
-before counter resets, error-swallowed) -> `callback_handler.on_interrupted`
+after the audio counters reset -- the callback reads neither, so ordering is
+inert -- error-swallowed) -> `callback_handler.on_interrupted`
 -> WS `{"type": "interrupted"}` (documented in ws-protocol.md; the contract
 test caught the initially missing row) -> `webFormConnection` clears the
 STAGING audioQueue and invokes `onInterrupted` -> `connection.ts` calls the
