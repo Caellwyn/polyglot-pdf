@@ -5,7 +5,7 @@
  * WHY A SOURCE-LEVEL GUARD. Every SchemaFormStateManager mutator spread-replaces
  * the WHOLE state and calls save() internally, so ANY of them called on a stale
  * `this.state` persists that stale copy over whatever the React UI wrote -- the
- * two-writer bug. Four successive pre-PR review rounds each found one MORE
+ * two-writer bug. Successive pre-PR review rounds each found one MORE
  * handler doing this (confirm/skip, then session_ready, then section_switched,
  * then drain_findings_result, then validation_result). Behavioural tests only
  * cover the handlers someone thought to test; this pins the SHAPE so the next
@@ -51,6 +51,12 @@ const PERSISTING_MUTATORS = [
   'markFieldsSteered',
   'consumeValidatorFindings',
   'updateField',
+  // Section mutators persist the whole state too. They are called on a freshly
+  // load()ed LOCAL rather than on this.state, so they are safe for a different
+  // reason than the rest -- but they belong in the allowlist, or a NEW call site
+  // passing this.state would slip past this check entirely.
+  'switchToSection',
+  'markSectionComplete',
 ]
 
 describe('WebFormConnection fieldValues persist sites (two-writer guard)', () => {
@@ -77,11 +83,19 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
       'markFieldSchemaLoaded',   // handleFormUpdated         -- reconciled
       'confirmField',            // handleConfirmFieldRequest -- reconciled
       'markFieldSkipped',        // handleSkipFieldRequest    -- reconciled
-      'pinField',                // handleSwitchFieldRequest  -- reconciled
       'enqueueValidatorFindings',// handleValidationResult    -- reconciled
       'markFieldsSteered',       // handleDrainFindingsResult -- reconciled
       'consumeValidatorFindings',// handleDrainFindingsResult -- same reconcile
-      'updateField',             // applyValue -- the stamping write itself
+      'updateField',             // the CHOKEPOINT -- reconciled; its own write
+                                 // stamps lastModified, so it wins its own reconcile
+      // Safe WITHOUT a reconcile, each for a stated reason:
+      'pinField',                // handleSwitchFieldRequest ADOPTS the persisted
+                                 // snapshot wholesale at entry (bd ezg2), so
+                                 // this.state cannot be stale by the time it runs
+      'switchToSection',         // x3: called on a freshly load()ed local, not
+      'switchToSection',         //     this.state (1636, 4120, and 4299 which
+      'switchToSection',         //     re-reads AFTER its buffer-drain await)
+      'markSectionComplete',     // same -- freshly load()ed local (4379)
     ]
 
     expect(found.map(f => f.split(':')[1]).sort()).toEqual([...EXPECTED].sort())

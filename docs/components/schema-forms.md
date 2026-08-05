@@ -97,7 +97,7 @@ copy over an on-screen edit.
 that stale copy. `reconcileFieldValues` (`utils/fieldValue.ts`) is the single
 arbiter. The most important call site is **`WebFormConnection.updateField` — the
 chokepoint every AI fill and manual edit funnels through**; its persisting call
-sits two frames below the message handler, which is why five rounds of
+sits two frames below the message handler, which is why six rounds of
 handler-level auditing missed it. The others are `handleSessionReady`,
 `handleConfirmFieldRequest`, `handleSkipFieldRequest`, `handleSectionSwitched`,
 `handleDrainFindingsResult`, `handleValidationResult`, and `handleFormUpdated`
@@ -114,7 +114,7 @@ is to re-read *after* the await, not to reconcile two diverged copies.
 
 `webFormConnection.persistsites.test.ts` pins both shapes: the persist-site list
 as an **allowlist** (a newly-added site fails by default) and a check that no
-persisting mutator reads a snapshot captured before an `await`. Five successive
+persisting mutator reads a snapshot captured before an `await`. Six successive
 review rounds each found one more instance, which is why the enumeration is
 enforced in a test rather than trusted to a convention.
 

@@ -339,6 +339,23 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
       ).toBe('same-write');
     });
 
+    it('a FRESHER hollow entry beats an older meaningful one ACROSS the alias split', () => {
+      // Deliberate, not a gap. A fresher hollow entry is exactly what
+      // markFieldSkipped writes (it BLANKS the value and stamps lastModified).
+      // Preferring the older meaningful entry here would resurrect an answer the
+      // user just skipped -- the same revive-a-cleared-value failure as bd
+      // polyglot-pdf-uw3w case 1, only via the alias split. "Meaningful entry
+      // wins" is the tie-break for EQUAL stamps; when the stamps differ, the
+      // newer write is the user's latest intent and it wins.
+      const out = reconcileFieldValues(
+        { [bare]: { value: null, lastModified: 500 } } as any,
+        { [bracket]: { value: ['a'], lastModified: 100 } } as any
+      );
+      const keys = Object.keys(out).filter(k => k.startsWith('p1_grp'));
+      expect(keys).toHaveLength(1);
+      expect(out[keys[0]].value).toBeNull();
+    });
+
     it('collapses to ONE entry even when a side holds BOTH key variants', () => {
       // A single side illegally holding both variants must still resolve to one
       // entry, and the entry that actually carries the answer must be the one
