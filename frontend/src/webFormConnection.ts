@@ -4309,8 +4309,18 @@ export class WebFormConnection {
     // throw (e.g. corrupted sessionStorage in extractSectionFields) releases the
     // guard immediately rather than leaving it stuck until the watchdog fires.
     try {
+      // Re-read AFTER the await (bd polyglot-pdf-uw3w / qim7). `currentState` was
+      // captured BEFORE waitForBufferDrain, which polls for up to a full second,
+      // and switchToSection spreads that snapshot -- fieldValues included -- and
+      // save()s it. A field typed on screen during the drain would otherwise be
+      // overwritten in sessionStorage AND omitted from the current_values this
+      // method sends to the backend below. This is the same stale-write class the
+      // message handlers reconcile against; here the staleness comes from the
+      // intervening await rather than from an unrefreshed this.state, so the fix
+      // is to re-read rather than to reconcile two diverged copies.
+      const freshState = SchemaFormStateManager.load() ?? currentState;
       // Switch to target section in local state
-      const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
+      const updatedState = SchemaFormStateManager.switchToSection(freshState, sectionId);
       this.state = updatedState;
 
       // Build section info to send to backend (avoid round-trip delay)

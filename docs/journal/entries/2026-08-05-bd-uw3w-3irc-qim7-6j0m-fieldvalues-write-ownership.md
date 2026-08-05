@@ -162,6 +162,22 @@ So the durable guard is a source-level **allowlist** test
 sites. A newly-added one fails by default rather than waiting for a review round
 to notice. Mutation-verified by adding a seventh site and watching it fail.
 
+- **Round 5** then found a genuinely DIFFERENT shape, which that guard was blind
+  to by construction: `switchToSection` does `load()` … `await
+  waitForBufferDrain(1000)` … `switchToSection(snapshot)`. The staleness comes
+  from the intervening await, not from an unrefreshed `this.state`, so the local
+  snapshot is up to a second old when it is persisted — and the stale copy is
+  also what gets sent to the backend as `current_values`. Fixed by re-reading
+  after the await; mutation shows the same total-loss signature (`expected
+  undefined to be defined`).
+
+The guard now covers that shape too. Writing that second check was itself
+instructive: the first version PASSED against known-bad code, because its
+method-boundary regex also matched `if (` and reset the tracking one line after
+the capture. A guard that silently passes is worse than no guard, so it is
+mutation-verified in both directions — it fails on the reverted fix, naming the
+exact line, and passes on the real source.
+
 Both out-of-scope sites were folded in rather than left as filed beads: shipping a
 change titled "one owner for `fieldValues`" while knowingly leaving more writers
 unreconciled would have been misleading.

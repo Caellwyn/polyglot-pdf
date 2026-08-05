@@ -101,9 +101,16 @@ arbiter, called at every handler that can reach one:
 `handleSwitchFieldRequest`, `handleFormUpdated` (bd `polyglot-pdf-qim7` / `uw3w` /
 `3irc` / `tare` / `6iwn`).
 
-`webFormConnection.persistsites.test.ts` pins that list as an **allowlist** — a
-newly-added persist site fails there by default. Four successive review rounds
-each found one more unreconciled handler, which is why the enumeration is
+There is a **second staleness shape** that reconciling `this.state` does not
+cover: `const s = load()` … `await` … `mutator(s)`. Here the local snapshot goes
+stale across the await and the mutator persists it. `switchToSection` had exactly
+this — its `waitForBufferDrain` polls for up to a full second — and the fix there
+is to re-read *after* the await, not to reconcile two diverged copies.
+
+`webFormConnection.persistsites.test.ts` pins both shapes: the persist-site list
+as an **allowlist** (a newly-added site fails by default) and a check that no
+persisting mutator reads a snapshot captured before an `await`. Five successive
+review rounds each found one more instance, which is why the enumeration is
 enforced in a test rather than trusted to a convention.
 
 > **Why not just reconcile inside `save()`?** Because `confirmField` deliberately

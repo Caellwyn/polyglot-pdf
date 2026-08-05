@@ -305,6 +305,29 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
     expect(persistedEntry('p1_name').value).toBe('typed mid-drain')
   })
 
+  it('switchToSection re-reads AFTER the buffer-drain await', async () => {
+    // switchToSection load()s state, then awaits waitForBufferDrain (which polls
+    // for up to a FULL SECOND), then persists that snapshot. Staleness here comes
+    // from the intervening await, not from an unrefreshed this.state -- a field
+    // typed on screen during the drain would be overwritten in sessionStorage AND
+    // omitted from the current_values sent to the backend.
+    const { conn, ws } = await connected()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'Field A': 'before' } }) })
+    await flush()
+
+    // Hold the drain open, and write on screen from INSIDE the await window.
+    let released = false
+    Object.defineProperty(ws, 'bufferedAmount', { get: () => (released ? 0 : 1), configurable: true })
+    setTimeout(() => { uiWrites('p1_name', 'typed during drain'); released = true }, 5)
+
+    await conn.switchToSection('s1', 'ws://x')
+
+    // The edit made during the drain must survive the switch's own save.
+    expect(persistedEntry('p1_name')).toBeDefined()
+    expect(persistedEntry('p1_name').value).toBe('typed during drain')
+  })
+
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {
     const { conn, ws } = await connected()
 

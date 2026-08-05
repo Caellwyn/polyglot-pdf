@@ -100,6 +100,62 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
     expect(sites).toHaveLength(4)
   })
 
+  it('no persisting mutator reads a state snapshot captured BEFORE an await', () => {
+    // The SECOND staleness shape, and the one the textual checks above cannot
+    // see: `const s = load()` ... `await ...` ... `mutator(s, ...)`. Here
+    // this.state is irrelevant -- the local snapshot goes stale across the await,
+    // and the mutator persists it. switchToSection had exactly this (its
+    // waitForBufferDrain polls for up to a full second).
+    //
+    // Heuristic: inside each method body, find a load() into a local, then an
+    // await, then a persisting-mutator call passing that same local. Flag it.
+    const PERSISTING = /SchemaFormStateManager\.(switchToSection|markSectionComplete|updateField|confirmField|markFieldSkipped|markFieldsSteered|consumeValidatorFindings|enqueueValidatorFindings|pinField|markFieldSchemaLoaded)\(\s*([A-Za-z_$][\w$]*)/
+
+    const offenders: string[] = []
+    let pendingLocals = new Map<string, number>()  // local name -> line captured
+    let sawAwaitSince = new Set<string>()
+
+    LINES.forEach((raw, i) => {
+      if (!isCode(raw)) return
+      const n = i + 1
+
+      // A method boundary resets the tracking. Must NOT match control-flow
+      // keywords (`if (`, `for (`, `while (`, `catch (`, `switch (`) -- an
+      // earlier version did, which reset the tracking one line after the
+      // capture and made this whole check silently vacuous.
+      const methodStart = /^\s{2}(?:(?:private|public|protected|static|async)\s+)*[A-Za-z_$][\w$]*\s*\(/.test(raw)
+        && !/^\s*(?:if|for|while|switch|catch|return|await|else)\b/.test(raw.trim())
+      if (methodStart) {
+        pendingLocals = new Map()
+        sawAwaitSince = new Set()
+      }
+
+      // Matches `const s = load()`, `let s = load()`, AND a bare re-assignment
+      // `s = load()` -- the last one matters: switchToSection declares the local
+      // with its type on one line and assigns it on another, so requiring
+      // const/let here would miss exactly the site this check exists for.
+      const cap = raw.match(/(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*SchemaFormStateManager\.load\(\)/)
+      if (cap) {
+        pendingLocals.set(cap[1], n)
+        sawAwaitSince.delete(cap[1])
+      }
+
+      if (/\bawait\b/.test(raw)) {
+        for (const name of pendingLocals.keys()) sawAwaitSince.add(name)
+      }
+
+      const use = raw.match(PERSISTING)
+      if (use) {
+        const arg = use[2]
+        if (pendingLocals.has(arg) && sawAwaitSince.has(arg)) {
+          offenders.push(`${n}: ${use[1]}(${arg}) -- captured at line ${pendingLocals.get(arg)}, stale across an await`)
+        }
+      }
+    })
+
+    expect(offenders).toEqual([])
+  })
+
   it('reconcileFieldValues is actually imported and used at multiple sites', () => {
     expect(SRC).toContain('reconcileFieldValues')
     const uses = LINES.filter(l => isCode(l) && l.includes('reconcileFieldValues(')).length
