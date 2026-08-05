@@ -163,6 +163,41 @@ fixtures rather than loosening the code, and added
 every reconnect is only safe if the same schema yields the same marker, and
 mid-form reconnects are routine (Gemini's ~10-minute cap).
 
+**Fresh-eyes round 3 (Opus): both criteria PASS, GAPS-FOUND (3), all fixed
+inline.** It confirmed the round-2 fixes are genuinely closed and -- the thing
+it was specifically asked to attack -- verified that changing FIXTURES rather
+than code was correct: all three production senders emit `full_schema`
+(`schemaFormState.ts:953` legacy, `:1028` JIT, `webFormConnection.ts:4036`
+section-switch), so the old fixtures had been exercising a message no client
+produces.
+
+1. ADOPTED, fixed inline (reviewer filed `polyglot-pdf-kdrz`, closed): the
+   backend read the government edition ONLY from the per-section schema, so a
+   currently-deployed pre-47r3 client -- which sends no top-level
+   `edition_date` but DOES send `full_schema` with the real `"12/2024"` inside
+   -- had its agency edition discarded in favour of a content digest. Strictly
+   weaker evidence, and my own test had PINNED that degradation as correct.
+   Now: per-section schema first, then `full_schema`, fingerprint last. The bad
+   test was rewritten; both paths mutation-verified. Fixed here rather than
+   deferred because it weakened the exact evidence quality this bead exists to
+   improve -- shipping it and filing a bead to undo it is worse than a small fix.
+2. ADOPTED (reviewer filed `polyglot-pdf-zbux`, closed): `kit_id` was documented
+   under the JIT-only table while the code reads it at the SHARED scope for both
+   transports -- so whoever picks up `d95y` (add it to the legacy builder) would
+   have found the doc arguing against the fix. Moved to the shared table, with a
+   note that only the JIT builder sends it today. The contract test could not
+   catch this: it unions all three tables before comparing.
+3. ADOPTED: the `published_at` comment claimed re-publishing "after an edit"
+   moves the date, but an idempotent complete->complete re-press moves it too.
+   It records "when last published", not "when last changed" -- corrected, since
+   epic `7jmy` will build on that claim.
+
+**Caveat on this round's evidence:** the reviewer could not execute pytest (no
+venv reachable from its sandbox), so its mutation checks were analytical rather
+than run. Its reasoning traced correctly against the code, but that is weaker
+than rounds 1-2, which actually ran them -- worth noting rather than treating
+all three rounds as equivalent.
+
 ## Lessons
 
 - **A `-k`-filtered run is iteration, never evidence.** I reported "21 passing"
@@ -185,6 +220,14 @@ mid-form reconnects are routine (Gemini's ~10-minute cap).
   looks like a style call; here it decided whether firms with proprietary forms
   could publish at all. The 23 failing fixtures were the signal that the rule
   was mis-scoped, not that the fixtures needed editing.
+- **A test can PIN a bug as correct.** Twice in this bead I wrote an assertion
+  that matched what the code did rather than what it should do: first
+  `edition_date is None` for a legacy client (when the fallback exists precisely
+  to avoid that), then the fingerprint for a client whose real edition was
+  sitting in `full_schema`. Both looked like passing coverage. The tell is an
+  assertion that encodes a DEGRADED outcome without a comment explaining why the
+  degradation is acceptable -- if the answer is "because that is what happens",
+  the test is describing, not specifying.
 - **When adding a field beside one that is deliberately PRESERVED, copy the
   preservation, not just the placement.** `start_session` is re-entered by the
   internal section-switch restart with partial arguments, so anything assigned

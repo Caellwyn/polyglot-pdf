@@ -347,10 +347,20 @@ class FormFillingService:
         if kit_id is not None:
             self._kit_id = kit_id
         if full_schema is not None:
-            self._edition_date = _resolve_edition_marker(
-                schema.get("form_metadata", {}).get("edition_date") if schema else None,
-                full_schema,
+            # Look for the government edition in the per-section schema FIRST
+            # (where a 47r3-aware client puts it via the handshake key), then in
+            # full_schema (bd polyglot-pdf-kdrz). A currently-deployed pre-47r3
+            # client sends no top-level edition_date but DOES send full_schema
+            # with the real "12/2024" inside -- reading only the former threw
+            # away an agency edition we were handed and recorded a fingerprint
+            # instead, which is strictly weaker evidence. The fingerprint stays
+            # the last resort, for kits that genuinely have no edition.
+            declared_edition = (
+                (schema.get("form_metadata") or {}).get("edition_date") if schema else None
             )
+            if not (isinstance(declared_edition, str) and declared_edition.strip()):
+                declared_edition = (full_schema.get("form_metadata") or {}).get("edition_date")
+            self._edition_date = _resolve_edition_marker(declared_edition, full_schema)
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
         self._form_session_id = form_session_id or session_id

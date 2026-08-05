@@ -1544,8 +1544,14 @@ async def set_editor_kit_status(
     # have "the version published on <date>", which is human-readable, real,
     # and meaningful in a liability record. Written only on the promotion to
     # complete: a revert to draft leaves the last publish date intact (the kit
-    # WAS published then), and re-publishing after an edit moves it, which is
-    # exactly the signal a disputed filing needs.
+    # WAS published then), and re-publishing after an edit moves it.
+    #
+    # Precisely: this stamps EVERY complete-status POST, including an idempotent
+    # complete->complete re-press with no schema edit, so it records "when this
+    # kit was last published", NOT "when it last changed" (Opus review on 47r3;
+    # an earlier comment here overclaimed the latter). Inert today -- nothing
+    # reads it -- but epic polyglot-pdf-7jmy will, and its author-supplied
+    # version is the field that will carry edit intent.
     if body.status == "complete":
         next_meta["published_at"] = datetime.now(timezone.utc).isoformat()
     try:

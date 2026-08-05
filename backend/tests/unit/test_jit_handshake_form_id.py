@@ -244,16 +244,21 @@ def test_edition_marker_is_stable_across_a_reconnect(ws_client):
     assert len(set(markers)) == 1, f"marker drifted across reconnects: {markers}"
 
 
-def test_older_client_omitting_kit_and_edition_degrades_cleanly(ws_client):
-    """A deployed client predating 47r3 must still connect -- and still pin a revision.
+def test_older_client_still_yields_the_REAL_edition_from_full_schema(ws_client):
+    """A pre-47r3 client's real edition must be USED, not discarded (bd kdrz).
 
     Clients update independently of the backend, so the pre-47r3 handshake shape
-    keeps working. kit_id has no fallback (only the client knows which kit was
-    picked), but the EDITION does: resolve_edition_marker fingerprints the kit's
-    answerable shape, so even a legacy session's record names a verifiable
-    revision rather than nothing. That fallback is the whole point of the
-    feature, so this asserts the fingerprint is present -- an earlier cut of
-    this test asserted None here and was simply wrong about the intent.
+    -- no top-level kit_id / edition_date, but full_schema present -- keeps
+    working. Crucially, that full_schema CARRIES the government edition
+    ("12/2024" on the shipped W-7), so reading only the top-level key threw away
+    an agency edition we had been handed and recorded a content fingerprint
+    instead: strictly weaker evidence in a liability record.
+
+    An earlier cut of this test asserted the fingerprint here and thereby PINNED
+    the degradation as correct -- caught by review.
+
+    kit_id genuinely has no server-side fallback (only the client knows which
+    kit was picked), so it stays None; that half is bd polyglot-pdf-d95y.
     """
     handshake = _jit_handshake()
     handshake.pop("kit_id")
@@ -264,6 +269,21 @@ def test_older_client_omitting_kit_and_edition_degrades_cleanly(ws_client):
     assert len(identity) == 1
     assert identity[0]["form_id"] == "W-7"  # unchanged: n0em's fix still applies
     assert identity[0]["kit_id"] is None  # no server-side fallback exists
+    assert identity[0]["edition_date"] == "12/2024"  # from full_schema, NOT a digest
+
+
+def test_fingerprint_is_used_only_when_no_edition_exists_anywhere(ws_client):
+    """The digest is the LAST resort, not the first (bd kdrz).
+
+    With no edition in the handshake key AND none in full_schema -- a genuine
+    custom form -- the fingerprint is correct and must still appear.
+    """
+    handshake = _with_edition(None)
+    handshake.pop("kit_id")
+    handshake.pop("edition_date")
+
+    identity = _run_handshakes_identity(ws_client, [handshake])
+
     assert identity[0]["edition_date"].startswith("sha256:")
 
 
