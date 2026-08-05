@@ -171,12 +171,36 @@ to notice. Mutation-verified by adding a seventh site and watching it fail.
   after the await; mutation shows the same total-loss signature (`expected
   undefined to be defined`).
 
+- **Round 6** found the one that mattered most: `handleFieldUpdate` -- the
+  ORDINARY AI-fill path, the most frequent message in the whole class -- was
+  unreconciled, and a second fill DROPPED a field the user typed in between
+  (`undefined`: total loss). Every prior enumeration missed it for a structural
+  reason: the persisting call is two frames deep
+  (`applyAiValueWithValidation` -> `this.updateField()` ->
+  `SchemaFormStateManager.updateField()`), so it is invisible to a handler-level
+  grep for `SchemaFormStateManager.X(this.state`.
+
+That finding justified the structural fix the round-6 reviewer recommended:
+reconcile at `WebFormConnection.updateField`, the CHOKEPOINT every AI fill and
+manual edit funnels through. It is safe there precisely because the write it
+makes STAMPS `lastModified`, so its own entry wins its own reconcile -- the
+property that made a `save()`-level reconcile unsafe simply does not apply.
+
+Round 6 also caught two test-quality problems worth recording. A `switch_field`
+test passed VACUOUSLY (the message key is `field`, not `field_id`, so it hit an
+unknown-field early return), and the reconcile it was meant to pin turned out to
+be DEAD CODE -- `handleSwitchFieldRequest` already adopts the persisted snapshot
+at entry (bd `ezg2`). Mutation exposed both: the test only failed when the ENTRY
+REFRESH was removed, never when the reconcile was. The dead reconcile was deleted
+rather than kept as harmless insurance.
+
 The guard now covers that shape too. Writing that second check was itself
 instructive: the first version PASSED against known-bad code, because its
 method-boundary regex also matched `if (` and reset the tracking one line after
 the capture. A guard that silently passes is worse than no guard, so it is
 mutation-verified in both directions — it fails on the reverted fix, naming the
-exact line, and passes on the real source.
+exact line, and passes on the real source. Round 6 then defeated it once more by
+renaming through an intermediate variable, so it now follows ALIASES too.
 
 Both out-of-scope sites were folded in rather than left as filed beads: shipping a
 change titled "one owner for `fieldValues`" while knowingly leaving more writers
