@@ -164,6 +164,7 @@ def price_text_usage(prompt_tokens: int, cached_tokens: int,
 # its matching question plan.
 DEMO_SCHEMA_PATH = _REPO_ROOT / "frontend" / "public" / "adult_intake_demo_schema.json"
 I90_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "i-90" / "schema.json"
+W7_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "w7" / "schema.json"
 AUDIO_CACHE = Path(__file__).resolve().parent / "fixtures" / "audio_cache"
 _AUDIO_RATE = 16000
 _CHUNK_MS = 40
@@ -553,10 +554,101 @@ def score_fill_accuracy(client, plan, expected) -> dict:
 
 # --schema registry: source path + matching question plan. Default is "demo" for
 # back-compat with the pre-jnjj.24 callers; "i90" is the production-faithful set.
+# --------------------------------------------------------------------- W-7
+# IRS Form W-7 (ITIN application), bd polyglot-pdf-89mt. The deployed demo kit
+# and the shortest real form we ship -- 53 fields, of which 44 survive the
+# certification denylist (the "Acceptance Agent's Use ONLY" block is never
+# fillable, bd polyglot-pdf-oagt) and 19 are conditional.
+#
+# THE PERSONA IS DELIBERATE: a nonresident alien filing a U.S. federal return
+# (reason "b"), which is the most common real W-7 case AND the one that avoids
+# the conditional branches -- no treaty article (a/f), no U.S.-person
+# relationship (d/e), no prior ITIN (6f), no college block (6g). A persona that
+# tripped those branches would measure a longer form, not a typical session, and
+# the per-question number is the point.
+#
+# The "wrong" values are plausible MIS-HEARINGS, not arbitrary different values:
+# Reyes/Reyna, Guatemala/Guatemala City, 03/14/1990 vs 03/04/1990. An
+# implausible wrong answer measures a correction the model would never actually
+# need to make.
+W7_QUESTIONS = [
+    # --- Application type + reason ---
+    {"field_id": "application_type",
+     "say": "I am applying for a new ITIN.",
+     "wrong": "I am renewing an existing ITIN."},
+    {"field_id": "reason",
+     "say": "I am a nonresident alien filing a U.S. federal tax return.",
+     "wrong": "I am a U.S. resident alien filing a return."},
+    # --- Name ---
+    {"field_id": "name_1a_first", "say": "My first name is Ana.",
+     "wrong": "My first name is Anna."},
+    {"field_id": "name_1a_middle", "say": "My middle name is Lucia.",
+     "wrong": "My middle name is Lucy."},
+    {"field_id": "name_1a_last", "say": "My last name is Reyes.",
+     "wrong": "My last name is Reyna."},
+    # --- Mailing address ---
+    {"field_id": "mailing_street",
+     "say": "My street address is 418 Willow Street, apartment 2B.",
+     "wrong": "My street address is 480 Willow Street, apartment 2D."},
+    {"field_id": "mailing_city_state_country",
+     "say": "Springfield, Oregon, United States, 97477.",
+     "wrong": "Springfield, Oregon, United States, 97747."},
+    # --- Foreign address ---
+    {"field_id": "foreign_street",
+     "say": "My foreign address is 12 Avenida Central.",
+     "wrong": "My foreign address is 20 Avenida Central."},
+    {"field_id": "foreign_city_state_country",
+     "say": "Quetzaltenango, Guatemala.",
+     "wrong": "Guatemala City, Guatemala."},
+    # --- Birth ---
+    {"field_id": "date_of_birth", "say": "I was born on March 14th, 1990.",
+     "wrong": "I was born on March 4th, 1990."},
+    {"field_id": "country_of_birth", "say": "I was born in Guatemala.",
+     "wrong": "I was born in Guatemala City."},
+    {"field_id": "city_state_of_birth", "say": "I was born in Quetzaltenango.",
+     "wrong": "I was born in Quetzaltenango, Mexico."},
+    {"field_id": "sex", "say": "Female.", "wrong": "Male."},
+    # --- Citizenship / foreign tax id / visa ---
+    {"field_id": "countries_of_citizenship", "say": "I am a citizen of Guatemala.",
+     "wrong": "I am a citizen of Honduras."},
+    {"field_id": "foreign_tax_id_number",
+     "say": "My foreign tax I.D. number is 2 4 9 8 1 7 3 6.",
+     "wrong": "My foreign tax I.D. number is 2 4 9 8 1 7 3 8."},
+    {"field_id": "us_visa_type_number_expiration",
+     "say": "I do not have a U.S. visa.",
+     "wrong": "I have a B2 visa."},
+    # --- Identification document ---
+    {"field_id": "id_document_type", "say": "I am submitting my passport.",
+     "wrong": "I am submitting my driver's license."},
+    {"field_id": "id_document_issued_by",
+     "say": "It was issued by Guatemala.",
+     "wrong": "It was issued by Guatemala City."},
+    {"field_id": "id_document_number",
+     "say": "The passport number is 1 0 4 7 2 2 8 5.",
+     "wrong": "The passport number is 1 0 4 7 2 2 8 6."},
+    {"field_id": "id_document_expiration_date",
+     "say": "It expires on August 30th, 2029.",
+     "wrong": "It expires on August 13th, 2029."},
+    {"field_id": "date_of_entry_us",
+     "say": "I entered the United States on 06/11/2023.",
+     "wrong": "I entered the United States on 06/01/2023."},
+    # --- Prior ITIN (answered NO, which closes the 6f branch) ---
+    {"field_id": "previously_received_itin_or_irsn",
+     "say": "No, I have never received an ITIN or an IRSN.",
+     "wrong": "Yes, I received one before."},
+]
+
+# No accuracy grading for this run -- 89mt asks a COST question, and an
+# expected-value map would invite reading fill-accuracy off a run whose
+# persona was chosen for cost realism rather than accuracy coverage.
+W7_EXPECTED: dict = {}
+
 SCHEMAS = {
     "demo": {"path": DEMO_SCHEMA_PATH, "questions": DEMO_QUESTIONS, "expected": {}},
     "i90": {"path": I90_SCHEMA_PATH, "questions": I90_QUESTIONS,
             "expected": I90_EXPECTED},
+    "w7": {"path": W7_SCHEMA_PATH, "questions": W7_QUESTIONS,
+           "expected": W7_EXPECTED},
 }
 
 CSV_COLUMNS = [
@@ -2931,14 +3023,17 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
-    ap.add_argument("--schema", choices=["demo", "i90", "i90-full"], default="demo",
+    ap.add_argument("--schema", choices=["demo", "i90", "i90-full", "w7"],
+                    default="demo",
                     help="form schema + question plan: 'demo' (the legacy "
                          "adult-intake demo, default for back-compat), 'i90' "
                          "(the REAL form-kits/i-90 first 4 sections, 34 "
-                         "questions; bd polyglot-pdf-jnjj.24), or 'i90-full' "
+                         "questions; bd polyglot-pdf-jnjj.24), 'i90-full' "
                          "(the WHOLE I-90 stress-test plan generated from the "
                          "g1b answer key -- ~113 questions; requires --arm dti "
-                         "--continuous; bd polyglot-pdf-n86b)")
+                         "--continuous; bd polyglot-pdf-n86b), or 'w7' (the "
+                         "REAL form-kits/w7 kit, 22 questions on the common "
+                         "nonresident-filer path; bd polyglot-pdf-89mt)")
     ap.add_argument("--arm",
                     choices=["unbounded", "section-reset", "section-reset-jit", "dti", "sliding-window"],
                     default="unbounded")
