@@ -503,6 +503,47 @@ describe('fieldValues write-ownership (uw3w / 3irc / qim7)', () => {
     expect(SchemaFormStateManager.load()!.fieldValues['race[]'].value).toEqual(['Asian'])
   })
 
+  it('confirm_field succeeds when the reconcile re-keyed the answer to the bracket', async () => {
+    // The reconcile CONSOLIDATES an alias pair onto the schema's variant and
+    // deletes the other. The model drops the bracket (bd 5k52), so it confirms
+    // `race` for an answer now living under `race[]`. An exact-key gate returns
+    // undefined -> the confirm is refused as 'no_value' -> the loop-breaker tells
+    // Gemini to stop trying, stranding a field that HOLDS the user's answer.
+    const conn = new WebFormConnection(BRACKET_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // The answer is persisted under the SCHEMA's bracketed id.
+    const seeded = SchemaFormStateManager.load()
+    SchemaFormStateManager.updateField(seeded as any, 'race[]', ['Asian'] as any, {
+      confirmed: false, confirmationMethod: 'manual_edit',
+    })
+
+    // The model confirms with the BARE id.
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'confirm_field', field_id: 'race',
+        confirmation_method: 'verbal', request_id: 'cf-1',
+      }),
+    })
+    await flush()
+
+    const acks = ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+      .filter((m: any) => m.type === 'confirm_field_response')
+    expect(acks[0]?.recorded).toBe(true)
+    expect(acks[0]?.reason).toBeUndefined()
+
+    // and it landed on the ONE existing entry, not a new bare-key one.
+    const keys = Object.keys(SchemaFormStateManager.load()!.fieldValues)
+      .filter(k => k.startsWith('race'))
+    expect(keys).toEqual(['race[]'])
+    expect(SchemaFormStateManager.load()!.fieldValues['race[]'].confirmed).toBe(true)
+  })
+
   it('session_ready does not persist stale in-memory state over a concurrent UI write', async () => {
     const { conn, ws } = await connected()
 

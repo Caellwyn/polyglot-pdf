@@ -1895,7 +1895,16 @@ export class WebFormConnection {
     // backend re-requests it forever (a tight confirm/next-field-hint spin that strands
     // the session and silences Gemini). Detect that, do not record a bogus confirmation,
     // and re-prompt Gemini to collect the value.
-    const fieldValue = this.state.fieldValues[field_id]?.value;
+    // Read through the `[]`-alias fallback, exactly as the skip handler's
+    // already-filled guard does (bd polyglot-pdf-5k52). An exact-key-only read
+    // MISSES an aliased filled value -- and the reconcile now actively
+    // CONSOLIDATES an alias pair onto the schema's variant and deletes the other,
+    // so a model that drops the bracket (which it does) can send `race` for an
+    // answer now living under `race[]`. That read returns undefined, the
+    // usable-value gate refuses a legitimate confirm as 'no_value', and the
+    // loop-breaker then tells Gemini to stop trying -- stranding a field that
+    // holds the user's answer.
+    const fieldValue = readFieldEntryWithAlias(this.state.fieldValues, field_id)?.value;
     // NOTE on empty arrays (fresh-eyes PR #145 rounds 4+5): an empty `[]` on a
     // checkbox group is deliberately NOT treated as unusable here. A blank OPTIONAL
     // group ("the user selected none") is a legitimate, confirmable end state;

@@ -103,8 +103,14 @@ handler-level auditing missed it. The others are `handleSessionReady`,
 `handleDrainFindingsResult`, `handleValidationResult`, and `handleFormUpdated`
 (bd `polyglot-pdf-qim7` / `uw3w` / `3irc` / `tare` / `6iwn`).
 
-`markFieldSkipped` resolves the `[]`-alias and deletes the stale variant, exactly
-as `updateField` does — it was the last remaining producer of the both-variants
+`confirmField` and `markFieldSkipped` both resolve the `[]`-alias and write back to
+the RESOLVED key, exactly as `updateField` does — and `handleConfirmFieldRequest`'s
+usable-value gate reads through the alias too. That matters *because* the reconcile
+consolidates a pair onto one variant: the model routinely drops the bracket
+(bd `polyglot-pdf-5k52`), so an exact-key read would miss the answer, refuse the
+confirm as `no_value`, and the loop-breaker would tell Gemini to stop trying —
+stranding a field that holds the user's answer. `markFieldSkipped` additionally
+deletes the stale variant — it was the last remaining producer of the both-variants
 state the reconcile then had to arbitrate (bd `polyglot-pdf-8c97`).
 
 `handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot

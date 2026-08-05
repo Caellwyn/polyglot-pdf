@@ -39,6 +39,47 @@ function groupKeys(state: any): string[] {
   return Object.keys(state.fieldValues).filter(k => k.startsWith('p1_grp')).sort()
 }
 
+describe('confirmField []-alias handling (bd polyglot-pdf-8c97)', () => {
+  beforeEach(() => {
+    const store: Record<string, string> = {}
+    const stub = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+    global.sessionStorage = stub
+    if (typeof window !== 'undefined') {
+      Object.defineProperty(window, 'sessionStorage', {
+        value: stub, writable: true, configurable: true,
+      })
+    }
+  })
+
+  it('confirms through the alias and does NOT create a second entry', () => {
+    // The reconcile consolidates an alias pair onto the schema's variant, so a
+    // model that drops the bracket sends `p1_grp` for a value now under
+    // `p1_grp[]`. An exact-key confirm would no-op (confirming nothing) or, if
+    // it wrote to the requested key, create a second entry.
+    let state: any = SchemaFormStateManager.init(schema())
+    state = { ...state, fieldValues: { 'p1_grp[]': { value: ['a'], lastModified: 100 } } }
+
+    const after = SchemaFormStateManager.confirmField(state, 'p1_grp', 'ai_voice')
+
+    expect(groupKeys(after)).toEqual(['p1_grp[]'])
+    expect(after.fieldValues['p1_grp[]'].confirmed).toBe(true)
+    expect(after.fieldValues['p1_grp[]'].value).toEqual(['a'])
+  })
+
+  it('still no-ops when NEITHER variant has an entry', () => {
+    const state: any = SchemaFormStateManager.init(schema())
+    const after = SchemaFormStateManager.confirmField(state, 'p1_grp', 'ai_voice')
+    expect(groupKeys(after)).toEqual([])
+  })
+})
+
 describe('markFieldSkipped []-alias handling (bd polyglot-pdf-8c97)', () => {
   beforeEach(() => {
     const store: Record<string, string> = {}

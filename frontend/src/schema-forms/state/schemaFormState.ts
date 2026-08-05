@@ -1214,7 +1214,17 @@ export class SchemaFormStateManager {
     fieldId: string,
     method: 'ai_voice' | 'manual_edit'
   ): SchemaFormState {
-    const fieldValue = state.fieldValues[fieldId];
+    // Resolve the `[]`-alias like updateField and markFieldSkipped do. Without
+    // it a confirm for `race` no-ops when the value lives under `race[]` -- and
+    // reconcileFieldValues now actively consolidates a pair onto the schema's
+    // variant, so the model dropping the bracket (bd polyglot-pdf-5k52) reaches
+    // exactly that state. The gate in handleConfirmFieldRequest reads through the
+    // alias too, so without this the gate would pass and the write silently do
+    // nothing -- confirming neither variant.
+    const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+    const targetKey = state.fieldValues[fieldId] !== undefined ? fieldId
+      : (state.fieldValues[aliasKey] !== undefined ? aliasKey : fieldId);
+    const fieldValue = state.fieldValues[targetKey];
     if (!fieldValue) {
       // bd polyglot-pdf-0y7: a confirm for a field with no entry in fieldValues is
       // a no-op (nothing to confirm until a value lands). This was previously
@@ -1234,7 +1244,10 @@ export class SchemaFormStateManager {
       ...state,
       fieldValues: {
         ...state.fieldValues,
-        [fieldId]: {
+        // Write back to the RESOLVED key, not the requested one -- writing to
+        // `fieldId` when the entry was found under the alias would create a
+        // SECOND entry and break the got6 one-entry invariant.
+        [targetKey]: {
           ...fieldValue,
           confirmed: true,
           confirmedAt: new Date().toISOString(),
