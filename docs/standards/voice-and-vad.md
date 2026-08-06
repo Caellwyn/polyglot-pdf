@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-08-05 (bd polyglot-pdf-s7uf: the Barge-in section now describes the FORWARDED `interrupted` WS message + two-hold client drain via `resetPlaybackClock` -- the adapter no longer swallows the event; the native-VAD delta note carries the measured backlog numbers.) Prior: 2026-08-04 (bd polyglot-pdf-87a9: the spoken language is PINNED per session -- a new SPEC section under "fill-language vs spoken-language" states that mid-conversation switching is unsupported, that the ONLY change path is a new session ("clear form" -> language modal), and that `change_spoken_language` is now a misnomer whose only live sender is the reconnect opener re-asserting the SAME pinned language. The dead UI switchers (`handleLanguageChange` in both overlays, `connectionManager.changeSpokenLanguage`) were removed.) Prior: 2026-07-16 (bd polyglot-pdf-yo5t: new "Pause / unpause" section -- the debounced post-unpause level-1 re-prompt, its cancel/fire guards, and the recovery_prompt channel's first production caller; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: the tool-call-compliance caveat resolved as historical -- bd polyglot-pdf-i9q8 closed, root cause was an untyped tool param, not the system instruction. Also current: the Barge-in section describes the FORWARDED `interrupted` WS message + two-hold client drain via `resetPlaybackClock` (bd polyglot-pdf-s7uf), and the spoken language is PINNED per session -- mid-conversation switching is unsupported and `change_spoken_language` is a misnomer whose only live sender is the reconnect opener re-asserting the same pinned language (bd polyglot-pdf-87a9).)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -54,10 +54,16 @@ The `VAD_*` settings in `backend/config.py` were hard-coded literals until bd
 Zero `code=1011` closures were observed across ~24 sessions on 2026-06-11
 (both models), consistent with bd `daa`'s "transient upstream outage" verdict.
 
-Caveat: turn REGISTRATION is fixed by this; tool-call COMPLIANCE under the
-app's full system instruction is a separate, pre-existing defect (2.5 hears the
-"yes" but does not call `confirm_field`; 3.1 skips `update_form_fields`) --
-tracked in bd `polyglot-pdf-i9q8` with the full E2E evidence.
+This bead (4sv7) fixes turn REGISTRATION only. A separately-suspected tool-call
+COMPLIANCE defect (2.5 not calling `confirm_field`; 3.1 skipping
+`update_form_fields`) was investigated under bd `polyglot-pdf-i9q8` and turned
+out NOT to be a system-instruction issue: the real cause was
+`update_form_fields`'s `value` tool param being required but undeclared-type,
+which google-genai 2.8.0's stricter validation made 3.1 reject outright; 2.5
+tolerated the untyped param. Typing `value` as `"string"` fixed both (verified
+4/4 on 2.5 and 3.1 with the full production system instruction; bd i9q8
+CLOSED). See the NOTE above `USE_PREMIUM_MODEL` in `backend/config.py` for the
+current explanation.
 
 ## Manual mode: client-side VAD, not Gemini's
 

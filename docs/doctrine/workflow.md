@@ -1,6 +1,6 @@
 # Workflow doctrine: beads + the agent-swarm tooling
 
-*Last updated: 2026-06-11.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: stale stamp + pr_review_watcher simplification).*
 
 The load-bearing rules for how work moves through this project. Product-agnostic;
 ported from the claude-swarm-kit. Adapt the specifics, keep the principles.
@@ -70,11 +70,7 @@ mechanical toil:
 - **`bd_safe.py`** -- `claim`/`close`/`dep-add` with pull/push bracketing,
   collision checks (will not claim a bead another worker's branch/PR already
   carries; excludes your own current worktree branch), and direction-safe edges.
-- **`pr_review_watcher.py <pr#>` (RETIRED)** -- watched a PR for an external bot
-  review's completion (Copilot, then Codex). It is now dead path: review is
-  entirely Claude-based (an Opus-5 outer review run as orchestrator-driven
-  subagents, read directly -- see [`review-flow.md`](review-flow.md)), so the
-  closeout flow no longer launches this watcher. Retained only as inert history.
+- **`pr_review_watcher.py <pr#>` (RETIRED)** -- see [`review-flow.md`](review-flow.md) for the full retirement history (review is now entirely Claude-based).
 - **`closeout_housekeeping.py`** -- pull + `bd orphans` + `bd stale` + push;
   surfaces lifecycle slips (closed-in-commits-but-open, stale in-progress).
 - **`journal_scaffold.py <bead-id>`** -- emits the journal-entry skeleton.

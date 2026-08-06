@@ -1,6 +1,6 @@
 # Branch-protection setup (one-time, agent-executable)
 
-*Last updated: 2026-07-08. External code review is retired -- review is now entirely Claude-based (no `copilot_code_review` rule, no Codex GitHub app); see [`doctrine/review-flow.md`](doctrine/review-flow.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: timestamp stale; file last modified 2026-07-28 with Opus-5 reviewer references).*
 
 This configures the GitHub rulesets the swarm workflow depends on. Run it once
 per repo. An agent can execute it via the `gh` CLI (shown) or the GitHub MCP if

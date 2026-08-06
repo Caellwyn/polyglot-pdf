@@ -2,12 +2,12 @@
 
 **Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-31 (bd polyglot-pdf-v437: the preview UI is CUT OVER -- the `?previewUi=1` opt-in flag and `featureFlag.ts` are deleted; the toggle now renders unconditionally, while Simplified remains the landing view). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected the stale kit-count claims -- three shipped kits (i-90, f1040, w7) carry option-position backfill, not four -- and added the ks1y/1utg known-gap bullets; the preview UI remains CUT OVER per bd polyglot-pdf-v437). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for cutover closeout details.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
 half of the dual view modes (epic `polyglot-pdf-js7q`, sprint 8 plan
-[`docs/sprint_8_preview-mode_plan.md`](../sprint_8_preview-mode_plan.md)).
+[`docs/archive/sprint_8_preview-mode_plan.md`](../archive/sprint_8_preview-mode_plan.md)).
 Related: the linear form and its state layer are in
 [schema-forms.md](schema-forms.md); server-side fill is in
 [pdf-filling.md](pdf-filling.md).
@@ -83,7 +83,7 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   current (orange) -- with the value painted inside (`valuePainting.ts`):
   fitted text, an X for single-box checkboxes. Radio/checkbox/checkbox_group
   selections whose options carry their own `pdf_position` (backfilled into
-  all four kits, bd 5f41) paint an X mark at each SELECTED option's printed
+  the shipped kits -- i-90, f1040, w7; bd 5f41) paint an X mark at each SELECTED option's printed
   box (`selectedOptionRects`, bd lp5v): the marks render as sibling divs in
   the same page space while the field-level box stays as the `data-field-id`
   snap-to anchor and paints no duplicate label. Coverage is ALL-OR-NOTHING
@@ -118,7 +118,12 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   horizontally, internal scroll for long option lists. Write-through on
   change via SchemaForm's `handleFieldChange` (the single place stamping
   `confirmed` + `manual_edit` and fanning out `copy_to`) -- overlays repaint
-  live while typing. Dismissal: Esc, click-outside, the X button, a voice
+  live while typing. **Known gap (bd `polyglot-pdf-1utg`, open):** the popover's
+  incoming value is read via a bare `fieldValues[editingHere.id]`, not the
+  alias-aware `readFieldEntryWithAlias` the overlay itself uses -- if a
+  field's value is stored only under the OTHER `[]`-bracket variant, the
+  overlay paints it filled/confirmed but clicking to edit opens the popover
+  blank. Dismissal: Esc, click-outside, the X button, a voice
   advance (`currentFieldId` change), zoom (scale change), and the edited
   field's `show_if` flipping false mid-edit (no chrome-only popover over a
   now-dimmed field). PreviewPane owns the editing state; without the edit
@@ -131,7 +136,8 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   The page CANVAS never re-renders per fill (its effect deps are stable);
   only the overlay layer does.
 - QA surface: fields with no usable `pdf_position` are console.debug-listed
-  once per pane mount (4 on the i-90).
+  once per pane mount (the count varies by kit as extraction/backfill
+  progresses; re-check the current kit rather than trust a cached number).
 
 ## Snap-to camera
 
@@ -160,9 +166,22 @@ approximation for feedback; this modal (and download) is the ground truth.
 - Client-painted text sizing approximates the PyMuPDF fill (comb spacing,
   font shrink); the FilledPreviewModal is the exact render.
 - Radio/checkbox-group selections paint marks at their own option boxes only
-  where the schema carries per-option `pdf_position` (all four kits are
-  backfilled); a schema without option rects falls back to labels at the
-  field-level rect (tiny for 10px option boxes).
+  where the schema carries per-option `pdf_position` (backfilled into the
+  shipped kits -- i-90, f1040, w7); a schema without option rects falls back
+  to labels at the field-level rect (tiny for 10px option boxes).
+- Known gap (bd `polyglot-pdf-ks1y`, open): 8 i-90 choice fields
+  (e.g. `p3_checkbox4[1]`) carry field-level rects derived under an older
+  extraction rule, predating the current "field rect = first option's
+  widget" convention. When no per-option `pdf_position` is available their
+  label-at-field-rect fallback can paint 42-108pt away from the correct
+  printed box. Fix lands via a fresh `i-90_v2` re-extraction (the deployed
+  `i-90` kit is live in the demo and stays byte-identical until promoted);
+  a from-scratch extraction is self-consistent by construction and needs no
+  patch.
+- Known gap (bd `polyglot-pdf-1utg`, open): see the click-to-edit paragraph
+  above -- the edit popover's value read is exact-key-only, so a value
+  stored under the other `[]`-bracket variant opens the popover blank even
+  though the overlay shows the field filled/confirmed.
 - `signature` fields with a usable `pdf_position` DO get overlays (the i-90
   has 4 such): a signature is not paintable as text, so if one ever carried a
   string value it would render as raw text in its rect. (Coverage varies by

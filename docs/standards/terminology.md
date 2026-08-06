@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-07-17 (bd polyglot-pdf-2h9j: label_translations canonical-key row). Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: removed the dead JIT-manifest part-holdout section, fixed the bracket-passthrough file pointer, linked stateless-architecture.md). Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -58,14 +58,13 @@ The **internal** holdouts were renamed to section-canonical names in
   navigation list, already section-canonical `{id, order, label}`), NOT the
   `current_part`/`part_id` keys -- so it was not a both-ends-lockstep change.
 
-**Remaining `part`-named holdout (intentionally out of zun scope):**
-
-- `backend/services/manifest_service.py` `generate_part_manifest` / `format_manifest_for_context`
-  -- a SEPARATE backend-internal path feeding `ai_context.py` system-instruction text
-  ("CURRENT PART: ..."). It still emits `current_part`/`part_id`/`part_label`. Renaming
-  it changes the Gemini prompt wording (behavior-adjacent), so it is deferred; it is
-  not on either wire format. The `parts` navigation key (consumed by the backend) keeps
-  its name because that IS the backend wire contract.
+The JIT manifest path that used to emit `current_part`/`part_id`/`part_label` into
+the Gemini system-instruction text (`generate_part_manifest` /
+`format_manifest_for_context` in `backend/services/manifest_service.py`) was
+removed wholesale in bd polyglot-pdf-en2j when the JIT SI mode was retired in
+favor of DTI -- there is no remaining part-named holdout. The `parts` navigation
+key (consumed by the backend) keeps its name because that IS the backend wire
+contract.
 
 Don't add new `part_id`/`currentPartId` names for section state.
 
@@ -106,10 +105,10 @@ comma-split tolerance are also gone from both evaluators (membership is
 ## Field IDs and brackets
 
 Field IDs can contain brackets -- e.g. `p1_checkbox4[0]` (PDF AcroForm array
-notation). These are **passed through verbatim, not escaped**: the JIT manifest
-deliberately emits them as-is to avoid JSON-quote confusion
-(`backend/services/manifest_service.py`; `backend/tests/unit/test_ai_context.py`
-asserts "field IDs with special characters (brackets) are not escaped"). When you
+notation). These are **passed through verbatim, not escaped**: `build_form_context`
+(`backend/services/ai_context.py`) deliberately emits them as-is to avoid
+JSON-quote confusion (`backend/tests/unit/test_ai_context.py` asserts "field IDs
+with special characters (brackets) are not escaped"). When you
 match, log, or forward a field ID, **keep the brackets**; don't strip or
 backslash-escape them. Gemini is instructed to use the exact `field_id` from the
 schema, brackets included (`backend/config.py`).
@@ -130,6 +129,6 @@ reconnected (same form-session)"**. State persistence is a property of the
 ## Stateless / state ownership
 
 The client is the source of truth; the backend is stateless re: field values.
-Documented in `stateless-architecture.md` (`polyglot-pdf-pki`) -- cross-referenced
-here because "session state" above means *client-owned* state. (Plain reference,
-not a link, until that doc lands on `dev`.)
+Documented in [`stateless-architecture.md`](stateless-architecture.md)
+(`polyglot-pdf-pki`) -- cross-referenced here because "session state" above means
+*client-owned* state.

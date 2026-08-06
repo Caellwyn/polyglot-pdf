@@ -2,8 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: /api/fill-pdf is auth-gated;
-fillPDF gained the optional getToken param). Prior: 2026-08-01. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers; [the eb4z entry](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the field_mappings []-alias exact-wins fix.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found).*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the

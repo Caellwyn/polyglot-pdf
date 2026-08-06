@@ -1,6 +1,6 @@
 # Branch-protection setup: the GitHub rulesets
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-kfm1: the procedural review-gate description now states the auto-merge-vs-ping split from the 2026-07-04 autonomy increase, bd polyglot-pdf-16pj, replacing the stale unconditional maintainer-merge wording). Prior 2026-07-02 (bd polyglot-pdf-g0mm: the three CI test jobs are now REQUIRED status checks on `dev` PRs; documented that "Defend Production" is currently INERT -- quote-mangled patterns, zero effective rules on `main`, fix owned by bd polyglot-pdf-pidj -- and that the repo default branch is `dev`); see [the journal entry](../journal/entries/2026-05-29-bd-xmf-github-branch-protection-rulesets.md) for the original setup.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found).*
 
 How `main` and `dev` are protected on `Caellwyn/polyglot-pdf`. This is the
 GitHub side of the [promotion-tiers](promotion-tiers.md) flow. Ported from

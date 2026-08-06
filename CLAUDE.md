@@ -22,9 +22,11 @@ on **Cloud Run** (co-located with Gemini). Entry points: backend `backend/main.p
 (WebSocket route `backend/routes/websocket_routes.py`, Gemini adapter
 `backend/adapters/live_ai_gemini.py`); frontend `frontend/src/` (WS config
 `frontend/src/shared/config.ts`). Deploy is **local/manual**
-(`deploy-demo.sh` / `deploy-production.sh`). For the full verified architecture,
-read the re-orientation brief
-([`docs/journal/entries/2026-05-30-bd-j2l-reorientation-brief.md`](docs/journal/entries/2026-05-30-bd-j2l-reorientation-brief.md)).
+(`deploy-demo.sh` / `deploy-production.sh`). For the current architecture --
+including the **Surface contracts** map of every cross-surface data contract
+(producer/consumer code sites; the blast-radius reference for reviews) -- read
+[`docs/technical_guide.md`](docs/technical_guide.md) plus the per-surface
+[`docs/components/`](docs/components/) docs.
 
 ---
 
@@ -100,18 +102,20 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    Field values, confirmations, and section state live in the browser's
    `sessionStorage` -- the backend rebuilds context from the WS handshake on
    every (re)connect. Never add server-side per-session field persistence, and
-   never log field values/PII/PHI server-side. See the re-orientation brief.
+   never log field values/PII/PHI server-side. See
+   [`docs/standards/stateless-architecture.md`](docs/standards/stateless-architecture.md).
 5. **"Section" is the navigation unit; "part" is a real but distinct level.**
    The hierarchy is Form > Parts > Sections > Fields -- *part* is an optional
    grouping of sections, **not** a synonym for section. Don't name section-state
    `current_part_id` / `part_id`. The internal holdouts and the wire-format keys
    are now section-canonical (`polyglot-pdf-gfb.4` + `polyglot-pdf-zun`: token-log
-   `section_id`; frontend handshake-manifest keys). The one remaining `part`-named
-   holdout is the backend-internal `manifest_service.py` / `ai_context.py`
-   SI-text path -- deliberately deferred (renaming changes the Gemini prompt
-   wording); the `manifest.parts` navigation key keeps its name because that IS
-   the backend wire contract. Full canon (incl. field-id brackets, form-session
-   vs session) in
+   `section_id`; frontend handshake-manifest keys), and the former backend-internal
+   `manifest_service.py` / `ai_context.py` part-named SI-text holdout was removed
+   with the losing SI modes (`polyglot-pdf-en2j`). The one deliberate survivor: the
+   `manifest.parts` navigation key keeps its name because that IS the backend wire
+   contract -- and its entries are SECTION-shaped (see the Surface contracts map in
+   [`docs/technical_guide.md`](docs/technical_guide.md)). Full canon (incl.
+   field-id brackets, form-session vs session) in
    [`docs/standards/terminology.md`](docs/standards/terminology.md) (`polyglot-pdf-m3f`).
 6. **ASCII ONLY in code files.** In `.py` / `.ts` / `.tsx` / `.js` and any other
    source file -- including comments and string literals -- use plain ASCII: `--`
