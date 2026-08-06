@@ -519,28 +519,41 @@ which is the same churn one layer down.
   behavior than the body, or a test whose name asserts something it does not check.
   The question is never "is it just a comment?" -- it is **"does this signal the
   behavior is wrong?"**
-- **PROSE ACCURACY IN DOCS -> FILE IT, do not fix it inline** (maintainer
-  directive 2026-08-06). A finding about the *wording* of a doc -- a stale claim, a
-  wrong citation, an imprecise sentence, a journal entry that reads badly -- is
-  **filed as a bead**, even when the reviewer is right and the fix is one line.
-  **Rationale:** a prose fix re-opens the review loop, and iterating an expensive
-  model over documentation wording is how a deployable PR turns into a three-hour
-  round-trip. Ship the code; sweep the prose later with a cheap batched runner.
-  - **Tier 3 (journal entries) -- ALWAYS file, never fix inline, no exceptions.**
-    They are a dated chronological record; nobody re-reads them, and their
-    accuracy never blocks a deploy. An Opus model iterating on journal wording is
-    the clearest waste this rule exists to stop.
-  - **Tier 1 / tier 2 (`CLAUDE.md`, `docs/standards/`, `docs/doctrine/`,
-    `docs/components/`) -- default to filing too**, tagged `tier: sonnet` /
-    `work_class: docs-nit`. These matter more (they are auto-loaded or
-    surface-authoritative), but "matters more" is an argument for fixing them
-    *soon*, not for blocking this PR on them.
-  - **The ONE carve-out: a doc statement that changes what an agent DOES.** A rule
-    that grants a permission the policy withholds, an instruction that routes work
-    to the wrong gate, a documented command that would destroy data -- those are
-    behavioral, not prose, and they are blockers. The test is *"if a future session
-    follows this sentence literally, does it do the wrong thing?"* If yes, fix it.
-    If it is merely inaccurate or ugly, file it.
+- **DOC FINDINGS: split by TIER, then by CURRENT-STATE vs. everything else**
+  (maintainer directive 2026-08-06). The split is deliberately mechanical -- *which
+  file* and *what kind of sentence* -- because a judgment-shaped test ("might this
+  change what an agent does?") gets resolved conservatively by every agent that
+  reads it, which turns the carve-out back into "block on everything."
+  - **TIER 3 -> ALWAYS FILE. Never fix inline, no exceptions.** Journal entries
+    (`docs/journal/`), research notes, sprint plans, archived docs. These are a
+    dated chronological record, they are rarely read, and their accuracy never
+    blocks a deploy. **An expensive model iterating on journal wording is the
+    single clearest waste this rule exists to stop.**
+  - **TIER 1/2, a WRONG claim about the code -> FIX IT before `NO-GAPS`.** Tier 1
+    is `CLAUDE.md` + `docs/INDEX.md`; tier 2 is `docs/standards/*`,
+    `docs/components/*`, `docs/doctrine/*`, `docs/technical_guide.md`. **These
+    files are CURRENT-STATE ONLY by construction** (`doc-architecture.md` §3 --
+    history and rationale belong in the tier-3 journal), so essentially every
+    substantive sentence in them asserts what the code does *now*: a default
+    value, a route's auth, a file's responsibility, a rule an agent must follow, a
+    command to run. They are auto-loaded or surface-authoritative, so a wrong one
+    actively misleads the next session. **Wrong = blocker.** Open the code and
+    check before calling it wrong.
+  - **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward, verbose,
+    inconsistently formatted, or could be phrased better, where the *claim itself
+    is correct*. Tagged `tier: sonnet` / `work_class: docs-nit`. Blocking a
+    shippable PR on doc style is the failure this rule exists to prevent, and it
+    is just as real in tier 1/2 as in tier 3.
+  - **The discriminating question is about the SENTENCE, not the consequence:**
+    *"is this sentence WRONG about the code, or just ugly?"* Wrong -> fix now.
+    Ugly -> file. Do not reason forward about whether a future agent might act on
+    it; that test is vague, and agents resolve vague tests conservatively, which
+    turns every doc nit back into a blocker.
+  - **Note:** if a tier-1/2 doc contains *history or rationale* at all, that is
+    itself a current-state-only violation (`doc-architecture.md` §3) -- file it as
+    a docs-nit rather than treating it as licence to skip the accuracy bar.
+    (`docs/sprint_<N>_*.md` plans are the one exemption: they are deliberately
+    chronological.)
 - **Never swept under the rug.** Every non-blocking and pre-existing finding gets
   **filed**. "Not a blocker" is a routing decision, not a dismissal. A finding you
   neither fixed nor filed is the one failure mode this rule does not tolerate.

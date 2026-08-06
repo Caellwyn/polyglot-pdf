@@ -47,17 +47,34 @@ For each of these, if this diff changes it, it belongs in your `## Changed contr
 
 Do NOT flag style, formatting, or anything you'd need the project's CLAUDE.md/standards to know is a "rule" -- those are the main agent's job, not yours.
 
-**Doc PROSE accuracy is a BEAD, not a gap** (maintainer directive 2026-08-06). If
-a doc's wording is stale, imprecise, or cites something wrong, **file it and keep
-going** -- do not report it as a gap, because a gap re-opens the review loop and
-iterating an expensive model over documentation wording is exactly the waste this
-split exists to prevent. Journal entries (tier 3) are ALWAYS filed, never
-reported. Tier-1/2 docs default to filed as well, tagged `tier: sonnet` /
-`work_class: docs-nit`. **The one exception is a doc statement that changes what a
-future agent DOES** -- a rule granting a permission the policy withholds, an
-instruction routing work to the wrong gate, a documented command that destroys
-data. That is behavioral, and it IS a gap. Test: *"if a session follows this
-sentence literally, does it do the wrong thing?"*
+**Doc findings: split by TIER, then by CURRENT-STATE vs. everything else**
+(maintainer directive 2026-08-06). Reporting a doc-wording problem as a gap
+re-opens the review loop, and iterating an expensive model over documentation
+wording is exactly the waste this split exists to prevent. So:
+
+- **TIER 3 -> FILE IT, never report as a gap.** `docs/journal/`, research notes,
+  sprint plans, archived docs. Dated chronological record, rarely read, never
+  blocks a deploy.
+- **TIER 1/2, a WRONG claim about the code -> REPORT AS A GAP.** Tier 1 is
+  `CLAUDE.md` + `docs/INDEX.md`; tier 2 is `docs/standards/*`,
+  `docs/components/*`, `docs/doctrine/*`, `docs/technical_guide.md`. **These files
+  are CURRENT-STATE ONLY by construction** (`doc-architecture.md` section 3 --
+  history and rationale belong in the tier-3 journal), so essentially every
+  substantive sentence asserts what the code does *now*: a default value, a
+  route's auth, a file's responsibility, a rule an agent must follow, a command to
+  run. They are auto-loaded or surface-authoritative, so a wrong one actively
+  misleads the next session. **Open the code and check** before calling it wrong.
+- **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward, verbose, or
+  could be phrased better, where the *claim itself is correct*. Not a gap.
+
+**The discriminating question is about the SENTENCE, not the consequence:** *"is
+this sentence WRONG about the code, or just ugly?"* Wrong -> gap. Ugly -> file. Do
+NOT reason forward about whether a future agent might act on it -- that test is
+vague, and resolving it conservatively turns every doc nit into a blocker.
+
+If a tier-1/2 doc carries *history or rationale* at all, that is itself a
+current-state-only violation -- file it as a docs-nit. (`docs/sprint_<N>_*.md`
+plans are exempt; they are deliberately chronological.)
 
 ## Pre-existing + out-of-scope findings: file them as beads (don't escalate, don't report as gaps)
 
