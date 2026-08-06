@@ -63,7 +63,7 @@ the first fix was *correct*; it just was not the whole set, so the reviewer foun
 the remainder one per round. The tell: a new finding differs from the last only in
 *location* or *wording*.
 
-### Rule 2 -- DOC FINDINGS SPLIT BY TIER (closeout triage + both reviewer agents)
+### Rule 2 -- DOC FINDINGS SPLIT BY TIER (closeout triage + all three reviewer agents)
 
 Maintainer directive: *"We need to get deployable code out the door, not wait for
 3 hours for iterative improvements to a doc journal entry that no one will ever
@@ -113,6 +113,15 @@ mutation actually applied, mutate per parametrization, restore and re-verify.
   vague carve-out reliably becomes *no* carve-out. "Which file is it, and is the
   claim wrong or just ugly?" has an answer. This generalizes well beyond doc
   triage.
+- **Rule 1 failed on the PR that introduced rule 1, and that is the most useful
+  thing here.** The bead said "both reviewer agents" when there are THREE, and the
+  one omitted (`docs-reviewer`) is the arm the rule most exists to protect. Written
+  from recall, not enumeration -- the exact failure the rule describes. The
+  round-1 reviewer caught it, and the fix was to enumerate *mechanically* (every
+  `.claude/agents/*.md` with a `NO-GAPS` verdict; every `SKILL.md` that triages
+  findings) rather than to recall harder. A rule you can state and still violate in
+  the same breath is a rule worth having; it also means **stating it is not
+  enough** -- the enumeration has to be an executed step, not an intention.
 - **Check a rule against the spec it depends on, not against memory.** The
   tier-definition error would have shipped a doc rule that contradicted
   `doc-architecture.md`. One `grep` settled it.
