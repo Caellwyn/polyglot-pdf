@@ -282,3 +282,37 @@ STATUS: bd oagw code stays on its branch, flag OFF, NOT merged. Control-arm data
 (5 real divergences / 32 gens under barge-in pressure, post-#550) stands as the
 current baseline for the remaining ladder items (muted echo, SI state-move,
 half-cascade).
+
+## CORRECTION (2026-08-06): two earlier claims RETRACTED, core finding SURVIVES
+
+Re-examined every "diverged" WAV by DURATION + sentence completeness, prompted by
+the maintainer asking how an INTERRUPTED (i.e. abandoned) generation can emit
+corrupted audio at all. Two classes emerged:
+
+RETRACTED -- STT hallucination on sub-second scraps:
+  runA gen 3, gen 14  -- WAV duration **0.11 s** (~2.6 KB), STT returned
+  "Okay, so the first name is J-A-M-E-S." A tenth of a second cannot hold that
+  sentence. The "phantom name that appears in no fixture" and the "verbatim
+  replay five minutes later" findings were BOTH artifacts: the STT model
+  hallucinated the same plausible sentence twice from two similar scraps.
+  runA gen 18 (0.15 s) is the same class.
+  => The scorer MUST skip sub-second dumps (the existing <0.4s guard was added
+  for a different symptom and is evidently not applied to the utterance-diff
+  path). Any finding resting on a <1s WAV is void.
+
+SURVIVES -- real, complete, wrong sentences:
+  runRUDE gens 6/8/10 (2.79-2.87 s) and control gens 9/11/15 (2.83-3.23 s) are
+  FULLY FORMED utterances, e.g. "J-O-H-N, Joshua?" and "J-O-H-N, John Joshua,
+  is that correct?" -- spelling one name while saying another. Truncation cannot
+  produce these. The audio/text divergence on spelled read-backs is REAL.
+
+ALSO NOTE: control gen 7 diverged on a **turn_complete** edge (not interrupted),
+and its own text track was correct -- so interruption is not strictly necessary,
+and the transcript-window pairing needs independent validation before any
+rate statistic (the 24%-vs-3% and 44%-vs-1% figures) is quoted again. Those
+rates are WITHDRAWN pending a pairing audit.
+
+WHAT IS STILL SOLID: (a) the desync is real and specific to spelled name
+read-backs; (b) it produces complete, plausible, WRONG utterances -- the
+dangerous failure mode on a legal form; (c) tool calls and the text track stay
+correct throughout.
