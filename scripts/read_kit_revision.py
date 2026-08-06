@@ -48,6 +48,7 @@ reported honestly instead of returning a confident wrong schema.
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -56,6 +57,25 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+
+# A disambiguated sibling is always "<marker>--<fingerprint>" where the suffix
+# is an ENCODED `sha256:<12 hex>` marker -- i.e. exactly "sha256-" + 12 hex
+# chars after encode_marker turns the colon into a dash. Matching that exact
+# shape (rather than any "--" run) is what keeps two UNRELATED markers apart:
+# `encode_marker` collapses any run of unsafe characters to a single "-", so an
+# ordinary raw marker like "12/2024//rev2" also encodes with a "--" in it and
+# would otherwise look like a sibling of "12/2024", producing a FALSE ambiguity
+# (fresh-eyes round 3, reproduced live).
+_SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
+
+
+def _is_sibling_of(segment: str, base: str) -> bool:
+    """True when `segment` is a fingerprint-disambiguated sibling of `base`."""
+    prefix = f"{base}--"
+    if not segment.startswith(prefix):
+        return False
+    return bool(_SIBLING_SUFFIX_RE.fullmatch(segment[len(prefix):]))
 
 
 class AmbiguousRevision(Exception):
@@ -112,7 +132,7 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
     # looking up only the plain segment silently returns the first revision's
     # schema for a record that meant the second.
     for segment in await store.list_archived_markers(kit_id):
-        if segment == base or segment.startswith(f"{base}--"):
+        if segment == base or _is_sibling_of(segment, base):
             archived = await store.load_archived_revision_or_none(kit_id, segment)
             if archived is not None:
                 candidates.append((f"archive:{segment}", archived))

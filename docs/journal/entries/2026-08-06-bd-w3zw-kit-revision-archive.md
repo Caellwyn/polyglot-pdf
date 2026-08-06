@@ -40,7 +40,8 @@ became unanswerable. Epic rubric #2 is exactly that retrieval.
   returning the current schema when the marker still matches it, else the
   archived copy. Keeps "absent" (exit 1) distinct from "store unreadable"
   (exit 2), the read_confirmations.py lesson from bd z2is.
-- 19 tests, mutation-verified; full backend suite 1621 passed.
+- 24 test functions / 29 cases (one is parametrized over marker shapes),
+  mutation-verified; full backend suite green.
 
 **Hook placement deviates from the plan, deliberately.** The plan said to
 archive "on promotion to complete". That is too late: a published kit's schema
@@ -79,6 +80,16 @@ there is exactly one, and raises `AmbiguousRevision` (exit 3) when there are
 several -- it never picks. `--segment` reads one exact archived segment for the
 operator who has disambiguated from `--list`. Identical bytes under several
 segments count as one revision, not an ambiguity.
+
+**Round 3 cleared all three criteria** and found one last defect in that fix:
+sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
+from the segment's name. `encode_marker` collapses any run of unsafe characters
+to one `-`, so an unrelated marker like `12/2024//rev2` encodes to
+`12-2024--rev2` and looked like a sibling of `12/2024` -- a FALSE ambiguity
+between two unrelated revisions, which erodes the exit-3 signal the tool depends
+on. Fixed by matching the suffix's real shape (an encoded `sha256:<12hex>`
+fingerprint) instead of any `--` run, with a test pinning the coupling to
+`resolve_edition_marker`'s format so the two cannot drift apart silently.
 
 ## Lessons
 
@@ -122,7 +133,16 @@ segments count as one revision, not an ambiguity.
    genuinely be ambiguous, the honest answer is to REFUSE (exit 3) rather than
    return the nearest match.
 
-5. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+5. **Don't infer a structural relationship from a string's shape when the
+   encoder is lossy.** The sibling test asked "does this segment start with
+   `<base>--`?", but `encode_marker` maps many raw markers onto the same shape,
+   so unrelated names answered yes. Matching the suffix's ACTUAL format (an
+   encoded `sha256:<12hex>`) is what makes the question answerable -- and
+   because that couples two modules, a test now pins the format rather than
+   leaving them to drift. Same family as the round-1 lesson: verify the
+   property, don't infer it from a proxy.
+
+6. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow

@@ -299,6 +299,46 @@ def test_retrieval_prefers_the_live_schema_when_it_still_matches(tmp_path):
     assert source == "current"
 
 
+def test_an_unrelated_marker_that_encodes_with_a_dash_run_is_not_a_sibling(tmp_path):
+    """encode_marker collapses ANY run of unsafe characters to one "-", so an
+    ordinary marker like "12/2024//rev2" encodes to "12-2024--rev2" and would
+    look like a fingerprint-disambiguated sibling of "12/2024" under a naive
+    "--" prefix test -- reporting a FALSE ambiguity for two genuinely unrelated
+    revisions (fresh-eyes round 3, reproduced live). Only a real encoded
+    sha256 fingerprint suffix counts as a sibling.
+    """
+    store = LocalFormKitStore(tmp_path)
+    only = _schema("a", edition="12/2024")
+    _make_kit(tmp_path, "w7", only)
+    _run(store.put_archived_revision("w7", "12/2024", only))
+    # An unrelated revision whose raw marker merely ENCODES with a "--" run.
+    _run(store.put_archived_revision("w7", "12/2024//rev2", _schema("z")))
+    # Nothing live matches, so only the archive answers.
+    (tmp_path / "w7" / "schema.json").write_text(
+        json.dumps(_schema("q", edition="09/2030")), encoding="utf-8"
+    )
+
+    source, schema = _resolve_revision(store, "w7", "12/2024")
+
+    assert schema == only  # resolved, NOT reported ambiguous
+    assert source == "archive:12-2024"
+
+
+def test_sibling_suffix_matches_the_real_fingerprint_format(tmp_path):
+    """The sibling test keys on the ENCODED shape of resolve_edition_marker's
+    fingerprint. If that format ever changes, siblings stop being found and
+    retrieval silently returns only the first revision -- so pin the coupling
+    rather than trusting the two to stay in step."""
+    fingerprint = resolve_edition_marker(None, _schema("a", "b"))
+    assert fingerprint.startswith("sha256:")
+
+    rkr = _read_kit_revision()
+    encoded_suffix = encode_marker(fingerprint)
+    assert rkr._is_sibling_of(f"12-2024--{encoded_suffix}", "12-2024")
+    # ...and a non-fingerprint suffix is not a sibling.
+    assert not rkr._is_sibling_of("12-2024--rev2", "12-2024")
+
+
 def test_retrieval_of_an_unknown_marker_is_not_found(tmp_path):
     """Absent must stay absent -- never silently the nearest sibling."""
     from backend.services.form_kits import FormKitNotFound
