@@ -1809,8 +1809,18 @@ class CallbackHandler:
                 "applied_fields": applied_fields,
                 "message": "Fields updated successfully.",
             }
-            if applied_values:
-                tool_response["stored_values"] = applied_values
+            # ECHO_STYLE arm (bd polyglot-pdf-0rpu). Default "full" is the
+            # shipped 3x-repetition shape; the other arms thin it to test
+            # whether the repetitions feed the acoustic substitution.
+            from backend.config import get_settings as _gs
+            _echo_style = getattr(_gs(), "ECHO_STYLE", "full")
+            if applied_values and _echo_style == "muted":
+                # Status only. Diagnostic ONLY: this reopens bd h7wx (the model
+                # can confirm a value it never stored), so it must never ship.
+                tool_response["message"] = "Fields updated successfully."
+            elif applied_values:
+                if _echo_style != "once":
+                    tool_response["stored_values"] = applied_values
                 # Name the VALUE directly in the imperative -- do NOT write
                 # "read THIS value back" (bd polyglot-pdf-0rpu, maintainer
                 # 2026-08-05). "THIS" is a referent the model has to resolve
@@ -1832,12 +1842,21 @@ class CallbackHandler:
                 spoken_values = " and ".join(
                     f"{val!r}" for val in applied_values.values()
                 )
-                tool_response["message"] = (
-                    f"Fields updated successfully. Stored value: {stored_str}. "
-                    f"Read {spoken_values} back to the user for confirmation. "
-                    f"If it is a name, spell it out letter by letter in the "
-                    f"session language."
-                )
+                if _echo_style == "once":
+                    # Value appears EXACTLY once, inside the imperative the
+                    # model acts on -- no dict, no "Stored value:" restatement.
+                    tool_response["message"] = (
+                        f"Fields updated successfully. Read {spoken_values} "
+                        f"back to the user for confirmation. If it is a name, "
+                        f"spell it out letter by letter in the session language."
+                    )
+                else:
+                    tool_response["message"] = (
+                        f"Fields updated successfully. Stored value: {stored_str}. "
+                        f"Read {spoken_values} back to the user for confirmation. "
+                        f"If it is a name, spell it out letter by letter in the "
+                        f"session language."
+                    )
 
         _log.info("-" * 80)
         _log.info("GEMINI TOOL RESPONSE", success=tool_response.get("success"), 

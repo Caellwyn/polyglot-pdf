@@ -234,6 +234,18 @@ class Settings(BaseModel):
 	#               multi-syllable anchors resist blending far better than letters
 	SPELLBACK_STYLE: str = os.getenv("SPELLBACK_STYLE", "hyphen").lower()
 
+	# === Tool-response echo style experiment (bd polyglot-pdf-0rpu) ===
+	# The update_form_fields response currently repeats the stored value THREE
+	# times (stored_values dict + "Stored value: <fid> = 'X'" + "Read 'X' back").
+	# Hypothesis: each repetition is another text anchor beside the user's spoken
+	# confirmation, feeding the acoustic substitution seen on spelled read-backs.
+	#   "full"  -- shipped behaviour, value 3x (CONTROL, default)
+	#   "once"  -- value exactly once, in the imperative; keeps the bd h7wx
+	#              guarantee that the read-back comes from a value the backend
+	#              actually stored
+	#   "muted" -- status only; DIAGNOSTIC ONLY, reopens h7wx, never ship
+	ECHO_STYLE: str = os.getenv("ECHO_STYLE", "full").lower()
+
 	# Appended verbatim to the NAMES block when SPELLBACK_STYLE selects them.
 	# ASCII only. Kept short: this rides on EVERY turn's system instruction.
 	SPELLBACK_STYLE_TEXT: dict = {
