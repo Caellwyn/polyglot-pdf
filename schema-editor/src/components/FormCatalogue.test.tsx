@@ -229,6 +229,64 @@ describe('FormCatalogue', () => {
     await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
   });
 
+  it('the compact STRIP dropdown shows no percentage for an unstamped kit (bd g687)', async () => {
+    // The strip is the DEFAULT view (cards are behind "Show form cards"), and
+    // it originally kept reading the local disk re-scan -- so it printed a
+    // client-recomputed number while the card below showed the verify hint
+    // (fresh-eyes gap 1). Deliberately does NOT expand the cards: this pins the
+    // strip on its own.
+    //
+    // The schema is FULLY REVIEWED so a restored re-scan would print a loud
+    // "100%", not a 0% that is easy to confuse with "no number".
+    const reviewedSchema = JSON.stringify({
+      form_metadata: { form_number: 'T-1' }, sections: [],
+      fields: [{
+        id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1',
+        read_only: false, spoken_name: 'first',
+        help: { instructions: 'Enter it.' },
+        _review: { status: 'reviewed_correct' },
+      }],
+    });
+    const root = mockRoot([
+      mockKit('a', {
+        'schema.json': reviewedSchema,
+        'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    await waitFor(() => expect(screen.getByText('Show form cards')).toBeTruthy());
+    // The strip lists the kit but attaches no percentage of any value.
+    await waitFor(() => expect(screen.getByRole('option', { name: /Kit A/ })).toBeTruthy());
+    expect(screen.getByRole('option', { name: /Kit A/ }).textContent)
+      .not.toMatch(/\d+%/);
+  });
+
+  it('the compact STRIP dropdown shows the STAMPED percentage (bd g687)', async () => {
+    const root = mockRoot([
+      mockKit('a', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({
+          label: 'Kit A', status: 'draft',
+          readiness: {
+            reviewed: 1, toReview: 3, total: 4, errors: 0, percent: 25,
+            ready: false, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Kit A/ }).textContent).toMatch(/25%/));
+  });
+
   it('shows the verify hint for an UNSTAMPED kit, and nothing for a no-schema kit', async () => {
     // Sprint-18 C4: a schema-bearing kit with no readiness stamp cannot be
     // given a percentage -- nobody measured it -- so the card shows the verify

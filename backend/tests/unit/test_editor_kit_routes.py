@@ -509,6 +509,39 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_mark_complete_survives_a_failing_readiness_stamp(client, monkeypatch):
+    """A stamp failure must not fail a PUBLISH either (fresh-eyes gap 4).
+
+    By the time the stamp runs, the kit has cleared validation, the v2 check,
+    the lint gate and the translation sweep -- which may already have WRITTEN
+    re-translations. Raising here would 500 a publish that legitimately passed
+    every gate, and the caller would retry a transition that partly happened.
+    The save path guarded this from the start; the status path did not, and the
+    asymmetry was the tell.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema=VALID_SCHEMA)
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("stamp computation exploded")
+
+    monkeypatch.setattr(ekr, "_readiness_stamp", boom)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    # The publish SUCCEEDED...
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    # ...the status flip and publish date landed...
+    assert meta["status"] == "complete"
+    assert "published_at" in meta
+    # ...and only the stamp is missing (the card shows the verify hint).
+    assert "readiness" not in meta
+
+
 def test_readiness_stamp_leaves_status_values_byte_identical(client):
     """Adding the readiness stamp must not perturb metadata.json's STATUS
     values (sprint-18 C4 exit criterion).

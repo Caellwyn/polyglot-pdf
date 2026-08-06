@@ -27,6 +27,7 @@ import pytest
 from backend.services.publish_readiness import (
     ReadinessCounts,
     finding_fingerprint,
+    has_uncovered_structural_error,
     is_counted_reviewed,
     publish_readiness,
 )
@@ -186,6 +187,77 @@ def test_malformed_field_entries_stay_in_the_denominator():
     assert v.counts.total == 3
     assert v.counts.reviewed == 1
     assert v.ready is False
+
+
+@pytest.mark.parametrize("reviewed,total,expected", [
+    # Exact .5 ratios: Python's round() is BANKER'S rounding (ties to even) and
+    # would give 12 / 62 / 38 here, while the client's Math.round ties UP. A
+    # mismatch means the stamp and the open editor's strip print different
+    # numbers for the SAME saved kit (fresh-eyes gap 2).
+    (1, 8, 13),
+    (5, 8, 63),
+    (3, 8, 38),
+    (7, 8, 88),
+    (1, 40, 3),
+    # Non-tie cases behave identically under either rule.
+    (1, 3, 33),
+    (2, 3, 67),
+    (1, 1, 100),
+    (0, 5, 0),
+])
+def test_percentage_rounds_ties_up_like_the_client(reviewed, total, expected):
+    """The percentage must match JS Math.round, not Python round()."""
+    counts = ReadinessCounts(
+        reviewed=reviewed, to_review=total - reviewed, total=total, errors=0,
+    )
+    assert counts.percentage == expected
+
+
+def test_uncovered_structural_error_mirrors_the_client_clause():
+    """The clause reviewStatus.ts hasUncoveredStructuralError applies, which
+    the server MUST compute identically (fresh-eyes gap 3) -- otherwise a field
+    counts reviewed in the stamp while the open editor renders it red."""
+    signed = {"status": "reviewed_correct"}
+
+    # A choice field where neither the field nor every option names a widget:
+    # genuinely unfillable, no lint ERROR covers it -> NOT reviewed.
+    unmapped_choice = {
+        "id": "c", "type": "select", "_review": signed,
+        "options": [{"value": "a", "pdf_field_name": "A[0]"}, {"value": "b"}],
+    }
+    assert is_counted_reviewed(unmapped_choice) is False
+    assert has_uncovered_structural_error(unmapped_choice) is True
+
+    # Every option mapped -> fine.
+    mapped_choice = {
+        "id": "c", "type": "select", "_review": signed,
+        "options": [{"value": "a", "pdf_field_name": "A[0]"},
+                    {"value": "b", "pdf_field_name": "B[0]"}],
+    }
+    assert is_counted_reviewed(mapped_choice) is True
+
+    # A field-level widget covers the whole choice -> fine.
+    field_mapped = {
+        "id": "c", "type": "select", "_review": signed,
+        "pdf_field_name": "C[0]", "options": [{"value": "a"}],
+    }
+    assert is_counted_reviewed(field_mapped) is True
+
+    # A NON-choice field with no widget is NOT a structural error here (that is
+    # the lint layer's field-unbacked rule) -- pinned so the clause does not
+    # silently widen and re-break bd polyglot-pdf-q3rm.
+    assert is_counted_reviewed(
+        {"id": "t", "type": "text", "_review": signed}) is True
+
+    # Missing id or type at all -> uncovered.
+    assert is_counted_reviewed({"type": "text", "_review": signed}) is False
+    assert is_counted_reviewed({"id": "x", "_review": signed}) is False
+
+    # Malformed options entries must not throw.
+    assert has_uncovered_structural_error(
+        {"id": "c", "type": "radio", "options": ["junk", None]}) is True
+    assert has_uncovered_structural_error(
+        {"id": "c", "type": "select", "options": "not-a-list"}) is False
 
 
 def test_counting_invariant_reviewed_plus_to_review_equals_total():

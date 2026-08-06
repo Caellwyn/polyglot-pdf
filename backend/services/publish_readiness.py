@@ -35,6 +35,7 @@ to drift.
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -172,6 +173,42 @@ def _seen_fingerprints(review: Dict[str, Any]) -> Optional[frozenset]:
     return frozenset(x for x in raw if isinstance(x, str))
 
 
+_CHOICE_TYPES = frozenset({"select", "radio", "checkbox_group"})
+
+
+def has_uncovered_structural_error(field: Dict[str, Any]) -> bool:
+    """The checkFieldComplete ERROR classes NO backend lint rule covers yet.
+
+    The exact mirror of reviewStatus.ts hasUncoveredStructuralError, whose own
+    docstring states the server computes the identical clause -- and it must,
+    or a field in one of these shapes counts reviewed in the STAMP while the
+    open editor renders it red (fresh-eyes gap 3; the two-surfaces-disagree bug
+    this bead exists to end).
+
+      - a CHOICE field (select/radio/checkbox_group) with options where neither
+        the field nor every option names a PDF widget. The field-backing rule
+        exempts choice types (identity legitimately lives per option) and the
+        widget-claim rules need a non-empty claim to fire, so this genuinely
+        unfillable shape earns a red row with no count-excluding lint ERROR;
+      - a field with no id or no type at all (hand-edited/drifted kits).
+
+    Derived from the SCHEMA alone, exactly like the client's. Retire the
+    choice-mapping half once the backend rule ships (bd polyglot-pdf-xuub) --
+    in BOTH implementations, together.
+    """
+    if not field.get("id") or not field.get("type"):
+        return True
+    options = field.get("options")
+    options = options if isinstance(options, list) else []
+    if (field.get("type") not in _CHOICE_TYPES or not options
+            or field.get("pdf_field_name")):
+        return False
+    return any(
+        not (o.get("pdf_field_name") if isinstance(o, dict) else None)
+        for o in options
+    )
+
+
 def is_counted_reviewed(
     field: Dict[str, Any],
     findings: Sequence[LintFinding] = (),
@@ -179,6 +216,9 @@ def is_counted_reviewed(
     """Whether ONE field counts as reviewed. `findings` are THIS field's."""
     review = _review_of(field)
     if review.get("status") != "reviewed_correct":
+        return False
+
+    if has_uncovered_structural_error(field):
         return False
 
     for f in findings:
@@ -224,7 +264,14 @@ class ReadinessCounts:
     def percentage(self) -> int:
         if self.total <= 0:
             return 0
-        return round(self.reviewed / self.total * 100)
+        # math.floor(x + 0.5), NOT round(): Python's round() is BANKER'S
+        # rounding (ties to even) while the client's Math.round (reviewStatus.ts
+        # reviewCounts) rounds ties UP, so any exact .5 ratio stamped one number
+        # and displayed another -- 1 of 8 fields stamped 12% while the open
+        # editor's strip said 13% (fresh-eyes gap 2, measured). The two surfaces
+        # disagreeing about one saved kit is the precise bug this bead exists to
+        # end, so the mirror has to match JS semantics, not Python's default.
+        return math.floor(self.reviewed / self.total * 100 + 0.5)
 
     def as_dict(self) -> Dict[str, int]:
         return {

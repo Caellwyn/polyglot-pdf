@@ -545,9 +545,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
               Select a form...
             </option>
             {kits.map((k) => {
+              // Same precedence AND the same stamp rule as the expanded card
+              // (sprint-18 C4): live > this session's saved value > the kit's
+              // stamp. NEVER progress[].reviewPercent -- see the FormCatalogue
+              // twin (fresh-eyes gap 1); it is dead null here today, but
+              // leaving the read in place invites the fallback back.
+              const stripStamp = readStamp(k.readiness);
               const pct = liveProgress && liveProgress.kitId === k.id
                 ? liveProgress.percent
-                : (editedProgress[k.id]?.percent ?? progress[k.id]?.reviewPercent ?? null);
+                : (editedProgress[k.id]?.percent
+                   ?? (stripStamp.kind === 'ok' ? stripStamp.stamp.percent : null));
               return (
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}

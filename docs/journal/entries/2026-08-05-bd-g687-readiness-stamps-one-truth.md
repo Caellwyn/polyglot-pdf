@@ -68,9 +68,30 @@ was obsolete on arrival: q3rm deleted that function hours earlier. The intent
 (an errors count plus a test-pinned counting invariant) carries to
 ReadinessCounts instead.
 
-Tests: backend 1620 passed (from a 1595 baseline -- 25 added, zero regressions),
-schema-editor 1176 passed, typecheck clean. Six mutations verified across the
-predicate, the fingerprint, the save path, and the render path.
+**The assess round found four ways "one definition" was not yet true**, all
+real and all fixed in-loop:
+
+1. The compact catalogue STRIP -- the DEFAULT view -- still read the local disk
+   re-scan in both catalogues, so the dropdown could print a client-recomputed
+   number while the card below it showed the verify hint. Only the expanded
+   cards had been converted.
+2. Percentage ROUNDING diverged across the mirror: Python's round() is banker's
+   rounding while the client's Math.round ties up, so an exact .5 ratio stamped
+   one number and displayed another (1 of 8: 12% stamped, 13% shown). The
+   backend now matches JS semantics, pinned on both sides with one ratio table.
+3. The client's hasUncoveredStructuralError clause had no Python equivalent --
+   despite reviewStatus.ts's own docstring saying the server computes the
+   identical clause. A choice field whose options name no PDF widget counted
+   REVIEWED in the stamp while the editor rendered it red. Now mirrored.
+4. The publish path's stamp was UNGUARDED while the save path's was wrapped. By
+   the time it runs the kit has cleared every gate and the translation sweep may
+   already have written re-translations, so an exception would 500 a legitimate
+   publish and leave the caller retrying a partly-completed transition.
+
+Tests: backend 1620 passed pre-fix (from a 1595 baseline), schema-editor 1187
+passed, typecheck clean. Ten mutations verified across the predicate, the
+fingerprint, the rounding, the structural clause, both stamp call sites, and
+both render paths.
 
 ## Lessons
 
@@ -92,6 +113,18 @@ predicate, the fingerprint, the save path, and the render path.
   SUCCESSFUL save into a 500 the editor reports as "save failed." The schema is
   already written when the stamp runs, so the whole failure class must be
   swallowed. Pinned with its own regression test.
+- **A cross-language mirror diverges at the EDGES, not the core.** The
+  fingerprint -- the scary part, with UTF-16 and 32-bit wraparound -- was
+  correct, verified against nine cases run through the real TS. What actually
+  diverged was mundane: the ROUNDING MODE of a percentage (Python ties-to-even
+  vs JS ties-up) and a whole missing clause. When claiming two implementations
+  agree, enumerate every observable output of both (not just the interesting
+  one) and pin each with the SAME table on both sides.
+- **An asymmetry between two call sites of the same helper is a finding in
+  itself.** The save path guarded its stamp; the publish path did not. Nothing
+  failed, but the inconsistency was the tell -- and the unguarded one sat behind
+  more already-committed work (a written translation sweep), so it was the more
+  dangerous of the two.
 - **A worktree's node_modules must be a real Windows JUNCTION, not a POSIX
   symlink.** A bash-created symlink let `tsc` and single-file runs appear to
   work while vitest's forks runner timed out with "Timeout starting forks

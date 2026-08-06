@@ -1783,9 +1783,21 @@ async def set_editor_kit_status(
         # just acted on, which is precisely the two-definitions bug this bead
         # exists to end. Folded into the single metadata write below rather
         # than issuing a second one.
-        next_meta[_READINESS_KEY] = _readiness_stamp(
-            schema, gate_findings, verified=True,
-        )
+        # Guarded for the SAME reason the save path guards its stamp: by the
+        # time this runs the kit has cleared validation, the v2 stamp, the lint
+        # gate and the translation sweep (which may already have WRITTEN
+        # re-translations), so letting a stamp failure raise would 500 a
+        # publish that legitimately passed every gate -- and the caller would
+        # retry a transition that partly happened. An unstamped publish is a
+        # card showing the verify hint; a 500 is a broken publish
+        # (fresh-eyes gap 4 -- this asymmetry with the save path was the tell).
+        try:
+            next_meta[_READINESS_KEY] = _readiness_stamp(
+                schema, gate_findings, verified=True,
+            )
+        except Exception:  # noqa: BLE001 -- never fail a gated publish
+            _log.warning("editor_status_stamp_failed", kit_id=kit_id,
+                         exc_info=True)
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:

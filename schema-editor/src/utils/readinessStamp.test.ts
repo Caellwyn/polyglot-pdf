@@ -96,6 +96,21 @@ describe('readStampFromMetadata (local mode: the backend-written snake_case)', (
   });
 });
 
+describe('percentage rounding parity with the backend mirror', () => {
+  // The backend stamps a percentage and the open editor computes its own with
+  // reviewCounts; if the two round differently, ONE saved kit prints two
+  // numbers. Python's round() ties-to-even vs JS Math.round's ties-up made
+  // exactly that (1 of 8: backend 12%, editor 13%) -- fresh-eyes gap 2. These
+  // are the same ratios the backend test parametrizes, asserted on the CLIENT
+  // side so a change to either implementation breaks a test.
+  it.each([
+    [1, 8, 13], [5, 8, 63], [3, 8, 38], [7, 8, 88], [1, 40, 3],
+    [1, 3, 33], [2, 3, 67], [1, 1, 100], [0, 5, 0],
+  ])('%i of %i -> %i%%', (reviewed, total, expected) => {
+    expect(Math.round((reviewed / total) * 100)).toBe(expected);
+  });
+});
+
 describe('stampHint', () => {
   it('explains each gap in plain language, naming no internals', () => {
     for (const reason of ['absent', 'unverified', 'stale'] as const) {
