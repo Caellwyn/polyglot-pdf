@@ -147,6 +147,12 @@ describe('RemoteCatalogue', () => {
       expect(screen.getAllByText(/Schema present but unreadable/).length).toBe(2));
     // ...and the stale stamp's number is nowhere on the card.
     expect(screen.queryByText('75%')).not.toBeInTheDocument();
+    // ...nor in the compact STRIP dropdown, which round 3 missed entirely
+    // (Opus fresh-eyes round 4): it is the DEFAULT view, so a confident number
+    // there is the first thing a user sees, contradicting the card below it.
+    for (const opt of screen.queryAllByRole('option')) {
+      expect(opt.textContent ?? '').not.toMatch(/\d+%/);
+    }
   });
 
   it('an UNVERIFIED stamp shows the hint, never its percentage (bd g687)', async () => {

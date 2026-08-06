@@ -550,6 +550,48 @@ def test_kits_listing_returns_the_readiness_stamp(client):
     assert stamp["schemaSha1"]  # camelCase on the wire, snake_case in storage
 
 
+@pytest.mark.parametrize("stored,expected", [
+    (True, True),
+    (False, False),
+    # bool("no") is True -- a string must NOT flip the honesty bit on. This is
+    # the single field standing between an unchecked count and a confident
+    # percentage on every card, and the client's parser already required an
+    # exact `=== true` (Opus fresh-eyes round 4).
+    ("no", False),
+    ("true", False),
+    (1, False),
+    (0, False),
+    (None, False),
+])
+def test_listing_reads_verified_strictly_not_truthily(client, stored, expected):
+    """`verified` is only true when it is literally True."""
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 0, "toReview": 0, "total": 0, "errors": 0, "percent": 0,
+        "ready": False, "verified": stored, "schema_sha1": "abc123",
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"]["verified"] is expected
+
+
+def test_listing_rejects_a_non_string_schema_hash(client):
+    """A missing/None hash must degrade the stamp to ABSENT, not become the
+    string "None" -- which would later read as STALE ("this form changed since
+    it was last checked"), telling the user something false about what
+    happened (latent until bd polyglot-pdf-j8sr compares hashes)."""
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 0, "toReview": 0, "total": 0, "errors": 0, "percent": 0,
+        "ready": False, "verified": True, "schema_sha1": None,
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is None
+
+
 def test_kits_listing_tolerates_a_malformed_stamp(client):
     """One kit's junk stamp must not 502 the whole listing -- it degrades to
     no stamp (the card then shows the verify hint), matching the same

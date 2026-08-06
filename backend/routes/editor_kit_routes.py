@@ -465,6 +465,18 @@ async def _load_kit_dump(store, kit_id: str) -> Optional[dict]:
 _READINESS_KEY = "readiness"
 
 
+def _require_str(value):
+    """The value if it is a real string, else raise so the caller yields None.
+
+    TypeError is one of the exceptions _readiness_out already catches, so a
+    non-string hash degrades the whole stamp to "absent" (the verify hint)
+    rather than fabricating one.
+    """
+    if not isinstance(value, str):
+        raise TypeError("expected str")
+    return value
+
+
 def _readiness_out(meta: Optional[dict]):
     """Parse a kit's stored readiness stamp into the wire model, or None.
 
@@ -484,8 +496,19 @@ def _readiness_out(meta: Optional[dict]):
             errors=int(raw["errors"]),
             percent=int(raw["percent"]),
             ready=bool(raw["ready"]),
-            verified=bool(raw["verified"]),
-            schemaSha1=str(raw["schema_sha1"]),
+            # `is True`, NOT bool(): bool("no") is True, so a hand-edited or
+            # older-shaped stamp carrying a STRING would promote itself from
+            # "not fully checked" to a confident percentage on every card --
+            # the exact confident-then-409 lie this flag exists to prevent.
+            # The client's parser already required `=== true`; this is the
+            # wire converter catching up (Opus fresh-eyes round 4).
+            verified=raw["verified"] is True,
+            # Likewise typed, not str()-coerced: str(None) is the string
+            # "None", which would later read as a hash that merely fails to
+            # match -- i.e. STALE ("this form changed") rather than absent.
+            # Latent until bd polyglot-pdf-j8sr compares hashes, and a wrong
+            # diagnosis is worse than none.
+            schemaSha1=_require_str(raw["schema_sha1"]),
             stampedAt=raw.get("stamped_at"),
         )
     except (KeyError, TypeError, ValueError):

@@ -593,11 +593,14 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
               // disk re-scan, and letting it through here made the compact
               // strip (the DEFAULT view) show a client-recomputed number while
               // the card below it showed the verify hint (fresh-eyes gap 1).
-              const stripStamp = readStamp(k.readiness);
+              // Withheld when the schema is unreadable, exactly as on the card
+              // -- see the RemoteCatalogue twin (Opus fresh-eyes round 4).
+              const stripStamp = progress[k.id]?.schemaError
+                ? null : readStamp(k.readiness);
               const pct = liveProgress && liveProgress.kitId === k.id
                 ? liveProgress.percent
                 : (editedProgress[k.id]?.percent
-                   ?? (stripStamp.kind === 'ok' ? stripStamp.stamp.percent : null));
+                   ?? (stripStamp?.kind === 'ok' ? stripStamp.stamp.percent : null));
               return (
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}

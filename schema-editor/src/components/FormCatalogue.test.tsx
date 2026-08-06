@@ -265,6 +265,40 @@ describe('FormCatalogue', () => {
       .not.toMatch(/\d+%/);
   });
 
+  it('an UNREADABLE schema shows the corruption notice, never a stamped % (bd g687)', async () => {
+    // The local twin of the RemoteCatalogue test. Round 3 fixed BOTH files but
+    // tested only the hosted one, so this half could have silently regressed --
+    // which is how the pair got out of sync to begin with (Opus fresh-eyes
+    // round 4). Covers the card AND the strip: neither may print a stale
+    // stamp's number for a schema nobody can read.
+    const root = mockRoot([
+      mockKit('a', {
+        'schema.json': 'not json{',
+        'metadata.json': JSON.stringify({
+          label: 'Kit A', status: 'draft',
+          readiness: {
+            reviewed: 3, toReview: 1, total: 4, errors: 0, percent: 75,
+            ready: false, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    // The STRIP (default view) must not carry the stale percentage...
+    await waitFor(() => expect(screen.getByRole('option', { name: /Kit A/ })).toBeTruthy());
+    expect(screen.getByRole('option', { name: /Kit A/ }).textContent).not.toMatch(/\d+%/);
+
+    // ...and the card says plainly that the schema cannot be read.
+    await expandCards();
+    await waitFor(() =>
+      expect(screen.getByText(/Schema present but unreadable/)).toBeTruthy());
+    expect(screen.queryByText('75%')).not.toBeInTheDocument();
+  });
+
   it('the compact STRIP dropdown shows the STAMPED percentage (bd g687)', async () => {
     const root = mockRoot([
       mockKit('a', {
