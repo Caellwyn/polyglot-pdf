@@ -509,6 +509,37 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_save_never_destroys_unparseable_metadata(client):
+    """A save must not REPLACE a corrupt metadata.json with just the stamp.
+
+    Both stores collapse a malformed metadata.json to None, indistinguishable
+    from absent -- so a `{**(meta or {}), readiness: ...}` merge would delete
+    the kit's status, label and any custom schema/pdf filenames. Pre-C4 the
+    save path wrote NO metadata, so a corrupt file passed through untouched
+    and was recoverable; adding a metadata writer must not make an ordinary
+    Cmd+S destructive (Opus fresh-eyes round 6).
+
+    Concretely, the loss would silently unpublish a complete kit (deploy-all.sh
+    greps `status`) and orphan a kit whose schema lives under a custom name.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": []})
+    corrupt = '{"status": "complete", "label": "Live Form", "schema": "custom.json'
+    (root / "i-90" / "metadata.json").write_text(corrupt, encoding="utf-8")
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text"}]},
+    )
+    # The save itself still succeeds (the stamp is never worth failing a save)...
+    assert r.status_code == 200
+    # ...and no stamp is claimed, since there was no metadata to merge into.
+    assert "readiness" not in r.json()
+    # ...and the corrupt file is left EXACTLY as it was, still recoverable.
+    assert (root / "i-90" / "metadata.json").read_text(encoding="utf-8") == corrupt
+
+
 def test_kits_listing_returns_the_readiness_stamp(client):
     """GET /kits must carry each kit's stamp -- the catalogue's only source of
     a percentage (sprint-18 C4).
@@ -574,6 +605,80 @@ def test_listing_reads_verified_strictly_not_truthily(client, stored, expected):
     assert listed.status_code == 200
     kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
     assert kit["readiness"]["verified"] is expected
+
+
+@pytest.mark.parametrize("field,bad_value", [
+    # Each is a value int() would happily COERCE (int("4") == 4,
+    # int(75.9) == 75, int(True) == 1) but the client's parser rejects,
+    # yielding the verify hint. If the backend coerces, one metadata.json
+    # reads as a percentage in hosted mode and a hint in local mode -- the
+    # two-readings divergence this bead exists to end. Unpinned until Opus
+    # fresh-eyes round 6: replacing _require_int with int() left the whole
+    # suite green.
+    ("total", "4"),
+    ("reviewed", "1"),
+    ("toReview", "3"),
+    ("errors", "0"),
+    ("percent", "75"),
+    ("percent", 75.9),
+    ("errors", True),
+])
+def test_listing_rejects_a_coercible_but_wrongly_typed_count(client, field, bad_value):
+    """The counts must be REAL ints, not merely int()-able."""
+    c, _store, root = client
+    stamp = {
+        "reviewed": 1, "toReview": 3, "total": 4, "errors": 0, "percent": 25,
+        "ready": False, "verified": True, "schema_sha1": "abc123",
+    }
+    stamp[field] = bad_value
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": stamp})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is None, f"{field}={bad_value!r} should not parse"
+
+
+@pytest.mark.parametrize("stored,expected", [
+    (True, True),
+    (False, False),
+    # Same strictness as `verified` -- a stored string must not read as True
+    # (the client requires an exact `=== true`). This sibling was missed one
+    # line above the round-4 verified fix, and then landed unpinned.
+    ("no", False),
+    ("true", False),
+    (1, False),
+])
+def test_listing_reads_ready_strictly_not_truthily(client, stored, expected):
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 0, "toReview": 0, "total": 0, "errors": 0, "percent": 0,
+        "ready": stored, "verified": True, "schema_sha1": "abc123",
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"]["ready"] is expected
+
+
+def test_listing_keeps_a_stamp_whose_timestamp_is_junk(client):
+    """A junk `stamped_at` DEGRADES to None; it must not fail the whole stamp.
+
+    The timestamp is decoration -- nothing gates on it -- and the client's
+    parser keeps the stamp in that case. Dropping it here would mean the verify
+    hint in hosted mode and a percentage in local mode for one file. Unpinned
+    until Opus fresh-eyes round 6 (the existing tests only omitted the key,
+    which fails via KeyError for an unrelated reason).
+    """
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 1, "toReview": 0, "total": 1, "errors": 0, "percent": 100,
+        "ready": True, "verified": True, "schema_sha1": "abc123",
+        "stamped_at": 12345,
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is not None, "a junk timestamp must not drop the stamp"
+    assert kit["readiness"]["percent"] == 100
+    assert kit["readiness"]["stampedAt"] is None
 
 
 def test_listing_rejects_a_non_string_schema_hash(client):

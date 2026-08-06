@@ -504,9 +504,12 @@ def _readiness_out(meta: Optional[dict]):
     try:
         return ReadinessStamp(
             # Typed, not int()-coerced: int("75") is 75 and int(75.9) is 75,
-            # where the client's parser rejects both and shows the verify hint.
-            # Same file, two readings by mode -- the divergence this bead
-            # exists to end (Opus fresh-eyes round 5).
+            # where the client's parser (readinessStamp.readStampFromMetadata,
+            # which requires Number.isInteger) rejects both and shows the
+            # verify hint. Same file, two readings by mode -- the divergence
+            # this bead exists to end (Opus fresh-eyes round 5; round 6 found
+            # this comment had over-claimed -- the client accepted floats until
+            # its `num()` was tightened to match).
             reviewed=_require_int(raw["reviewed"]),
             toReview=_require_int(raw["toReview"]),
             total=_require_int(raw["total"]),
@@ -587,9 +590,22 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
         _log.warning("editor_readiness_lint_failed", kit_id=kit_id, exc_info=True)
         findings = []
         verified = False
+    if meta is None:
+        # NO metadata dict in hand -- and `None` means EITHER absent OR
+        # unparseable (both stores collapse a malformed metadata.json to None).
+        # Merging into `{}` would REPLACE a corrupt-but-recoverable file with
+        # just the stamp, deleting the kit's status, label and any custom
+        # schema/pdf filenames: a complete kit would silently unpublish (the
+        # deploy greps `status`), and a kit pointing at custom.json would
+        # orphan its real schema. Pre-C4 the save path wrote no metadata at
+        # all, so a corrupt file passed through untouched -- this diff must not
+        # make an ordinary Cmd+S destructive (Opus fresh-eyes round 6). Skip
+        # the stamp; the card shows the verify hint, which is honest.
+        _log.warning("editor_readiness_stamp_skipped_no_metadata", kit_id=kit_id)
+        return None
     try:
         stamp = _readiness_stamp(schema, findings, verified)
-        await store.put_metadata(kit_id, {**(meta or {}), _READINESS_KEY: stamp})
+        await store.put_metadata(kit_id, {**meta, _READINESS_KEY: stamp})
     except Exception:  # noqa: BLE001 -- see the docstring: never fail the save
         # Deliberately broad, and load-bearing rather than defensive: the schema
         # is ALREADY written by the time this runs, so ANY exception escaping

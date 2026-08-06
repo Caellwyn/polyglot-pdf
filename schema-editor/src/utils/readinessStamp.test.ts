@@ -79,6 +79,19 @@ describe('readStampFromMetadata (local mode: the backend-written snake_case)', (
     expect(readStamp(parsed).kind).toBe('ok');
   });
 
+  it.each([
+    ['a float percent', { percent: 75.9 }],
+    ['a float count', { total: 4.5 }],
+    ['a numeric string', { reviewed: '1' }],
+    ['a boolean count', { errors: true }],
+  ])('rejects %s, matching the backend parser exactly', (_label, override) => {
+    // The backend requires a real int (rejecting bool/str/float). If this side
+    // were looser, ONE metadata.json would render a percentage here and the
+    // verify hint in hosted mode -- measured for 75.9 before `num()` required
+    // Number.isInteger (Opus fresh-eyes round 6).
+    expect(readStampFromMetadata({ ...raw, ...override })).toBeNull();
+  });
+
   it('returns null for anything malformed or missing', () => {
     expect(readStampFromMetadata(undefined)).toBeNull();
     expect(readStampFromMetadata('nope')).toBeNull();

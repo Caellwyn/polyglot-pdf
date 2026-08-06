@@ -38,9 +38,13 @@ the client's MESSAGE_LOCALIZED_RULES set grows without the mirror following.
 
 **Stamps.** The hosted save and the status flip record the counts into
 metadata.json; the /kits listing returns the stamp on metadata it already reads
-(no extra per-kit fetch). The publish transition re-stamps from the GATE'S OWN
-lint findings rather than re-linting -- a second lint run could only produce a
-different answer than the gate just acted on.
+(no extra per-kit fetch). The publish transition RE-LINTS the schema it is
+about to publish rather than reusing the gate's findings: the translation drift
+sweep runs AFTER the gate and mutates + re-persists the schema, so the gate's
+findings describe a different object than the one being stamped. (An early
+draft of this bead did reuse them, which stamped pre-sweep counts under a
+post-sweep hash -- an internally inconsistent stamp the editor contradicted on
+open. Both the stamp and that re-lint choice are now test-pinned.)
 
 **Both catalogues read stamps.** Hosted and local-folder cards render the stamp
 or, when it is absent / unverified / stale, a plain-language verify hint --
@@ -118,10 +122,27 @@ rewrite a schema without re-stamping; local-folder save never stamps) and
 polyglot-pdf-drpn (every save now rewrites metadata.json, widening a
 pre-existing concurrent-write revert window).
 
-Tests: backend 1649 passed (from a 1595 baseline -- 54 added, zero
-regressions), schema-editor 1204 passed, typecheck clean. Eleven mutations
-verified across the predicate, the fingerprint, the rounding, the structural
-clause, the stale-rule exclusion, both stamp call sites, and both render paths.
+**Rounds 3-6 continued to find real defects** -- the assess loop ran six rounds
+because each round's findings were correct and blocking, not because of thrash.
+Beyond those already listed: a stamp could HIDE a schema-corruption notice
+(the notice was gated on the percentage being absent, which stopped being true
+once the percentage came from the stamp); `bool()`/`int()` coercions let a
+hand-edited stamp read differently in hosted vs local mode; the whole
+publish-path stamp could be deleted with the entire backend suite green; and a
+save over a kit whose metadata.json was UNPARSEABLE replaced the file with just
+the stamp, deleting its status and label (both stores collapse a malformed file
+to None, indistinguishable from absent -- pre-C4 the save wrote no metadata, so
+this diff had made an ordinary Cmd+S destructive).
+
+Three recurring shapes, recorded in Lessons: fixing one half of a mirrored pair
+(strip vs card, hosted vs local, Python vs TS); tests that describe rather than
+pin; and comments that over-claim what the code guarantees.
+
+Final tests: backend 1661+ passed (from a 1595 baseline, zero regressions),
+schema-editor 1206+ passed, typecheck clean. ~20 mutations verified across the
+predicate, the fingerprint, the rounding (both sides), the structural clause,
+the stale-rule exclusion, both stamp call sites, the publish re-lint, the
+listing, the parsers, and every render path.
 
 ## Lessons
 

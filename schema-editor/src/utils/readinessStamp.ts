@@ -66,8 +66,13 @@ export function readStampFromMetadata(
 ): ReadinessStamp | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
+  // INTEGERS, not merely finite numbers: these are counts and a percentage.
+  // The backend's parser requires a real int, so accepting 75.9 here would
+  // render "75.9%" in local mode while hosted mode showed the verify hint for
+  // the same file -- the two-readings divergence this module exists to end
+  // (Opus fresh-eyes round 6 measured exactly that asymmetry).
   const num = (v: unknown): number | null =>
-    typeof v === 'number' && Number.isFinite(v) ? v : null;
+    typeof v === 'number' && Number.isInteger(v) ? v : null;
   const reviewed = num(r.reviewed);
   const toReview = num(r.toReview);
   const total = num(r.total);
