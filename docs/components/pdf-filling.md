@@ -178,7 +178,13 @@ last of these was ungated until bd `polyglot-pdf-w3zw` and is now pinned by a
 property test), so the revert is the last moment the published bytes exist. A
 marker is not a unique key -- two revisions can share one `edition_date` -- so
 the archive skips only when the stored copy IS the same schema, and a distinct
-revision under a taken marker lands on a fingerprint-disambiguated sibling. Archives are invisible to both catalogues for free: `list_kit_files`
+revision under a taken marker lands on a fingerprint-disambiguated sibling
+(`<marker>--<fingerprint>`). Retrieval therefore searches the marker AND its
+siblings: `scripts/read_kit_revision.py` returns the revision when exactly one
+answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
+several do -- for a confirmation record, a confident wrong schema is worse than
+an honest "cannot tell". `--segment` reads one exact archived segment after the
+operator disambiguates from `--list`. Archives are invisible to both catalogues for free: `list_kit_files`
 ignores anything deeper than `<kit>/<file>` in both backends, and `_archive` is
 outside `_KIT_ID_RE`. `scripts/read_kit_revision.py` is the operator read
 (current-or-archived, by `kit_id` + marker).

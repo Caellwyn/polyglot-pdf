@@ -222,6 +222,94 @@ def test_fieldless_schema_archives_nothing(tmp_path):
     assert _run(store.list_archived_markers("empty-kit")) == []
 
 
+# --- retrieval: never hand back a confident WRONG revision ------------------
+
+
+def _read_kit_revision():
+    """The operator retrieval script as a module (it lives in scripts/, which is
+    not a package on the default path)."""
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[3] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import read_kit_revision
+
+    return read_kit_revision
+
+
+def _resolve_revision(store, kit_id, marker):
+    return _run(_read_kit_revision()._resolve(store, kit_id, marker))
+
+
+def test_retrieval_refuses_to_guess_between_colliding_revisions(tmp_path):
+    """A confirmation record carries the PLAIN marker, and an edition_date is
+    not unique -- so when two archived revisions answer to it, the record alone
+    cannot say which was confirmed against. Retrieval must say so, NOT return
+    the first one: a confident wrong schema is the worst outcome for a legal
+    record (fresh-eyes round 2, reproduced live against the shipped resolver).
+    """
+    AmbiguousRevision = _read_kit_revision().AmbiguousRevision
+
+    store = LocalFormKitStore(tmp_path)
+    rev_1 = _schema("a", "b", edition="12/2024")
+    _make_kit(tmp_path, "w7", rev_1)
+    _archive_hook(store, "w7", {"status": "complete"})
+    rev_2 = _schema("a", "b", "c", edition="12/2024")
+    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
+    _archive_hook(store, "w7", {"status": "complete"})
+    # A third, unrelated revision goes live so neither archived one is current.
+    (tmp_path / "w7" / "schema.json").write_text(
+        json.dumps(_schema("z", edition="01/2026")), encoding="utf-8"
+    )
+
+    with pytest.raises(AmbiguousRevision) as exc:
+        _resolve_revision(store, "w7", "12/2024")
+    assert len(exc.value.candidates) == 2
+
+
+def test_retrieval_finds_the_only_revision_for_a_marker(tmp_path):
+    """The unambiguous case still resolves -- exit criterion 1's happy path."""
+    store = LocalFormKitStore(tmp_path)
+    published = _schema("a", "b", edition="12/2024")
+    _make_kit(tmp_path, "w7", published)
+    _archive_hook(store, "w7", {"status": "complete"})
+    (tmp_path / "w7" / "schema.json").write_text(
+        json.dumps(_schema("a", "b", "c", edition="01/2026")), encoding="utf-8"
+    )
+
+    source, schema = _resolve_revision(store, "w7", "12/2024")
+
+    assert schema == published
+    assert source.startswith("archive")
+
+
+def test_retrieval_prefers_the_live_schema_when_it_still_matches(tmp_path):
+    """A kit never revised since the record was written resolves to the live
+    schema -- and one revision recorded under two segments is not an ambiguity."""
+    store = LocalFormKitStore(tmp_path)
+    published = _schema("a", "b", edition="12/2024")
+    _make_kit(tmp_path, "w7", published)
+    _archive_hook(store, "w7", {"status": "complete"})
+
+    source, schema = _resolve_revision(store, "w7", "12/2024")
+
+    assert schema == published
+    assert source == "current"
+
+
+def test_retrieval_of_an_unknown_marker_is_not_found(tmp_path):
+    """Absent must stay absent -- never silently the nearest sibling."""
+    from backend.services.form_kits import FormKitNotFound
+
+    store = LocalFormKitStore(tmp_path)
+    _make_kit(tmp_path, "w7", _schema("a", edition="12/2024"))
+
+    with pytest.raises(FormKitNotFound):
+        _resolve_revision(store, "w7", "07/1999")
+
+
 # --- the REAL route: the archive must actually be WIRED IN ------------------
 # The helper tests above all call _archive_published_revision directly, so they
 # stay green even if the status route never calls it (verified by mutation:
@@ -304,14 +392,20 @@ def test_repeating_the_same_colliding_revision_still_skips(tmp_path):
 
 
 def test_every_schema_writing_editor_route_refuses_a_published_kit(route_client):
-    """The PROPERTY the archive's placement depends on: a published kit's schema
-    cannot be written by ANY editor route, so revert-to-draft is genuinely the
-    last moment the superseded bytes exist.
+    """The PROPERTY the archive's placement depends on: no editor route may
+    change a published kit's ANSWERABLE SHAPE (field ids/types/option values --
+    what the revision marker is computed from), so revert-to-draft is genuinely
+    the last moment the superseded revision's bytes exist.
 
-    Pinning the property rather than the one route that was found missing it:
-    the extract route had no complete-gate, which silently falsified the whole
-    design premise. A new schema-writing route added later must either gate or
-    fail this test.
+    Stated precisely, because "cannot be written by ANY route" is FALSE: the
+    /status drift sweep does write schema.json on a complete->complete re-press.
+    That write only bakes translation metadata, which resolve_edition_marker
+    deliberately excludes from the fingerprint, so it cannot produce a new
+    revision -- see test_drift_sweep_write_does_not_change_the_revision_marker.
+
+    Pinning the property rather than the one route found missing it: the extract
+    route had no complete-gate, which silently falsified the design premise. A
+    new SHAPE-writing route added later must gate or fail this test.
     """
     client, _store, root = route_client
     _make_kit(root, "w7", _schema("a", edition="12/2024"), {"status": "complete"})
@@ -333,6 +427,26 @@ def test_every_schema_writing_editor_route_refuses_a_published_kit(route_client)
     # overwritten the published schema in place, bypassing the archive.
     assert client.post("/api/editor/kits/w7/extract", data={"force": "true"},
                        headers=author).status_code == 409
+
+
+def test_drift_sweep_write_does_not_change_the_revision_marker():
+    """The carve-out the property test rests on: the /status drift sweep DOES
+    write schema.json on a complete->complete re-press, but it only bakes
+    translation metadata -- which resolve_edition_marker excludes from the
+    fingerprint by design. So that write cannot create a revision the archive
+    would need to preserve. If the sweep ever touched field shape, this fails.
+    """
+    before = _schema("a", "b")
+    after = json.loads(json.dumps(before))
+    # What the sweep actually persists: baked translations in the provenance
+    # slot, plus per-option label translations.
+    after.setdefault("_bakeoff", {}).setdefault("authoring", {})[
+        "option_translation"
+    ] = {"changed": True, "model": "gemini-x"}
+    after["fields"][0]["label_translations"] = {"spanish": "campo uno"}
+    after["fields"][0]["spoken_name"] = "field one"
+
+    assert resolve_edition_marker(None, before) == resolve_edition_marker(None, after)
 
 
 def test_revert_of_an_already_draft_kit_archives_nothing(route_client):

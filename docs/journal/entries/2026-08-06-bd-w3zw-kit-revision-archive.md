@@ -68,6 +68,18 @@ Fresh-eyes scored exit criterion 1 FAIL on two counterexamples, both fixed here:
   schema; a distinct revision under a taken marker archives under a
   fingerprint-disambiguated sibling so both survive.
 
+**Round 2 then found the write-side fix had MOVED the bug to the read side.**
+A confirmation record carries the PLAIN marker, but the second colliding
+revision now lives under `<marker>--<fingerprint>` -- and retrieval did one
+plain-marker lookup, so a record naming the second revision silently got the
+FIRST one's schema, exit code 0. The same "confident wrong answer" defect,
+relocated. Fixed: `_resolve` collects EVERY stored revision answering to the
+marker (live schema, plain segment, and any sibling), returns the one when
+there is exactly one, and raises `AmbiguousRevision` (exit 3) when there are
+several -- it never picks. `--segment` reads one exact archived segment for the
+operator who has disambiguated from `--list`. Identical bytes under several
+segments count as one revision, not an ambiguity.
+
 ## Lessons
 
 1. **A helper-level test suite can be fully green with the feature unwired.**
@@ -98,7 +110,19 @@ Fresh-eyes scored exit criterion 1 FAIL on two counterexamples, both fixed here:
    route refuses a published kit) rather than the one route that was missing it,
    so a newly-added write route must gate or fail.
 
-4. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+4. **Fixing a write path can relocate the bug to the read path.** Round 1: two
+   revisions collided on one marker and the second was destroyed. The fix made
+   the WRITE side store both -- under a new sibling key. Round 2: retrieval
+   still looked up only the plain marker, so the record that meant the second
+   revision now got the first one's bytes. Same defect ("a confident wrong
+   answer"), same severity, one layer over. The lesson is to re-ask the ORIGINAL
+   question of the whole round trip after a fix, not just of the code that
+   changed: "can a record still resolve to the wrong schema?" would have caught
+   it immediately, where "is the write correct now?" did not. Where a key can
+   genuinely be ambiguous, the honest answer is to REFUSE (exit 3) rather than
+   return the nearest match.
+
+5. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow
