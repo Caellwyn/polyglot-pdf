@@ -73,8 +73,11 @@ list_form_kits; the pdf-view overlay (PreviewPane -> usePDFDocument raw
 getDocument URL) added to vccy's seam + surfaces; two hosted-path symbol
 names corrected (KitStatusResult / setRemoteStatus); and the sprint-18
 coordination note widened to bd apmo (C2), with Unlock-vs-unpublished
-semantics pinned (unpublished is never unlockable to draft). Eighteen
-adopted gaps across rounds 2-5; nothing rejected or deferred; no
+semantics pinned (unpublished is never unlockable to draft). Round 6 (Opus)
+found 1: the explicit-filename fix must land on the BACKEND (FormKitInfo
+gains schema_file/pdf_file; the frontend FormKitDescriptor.pdfFile is itself
+URL-derived, so pointing at it reproduced the bug) -- adopted. Nineteen
+adopted gaps across rounds 2-6; nothing rejected or deferred; no
 out-of-scope beads filed by the reviewers. The terminal verdict is the Opus
 re-review of the final diff, recorded in the PR body and merge ping.
 

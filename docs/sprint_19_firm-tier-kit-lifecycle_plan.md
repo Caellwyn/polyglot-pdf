@@ -175,10 +175,18 @@ stable across revisions, so firm allowlists never churn on republish.
   segment (`pdfUrl.split('/').pop()`), and SchemaFormDemo.tsx:109-111 does the
   same for schema/pdf filenames -- under backend-route paths those segments
   become the literals "pdf"/"schema" and the fill 404s in
-  `store.load_pdf_bytes`. The fix carries the schema/pdf FILENAMES explicitly
-  from the manifest (`FormKitDescriptor` already declares `pdfFile`) instead
-  of re-deriving them from the URL, so the filled-PDF download keeps working
-  for private kits. `fillPDF` has three call sites in
+  `store.load_pdf_bytes`. The fix is on the BACKEND side of the wire: the
+  client manifest's `FormKitInfo` response model (form_kit_routes.py:124-128)
+  today exposes only paths, no filenames -- and the frontend
+  `FormKitDescriptor.pdfFile` is populated by splitting those very URLs
+  (SchemaFormDemo.tsx:109-111), so it breaks identically under rewritten
+  paths. `FormKitInfo` gains `schema_file`/`pdf_file` (the normalized manifest
+  entries already carry them), and SchemaFormDemo populates
+  `FormKitDescriptor.schemaFile`/`pdfFile` from those fields instead of the
+  URL split, so the filled-PDF download keeps working for private kits. (The
+  editor route already ships schemaFile/pdfFile keys -- that is the
+  token-gated editor catalogue, not this client manifest; don't let the grep
+  hit satisfy you.) `fillPDF` has three call sites in
   two more files -- SchemaForm.tsx:623 (download) / :659 (print) and
   FilledPreviewModal.tsx:62 (preview), all fed by a `pdfUrl` prop from
   SchemaFormDemo -- so the explicit-filename fix threads a `pdfFile` prop
@@ -252,7 +260,7 @@ serial).
 | Bead | Scope | Surfaces | Inherits |
 |------|-------|----------|----------|
 | firms-store | firms collection model + FirmsService + firestore.rules deny block + bootstrap/claim-stamping admin script | backend/services/firms.py (new), firestore.rules, scripts/ (admin script, new) | 02ye #1 |
-| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (per-request path rewrite in list_form_kits; header-carrying viewer fetches incl. the pdf-view overlay; filenames carried explicitly -- a pdfFile prop threads through SchemaForm and FilledPreviewModal -- so the pdf-fill call survives) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, frontend/src/schema-forms/components/SchemaForm.tsx, frontend/src/pdf-view/FilledPreviewModal.tsx, frontend/src/pdf-view/PreviewPane.tsx, frontend/src/pdf-view/usePDFDocument.ts, frontend/src/schema-forms/utils/pdfFiller.ts, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
+| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (per-request path rewrite in list_form_kits; header-carrying viewer fetches incl. the pdf-view overlay; `FormKitInfo` gains schema_file/pdf_file and the frontend reads them instead of URL-splitting -- a pdfFile prop threads through SchemaForm and FilledPreviewModal -- so the pdf-fill call survives) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, frontend/src/schema-forms/components/SchemaForm.tsx, frontend/src/pdf-view/FilledPreviewModal.tsx, frontend/src/pdf-view/PreviewPane.tsx, frontend/src/pdf-view/usePDFDocument.ts, frontend/src/schema-forms/utils/pdfFiller.ts, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
 | static-scoping | Static pipeline filters to complete + public, and excludes `_`-prefixed entries at root AND kit level (closes the draft leak and the `_translation`/future `_archive` sweep) | frontend/scripts/generate-form-manifest.ts | 02ye #2 (static half) |
 | firm-telemetry | firm_id threading (claims -> WS session) + wire log_form_session_start/end + firm_id on confirmation events | backend/routes/websocket_routes.py, backend/utils/confirmation_logger.py | 02ye #3 |
 | magic-links (BLOCKED) | Per-firm API key + link minting + EntryGate + fragment routing (settled design) | frontend/src/schema-forms/, backend auth | deferred until first paying firm |
