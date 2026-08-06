@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: resolved the tool-call-compliance caveat as historical -- bd polyglot-pdf-i9q8 closed, root cause was an untyped tool param, not the system instruction; the spoken language remains PINNED per session per bd polyglot-pdf-87a9).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: resolved the tool-call-compliance caveat as historical -- bd polyglot-pdf-i9q8 closed, root cause was an untyped tool param, not the system instruction; the spoken language remains PINNED per session per bd polyglot-pdf-87a9).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live

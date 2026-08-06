@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -67,7 +67,7 @@ The "Section resets" column is the DEPRECATED fallback (bd polyglot-pdf-55jg).
 | | Section resets (DEPRECATED fallback) | Sliding window (SHIPPED default) |
 |---|---|---|
 | Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: conversation history capped at `target_tokens`. Under DTI the SI floor is ~one field, so the whole-form SI no longer dominates and the window is a real saving (not the ~2% wash the wyhh matrix saw under the full-form SI) |
-| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted; the session-duration GoAway STILL arrives (~13-15 min, bd wyhh, WITH compression evicting), handled by the GoAway -> reconnect -> resumption path (c5t / l3a.2 / wnt) |
+| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted; the session-duration GoAway STILL arrives (~13-15 min, bd wyhh, WITH compression evicting), handled by the GoAway -> reconnect path, which opens a FRESH session rehydrated from the client handshake (c5t / l3a.2; SDK session resumption was rejected, bd polyglot-pdf-l3a.3 wont-do) |
 | Conversational continuity | Lost at every boundary (re-greeting suppressed by `vmxx` resume, but context is gone) | Preserved (subject to eviction of old turns) |
 | Moving parts | Reset orchestration: `switch_to_section` finalize/restart, section chopping, carried-over `previous_spoken_names` | One server-side config; eviction timing is the server's |
 
@@ -152,7 +152,7 @@ per-form** (below); the static token values are the override:
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
 | `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (calibrated against the I-90's measured eviction floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6370/7870 with the clamp NOT firing -- see below) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6278/7778 with the clamp NOT firing -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -182,12 +182,17 @@ Two inputs are easy to miss and both move the result by thousands of tokens:
   `settings.TOOL_DECLARATIONS` overstates the floor by ~92 tokens.
 - **`injection_budget_tokens` is a real third addend**, passed from
   `guidance_contract.inline_injection_budget_tokens(full_schema)`
-  (`backend/adapters/live_ai_gemini.py:1772`, bd polyglot-pdf-wsao.8). It reserves
+  (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1772`).
+  It reserves
   room for the largest per-field inline guidance injection the form can produce.
   It is `0` for a form with no `help.details`, so it is invisible on some kits and
   decisive on others -- on the W-7 it is **1652 tokens**. Without it, a
   details-bearing initiating message can exceed the assembled window and Vertex
-  closes `1007` AT SESSION ASSEMBLE (the wsao.2 measured failure).
+  closes `1007` AT SESSION ASSEMBLE (the wsao.2 measured failure). It is computed
+  at `backend/services/guidance_contract.py:246` and passed in from TWO sites in
+  `backend/services/form_filling_service.py` -- `:478` (start) and `:1100`
+  (restart); the restart site is the one that regressed wsao.2 when it was
+  missed.
 
 **The Live API enforces `trigger_tokens` within `[5000, 128000]`** (wire-verified
 2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
@@ -363,7 +368,9 @@ polyglot-pdf-7872):
    correctness gate (bd polyglot-pdf-jnjj.7) confirmed no fill-accuracy
    regression vs the full-SI baseline.
 3. A whole-form FLOW survives past the session-duration limit -- compression
-   (context-size cap) PLUS GoAway-triggered reconnect with session resumption
+   (context-size cap) PLUS GoAway-triggered reconnect (a FRESH session
+   rehydrated from the client handshake; SDK session resumption was designed
+   and rejected, bd polyglot-pdf-l3a.3 wont-do)
    (duration limit): a compression-on session is still terminated by the
    duration GoAway at ~13-15 min (bd wyhh), so the continuous flow COMPOSES
    compression with the l3a.2 GoAway pre-emptive resume -- DONE.

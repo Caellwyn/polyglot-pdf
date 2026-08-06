@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: added the missing `switch_to_field` tool bullet to the tool-calling list -- a seventh currently-declared, shipped, non-deprecated tool, wire message `switch_field`/`switch_field_response`).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the missing `switch_to_field` tool bullet to the tool-calling list -- a seventh currently-declared, shipped, non-deprecated tool, wire message `switch_field`/`switch_field_response`).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool

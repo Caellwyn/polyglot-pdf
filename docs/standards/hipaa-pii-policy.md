@@ -66,7 +66,7 @@ The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed i
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected the sweep
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the sweep
 self-check floor to `>=20` and confirmed StructuredLogger is live, not a dead
 import; retains the bd polyglot-pdf-z2is disclaimer-acceptance row and
 confirmation Firestore mirror note).*

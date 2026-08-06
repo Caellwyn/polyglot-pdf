@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected compression-epic citation from l3a to x8rt/7872, with link to shipped default in context-compression.md).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected compression-epic citation from l3a to x8rt/7872, with link to shipped default in context-compression.md).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real

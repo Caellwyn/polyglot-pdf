@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: Vertex-only production enforced; 3.1 A/B remains local-only until Vertex GA).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: Vertex-only production enforced; 3.1 A/B remains local-only until Vertex GA).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in

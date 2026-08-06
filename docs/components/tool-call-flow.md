@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: added the `switch_to_field` tool row to the table; validation-error responses carry an explicit DISCARD-the-rejected-value instruction so a rejected value is never re-used on the next field).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the `switch_to_field` tool row to the table; validation-error responses carry an explicit DISCARD-the-rejected-value instruction so a rejected value is never re-used on the next field).*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the

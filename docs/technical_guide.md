@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-05 (bd polyglot-pdf-n18q: the Surface contracts section --
+*Last updated: 2026-08-06 (bd polyglot-pdf-n18q: the Surface contracts section --
 the code-derived cross-surface data-contract map for blast-radius review).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
@@ -276,8 +276,10 @@ Known traps (all deliberate, all pinned only by comments):
 
 Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:456-674`), deep-copied into the
-live config by `form_filling_service.py:219-229` and declared to Gemini in
-`_build_live_config` (`backend/adapters/live_ai_gemini.py:1630`). Gemini's tool
+live config by `form_filling_service.py:219-229` (which drops `switch_section`
+in continuous mode -- the session ships 6 declarations, not 7) and declared to
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1632`;
+tools assembled at :1645). Gemini's tool
 calls come back through the adapter (`live_ai_gemini.py:2398-2585` and :2592+)
 into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:418`),
 which dispatches to the `form_filling_service` handlers that emit the Leg-A

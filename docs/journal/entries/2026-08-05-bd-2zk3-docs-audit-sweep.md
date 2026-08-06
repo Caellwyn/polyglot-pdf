@@ -61,9 +61,14 @@ never catches; every touched doc now carries the one-line stamp.
   executes -- replacing an honest "untested interim" caveat with a wrong
   certainty. A derived number must be DERIVED (run the function against the
   live config) before it is written down, not reasoned forward from the
-  formula. Round-3 review caught it; the doc now records the executed reading
-  (floor ~5771 / window ~6370 / trigger ~7870, clamp does not fire) and says
-  it moves with the SI.
+  formula. Rounds 3 AND 4 were both needed: round 3 caught the invented
+  derivation, then round 4 caught that the replacement had been executed
+  against the raw 7-tool settings list rather than the session's filtered 6
+  (continuous mode drops `switch_section`) and omitted `injection_budget_tokens`
+  entirely. The doc now records the production reading (floor 5679 / window
+  6278 / trigger 7778 with no injection budget; window 7930 / trigger 9430 on
+  the W-7's 1652-token budget; the clamp does not fire in either case) and
+  tells readers to re-execute rather than trust any written figure.
 - A link sweep scoped to CHANGED files cannot see the links a MOVE breaks in
   files that did not change; sweep the whole live corpus after any archive
   move (now bd polyglot-pdf-3qgw: teach check_doc_freshness.py to do it).
