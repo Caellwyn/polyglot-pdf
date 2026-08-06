@@ -306,7 +306,8 @@ Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`
 (`backend/services/ai_context.py:79`); the contract there is between the SI
 templates and the prose, not key names. System instruction:
-`form_filling_service.build_form_context_message` (:1165) ->
+`form_filling_service.build_form_context_message`
+(`form_filling_service.py:1165`) ->
 `ai_context.build_form_context` (:444).
 
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
@@ -336,15 +337,16 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-45`).
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (:92-134); widget dispatch by `field_type` (:409-681):
+  exact id always winning (`pdf_fill_routes.py:92-134`); widget dispatch by
+  `field_type` (`pdf_fill_routes.py:409-681`):
   text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
   (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
   direct `xref_set_key` writes (:459-495).
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (:410-413).
-- `NeedAppearances` is deliberately NOT set (:691-697); appearance regeneration
+  (`pdf_fill_routes.py:410-413`).
+- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
 
