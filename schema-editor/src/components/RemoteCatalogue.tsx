@@ -4,7 +4,7 @@ import {
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type EditorRole, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
-import { reviewCounts } from '../utils/reviewStatus';
+import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
 
 interface RemoteCatalogueProps {
@@ -165,14 +165,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       if (seq !== refreshSeq.current) return;
       setKits(entries);
       setProgress({});
-      // Review % per kit: load each schema and reuse reviewCounts -- THE pinned
-      // count predicate App.liveStats uses for the open kit, so a card's scanned
-      // % and its live % can never disagree (bd polyglot-pdf-q3rm: they briefly
-      // ran different predicates and the same kit showed two numbers). The scan
-      // has no lint report, so the lint clause is honestly gate-blind here
-      // (findings = undefined), exactly like liveStats before findings arrive.
-      // Client-side on purpose: a server-side re-implementation would drift.
-      // Fine at current catalogue scale.
+      // Review % per kit comes from the kit's READINESS STAMP, which the
+      // backend wrote at save/publish with publish_readiness -- the same
+      // definition the open editor's strip mirrors (sprint-18 C4, bd
+      // polyglot-pdf-g687). The card reports a stored answer rather than
+      // deriving a second one, so a card and the open kit cannot disagree
+      // (bd polyglot-pdf-q3rm was exactly that disagreement). An absent,
+      // unverified, or stale stamp yields the verify hint -- never a
+      // re-scanned percentage, which would restore the two-definitions bug.
+      //
+      // The schema fetch below survives ONLY for the card's VERSION line
+      // (edition date), which no stamp carries; it no longer computes any
+      // percentage. Folding version into the stamp would let the listing drop
+      // this fetch entirely -- filed as its own bead rather than widened into
+      // this one.
       const withSchema = entries.filter((e) => e.hasSchema);
       // A 401 during this scan (code revoked between the list call and the
       // per-kit fetches) is an AUTH state, not a broken schema -- it must
@@ -195,11 +201,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           if (!schema || !fieldsOk) {
             return [e.id, { reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null }] as const;
           }
-          const stats = reviewCounts(schema.fields, undefined);
+          // Percentage comes from the stamp (read at render), NOT from here --
+          // this fetch now yields only the version line.
           return [e.id, {
-            reviewPercent: stats.percentage,
-            completeFields: stats.reviewed,
-            totalFields: stats.total,
+            reviewPercent: null,
+            completeFields: 0,
+            totalFields: 0,
             schemaError: false,
             version: versionInfoFromSchema(schema),
           }] as const;
@@ -538,13 +545,31 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
               Select a form...
             </option>
             {kits.map((k) => {
+              // Same precedence AND the same stamp rule as the expanded card
+              // (sprint-18 C4): live > this session's saved value > the kit's
+              // stamp. NEVER progress[].reviewPercent -- see the FormCatalogue
+              // twin (fresh-eyes gap 1); it is dead null here today, but
+              // leaving the read in place invites the fallback back.
+              // Withheld when the schema is unreadable, exactly as on the card
+              // (round 3 fixed the card and MISSED the strip -- so the default
+              // view still printed a confident % that the card below it
+              // simultaneously denied; Opus fresh-eyes round 4).
+              const stripStamp = progress[k.id]?.schemaError
+                ? null : readStamp(k.readiness);
               const pct = liveProgress && liveProgress.kitId === k.id
                 ? liveProgress.percent
-                : (editedProgress[k.id]?.percent ?? progress[k.id]?.reviewPercent ?? null);
+                : (editedProgress[k.id]?.percent
+                   ?? (stripStamp?.kind === 'ok' ? stripStamp.stamp.percent : null));
+              // Says so when there is no trustworthy stamp -- see the
+              // FormCatalogue twin for why withholding the number alone was
+              // not enough (both Opus outer reviewers flagged it).
+              const stripUnmeasured = pct === null && k.hasSchema
+                && !progress[k.id]?.schemaError;
               return (
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
+                  {stripUnmeasured ? STAMP_MARKER_SHORT : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
                 </option>
               );
@@ -696,10 +721,35 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
             const edited = editedProgress[kit.id] ?? null;
             const source = live ?? edited;
-            const pct = source ? source.percent : (prog?.reviewPercent ?? null);
-            const completeFields = source ? source.complete : (prog?.completeFields ?? 0);
-            const totalFields = source ? source.total : (prog?.totalFields ?? 0);
-            const showSchemaError = !source && prog?.schemaError && pct === null;
+            // With no live/session value, the card reports the kit's STAMP
+            // (sprint-18 C4). A stamp that is absent, unverified, or stale
+            // yields the hint instead of a number -- deliberately NOT a
+            // re-scan (that is the two-definitions bug this bead ends).
+            // An unreadable schema is reported REGARDLESS of whether a stamp
+            // exists. Before C4 this could safely key on `pct === null`,
+            // because pct came from the same scan that set schemaError. Now
+            // pct comes from the STAMP, so a kit whose schema.json became
+            // corrupt AFTER its last save would have rendered a confident
+            // percentage AND swallowed the corruption notice -- a card
+            // asserting progress about a schema nobody can read, which is the
+            // very class of lie this bead exists to end (Opus fresh-eyes
+            // round 3; regression introduced by this diff).
+            const showSchemaError = !source && Boolean(prog?.schemaError);
+            // ...and the stamp is withheld in that case at the SOURCE: a stamp
+            // measured an earlier, readable schema, so it cannot describe the
+            // one on disk now. Suppressing here (rather than at each render
+            // site) means the bar, the hover counts and the hint all follow.
+            const reading = source || showSchemaError
+              ? null : readStamp(kit.readiness);
+            const stamped = reading?.kind === 'ok' ? reading.stamp : null;
+            const pct = source ? source.percent : (stamped ? stamped.percent : null);
+            const completeFields = source ? source.complete : (stamped?.reviewed ?? 0);
+            const totalFields = source ? source.total : (stamped?.total ?? 0);
+            // The verify hint: only for a schema-bearing kit (a kit with no
+            // schema has nothing to measure and already says so) and never
+            // alongside the louder unreadable-schema error.
+            const stampGap = !source && kit.hasSchema && !showSchemaError
+              && reading?.kind === 'hint' ? reading.reason : null;
             const cardVersion = source?.version ?? prog?.version ?? null;
             // The open kit has UNSAVED edits: promoting now would publish the
             // stale persisted schema (and the follow-up save would then be
@@ -755,6 +805,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           style={{ width: `${pct}%` }}
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {stampGap && (
+                    <div className="mt-2 text-xs text-gray-500"
+                         data-testid="readiness-hint">
+                      {stampHint(stampGap)}
                     </div>
                   )}
 

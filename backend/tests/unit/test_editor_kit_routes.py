@@ -509,6 +509,565 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_a_failed_lint_stamps_UNVERIFIED(client, monkeypatch):
+    """When lint cannot run, the stamp must say its checks did not run.
+
+    Seven parametrized tests pin how `verified` is READ; nothing pinned how it
+    is WRITTEN -- flipping the degrade branch to True left all 227 backend
+    tests green (measured, Opus outer review). `verified` is the single flag
+    between an unchecked count and a confident percentage on every card, so
+    the write side needs its own guard.
+
+    (bd polyglot-pdf-kwh3t covers the adjacent case where a CORRUPT AcroForm
+    dump degrades to a dump-blind lint that still stamps verified:true; this
+    pins the branch that already behaves correctly so kwh3t's fix cannot
+    silently regress it.)
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": []})
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("lint exploded")
+
+    monkeypatch.setattr(ekr, "lint_schema", boom)
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text",
+                          "_review": {"status": "reviewed_correct"}}]},
+    )
+    assert r.status_code == 200, r.text
+    stamp = r.json()["readiness"]
+    # The counts are still recorded (honest: what we know without lint)...
+    assert stamp["total"] == 1
+    # ...but the stamp says plainly that the checks did not run, so the card
+    # shows the verify hint rather than a confident 100%.
+    assert stamp["verified"] is False
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["readiness"]["verified"] is False
+
+
+def test_save_never_destroys_unparseable_metadata(client):
+    """A save must not REPLACE a corrupt metadata.json with just the stamp.
+
+    Both stores collapse a malformed metadata.json to None, indistinguishable
+    from absent -- so a `{**(meta or {}), readiness: ...}` merge would delete
+    the kit's status, label and any custom schema/pdf filenames. Pre-C4 the
+    save path wrote NO metadata, so a corrupt file passed through untouched
+    and was recoverable; adding a metadata writer must not make an ordinary
+    Cmd+S destructive (Opus fresh-eyes round 6).
+
+    Concretely, the loss would silently unpublish a complete kit (deploy-all.sh
+    greps `status`) and orphan a kit whose schema lives under a custom name.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": []})
+    corrupt = '{"status": "complete", "label": "Live Form", "schema": "custom.json'
+    (root / "i-90" / "metadata.json").write_text(corrupt, encoding="utf-8")
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text"}]},
+    )
+    # The save itself still succeeds (the stamp is never worth failing a save)...
+    assert r.status_code == 200
+    # ...and no stamp is claimed, since there was no metadata to merge into.
+    assert "readiness" not in r.json()
+    # ...and the corrupt file is left EXACTLY as it was, still recoverable.
+    assert (root / "i-90" / "metadata.json").read_text(encoding="utf-8") == corrupt
+
+
+def test_save_stamps_a_kit_that_has_no_metadata_file(client):
+    """An ABSENT metadata.json is a normal state -- stamp into a fresh dict.
+
+    A metadata-less kit ships in this repo (form-kits/w9-heldout), and
+    list_kit_files treats any subdirectory as a kit. Round 6 collapsed "absent"
+    and "unparseable" into one skip, so such a kit could never show a
+    percentage however many times it was saved (Opus fresh-eyes round 7). The
+    two cases are told apart by the kit's filename set, which the route already
+    holds -- no extra store round-trip.
+    """
+    c, _store, root = client
+    kit = root / "bare"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps({"fields": []}), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7 test")
+    assert not (kit / "metadata.json").exists()
+
+    r = c.put(
+        "/api/editor/kits/bare/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text",
+                          "_review": {"status": "reviewed_correct"}}]},
+    )
+    assert r.status_code == 200, r.text
+    # The stamp is returned...
+    assert r.json()["readiness"]["percent"] == 100
+    # ...and persisted into a metadata.json created for the purpose.
+    meta = json.loads((kit / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["readiness"]["reviewed"] == 1
+    assert meta["readiness"]["verified"] is True
+
+
+def test_kits_listing_returns_the_readiness_stamp(client):
+    """GET /kits must carry each kit's stamp -- the catalogue's only source of
+    a percentage (sprint-18 C4).
+
+    Untested until Opus fresh-eyes round 3: dropping `readiness=` from the
+    listing, or typo-ing a key in _readiness_out (the stored block deliberately
+    mixes snake_case `schema_sha1` with camelCase `toReview`, so this is a live
+    hazard), left the whole backend suite green while every hosted card showed
+    the verify hint forever.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": [{"id": "a"}]})
+
+    # Save to produce a real stamp, then list.
+    saved = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        # `type` is required for a field to count reviewed at all: a field
+        # with no id or no type is an uncovered structural error (mirroring
+        # the client). Omitting it here made this fixture measure 0 of 2.
+        json={"fields": [
+            {"id": "a", "type": "text",
+             "_review": {"status": "reviewed_correct"}},
+            {"id": "b", "type": "text"},
+        ]},
+    )
+    assert saved.status_code == 200
+
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "i-90")
+    stamp = kit["readiness"]
+    assert stamp is not None, "the listing dropped the stamp"
+    # The values the card renders, end to end through the wire model.
+    assert stamp["reviewed"] == 1
+    assert stamp["total"] == 2
+    assert stamp["percent"] == 50
+    assert stamp["verified"] is True
+    assert stamp["schemaSha1"]  # camelCase on the wire, snake_case in storage
+
+
+@pytest.mark.parametrize("stored,expected", [
+    (True, True),
+    (False, False),
+    # bool("no") is True -- a string must NOT flip the honesty bit on. This is
+    # the single field standing between an unchecked count and a confident
+    # percentage on every card, and the client's parser already required an
+    # exact `=== true` (Opus fresh-eyes round 4).
+    ("no", False),
+    ("true", False),
+    (1, False),
+    (0, False),
+    (None, False),
+])
+def test_listing_reads_verified_strictly_not_truthily(client, stored, expected):
+    """`verified` is only true when it is literally True."""
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 0, "toReview": 0, "total": 0, "errors": 0, "percent": 0,
+        "ready": False, "verified": stored, "schema_sha1": "abc123",
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"]["verified"] is expected
+
+
+@pytest.mark.parametrize("field,bad_value", [
+    # Each is a value int() would happily COERCE (int("4") == 4,
+    # int(75.9) == 75, int(True) == 1) but the client's parser rejects,
+    # yielding the verify hint. If the backend coerces, one metadata.json
+    # reads as a percentage in hosted mode and a hint in local mode -- the
+    # two-readings divergence this bead exists to end. Unpinned until Opus
+    # fresh-eyes round 6: replacing _require_int with int() left the whole
+    # suite green.
+    ("total", "4"),
+    ("reviewed", "1"),
+    ("toReview", "3"),
+    ("errors", "0"),
+    ("percent", "75"),
+    ("percent", 75.9),
+    ("errors", True),
+])
+def test_listing_rejects_a_coercible_but_wrongly_typed_count(client, field, bad_value):
+    """The counts must be REAL ints, not merely int()-able."""
+    c, _store, root = client
+    stamp = {
+        "reviewed": 1, "toReview": 3, "total": 4, "errors": 0, "percent": 25,
+        "ready": False, "verified": True, "schema_sha1": "abc123",
+    }
+    stamp[field] = bad_value
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": stamp})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is None, f"{field}={bad_value!r} should not parse"
+
+
+@pytest.mark.parametrize("stored,expected", [
+    (True, True),
+    (False, False),
+    # Same strictness as `verified` -- a stored string must not read as True
+    # (the client requires an exact `=== true`). This sibling was missed one
+    # line above the round-4 verified fix, and then landed unpinned.
+    ("no", False),
+    ("true", False),
+    (1, False),
+])
+def test_listing_reads_ready_strictly_not_truthily(client, stored, expected):
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 0, "toReview": 0, "total": 0, "errors": 0, "percent": 0,
+        "ready": stored, "verified": True, "schema_sha1": "abc123",
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"]["ready"] is expected
+
+
+def test_listing_keeps_a_stamp_whose_timestamp_is_junk(client):
+    """A junk `stamped_at` DEGRADES to None; it must not fail the whole stamp.
+
+    The timestamp is decoration -- nothing gates on it -- and the client's
+    parser keeps the stamp in that case. Dropping it here would mean the verify
+    hint in hosted mode and a percentage in local mode for one file. Unpinned
+    until Opus fresh-eyes round 6 (the existing tests only omitted the key,
+    which fails via KeyError for an unrelated reason).
+    """
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 1, "toReview": 0, "total": 1, "errors": 0, "percent": 100,
+        "ready": True, "verified": True, "schema_sha1": "abc123",
+        "stamped_at": 12345,
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is not None, "a junk timestamp must not drop the stamp"
+    assert kit["readiness"]["percent"] == 100
+    assert kit["readiness"]["stampedAt"] is None
+
+
+@pytest.mark.parametrize("omitted", ["ready", "verified"])
+def test_listing_treats_an_omitted_flag_as_false_not_as_a_broken_stamp(client, omitted):
+    """An ABSENT boolean must read False, exactly as the client's `=== true`.
+
+    Requiring the key made Python drop the WHOLE stamp (the "not measured yet"
+    hint) where the client kept it and rendered a percentage -- the strictness
+    was mirrored in round 4/5 but the required-vs-optional shape was not, so
+    the fix was one step short (Opus outer review).
+    """
+    stamp = {
+        "reviewed": 3, "toReview": 1, "total": 4, "errors": 0, "percent": 75,
+        "ready": False, "verified": True, "schema_sha1": "abc123",
+    }
+    del stamp[omitted]
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": stamp})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is not None, "an omitted flag must not drop the stamp"
+    assert kit["readiness"][omitted if omitted == "ready" else "verified"] is False
+
+
+def test_listing_accepts_an_INTEGRAL_float_like_json_round_trips_produce(client):
+    """`75.0` must parse -- JSON has one number type.
+
+    json.loads('{"p": 75.0}') gives a Python float while JSON.parse gives 75,
+    so rejecting it would make one file parse in local mode and not in hosted
+    -- and 75.0 is exactly what any jq / Python round-trip of the stamp
+    produces, which is the population a tolerant parser exists to serve
+    (Opus outer review). A NON-integral float stays rejected.
+    """
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 3.0, "toReview": 1.0, "total": 4.0, "errors": 0.0,
+        "percent": 75.0, "ready": False, "verified": True,
+        "schema_sha1": "abc123",
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is not None
+    assert kit["readiness"]["percent"] == 75
+    assert kit["readiness"]["reviewed"] == 3
+
+
+@pytest.mark.parametrize("field,bad", [
+    ("percent", 999), ("percent", -1), ("reviewed", -5), ("total", -1),
+])
+def test_listing_rejects_an_out_of_range_stamp(client, field, bad):
+    """A 999% stamp is exactly the hand-edited shape this parser rejects -- and
+    the card renders the percentage as a BAR WIDTH, so it would paint a
+    999%-wide bar (Opus outer review). Mirrored on the client."""
+    stamp = {
+        "reviewed": 3, "toReview": 1, "total": 4, "errors": 0, "percent": 75,
+        "ready": False, "verified": True, "schema_sha1": "abc123",
+    }
+    stamp[field] = bad
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": stamp})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is None
+
+
+def test_listing_rejects_a_non_string_schema_hash(client):
+    """A missing/None hash must degrade the stamp to ABSENT, not become the
+    string "None" -- which would later read as STALE ("this form changed since
+    it was last checked"), telling the user something false about what
+    happened (latent until bd polyglot-pdf-j8sr compares hashes)."""
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 0, "toReview": 0, "total": 0, "errors": 0, "percent": 0,
+        "ready": False, "verified": True, "schema_sha1": None,
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is None
+
+
+def test_kits_listing_tolerates_a_malformed_stamp(client):
+    """One kit's junk stamp must not 502 the whole listing -- it degrades to
+    no stamp (the card then shows the verify hint), matching the same
+    'one malformed kit must not hide the rest' rule the listing already
+    follows for metadata."""
+    c, _store, root = client
+    _make_kit(root, "bad", schema={"fields": []},
+              extra_meta={"readiness": {"reviewed": "not-a-number"}})
+    _make_kit(root, "good", schema={"fields": []})
+
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    ids = {k["id"] for k in listed.json()["kits"]}
+    assert {"bad", "good"} <= ids
+    bad = next(k for k in listed.json()["kits"] if k["id"] == "bad")
+    assert bad["readiness"] is None
+
+
+def test_mark_complete_stamps_readiness_from_the_published_schema(client):
+    """Publishing STAMPS the kit -- the other half of exit criterion 2.
+
+    Unpinned until Opus fresh-eyes round 5: deleting the entire publish-path
+    stamp block left all 1659 backend tests green, because the only publish
+    test asserted the FAILURE case ("readiness" not in meta), which a deleted
+    stamp satisfies trivially. Publish is the more consequential half -- it is
+    the number a completed kit carries into deploy.
+
+    Also pins the RE-LINT decision: the stamp must describe the POST-sweep
+    schema (the translation sweep mutates and re-persists it), so swapping the
+    re-lint back to the gate's pre-sweep findings must not silently pass.
+    """
+    c, _store, root = client
+    # The gate-clean fixture, with its one field signed off so the stamp has a
+    # non-trivial number to record.
+    reviewed = json.loads(json.dumps(VALID_SCHEMA))
+    reviewed["fields"][0]["_review"] = {"status": "reviewed_correct"}
+    _make_kit(root, "i-90", schema=reviewed)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.text
+
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    stamp = meta["readiness"]
+    # One field, signed off -> fully reviewed and ready.
+    assert stamp["reviewed"] == 1
+    assert stamp["total"] == 1
+    assert stamp["percent"] == 100
+    assert stamp["ready"] is True
+    # The publish path HAS a lint report in hand, so the stamp is verified.
+    assert stamp["verified"] is True
+    # The hash describes the schema that was actually published.
+    published = json.loads((root / "i-90" / "schema.json").read_text(encoding="utf-8"))
+    assert stamp["schema_sha1"] == ekr._schema_hash(published)
+
+
+def test_publish_stamp_measures_the_POST_sweep_schema(client, monkeypatch):
+    """The stamp must describe the schema as PUBLISHED, not as gated.
+
+    The translation drift sweep runs AFTER the gate's lint and mutates +
+    re-persists the schema. Reusing the gate's pre-sweep findings would stamp
+    counts describing one schema under a hash computed from another --
+    internally inconsistent, and contradicted by the editor the moment anyone
+    opens the kit.
+
+    The default sweep stub is a no-op, which makes pre- and post-sweep findings
+    identical and the re-lint decision unfalsifiable (measured: swapping the
+    re-lint for gate_findings left all 152 tests green). This stub MUTATES the
+    schema the way the real sweep does, so the two differ and the choice is
+    pinned.
+    """
+    c, _store, root = client
+    reviewed = json.loads(json.dumps(VALID_SCHEMA))
+    # The sign-off stamps exactly the findings that exist BEFORE the sweep --
+    # computed from the real linter, not hardcoded, so this cannot rot when a
+    # rule's path changes. That makes the field reviewed under the gate's lint
+    # and NOT reviewed under a post-sweep lint (whose extra flag is new since
+    # the sign-off), which is the only observable difference between the two
+    # runs. An absent slot would be the grandfather case (no timeliness claim,
+    # rule never fires) and could not distinguish them at all.
+    from backend.services.publish_readiness import finding_fingerprint
+    from backend.services.schema_lint import lint_schema as _lint
+    reviewed["fields"][0]["_review"] = {
+        "status": "reviewed_correct",
+        "seen_fingerprints": [finding_fingerprint(f) for f in _lint(reviewed, None)],
+    }
+    _make_kit(root, "i-90", schema=reviewed)
+
+    async def _mutating_sweep(store, kit_id, schema, schema_file):
+        # What the real sweep does: write translation flags into _bakeoff
+        # provenance and re-persist. schema_lint RE-EMITS those flags as
+        # field-anchored findings, so a post-sweep lint sees a finding the
+        # gate's lint could not have -- which is the whole difference between
+        # the two, and what makes this test able to tell them apart.
+        schema.setdefault("_bakeoff", {}).setdefault("authoring", {})[
+            "option_translation"] = {
+            "flags": [{"rule": "translation-drift-unresolved", "field_id": "f1",
+                       "path": "fields[0] (id=f1).options[x].label_translations.es",
+                       "message": "needs review", "severity": "WARNING"}],
+            "model": "gemini-2.5-pro",
+        }
+        await store.put_schema(kit_id, schema, schema_file)
+        return 1, "gemini-2.5-pro"
+
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _mutating_sweep)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.text
+
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    published = json.loads((root / "i-90" / "schema.json").read_text(encoding="utf-8"))
+    # The sweep's write reached disk...
+    assert "option_translation" in published["_bakeoff"]["authoring"]
+    # ...the stamp's hash describes THAT schema, not the pre-sweep one...
+    assert meta["readiness"]["schema_sha1"] == ekr._schema_hash(published)
+    # ...and -- the part that actually distinguishes the two lint runs -- the
+    # COUNTS reflect the post-sweep finding. It is newer than the field's
+    # sign-off, so the timeliness rule demotes the field: 0 of 1, not 1 of 1.
+    # Reusing the gate's pre-sweep findings would stamp a confident 100% here.
+    assert meta["readiness"]["reviewed"] == 0
+    assert meta["readiness"]["percent"] == 0
+    assert meta["readiness"]["total"] == 1
+
+
+def test_mark_complete_survives_a_failing_readiness_stamp(client, monkeypatch):
+    """A stamp failure must not fail a PUBLISH either (fresh-eyes gap 4).
+
+    By the time the stamp runs, the kit has cleared validation, the v2 check,
+    the lint gate and the translation sweep -- which may already have WRITTEN
+    re-translations. Raising here would 500 a publish that legitimately passed
+    every gate, and the caller would retry a transition that partly happened.
+    The save path guarded this from the start; the status path did not, and the
+    asymmetry was the tell.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema=VALID_SCHEMA)
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("stamp computation exploded")
+
+    monkeypatch.setattr(ekr, "_readiness_stamp", boom)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    # The publish SUCCEEDED...
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    # ...the status flip and publish date landed...
+    assert meta["status"] == "complete"
+    assert "published_at" in meta
+    # ...and only the stamp is missing (the card shows the verify hint).
+    assert "readiness" not in meta
+
+
+def test_readiness_stamp_leaves_status_values_byte_identical(client):
+    """Adding the readiness stamp must not perturb metadata.json's STATUS
+    values (sprint-18 C4 exit criterion).
+
+    deploy-all.sh greps `status` out of this file with shell tooling to decide
+    which kits ship, so the stored token must stay exactly "draft"/"complete" --
+    a stamp that re-serialized the value (or the key) differently would silently
+    change which forms reach users. This asserts the raw stored bytes, not the
+    parsed object, because that is what the deploy actually reads.
+    """
+    c, _store, root = client
+    kit = _make_kit(root, "i-90", schema={"fields": [{"id": "a"}]})
+    meta_path = kit / "metadata.json"
+
+    before = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert before["status"] == "draft"
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a"}]},
+    )
+    assert r.status_code == 200
+
+    raw = meta_path.read_text(encoding="utf-8")
+    after = json.loads(raw)
+    # The stamp landed...
+    assert "readiness" in after
+    # ...and the status token is untouched, as the exact string deploy greps.
+    assert after["status"] == "draft"
+    assert '"status": "draft"' in raw or '"status":"draft"' in raw
+    # Every pre-existing key survived the read-merge-write.
+    for key, value in before.items():
+        assert after[key] == value
+
+
+def test_put_schema_survives_a_failing_readiness_stamp(client, monkeypatch):
+    """A stamp failure must NEVER fail the save (sprint-18 C4).
+
+    The schema is already written by the time the stamp runs, so an exception
+    escaping the stamp turns a successful save into a 500 the editor reports as
+    "save failed" -- and the human re-saves, or believes the work was lost. This
+    pins the whole failure class, not one exception type: the first version
+    caught only FormKitStoreError and 500'd on an AttributeError from a store
+    without put_metadata.
+    """
+    c, _store, _root = client
+    store = _PublishedStore(status="draft")
+
+    calls = {"n": 0}
+
+    async def boom(kit_id, metadata):
+        calls["n"] += 1
+        raise RuntimeError("stamp write exploded")
+
+    store.put_metadata = boom  # type: ignore[attr-defined]
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+
+    r = c.put(
+        "/api/editor/kits/live-kit/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a"}]},
+    )
+    # The SAVE succeeded and the schema landed...
+    assert r.status_code == 200
+    assert store.saved is not None
+    # ...the stamp was attempted and swallowed...
+    assert calls["n"] == 1
+    # ...and the response simply omits readiness (the card shows the verify
+    # hint) rather than reporting a number the store never recorded.
+    assert "readiness" not in r.json()
+
+
 def test_put_schema_refuses_published_kit(client, monkeypatch):
     # Saving over a COMPLETE kit would go live instantly -- refuse with the
     # revert-first message; the store write must never be reached.
@@ -749,7 +1308,15 @@ def test_put_schema_roundtrip(client):
         json=edited,
     )
     assert r.status_code == 200
-    assert r.json() == {"ok": True, "schemaFile": "schema.json"}
+    body = r.json()
+    assert body["ok"] is True
+    assert body["schemaFile"] == "schema.json"
+    # The save also stamps readiness (sprint-18 C4, bd polyglot-pdf-g687): one
+    # unreviewed field -> 0%, and `verified` because lint ran.
+    assert body["readiness"]["total"] == 1
+    assert body["readiness"]["reviewed"] == 0
+    assert body["readiness"]["percent"] == 0
+    assert body["readiness"]["verified"] is True
     # The saved edit is re-readable through the read route (the round trip).
     back = c.get("/api/editor/kits/i-90/schema", headers={"X-Editor-Token": "edit-tok"})
     assert back.json() == edited

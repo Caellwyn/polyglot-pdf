@@ -11,6 +11,7 @@ import {
 import {
   isExtractionAvailable, runExtraction, verifyExtractorFolder,
 } from '../utils/extractionClient';
+import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 // Completion routes through the SAME editor endpoint the hosted catalogue uses
 // (bd polyglot-pdf-rh5v) so the publish gates and the translation drift sweep
 // run in local mode too -- one implementation, not two that disagree.
@@ -586,13 +587,35 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             </option>
             {kits.map((k) => {
               // Same precedence as the card: live > cached-saved > disk scan.
+              // Same precedence AND the same stamp rule as the expanded card
+              // (sprint-18 C4): live > this session's saved value > the kit's
+              // stamp. NEVER progress[].reviewPercent -- that is the local
+              // disk re-scan, and letting it through here made the compact
+              // strip (the DEFAULT view) show a client-recomputed number while
+              // the card below it showed the verify hint (fresh-eyes gap 1).
+              // Withheld when the schema is unreadable, exactly as on the card
+              // -- see the RemoteCatalogue twin (Opus fresh-eyes round 4).
+              const stripStamp = progress[k.id]?.schemaError
+                ? null : readStamp(k.readiness);
               const pct = liveProgress && liveProgress.kitId === k.id
                 ? liveProgress.percent
-                : (editedProgress[k.id]?.percent ?? progress[k.id]?.reviewPercent ?? null);
+                : (editedProgress[k.id]?.percent
+                   ?? (stripStamp?.kind === 'ok' ? stripStamp.stamp.percent : null));
+              // A schema-bearing kit with no trustworthy stamp says so, in the
+              // strip's terse register. Withholding the number ALONE left the
+              // default view (cards are collapsed) silently missing a
+              // percentage with no explanation -- and since no shipped kit
+              // carries a stamp yet, that is every kit. The card's full
+              // sentence would be unusable inside an <option>, so this is the
+              // same message compressed, not a different one (both Opus outer
+              // reviewers flagged the omission).
+              const stripUnmeasured = pct === null && k.hasSchema
+                && !progress[k.id]?.schemaError;
               return (
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
+                  {stripUnmeasured ? STAMP_MARKER_SHORT : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
                 </option>
               );
@@ -621,13 +644,33 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
             const edited = editedProgress[kit.id] ?? null;
             const source = live ?? edited;
-            const pct = source ? source.percent : (prog?.reviewPercent ?? null);
-            const completeFields = source ? source.complete : (prog?.completeFields ?? 0);
-            const totalFields = source ? source.total : (prog?.totalFields ?? 0);
+            // With no live/session value the card reports the kit's STAMP --
+            // the same rule the hosted catalogue follows (sprint-18 C4). Local
+            // mode reads the stamp the BACKEND wrote into metadata.json, so
+            // both modes render one definition of progress; an absent,
+            // unverified, or stale stamp shows the verify hint rather than a
+            // re-derived percentage.
             // Present-but-unreadable schema: show a notice instead of nothing, so
             // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
             // override always has measurable stats, so suppress it then.
-            const showSchemaError = !source && prog?.schemaError && pct === null;
+            // Reported REGARDLESS of a stamp -- see the RemoteCatalogue twin:
+            // keying this on `pct === null` was safe only while pct came from
+            // the same scan that set schemaError. With pct now from the stamp,
+            // a schema that became corrupt after its last save would show a
+            // confident percentage and hide this notice (Opus fresh-eyes
+            // round 3).
+            const showSchemaError = !source && Boolean(prog?.schemaError);
+            // ...and the stamp is withheld at the SOURCE in that case: it
+            // measured an earlier, readable schema and cannot describe the one
+            // on disk now, so the bar, the hover counts and the hint all follow.
+            const reading = source || showSchemaError
+              ? null : readStamp(kit.readiness);
+            const stamped = reading?.kind === 'ok' ? reading.stamp : null;
+            const pct = source ? source.percent : (stamped ? stamped.percent : null);
+            const completeFields = source ? source.complete : (stamped?.reviewed ?? 0);
+            const totalFields = source ? source.total : (stamped?.total ?? 0);
+            const stampGap = !source && kit.hasSchema && !showSchemaError
+              && reading?.kind === 'hint' ? reading.reason : null;
             // Version line: prefer the live/edited summary (tracks an in-session
             // metadata edit) over the stale disk-scan value (Codex PR #263).
             const cardVersion = source?.version ?? prog?.version ?? null;
@@ -684,6 +727,15 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* No trustworthy stamp: say so rather than show a number
+                    nobody measured (sprint-18 C4). */}
+                {stampGap && (
+                  <div className="mt-2 text-xs text-gray-500"
+                       data-testid="readiness-hint">
+                    {stampHint(stampGap)}
                   </div>
                 )}
 

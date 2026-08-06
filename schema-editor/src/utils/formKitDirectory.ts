@@ -13,7 +13,8 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
-import { reviewCounts } from './reviewStatus';
+import { readStampFromMetadata } from './readinessStamp';
+import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
 
 export type KitStatus = 'draft' | 'complete' | 'unknown';
@@ -24,6 +25,12 @@ export interface KitMetadata {
   status?: KitStatus;
   schema?: string; // custom schema filename (defaults to schema.json)
   pdf?: string;    // custom pdf filename (defaults to form.pdf)
+  // The readiness stamp the BACKEND writes at save/publish (sprint-18 C4, bd
+  // polyglot-pdf-g687). Stored snake_case exactly as metadata.json carries it;
+  // readStampFromMetadata converts it to the camelCase wire shape the cards
+  // share with hosted mode. Local mode reads the same file the backend wrote,
+  // so both catalogues render one definition of progress.
+  readiness?: Record<string, unknown>;
 }
 
 export interface CatalogueEntry {
@@ -35,6 +42,12 @@ export interface CatalogueEntry {
   schemaFile: string;         // resolved schema filename
   pdfFile: string;            // resolved pdf filename
   dirHandle: FsDirectoryHandle;
+  // The kit's recorded review progress (sprint-18 C4). Absent/null when the
+  // kit has never been stamped or its stamp is malformed -- the card then
+  // shows the verify hint, never a percentage. OPTIONAL rather than required
+  // so a caller constructing an entry cannot be forced to invent a stamp;
+  // readStamp treats undefined and null identically.
+  readiness?: ReadinessStamp | null;
 }
 
 const SCHEMA_DEFAULT = 'schema.json';
@@ -102,6 +115,7 @@ export async function readKitEntry(
     schemaFile,
     pdfFile,
     dirHandle: dir,
+    readiness: readStampFromMetadata(meta?.readiness),
   };
 }
 
@@ -178,17 +192,24 @@ export async function setKitLabel(
   return readKitEntry(entry.id, dir);
 }
 
-// --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
+// --- Kit readability + version scan (was: the review-progress metric) ------- //
 //
-// "Review progress" for a form is THE pinned count predicate (sprint-18 C1,
-// decision 2): reviewCounts / isCountedReviewed -- the same one App.liveStats
-// computes for the open kit -- so the catalogue % and the in-editor % can never
-// disagree (bd polyglot-pdf-q3rm: a second predicate here briefly made the same
-// kit show two numbers). The scan has no lint report, so the lint clause is
-// honestly gate-blind (findings = undefined), exactly like liveStats before
-// findings arrive.
+// This scan NO LONGER computes review progress. Since sprint-18 C4 (bd
+// polyglot-pdf-g687) a kit's percentage comes from its readiness STAMP in
+// metadata.json, written by the backend's publish_readiness -- the same
+// definition the open editor's strip mirrors. What survives here is what no
+// stamp carries: whether the schema is READABLE (schemaError) and its VERSION
+// line.
+//
+// Do NOT reintroduce a percentage here. A client-side re-derivation living
+// beside the stamp is a second definition of one number, and the two drifting
+// apart is precisely the bug this area has already shipped twice (bd
+// polyglot-pdf-q3rm: the same kit showed one number open and another after a
+// refresh). readKitProgress returns reviewPercent: null deliberately.
 
-/** A catalogue entry plus its computed review progress (null if no schema). */
+/** A catalogue entry plus its readability/version scan. `reviewPercent` is
+ * always null since C4 -- the field remains so the shape stays stable for the
+ * card's other consumers; the percentage lives on the kit's stamp. */
 /**
  * Displayable version summary for a kit's catalogue card (bd polyglot-pdf-s4dp.2).
  * `label` is the human-facing version string (edition_date or version, e.g.
@@ -235,9 +256,10 @@ export function versionInfoFromSchema(schema: FormSchema): KitVersionInfo {
 }
 
 /**
- * Compute one kit's review progress by loading its schema and reusing
- * reviewCounts. A kit with no schema (PDF-only, pre-extraction) or an
- * unparseable schema yields reviewPercent=null so the UI can show "no schema".
+ * Read one kit's schema for its VERSION line and readability, NOT its review
+ * percentage (that comes from the kit's readiness stamp since sprint-18 C4 --
+ * see the body). A kit with no schema (PDF-only, pre-extraction) or an
+ * unparseable schema yields schemaError so the UI can distinguish the two.
  */
 export async function readKitProgress(
   entry: CatalogueEntry,
@@ -264,15 +286,24 @@ export async function readKitProgress(
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null };
   }
   try {
-    // Belt-and-suspenders: any remaining failure inside reviewCounts is a
-    // measurable-progress failure (schemaError), never an unhandled rejection
-    // that would reject the catalogue-wide Promise.all and wipe every bar.
-    const stats = reviewCounts(schema.fields, undefined);
+    // reviewPercent is deliberately NULL: since sprint-18 C4 the percentage
+    // comes from the kit's readiness STAMP (metadata.json), never from a
+    // client-side re-derivation here -- that fallback is what let a card and
+    // the open editor disagree (bd polyglot-pdf-q3rm). Computing it "just in
+    // case" would leave a live second definition of the very number this bead
+    // centralized, which is exactly how the fallback creeps back (its
+    // RemoteCatalogue twin nulls the field for the same reason; Opus
+    // fresh-eyes round 2 caught this side still computing it).
+    //
+    // This function survives for schemaError + version, which no stamp carries.
+    // Belt-and-suspenders try/catch retained: a malformed schema must surface
+    // as schemaError, never as an unhandled rejection that would reject the
+    // catalogue-wide Promise.all and wipe every card.
     return {
       entry,
-      reviewPercent: stats.percentage,
-      completeFields: stats.reviewed,
-      totalFields: stats.total,
+      reviewPercent: null,
+      completeFields: 0,
+      totalFields: 0,
       schemaError: false,
       version: versionInfoFromSchema(schema),
     };
