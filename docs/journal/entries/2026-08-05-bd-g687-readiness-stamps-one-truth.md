@@ -117,7 +117,34 @@ reachable everyday flow, plus four smaller issues:
    that branch is unreachable in production. Corrected, with a pointer to the
    bead that will make it true (polyglot-pdf-j8sr).
 
-**The OUTER review then found three more** that eight inner rounds had missed,
+**The two outer reviewers DISAGREED, and the second one was right.** The
+primary Opus outer review cleared the diff; the confirming pass went back to
+the bead text and found that the claim-time scope amendment had narrowed
+criterion 2's GATE clause and criterion 3's getCompletionStats clause but never
+touched criterion 1's local-folder requirement or criterion 3's Save-As test.
+Both were still binding, and neither was met: local-folder saves never WRITE a
+stamp (fileSystemAccess.ts, named in this bead's own surfaces list, is
+untouched), so a locally-saved kit keeps a stale stamp and renders it
+confidently instead of showing the verify hint; and no Save-As test exists.
+
+Maintainer decision at closeout: SPLIT. This bead closes at the backend +
+hosted + read-side half; the local WRITE half becomes bd polyglot-pdf-na1zy
+(C4b), wired as a child of the epic and blocked behind this bead, carrying the
+Save-As boundary test and a revert-invalidation test. Amendment 2 on the bead
+records exactly what moved. What local mode DID get here is worth stating
+precisely: both local catalogue surfaces READ stamps through the one definition
+and show the hint when there is none, so the two-sources-of-truth bug is closed
+on both sides -- only the writer is missing.
+
+That disagreement is the two-independent-reviews gate paying for itself: a
+single clearing review would have shipped this with two unmet criteria.
+
+The confirming review also found that `blocking_ids` silently dropped blockers
+with no usable id, so `ready=False` could ship naming NOBODY -- an unactionable
+409 once C2 wires the gate, and a direct violation of criterion 2's "no broken
+definition for C2 to inherit". Fixed here rather than deferred.
+
+**The primary OUTER review had already found three** that eight inner rounds missed,
 all in the same blind spot: the inner loop kept checking the two stamp parsers
 for VALUE mismatches and never for SHAPE ones. A stamp missing `ready` made
 Python drop the whole stamp while the client kept it and rendered a percentage;
@@ -196,6 +223,19 @@ randomized inputs and proved the rounding mirror exhaustively (80,199 pairs).
   SUCCESSFUL save into a 500 the editor reports as "save failed." The schema is
   already written when the stamp runs, so the whole failure class must be
   swallowed. Pinned with its own regression test.
+- **An amendment must be read against the WHOLE criterion list, not the clause
+  that prompted it.** The claim-time amendment settled a real ambiguity (who
+  owns the publish gate) and I wrote it carefully -- but I then carried "the
+  criteria are amended" forward as if it covered everything, and never re-read
+  criterion 1. Two clauses stayed binding and unmet through eight inner rounds
+  and one clearing outer review, because every round scored against my summary
+  of the criteria rather than the bead. When amending, restate the FULL list as
+  amended and score against that text.
+- **Two independent reviews are not redundancy.** The primary outer review
+  cleared this diff; the confirming one refused it on scope. They were looking
+  at the same code and disagreed about what the bead ASKED FOR -- which is
+  exactly the failure a second independent pass exists to catch, and it is not
+  a failure more rounds of the same reviewer would have found.
 - **"Test-pinned" must mean a SHARED expectation, not two per-side test
   suites.** The module docstring claimed the mirror's equality was test-pinned;
   only the FINGERPRINT actually was. Both sides' unit tests passed green while
@@ -241,6 +281,20 @@ describes the catalogue percentage or metadata.json's shape by name -- the
 plan + this entry are the record. docs/sprint_18_editor-ux-overhaul_plan.md
 line 252 still describes the deleted getCompletionStats (tracked as bd
 polyglot-pdf-ipci, filed during the q3rm review).
+
+## What this bead did NOT ship
+
+Local-folder saves do not write a stamp -- that is bd polyglot-pdf-na1zy (C4b),
+split out at closeout and blocked behind this bead. Consequence while C4b is
+open: after a local save the card can show a stale confident percentage, and a
+deliberate Refresh can move the number backward (bd polyglot-pdf-bqgr). Hosted
+mode is unaffected: it stamps on every save and publish.
+
+The /status publish GATE still refuses on lint ERRORs only -- it does not yet
+consult publish_readiness. That is C2 (bd polyglot-pdf-apmo) by the claim-time
+amendment. C2 is now additionally blocked on bd polyglot-pdf-dm3c8 (the
+verdict's `ready` flag ignores schema-level lint ERRORs), so it cannot inherit
+that trap by accident.
 
 ## Files touched
 
