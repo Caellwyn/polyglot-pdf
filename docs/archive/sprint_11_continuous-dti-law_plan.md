@@ -1,5 +1,11 @@
 # Sprint 11 -- Continuous-DTI law of the land
 
+> **ARCHIVED (2026-08-06, docs audit bd polyglot-pdf-2zk3).** Epic
+> `polyglot-pdf-fc7t` is closed. Kept verbatim as the sprint's plan of record --
+> read it as history, not as current direction. Current behavior lives in
+> [`../components/context-compression.md`](../components/context-compression.md)
+> and [`../standards/section-reset-deprecation.md`](../standards/section-reset-deprecation.md).
+
 **Epic:** `polyglot-pdf-fc7t` | **Planning bead:** `polyglot-pdf-s9xh` (closed by
 this plan's PR) | **Approved:** 2026-07-11 (maintainer, via the /plan-epic
 Step-5 gate)

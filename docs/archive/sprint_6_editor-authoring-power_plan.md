@@ -1,5 +1,11 @@
 # Sprint 6 -- Editor authoring power
 
+> **ARCHIVED (2026-08-06, docs audit bd polyglot-pdf-2zk3).** Epic
+> `polyglot-pdf-s4dp` is closed; the one remaining loop-proof bead
+> `polyglot-pdf-ue5s` is tracked in beads, not here. Kept verbatim as the
+> sprint's plan of record -- read it as history, not as current direction.
+> The "Status" line below is the plan's state at approval time.
+
 **Epic:** `polyglot-pdf-s4dp` -- Editor authoring power (grouping, preview,
 help-from-instructions, versioning)
 

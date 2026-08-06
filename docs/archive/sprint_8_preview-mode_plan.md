@@ -1,5 +1,10 @@
 # Sprint 8 -- Preview mode: dual view modes (live PDF + Simplified)
 
+> **ARCHIVED (2026-08-06, docs audit bd polyglot-pdf-2zk3).** Epic
+> `polyglot-pdf-js7q` is closed. Kept verbatim as the sprint's plan of record --
+> read it as history, not as current direction. Current preview-mode behavior
+> lives in [`../components/pdf-view.md`](../components/pdf-view.md).
+
 **Epic:** `polyglot-pdf-js7q` · **Approved:** 2026-07-06 (maintainer) ·
 **Origin:** exploration session 2026-07-06 (plan file
 `~/.claude/plans/i-d-like-to-explore-wise-newell.md`, approved with maintainer

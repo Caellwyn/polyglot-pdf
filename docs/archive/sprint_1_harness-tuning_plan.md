@@ -1,7 +1,12 @@
 # Sprint 1 — Harness tuning: reduce token burn, increase bounded autonomy
 
-*Active sprint plan. Lives at `docs/` root while active; archived to `docs/archive/`
-at sprint closeout (see [`doc-architecture.md`](../doc-architecture.md) §sprint-archive).
+> **ARCHIVED (2026-08-06, docs audit bd polyglot-pdf-2zk3).** Epic
+> `polyglot-pdf-hrn` is closed; the R1-R4 harness-autonomy roadmap continues as
+> open epic `polyglot-pdf-h2r`. Kept verbatim below as the sprint's plan of
+> record -- read it as history, not as current direction.
+
+*Archived sprint plan. Sprint plans live at `docs/` root while active and move to
+`docs/archive/` at sprint closeout (see [`doc-architecture.md`](../doc-architecture.md) §sprint-archive).
 This is the maintainer-approved plan of record for this sprint — per the
 plan-traceability goal (R3 below), every bead in this sprint should trace back to a
 section here. Owning epic: `polyglot-pdf-hrn` (harness near-term);

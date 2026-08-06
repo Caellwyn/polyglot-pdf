@@ -1,7 +1,7 @@
 # Harness A/B experiment -- FINAL report
 
 **Bead:** polyglot-pdf-hrn.17 (parent epic polyglot-pdf-hrn, "Harness tuning").
-**Plan of record:** [`docs/sprint_1_harness-tuning_plan.md`](../../sprint_1_harness-tuning_plan.md)
+**Plan of record:** [`docs/sprint_1_harness-tuning_plan.md`](../../archive/sprint_1_harness-tuning_plan.md)
 (section "A/B testing strategy").
 **Data:** all rows in `docs/journal/telemetry/*.json` plus the legacy
 `docs/journal/harness_ledger.jsonl`, deduped by `(session_id, recorded_at)`.
