@@ -260,10 +260,16 @@ describe('FormCatalogue', () => {
     fireEvent.click(screen.getByText('Open form-kits folder'));
 
     await waitFor(() => expect(screen.getByText('Show form cards')).toBeTruthy());
-    // The strip lists the kit but attaches no percentage of any value.
+    // The strip lists the kit but attaches no percentage of any value...
     await waitFor(() => expect(screen.getByRole('option', { name: /Kit A/ })).toBeTruthy());
-    expect(screen.getByRole('option', { name: /Kit A/ }).textContent)
-      .not.toMatch(/\d+%/);
+    const optText = screen.getByRole('option', { name: /Kit A/ }).textContent ?? '';
+    expect(optText).not.toMatch(/\d+%/);
+    // ...and it SAYS WHY. Withholding the number alone left the default view
+    // (cards are collapsed) silently missing a percentage with no explanation
+    // -- and since no shipped kit carries a stamp yet, that is every kit. The
+    // card's full sentence would be unusable in an <option>, so the strip
+    // carries the same message compressed (both Opus outer reviewers).
+    expect(optText).toContain('not measured');
   });
 
   it('an UNREADABLE schema shows the corruption notice, never a stamped % (bd g687)', async () => {

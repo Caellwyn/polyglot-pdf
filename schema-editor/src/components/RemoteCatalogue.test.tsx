@@ -107,6 +107,15 @@ describe('RemoteCatalogue', () => {
     // not a 0%, nothing. Asserting the absence of the whole class beats
     // blacklisting one value.
     expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument();
+    // The compact STRIP says why too, in its terse register: withholding the
+    // number alone left the collapsed default view unexplained (both Opus
+    // outer reviewers). Every listed schema-bearing kit is unstamped here.
+    const kitOptions = screen.getAllByRole('option')
+      .map((o) => o.textContent ?? '')
+      .filter((t) => t.includes(' -- '))          // skip the "Select a form..." placeholder
+      .filter((t) => !t.includes('no schema yet'));  // nothing to measure
+    expect(kitOptions.length).toBe(2);
+    for (const text of kitOptions) expect(text).toContain('not measured');
   });
 
   it('renders the stamped percentage when the stamp is verified (bd g687)', async () => {

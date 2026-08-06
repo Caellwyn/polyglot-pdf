@@ -601,10 +601,21 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                 ? liveProgress.percent
                 : (editedProgress[k.id]?.percent
                    ?? (stripStamp?.kind === 'ok' ? stripStamp.stamp.percent : null));
+              // A schema-bearing kit with no trustworthy stamp says so, in the
+              // strip's terse register. Withholding the number ALONE left the
+              // default view (cards are collapsed) silently missing a
+              // percentage with no explanation -- and since no shipped kit
+              // carries a stamp yet, that is every kit. The card's full
+              // sentence would be unusable inside an <option>, so this is the
+              // same message compressed, not a different one (both Opus outer
+              // reviewers flagged the omission).
+              const stripUnmeasured = pct === null && k.hasSchema
+                && !progress[k.id]?.schemaError;
               return (
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
+                  {stripUnmeasured ? ' (not measured)' : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
                 </option>
               );

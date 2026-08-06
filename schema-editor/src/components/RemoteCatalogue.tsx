@@ -560,10 +560,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                 ? liveProgress.percent
                 : (editedProgress[k.id]?.percent
                    ?? (stripStamp?.kind === 'ok' ? stripStamp.stamp.percent : null));
+              // Says so when there is no trustworthy stamp -- see the
+              // FormCatalogue twin for why withholding the number alone was
+              // not enough (both Opus outer reviewers flagged it).
+              const stripUnmeasured = pct === null && k.hasSchema
+                && !progress[k.id]?.schemaError;
               return (
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
+                  {stripUnmeasured ? ' (not measured)' : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
                 </option>
               );
