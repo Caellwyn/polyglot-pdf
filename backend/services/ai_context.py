@@ -717,6 +717,15 @@ def build_form_context(
     # handler for a manifest-first schema regardless of the flag.
     if getattr(settings, "USE_DTI", False) or schema.get("jit_mode"):
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION
+        # Spell-back style experiment (bd polyglot-pdf-0rpu). Appended rather
+        # than templated INTO the constant so every raw consumer of
+        # DTI_SYSTEM_INSTRUCTION (token-cost tooling, the SI-size tests) still
+        # sees a plain string. Default "hyphen" contributes "" -- byte-identical
+        # to the shipped SI, so the control arm and production are the same text.
+        _style = getattr(settings, "SPELLBACK_STYLE", "hyphen")
+        _extra = (getattr(settings, "SPELLBACK_STYLE_TEXT", {}) or {}).get(_style, "")
+        if _extra:
+            system_instruction = system_instruction + "\n" + _extra
     else:
         # Legacy mode: Use full schema with SYSTEM_INSTRUCTION template
         system_instruction = settings.SYSTEM_INSTRUCTION.format(

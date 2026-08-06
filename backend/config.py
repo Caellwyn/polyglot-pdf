@@ -220,6 +220,37 @@ class Settings(BaseModel):
 	# *SI mode* was removed.
 	USE_DTI: bool = os.getenv("USE_DTI", "true").lower() == "true"
 
+	# === Spell-back style experiment (bd polyglot-pdf-0rpu) ===
+	# Measured 2026-08-06: on spelled name read-backs the native-audio model's
+	# SPEECH path emits a PREVIOUS name's letter run while its own TEXT track
+	# spells the current name correctly (runs containing spelled read-backs:
+	# ~14-16% of generations diverge; runs without any: 0%). The SI prescribes
+	# the terse hyphenated form ("N-G-U-Y-E-N, Nguyen") -- four near-identical
+	# short letter-sounds that are easy to substitute for one another.
+	# Variants, appended to the NAMES block at SI render time (ai_context):
+	#   "hyphen" -- current shipped wording (CONTROL)
+	#   "comma"  -- comma-separated letters with explicit pauses ("J, O, H, N")
+	#   "nato"   -- NATO word anchors ("J as in Juliet, O as in Oscar ...");
+	#               multi-syllable anchors resist blending far better than letters
+	SPELLBACK_STYLE: str = os.getenv("SPELLBACK_STYLE", "hyphen").lower()
+
+	# Appended verbatim to the NAMES block when SPELLBACK_STYLE selects them.
+	# ASCII only. Kept short: this rides on EVERY turn's system instruction.
+	SPELLBACK_STYLE_TEXT: dict = {
+		"hyphen": "",
+		"comma": (
+			"- SPELL-BACK DELIVERY: when you read a spelling back, say the letters "
+			"SEPARATED BY COMMAS with a clear pause after each one -- 'J, O, H, N' "
+			"-- never as one run-together string. Each letter is its own beat.\n"
+		),
+		"nato": (
+			"- SPELL-BACK DELIVERY: when you read a spelling back, anchor EVERY "
+			"letter to a NATO word -- 'J as in Juliet, O as in Oscar, H as in "
+			"Hotel, N as in November' -- then say the name. Never read bare letters "
+			"in a row: the anchor words are what keep the letters distinct.\n"
+		),
+	}
+
 	# === Interrupt re-anchor (bd polyglot-pdf-oagw) ===
 	# After a barge-in interrupts a generation, the native-audio model's SPEECH
 	# path resumes from stale continuation state: measured on the bd 0rpu
