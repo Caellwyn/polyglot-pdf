@@ -307,7 +307,7 @@ guidance prose by `ai_context.render_field_guidance`
 (`backend/services/ai_context.py:79`); the contract there is between the SI
 templates and the prose, not key names. System instruction:
 `form_filling_service.build_form_context_message`
-(`form_filling_service.py:1165`) ->
+(`form_filling_service.py:1167`) ->
 `ai_context.build_form_context` (:444).
 
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
@@ -331,7 +331,7 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-45`).
   store is consulted only for the PDF bytes (:68), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
   the editor/publish surface (`_load_kit_dump`,
-  `backend/routes/editor_kit_routes.py:393-396`, called from the lint routes
+  `backend/routes/editor_kit_routes.py:396`, called from the lint routes
   and the mark-complete promotion gate at :1571, feeding the pure-function
   checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
