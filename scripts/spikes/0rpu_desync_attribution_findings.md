@@ -237,3 +237,48 @@ FIX LADDER (final form):
    signature utterances, WAVs, and the persistence evidence.
 5. Compression: unchanged (exonerated as trigger; keep the 38% saving).
 6. Slim SI: unblocked; proceed on its own merits.
+
+## ROUND 3 (2026-08-05/06): interrupt-triggered RE-ANCHOR -- REJECTED (runaway loop)
+
+Fix-ladder item 2 (bd polyglot-pdf-oagw): after each `interrupted` event, inject
+one short generic value-free text turn pointing the model back at its latest
+guidance block. Flag-gated `INTERRUPT_REANCHOR_ENABLED`, default OFF.
+
+| Arm | Injections | Interrupts | Fields | Real divergences | Cost |
+|---|---|---|---|---|---|
+| Control (OFF), RUDE, post-#550 | 0 | 27 | PASS 15/15 | 5 / 32 gens | $1.05 |
+| Treatment (ON), RUDE | 1160 | 1160 | **PARTIAL 0/15** | unscoreable | **$9.93 / 105s** |
+
+VERDICT: **the re-anchor is unshippable in this shape.** It creates a
+self-reinforcing loop: the injected text turn makes Gemini START SPEAKING ->
+the user (here, the RUDE harness) barges into that new speech -> `interrupted`
+fires -> another injection. Measured cadence ~80 ms per cycle, 1160 cycles in
+105 s, and the session never advanced past field 1. The maintainer's Gemini
+research warned that text anchors next to verbal confirmation could aggravate
+rather than help; the observed failure is worse and more mechanical than that --
+it is positive feedback, not just a bad anchor.
+
+WHY THE DESIGN INVITED IT: the injection had a correctness gate (the flag) but
+NO RATE BOUND and no coupling to conversational progress. Any "respond to an
+interruption by making the model talk" action is inherently re-entrant, because
+talking is what gets interrupted.
+
+WHAT WOULD HAVE TO CHANGE before this idea is testable again (all unproven):
+- inject at most once per FIELD, not per interruption (progress-coupled), and/or
+- a cooldown (e.g. ignore interrupts within N seconds of an injection), and/or
+- a NON-SPEAKING re-ground: a channel that updates model context WITHOUT
+  eliciting a spoken turn -- if the Live API offers one. `send_text_message`
+  wraps every turn in activity signals precisely to elicit a response, so it is
+  the wrong vehicle by construction.
+
+COST DISCIPLINE LESSON (recorded for the experimentation skill): a probe that
+makes the model SPEAK in response to a model EVENT needs a hard cycle cap
+before its first live run. The pre-spend estimate for this arm was ~$1 (one
+15-field session); it billed $9.93 in 105 seconds because the estimate assumed
+a bounded turn count that the feature itself removed. Estimate the FAILURE mode's
+cost, not just the happy path's.
+
+STATUS: bd oagw code stays on its branch, flag OFF, NOT merged. Control-arm data
+(5 real divergences / 32 gens under barge-in pressure, post-#550) stands as the
+current baseline for the remaining ladder items (muted echo, SI state-move,
+half-cascade).
