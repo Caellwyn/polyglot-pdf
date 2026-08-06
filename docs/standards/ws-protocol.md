@@ -117,7 +117,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `interrupted` | callback_handler.py (`on_interrupted`) | Gemini stopped the current generation because the user barged in (bd polyglot-pdf-s7uf). The client drains BOTH its audio holds (staging queue + scheduled playback via `resetPlaybackClock`) so the dead generation's tail stops playing; without this, barge-in leaves seconds of stale audio playing behind the model's next generation. No payload; the connection stays live. |
 | `gemini_session_dropped` | callback_handler.py (`on_session_dropped`) | Gemini session died SPONTANEOUSLY behind the still-open WS (e.g. a 1011 "Input data processing failed") -- the client is otherwise frozen on "connected" (bd polyglot-pdf-ppfy). Drives the same pre-emptive reconnect as `go_away`, but the client surfaces a `reconnecting` status so the transient recovery modal shows. No payload. |
 | `idle_timeout` | websocket_routes.py:314 | Backend closing for inactivity; client must NOT auto-reconnect. |
-| `section_switched` | form_filling_service.py:1397 | Same-socket section switch completed. |
+| `section_switched` | form_filling_service.py:1398 | Same-socket section switch completed. |
 | `gemini_session_ended` | websocket_routes.py:729 | Gemini session ended. |
 | `gemini_session_restarted` | websocket_routes.py:742 | Gemini session restarted successfully. |
 | `get_form_state` | request_coordinator.py:173 | Backend asks the client for current form state. |
