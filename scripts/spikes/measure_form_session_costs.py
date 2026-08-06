@@ -1492,6 +1492,14 @@ class _LogTap:
 # text_ai_gemini._log_usage / ask()/validate(); form_filling_service's
 # ask_secretary_* + validator_* events; callback_handler's DTI coercion event.
 _INFO_EVENTS = frozenset({
+    # bd polyglot-pdf-89mt: capture the compression config the ADAPTER actually
+    # built, so a run's own artifact proves which trigger/window reached the
+    # API. Without this the only record was the operator's REQUESTED values,
+    # and a run that pinned the 12000/9000 argparse defaults looked identical
+    # in metadata to one that derived production's pair.
+    "context_window_compression_enabled",
+    "compression_trigger_clamped_to_api_bounds",
+    "compression_window_clamped_below_trigger",
     "text_ai_usage", "text_ai_ask_complete", "text_ai_validate_complete",
     "ask_secretary_complete", "ask_secretary_pending_async_deliver",
     "ask_secretary_async_delivered", "ask_secretary_async_dropped_session_inactive",
@@ -1790,7 +1798,7 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 # ------------------------------------------------------------------- driver
 
 def _make_settings(arm: str, trigger: int, window: int, compression: bool = False,
-                   continuous: bool = False):
+                   continuous: bool = False, derive_compression: bool = False):
     # The production code defaults are continuous-DTI (bd polyglot-pdf-7872:
     # USE_DTI / CONTINUOUS_SESSION / CONTEXT_COMPRESSION_ENABLED all default ON),
     # so every arm PINS its full mode explicitly -- a future default flip must
@@ -1854,13 +1862,26 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
     # window 2500 (floor + the current field's guidance headroom), trigger 3500.
     if compression and arm != "sliding-window":
         overrides["CONTEXT_COMPRESSION_ENABLED"] = True
-        overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
-        overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
-        # Honor the EXACT --trigger/--window for this calibration sweep: turn OFF
-        # the production per-form derivation (default-on under DTI, bd jnjj.35),
-        # which would otherwise auto-size the window and ignore the CLI values --
-        # silently, while the run metadata still records the requested fixed pair.
-        overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = False
+        if derive_compression:
+            # DEPLOY-FIDELITY MODE (bd polyglot-pdf-89mt). Production derives the
+            # window per-form from THIS form's SI+tools floor plus its inline
+            # injection budget (CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR defaults
+            # TRUE and FormFillingService passes the budget), so a run that pins
+            # --trigger/--window measures a configuration NOBODY DEPLOYS. Leave
+            # derivation on and let the adapter size it.
+            #
+            # This matters more than it looks: the harness's --trigger/--window
+            # DEFAULTS are 12000/9000, so simply passing --compression without
+            # thinking measured eviction at roughly twice production's threshold.
+            overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = True
+        else:
+            overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
+            overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
+            # Honor the EXACT --trigger/--window for this calibration sweep: turn OFF
+            # the production per-form derivation (default-on under DTI, bd jnjj.35),
+            # which would otherwise auto-size the window and ignore the CLI values --
+            # silently, while the run metadata still records the requested fixed pair.
+            overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = False
 
     s = _config.Settings(**overrides)
     # Labeled deviation from deploy config: DISABLE automatic VAD so the explicit
@@ -2089,7 +2110,8 @@ async def run(args) -> int:
         model_name = MODEL_NATIVE_STANDARD_VERTEX
     rates = get_pricing_for_model(model_name)
     settings = _make_settings(args.arm, args.trigger, args.window, args.compression,
-                              continuous=bool(getattr(args, "continuous", False)))
+                              continuous=bool(getattr(args, "continuous", False)),
+                              derive_compression=bool(getattr(args, "derive_compression", False)))
     # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
     # `_config.get_settings = ...` is NOT enough: modules that did
     # `from backend.config import get_settings` at import time (ai_context,
@@ -2111,7 +2133,12 @@ async def run(args) -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    _comp_tag = "_comp" if args.compression and args.arm != "sliding-window" else ""
+    # bd polyglot-pdf-89mt: "_der" marks a DERIVED-window run. Without it a
+    # deploy-fidelity run and a pinned-calibration run produce filenames that
+    # differ in nothing, and an analysis that globs the directory can silently
+    # read the wrong one -- which is exactly what happened on the first pass.
+    _comp_tag = ("_comp" if args.compression and args.arm != "sliding-window" else "") + \
+                ("_der" if getattr(args, "derive_compression", False) else "")
     _cont_tag = "_cont" if getattr(args, "continuous", False) else ""
     base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_cont_tag}{_comp_tag}_{args.path}_{stamp}"
     meta: dict = {
@@ -2119,8 +2146,26 @@ async def run(args) -> int:
         "schema": args.schema,
         "arm": args.arm, "path": args.path, "questions": len(plan),
         "compression": bool(args.compression),
+        # REQUESTED values. These are what the OPERATOR asked for and are NOT
+        # necessarily what the session used -- under --derive-compression the
+        # adapter sizes the window itself and these are meaningless. Read
+        # compression_effective (populated post-connect from the adapter's own
+        # config) for what was actually sent to the API. bd polyglot-pdf-89mt:
+        # an earlier run reported "compression on" while carrying the harness's
+        # 12000/9000 argparse defaults, roughly twice production's derived pair.
+        # KEEP the original key names: build_summary's run block,
+        # analyze_continuous_window.py and cost_matrix_lib.py all read
+        # meta["trigger"]/["window"] and a rename silently turns them into
+        # None -- collapsing every run into one bogus analysis cell and
+        # raising TypeError in cost_matrix_lib. These are OVERWRITTEN
+        # post-connect with the EFFECTIVE derived pair (see compression_effective
+        # below), so downstream consumers keep reading the config that actually
+        # ran, not the one requested.
         "trigger": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
         "window": args.window if (args.arm == "sliding-window" or args.compression) else None,
+        "trigger_requested": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
+        "window_requested": args.window if (args.arm == "sliding-window" or args.compression) else None,
+        "derive_compression": bool(getattr(args, "derive_compression", False)),
         "continuous": bool(getattr(args, "continuous", False)),
         "schema_scope": ("continuous-full-plan" if getattr(args, "continuous", False)
                          else "per-section" if args.arm in ("section-reset", "section-reset-jit", "dti")
@@ -2986,6 +3031,64 @@ async def run(args) -> int:
         _ffs_mod._log = _module_logs["ffs"]
         _callback_mod._log = _module_logs["cb"]
 
+    # bd polyglot-pdf-89mt: the EFFECTIVE compression config, read from the
+    # adapter's own log event rather than from what the operator requested.
+    # This is the artifact that makes a cost number auditable: it names the
+    # trigger/window that actually reached the API, whether they were derived
+    # or pinned, and whether the API's 5000-token floor clamped them.
+    _comp_evt = next((e for e in log_sink
+                      if e.get("event") == "context_window_compression_enabled"), None)
+    _clamp_evt = next((e for e in log_sink
+                       if e.get("event") == "compression_trigger_clamped_to_api_bounds"), None)
+    # NOTE the kwargs land under "fields" (the tap stringifies them there), not
+    # at the top level -- reading them off the event dict directly yields all
+    # None, which would look like "compression was off" rather than "I read the
+    # wrong key".
+    # _LogTap STRINGIFIES every kwarg ({k: str(v)}), so these arrive as "7526"
+    # and "True". Coerce them: a later `if eff["derived_from_si_floor"]:` on the
+    # raw string is ALWAYS true -- bool("False") is True -- which would make a
+    # pinned run's metadata claim it was derived. That is the same
+    # metadata-that-looks-right-but-asserts-nothing failure that caused the
+    # first retraction.
+    def _as_int(v):
+        try:
+            return int(str(v))
+        except (TypeError, ValueError):
+            return None
+
+    _cf = (_comp_evt or {}).get("fields") or {}
+    meta["compression_effective"] = ({
+        "trigger_tokens": _as_int(_cf.get("trigger_tokens")),
+        "window_tokens": _as_int(_cf.get("window_tokens")),
+        "derived_from_si_floor": str(_cf.get("derived_from_si_floor")) == "True",
+        "si_floor_tokens": _as_int(_cf.get("si_floor_tokens")),
+        "clamped_to_api_minimum": bool(_clamp_evt),
+    } if _comp_evt else None)
+    # Overwrite the REQUESTED pair with what actually ran, so every downstream
+    # consumer (build_summary's run block, analyze_continuous_window,
+    # cost_matrix_lib) reports the effective config rather than the CLI values
+    # the adapter ignored.
+    if meta.get("compression_effective"):
+        _eff = meta["compression_effective"]
+        if _eff.get("trigger_tokens") is not None:
+            meta["trigger"] = _eff["trigger_tokens"]
+        if _eff.get("window_tokens") is not None:
+            meta["window"] = _eff["window_tokens"]
+
+    # Pre-registration guard: fail LOUDLY if the session did not run the config
+    # this measurement was designed around.
+    _expect = getattr(args, "expect_trigger", None)
+    if _expect is not None:
+        _actual = (meta.get("compression_effective") or {}).get("trigger_tokens")
+        if _actual != _expect:
+            raise SystemExit(
+                f"ABORT (bd polyglot-pdf-89mt pre-registration): expected "
+                f"trigger_tokens={_expect}, adapter used {_actual!r}. "
+                f"compression_effective={meta.get('compression_effective')!r}. "
+                "The measurement config is not what was intended -- refusing to "
+                "write artifacts that would be analysed as if it were."
+            )
+
     prompts = [d["prompt"] or 0 for d in usage_dumps]
     meta["prompt_curve"] = prompts
     # bd polyglot-pdf-89mt: persist the CACHED-token evidence. Without this the
@@ -3255,6 +3358,24 @@ def main() -> int:
                          "section resets (bd polyglot-pdf-ctu8 candidate arm). Only "
                          "valid with --arm dti; combine with --compression so the "
                          "window bounds the continuous session's growth.")
+    ap.add_argument("--expect-trigger", type=int, default=None,
+                    help="PRE-REGISTRATION guard (bd polyglot-pdf-89mt): the "
+                         "trigger_tokens this run is EXPECTED to derive. The run "
+                         "aborts before writing artifacts if the adapter's actual "
+                         "config differs. Two retracted measurements in this bead "
+                         "came from a run silently using a different compression "
+                         "config than the analysis assumed; this makes that a hard "
+                         "failure instead of a later discovery.")
+    ap.add_argument("--derive-compression", action="store_true",
+                    dest="derive_compression",
+                    help="DEPLOY FIDELITY (bd polyglot-pdf-89mt): with "
+                         "--compression, leave the production per-form window "
+                         "DERIVATION on (SI+tools floor + the kit's inline "
+                         "injection budget) instead of pinning --trigger/--window. "
+                         "Use this for any run whose number is meant to describe "
+                         "what a deployed session costs -- the --trigger/--window "
+                         "defaults (12000/9000) are a calibration-sweep artifact "
+                         "and are roughly twice what production derives.")
     ap.add_argument("--compression", action="store_true",
                     help="layer calibrated context-window eviction onto a non-"
                          "sliding-window arm (the jnjj.25-folded eviction test): "
