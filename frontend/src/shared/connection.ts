@@ -37,6 +37,9 @@ declare global {
 			// multi-section scenario can confirm one VOICE field and trigger the real
 			// section auto-advance. Returns false if no form state is loaded yet.
 			seedFieldConfirmed: (fieldId: string, value: string) => boolean
+			// MEASUREMENT-ONLY (bd 0rpu experiment branch): playback-backlog read
+			// used by the harness pacing arms. Never merged to dev.
+			getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean }
 		}
 	}
 }
