@@ -288,10 +288,18 @@ def main() -> int:
         if not rec["text"]:
             results.append({**base, "verdict": "NO_SPEECH_DETECTED"})
             continue
-        # Guard 3: heard something, but not confidently enough to accuse.
-        if rec["confidence"] < _MIN_CONFIDENCE:
+        # Guard 3: heard something, but not confidently enough to accuse --
+        # UNLESS the clip contains a spelled run. Confidence is ALSO a
+        # corruption signal here (healthy rows 0.93-0.99, corrupted 0.34-0.65),
+        # so discarding low-confidence spellings deletes precisely the failures
+        # this scorer exists to find (the comma arm reported 0% while 2 of 6
+        # spelled read-backs were wrong). Score those rows and flag them for a
+        # human read instead.
+        _low_conf = rec["confidence"] < _MIN_CONFIDENCE
+        if _low_conf and not _letters(rec["text"]):
             results.append({**base, "verdict": "LOW_CONFIDENCE"})
             continue
+        base["needs_hand_check"] = bool(_low_conf)
         # Guard 4: no transcript to compare against -> pairing cannot be judged.
         if not text_track:
             results.append({**base, "verdict": "NO_TRANSCRIPT"})
@@ -368,6 +376,7 @@ def main() -> int:
         "rate_pct": round(100.0 * len(desync) / len(scoreable), 1) if scoreable else None,
         "by_verdict": {v: sum(1 for r in results if r["verdict"] == v)
                        for v in sorted({r["verdict"] for r in results})},
+        "needs_hand_check": [r["gen"] for r in results if r.get("needs_hand_check")],
     }
     out_path = Path(args.out) if args.out else audio_dir / "stt_report_v2.json"
     out_path.write_text(json.dumps({"summary": summary, "results": results}, indent=2),
