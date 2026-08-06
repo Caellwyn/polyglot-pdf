@@ -294,6 +294,20 @@ called that unverifiable.) Note the battery injects mid-document, not at
 end-of-file: an EOF append can be caught coincidentally by merging into the
 unterminated tail fragment, which would falsely suggest the enumeration is sound.
 
+**When a prose pin resists, stop DETECTING and pin the CLAIM.** The
+detect-the-bad-sentence shape is what kept failing above; its positive inverse is
+usually available and far more robust. A second pin in the same bead needed it
+too: `.claude/prime-closeout-override.md` must not authorize auto-merging a
+Haiku-cleared docs PR, and two detection drafts failed in opposite directions --
+an exemption list that the offending text already satisfied ("pings the maintainer
+for a consequence-bearing one" while implying auto-merge for everything else),
+then a paragraph scope that let a neighbouring *correct* sentence mask the wrong
+one. What held was asserting what the file must SAY: that auto-merge requires the
+Opus clear, that a Haiku-cleared docs PR pings, and that the boundary must not be
+widened autonomously. A positive claim cannot be evaded by rephrasing the other
+sentences. Applying this rule to itself took three attempts rather than six --
+that is what the lesson is worth.
+
 **Pin the limits you accept, so they stay decisions.** This pin has two: a denial
 using no review vocabulary at all ("docs-only edits never get a look from anyone"),
 and one split across a paragraph break. Chasing either -- more synonyms, or N
