@@ -2,6 +2,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 
+import { shouldCopyKitPath } from "./kitCopyFilter";
+
 interface KitMetadata {
   label?: string;
   description?: string;
@@ -127,19 +129,12 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
 async function copyKitsToPublic() {
   await fs.rm(FORM_KITS_PUBLIC_DIR, { recursive: true, force: true });
   await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
+  // shouldCopyKitPath keeps <kit>/_archive/** (superseded revisions, bd
+  // polyglot-pdf-w3zw) out of the PUBLIC bundle. It lives in its own module so
+  // this script and its test share one definition -- see kitCopyFilter.ts.
   await fs.cp(FORM_KITS_SOURCE_DIR, FORM_KITS_PUBLIC_DIR, {
     recursive: true,
-    // Skip underscore-prefixed dirs at EVERY level, not just the root. A kit's
-    // "_archive/" holds SUPERSEDED revisions (bd polyglot-pdf-w3zw) -- an
-    // operator-only, legal-retention surface read through the authenticated
-    // store, never something to publish. This copy is recursive and Firebase
-    // Hosting serves whatever lands in the bundle, so without this filter every
-    // superseded schema becomes fetchable at
-    // /form-kits/<kit>/_archive/<marker>/schema.json (and the bundle grows with
-    // every republish). The deploy scripts' own `case "$kit_id" in _*)` guards
-    // skip only TOP-level entries like form-kits/_translation, which is why a
-    // nested _archive slipped past them.
-    filter: (src) => !path.basename(src).startsWith("_"),
+    filter: shouldCopyKitPath,
   });
 }
 
