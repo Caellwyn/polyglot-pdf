@@ -73,6 +73,29 @@ REGRESSIONS = [
     "Lightweight changes to docs-only surfaces (e.g. journal edits) never receive an "
     "adversarial pass.",
     "Docs-only diffs (i.e. prose, beads, journal) skip the adversarial review.",
+    # round 8 -- the subject and the review word land MORE than one fragment
+    # apart, defeating any fixed-size sentence window. This is why the scope is
+    # the PARAGRAPH rather than an N-sentence slide.
+    "Docs-only changes are handled specially. They go through a lightweight path. "
+    "No adversarial pass applies to them, by the way, at all, ever.",
+]
+
+# KNOWN LIMIT, deliberately not "fixed". The enumerator keys on a subject AND a
+# review word. A sentence that denies review using NO review vocabulary at all --
+# "Docs-only edits never get a look from anyone." -- cannot be enumerated, and
+# widening `review_word` toward every synonym for "look at" is precisely the
+# patch-the-instance trap this file's history documents
+# (docs/standards/testing.md#change-the-mechanism): each addition invites the next
+# synonym, and an over-broad review_word turns every docs paragraph into a
+# candidate and the pin into noise that gets deleted.
+#
+# Accepted because the realistic failure mode is DRIFT, not adversarial evasion:
+# the four real regressions this pin was built for (rounds 3-8) all used ordinary
+# review vocabulary, because whoever writes them is describing the review flow.
+# Recorded here so the limit is a known, reviewed decision rather than a silent
+# hole a future round rediscovers.
+UNENUMERABLE_BY_DESIGN = [
+    "Docs-only edits (e.g. journal notes, i.e. prose) never get a look from anyone.",
 ]
 
 REVERSALS = [
@@ -114,3 +137,19 @@ def test_baseline_passes():
 def test_legitimate_sentence_does_not_trip(label, sentence):
     assert not flagged(inject_mid(sentence)), \
         "false positive on a legitimate sentence: " + sentence
+
+
+@pytest.mark.parametrize("sentence", UNENUMERABLE_BY_DESIGN)
+def test_known_limit_still_holds(sentence):
+    """Pin the ACCEPTED limit so it stays a decision, not a silent hole.
+
+    A denial phrased with no review vocabulary cannot be enumerated. If this
+    test starts FAILING, the limit was closed -- good news, but check HOW: if
+    `review_word` was widened toward "look/see/examine/touch", confirm the pin
+    did not become noise (every docs paragraph a candidate), which is how these
+    pins get deleted. Then move this case into REGRESSIONS.
+    """
+    assert not flagged(inject_mid(sentence)), (
+        "the known limit no longer holds -- see this test's docstring before "
+        "celebrating: " + sentence
+    )

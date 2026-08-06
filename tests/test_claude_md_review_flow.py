@@ -93,7 +93,6 @@ def test_every_docs_only_mention_is_allowlisted(text):
     Operate on SENTENCES, not lines: the round-3 defect wrapped mid-sentence, so
     a line-based check saw the subject and the denial on different lines.
     """
-    flat = re.sub(r"\s+", " ", text)
     # ENUMERATION half. Deliberately over-broad: any sentence mentioning the
     # docs-only change class AND containing a review word is a candidate. It does
     # NOT try to decide whether the sentence denies anything -- two drafts tried
@@ -108,33 +107,34 @@ def test_every_docs_only_mention_is_allowlisted(text):
     )
     review_word = re.compile(r"review|adversarial|haiku|opus|gate", re.IGNORECASE)
 
-    # Splitting on ". " is unavoidably approximate: an internal abbreviation
-    # ("e.g.", "i.e.", "etc.") splits one prose sentence into two fragments, and
-    # a round-7 attack used exactly that to put the docs-only subject in one
-    # fragment and the review word in the next -- so neither fragment matched
-    # both patterns and the denial was never enumerated.
+    # SCOPE = the PARAGRAPH. There is deliberately no fixed sentence window.
     #
-    # Rather than chase abbreviations (an open-ended list -- the same
-    # patch-the-instance trap that cost this file three rounds; see
-    # docs/standards/testing.md#change-the-mechanism), scan a SLIDING WINDOW of
-    # adjacent fragments. A subject and a review word that land in neighbouring
-    # fragments are still caught, whatever forced the split. The window is
-    # reported as the joined text, which is also what a human needs to read.
-    # Report the SUBJECT-bearing fragment, never the joined window. The window is
-    # only how we DETECT that a subject and a review word belong to the same
-    # prose sentence; reporting the join would put unrelated neighbouring
-    # sentences into the allowlist, so any edit to a neighbour would churn it.
-    fragments = [s.strip() for s in re.split(r"(?<=\.)\s+", flat) if s.strip()]
-    WINDOW = 2
+    # Splitting on ". " is unavoidably approximate -- an internal abbreviation
+    # ("e.g.", "i.e.") splits one prose sentence in two -- so the subject and the
+    # review word can land in different fragments. Two earlier mechanisms tried
+    # to bound that gap and both were defeated: single-fragment matching (round 7
+    # beat it with "e.g."), then a 2-fragment sliding window (round 8 beat THAT
+    # with a three-sentence phrasing and a doubled "e.g. ... i.e." split).
+    #
+    # Any fixed N is the same patch-the-instance trap one increment later -- see
+    # docs/standards/testing.md#change-the-mechanism. So there is no N: a
+    # candidate is any subject-bearing sentence whose PARAGRAPH mentions review
+    # at all. CLAUDE.md keeps one claim inside one paragraph, so the paragraph is
+    # the real unit of meaning, and no sentence-splitting artifact can separate a
+    # subject from its own paragraph.
+    #
+    # Report the SUBJECT-BEARING SENTENCE, never the whole paragraph: reporting
+    # the paragraph would drag unrelated neighbouring sentences into the
+    # allowlist, so editing a neighbour would churn it.
     candidates = []
-    for i, frag in enumerate(fragments):
-        if not subject.search(frag):
+    for para in re.split(r"\n\s*\n", text):
+        para_flat = re.sub(r"\s+", " ", para).strip()
+        if not para_flat or not review_word.search(para_flat):
             continue
-        # The review word may sit in this fragment or in an adjacent one that an
-        # abbreviation period split off.
-        window = " ".join(fragments[max(0, i - WINDOW + 1):i + WINDOW])
-        if review_word.search(window):
-            candidates.append(frag)
+        for frag in re.split(r"(?<=\.)\s+", para_flat):
+            frag = frag.strip()
+            if frag and subject.search(frag):
+                candidates.append(frag)
     candidates = list(dict.fromkeys(candidates))
 
     # ALLOWLIST half: EXACT whole-sentence equality, never substring containment.

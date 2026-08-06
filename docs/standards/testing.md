@@ -261,6 +261,16 @@ instead of **enumerating** it. Replacing the mechanism (enumerate every candidat
 sentence with no denial test at all, then require exact whole-sentence equality
 against an allowlist) held against every earlier escape at once.
 
+**Prefer a NATURAL scope over a tuned constant.** The same pin was then defeated
+twice more on *scope* rather than vocabulary: matching one sentence at a time lost
+to an `e.g.` mid-sentence split, and widening to a two-sentence sliding window lost
+to a three-sentence phrasing. Each fix was a bigger N, and each invited the next
+phrasing just outside it. What held was dropping N entirely and scoping to the
+**paragraph** -- the unit the prose itself uses for one claim, so no
+sentence-splitting artifact can separate a subject from its own context. When you
+find yourself tuning a window, span, or threshold, ask what natural boundary the
+artifact already has.
+
 **Keep the escapes as a committed battery, not a claim.** Each phrasing that
 defeated a draft lives on as a parametrized case in
 [`tests/test_claude_md_review_flow_battery.py`](../../tests/test_claude_md_review_flow_battery.py),
@@ -271,6 +281,15 @@ cited a case count with no committed artifact behind it; a reviewer correctly
 called that unverifiable.) Note the battery injects mid-document, not at
 end-of-file: an EOF append can be caught coincidentally by merging into the
 unterminated tail fragment, which would falsely suggest the enumeration is sound.
+
+**Pin the limits you accept, so they stay decisions.** No prose pin catches
+everything -- this one cannot see a denial phrased with no review vocabulary at all
+("docs-only edits never get a look from anyone"), and chasing that with more
+synonyms would both restart the trap and make the pin so broad it becomes noise and
+gets deleted. The accepted limit is therefore itself a test
+(`test_known_limit_still_holds`) that fails if the limit ever closes, with a
+docstring saying what to check before celebrating. A known limit with a test is a
+reviewed decision; the same limit in a comment is a hole the next round rediscovers.
 
 Tells you are in this trap: your fix is "add another alternation / synonym /
 exemption"; the new repro differs from the last only in wording; you can list the
