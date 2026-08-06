@@ -44,12 +44,29 @@ became unanswerable. Epic rubric #2 is exactly that retrieval.
 
 **Hook placement deviates from the plan, deliberately.** The plan said to
 archive "on promotion to complete". That is too late: a published kit's schema
-cannot be written at all (five write-path gates refuse while status is
-complete), so the only route to a new revision is
-complete -> draft -> save -> complete, and by promotion time the superseded
+cannot be written while status is complete, so the only route to a new revision
+is complete -> draft -> save -> complete, and by promotion time the superseded
 bytes are already overwritten. The archive fires on the revert instead -- the
 last moment the published revision exists. The plan's INTENT (superseded
 revisions stay retrievable) is unchanged; only the location moved.
+
+**That premise was HALF TRUE when first written, and the review caught it.**
+Fresh-eyes scored exit criterion 1 FAIL on two counterexamples, both fixed here:
+
+- `extract_editor_kit` had NO complete-status gate, so
+  `POST /kits/{id}/extract?force=true` could overwrite a published kit's schema
+  in place, bypassing the archive entirely. I had counted five `== "complete"`
+  gates and concluded "every editing route refuses" -- a count of GATED sites is
+  not proof that all sites are gated, and the extract route was the seventh
+  `put_schema` caller with no gate. Fixed by adding the same 409 the other write
+  routes use.
+- The idempotence check skipped on the marker NAME being taken, so two different
+  revisions sharing one `edition_date` (an author edits fields without bumping
+  the government edition string) meant the second was dropped and retrieval
+  returned the FIRST revision's schema -- a WRONG answer, worse than a missing
+  one for a legal record. Fixed: skip only when the archived copy IS this
+  schema; a distinct revision under a taken marker archives under a
+  fingerprint-disambiguated sibling so both survive.
 
 ## Lessons
 
@@ -70,7 +87,18 @@ revisions stay retrievable) is unchanged; only the location moved.
    sits beside it and already documents the fix (bd polyglot-pdf-r8gq) in a
    comment on its own `_run`. The DeprecationWarning was visible in the very
    first green run and I did not act on it.
-3. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+3. **"I checked N sites and they all had the guard" is not the same claim as
+   "every site has the guard".** The archive's whole design rested on a
+   universal: no route writes a published kit's schema. I verified it by
+   counting the gates I found (five) rather than by enumerating the WRITE SITES
+   and checking each (seven). The two extra sites were the actual answer, and
+   one of them was the hole. Enumerate the population, then check coverage --
+   the same "enumerate the block, don't hand-list it" lesson in a control-flow
+   shape. The regression test now pins the PROPERTY (every schema-writing editor
+   route refuses a published kit) rather than the one route that was missing it,
+   so a newly-added write route must gate or fail.
+
+4. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow

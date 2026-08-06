@@ -284,6 +284,21 @@ class FormKitStore:
 		"""The archived schema stored under `marker` (FormKitNotFound if absent)."""
 		raise NotImplementedError
 
+	async def load_archived_revision_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		"""`load_archived_revision`, with absence as None instead of an exception.
+
+		For the "is this revision already archived?" question, where absent is a
+		normal answer rather than a failure. A genuine store failure still raises
+		FormKitStoreError -- absent and unreadable must stay distinguishable, or
+		a transient error would read as "not archived yet" and overwrite.
+		"""
+		try:
+			return await self.load_archived_revision(kit_id, marker)
+		except FormKitNotFound:
+			return None
+
 	async def list_archived_markers(self, kit_id: str) -> list[str]:
 		"""Encoded markers this kit has archived revisions for (sorted).
 

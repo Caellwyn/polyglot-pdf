@@ -860,20 +860,41 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
         _log.warning("kit_revision_archive_no_marker", kit_id=kit_id)
         return None
 
-    # Idempotence (exit criterion 2): if this exact marker is already archived,
-    # the bytes for that revision are already preserved. Re-archiving would be a
-    # pointless copy on every revert->republish cycle that did not change the
-    # answerable shape.
+    # Idempotence (exit criterion 2) vs. NOT LOSING A REVISION: skip only when
+    # the archived copy IS this schema, never merely because the marker name is
+    # taken. Markers are not unique keys -- an author who edits fields without
+    # bumping the government edition string produces two DIFFERENT revisions
+    # under one edition_date, and a marker-only check would treat the second as
+    # "already archived" and destroy it (fresh-eyes on this bead, reproduced
+    # live: retrieval then returns the WRONG schema, which for a legal record is
+    # worse than a missing one).
+    #
+    # So: same marker + same bytes -> skip (the cheap re-press case). Same marker
+    # + different bytes -> archive under a disambiguated segment so BOTH survive.
+    # Retrieval by the plain marker still finds the first; the sibling keeps the
+    # later revision recoverable instead of silently gone.
     try:
-        if encode_marker(marker) in await store.list_archived_markers(kit_id):
+        existing = await store.load_archived_revision_or_none(kit_id, marker)
+        if existing == schema:
             return None
-        await store.put_archived_revision(kit_id, marker, schema, meta)
+        store_marker = marker
+        if existing is not None:
+            # Distinct revision under a taken marker: suffix with this
+            # revision's own shape fingerprint, which is what actually
+            # distinguishes it (and is stable, so a repeat of THIS revision
+            # re-collides with itself and skips above on the next pass).
+            fingerprint = resolve_edition_marker(None, schema) or "revision"
+            store_marker = f"{marker}--{fingerprint}"
+            if await store.load_archived_revision_or_none(kit_id, store_marker) == schema:
+                return None
+        await store.put_archived_revision(kit_id, store_marker, schema, meta)
     except FormKitStoreError as exc:
         _log.error("kit_revision_archive_failed", kit_id=kit_id, marker=marker,
                    error=str(exc))
         return None
-    _log.info("kit_revision_archived", kit_id=kit_id, marker=marker)
-    return marker
+    _log.info("kit_revision_archived", kit_id=kit_id, marker=marker,
+              store_marker=store_marker)
+    return store_marker
 
 
 @router.get("/kits/{kit_id}/schema")
@@ -2302,6 +2323,22 @@ async def extract_editor_kit(
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
     schema_file, pdf_file = _resolve_meta_names(meta)
+    # A PUBLISHED kit's schema is what the voice app streams AND what its
+    # confirmation records were confirmed against. force=true would overwrite it
+    # in place -- going live unvalidated (the same hazard the lenient-save gate
+    # closes) and destroying the superseded revision without passing through the
+    # revert-to-draft archive hook, so an old record could name a schema the
+    # store can no longer produce (bd polyglot-pdf-w3zw; this route was the one
+    # write path missing the gate). Require the explicit revert first, exactly
+    # like save/repair/translate/derive/regenerate.
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to "
+                   "draft first, then re-extract -- otherwise the published "
+                   "schema would be overwritten in place, and the revision its "
+                   "confirmation records name would be lost.",
+        )
     if pdf_file not in files:
         raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
     if schema_file in files and not force:

@@ -262,6 +262,79 @@ def test_revert_to_draft_route_archives_the_published_revision(route_client):
     assert _run(store.load_archived_revision("w7", "12/2024")) == published
 
 
+def test_two_revisions_sharing_one_edition_date_both_survive(tmp_path):
+    """An author may edit fields WITHOUT bumping the government edition string,
+    producing two different revisions under one marker. A marker is therefore
+    not a unique key: skipping on the marker NAME alone destroyed the second
+    revision and made retrieval return the FIRST one -- a wrong answer, which
+    for a legal record is worse than a missing one (fresh-eyes, reproduced live).
+    """
+    store = LocalFormKitStore(tmp_path)
+    rev_1 = _schema("a", "b", edition="12/2024")
+    _make_kit(tmp_path, "w7", rev_1)
+    _archive_hook(store, "w7", {"status": "complete"})
+
+    # Same edition_date, different answerable shape.
+    rev_2 = _schema("a", "b", "c", edition="12/2024")
+    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
+    second = _archive_hook(store, "w7", {"status": "complete"})
+
+    # The first revision is untouched...
+    assert _run(store.load_archived_revision("w7", "12/2024")) == rev_1
+    # ...and the second was NOT silently dropped.
+    assert second is not None
+    assert _run(store.load_archived_revision("w7", second)) == rev_2
+
+
+def test_repeating_the_same_colliding_revision_still_skips(tmp_path):
+    """The disambiguated sibling must itself stay idempotent -- a repeated
+    revert of the SAME revision must not pile up copies."""
+    store = LocalFormKitStore(tmp_path)
+    _make_kit(tmp_path, "w7", _schema("a", edition="12/2024"))
+    _archive_hook(store, "w7", {"status": "complete"})
+    rev_2 = _schema("a", "b", edition="12/2024")
+    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
+
+    first = _archive_hook(store, "w7", {"status": "complete"})
+    again = _archive_hook(store, "w7", {"status": "complete"})
+
+    assert first is not None
+    assert again is None  # same bytes already archived -> no third copy
+    assert len(_run(store.list_archived_markers("w7"))) == 2
+
+
+def test_every_schema_writing_editor_route_refuses_a_published_kit(route_client):
+    """The PROPERTY the archive's placement depends on: a published kit's schema
+    cannot be written by ANY editor route, so revert-to-draft is genuinely the
+    last moment the superseded bytes exist.
+
+    Pinning the property rather than the one route that was found missing it:
+    the extract route had no complete-gate, which silently falsified the whole
+    design premise. A new schema-writing route added later must either gate or
+    fail this test.
+    """
+    client, _store, root = route_client
+    _make_kit(root, "w7", _schema("a", edition="12/2024"), {"status": "complete"})
+    (root / "w7" / "form.pdf").write_bytes(b"%PDF-1.7 test")
+    hdr = {"X-Editor-Token": "edit-tok"}
+    author = {"X-Editor-Token": "auth-tok"}
+
+    # Every route that can write schema.json for an EXISTING kit.
+    assert client.put("/api/editor/kits/w7/schema", json={"fields": []},
+                      headers=hdr).status_code == 409
+    assert client.post("/api/editor/kits/w7/repair", headers=author).status_code == 409
+    assert client.post("/api/editor/kits/w7/translate-options",
+                       headers=author).status_code == 409
+    assert client.post("/api/editor/kits/w7/derive-divisions",
+                       headers=author).status_code == 409
+    assert client.post("/api/editor/kits/w7/regenerate-guidance",
+                       headers=author).status_code == 409
+    # The one this bead's review found ungated: force=true would have
+    # overwritten the published schema in place, bypassing the archive.
+    assert client.post("/api/editor/kits/w7/extract", data={"force": "true"},
+                       headers=author).status_code == 409
+
+
 def test_revert_of_an_already_draft_kit_archives_nothing(route_client):
     """Only the complete -> draft transition supersedes a PUBLISHED revision; a
     draft->draft no-op must not manufacture archive entries."""
