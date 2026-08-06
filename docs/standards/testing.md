@@ -259,7 +259,18 @@ so a sentence could quote an allowed fragment verbatim while asserting the
 opposite. All three escapes shared one root -- the test was **matching** prose
 instead of **enumerating** it. Replacing the mechanism (enumerate every candidate
 sentence with no denial test at all, then require exact whole-sentence equality
-against an allowlist) held against all 17 earlier escapes at once.
+against an allowlist) held against every earlier escape at once.
+
+**Keep the escapes as a committed battery, not a claim.** Each phrasing that
+defeated a draft lives on as a parametrized case in
+[`tests/test_claude_md_review_flow_battery.py`](../../tests/test_claude_md_review_flow_battery.py),
+so the next mechanism change is re-verified against ALL of them rather than only
+the newest one -- and so "it holds against the old attacks" is something a reader
+can run, not something the author asserts. (An earlier draft of this very section
+cited a case count with no committed artifact behind it; a reviewer correctly
+called that unverifiable.) Note the battery injects mid-document, not at
+end-of-file: an EOF append can be caught coincidentally by merging into the
+unterminated tail fragment, which would falsely suggest the enumeration is sound.
 
 Tells you are in this trap: your fix is "add another alternation / synonym /
 exemption"; the new repro differs from the last only in wording; you can list the

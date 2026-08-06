@@ -107,10 +107,35 @@ def test_every_docs_only_mention_is_allowlisted(text):
         re.IGNORECASE,
     )
     review_word = re.compile(r"review|adversarial|haiku|opus|gate", re.IGNORECASE)
-    candidates = [
-        s.strip() for s in re.split(r"(?<=\.)\s+", flat)
-        if subject.search(s) and review_word.search(s)
-    ]
+
+    # Splitting on ". " is unavoidably approximate: an internal abbreviation
+    # ("e.g.", "i.e.", "etc.") splits one prose sentence into two fragments, and
+    # a round-7 attack used exactly that to put the docs-only subject in one
+    # fragment and the review word in the next -- so neither fragment matched
+    # both patterns and the denial was never enumerated.
+    #
+    # Rather than chase abbreviations (an open-ended list -- the same
+    # patch-the-instance trap that cost this file three rounds; see
+    # docs/standards/testing.md#change-the-mechanism), scan a SLIDING WINDOW of
+    # adjacent fragments. A subject and a review word that land in neighbouring
+    # fragments are still caught, whatever forced the split. The window is
+    # reported as the joined text, which is also what a human needs to read.
+    # Report the SUBJECT-bearing fragment, never the joined window. The window is
+    # only how we DETECT that a subject and a review word belong to the same
+    # prose sentence; reporting the join would put unrelated neighbouring
+    # sentences into the allowlist, so any edit to a neighbour would churn it.
+    fragments = [s.strip() for s in re.split(r"(?<=\.)\s+", flat) if s.strip()]
+    WINDOW = 2
+    candidates = []
+    for i, frag in enumerate(fragments):
+        if not subject.search(frag):
+            continue
+        # The review word may sit in this fragment or in an adjacent one that an
+        # abbreviation period split off.
+        window = " ".join(fragments[max(0, i - WINDOW + 1):i + WINDOW])
+        if review_word.search(window):
+            candidates.append(frag)
+    candidates = list(dict.fromkeys(candidates))
 
     # ALLOWLIST half: EXACT whole-sentence equality, never substring containment.
     # A substring allowlist was defeated live by a sentence that QUOTED an allowed
