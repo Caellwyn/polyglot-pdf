@@ -38,8 +38,10 @@ archived with a superseded banner; INDEX.md's active-sprint-plans cell
 compressed from ~2,600 chars of prose to one clause per plan; the 2026-05-30
 reorientation brief demoted everywhere to a historical snapshot in favor of
 technical_guide.md's Surface contracts map; CLAUDE.md scar 5 corrected (the
-part-named SI holdout was deleted in bd en2j); doc-architecture.md now calls
-itself tier-2 and explicitly bans "Prior:" chain synonyms -- a dozen docs had
+part-named SI holdout was deleted in bd en2j); doc-architecture.md now
+classifies itself as a meta-doc outside the three product tiers (it owns no
+code path, so it carries no Tracks: line) and explicitly bans "Prior:" chain
+synonyms -- a dozen docs had
 accumulated multi-entry stamp chains the checker's Previously:-only regex
 never catches; every touched doc now carries the one-line stamp.
 
@@ -64,6 +66,7 @@ conventions); tests/test_doc_freshness.py 42/42; relative-link sweep over all
 
 43 docs: CLAUDE.md, docs/INDEX.md, docs/doc-architecture.md,
 docs/schema_format.md, docs/beads-setup.md, docs/branch-protection-setup.md,
-docs/archive_completed_plans.md, docs/components/*.md (12),
-docs/standards/*.md (15), docs/doctrine/*.md (4), five files moved into
-docs/archive/, plus this entry.
+docs/archive_completed_plans.md, docs/components/*.md (11),
+docs/standards/*.md (15), docs/doctrine/*.md (3, incl. drain-handover.md's
+repointed plan-of-record link), five files moved into docs/archive/, plus this
+entry.
