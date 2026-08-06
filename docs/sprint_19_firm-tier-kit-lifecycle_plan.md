@@ -83,11 +83,14 @@ stable across revisions, so firm allowlists never churn on republish.
   (which would 422 the unpublish request itself), the schema-editor's LOCAL
   `KitStatus` type in formKitDirectory.ts:19 + the FormCatalogue status
   bucketing built on it, AND the HOSTED path's own two-value sites in
-  remoteKitStore.ts -- `RemoteKitEntry.status` (:33), `KitStatusResponse`
-  (:419), and `setKitStatus`'s parameter type (:432, which as written cannot
-  express the unpublish call at all) -- plus RemoteCatalogue's status
-  bucketing/badge styling. The hosted path is the one that talks to the
-  backend /status route, so it is the path rubric #5's verify exercises.
+  remoteKitStore.ts -- `RemoteKitEntry.status` (:33), `KitStatusResult`
+  (:417-419), and `setRemoteStatus`'s parameter type (:431-432, which as
+  written cannot express the unpublish call at all) -- plus RemoteCatalogue's
+  status bucketing/badge styling. (Do not confuse these with the backend
+  Pydantic `KitStatusResponse` -- its status field is a bare str, no change
+  needed -- or the LOCAL-mode `setKitStatus` in formKitDirectory.ts.) The
+  hosted path is the one that talks to the backend /status route, so it is
+  the path rubric #5's verify exercises.
   form_kit_routes.py itself needs NO change for hiding: `_require_published`
   and the manifest filter are already complete-or-hidden inclusion tests, so
   a third status hides automatically.
@@ -115,12 +118,22 @@ stable across revisions, so firm allowlists never churn on republish.
   (the ABC has no delete of any kind today) with both implementations --
   local recursive dir removal and GCS list_blobs + batch delete -- the route
   never touches the filesystem or bucket directly, or GCS mode breaks.
-- **Coordination with sprint 18 (epic polyglot-pdf-4qul, active).** Sprint 18
-  C8 moves the token-spending translation bake OUT of the /status promotion
-  route (the free coverage CHECK stays). The lifecycle beads touch the same
-  route: the archive hook and replace-current semantics must attach to
-  whatever the promotion transition is when they land, and 7jmy.2 must not
-  race a C8 rework of the same lines -- check 4qul's state at claim time.
+- **Coordination with sprint 18 (epic polyglot-pdf-4qul, active) -- TWO
+  beads, not one.** (a) C8 moves the token-spending translation bake OUT of
+  the /status promotion route (the free coverage CHECK stays); the archive
+  hook and replace-current semantics must attach to whatever the promotion
+  transition is when they land. (b) C2 (bd polyglot-pdf-apmo, open) reworks
+  the WRITE-LOCK semantics themselves across three of the lifecycle bead's
+  files (editor_kit_routes.py, RemoteCatalogue.tsx, FormCatalogue.tsx): it
+  adds a SIXTH write-path lock (the extract route joins the five == complete
+  gates -- treat the gate inventory as "every write-path lock at claim time",
+  not a fixed five) and introduces an author-only Unlock action. Unlock
+  semantics against `unpublished` are pinned HERE: Unlock applies to COMPLETE
+  kits only; an unpublished kit is never unlockable to draft (it returns to
+  complete only through the full publish gate), because unlocking it to an
+  editable draft would let the bytes an audit record references be edited --
+  the exact corruption the status exists to prevent. Check BOTH beads' state
+  at claim time; do not race either.
 
 ### Firm tier (02ye)
 
@@ -139,22 +152,33 @@ stable across revisions, so firm allowlists never churn on republish.
   (test_form_kit_pdf_is_deliberately_public is updated deliberately, not
   broken).
 - **Private-kit SERVING seam (the third piece the form_kit_routes.py revisit
-  comment names).** Today `normalize_manifest` always emits schemaPath/pdfPath
-  as STATIC Hosting paths and the viewer fetches them verbatim -- so a private
-  kit excluded from the bundle would be unloadable by its own firm. The
-  kit-scoping bead therefore also changes path emission for PRIVATE kits to the
-  authenticated backend routes (`/api/form-kits/<id>/schema` + `.../pdf`) and
-  makes the viewer's fetches header-carrying on those paths (the schema fetch
-  already attaches the Bearer token; the PDF/viewer path needs the
-  fetch-with-header -> blob URL form). Public kits keep the static paths
-  unchanged. The seam has a SECOND consumer beyond display: pdfFiller.ts:96
+  comment names).** Today every manifest entry carries schemaPath/pdfPath as
+  STATIC Hosting paths and the viewer fetches them verbatim -- so a private
+  kit excluded from the bundle would be unloadable by its own firm. Where the
+  paths come from matters for the fix: in GCS mode they are BAKED into
+  index.json by deploy-all.sh:383 (the store's load_manifest passes them
+  through; `normalize_manifest` only supplies defaults and is a firm-agnostic
+  store-boundary validator with no request context -- do NOT attack it); in
+  local mode LocalFormKitStore.load_manifest emits them. The per-request
+  rewrite therefore belongs in `list_form_kits` (form_kit_routes.py:162-180),
+  the one site that already holds the caller's decoded claims and already
+  post-filters entries: for PRIVATE kits it rewrites schemaPath/pdfPath to
+  the authenticated backend routes (`/api/form-kits/<id>/schema` + `.../pdf`)
+  -- SchemaFormDemo's comment already anticipates manifest entries carrying
+  `/api/...` paths. Viewer fetches become header-carrying on those paths: the
+  schema fetch already attaches the Bearer token; the pdf-view overlay
+  (SchemaForm -> PreviewPane.tsx:57 -> usePDFDocument.ts:47, which passes the
+  raw URL to `pdfjsLib.getDocument` with no header capability) needs the
+  fetch-with-header -> blob URL form that FilledPreviewModal.tsx:85 already
+  demonstrates. Public kits keep the static paths unchanged. The seam has a SECOND consumer beyond display: pdfFiller.ts:96
   derives the `pdf_filename` it POSTs to /api/fill-pdf by taking the last URL
   segment (`pdfUrl.split('/').pop()`), and SchemaFormDemo.tsx:109-111 does the
   same for schema/pdf filenames -- under backend-route paths those segments
   become the literals "pdf"/"schema" and the fill 404s in
   `store.load_pdf_bytes`. The fix carries the schema/pdf FILENAMES explicitly
-  from the manifest instead of re-deriving them from the URL, so the filled-PDF
-  download keeps working for private kits. `fillPDF` has three call sites in
+  from the manifest (`FormKitDescriptor` already declares `pdfFile`) instead
+  of re-deriving them from the URL, so the filled-PDF download keeps working
+  for private kits. `fillPDF` has three call sites in
   two more files -- SchemaForm.tsx:623 (download) / :659 (print) and
   FilledPreviewModal.tsx:62 (preview), all fed by a `pdfUrl` prop from
   SchemaFormDemo -- so the explicit-filename fix threads a `pdfFile` prop
@@ -228,7 +252,7 @@ serial).
 | Bead | Scope | Surfaces | Inherits |
 |------|-------|----------|----------|
 | firms-store | firms collection model + FirmsService + firestore.rules deny block + bootstrap/claim-stamping admin script | backend/services/firms.py (new), firestore.rules, scripts/ (admin script, new) | 02ye #1 |
-| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (normalize_manifest path emission -> backend routes; header-carrying viewer fetches; filenames carried explicitly -- a pdfFile prop threads through SchemaForm and FilledPreviewModal -- so the pdf-fill call survives) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, frontend/src/schema-forms/components/SchemaForm.tsx, frontend/src/pdf-view/FilledPreviewModal.tsx, frontend/src/schema-forms/utils/pdfFiller.ts, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
+| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (per-request path rewrite in list_form_kits; header-carrying viewer fetches incl. the pdf-view overlay; filenames carried explicitly -- a pdfFile prop threads through SchemaForm and FilledPreviewModal -- so the pdf-fill call survives) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, frontend/src/schema-forms/components/SchemaForm.tsx, frontend/src/pdf-view/FilledPreviewModal.tsx, frontend/src/pdf-view/PreviewPane.tsx, frontend/src/pdf-view/usePDFDocument.ts, frontend/src/schema-forms/utils/pdfFiller.ts, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
 | static-scoping | Static pipeline filters to complete + public, and excludes `_`-prefixed entries at root AND kit level (closes the draft leak and the `_translation`/future `_archive` sweep) | frontend/scripts/generate-form-manifest.ts | 02ye #2 (static half) |
 | firm-telemetry | firm_id threading (claims -> WS session) + wire log_form_session_start/end + firm_id on confirmation events | backend/routes/websocket_routes.py, backend/utils/confirmation_logger.py | 02ye #3 |
 | magic-links (BLOCKED) | Per-firm API key + link minting + EntryGate + fragment routing (settled design) | frontend/src/schema-forms/, backend auth | deferred until first paying firm |

@@ -66,10 +66,17 @@ FilledPreviewModal (three fillPDF call sites), a NEW store-level
 prefix-delete primitive on FormKitStore for 6x1j, author_version in both TS
 FormMetadata mirrors (compile error otherwise), the kit-card version-label
 precedence slot, and the 6dz0->vccy ordering rationale restated as
-behavioral. Fourteen adopted gaps across rounds 2-4; nothing rejected or
-deferred; no out-of-scope beads filed by the reviewers. The terminal verdict
-is the Opus re-review of the final diff, recorded in the PR body and merge
-ping.
+behavioral. Round 5 (Opus) found 4 more, all adopted: the serving-seam
+rewrite relocated from normalize_manifest (firm-agnostic, and in GCS mode the
+paths are baked by deploy-all.sh into index.json) to a per-request rewrite in
+list_form_kits; the pdf-view overlay (PreviewPane -> usePDFDocument raw
+getDocument URL) added to vccy's seam + surfaces; two hosted-path symbol
+names corrected (KitStatusResult / setRemoteStatus); and the sprint-18
+coordination note widened to bd apmo (C2), with Unlock-vs-unpublished
+semantics pinned (unpublished is never unlockable to draft). Eighteen
+adopted gaps across rounds 2-5; nothing rejected or deferred; no
+out-of-scope beads filed by the reviewers. The terminal verdict is the Opus
+re-review of the final diff, recorded in the PR body and merge ping.
 
 Research findings that shaped the design (recorded in the plan): kit storage is
 single-slot per kit_id with destructive overwrite-in-place; confirmation
