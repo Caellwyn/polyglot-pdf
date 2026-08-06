@@ -462,13 +462,13 @@ Do NOT hand-roll the review cycle. In particular:
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
   review setup and tempts hand-polling).
-- **The Opus-5 outer review handles review-worthy changes PRE-PR -- there is NO
+- **The outer review handles review-worthy changes PRE-PR -- there is NO
   external reviewer.** Review is entirely Claude-based (the maintainer's OpenAI Codex
   subscription ended 2026-07-08; Codex succeeded Copilot at the earlier
   credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). The orchestrator
   judges whether the diff can regress runtime behavior; if so, closeout runs
-  the outer review ON THE LOCAL BRANCH, before the PR opens: it spawns the
-  `cross-surface-reviewer` agent (`model: opus`) on the local diff
+  the outer review ON THE LOCAL BRANCH, before the PR opens. For a SOURCE diff it
+  spawns the `cross-surface-reviewer` agent (`model: opus`) on the local diff
   (`origin/dev...HEAD`) and loops it to `NO-GAPS`. **That single clearing pass is
   the gate**, and only a BEHAVIORAL fix voids it.
   There is **no `@codex review` trigger, no `pr_review_watcher.py`, and no
@@ -477,7 +477,7 @@ Do NOT hand-roll the review cycle. In particular:
   `docs-reviewer` agent, same loop, prose review rather than a contract trace). Only a
   genuinely TRIVIAL change gets no adversarial review at all.
 - **The outer review's subagents are read directly, never watched by a script.**
-  Closeout reads each Opus reviewer's `NO-GAPS` / `GAPS-FOUND` STATUS line straight
+  Closeout reads the outer reviewer's `NO-GAPS` / `GAPS-FOUND` STATUS line straight
   from the subagent result -- there is no GitHub bot to poll, so the old
   `pr_review_watcher.py` background-watch loop does not run for the outer review.
   Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean -- surface it.

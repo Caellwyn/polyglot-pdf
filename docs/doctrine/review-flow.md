@@ -226,10 +226,10 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   was a skip/run binary, and docs PRs got their only adversarial look from the inner
   loop's guaranteed-Opus round; retiring that round (bd ofh6) left them at zero,
   which is the gap this fork closes.
-- **Fresh-eyes FIRST, then the Opus outer review -- both pre-PR, serial not
+- **Fresh-eyes FIRST, then the outer review -- both pre-PR, serial not
   parallel.** The inner fresh-eyes assess loop runs first and loops to `NO-GAPS`;
-  then the ONE Opus outer cross-surface review runs on the same local branch and
-  loops to `NO-GAPS`. Only after BOTH clear does the PR open. They catch
+  then the ONE outer adversarial pass (Opus cross-surface for source, Haiku prose
+  for docs-only) runs on the same local branch and loops to `NO-GAPS`. Only after BOTH clear does the PR open. They catch
   different bug classes **because they are given different jobs** -- fresh-eyes scores
   outcome-fitness against the rubric and asks "what did the author's own priorities
   blind them to" *within the diff*; the outer review is an independent,
@@ -248,9 +248,10 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   promotion-tiers.md) -- a PR never merges on its own; it is merged by an explicit
   `gh pr merge` (the orchestrator's, under the auto-merge rule, or the
   maintainer's), draft or not. Always open normal.
-- **Loop the Opus outer review until CLEAN -- but only a BEHAVIORAL fix re-opens
+- **Loop the outer review until CLEAN -- but only a BEHAVIORAL fix re-opens
   it.** After a **behavioral** fix (committed locally, not pushed -- the PR does not
-  exist yet), re-spawn the Opus reviewer on the updated local diff. A
+  exist yet), re-spawn whichever outer reviewer the diff type selected on the
+  updated local diff. A
   **non-behavioral** fix -- filing a bead, a comment or docstring edit, `docs/`-only
   prose, a journal entry, a `.beads/` sync -- leaves the clear standing; re-running a
   heavy Opus pass because a journal sentence was written is pure waste, and the fear

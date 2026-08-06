@@ -98,7 +98,7 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
 
 - **YOURS (judgment, never delegate):** triaging any prep `ATTENTION`; bumping
   stale docs; **writing the journal prose**; the **review-worthiness gate** (Step
-  5.6); spawning + triaging **fresh-eyes** (Step 5.5) and the **Opus outer review**
+  5.6); spawning + triaging **fresh-eyes** (Step 5.5) and the **outer review**
   (Step 5.6); the **nit-vs-blocker** calls; resolving a merge conflict; **naming
   which beads close**; the merge ping; any escalation.
 - **DELEGABLE (mechanics):** running `closeout_prep.py`; writing the
@@ -118,7 +118,7 @@ brief (bead id(s) + close reason; the **complete filled journal text**; PR title
 body, including the Step-5.5 scorecard; branch + base). It
 runs the glue -- open PR, close bead(s) -- and **stops back at every
 judgment point** (prep ATTENTION, a rebase conflict, any tooling error, a missing
-brief input). Fresh-eyes and the Opus outer review are NOT spawned by the runner --
+brief input). Fresh-eyes and the outer review (Opus or Haiku) are NOT spawned by the runner --
 they already ran pre-PR (Steps 5.5 + 5.6).
 
 **Bead close (one run, review already done).** Because both reviews cleared BEFORE
@@ -360,9 +360,13 @@ diff. For a genuinely TRIVIAL PR (no adversarial review at all) the last fresh-e
 ## Step 5.6 -- Adversarial review (PRE-PR): ONE looped clearing pass, model by diff type
 
 **Both review layers run BEFORE the PR opens (2026-07-08 flow).** The inner
-fresh-eyes loop (Step 5.5) cleared to `NO-GAPS`; the Opus-5 outer cross-surface
-review runs now, on the LOCAL branch, and must clear to `NO-GAPS` BEFORE Step 6 opens
-the PR. Nothing is pushed and no PR exists yet -- the outer review reads the local
+fresh-eyes loop (Step 5.5) cleared to `NO-GAPS`; the outer adversarial pass runs
+now, on the LOCAL branch, and must clear to `NO-GAPS` BEFORE Step 6 opens
+the PR. **Which reviewer runs is the fork below** -- Opus `cross-surface-reviewer`
+for a source diff, Haiku `docs-reviewer` for a docs-only one, neither for a trivial
+one. The rest of this section describes the Opus arm (the common case); the Haiku
+arm follows the same loop, ordering, and clearing rules with a prose mandate
+instead of a contract trace. Nothing is pushed and no PR exists yet -- the outer review reads the local
 diff (`git diff origin/dev...HEAD`).
 
 **The two layers have DIFFERENT jobs -- that is the point of the split.** The inner
@@ -416,7 +420,8 @@ product/autonomy call for the maintainer, not this skill's to assume. See Step 6
 
 **Fresh-eyes is NOT re-run here** -- it ran (and looped to `NO-GAPS`) in Step 5.5;
 its triage breakdown and any filed out-of-scope beads are already recorded. Step 5.6
-is the Opus-5 OUTER review: an independent adversarial look at the
+is the OUTER review -- Opus for a source diff, Haiku for a docs-only one: an
+independent adversarial look at the
 same local diff by a fresh subagent with no shared context. There is **no external reviewer, no bot watcher, no trigger
 comment** -- you spawn the reviewer subagents and read their STATUS lines directly
 (the maintainer's Codex subscription ended 2026-07-08; the Opus review that was
@@ -425,8 +430,10 @@ primary). Do NOT put an `@codex review` line anywhere, do NOT use the
 `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all
 retired dead path.
 
-**ONE looped Opus pass is the gate (2026-08-05).** A single `cross-surface-reviewer`
-spawn at `model: opus`, looped fix -> re-spawn until `NO-GAPS`. The duplicate
+**ONE looped pass is the gate (2026-08-05)** -- on a source diff that is a single
+`cross-surface-reviewer` spawn at `model: opus`, looped fix -> re-spawn until
+`NO-GAPS`; on a docs-only diff the same loop runs with `docs-reviewer` at
+`model: haiku`. The duplicate
 confirming pass is **retired**: it doubled the most expensive step and re-ran on every fix, for a
 marginal catch rate that did not justify the bill. Independence -- the property that
 actually mattered -- is preserved: a fresh subagent, no shared context, reading the

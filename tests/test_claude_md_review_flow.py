@@ -12,9 +12,9 @@ each one more spot in CLAUDE.md still describing the OLD rule -- because each fi
 was made per-instance and no test covered this file at all. On `origin/dev` they
 are at:
 
-  :89  -- the Closeout section, "changes get NO outer review"
+  :89  -- scar tissue #2, "skip the outer review"
   :218 -- the "Never merge" rule, "skipped review under the docs-only gate"
-  :470 -- scar tissue #2, "skip the outer review"
+  :470 -- the Closeout section, "changes get NO outer review"
 
 (NB: "real regression" here means a defect that actually shipped in CLAUDE.md.
 The sibling battery file numbers a DIFFERENT sequence -- later rounds in which a
