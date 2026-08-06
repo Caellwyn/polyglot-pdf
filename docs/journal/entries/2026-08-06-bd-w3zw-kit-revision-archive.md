@@ -81,6 +81,22 @@ several -- it never picks. `--segment` reads one exact archived segment for the
 operator who has disambiguated from `--list`. Identical bytes under several
 segments count as one revision, not an ambiguity.
 
+**The Opus clearing round found the leak every Sonnet round missed:** archived
+revisions reached the PUBLIC Hosting bundle. The two runtime catalogues exclude
+`_archive` structurally, but `copyKitsToPublic` is a blanket recursive `fs.cp`,
+and the deploy scripts' `_*` guards skip only TOP-level entries (which is why
+`form-kits/_translation` is safe and a nested `_archive` was not) -- so every
+superseded schema became fetchable at
+`/form-kits/<kit>/_archive/<marker>/schema.json`. The reviewer filed it rather
+than blocking, on the grounds that the fix lands outside this bead's declared
+surfaces; I folded it in instead. Publishing a legal-retention artifact to an
+unauthenticated origin is a DIRECT consequence of this diff creating `_archive`,
+and the fix is a one-line `filter` on the copy. Shipping the cause and deferring
+the exposure would have been the wrong trade. The GCS upload deliberately still
+carries archives -- that bucket IS the authenticated store the operator read
+goes through. Doc wording narrowed to "runtime catalogues", which is what the
+structural guarantee actually covers.
+
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
 from the segment's name. `encode_marker` collapses any run of unsafe characters

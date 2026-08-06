@@ -184,9 +184,15 @@ siblings: `scripts/read_kit_revision.py` returns the revision when exactly one
 answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
 several do -- for a confirmation record, a confident wrong schema is worse than
 an honest "cannot tell". `--segment` reads one exact archived segment after the
-operator disambiguates from `--list`. Archives are invisible to both catalogues for free: `list_kit_files`
+operator disambiguates from `--list`. Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
 ignores anything deeper than `<kit>/<file>` in both backends, and `_archive` is
-outside `_KIT_ID_RE`. `scripts/read_kit_revision.py` is the operator read
+outside `_KIT_ID_RE`. The static-bundle copy is a separate matter and needed an
+explicit fix -- `copyKitsToPublic` in `frontend/scripts/generate-form-manifest.ts`
+is recursive, so it now filters underscore-prefixed dirs at EVERY level (the
+deploy scripts' own `_*` guards skip only top-level entries like
+`form-kits/_translation`, which is why a nested `_archive` slipped past them).
+Archives DO belong in the GCS bucket: that is the authenticated backend store
+the operator read goes through. `scripts/read_kit_revision.py` is the operator read
 (current-or-archived, by `kit_id` + marker).
 
 ## Debugging
