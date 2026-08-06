@@ -2,7 +2,14 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: added the 5 missing control-channel message types -- `stats`, `skip_field_response`, `switch_field_response`, `clear_thinking`, `client_diagnostic`. The `change_spoken_language` row re-asserts the session's PINNED language after a RECONNECT (field N, not field 1); mid-conversation language switching is unsupported (see ../standards/voice-and-vad.md). continuous-DTI is the production law: the whole form runs as one session and the section-switch flow below is the DEPRECATED section-reset fallback, bd polyglot-pdf-55jg.)*
+*Last updated: 2026-08-06 (post-merge freshness check against
+frontend/src/shared/connection.ts + frontend/src/webFormConnection.ts: added
+the new "Server-initiated messages" table documenting the `interrupted`
+backend->frontend barge-in message (bd polyglot-pdf-s7uf, `CallbackHandler.
+on_interrupted` -> `webFormConnection.ts` `onInterrupted` ->
+`audioManager.resetPlaybackClock`), which the freshness checker flagged as
+undocumented; re-verified the existing control-channel table + section-switch
+flow against current code, no other drift found.)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -114,6 +121,20 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `client_diagnostic` | one-way, PII-free client diagnostic log (bd polyglot-pdf-xp4q) -- `event` is whitelisted to a fixed set of known tokens (anything else logs as `"invalid"`) so a raw client payload can never smuggle PII into the log line; no ack, fire-and-forget |
 
 Unknown types → `{"type":"error","code":"unknown_control"}` (logged).
+
+## Server-initiated messages (backend → client)
+
+Besides replying to the client-sent types above, the backend also PUSHES a few
+message types unprompted, forwarding Gemini/session lifecycle events the client
+has no way to observe otherwise:
+
+| `type` | When | Client effect |
+|--------|------|----------------|
+| `interrupted` | Gemini stops generating because the user barged in mid-response (`CallbackHandler.on_interrupted`, bd polyglot-pdf-s7uf). No payload -- the event itself is the signal. | `webFormConnection.ts` clears its staging `audioQueue` + `isProcessingAudio`, then fires `onInterrupted()`, which calls `audioManager.resetPlaybackClock()` to drop the dead generation's unplayed tail without setting `playbackBlocked` (so the model's next generation still plays). |
+| `go_away` | The Gemini Live server is about to terminate the connection (`on_go_away`). | Surfaces `time_left` via `onGoAway`, then the client silently pre-emptively reconnects with `resume:true`. Distinct from the "Idle watchdog" below -- this is a Gemini-side lifecycle reset, not a client-inactivity close. |
+| `gemini_session_dropped` | Gemini's session died spontaneously behind a still-open WS (e.g. a 1011 error) (`on_session_dropped`). | Same pre-emptive reconnect path as `go_away`, but surfaces a `reconnecting` status so the UI shows a transient-recovery modal. |
+| `idle_timeout` | The idle watchdog fires (see below). | Client stops auto-reconnecting and shows a manual Reconnect button. |
+| `section_switched` | A `manual_section_switch` completes (DEPRECATED section-reset fallback only -- see below). | Releases the switch guard, settles connection status to `connected`. |
 
 **Validator results (backend → client, Pillar B / bd polyglot-pdf-jnjj.17;
 async since W1 / bd polyglot-pdf-xbl2; REPORT-ONLY + finding-driven since W3 /

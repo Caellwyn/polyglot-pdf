@@ -2,7 +2,13 @@
 
 **Tracks:** backend/config.py backend/services/callback_handler.py backend/services/form_filling_service.py backend/services/request_coordinator.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts frontend/src/shared/connection.ts frontend/src/demo/VoiceOverlay.tsx
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: removed stale line number from switch_to_field row to match table's file+symbol citation style).*
+*Last updated: 2026-08-06 (post-merge freshness check against
+backend/services/callback_handler.py + backend/services/form_filling_service.py:
+every DEPRECATED-site symbol in the table -- `_handle_switch_section_tool`,
+`handle_switch_section`, `_complete_section_switch`, `request_section_info`,
+`switch_to_section`/`_switch_to_section_locked` on the KEEP list -- re-verified
+present with its `DEPRECATED (bd polyglot-pdf-55jg)` marker intact, no drift
+found).*
 
 ## Status: DEPRECATED but LIVE
 

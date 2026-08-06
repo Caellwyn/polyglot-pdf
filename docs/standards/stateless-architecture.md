@@ -1,6 +1,15 @@
 # Stateless architecture
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: dropped stale bead-status parentheticals from hipaa-pii-policy.md and logging-and-cost.md links).*
+*Last updated: 2026-08-06 (post-merge freshness check against
+backend/services/form_filling_service.py +
+frontend/src/schema-forms/state/schemaFormState.ts: added a note on the
+client-side two-writer `fieldValues` reconciliation (React UI +
+WebFormConnection, `reconcileFieldValues` in
+frontend/src/schema-forms/utils/fieldValue.ts, bd polyglot-pdf-uw3w/3irc/qim7)
+-- a client-internal consistency mechanism that does not change the
+backend-statelessness invariant this doc tracks; re-verified the
+`current_values` backend comments and `SchemaFormStateManager.clear()`
+behavior, no other drift found).*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 
@@ -25,6 +34,28 @@ persists them.** This isn't incidental -- the service says so in its own code:
   Gemini's in-memory context for the live turn, then dropped.
 
 So the only durable copy of a user's answers is in their own browser tab.
+
+**Client-side, `fieldValues` has two writers, reconciled per field.** The
+"client is the single source of truth" invariant is about the backend; on the
+client itself, `WebFormConnection` holds an in-memory `this.state` across
+voice turns while the React UI (`SchemaForm.tsx` `handleFieldChange` /
+`handleFieldSkip`) writes straight through `SchemaFormStateManager` to
+`sessionStorage` without touching that in-memory copy -- two independent
+writers of the same map (bd polyglot-pdf-uw3w / polyglot-pdf-3irc /
+polyglot-pdf-qim7). A handler that persists its in-memory copy verbatim would
+silently overwrite whatever the UI wrote since the last sync (a value the user
+cleared on screen coming back to life, or a deleted `[]`-alias key being
+resurrected). `reconcileFieldValues`
+(`frontend/src/schema-forms/utils/fieldValue.ts`) is the fix: every
+`WebFormConnection` handler that re-derives `this.state` from a freshly-read
+`persistedAtEntry` reconciles `fieldValues` per LOGICAL field (collapsing the
+`p1_grp` / `p1_grp[]` alias pair into one decision) rather than replacing or
+key-unioning the two sides -- the newer `lastModified` stamp wins, ties go to
+the persisted side, and an unstamped entry loses to a stamped one. This is a
+client-internal consistency mechanism between the UI and the voice-connection
+object; it does not change where the durable copy lives (`sessionStorage`) or
+who the backend treats as authoritative (still nobody -- the backend stores
+none of it either way).
 
 ## Why
 

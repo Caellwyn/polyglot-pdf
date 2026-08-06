@@ -2,11 +2,12 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: USE_DTI/CONTINUOUS_SESSION
-default flipped to true, main.py load_dotenv line fix, jpe cleanup already shipped,
-deploy-new.sh mentioned). Vertex is the only production path (bd polyglot-pdf-5e6a):
-the ALLOW_AI_STUDIO override was removed; a deployed AI Studio path now fails
-startup outright.*
+*Last updated: 2026-08-06 (post-merge freshness check against
+backend/services/callback_handler.py: the `.env.DEV`/`DEV_LOGGING_ENABLED`/
+`VFF_DEV_LOGGING` claims and the `callback_handler.py:466` comment citation
+re-verified line-for-line, no drift). Vertex is the only production path (bd
+polyglot-pdf-5e6a): the ALLOW_AI_STUDIO override was removed; a deployed AI
+Studio path now fails startup outright.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic

@@ -196,4 +196,9 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found).*
+*Last updated: 2026-08-06 (post-merge freshness check against
+backend/services/callback_handler.py: `_handle_confirm_field_tool` (default
+`confirmation_method="verbal"`), the `recorded`-guard, and the
+`log_field_confirmation(...)` call site (gated on `self._form_id and
+self._form_session_id`, carrying `kit_id`/`edition_date`) all re-verified
+line-for-line, no drift found).*
