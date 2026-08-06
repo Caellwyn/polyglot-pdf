@@ -63,10 +63,10 @@ bd dolt pull && bd create --title="<scope>(<area>): <one-line bug>" \
 ## Exit criteria
 
 1. <binary, outcome-based criterion that says the bug is fixed + how to verify>" \
-  --type=bug --metadata '{"surfaces":["<file/dir it will modify>"]}' && bd dolt push
+  --type=bug --metadata '{"surfaces":["<file/dir it will modify>"],"tier":"sonnet","work_class":"local-bug"}' && bd dolt push
 ```
 
-Include **>= 1 exit criterion** in the body (the creation-time norm) and a `surfaces` metadata entry (note: `--metadata` REPLACES the whole object, so keep every key in one JSON object). Then list the **filed bead ID(s)** in your output so the caller has the audit trail.
+Include **>= 1 exit criterion** in the body (the creation-time norm) plus all three metadata keys in ONE object -- `--metadata` REPLACES the whole object, so omitting `surfaces` wipes the collision guard. `tier` is one of `haiku`/`sonnet`/`opus`/`fable` and `work_class` one of `docs-nit`/`comment-align`/`cross-surface`/`local-bug`/`needs-plan`/`mechanical` -- both CLOSED enums (a value outside them makes the bead invisible to the batching query). Pick the tier by the judgment the fix needs: a prose or stale-reference fix is `haiku`/`docs-nit`; a contained defect is `sonnet`/`local-bug`; one touching contracts several surfaces depend on is `opus`/`cross-surface`. Full table: [`docs/standards/bead-tiers.md`](../../docs/standards/bead-tiers.md). Then list the **filed bead ID(s)** in your output so the caller has the audit trail.
 
 **An in-scope gap against the rubric is a finding you report inline (above), never a bead** -- a criterion failure is fixed before the PR opens. Conversely, **filing is a routing decision, not a dismissal**: a finding you neither reported nor filed is the one outcome this rule does not tolerate.
 

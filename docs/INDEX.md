@@ -52,6 +52,7 @@ ground truth -- fix the doc first as a separate commit.
 | Logging + cost | [`standards/logging-and-cost.md`](standards/logging-and-cost.md) |
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | [`standards/testing.md`](standards/testing.md) |
+| Bead tiers (which model picks up a bead) | [`standards/bead-tiers.md`](standards/bead-tiers.md) |
 | Risk rating (high/med/low; feeds fresh-eyes self-escalation) | [`standards/risk-rating.md`](standards/risk-rating.md) |
 | SI reduction (system-instruction shape + reduced-SI floor) | [`standards/si-reduction.md`](standards/si-reduction.md) |
 | WebSocket protocol (handshake + message-type union) | [`standards/ws-protocol.md`](standards/ws-protocol.md) |

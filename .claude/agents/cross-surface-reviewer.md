@@ -72,10 +72,10 @@ bd dolt pull && bd create --title="<scope>(<area>): <one-line bug>" \
 ## Exit criteria
 
 1. <binary, outcome-based criterion that says the bug is fixed + how to verify>" \
-  --type=bug --metadata '{"surfaces":["<file/dir it will modify>"]}' && bd dolt push
+  --type=bug --metadata '{"surfaces":["<file/dir it will modify>"],"tier":"opus","work_class":"cross-surface"}' && bd dolt push
 ```
 
-Include **>= 1 exit criterion** and a `surfaces` metadata entry (note: `--metadata` REPLACES the whole object, so keep every key in one JSON object). List the filed bead ID(s) in your output.
+Include **>= 1 exit criterion** plus all three metadata keys in ONE object -- `--metadata` REPLACES the whole object, so omitting `surfaces` wipes the collision guard. `tier` is one of `haiku`/`sonnet`/`opus`/`fable` and `work_class` one of `docs-nit`/`comment-align`/`cross-surface`/`local-bug`/`needs-plan`/`mechanical` -- both CLOSED enums. **Do not reflexively file everything as `opus`/`cross-surface` just because you found it:** tier by the judgment the FIX needs, not by the reviewer who found it. An interaction bug spanning surfaces is `opus`/`cross-surface`; a stale comment you noticed while tracing is `haiku`/`docs-nit`. Full table: [`docs/standards/bead-tiers.md`](../../docs/standards/bead-tiers.md). List the filed bead ID(s) in your output.
 
 **Never silently drop a finding.** Filing is a routing decision, not a dismissal; an unfiled finding is the one outcome this rule does not tolerate.
 

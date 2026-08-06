@@ -171,10 +171,13 @@ The guard is only as good as the `surfaces` beads declare. A bead's
 `metadata.surfaces` is a structured list of the files/dirs it will **MODIFY**
 (not merely read -- reads don't collide). Conventions:
 
-- **Declare at creation.** New beads should list their write targets when known.
-  `--metadata` takes a full JSON object (it REPLACES the metadata), so include
-  any other keys you're setting:
-  `bd create ... --metadata '{"surfaces":["scripts/","docs/x.md"]}'`.
+- **Declare at creation.** New beads should list their write targets when known,
+  **plus the `tier` + `work_class` routing keys**
+  ([`docs/standards/bead-tiers.md`](../../../docs/standards/bead-tiers.md)).
+  `--metadata` takes a full JSON object (it REPLACES the metadata), so every key
+  goes in ONE object -- omitting `surfaces` while setting `tier` wipes the
+  collision guard:
+  `bd create ... --metadata '{"surfaces":["scripts/","docs/x.md"],"tier":"sonnet","work_class":"local-bug"}'`.
   To add surfaces to a bead that already has metadata, prefer reading the JSON,
   adding the key, and re-setting the whole object (or use `bd update
   --set-metadata` for scalar keys). Use forward slashes; a trailing slash

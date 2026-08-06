@@ -49,6 +49,20 @@ nits vs. priority) made SAFE by a deterministic write-overlap guard. The
   overlap and block it -- but the absence of a declaration is permissive, not
   fail-closed. For an active claim that under-declared, the guard still derives
   its real footprint from its open PR first (bd polyglot-pdf-8y7).
+- **Every bead also declares WHICH MODEL TIER should pick it up** -- `metadata.tier`
+  (`haiku`|`sonnet`|`opus`|`fable`) and `metadata.work_class`
+  (`docs-nit`|`comment-align`|`cross-surface`|`local-bug`|`needs-plan`|`mechanical`),
+  both CLOSED enums. Set them in the SAME `--metadata` object as `surfaces` (it
+  REPLACES, so a separate call wipes the guard). This is what lets a cheap session
+  query `bd list --metadata-field tier=sonnet --metadata-field work_class=docs-nit
+  --status=open` and **batch 4-5 nit beads into one PR** -- allowed by the bead/PR
+  contract, and the reason nits get FILED during review instead of chased inline.
+  `fable` is not "harder than opus" -- it is planning work whose deliverable is a
+  decision, not a diff. An agent finding a bead ABOVE its tier releases it WITH
+  NOTES and bumps the tier; finding one BELOW its tier it just does the work (sunk
+  context beats re-derivation). Full rules + the escalation/de-escalation
+  asymmetry: [`../standards/bead-tiers.md`](../standards/bead-tiers.md)
+  (bd polyglot-pdf-1bsx).
 - **`/next-bead` surfaces ready candidates and HARD-blocks write-overlaps.**
   `next_bead.py` cross-references each ready bead's surfaces against every ACTIVE
   claim (in_progress AND backed by a live branch/PR -- a stale claim does not

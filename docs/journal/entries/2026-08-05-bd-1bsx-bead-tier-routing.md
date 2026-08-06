@@ -1,0 +1,143 @@
+---
+date: 2026-08-05
+bead: polyglot-pdf-1bsx
+title: "feat(beads): tier routing + a Haiku adversarial review for docs-only PRs"
+tags: [harness, doctrine, review]
+---
+
+## Trigger
+
+Follow-on to PR #549 (bd `ofh6`/`0arm`), which collapsed the review harness from
+three serial Opus passes to one. Three threads converged into this PR:
+
+1. **The gap #549's own Opus reviewer flagged.** Retiring the inner loop's
+   guaranteed-Opus round removed the ONLY adversarial look a docs-only PR ever got
+   -- the Step 5.6 gate skipped them entirely. Maintainer's call: *"I'm fine with
+   docs not getting a full opus review. Let's give docs only changes a single
+   adversarial haiku review, though."* (bd `saxh`)
+2. **The routing layer the whole exercise was aimed at.** The maintainer's goal is
+   to get from 4-6 concurrent sessions down to *2 epics + 1 bug session + 1
+   perpetual cheap nit-cleanup session*. That last one only works if beads say
+   which model should pick them up: *"if the reviewers can classify which tier
+   model should pick up a bead... that will really help get the right model to the
+   right jobs."* (bd `1bsx`)
+3. **A stale reference** #549's Opus pass found and filed rather than fixing
+   inline -- itself a demonstration of that PR's new non-behavioral carve-out.
+   (bd `l6df`)
+
+## What shipped
+
+### bd polyglot-pdf-saxh -- the review gate becomes a THREE-way fork
+
+Was a skip/run binary. Now:
+
+- **source diff** -> ONE looped Opus cross-surface review (unchanged)
+- **docs-only diff** -> ONE looped adversarial **Haiku** review (new)
+- **trivial diff** -> no adversarial pass; fresh-eyes `NO-GAPS` is the record
+
+New [`.claude/agents/docs-reviewer.md`](../../../.claude/agents/docs-reviewer.md)
+(`model: haiku`). **Purpose-written rather than reusing `cross-surface-reviewer` at
+a cheaper model** -- that agent's entire framing is "follow contracts into untouched
+consumers," which is meaningless on a diff that changes no runtime contract. The
+docs reviewer instead hunts the failure classes prose actually has: claims that
+contradict the code they document (it *opens the cited source to check* -- the
+highest-value thing it does), stale or broken cross-references, doc-vs-doc conflict,
+a `*Last updated:*` bump with no real prose review, and history smuggled into a
+current-state doc. Explicitly NOT a contract trace, NOT a rubric re-score, NOT a
+style critic (markdown is exempt from the ASCII rule).
+
+**Auto-merge was deliberately NOT widened.** A Haiku-cleared docs PR now has a real
+adversarial review and so arguably satisfies auto-merge condition (a) -- but that is
+a product/autonomy call, not a side effect of this bead. It still pings; the
+question is surfaced to the maintainer instead of assumed.
+
+### bd polyglot-pdf-1bsx -- tier + work-class routing
+
+Two CLOSED enums on every bead's metadata, documented in the new
+[`docs/standards/bead-tiers.md`](../../standards/bead-tiers.md):
+
+- `tier`: `haiku` | `sonnet` | `opus` | `fable`
+- `work_class`: `docs-nit` | `comment-align` | `cross-surface` | `local-bug` |
+  `needs-plan` | `mechanical`
+
+**`fable` is a DIFFERENT JOB, not a higher rung.** Three of the four are a
+capability ordering; `fable` is long-horizon planning that should never write code,
+while Opus is equally good at code and does cross-surface work. Without that stated
+plainly, reviewers file `fable` when they mean "hard," and a hard refactor lands in
+the planning queue and stalls. Disambiguator: *"what does done look like?"* -- a
+merged diff is haiku/sonnet/opus by blast radius; an approved plan or research
+conclusion is `fable`.
+
+**The escalation/de-escalation asymmetry is deliberate.** Above tier -> release
+**with notes** and bump the tier (a bare unclaim just gets re-claimed by the next
+same-tier runner, which is the ping-pong the notes prevent). Below tier -> **just do
+it**, or delegate to a cheap subagent; do NOT release. By the time you know a bead
+is easy you have already loaded its context, so releasing throws that away and makes
+a cheaper session re-derive it. Administration that outweighs the saving is not a
+saving. No calibration notes either -- explicitly declined by the maintainer as
+overhead with no consumer.
+
+**Epic-scale reclassification must be LOUD:** re-tier to `fable`, don't halt if
+non-blocking, but return it to the orchestrator, which must surface it emphatically
+in its end-of-session summary as its own flagged item.
+
+### bd polyglot-pdf-l6df
+
+`closeout-runner.md:12` called itself the counterpart to "the `fresh-eyes-reviewer`
+agent" when there are now two judging reviewers. Prose only -- the runner never
+spawns a reviewer (its STOP list forbids it).
+
+## Lessons
+
+- **A closed enum needs a verified consumer before it is worth writing down.** The
+  enum's own justification ("a bad value breaks the batching query") presupposes a
+  query exists. It was worth checking rather than assuming: `bd list` turns out to
+  support `--metadata-field key=value` (repeatable) and `--has-metadata-key`
+  natively, so no `jq` pipeline is needed. That command is now named in the standards
+  doc -- an enum whose only consumer is hypothetical is exactly the "overhead with no
+  consumer" this same PR declined for calibration notes. Verified end-to-end on a
+  throwaway bead, **both directions**: `surfaces` survived alongside the new keys
+  (the `--metadata`-REPLACES trap), the query returned the bead, and a wrong-tier
+  query returned nothing.
+- **A pinning test that matches "the word" instead of "the claim" is not a pin --
+  and this trap recurs at every layer.** Writing the three-way-fork test, two
+  assertions matched OTHER legitimate sites (the PR-body review-record line and the
+  Step 6.2 ping list) rather than the operative gate, so a mutation widening the skip
+  arm back to docs-only passed when it should have failed. This is the **third**
+  occurrence in two PRs -- the same failure mode bit the `behavioral` pin in #549,
+  then bit its own fix one layer down. The reliable form is: pin the operative
+  sentence's own wording, and mutation-verify by editing THAT sentence alone, never
+  by a global find-replace (a global replace proves nothing, because it changes every
+  site the loose assertion might be matching).
+- **When a change closes a gap another change opened, say so in both places.** The
+  three-way fork only makes sense against the history of the guaranteed-Opus round
+  being retired. Recording *why* the gate is three-way (in `review-flow.md`'s gate
+  bullet and its dateline) keeps a future reader from "simplifying" it back to a
+  binary and silently reopening the gap.
+
+## Doc freshness
+
+- **New:** [`docs/standards/bead-tiers.md`](../../standards/bead-tiers.md) (with a
+  `**Tracks:**` line, so the freshness gate polices it going forward). Indexed in
+  [`docs/standards/README.md`](../../standards/README.md) and
+  [`docs/INDEX.md`](../../INDEX.md).
+- **Updated:** [`docs/doctrine/review-flow.md`](../../doctrine/review-flow.md)
+  (dateline, flow diagram, review-worthiness-gate bullet, merge-decision paragraph,
+  reviewer inventory), [`docs/doctrine/workflow.md`](../../doctrine/workflow.md) (the
+  tier/work_class declaration bullet), `CLAUDE.md` (scar-tissue #2 + the auto-merge
+  condition).
+- **Reviewed and deliberately LEFT:** the 24 pre-existing STALE tier-2 docs, filed as
+  bd `polyglot-pdf-2j8w`. This branch touches no `backend/`/`frontend/`/`.github/`
+  file, so none of them is this PR's doing -- the same pre-existing rule #549
+  introduced, applied again.
+
+## Files touched
+
+- `.claude/agents/docs-reviewer.md` (**new**, `model: haiku`)
+- `.claude/agents/closeout-runner.md`, `.claude/agents/fresh-eyes-reviewer.md`,
+  `.claude/agents/cross-surface-reviewer.md`
+- `.claude/skills/closeout/SKILL.md`, `.claude/skills/next-bead/SKILL.md`
+- `CLAUDE.md`
+- `docs/standards/bead-tiers.md` (**new**), `docs/standards/README.md`, `docs/INDEX.md`
+- `docs/doctrine/review-flow.md`, `docs/doctrine/workflow.md`
+- `tests/test_closeout_skill.py`
