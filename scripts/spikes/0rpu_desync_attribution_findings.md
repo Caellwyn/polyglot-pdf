@@ -316,3 +316,62 @@ WHAT IS STILL SOLID: (a) the desync is real and specific to spelled name
 read-backs; (b) it produces complete, plausible, WRONG utterances -- the
 dangerous failure mode on a legal form; (c) tool calls and the text track stay
 correct throughout.
+
+## ROUND 4 (2026-08-06): CORRECTED MEASUREMENT -- all six runs re-scored with a sound instrument
+
+Every earlier rate in this document was produced by Gemini-as-STT and is
+superseded. v2 (`stt_readback_diff2.py`) uses Cloud Speech-to-Text: independent
+per-generation requests, no prompt (nothing to prime), per-row duration +
+confidence + pairing basis, and explicit UNSCOREABLE verdicts kept out of the
+denominator.
+
+Three instrument defects were found and fixed along the way, each of which had
+been silently manufacturing or hiding findings:
+1. sub-second clips (0.11 s) that v1 "transcribed" into whole sentences ->
+   now TOO_SHORT, excluded;
+2. transcript windows bleeding the NEXT generation's text into this row ->
+   bounded by the next dump's first_seq, plus a containment veto;
+3. **the decisive one**: Cloud STT COLLAPSES a spelled run into a pseudo-word
+   ("J-O-H-N" -> "J0hn", zero for O). The letter comparator silently discarded
+   exactly the token carrying the evidence. Now recovered and compared.
+
+### Corrected results (desync / scoreable generations)
+
+| Run | pacing | desync | rate |
+|---|---|---|---|
+| runA (compression OFF) | rude | 0 / 14 | 0% |
+| runB (compression ON) | rude | 0 / 16 | 0% |
+| runB2 (replication) | rude | 0 / 17 | 0% |
+| runPOLITE (drain-paced) | polite | 4 / 29 | 13.8% |
+| runRUDE (barge-in) | rude | 4 / 26 | 15.4% |
+| control post-#550 | rude | 5 / 31 | 16.1% |
+
+### What the corrected data says
+
+**The spelling corruption is REAL and now measured directly.** Ground truth:
+in runRUDE the model's own TEXT track spells three DIFFERENT names
+(J-O-H-N / J-O-S-H-U-A / J-O-H-N-S-O-N) while the AUDIO renders the SAME
+letter token all three times. A recognizer mangling spelled letters would
+mangle each differently; producing one identical token across three different
+inputs is the model, not the recognizer. The maintainer's original report
+("J-O-H-N, Joshua") is confirmed at the measurement level.
+
+**Compression is exonerated, again and more cleanly:** runA (OFF), runB (ON)
+and runB2 (ON) all score 0%. The three runs that DO show divergence
+(POLITE 13.8%, RUDE 15.4%, control 16.1%) are the three whose scripts reached
+the 1b name block, i.e. the runs with the most spelled read-backs.
+
+**Interruption is NOT the discriminator it appeared to be.** POLITE (drain-paced,
+designed to avoid interrupting) scores 13.8% -- statistically indistinguishable
+from RUDE's 15.4%. The earlier "44% interrupted vs 1% clean" split was an
+artifact of the broken instrument. What separates a 0% run from a ~15% run is
+NOT pacing but WHETHER THE RUN SPELLED NAMES AT ALL.
+
+=> Working conclusion, on corrected data: **spelled name read-back is the
+driver; interruption is at most a secondary factor.** This REVERSES the
+round-2 conclusion and re-orders the fix ladder: the spell-back lever
+(maintainer's lever 1) now looks primary, and the VAD lever (lever 2)
+looks unlikely to help on its own.
+
+All prior rate statistics in this document are WITHDRAWN in favour of the table
+above. Reports: `stt_final.json` beside each run's audio dir.

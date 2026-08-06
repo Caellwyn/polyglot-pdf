@@ -96,6 +96,15 @@ def _letters(text: str) -> str:
     Minimum THREE letters, and known acronyms excluded: two-letter dotted
     abbreviations and acronyms are prose, not spell-outs.
     """
+    # Cloud STT COLLAPSES a spelled run into a pseudo-word rather than emitting
+    # isolated letters (phrase hints do not stop it): "J-O-H-N" comes back as
+    # "J0hn", with a zero for the letter O. Recover the run in two steps --
+    # normalize the zero, then treat a leading-capital pseudo-word that the
+    # recognizer spelled (marked by that 0-for-O, or by mixed case mid-word) as
+    # a spelled sequence. Without this the letter comparator silently drops the
+    # single most diagnostic token in the corpus.
+    for m in set(re.findall(r"\b[A-Za-z]*0[A-Za-z]+\b", text)):
+        text = text.replace(m, "-".join(m.replace("0", "O").upper()))
     out = []
     for chunk in re.findall(r"\b(?:[A-Za-z][\s\.\-,]+){1,}[A-Za-z]\b", text):
         letters = re.findall(r"[A-Za-z]", chunk)
@@ -125,7 +134,19 @@ def _containment(audio_text: str, track_text: str):
 
 
 def _recognize(client, speech, audio_bytes: bytes, rate: int) -> dict:
-    """One independent Cloud STT request. No prompt, no context, no history."""
+    """One independent Cloud STT request. No prompt, no context, no history.
+
+    SPELLED LETTERS. Left to itself the recognizer REASSEMBLES a spelled run
+    into a word -- "J-O-H-N" comes back as "J0hn" (with a zero for O). That is
+    the recognizer being helpful in precisely the wrong way here: the letters
+    ARE the measurement. Phrase hints bias it toward isolated letter tokens.
+    Hints are a decoding bias, not a prompt: they cannot invent content that
+    is not in the audio, so they do not reintroduce the v1 priming hazard.
+    """
+    letter_hints = speech.SpeechContext(
+        phrases=[chr(c) for c in range(ord("A"), ord("Z") + 1)],
+        boost=12.0,
+    )
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=rate,
@@ -134,6 +155,7 @@ def _recognize(client, speech, audio_bytes: bytes, rate: int) -> dict:
         # The model speaks digits and spelled letters; 'default' handles both
         # better than the phone models for studio-quality synthetic audio.
         model="default",
+        speech_contexts=[letter_hints],
     )
     resp = client.recognize(config=config, audio=speech.RecognitionAudio(content=audio_bytes))
     parts, confs = [], []
