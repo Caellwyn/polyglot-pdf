@@ -110,7 +110,16 @@ to the maintainer. **Stop here for approval** -- this is the one planning gate.
 2. File the beads with **pull/push-bracketed `bd create`** -- `bd_safe.py` has no
    `create` subcommand, so bracket the raw `bd create` yourself:
    `bd dolt pull && bd create ... && bd dolt push`. Set each child's
-   `--metadata '{"surfaces":[...]}'` and write its `## Exit criteria` into the
+   `--metadata '{"surfaces":[...],"tier":"<enum>","work_class":"<enum>"}'` -- all
+   three keys in ONE object, since `--metadata` REPLACES it wholesale and omitting
+   `surfaces` wipes the collision guard. `tier` routes the bead to the model that
+   should pick it up (`haiku`|`sonnet`|`opus`|`fable`) and `work_class` says what
+   kind of work it is (`docs-nit`|`comment-align`|`cross-surface`|`local-bug`|
+   `needs-plan`|`mechanical`); both are CLOSED enums, and a value outside them makes
+   the bead invisible to the batching query -- full table in
+   [`bead-tiers.md`](../../../docs/standards/bead-tiers.md). `/plan-epic` is the
+   repo's highest-volume bead creator, so an untagged child here is the largest
+   possible hole in that queue. Also write its `## Exit criteria` into the
    body at creation time (the creation-time norm -- see
    [`workflow.md`](../../../docs/doctrine/workflow.md#bead-creation-requirements)).
    Wire the parent-child deps with `bd_safe.py dep-add --epic/--child`.

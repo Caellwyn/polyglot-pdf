@@ -17,22 +17,29 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
   `gh pr create` by hand). Reviewed in two serial layers, both Claude, BOTH PRE-PR
   (on the local branch), with DIFFERENT jobs — a fresh-eyes assess loop
   (Sonnet/Haiku: score the exit criteria, get the local diff right, enumerate every
-  changed contract), then ONE looped Opus-5 outer cross-surface review (follow those
-  contracts out into untouched consumers) when the change is review-worthy — each
-  looped to clean. Only after both clear does the PR open (and close the bead(s),
+  changed contract), then ONE looped outer adversarial pass — a **three-way fork by
+  diff type**: an Opus-5 `cross-surface-reviewer` for a SOURCE diff (follow those
+  contracts out into untouched consumers), a Haiku `docs-reviewer` for a DOCS-ONLY
+  diff (adversarial prose review — nothing to trace), and none at all for a
+  genuinely trivial one — each looped to clean. Only after both clear does the PR open (and close the bead(s),
   one run). There is NO external reviewer (the maintainer's Codex subscription ended
   2026-07-08). On CLEAN,
   closeout **auto-merges a routine low-risk PR** (`gh pr merge`) or **pings the
   maintainer** for a consequence-bearing one (autonomy increase 2026-07-04;
-  CLAUDE.md "Auto-merge vs. maintainer merge").
+  CLAUDE.md "Auto-merge vs. maintainer merge") — but auto-merge requires that the
+  outer pass was the **OPUS cross-surface** one specifically. A **Haiku-cleared
+  docs-only PR pings**, as does a trivial PR that got no adversarial review;
+  whether a Haiku clear should ever qualify is an open maintainer question, so do
+  NOT widen it autonomously.
 - **Demo deploy** — there is NO `main`/prod tier; the demo remote is the live
   target. Deploys are manual (`deploy-demo.sh`, not branch-triggered). The agent
   MAY run the demo deploy, but only after a local test of the change, with
   explicit per-instance maintainer permission, and a post-deploy test-drive (the
   three-part gate in [`docs/doctrine/promotion-tiers.md`](../docs/doctrine/promotion-tiers.md)).
   Syncing the local root to `dev` is autonomous; merging a PR into `dev` is
-  autonomous for a routine low-risk PR under the auto-merge rule, the maintainer's
-  for a consequence-bearing one.
+  autonomous for a routine low-risk PR under the auto-merge rule (which requires
+  the OPUS cross-surface clear specifically), the maintainer's for a
+  consequence-bearing one -- or for one cleared only by the Haiku docs review.
 
 **Before saying "done":**
 

@@ -87,8 +87,10 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    journal entry does not re-run the review. The subagents' STATUS lines are read
    directly -- there is **no bot watcher and no `@codex review` /
    `pr_review_watcher.py` / `requested_reviewers` trigger** (all dead path).
-   Docs/beads/journal-only changes
-   skip the outer review (fresh-eyes `NO-GAPS` is their record). Once both clear,
+   **Docs-only changes get ONE adversarial HAIKU review** instead (the
+   `docs-reviewer` agent -- prose review, not a contract trace); only a genuinely
+   TRIVIAL diff skips adversarial review entirely (fresh-eyes `NO-GAPS` is its
+   record). Once both clear,
    **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (no two-call
    watcher pattern), then closeout auto-merges a routine low-risk PR or pings the
    maintainer for a consequence-bearing one (see "Auto-merge vs. maintainer merge").
@@ -198,9 +200,12 @@ when **ALL** of these hold:
      review returned `NO-GAPS` -- ONE looped clearing pass (see
      [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). (There is NO
      external reviewer; the maintainer's Codex subscription ended 2026-07-08.) A
-     separate, independent model instance, adversarially, found it clean. **A
-     review-SKIPPED PR does NOT satisfy this** -- no adversarial review ran, so it
-     pings (below).
+     separate, independent model instance, adversarially, found it clean. **This
+     condition means the OPUS cross-surface gate specifically** -- a docs-only PR
+     cleared by the Haiku `docs-reviewer`, or a trivial PR with no adversarial
+     review, does NOT satisfy it and pings (below). (Whether a Haiku-cleared docs
+     PR should count is an open question for the maintainer, deliberately left
+     undecided by bd polyglot-pdf-saxh; do not widen it autonomously.)
    - **CI / required status checks are green.**
    - **The PR is NOT consequence-bearing** (see the list below).
 
@@ -219,8 +224,9 @@ when **ALL** of these hold:
    that it is clean and ready for their merge is the handoff that ends closeout (not
    "asking to merge"). When unsure which side of the line a PR is on, treat it as
    consequence-bearing and ping. **Never** merge a PR whose review wasn't CLEAN,
-   whose checks are red, or that skipped review under the docs-only gate -- those
-   ping too. (Deliberately conservative while this ramps; it will loosen if it
+   whose checks are red, or whose adversarial review was not the Opus cross-surface
+   gate specifically (a Haiku-cleared docs-only PR, or a trivial PR with no
+   adversarial review at all) -- those ping too. (Deliberately conservative while this ramps; it will loosen if it
    over-pings.)
 2. **Does it make a longer-term commitment the bead doesn't explicitly call for,
    or is it a product-owner call?** -> Escalate (ask). This is the case you ask:
@@ -460,20 +466,22 @@ Do NOT hand-roll the review cycle. In particular:
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
   review setup and tempts hand-polling).
-- **The Opus-5 outer review handles review-worthy changes PRE-PR -- there is NO
+- **The outer review handles review-worthy changes PRE-PR -- there is NO
   external reviewer.** Review is entirely Claude-based (the maintainer's OpenAI Codex
   subscription ended 2026-07-08; Codex succeeded Copilot at the earlier
   credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). The orchestrator
   judges whether the diff can regress runtime behavior; if so, closeout runs
-  the outer review ON THE LOCAL BRANCH, before the PR opens: it spawns the
-  `cross-surface-reviewer` agent (`model: opus`) on the local diff
+  the outer review ON THE LOCAL BRANCH, before the PR opens. For a SOURCE diff it
+  spawns the `cross-surface-reviewer` agent (`model: opus`) on the local diff
   (`origin/dev...HEAD`) and loops it to `NO-GAPS`. **That single clearing pass is
   the gate**, and only a BEHAVIORAL fix voids it.
   There is **no `@codex review` trigger, no `pr_review_watcher.py`, and no
-  `requested_reviewers` reviewer API** -- all dead path. Docs-only / `.beads`-only /
-  journal-only / trivial changes get NO outer review.
+  `requested_reviewers` reviewer API** -- all dead path. **Docs-only / `.beads`-only /
+  journal-only changes get the cheap arm instead: ONE adversarial HAIKU review** (the
+  `docs-reviewer` agent, same loop, prose review rather than a contract trace). Only a
+  genuinely TRIVIAL change gets no adversarial review at all.
 - **The outer review's subagents are read directly, never watched by a script.**
-  Closeout reads each Opus reviewer's `NO-GAPS` / `GAPS-FOUND` STATUS line straight
+  Closeout reads the outer reviewer's `NO-GAPS` / `GAPS-FOUND` STATUS line straight
   from the subagent result -- there is no GitHub bot to poll, so the old
   `pr_review_watcher.py` background-watch loop does not run for the outer review.
   Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean -- surface it.
@@ -496,8 +504,10 @@ Do NOT hand-roll the review cycle. In particular:
   fixed.
 - **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
   the fresh-eyes assess loop first (scored against the bead's exit criteria,
-  re-spawned until no gap at the routed haiku/sonnet model), THEN the ONE Opus outer
-  cross-surface review (review-worthy changes only, looped until it clears),
+  re-spawned until no gap at the routed haiku/sonnet model), THEN ONE outer
+  adversarial pass looped until it clears -- the Opus `cross-surface-reviewer` for a
+  source diff, or the Haiku `docs-reviewer` for a docs-only one (only a trivial diff
+  gets neither),
   all on the local branch with fixes committed. Only after both clear does the PR
   open.
 - Once both reviews are `NO-GAPS`, **one `closeout_finish.py` run opens the PR AND
@@ -510,7 +520,7 @@ Do NOT hand-roll the review cycle. In particular:
   remain barred either way.
 
 The full checklist (beads housekeeping, doc-freshness, journal entry, tests, the
-pre-PR fresh-eyes assess loop + the PR + the Opus outer-review loop) lives in
+pre-PR fresh-eyes assess loop + the PR + the outer-review loop) lives in
 [`.claude/skills/closeout/SKILL.md`](.claude/skills/closeout/SKILL.md) -- that
 skill is the source of truth; this section just makes running it **non-optional,
 once per PR.**

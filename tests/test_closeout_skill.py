@@ -220,6 +220,32 @@ def test_merge_endpoint_is_auto_merge_or_ping(body):
     assert "gh pr ready" not in body
 
 
+def test_review_worthiness_gate_is_a_three_way_fork(body):
+    # bd polyglot-pdf-saxh (2026-08-05): the Step 5.6 gate is source -> Opus /
+    # docs-only -> Haiku / trivial -> none. Before saxh it was a skip/run binary
+    # and a docs-only PR got ZERO adversarial review, because retiring the
+    # guaranteed-Opus inner round (bd ofh6) removed its only look. Pin all three
+    # arms so a collapse back to the binary is caught.
+    lo = body.lower()
+    assert ".claude/agents/docs-reviewer.md" in body, \
+        "skill must name the Haiku docs reviewer agent path"
+    assert re.search(r"docs-only[^\n]*haiku|haiku[^\n]*docs", lo), \
+        "skill must route docs-only diffs to the Haiku review"
+    # The trivial arm must remain the ONLY thing that skips adversarial review.
+    # Pin the SKIP ARM's own sentence: "trivial" and "skip" both appear at other
+    # legitimate sites (the PR-body record line, the auto-merge ping list), so a
+    # loose co-occurrence search stays green even when the skip arm is widened
+    # back to docs-only -- which is exactly the regression that reopens the gap.
+    assert re.search(r"skip adversarial review\s+entirely\*{0,2}\s+only for a genuinely\s+\*{0,2}trivial", lo), \
+        ("the skip arm must be scoped to a genuinely TRIVIAL diff only "
+         "(widening it back to docs-only reopens the bd saxh gap)")
+    # Auto-merge must NOT have been widened as a side effect (saxh left that call
+    # to the maintainer). Pin the gate's OWN statement, not any mention of Haiku
+    # near the word "ping" -- Step 6.2's ping list also matches that shape.
+    assert re.search(r"docs pr that a haiku review cleared still \*{0,2}pings", lo), \
+        "a Haiku-cleared docs PR must still ping, not auto-merge (bd saxh left this to the maintainer)"
+
+
 def test_mentions_both_reviewers(skill_text):
     # The two pre-PR layers have DIFFERENT jobs and DIFFERENT agent files
     # (bd 0arm, 2026-08-05): the inner fresh-eyes assessor owns the local diff

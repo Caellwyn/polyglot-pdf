@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
+*Last updated: 2026-08-05 (bd polyglot-pdf-saxh: TDD-cadence rule -- when the same defect class survives your fix TWICE, change the MECHANISM not the instance; generate expectations from the real artifact; verify a mutation actually applied. Same day, docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -259,3 +259,107 @@ real unit and let IT drive the mock; a cheap guard against writing the fake vers
 is to mutate one production assertion (e.g. flip a close code) and confirm the test
 goes red. (`polyglot-pdf-uov.9` found this in `test_idle_timeout.py`; the honest
 idle-watchdog spec drives the real `_handle_fill_session` watchdog.)
+
+<a name="change-the-mechanism"></a>
+**When the same defect class survives your fix TWICE, change the MECHANISM, not
+the instance.** A third occurrence is not bad luck -- it is evidence the approach
+is wrong. `polyglot-pdf-saxh` burned six review rounds on one PR because rounds 4,
+5 and 6 each defeated a test written in the round before, and each of my fixes
+patched the case in hand: the pin's verb list was too narrow (added verbs), then
+its noun pattern allowed only one literal infix (widened the infix), then it
+required the denial *before* the noun **and** its allowlist matched by substring
+so a sentence could quote an allowed fragment verbatim while asserting the
+opposite. All three escapes shared one root -- the test was **matching** prose
+instead of **enumerating** it. Replacing the mechanism (enumerate every candidate
+sentence with no denial test at all, then require exact whole-sentence equality
+against an allowlist) held against every earlier escape at once.
+
+**Prefer a NATURAL scope over a tuned constant.** The same pin was then defeated
+twice more on *scope* rather than vocabulary: matching one sentence at a time lost
+to an `e.g.` mid-sentence split, and widening to a two-sentence sliding window lost
+to a three-sentence phrasing. Each fix was a bigger N, and each invited the next
+phrasing just outside it. What held was dropping N entirely and scoping to the
+**paragraph** -- the unit the prose itself uses for one claim. When you find
+yourself tuning a window, span, or threshold, ask what natural boundary the
+artifact already has.
+
+**Then STOP, and name what you are not covering.** A natural scope is better than
+a tuned one, not perfect: the very next round split a claim across a paragraph
+break and escaped that too. Every scope has an adjacent-scope escape, so a prose
+heuristic cannot be made evasion-proof and iterating toward one is the trap in a
+new costume. The discriminating question is **what failure are you actually
+defending against?** Here it is DRIFT -- a maintainer updating one statement of a
+rule and missing another -- and all three real regressions were single
+in-paragraph sentences in ordinary vocabulary, because whoever edits a rule is by
+definition describing it. The later escapes were *constructed by a reviewer trying
+to evade the check*, and none has occurred naturally. Cover the realistic class
+well, then pin the rest as accepted limits (below) instead of buying each one with
+another round.
+
+**Keep the escapes as a committed battery, not a claim.** Each phrasing that
+defeated a draft lives on as a parametrized case in
+[`tests/test_claude_md_review_flow_battery.py`](../../tests/test_claude_md_review_flow_battery.py),
+so the next mechanism change is re-verified against ALL of them rather than only
+the newest one -- and so "it holds against the old attacks" is something a reader
+can run, not something the author asserts. (An earlier draft of this very section
+cited a case count with no committed artifact behind it; a reviewer correctly
+called that unverifiable.) Note the battery injects mid-document, not at
+end-of-file: an EOF append can be caught coincidentally by merging into the
+unterminated tail fragment, which would falsely suggest the enumeration is sound.
+
+**When a prose pin resists, stop DETECTING and pin the CLAIM.** The
+detect-the-bad-sentence shape is what kept failing above; its positive inverse is
+usually available and far more robust. A second pin in the same bead needed it
+too: `.claude/prime-closeout-override.md` must not authorize auto-merging a
+Haiku-cleared docs PR, and two detection drafts failed in opposite directions --
+an exemption list that the offending text already satisfied ("pings the maintainer
+for a consequence-bearing one" while implying auto-merge for everything else),
+then a paragraph scope that let a neighbouring *correct* sentence mask the wrong
+one. What held was asserting what the file must SAY: that auto-merge requires the
+Opus clear, that a Haiku-cleared docs PR pings, and that the boundary must not be
+widened autonomously. Applying this rule to itself took three attempts rather
+than six -- that is what the lesson is worth.
+
+**A positive pin's own limit, stated rather than overclaimed.** It reliably
+catches REMOVAL and REWORDING of the claim, which is the drift case. It does NOT
+catch ADDITION: appending "the open question above is now settled, a Haiku clear
+does qualify" leaves all the asserted claims intact and passes. Nor does it catch
+a widening clause spliced *after* the matched span, or a negation that preserves
+the literal words ("It is no longer true that a Haiku-cleared docs-only PR
+pings"). All three were executed against the committed pin and passed. So a
+positive pin is stronger than a detector against paraphrase and weaker against
+contradiction -- pick it for drift, and if you also need contradiction-resistance,
+add a guard that no sentence *reverses* an asserted claim, or fall back to
+whole-artifact equality. Do not write that a positive pin "cannot be evaded"; an
+earlier draft of this very paragraph did, and a reviewer refuted it in one pass.
+
+**Pin the limits you accept, so they stay decisions.** This pin has two: a denial
+using no review vocabulary at all ("docs-only edits never get a look from anyone"),
+and one split across a paragraph break. Chasing either -- more synonyms, or N
+paragraphs -- would restart the trap, and an over-broad matcher makes the pin noisy
+enough to get deleted, which is a worse outcome than a named gap. Each accepted
+limit is therefore itself a test (`test_known_limit_still_holds`) that FAILS if the
+limit ever closes, with a docstring saying what to check before celebrating. **A
+known limit with a test is a reviewed decision; the same limit in a comment is a
+hole the next round rediscovers -- and the same limit unstated is one a reviewer
+will keep finding, correctly, forever.**
+
+Tells you are in this trap: your fix is "add another alternation / synonym /
+exemption"; the new repro differs from the last only in wording; you can list the
+cases the test catches but cannot state a **property** it holds. Two corollaries,
+both of which also bit in that bead:
+
+- **Generate expectations from the real artifact, never hand-type them.** Two of
+  five hand-typed allowlist entries described sentences that did not exist in the
+  file.
+- **Verify the mutation actually APPLIED before trusting a green result.** Two
+  mutation checks silently no-op'd (a multi-line string did not match the wrapped
+  source) and "passed" while testing nothing -- assert the text changed first. A
+  mutation you did not confirm landed is worth less than no mutation at all,
+  because it manufactures false confidence in the pin.
+
+Related: **regexes do not parse English.** A prose pin that must judge meaning
+will be wrong in one direction or the other -- a false negative is silent, a false
+positive gets the test deleted. Prefer enumerate-and-allowlist, and accept that it
+fails loudly whenever the prose changes; that IS the design, and the failure
+message should say so.

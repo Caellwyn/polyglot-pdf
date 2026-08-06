@@ -21,7 +21,7 @@ ground truth -- fix the doc first as a separate commit.
 | [`schema_format.md`](schema_format.md) | The `FormSchema` JSON spec (Form > Parts > Sections > Fields). Owned by [`standards/terminology.md`](standards/terminology.md). |
 | [`doctrine/planning.md`](doctrine/planning.md) | SPEAR (Scope/Plan/Execute/Assess/Resolve) per-epic: Why/How/What ownership, exit rubrics, bead taxonomy, model tiering, parallel execution. |
 | [`doctrine/workflow.md`](doctrine/workflow.md) | Beads cadence, session start/end, the agent-swarm tooling, bead-creation exit-criteria convention. |
-| [`doctrine/review-flow.md`](doctrine/review-flow.md) | The two-layer Claude-based review: pre-PR adversarial fresh-eyes assess loop + Opus-5 outer review (no external reviewer). |
+| [`doctrine/review-flow.md`](doctrine/review-flow.md) | The two-layer Claude-based review: pre-PR adversarial fresh-eyes assess loop, then ONE outer adversarial pass -- Opus cross-surface for source, Haiku prose review for docs-only (no external reviewer). |
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | worktree -> local -> dev -> demo promotion (no prod); the gated demo-deploy authority. |
 | [`doctrine/drain-handover.md`](doctrine/drain-handover.md) | R2 clean-drain / handover: PreCompact auto-compaction raises a drain flag; the orchestrator finishes or splits its in-flight bead (tracker is the handoff) and stops claiming new work. |
 | [`beads-setup.md`](beads-setup.md) | One-time beads install + sync wiring (prerequisite for the swarm tooling). |
@@ -56,6 +56,7 @@ ground truth -- fix the doc first as a separate commit.
 | Logging + cost | [`standards/logging-and-cost.md`](standards/logging-and-cost.md) |
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | [`standards/testing.md`](standards/testing.md) |
+| Bead tiers (which model picks up a bead) | [`standards/bead-tiers.md`](standards/bead-tiers.md) |
 | Risk rating (high/med/low; feeds fresh-eyes self-escalation) | [`standards/risk-rating.md`](standards/risk-rating.md) |
 | SI reduction (system-instruction shape + reduced-SI floor) | [`standards/si-reduction.md`](standards/si-reduction.md) |
 | WebSocket protocol (handshake + message-type union) | [`standards/ws-protocol.md`](standards/ws-protocol.md) |
