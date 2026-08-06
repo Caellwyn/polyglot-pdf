@@ -104,7 +104,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 `backend/services/form_filling_service.py`,
 `backend/services/request_coordinator.py`, and
 `backend/routes/websocket_routes.py`. The frontend switches on `message.type` in
-`webFormConnection.ts` (lines 612-782).
+`webFormConnection.ts` (lines 635-826).
 
 | Type | Source | Purpose |
 |------|--------|---------|

@@ -162,7 +162,12 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
   (`frontend/src/schema-forms/SchemaFormDemo.tsx:173`). *Breaks if drifted:* the
   TS side reads `undefined` where the backend added/renamed a key -- no error,
   just missing UI behavior.
-- **Load-bearing keys** (producer = `form_models.py` field; consumers listed):
+- **Load-bearing keys** (producer = `form_models.py` field; consumers listed).
+  Bare filenames below are the `backend/` paths named earlier in this contract --
+  note two of them have same-named siblings elsewhere in the repo:
+  `form_models.py` is `backend/models/` (NOT
+  `scripts/bakeoff/prior_extractor/`), and `secretary_context.py` is
+  `backend/services/` (NOT `backend/scripts/`):
   - `id`: keyed into the secretary index
     (`backend/services/secretary_context.py:69`) and the frontend
     manifest-generation lookup
