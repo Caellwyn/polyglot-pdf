@@ -485,7 +485,7 @@ make a fix, ask: **does it change what the program does?**
 > upstream.
 
 - **`NO-GAPS`** -> the outer review is CLEAN and **the gate is met** (the **adversarial clear**). **Go to Step 6** to open the PR + close the bead(s) + make the merge decision. If you make any further fix before Step 6, apply the behavioral test above: a behavioral fix voids this clear and re-spawns; a non-behavioral one does not.
-- **`GAPS-FOUND (n)`** -> triage each finding by the rule below (pre-existing -> bead; blocker -> fix; true nit -> bead), commit, then **re-spawn the Opus review** on the updated local diff. This is the loop. Re-run the test suite (Step 4) after any code fix. (No push -- pre-PR.)
+- **`GAPS-FOUND (n)`** -> triage each finding by the rule below (pre-existing -> bead; blocker -> fix; true nit -> bead), commit, then **re-spawn the same outer reviewer** on the updated local diff. This is the loop. Re-run the test suite (Step 4) after any code fix. (No push -- pre-PR.)
 - **`BLOCKED` / a subagent TIMEOUT or ERROR (no verdict)** -> surface to the maintainer. A failure of the last-resort reviewer is a genuine stop (no further fallback, EXCEPT the effort-400 Workflow retry above -- take that first when the failure is an effort-unsupported 400, and surface only if it too fails), so this is the one branch that escalates. **Never** interpret a missing verdict as CLEAN.
 
 ### The nit-vs-blocker decision rule (bd polyglot-pdf-hrn.5)

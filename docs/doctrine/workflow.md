@@ -86,7 +86,8 @@ mechanical toil:
   carries; excludes your own current worktree branch), and direction-safe edges.
 - **`pr_review_watcher.py <pr#>` (RETIRED)** -- watched a PR for an external bot
   review's completion (Copilot, then Codex). It is now dead path: review is
-  entirely Claude-based (an Opus-5 outer review run as orchestrator-driven
+  entirely Claude-based (ONE outer adversarial pass -- Opus cross-surface for a
+  source diff, Haiku prose review for a docs-only one -- run as orchestrator-driven
   subagents, read directly -- see [`review-flow.md`](review-flow.md)), so the
   closeout flow no longer launches this watcher. Retained only as inert history.
 - **`closeout_housekeeping.py`** -- pull + `bd orphans` + `bd stale` + push;

@@ -281,7 +281,7 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   step-2 escalation triggers; when unsure, ping. Full rule: CLAUDE.md "Auto-merge
   vs. maintainer merge". Force-push / `bd dolt push --force` stay barred.
 
-## The two reviewers
+## The three reviewers
 
 **Inner -- `.claude/agents/fresh-eyes-reviewer.md`** (spawn by type; Sonnet, or
 diff-size-routed Haiku). It MUST read the real `git diff origin/dev...HEAD`, never a

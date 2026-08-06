@@ -516,7 +516,7 @@ Do NOT hand-roll the review cycle. In particular:
   remain barred either way.
 
 The full checklist (beads housekeeping, doc-freshness, journal entry, tests, the
-pre-PR fresh-eyes assess loop + the PR + the Opus outer-review loop) lives in
+pre-PR fresh-eyes assess loop + the PR + the outer-review loop) lives in
 [`.claude/skills/closeout/SKILL.md`](.claude/skills/closeout/SKILL.md) -- that
 skill is the source of truth; this section just makes running it **non-optional,
 once per PR.**
