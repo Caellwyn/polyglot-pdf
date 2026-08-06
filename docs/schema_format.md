@@ -164,7 +164,9 @@ The top-level container for the entire form definition.
 **Common Optional Fields**:
 - `validation`: Validation rules object
 - `help`: Help text object (inline, tooltip, instructions, warning, legal_reference)
-- `show_if` / `hide_if`: Conditional display logic
+- `show_if`: Conditional display logic (there is NO `hide_if` -- invert the
+  condition instead; an unknown key is silently dropped by the model's
+  `extra="ignore"`)
 - `placeholder`: Placeholder text
 - `description`: Field description
 - `pdf_field_name`: Original PDF fillable field name
@@ -439,7 +441,12 @@ The top-level container for the entire form definition.
 
 **Usage**:
 - `show_if`: Show field if condition is true
-- `hide_if`: Hide field if condition is true
+- `require_if`: Make the field required if condition is true
+
+There is **no `hide_if`** on the model -- to hide, invert the `show_if`
+condition. A schema carrying `hide_if` is accepted and the key is SILENTLY
+dropped (`FormSchema` uses `extra="ignore"`), leaving the field
+unconditionally visible.
 
 **Example (Show spouse details if married)**:
 ```json
@@ -831,7 +838,7 @@ FIELD's `pdf_field_name`) and differ only by this state; for per-widget
 `checkbox_group` options, it is the widget's own on-value (paired with the
 option's own `pdf_field_name`).
 
-**`require_if`** (FormField): a sibling of `show_if`/`hide_if` -- marks a
+**`require_if`** (FormField): a sibling of `show_if` -- marks a
 field conditionally REQUIRED (rather than conditionally visible) based on
 another field's value. Same condition shape as `show_if`.
 
@@ -858,7 +865,7 @@ holds (if present), AND none of `none_of` hold. Buckets are flat -- a nested
 group is a validation error; at least one non-empty bucket is required. This
 sits alongside the legacy single-condition shape (a plain
 `{"field", "operator", "value"}` object) as an alternative for `show_if` /
-`hide_if` / `require_if`, not a replacement for it.
+`require_if`, not a replacement for it.
 
 ---
 

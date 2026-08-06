@@ -424,7 +424,7 @@ confirmed:
 
 **This subsection describes the section-reset fallback path, not the production
 default.** Under `CONTINUOUS_SESSION=true` (the production default -- see
-"Continuous-DTI mode is the production default" below), the whole form is one
+"Continuous-DTI mode is the production default" above), the whole form is one
 Live session and there is no section boundary to race; the ordering problem below
 does not arise in production. It remains relevant for the deprecated
 section-reset fallback, kept for when `CONTINUOUS_SESSION=false`.
