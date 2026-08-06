@@ -466,14 +466,23 @@ _READINESS_KEY = "readiness"
 
 
 def _require_int(value):
-    """The value if it is a real int, else raise so the caller yields None.
+    """The value if it is INTEGRAL, else raise so the caller yields None.
 
-    Deliberately rejects bool (True is an int in Python) and str/float, which
-    `int()` would happily coerce -- the client's parser accepts neither, and a
-    stamp that parses differently per mode is the two-readings bug this bead
-    exists to end.
+    Rejects bool (True is an int in Python) and str, which `int()` would
+    happily coerce and the client's parser rejects. Accepts an integral FLOAT
+    (75.0) because JSON has one number type: `json.loads('{"p": 75.0}')` gives
+    a Python float while `JSON.parse` gives 75, so rejecting it here would make
+    the same file parse in local mode and not in hosted -- and 75.0 is exactly
+    what any jq / Python round-trip of the stamp produces (Opus outer review).
+    A non-integral float (75.9) is still rejected, matching Number.isInteger.
     """
-    if isinstance(value, bool) or not isinstance(value, int):
+    if isinstance(value, bool):
+        raise TypeError("expected int")
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise TypeError("expected integral value")
+        return int(value)
+    if not isinstance(value, int):
         raise TypeError("expected int")
     return value
 
@@ -502,7 +511,7 @@ def _readiness_out(meta: Optional[dict]):
     if not isinstance(raw, dict):
         return None
     try:
-        return ReadinessStamp(
+        stamp = ReadinessStamp(
             # Typed, not int()-coerced: int("75") is 75 and int(75.9) is 75,
             # where the client's parser (readinessStamp.readStampFromMetadata,
             # which requires Number.isInteger) rejects both and shows the
@@ -520,14 +529,23 @@ def _readiness_out(meta: Optional[dict]):
             # loose read here means one metadata.json yields two answers
             # depending on which mode reads it (Opus fresh-eyes round 5: this
             # sibling boolean was missed one line above the round-4 fix).
-            ready=raw["ready"] is True,
+            # `.get`, not `[...]`: an ABSENT flag must read as False, exactly
+            # as the client's `r.ready === true` does. Requiring the key made
+            # Python drop the whole stamp (the "not measured yet" hint) where
+            # the client kept it and rendered a percentage -- the strictness
+            # was mirrored but the required-vs-optional shape was not, leaving
+            # the fix one step short (Opus outer review).
+            ready=raw.get("ready") is True,
             # `is True`, NOT bool(): bool("no") is True, so a hand-edited or
             # older-shaped stamp carrying a STRING would promote itself from
             # "not fully checked" to a confident percentage on every card --
             # the exact confident-then-409 lie this flag exists to prevent.
             # The client's parser already required `=== true`; this is the
             # wire converter catching up (Opus fresh-eyes round 4).
-            verified=raw["verified"] is True,
+            # `.get` for the same reason as `ready` above -- and the safe
+            # direction besides: an absent flag means "no claim that the checks
+            # ran", which is exactly UNVERIFIED.
+            verified=raw.get("verified") is True,
             # Likewise typed, not str()-coerced: str(None) is the string
             # "None", which would later read as a hash that merely fails to
             # match -- i.e. STALE ("this form changed") rather than absent.
@@ -544,6 +562,16 @@ def _readiness_out(meta: Optional[dict]):
         )
     except (KeyError, TypeError, ValueError):
         return None
+    # RANGE, not just type: a hand-edited `percent: 999` is exactly the
+    # "hand-edited, truncated, or older-shaped stamp" this parser promises to
+    # reject, and the card renders the percentage as a bar width -- a 999% bar
+    # (Opus outer review). Negative counts are the same shape. Mirrored in the
+    # client's readStampFromMetadata so the two still agree.
+    if not 0 <= stamp.percent <= 100:
+        return None
+    if min(stamp.reviewed, stamp.toReview, stamp.total, stamp.errors) < 0:
+        return None
+    return stamp
 
 
 def _schema_hash(schema: dict) -> str:

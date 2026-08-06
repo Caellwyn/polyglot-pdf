@@ -83,6 +83,12 @@ export function readStampFromMetadata(
       || errors === null || percent === null || sha === null) {
     return null;
   }
+  // RANGE, not just type -- mirrored in the backend's _readiness_out. A
+  // hand-edited `percent: 999` is exactly the malformed shape this parser
+  // promises to reject, and the card renders the percentage as a BAR WIDTH,
+  // so it would paint a 999%-wide bar (Opus outer review).
+  if (percent < 0 || percent > 100) return null;
+  if (Math.min(reviewed, toReview, total, errors) < 0) return null;
   return {
     reviewed, toReview, total, errors, percent,
     ready: r.ready === true,

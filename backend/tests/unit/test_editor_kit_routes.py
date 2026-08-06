@@ -713,6 +713,69 @@ def test_listing_keeps_a_stamp_whose_timestamp_is_junk(client):
     assert kit["readiness"]["stampedAt"] is None
 
 
+@pytest.mark.parametrize("omitted", ["ready", "verified"])
+def test_listing_treats_an_omitted_flag_as_false_not_as_a_broken_stamp(client, omitted):
+    """An ABSENT boolean must read False, exactly as the client's `=== true`.
+
+    Requiring the key made Python drop the WHOLE stamp (the "not measured yet"
+    hint) where the client kept it and rendered a percentage -- the strictness
+    was mirrored in round 4/5 but the required-vs-optional shape was not, so
+    the fix was one step short (Opus outer review).
+    """
+    stamp = {
+        "reviewed": 3, "toReview": 1, "total": 4, "errors": 0, "percent": 75,
+        "ready": False, "verified": True, "schema_sha1": "abc123",
+    }
+    del stamp[omitted]
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": stamp})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is not None, "an omitted flag must not drop the stamp"
+    assert kit["readiness"][omitted if omitted == "ready" else "verified"] is False
+
+
+def test_listing_accepts_an_INTEGRAL_float_like_json_round_trips_produce(client):
+    """`75.0` must parse -- JSON has one number type.
+
+    json.loads('{"p": 75.0}') gives a Python float while JSON.parse gives 75,
+    so rejecting it would make one file parse in local mode and not in hosted
+    -- and 75.0 is exactly what any jq / Python round-trip of the stamp
+    produces, which is the population a tolerant parser exists to serve
+    (Opus outer review). A NON-integral float stays rejected.
+    """
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": {
+        "reviewed": 3.0, "toReview": 1.0, "total": 4.0, "errors": 0.0,
+        "percent": 75.0, "ready": False, "verified": True,
+        "schema_sha1": "abc123",
+    }})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is not None
+    assert kit["readiness"]["percent"] == 75
+    assert kit["readiness"]["reviewed"] == 3
+
+
+@pytest.mark.parametrize("field,bad", [
+    ("percent", 999), ("percent", -1), ("reviewed", -5), ("total", -1),
+])
+def test_listing_rejects_an_out_of_range_stamp(client, field, bad):
+    """A 999% stamp is exactly the hand-edited shape this parser rejects -- and
+    the card renders the percentage as a BAR WIDTH, so it would paint a
+    999%-wide bar (Opus outer review). Mirrored on the client."""
+    stamp = {
+        "reviewed": 3, "toReview": 1, "total": 4, "errors": 0, "percent": 75,
+        "ready": False, "verified": True, "schema_sha1": "abc123",
+    }
+    stamp[field] = bad
+    c, _store, root = client
+    _make_kit(root, "k", schema={"fields": []}, extra_meta={"readiness": stamp})
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "k")
+    assert kit["readiness"] is None
+
+
 def test_listing_rejects_a_non_string_schema_hash(client):
     """A missing/None hash must degrade the stamp to ABSENT, not become the
     string "None" -- which would later read as STALE ("this form changed since

@@ -92,6 +92,25 @@ describe('readStampFromMetadata (local mode: the backend-written snake_case)', (
     expect(readStampFromMetadata({ ...raw, ...override })).toBeNull();
   });
 
+  it.each([
+    ['an out-of-range percent', { percent: 999 }],
+    ['a negative percent', { percent: -1 }],
+    ['a negative count', { reviewed: -5 }],
+  ])('rejects %s, matching the backend parser', (_label, override) => {
+    // The card renders the percentage as a BAR WIDTH, so a 999% stamp paints a
+    // 999%-wide bar. Both parsers range-check so they stay in step (Opus
+    // outer review).
+    expect(readStampFromMetadata({ ...raw, ...override })).toBeNull();
+  });
+
+  it('accepts an INTEGRAL float, which a JSON round-trip produces', () => {
+    // JSON has one number type: 75.0 arrives as a float on the Python side and
+    // as 75 here. Both parsers must accept it or one file reads two ways.
+    const parsed = readStampFromMetadata({ ...raw, percent: 75.0, reviewed: 3.0 });
+    expect(parsed?.percent).toBe(75);
+    expect(parsed?.reviewed).toBe(3);
+  });
+
   it('returns null for anything malformed or missing', () => {
     expect(readStampFromMetadata(undefined)).toBeNull();
     expect(readStampFromMetadata('nope')).toBeNull();

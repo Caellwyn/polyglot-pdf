@@ -386,6 +386,13 @@ describe('FormCatalogue', () => {
     // caches 60%, a deliberate Refresh must re-read from disk and let THAT win
     // -- the session cache cannot outrank an explicit Refresh. The disk value
     // is now the kit's readiness stamp (25%) rather than a re-scan.
+    //
+    // KNOWN CONSEQUENCE, tracked as bd polyglot-pdf-bqgr: in LOCAL mode
+    // nothing writes a stamp (local save is a pure File System Access write),
+    // so this "disk wins" rule can move the number BACKWARD after a local
+    // save -- the opposite of what Refresh used to mean. This test encodes the
+    // precedence, NOT an endorsement of that outcome; bqgr decides whether
+    // local save stamps or local mode keeps a client-side fallback.
     const root = mockRoot([
       mockKit('a', {
         'schema.json': SCHEMA,
