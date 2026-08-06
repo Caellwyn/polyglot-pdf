@@ -57,10 +57,19 @@ through the _status_of allowlist, the KitStatusBody Literal, and the editor's
 KitStatus type/bucketing, else it coerces to "unknown" and the write-lock 409
 never fires -- 6dz0 surfaces widened; (8) the static-bundle filter must
 exclude underscore-prefixed entries at both levels or <kit>/_archive/** ships
-publicly the way _translation does today -- kkos sharpened. Eight adopted
-gaps across rounds 2-3; nothing rejected or deferred; no out-of-scope beads
-filed by the reviewers. The terminal verdict is the Opus re-review of the
-final diff, recorded in the PR body and merge ping.
+publicly the way _translation does today -- kkos sharpened. Round 4 (Opus)
+found 6 more, all adopted: the hosted catalogue's own two-value status sites
+(remoteKitStore/RemoteCatalogue -- the path rubric #5 verifies; and
+form_kit_routes.py removed from 6dz0's surfaces, its gates already hide
+non-complete), the pdfFile prop threading through SchemaForm +
+FilledPreviewModal (three fillPDF call sites), a NEW store-level
+prefix-delete primitive on FormKitStore for 6x1j, author_version in both TS
+FormMetadata mirrors (compile error otherwise), the kit-card version-label
+precedence slot, and the 6dz0->vccy ordering rationale restated as
+behavioral. Fourteen adopted gaps across rounds 2-4; nothing rejected or
+deferred; no out-of-scope beads filed by the reviewers. The terminal verdict
+is the Opus re-review of the final diff, recorded in the PR body and merge
+ping.
 
 Research findings that shaped the design (recorded in the plan): kit storage is
 single-slot per kit_id with destructive overwrite-in-place; confirmation

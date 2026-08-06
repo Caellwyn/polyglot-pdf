@@ -80,9 +80,17 @@ stable across revisions, so firm allowlists never churn on republish.
   `("draft", "complete")` allowlist (editor_kit_routes.py:387, guarding five
   write-path gates -- its `== "complete"` checks must become
   is-write-locked checks), `KitStatusBody`'s `Literal["draft","complete"]`
-  (which would 422 the unpublish request itself), and the schema-editor's
+  (which would 422 the unpublish request itself), the schema-editor's LOCAL
   `KitStatus` type in formKitDirectory.ts:19 + the FormCatalogue status
-  bucketing built on it.
+  bucketing built on it, AND the HOSTED path's own two-value sites in
+  remoteKitStore.ts -- `RemoteKitEntry.status` (:33), `KitStatusResponse`
+  (:419), and `setKitStatus`'s parameter type (:432, which as written cannot
+  express the unpublish call at all) -- plus RemoteCatalogue's status
+  bucketing/badge styling. The hosted path is the one that talks to the
+  backend /status route, so it is the path rubric #5's verify exercises.
+  form_kit_routes.py itself needs NO change for hiding: `_require_published`
+  and the manifest filter are already complete-or-hidden inclusion tests, so
+  a third status hides automatically.
 - **Author-supplied version.** When `form_metadata.edition_date` is absent
   (a firm's proprietary intake sheet), the publish modal shows a version box
   prefilled with the current date (ISO yyyy-mm-dd), previous value shown,
@@ -90,13 +98,23 @@ stable across revisions, so firm allowlists never churn on republish.
   never written into edition_date (documented as strictly the government
   marker). `resolve_edition_marker` precedence becomes edition_date >
   author_version > fingerprint; existing fingerprint-marked records stay
-  valid.
+  valid. The field lands in BOTH TypeScript `FormMetadata` mirrors
+  (schema-editor/src/types/schema.ts and
+  frontend/src/schema-forms/types/schema.ts) -- FieldEditor's metadata setter
+  is typed `keyof FormSchema['form_metadata']`, so omitting the editor mirror
+  is a compile error -- and the kit-card version label
+  (`versionInfoFromSchema`, formKitDirectory.ts:226-235) gains an
+  author_version slot in its precedence chain so a freshly-versioned kit
+  stops rendering as 'unknown (verify)'.
 - **Guarded hard delete.** DELETE /api/editor/kits/{kit_id} (author role).
   Backend queries `confirmation_events` by kit_id equality (cheap; no
   composite index needed) -- any hit returns 409 with a "records exist;
   unpublish instead" payload; zero hits deletes the whole kit prefix
   (including archives) after the editor UI's type-the-kit-id confirmation
-  modal.
+  modal. The prefix delete is a NEW store-level primitive on `FormKitStore`
+  (the ABC has no delete of any kind today) with both implementations --
+  local recursive dir removal and GCS list_blobs + batch delete -- the route
+  never touches the filesystem or bucket directly, or GCS mode breaks.
 - **Coordination with sprint 18 (epic polyglot-pdf-4qul, active).** Sprint 18
   C8 moves the token-spending translation bake OUT of the /status promotion
   route (the free coverage CHECK stays). The lifecycle beads touch the same
@@ -136,7 +154,11 @@ stable across revisions, so firm allowlists never churn on republish.
   become the literals "pdf"/"schema" and the fill 404s in
   `store.load_pdf_bytes`. The fix carries the schema/pdf FILENAMES explicitly
   from the manifest instead of re-deriving them from the URL, so the filled-PDF
-  download keeps working for private kits.
+  download keeps working for private kits. `fillPDF` has three call sites in
+  two more files -- SchemaForm.tsx:623 (download) / :659 (print) and
+  FilledPreviewModal.tsx:62 (preview), all fed by a `pdfUrl` prop from
+  SchemaFormDemo -- so the explicit-filename fix threads a `pdfFile` prop
+  through both components' interfaces as well.
 - **Firm identity propagation.** The firm_id claim rides the existing
   require_auth decoded claims and the WS ?token= verify; threaded into the
   fill session the way kit_id was in 47r3. `log_form_session_start`/`_end`
@@ -192,9 +214,9 @@ confirmation_logger.py are hubs); cross-epic ordering edge 7jmy.2 -> 02ye.2.
 | Bead | Scope | Surfaces | Inherits |
 |------|-------|----------|----------|
 | revision-archive | Archive-on-republish in the store + retrieval helper + operator script | backend/services/form_kits.py, scripts/ (retrieval script) | 7jmy #2 |
-| lifecycle-statuses | `unpublished` status (write-locked, hidden, reversible; threaded through the `_status_of` allowlist, the `KitStatusBody` Literal, and the editor's `KitStatus` type/bucketing) + replace-current cross-kit publish + editor UI | backend/routes/editor_kit_routes.py, backend/routes/form_kit_routes.py, schema-editor/src/components/RemoteCatalogue.tsx, schema-editor/src/components/FormCatalogue.tsx, schema-editor/src/utils/remoteKitStore.ts, schema-editor/src/utils/formKitDirectory.ts | 7jmy #1, #5 |
-| author-version | author_version field + modal version box (prefill/normalize/show-previous) + marker precedence + lint update | backend/models/form_models.py, backend/utils/confirmation_logger.py, backend/services/schema_lint.py, schema-editor publish-modal component | 7jmy #3 |
-| guarded-delete | DELETE route + kit_id-keyed confirmation existence query (lands in confirmation_logger.py) + confirm modal UI | backend/routes/editor_kit_routes.py (delete route), backend/utils/confirmation_logger.py, schema-editor catalogue delete UI | 7jmy #4 |
+| lifecycle-statuses | `unpublished` status (write-locked, hidden, reversible; threaded through the `_status_of` allowlist, the `KitStatusBody` Literal, and BOTH editor catalogues' status types/bucketing -- local formKitDirectory/FormCatalogue and hosted remoteKitStore/RemoteCatalogue) + replace-current cross-kit publish + editor UI | backend/routes/editor_kit_routes.py, schema-editor/src/components/RemoteCatalogue.tsx, schema-editor/src/components/FormCatalogue.tsx, schema-editor/src/utils/remoteKitStore.ts, schema-editor/src/utils/formKitDirectory.ts | 7jmy #1, #5 |
+| author-version | author_version field (Pydantic + both TS FormMetadata mirrors) + modal version box (prefill/normalize/show-previous) + kit-card version-label precedence + marker precedence + lint update | backend/models/form_models.py, schema-editor/src/types/schema.ts, frontend/src/schema-forms/types/schema.ts, schema-editor/src/utils/formKitDirectory.ts (version label), backend/utils/confirmation_logger.py, backend/services/schema_lint.py, schema-editor publish-modal component | 7jmy #3 |
+| guarded-delete | DELETE route + kit_id-keyed confirmation existence query (lands in confirmation_logger.py) + NEW store-level prefix-delete primitive (local + GCS impls on FormKitStore) + confirm modal UI | backend/routes/editor_kit_routes.py (delete route), backend/services/form_kits.py (delete primitive), backend/utils/confirmation_logger.py, schema-editor catalogue delete UI | 7jmy #4 |
 
 Ordering: revision-archive -> lifecycle-statuses -> author-version ->
 guarded-delete (blocks edges; the latter two could in principle run
@@ -206,17 +228,20 @@ serial).
 | Bead | Scope | Surfaces | Inherits |
 |------|-------|----------|----------|
 | firms-store | firms collection model + FirmsService + firestore.rules deny block + bootstrap/claim-stamping admin script | backend/services/firms.py (new), firestore.rules, scripts/ (admin script, new) | 02ye #1 |
-| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (normalize_manifest path emission -> backend routes; header-carrying viewer fetches; filenames carried explicitly so the pdf-fill call survives) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, frontend/src/schema-forms/utils/pdfFiller.ts, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
+| kit-scoping | visibility/owner_firm_id metadata + firm filter on manifest/schema/pdf routes + the private-kit serving seam (normalize_manifest path emission -> backend routes; header-carrying viewer fetches; filenames carried explicitly -- a pdfFile prop threads through SchemaForm and FilledPreviewModal -- so the pdf-fill call survives) + test updates | backend/routes/form_kit_routes.py, backend/services/form_kits.py, frontend/src/schema-forms/SchemaFormDemo.tsx, frontend/src/schema-forms/components/SchemaForm.tsx, frontend/src/pdf-view/FilledPreviewModal.tsx, frontend/src/schema-forms/utils/pdfFiller.ts, backend/tests/unit/test_http_route_auth.py | 02ye #2 |
 | static-scoping | Static pipeline filters to complete + public, and excludes `_`-prefixed entries at root AND kit level (closes the draft leak and the `_translation`/future `_archive` sweep) | frontend/scripts/generate-form-manifest.ts | 02ye #2 (static half) |
 | firm-telemetry | firm_id threading (claims -> WS session) + wire log_form_session_start/end + firm_id on confirmation events | backend/routes/websocket_routes.py, backend/utils/confirmation_logger.py | 02ye #3 |
 | magic-links (BLOCKED) | Per-firm API key + link minting + EntryGate + fragment routing (settled design) | frontend/src/schema-forms/, backend auth | deferred until first paying firm |
 | limits (BLOCKED) | Per-jti/per-firm rate limits + per-session cost ceiling | backend (new middleware) | required before first public link |
 
-Ordering: 7jmy lifecycle-statuses -> 02ye kit-scoping (shared
-form_kit_routes.py). firms-store and static-scoping are parallelizable with
-everything (disjoint surfaces). firm-telemetry after firms-store (needs the
-firm model) and after 7jmy author-version/guarded-delete (shared
-confirmation_logger.py).
+Ordering: 7jmy lifecycle-statuses -> 02ye kit-scoping -- a behavioral edge,
+not a file collision: kit-scoping layers the firm filter onto the same
+manifest/read gating (`_require_published`, the complete-only manifest
+filter) whose complete-or-hidden semantics the unpublished status relies on,
+so the status semantics settle first. firms-store and static-scoping are
+parallelizable with everything (disjoint surfaces). firm-telemetry after
+firms-store (needs the firm model) and after 7jmy
+author-version/guarded-delete (shared confirmation_logger.py).
 
 ## Out of scope
 
