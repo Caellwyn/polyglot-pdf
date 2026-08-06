@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: removed the dead JIT-manifest part-holdout section, fixed the bracket-passthrough file pointer, linked stateless-architecture.md). Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: removed the dead JIT-manifest part-holdout section, fixed the bracket-passthrough file pointer, linked stateless-architecture.md). Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
