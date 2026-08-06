@@ -57,7 +57,7 @@ bd dolt pull && bd create --title="docs(<area>): <one-line problem>" \
   --type=bug --metadata '{"surfaces":["<file it will modify>"],"tier":"haiku","work_class":"docs-nit"}' && bd dolt push
 ```
 
-Note `--metadata` REPLACES the whole object, so keep every key in one JSON object. List filed bead IDs in your output. **Never silently drop a finding** -- filing is routing, not dismissal.
+Note `--metadata` REPLACES the whole object, so keep every key in one JSON object. **The `haiku`/`docs-nit` values above are the COMMON case, not a default to copy blindly** -- tier by the judgment the FIX needs, not by the fact that you (a cheap prose reviewer) found it. A typo or stale link really is `haiku`/`docs-nit`; but a doc that contradicts the code because **the code is wrong** is `sonnet`/`local-bug` and NOT a nit, and a misrouted diff that turns out to touch executable source is `opus`/`cross-surface`. Both enums are closed -- full table in [`docs/standards/bead-tiers.md`](../../docs/standards/bead-tiers.md). List filed bead IDs in your output. **Never silently drop a finding** -- filing is routing, not dismissal.
 
 ## Output format
 

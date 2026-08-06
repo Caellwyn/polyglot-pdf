@@ -389,9 +389,12 @@ model and mandate change:
   `model: haiku`) on the same local diff, looped to `NO-GAPS` exactly like the Opus
   loop. Its mandate is **adversarial prose review, NOT a contract trace** -- prose
   that contradicts the code it documents, stale cross-references, doc-vs-doc
-  conflicts, a `*Last updated:*` bump with no real prose review. Prompt requirements
-  (a)-(d) are the same as the Opus spawn; requirement (e) (the `## Changed
-  contracts` paste) does NOT apply -- a docs diff changes no runtime contract.
+  conflicts, a `*Last updated:*` bump with no real prose review. Its prompt MUST
+  (a) include the bead's `## Exit criteria` verbatim; (b) name the branch; (c) tell
+  it to read the REAL LOCAL diff (`git diff origin/dev...HEAD`), never a summary.
+  The Opus spawn's (d) and (e) do NOT apply here: (d) is about the dormant
+  self-escalation clause, which this agent does not have, and (e)'s `## Changed
+  contracts` paste is meaningless when the diff changes no runtime contract.
   *Why this exists:* before bd saxh a docs-only PR got NO adversarial model review
   at all (the retired guaranteed-Opus inner round had been its only one), so a doc
   asserting something the code contradicts could ship unchallenged.
