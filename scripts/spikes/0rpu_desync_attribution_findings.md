@@ -426,3 +426,49 @@ intermittently substitutes instead.
   not depend on the model choosing to obey.
 - The comma arm is still worth its ~$1 as a cheap check of the same channel,
   but expectations should be low after NATO.
+
+## ROUND 6 (2026-08-06): COMMA arm -- instruction OBEYED, corruption NOT eliminated
+
+### The arm took (unlike NATO)
+`SPELLBACK_STYLE=comma` was followed: the text track contains SIX
+comma-separated runs ("J, O, H, N" / "J, O, S, H, U, A" / "M, A, R, I, A" ...)
+and ZERO hyphenated ones. So delivery IS steerable by the SI -- the NATO rule's
+failure was specific to that instruction (probably its complexity), not proof
+that prompting can never reach delivery. That is a genuine correction to the
+round-5 conclusion.
+
+### But the headline "0% desync" is a MEASUREMENT ARTIFACT -- do not quote it
+The scorer reported desync 0/27. It reached that number by refusing to judge
+the four rows that matter: all four spelled read-backs came back LOW_CONFIDENCE
+(0.344-0.550) and were excluded from the denominator. Reading them by hand
+against the text track's intent:
+
+| gen | intended (text) | AUDIO spelled | verdict by hand |
+|---|---|---|---|
+| 7 | JOHN (first) | J-O-H-N, "John" | correct |
+| 9 | JOSHUA | "J OHSU" | garbled, Joshua-shaped (not a substitution) |
+| 11 | JOHNSON (last) | J-O-H-N | **WRONG -- substitution** |
+| 15 | JOSE | J-O-H | **WRONG -- substitution** |
+| 13 | MARIA | M-A-R-I-A | correct |
+| 17 | SMITH | S-M-I-T-H | correct |
+
+So comma pacing did NOT eliminate the substitution: 2 of 6 spelled read-backs
+still emitted a previous name's letters. What it may have changed is the
+FLAVOUR of the failure -- NATO's run produced the fully-formed wrong utterance
+"Joe Howa" three times, whereas the comma run's failures are shorter and more
+fragmentary. That is a hypothesis, not a result: n is tiny and confidence is
+low on exactly those rows.
+
+### FIFTH instrument defect (found by this run)
+LOW_CONFIDENCE is doing double duty: it is BOTH a "recognizer could not hear
+it" guard AND, per round 5, a corruption SIGNAL (healthy rows 0.93-0.99,
+corrupted rows 0.34-0.65). Excluding those rows therefore systematically
+DELETES the failures from the statistic -- the scorer is most blind exactly
+where the bug lives. Fix required before any arm comparison is trustworthy:
+low-confidence spelled rows must be routed to a hand-adjudication list, never
+silently dropped from the denominator.
+
+STATUS: comma arm = instruction obeyed, corruption persists (2/6 spelled
+read-backs wrong). No arm has yet fixed the defect. Idea 3 (deterministic
+spell-back tool, outside the model's speech path) remains the only proposal
+that does not depend on the model's cooperation.
