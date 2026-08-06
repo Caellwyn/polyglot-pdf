@@ -88,10 +88,40 @@ real and all fixed in-loop:
    already have written re-translations, so an exception would 500 a legitimate
    publish and leave the caller retrying a partly-completed transition.
 
-Tests: backend 1620 passed pre-fix (from a 1595 baseline), schema-editor 1187
-passed, typecheck clean. Ten mutations verified across the predicate, the
-fingerprint, the rounding, the structural clause, both stamp call sites, and
-both render paths.
+**A second (Opus) assess round found the mirror STILL diverged**, on a
+reachable everyday flow, plus four smaller issues:
+
+5. THE BUG. The Python timeliness rule did not exclude guidance-identity-stale,
+   but the client's newFindingsSinceReview does -- with a comment recording an
+   earlier review that found why: the ack gate is that rule's SOLE owner, and
+   the ack writer preserves seen_fingerprints, so counting the stale finding in
+   BOTH places makes sign-off -> drift -> ack a dead end no control can clear.
+   Measured on identical input: Python False, TypeScript True. One saved kit,
+   two numbers -- this bead's own bug, recreated inside the mirror. It would
+   also have poisoned C2, whose gate would refuse BY NAME a field the editor
+   renders green.
+6. The publish stamp reused the GATE's lint findings, but the translation drift
+   sweep mutates and re-persists the schema after those were computed -- so the
+   stamp recorded pre-sweep counts under a post-sweep schema hash. It re-lints
+   now.
+7. readKitProgress still computed a percentage nothing rendered (its
+   RemoteCatalogue twin had been nulled for exactly this reason) -- a live
+   second definition of the centralized number, which is how a fallback creeps
+   back.
+8. Three docstrings claimed an out-of-band-edited kit "reads as stale, not as
+   truth". False as written: no caller passes readStamp's currentSchemaSha1, so
+   that branch is unreachable in production. Corrected, with a pointer to the
+   bead that will make it true (polyglot-pdf-j8sr).
+
+Filed rather than widened into this bead: polyglot-pdf-j8sr (five routes
+rewrite a schema without re-stamping; local-folder save never stamps) and
+polyglot-pdf-drpn (every save now rewrites metadata.json, widening a
+pre-existing concurrent-write revert window).
+
+Tests: backend 1649 passed (from a 1595 baseline -- 54 added, zero
+regressions), schema-editor 1204 passed, typecheck clean. Eleven mutations
+verified across the predicate, the fingerprint, the rounding, the structural
+clause, the stale-rule exclusion, both stamp call sites, and both render paths.
 
 ## Lessons
 
@@ -113,6 +143,22 @@ both render paths.
   SUCCESSFUL save into a 500 the editor reports as "save failed." The schema is
   already written when the stamp runs, so the whole failure class must be
   swallowed. Pinned with its own regression test.
+- **"Test-pinned" must mean a SHARED expectation, not two per-side test
+  suites.** The module docstring claimed the mirror's equality was test-pinned;
+  only the FINGERPRINT actually was. Both sides' unit tests passed green while
+  the predicates returned different answers for the ordinary ack flow, because
+  each suite asserted what its own implementation did. The fix is structural: a
+  shared fixture (`__fixtures__/reviewPredicateParity.json`) both suites execute
+  against their real predicate, so changing either side alone breaks a test.
+  Reach for this the moment the SAME rule exists in two languages -- per-side
+  tests cannot detect divergence by construction.
+- **When mirroring a function, read its comments for rules that are not in its
+  signature.** The stale-rule exclusion existed only as a filter inside
+  `newFindingsSinceReview` with a comment explaining a dead-end it prevented. I
+  mirrored the clause list from the docstring and missed a rule that lived in
+  the body -- and that omission recreated the very bug the module exists to
+  prevent. A prior review had already paid for that lesson once; the comment was
+  the record, and I did not read far enough.
 - **A cross-language mirror diverges at the EDGES, not the core.** The
   fingerprint -- the scary part, with UTF-16 and 32-bit wraparound -- was
   correct, verified against nine cases run through the real TS. What actually
