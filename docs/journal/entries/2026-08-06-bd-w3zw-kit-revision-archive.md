@@ -80,11 +80,14 @@ revisions stay retrievable) is unchanged; only the location moved.
 
 ## Doc freshness
 
-- No tier-1/tier-2 doc changes. `docs/components/pdf-filling.md` tracks
-  `form_kits.py` and describes the store's read/write surface; the archive
-  methods are additive and the doc's current-state prose stays accurate. The
-  lifecycle-facing documentation (statuses, publish flow) belongs to the later
-  beads in the chain that change that behavior.
+- `docs/components/pdf-filling.md` BUMPED. It tracks `form_kits.py` and
+  enumerates the store's editor write/list surface exhaustively, so three new
+  archive methods made that list incomplete -- an additive change still
+  falsifies an exhaustive list. Added a Revision archive paragraph (the
+  primitives, the marker encoding, why the hook is on revert-to-draft, why
+  archives are invisible to both catalogues) and re-stamped the date. My first
+  pass through this entry claimed the doc stayed accurate; the freshness gate
+  correctly disagreed.
 - `docs/standards/confirmation-and-audit.md` describes the marker precedence
   this bead consumes but does not change it (author_version is bead xzw5).
 
