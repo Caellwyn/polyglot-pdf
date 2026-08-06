@@ -192,9 +192,12 @@ describe('FormCatalogue', () => {
     expect(summary.textContent).toMatch(/1 awaiting extraction/);
   });
 
-  it('shows a per-form review percentage derived from field completion', async () => {
-    // A schema with one signed-off field -> 100% review. Since bd g63j the
-    // percentage tracks HUMAN sign-off, so the field carries _review.
+  it('shows a per-form review percentage from the kit READINESS STAMP', async () => {
+    // Sprint-18 C4 (bd polyglot-pdf-g687): the card renders the stamp the
+    // BACKEND wrote into metadata.json with publish_readiness -- the same
+    // definition the open editor's strip mirrors -- rather than re-deriving a
+    // percentage from the schema on disk. The schema below is fully signed off,
+    // but it is the STAMP that supplies the number.
     const fullSchema = JSON.stringify({
       form_metadata: { form_number: 'T-1' }, sections: [],
       fields: [{
@@ -205,7 +208,16 @@ describe('FormCatalogue', () => {
       }],
     });
     const root = mockRoot([
-      mockKit('done', { 'schema.json': fullSchema, 'metadata.json': JSON.stringify({ label: 'Done', status: 'complete' }) }),
+      mockKit('done', {
+        'schema.json': fullSchema,
+        'metadata.json': JSON.stringify({
+          label: 'Done', status: 'complete',
+          readiness: {
+            reviewed: 1, toReview: 0, total: 1, errors: 0, percent: 100,
+            ready: true, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
     ]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
 
@@ -217,11 +229,13 @@ describe('FormCatalogue', () => {
     await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
   });
 
-  it('shows a 0% bar for an extracted-but-empty schema, and no bar for a no-schema kit', async () => {
+  it('shows the verify hint for an UNSTAMPED kit, and nothing for a no-schema kit', async () => {
+    // Sprint-18 C4: a schema-bearing kit with no readiness stamp cannot be
+    // given a percentage -- nobody measured it -- so the card shows the verify
+    // hint. A kit with NO schema has nothing to measure and gets neither a
+    // number nor a hint (it already reads as awaiting extraction).
     const root = mockRoot([
-      // empty-fields schema -> 0% (bar renders)
       mockKit('empty', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Empty', status: 'draft' }) }),
-      // no schema -> no bar
       mockKit('raw', { 'metadata.json': JSON.stringify({ label: 'Raw', status: 'draft' }) }),
     ]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
@@ -231,10 +245,12 @@ describe('FormCatalogue', () => {
     await expandCards();
 
     await screen.findByText('Empty');
-    // The empty-schema kit shows a 0% review bar...
-    await waitFor(() => expect(screen.getByText('0%')).toBeTruthy());
-    // ...and there is exactly one "Review" bar (the no-schema 'raw' kit has none).
-    expect(screen.getAllByText('Review')).toHaveLength(1);
+    // Exactly one hint: the schema-bearing kit. No percentage anywhere, and no
+    // review bar (the bar renders only alongside a trustworthy number).
+    await waitFor(() =>
+      expect(screen.getAllByTestId('readiness-hint')).toHaveLength(1));
+    expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText('Review')).toHaveLength(0);
   });
 
   it('persists the live percentage after the kit stops being live (no revert to stale scan)', async () => {
@@ -273,12 +289,22 @@ describe('FormCatalogue', () => {
     expect(screen.queryByText('0%')).toBeNull();
   });
 
-  it('lets Refresh replace a cached kit percentage with the fresh disk scan', async () => {
-    // Codex round 6: after a saved edit caches 60%, if the schema changes on disk
-    // and the user clicks Refresh, the scan's value (0% for the empty fixture)
-    // must win -- the cache cannot outrank a deliberate Refresh.
+  it('lets Refresh replace a cached kit percentage with the fresh stamp', async () => {
+    // Codex round 6, carried to the stamp (sprint-18 C4): after a saved edit
+    // caches 60%, a deliberate Refresh must re-read from disk and let THAT win
+    // -- the session cache cannot outrank an explicit Refresh. The disk value
+    // is now the kit's readiness stamp (25%) rather than a re-scan.
     const root = mockRoot([
-      mockKit('a', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }) }),
+      mockKit('a', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({
+          label: 'Kit A', status: 'draft',
+          readiness: {
+            reviewed: 1, toReview: 3, total: 4, errors: 0, percent: 25,
+            ready: false, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
     ]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
 
@@ -299,10 +325,10 @@ describe('FormCatalogue', () => {
     );
     await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
 
-    // Deselect (cache holds 60%) then click Refresh -> disk scan (0%) wins.
+    // Deselect (cache holds 60%) then click Refresh -> the stamp (25%) wins.
     rerender(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />);
     fireEvent.click(screen.getByText('Refresh'));
-    await waitFor(() => expect(screen.getByText('0%')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('25%')).toBeTruthy());
     expect(screen.queryByText('60%')).toBeNull();
   });
 
@@ -342,11 +368,21 @@ describe('FormCatalogue', () => {
   });
 
   it('does NOT persist an UNSAVED edit after the kit is deselected (discard flow)', async () => {
-    // Codex round 5: an unsaved edit shows live on the open card, but if the user
-    // discards it (switches kits without saving), the card must revert to the
-    // disk-scan value, not keep phantom progress.
+    // Codex round 5, carried to the stamp (sprint-18 C4): an unsaved edit shows
+    // live on the open card, but if the user discards it (switches kits without
+    // saving), the card must revert to the kit's RECORDED value (25%), never
+    // keep phantom progress from an edit that was thrown away.
     const root = mockRoot([
-      mockKit('a', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }) }),
+      mockKit('a', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({
+          label: 'Kit A', status: 'draft',
+          readiness: {
+            reviewed: 1, toReview: 3, total: 4, errors: 0, percent: 25,
+            ready: false, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
     ]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
 
@@ -367,11 +403,11 @@ describe('FormCatalogue', () => {
     );
     await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
 
-    // Edit discarded, kit deselected -> revert to disk scan (0%), NOT 60%.
+    // Edit discarded, kit deselected -> revert to the recorded 25%, NOT 60%.
     rerender(
       <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
     );
-    expect(screen.getByText('0%')).toBeTruthy();
+    expect(screen.getByText('25%')).toBeTruthy();
     expect(screen.queryByText('60%')).toBeNull();
   });
 

@@ -11,6 +11,7 @@ import {
 import {
   isExtractionAvailable, runExtraction, verifyExtractorFolder,
 } from '../utils/extractionClient';
+import { readStamp, stampHint } from '../utils/readinessStamp';
 // Completion routes through the SAME editor endpoint the hosted catalogue uses
 // (bd polyglot-pdf-rh5v) so the publish gates and the translation drift sweep
 // run in local mode too -- one implementation, not two that disagree.
@@ -621,13 +622,23 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
             const edited = editedProgress[kit.id] ?? null;
             const source = live ?? edited;
-            const pct = source ? source.percent : (prog?.reviewPercent ?? null);
-            const completeFields = source ? source.complete : (prog?.completeFields ?? 0);
-            const totalFields = source ? source.total : (prog?.totalFields ?? 0);
+            // With no live/session value the card reports the kit's STAMP --
+            // the same rule the hosted catalogue follows (sprint-18 C4). Local
+            // mode reads the stamp the BACKEND wrote into metadata.json, so
+            // both modes render one definition of progress; an absent,
+            // unverified, or stale stamp shows the verify hint rather than a
+            // re-derived percentage.
+            const reading = source ? null : readStamp(kit.readiness);
+            const stamped = reading?.kind === 'ok' ? reading.stamp : null;
+            const pct = source ? source.percent : (stamped ? stamped.percent : null);
+            const completeFields = source ? source.complete : (stamped?.reviewed ?? 0);
+            const totalFields = source ? source.total : (stamped?.total ?? 0);
             // Present-but-unreadable schema: show a notice instead of nothing, so
             // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
             // override always has measurable stats, so suppress it then.
             const showSchemaError = !source && prog?.schemaError && pct === null;
+            const stampGap = !source && kit.hasSchema && !showSchemaError
+              && reading?.kind === 'hint' ? reading.reason : null;
             // Version line: prefer the live/edited summary (tracks an in-session
             // metadata edit) over the stale disk-scan value (Codex PR #263).
             const cardVersion = source?.version ?? prog?.version ?? null;
@@ -684,6 +695,15 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* No trustworthy stamp: say so rather than show a number
+                    nobody measured (sprint-18 C4). */}
+                {stampGap && (
+                  <div className="mt-2 text-xs text-gray-500"
+                       data-testid="readiness-hint">
+                    {stampHint(stampGap)}
                   </div>
                 )}
 

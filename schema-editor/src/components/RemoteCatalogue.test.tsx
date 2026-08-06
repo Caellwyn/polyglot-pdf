@@ -80,31 +80,69 @@ describe('RemoteCatalogue', () => {
     expect(freshCard).toBeDisabled();
   });
 
-  it('computes review progress from each kit schema (shared definition)', async () => {
-    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
-    // The one-field schema is unreviewed -> 0% bars on both schema kits.
-    await waitFor(() => expect(screen.getAllByText('0%').length).toBe(2));
-    expect(vi.mocked(loadRemoteSchema)).toHaveBeenCalledWith('done-kit');
-    expect(vi.mocked(loadRemoteSchema)).toHaveBeenCalledWith('draft-kit');
-    // The schemaless kit is never fetched.
-    expect(vi.mocked(loadRemoteSchema)).not.toHaveBeenCalledWith('fresh-kit');
-  });
-
-  it('scans with the pinned reviewCounts predicate, not checkFieldComplete (bd q3rm)', async () => {
-    // A signed-off text field with NO pdf_field_name: checkFieldComplete
-    // ERRORs it, so the old getCompletionStats scan showed 0% while the open
-    // kit's liveStats (reviewCounts) showed 100% -- the same card flipped
-    // between two numbers. The scan must count the sign-off (the missing
-    // widget mapping is the lint layer's job, which a scan honestly lacks).
+  it('shows the verify hint, NOT a percentage, for an unstamped kit (bd g687)', async () => {
+    // Sprint-18 C4: the card reports the backend's readiness STAMP. The KITS
+    // fixture carries none, so both schema kits must show the hint and NO
+    // percentage. Critically it must NOT fall back to re-scanning the schema:
+    // that fallback is what let a card and the open kit disagree (bd q3rm),
+    // and a confident number nobody measured is the lie this bead ends.
+    //
+    // The schema below is FULLY REVIEWED on purpose. An unreviewed fixture
+    // makes a re-scan compute 0%, which is too easy to confuse with "no number
+    // rendered" -- a restored fallback survived that assertion (measured). A
+    // 100%-reviewed schema makes the fallback produce a LOUD, unmistakable
+    // "100%", so the no-fallback property is what actually gets pinned.
     vi.mocked(loadRemoteSchema).mockResolvedValue({
       fields: [{
         id: 'f1', name: 'F1', type: 'text', spoken_name: 'f',
-        help: { instructions: 'x' }, _review: { status: 'reviewed_correct' },
+        pdf_field_name: 'F1[0]', help: { instructions: 'x' },
+        _review: { status: 'reviewed_correct' },
       }],
       sections: [],
     } as never);
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
-    await waitFor(() => expect(screen.getAllByText('100%').length).toBe(2));
+    await waitFor(() =>
+      expect(screen.getAllByTestId('readiness-hint').length).toBe(2));
+    // No percentage of ANY value reached the cards -- not the re-scan's 100%,
+    // not a 0%, nothing. Asserting the absence of the whole class beats
+    // blacklisting one value.
+    expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument();
+  });
+
+  it('renders the stamped percentage when the stamp is verified (bd g687)', async () => {
+    // The number comes from the STAMP the backend wrote with publish_readiness
+    // -- the same definition the open editor's strip mirrors -- never from a
+    // client-side re-derivation.
+    vi.mocked(listRemoteKits).mockResolvedValue(KITS.map((k) => (
+      k.hasSchema
+        ? { ...k, readiness: {
+            reviewed: 3, toReview: 1, total: 4, errors: 0, percent: 75,
+            ready: false, verified: true, schemaSha1: 'abc123',
+          } }
+        : k
+    )));
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getAllByText('75%').length).toBe(2));
+    expect(screen.queryByTestId('readiness-hint')).not.toBeInTheDocument();
+  });
+
+  it('an UNVERIFIED stamp shows the hint, never its percentage (bd g687)', async () => {
+    // verified:false means the counts were computed with no usable lint
+    // report. The counts may look complete, but presenting 100% as checked is
+    // exactly the confident-then-409 lie the epic exists to end -- so the
+    // number is withheld even though the stamp carries one.
+    vi.mocked(listRemoteKits).mockResolvedValue(KITS.map((k) => (
+      k.hasSchema
+        ? { ...k, readiness: {
+            reviewed: 4, toReview: 0, total: 4, errors: 0, percent: 100,
+            ready: true, verified: false, schemaSha1: 'abc123',
+          } }
+        : k
+    )));
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getAllByTestId('readiness-hint').length).toBe(2));
+    expect(screen.queryByText('100%')).not.toBeInTheDocument();
   });
 
   it('marks a draft complete via the server and refreshes', async () => {

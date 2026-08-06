@@ -14,6 +14,8 @@
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
 import { reviewCounts } from './reviewStatus';
+import { readStampFromMetadata } from './readinessStamp';
+import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
 
 export type KitStatus = 'draft' | 'complete' | 'unknown';
@@ -24,6 +26,12 @@ export interface KitMetadata {
   status?: KitStatus;
   schema?: string; // custom schema filename (defaults to schema.json)
   pdf?: string;    // custom pdf filename (defaults to form.pdf)
+  // The readiness stamp the BACKEND writes at save/publish (sprint-18 C4, bd
+  // polyglot-pdf-g687). Stored snake_case exactly as metadata.json carries it;
+  // readStampFromMetadata converts it to the camelCase wire shape the cards
+  // share with hosted mode. Local mode reads the same file the backend wrote,
+  // so both catalogues render one definition of progress.
+  readiness?: Record<string, unknown>;
 }
 
 export interface CatalogueEntry {
@@ -35,6 +43,12 @@ export interface CatalogueEntry {
   schemaFile: string;         // resolved schema filename
   pdfFile: string;            // resolved pdf filename
   dirHandle: FsDirectoryHandle;
+  // The kit's recorded review progress (sprint-18 C4). Absent/null when the
+  // kit has never been stamped or its stamp is malformed -- the card then
+  // shows the verify hint, never a percentage. OPTIONAL rather than required
+  // so a caller constructing an entry cannot be forced to invent a stamp;
+  // readStamp treats undefined and null identically.
+  readiness?: ReadinessStamp | null;
 }
 
 const SCHEMA_DEFAULT = 'schema.json';
@@ -102,6 +116,7 @@ export async function readKitEntry(
     schemaFile,
     pdfFile,
     dirHandle: dir,
+    readiness: readStampFromMetadata(meta?.readiness),
   };
 }
 

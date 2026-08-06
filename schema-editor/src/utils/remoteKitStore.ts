@@ -26,6 +26,33 @@ export type EditorRole = 'editor' | 'author';
 
 /** A kit as the editor list route reports it -- the remote mirror of
  * CatalogueEntry (formKitDirectory.ts) minus the directory handle. */
+/**
+ * A kit's RECORDED review progress, written into metadata.json at save/publish
+ * by the backend's publish_readiness (sprint-18 C4, bd polyglot-pdf-g687).
+ *
+ * The catalogue renders this stored answer instead of re-deriving its own, so
+ * a card and the open editor cannot disagree. Two fields make the stamp
+ * honest rather than merely convenient:
+ *
+ *   verified   false when the counts were computed with NO usable lint report.
+ *              The card must then show the verify hint, never a confident %.
+ *   schemaSha1 the schema the stamp measured. A kit edited out of band leaves
+ *              a stamp whose hash no longer matches -- that is STALE, not truth.
+ *
+ * Absent entirely on a kit not saved since C4 shipped: also the verify hint.
+ */
+export interface ReadinessStamp {
+  reviewed: number;
+  toReview: number;
+  total: number;
+  errors: number;
+  percent: number;
+  ready: boolean;
+  verified: boolean;
+  schemaSha1: string;
+  stampedAt?: string | null;
+}
+
 export interface RemoteKitEntry {
   id: string;
   label: string;
@@ -35,6 +62,7 @@ export interface RemoteKitEntry {
   hasPdf: boolean;
   schemaFile: string;
   pdfFile: string;
+  readiness?: ReadinessStamp | null;
 }
 
 /** The access code was missing/wrong (HTTP 401): clear it and re-prompt. */
