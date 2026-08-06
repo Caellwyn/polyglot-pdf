@@ -47,10 +47,20 @@ SUPERSEDED revision's own schema so fingerprint-era confirmation records stay
 retrievable; (4) 7jmy rubric #5 verify step corrected to the GCS-mode gating
 path (local mode is deliberately ungated -- change logged on the epic bead);
 (5) guarded-delete's existence query surfaced in confirmation_logger.py
-(6x1j surfaces updated, making the serialization rationale accurate). Nothing
-rejected or deferred; no out-of-scope beads filed by the reviewers. The
-terminal verdict is the Opus re-review of the fixed diff, recorded in the PR
-body and merge ping.
+(6x1j surfaces updated, making the serialization rationale accurate). Round 3
+(Opus, on the fixed diff) found 3 more consumer-trace gaps, also all adopted:
+(6) the pdf-fill call derives pdf_filename from the last URL segment, so
+private-kit backend-route paths would 404 the fill -- vccy now carries
+pdfFiller.ts and the 02ye rubric gained a private-kit-still-works clause
+(change logged on the epic); (7) the unpublished status must be threaded
+through the _status_of allowlist, the KitStatusBody Literal, and the editor's
+KitStatus type/bucketing, else it coerces to "unknown" and the write-lock 409
+never fires -- 6dz0 surfaces widened; (8) the static-bundle filter must
+exclude underscore-prefixed entries at both levels or <kit>/_archive/** ships
+publicly the way _translation does today -- kkos sharpened. Eight adopted
+gaps across rounds 2-3; nothing rejected or deferred; no out-of-scope beads
+filed by the reviewers. The terminal verdict is the Opus re-review of the
+final diff, recorded in the PR body and merge ping.
 
 Research findings that shaped the design (recorded in the plan): kit storage is
 single-slot per kit_id with destructive overwrite-in-place; confirmation
