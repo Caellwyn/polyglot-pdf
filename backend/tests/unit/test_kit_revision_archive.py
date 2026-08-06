@@ -390,6 +390,41 @@ def test_a_prefix_sharing_marker_never_matches_at_any_length(base_len):
     assert rkr._is_sibling_of(sibling_marker(theirs, fp), enc(theirs), theirs)
 
 
+def test_a_marker_ending_in_our_digest_is_not_our_sibling(tmp_path):
+    """The impostor that shares NO prefix with us at all.
+
+    A trimmed sibling is verified by a digest of the raw marker -- but the
+    digest is derivable from any confirmation record, so an UNTRIMMED base that
+    merely ends in "-<our 8 hex>" would take the trimmed path and answer to our
+    marker, returning an unrelated schema at exit 0. The length gate is what
+    establishes the segment was trimmed at all; a mutation deleting it survived
+    because every existing false-positive case was a PREFIX pair, which this
+    one deliberately is not (fresh-eyes, reproduced end to end).
+    """
+    import hashlib
+
+    from backend.services.form_kits import FormKitNotFound
+
+    victim = "12/2024"
+    tag = hashlib.sha256(victim.encode("utf-8")).hexdigest()[:8]
+    attacker = f"TOTALLY-UNRELATED-{tag}"  # shares no prefix with the victim
+
+    store = LocalFormKitStore(tmp_path)
+    rev_1 = _schema("a", edition=attacker)
+    _make_kit(tmp_path, "w7", rev_1)
+    _archive_hook(store, "w7", {"status": "complete"})
+    rev_2 = _schema("a", "b", "c", edition=attacker)
+    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
+    _archive_hook(store, "w7", {"status": "complete"})
+    # Nothing was EVER archived under the victim's marker.
+    (tmp_path / "w7" / "schema.json").write_text(
+        json.dumps(_schema("z", edition="09/2030")), encoding="utf-8"
+    )
+
+    with pytest.raises(FormKitNotFound):
+        _resolve_revision(store, "w7", victim)
+
+
 def test_an_unrelated_prefix_marker_resolves_to_not_found(tmp_path):
     """End to end: the prefix bleed must surface as an honest NOT FOUND, never
     as another revision's schema."""

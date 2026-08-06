@@ -154,11 +154,12 @@ Two follow-ons from that redesign. The digest must cover the RAW marker, not
 the encoded base -- `encode_marker` truncates at the cap, so two markers
 differing only past it share an encoded base and a digest over THAT would still
 collide (caught by the new boundary parametrization at lengths 128/200). And
-once the digest verifies, the accompanying `startswith` guard became genuinely
-redundant: a mutation deleting it left all 53 tests green, and rather than
-manufacture a test for a check that pins nothing, it was removed -- a
-redundant-looking guard no test can kill reads as protection while providing
-none.
+the trimmed path needs BOTH the digest AND a trim-LENGTH check: I deleted the
+length guard on the strength of a survived mutation, and the next round showed
+that admits an untrimmed base ending in `-<our 8 hex>` -- an unrelated
+revision returned at exit 0, with the digest being public knowledge derivable
+from any confirmation record. Restored, with the impostor case (which shares no
+prefix, so no existing test could reach it) now pinned. See Lessons 10.
 
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
@@ -264,13 +265,19 @@ fingerprint) instead of any `--` run, with a test pinning the coupling to
    shape of the iteration -- adjacent defects in the same small function -- not
    any one finding.
 
-10. **A guard no mutation can kill is not a guard.** After the digest check
-    landed, deleting the accompanying `startswith` left all 53 tests green. The
-    tempting response is to write a test for it; the correct one was to notice
-    it had become genuinely redundant and delete it. Per the repo's
-    redundant-guard lesson, unkillable code that reads as protection is worse
-    than absent code, because it stops the next reader from asking whether the
-    real check is sound.
+10. **A surviving mutation means "untested", NOT "unnecessary" -- and I got
+    this backwards, at real cost.** After the digest landed, deleting the
+    accompanying length/prefix guard left all 53 tests green, and I concluded
+    it was redundant and removed it. The next round proved otherwise end to
+    end: without the LENGTH half, any untrimmed base merely ENDING in
+    `-<8 hex>` takes the trimmed path, so a kit published under an unrelated
+    edition string ending in the victim's digest answers to the victim's marker
+    -- a wrong schema at exit 0, and the digest is public, derivable from any
+    confirmation record. The guard was load-bearing; the SUITE was blind,
+    because every false-positive case in the file was a PREFIX pair and this
+    impostor shares no prefix at all. When a mutation survives, the first
+    question is "what case does no test cover?", not "is this code dead?" --
+    deleting on the strength of a survived mutation is exactly inverted.
 
 11. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which

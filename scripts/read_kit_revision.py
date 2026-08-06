@@ -75,7 +75,18 @@ _SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
 _BASE_TAG_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
-def _is_sibling_of(segment: str, base: str, raw_marker: str | None = None) -> bool:
+def _marker_max_len() -> int:
+    """The writer's segment cap, imported rather than duplicated.
+
+    The trim budget must be computed from the SAME constant the writer uses --
+    a local copy would drift silently and make genuine siblings unresolvable.
+    """
+    from backend.services.form_kits import _MARKER_MAX_LEN
+
+    return _MARKER_MAX_LEN
+
+
+def _is_sibling_of(segment: str, base: str, raw_marker: str) -> bool:
     """True when `segment` is a fingerprint-disambiguated sibling of `base`.
 
     A sibling is "<base>--<encoded fingerprint>". Three things have to hold at
@@ -85,14 +96,14 @@ def _is_sibling_of(segment: str, base: str, raw_marker: str | None = None) -> bo
        ordinary marker that merely encodes with a "--" run (e.g. "12/2024//rev2")
        looks like a sibling of "12/2024" and produces a false ambiguity.
     2. An equal base matches, obviously.
-    3. A TRIMMED base is verified by its DIGEST, never by a prefix. The writer
-       trims long bases to fit the fingerprint under the segment cap, so this
-       reader's untrimmed base will not compare equal -- but prefix matching
-       cannot substitute, because trimming is lossy and any two markers sharing
-       the trimmed prefix become indistinguishable (measured in review at
-       thousands of cross-matching pairs; narrowing to the exact trim budget
-       still left thousands). So the writer appends a digest of the raw marker
-       and we recompute it: it either matches ours or it does not.
+    3. A TRIMMED base needs BOTH a trim-length check and a digest match.
+       Prefix matching cannot substitute for either: trimming is lossy, so any
+       two markers sharing the trimmed prefix become indistinguishable
+       (measured in review at thousands of cross-matching pairs; narrowing to
+       the exact trim budget still left thousands). So the writer appends a
+       digest of the raw marker, and the length says the segment was trimmed AT
+       ALL -- without which an untrimmed base merely ENDING in "-<8 hex>" takes
+       this path and answers to whatever marker digests to it.
     """
     marker_pos = segment.rfind("--")
     if marker_pos <= 0:
@@ -115,14 +126,23 @@ def _is_sibling_of(segment: str, base: str, raw_marker: str | None = None) -> bo
     _head, sep, tag = seg_base.rpartition("-")
     if not sep or not _BASE_TAG_RE.fullmatch(tag):
         return False
-    # The tag digests the RAW marker (encode_marker truncates at the cap, so
-    # two markers differing only past it share an encoded base -- a digest over
-    # THAT would still collide), which is why the caller's raw marker is
-    # required. No prefix check accompanies this: a matching digest already
-    # establishes the segment came from this marker, and a redundant-looking
-    # guard that no test can kill is worse than none -- it reads as protection
-    # while pinning nothing.
-    if raw_marker is None:
+    # TWO independent conditions, and BOTH are load-bearing:
+    #
+    # (a) the base must be exactly the length the writer's trim produces. This
+    #     is what establishes the segment was TRIMMED at all. Without it, any
+    #     untrimmed base that merely ENDS in "-<8 hex>" takes this path -- and
+    #     since the tag digests the marker (public, derivable from any record),
+    #     a kit published under an unrelated edition string ending in the
+    #     victim's digest answers to the victim's marker, returning a wrong
+    #     schema at exit 0. Reproduced end to end in review; deleting this
+    #     because a mutation "survived" was the error -- the mutation survived
+    #     because no test covered the case, not because the guard was dead.
+    #
+    # (b) the tag must match a digest of the RAW marker. encode_marker
+    #     truncates at the cap, so two markers differing only past it share an
+    #     encoded base; a digest over that would still collide.
+    budget = max(8, _marker_max_len() - len(suffix) - 2)
+    if len(seg_base) != budget:
         return False
     return hashlib.sha256(raw_marker.encode("utf-8")).hexdigest()[:len(tag)] == tag
 
