@@ -509,6 +509,65 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_kits_listing_returns_the_readiness_stamp(client):
+    """GET /kits must carry each kit's stamp -- the catalogue's only source of
+    a percentage (sprint-18 C4).
+
+    Untested until Opus fresh-eyes round 3: dropping `readiness=` from the
+    listing, or typo-ing a key in _readiness_out (the stored block deliberately
+    mixes snake_case `schema_sha1` with camelCase `toReview`, so this is a live
+    hazard), left the whole backend suite green while every hosted card showed
+    the verify hint forever.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": [{"id": "a"}]})
+
+    # Save to produce a real stamp, then list.
+    saved = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        # `type` is required for a field to count reviewed at all: a field
+        # with no id or no type is an uncovered structural error (mirroring
+        # the client). Omitting it here made this fixture measure 0 of 2.
+        json={"fields": [
+            {"id": "a", "type": "text",
+             "_review": {"status": "reviewed_correct"}},
+            {"id": "b", "type": "text"},
+        ]},
+    )
+    assert saved.status_code == 200
+
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    kit = next(k for k in listed.json()["kits"] if k["id"] == "i-90")
+    stamp = kit["readiness"]
+    assert stamp is not None, "the listing dropped the stamp"
+    # The values the card renders, end to end through the wire model.
+    assert stamp["reviewed"] == 1
+    assert stamp["total"] == 2
+    assert stamp["percent"] == 50
+    assert stamp["verified"] is True
+    assert stamp["schemaSha1"]  # camelCase on the wire, snake_case in storage
+
+
+def test_kits_listing_tolerates_a_malformed_stamp(client):
+    """One kit's junk stamp must not 502 the whole listing -- it degrades to
+    no stamp (the card then shows the verify hint), matching the same
+    'one malformed kit must not hide the rest' rule the listing already
+    follows for metadata."""
+    c, _store, root = client
+    _make_kit(root, "bad", schema={"fields": []},
+              extra_meta={"readiness": {"reviewed": "not-a-number"}})
+    _make_kit(root, "good", schema={"fields": []})
+
+    listed = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert listed.status_code == 200
+    ids = {k["id"] for k in listed.json()["kits"]}
+    assert {"bad", "good"} <= ids
+    bad = next(k for k in listed.json()["kits"] if k["id"] == "bad")
+    assert bad["readiness"] is None
+
+
 def test_mark_complete_survives_a_failing_readiness_stamp(client, monkeypatch):
     """A stamp failure must not fail a PUBLISH either (fresh-eyes gap 4).
 

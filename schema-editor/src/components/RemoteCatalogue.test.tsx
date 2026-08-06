@@ -126,6 +126,29 @@ describe('RemoteCatalogue', () => {
     expect(screen.queryByTestId('readiness-hint')).not.toBeInTheDocument();
   });
 
+  it('an UNREADABLE schema shows the corruption notice, never a stamped % (bd g687)', async () => {
+    // A stamp measured an EARLIER, readable schema. If schema.json later
+    // becomes corrupt, the card must say so -- not print the old stamp's
+    // confident percentage while swallowing the notice. This regressed when
+    // pct stopped coming from the same scan that sets schemaError (Opus
+    // fresh-eyes round 3).
+    vi.mocked(listRemoteKits).mockResolvedValue(KITS.map((k) => (
+      k.hasSchema
+        ? { ...k, readiness: {
+            reviewed: 3, toReview: 1, total: 4, errors: 0, percent: 75,
+            ready: false, verified: true, schemaSha1: 'abc123',
+          } }
+        : k
+    )));
+    // The schema fetch fails -> schemaError for both schema-bearing kits.
+    vi.mocked(loadRemoteSchema).mockResolvedValue(null as never);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getAllByText(/Schema present but unreadable/).length).toBe(2));
+    // ...and the stale stamp's number is nowhere on the card.
+    expect(screen.queryByText('75%')).not.toBeInTheDocument();
+  });
+
   it('an UNVERIFIED stamp shows the hint, never its percentage (bd g687)', async () => {
     // verified:false means the counts were computed with no usable lint
     // report. The counts may look complete, but presenting 100% as checked is

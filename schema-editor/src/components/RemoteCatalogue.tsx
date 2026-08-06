@@ -714,12 +714,26 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             // (sprint-18 C4). A stamp that is absent, unverified, or stale
             // yields the hint instead of a number -- deliberately NOT a
             // re-scan (that is the two-definitions bug this bead ends).
-            const reading = source ? null : readStamp(kit.readiness);
+            // An unreadable schema is reported REGARDLESS of whether a stamp
+            // exists. Before C4 this could safely key on `pct === null`,
+            // because pct came from the same scan that set schemaError. Now
+            // pct comes from the STAMP, so a kit whose schema.json became
+            // corrupt AFTER its last save would have rendered a confident
+            // percentage AND swallowed the corruption notice -- a card
+            // asserting progress about a schema nobody can read, which is the
+            // very class of lie this bead exists to end (Opus fresh-eyes
+            // round 3; regression introduced by this diff).
+            const showSchemaError = !source && Boolean(prog?.schemaError);
+            // ...and the stamp is withheld in that case at the SOURCE: a stamp
+            // measured an earlier, readable schema, so it cannot describe the
+            // one on disk now. Suppressing here (rather than at each render
+            // site) means the bar, the hover counts and the hint all follow.
+            const reading = source || showSchemaError
+              ? null : readStamp(kit.readiness);
             const stamped = reading?.kind === 'ok' ? reading.stamp : null;
             const pct = source ? source.percent : (stamped ? stamped.percent : null);
             const completeFields = source ? source.complete : (stamped?.reviewed ?? 0);
             const totalFields = source ? source.total : (stamped?.total ?? 0);
-            const showSchemaError = !source && prog?.schemaError && pct === null;
             // The verify hint: only for a schema-bearing kit (a kit with no
             // schema has nothing to measure and already says so) and never
             // alongside the louder unreadable-schema error.

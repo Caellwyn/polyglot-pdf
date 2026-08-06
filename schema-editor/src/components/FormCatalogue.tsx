@@ -636,15 +636,25 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // both modes render one definition of progress; an absent,
             // unverified, or stale stamp shows the verify hint rather than a
             // re-derived percentage.
-            const reading = source ? null : readStamp(kit.readiness);
+            // Present-but-unreadable schema: show a notice instead of nothing, so
+            // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
+            // override always has measurable stats, so suppress it then.
+            // Reported REGARDLESS of a stamp -- see the RemoteCatalogue twin:
+            // keying this on `pct === null` was safe only while pct came from
+            // the same scan that set schemaError. With pct now from the stamp,
+            // a schema that became corrupt after its last save would show a
+            // confident percentage and hide this notice (Opus fresh-eyes
+            // round 3).
+            const showSchemaError = !source && Boolean(prog?.schemaError);
+            // ...and the stamp is withheld at the SOURCE in that case: it
+            // measured an earlier, readable schema and cannot describe the one
+            // on disk now, so the bar, the hover counts and the hint all follow.
+            const reading = source || showSchemaError
+              ? null : readStamp(kit.readiness);
             const stamped = reading?.kind === 'ok' ? reading.stamp : null;
             const pct = source ? source.percent : (stamped ? stamped.percent : null);
             const completeFields = source ? source.complete : (stamped?.reviewed ?? 0);
             const totalFields = source ? source.total : (stamped?.total ?? 0);
-            // Present-but-unreadable schema: show a notice instead of nothing, so
-            // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
-            // override always has measurable stats, so suppress it then.
-            const showSchemaError = !source && prog?.schemaError && pct === null;
             const stampGap = !source && kit.hasSchema && !showSchemaError
               && reading?.kind === 'hint' ? reading.reason : null;
             // Version line: prefer the live/edited summary (tracks an in-session

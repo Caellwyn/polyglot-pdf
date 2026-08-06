@@ -192,17 +192,24 @@ export async function setKitLabel(
   return readKitEntry(entry.id, dir);
 }
 
-// --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
+// --- Kit readability + version scan (was: the review-progress metric) ------- //
 //
-// "Review progress" for a form is THE pinned count predicate (sprint-18 C1,
-// decision 2): reviewCounts / isCountedReviewed -- the same one App.liveStats
-// computes for the open kit -- so the catalogue % and the in-editor % can never
-// disagree (bd polyglot-pdf-q3rm: a second predicate here briefly made the same
-// kit show two numbers). The scan has no lint report, so the lint clause is
-// honestly gate-blind (findings = undefined), exactly like liveStats before
-// findings arrive.
+// This scan NO LONGER computes review progress. Since sprint-18 C4 (bd
+// polyglot-pdf-g687) a kit's percentage comes from its readiness STAMP in
+// metadata.json, written by the backend's publish_readiness -- the same
+// definition the open editor's strip mirrors. What survives here is what no
+// stamp carries: whether the schema is READABLE (schemaError) and its VERSION
+// line.
+//
+// Do NOT reintroduce a percentage here. A client-side re-derivation living
+// beside the stamp is a second definition of one number, and the two drifting
+// apart is precisely the bug this area has already shipped twice (bd
+// polyglot-pdf-q3rm: the same kit showed one number open and another after a
+// refresh). readKitProgress returns reviewPercent: null deliberately.
 
-/** A catalogue entry plus its computed review progress (null if no schema). */
+/** A catalogue entry plus its readability/version scan. `reviewPercent` is
+ * always null since C4 -- the field remains so the shape stays stable for the
+ * card's other consumers; the percentage lives on the kit's stamp. */
 /**
  * Displayable version summary for a kit's catalogue card (bd polyglot-pdf-s4dp.2).
  * `label` is the human-facing version string (edition_date or version, e.g.

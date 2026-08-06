@@ -9,6 +9,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readStamp, readStampFromMetadata, stampHint } from './readinessStamp';
+import { reviewCounts } from './reviewStatus';
+import type { FormField } from '../types/schema';
 import type { ReadinessStamp } from './remoteKitStore';
 
 const stamp = (over: Partial<ReadinessStamp> = {}): ReadinessStamp => ({
@@ -100,14 +102,29 @@ describe('percentage rounding parity with the backend mirror', () => {
   // The backend stamps a percentage and the open editor computes its own with
   // reviewCounts; if the two round differently, ONE saved kit prints two
   // numbers. Python's round() ties-to-even vs JS Math.round's ties-up made
-  // exactly that (1 of 8: backend 12%, editor 13%) -- fresh-eyes gap 2. These
-  // are the same ratios the backend test parametrizes, asserted on the CLIENT
-  // side so a change to either implementation breaks a test.
+  // exactly that (1 of 8: backend 12%, editor 13%). Same ratios the backend
+  // test parametrizes, so a change to EITHER implementation breaks a test.
+  //
+  // Drives the REAL reviewCounts. The first version of this block asserted
+  // `Math.round(...)` against a literal -- a tautology over a JS builtin that
+  // could not fail however reviewCounts changed, leaving the client half of
+  // the mirror unpinned while claiming to pin it (measured: swapping
+  // reviewCounts' Math.round for Math.floor left all 1204 tests green; Opus
+  // fresh-eyes round 3).
+  const fields = (reviewed: number, total: number): FormField[] =>
+    Array.from({ length: total }, (_, i) => ({
+      id: `f${i}`, name: `f${i}`, type: 'text', spoken_name: `f${i}`,
+      pdf_field_name: `F${i}[0]`,
+      ...(i < reviewed ? { _review: { status: 'reviewed_correct' } } : {}),
+    })) as unknown as FormField[];
+
   it.each([
     [1, 8, 13], [5, 8, 63], [3, 8, 38], [7, 8, 88], [1, 40, 3],
     [1, 3, 33], [2, 3, 67], [1, 1, 100], [0, 5, 0],
   ])('%i of %i -> %i%%', (reviewed, total, expected) => {
-    expect(Math.round((reviewed / total) * 100)).toBe(expected);
+    const counts = reviewCounts(fields(reviewed, total), undefined);
+    expect(counts.reviewed).toBe(reviewed);   // the fixture builds what it claims
+    expect(counts.percentage).toBe(expected);
   });
 });
 
