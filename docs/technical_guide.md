@@ -315,7 +315,7 @@ templates and the prose, not key names. System instruction:
 Producer: client state `SchemaFormState.fieldValues`
 (`frontend/src/schema-forms/state/schemaFormState.ts:25`, persisted :250-270).
 THREE call sites assemble the request -- download and print
-(`frontend/src/schema-forms/components/SchemaForm.tsx:601-638` and :640-670)
+(`frontend/src/schema-forms/components/SchemaForm.tsx:602-638` and :640-670)
 plus the in-browser preview
 (`frontend/src/pdf-view/FilledPreviewModal.tsx:62`, with its own unwrap loop
 :58-61). All run every value through `unwrapFieldValue`
@@ -358,7 +358,7 @@ acks (`webFormConnection.ts:1896+`, reply built :3169-3190 -- `reason` is a fixe
 category token, never a field value) -> backend logs ONLY on a positive ack
 (the `recorded` guard at `callback_handler.py:933`; the `log_field_confirmation`
 call it protects at :967-975). Event shape (NO PII, no
-`value` key anywhere): `backend/utils/confirmation_logger.py:270-285` --
+`value` key anywhere): `backend/utils/confirmation_logger.py:271-285` --
 `{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
 field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL
 (:301-317, dies with the instance), Firestore `confirmation_events` (:88-119,

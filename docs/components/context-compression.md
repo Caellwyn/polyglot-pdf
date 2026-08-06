@@ -190,7 +190,7 @@ Two inputs are easy to miss and both move the result by thousands of tokens:
   details-bearing initiating message can exceed the assembled window and Vertex
   closes `1007` AT SESSION ASSEMBLE (the wsao.2 measured failure). It is computed
   at `backend/services/guidance_contract.py:246` and passed in from TWO sites in
-  `backend/services/form_filling_service.py` -- `:478` (start) and `:1100`
+  `backend/services/form_filling_service.py` -- `:478` (start) and `:1102`
   (restart); the restart site is the one that regressed wsao.2 when it was
   missed.
 
