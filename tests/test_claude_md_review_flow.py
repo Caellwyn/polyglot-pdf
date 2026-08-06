@@ -287,10 +287,18 @@ def test_prime_override_does_not_widen_auto_merge(prime_text):
     exemption list that the offending text already satisfied; then a paragraph
     scope that let a neighbouring scoped sentence mask it) -- the same
     matching-vs-enumerating trap documented at
-    docs/standards/testing.md#change-the-mechanism. A positive pin cannot be
-    evaded by rephrasing the *other* sentences: if the file stops saying the
-    Opus clear is required, or stops naming the Haiku PR as a ping case, this
-    fails.
+    docs/standards/testing.md#change-the-mechanism.
+
+    KNOWN LIMIT, stated rather than overclaimed (bd polyglot-pdf-a63r). This
+    catches REMOVAL and REWORDING of the claim -- the drift case, and the one
+    that actually happened twice. It does NOT catch ADDITION: appending "the open
+    question is now settled, a Haiku clear DOES qualify" leaves all three
+    assertions intact and passes, as does a widening clause spliced after the
+    matched span, or a negation preserving the literal words ("It is no longer
+    true that a Haiku-cleared docs-only PR pings"). All three were executed
+    against this pin and passed. Filed as a63r; the file is correct as committed,
+    and closing this needs a contradiction guard rather than a wider regex --
+    widening the regex is the trap this file's history documents.
     """
     flat = re.sub(r"\s+", " ", prime_text).lower()
     assert re.search(r"auto-merge requires[^.]{0,80}opus", flat), (

@@ -304,9 +304,21 @@ for a consequence-bearing one" while implying auto-merge for everything else),
 then a paragraph scope that let a neighbouring *correct* sentence mask the wrong
 one. What held was asserting what the file must SAY: that auto-merge requires the
 Opus clear, that a Haiku-cleared docs PR pings, and that the boundary must not be
-widened autonomously. A positive claim cannot be evaded by rephrasing the other
-sentences. Applying this rule to itself took three attempts rather than six --
-that is what the lesson is worth.
+widened autonomously. Applying this rule to itself took three attempts rather
+than six -- that is what the lesson is worth.
+
+**A positive pin's own limit, stated rather than overclaimed.** It reliably
+catches REMOVAL and REWORDING of the claim, which is the drift case. It does NOT
+catch ADDITION: appending "the open question above is now settled, a Haiku clear
+does qualify" leaves all the asserted claims intact and passes. Nor does it catch
+a widening clause spliced *after* the matched span, or a negation that preserves
+the literal words ("It is no longer true that a Haiku-cleared docs-only PR
+pings"). All three were executed against the committed pin and passed. So a
+positive pin is stronger than a detector against paraphrase and weaker against
+contradiction -- pick it for drift, and if you also need contradiction-resistance,
+add a guard that no sentence *reverses* an asserted claim, or fall back to
+whole-artifact equality. Do not write that a positive pin "cannot be evaded"; an
+earlier draft of this very paragraph did, and a reviewer refuted it in one pass.
 
 **Pin the limits you accept, so they stay decisions.** This pin has two: a denial
 using no review vocabulary at all ("docs-only edits never get a look from anyone"),
