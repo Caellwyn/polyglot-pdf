@@ -181,6 +181,30 @@ def test_a_malformed_fields_value_is_unmeasurable_not_zero_percent():
         assert v.ready is False
 
 
+def test_a_refusal_always_names_something():
+    """`ready=False` must never ship with an EMPTY blocking_ids.
+
+    ReadinessVerdict's docstring promises the gate "refuses BY NAME, never with
+    a bare count", and C2 surfaces that list to a human. Id-less and malformed
+    entries were silently dropped, so a kit made entirely of them refused while
+    naming nobody -- an unactionable 409 (confirming Opus outer review).
+    """
+    # Every entry unusable: malformed, None, and a dict with no id.
+    v = publish_readiness({"fields": ["junk", None, {"type": "text"}]}, [])
+    assert v.ready is False
+    assert v.counts.to_review == 3
+    assert len(v.blocking_ids) == 3, "a refusal that names nobody is unactionable"
+    # The placeholders say WHERE, and are deliberately not id-shaped so a
+    # caller cannot present them as searchable field ids.
+    assert all("no id" in name for name in v.blocking_ids)
+    assert "fields[0]" in v.blocking_ids[0]
+
+    # Real ids are still used verbatim when present, and the two mix correctly.
+    mixed = publish_readiness(
+        {"fields": [_field("real"), "junk"]}, [])
+    assert mixed.blocking_ids == ["real", "fields[1] (no id)"]
+
+
 def test_malformed_field_entries_stay_in_the_denominator():
     """A junk entry cannot be reviewed, so it must still count toward total --
     dropping it would let a corrupted kit report a confident 100%."""

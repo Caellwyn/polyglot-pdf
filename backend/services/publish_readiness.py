@@ -310,6 +310,16 @@ class ReadinessVerdict:
     blocking_ids: List[str]
 
 
+def _positional_name(index: int) -> str:
+    """A stand-in name for a blocking field that has no usable id.
+
+    Deliberately NOT id-shaped: a caller rendering these (C2's gate names the
+    fields it refuses on) must not present it as something the human can search
+    for. It says WHERE the problem is, which is the most the schema affords.
+    """
+    return f"fields[{index}] (no id)"
+
+
 def _bucket_by_field(
     findings: Optional[Iterable[LintFinding]],
 ) -> Dict[str, List[LintFinding]]:
@@ -348,11 +358,14 @@ def publish_readiness(
     errors = 0
     blocking: List[str] = []
     total = 0
-    for field in fields:
+    for index, field in enumerate(fields):
         if not isinstance(field, dict):
-            # A malformed entry cannot be reviewed and cannot be named; it
-            # still occupies the denominator so the percentage never overstates.
+            # A malformed entry cannot be reviewed. It still occupies the
+            # denominator (so the percentage never overstates) AND it is named
+            # positionally, because a verdict that refuses without naming
+            # anything is unactionable -- see the placeholder note below.
             total += 1
+            blocking.append(_positional_name(index))
             continue
         total += 1
         fid = field.get("id")
@@ -363,6 +376,15 @@ def publish_readiness(
             reviewed += 1
         elif isinstance(fid, str) and fid:
             blocking.append(fid)
+        else:
+            # An id-less (or non-string-id) field blocks too. Silently dropping
+            # it let `ready=False` ship with an EMPTY blocking_ids -- a refusal
+            # naming nobody, which ReadinessVerdict's own docstring forbids
+            # ("the gate refuses BY NAME, never with a bare count") and which
+            # C2's gate would surface to a human as an unactionable 409
+            # (confirming Opus outer review). A positional placeholder is not a
+            # field id, so it is deliberately unmistakable as one.
+            blocking.append(_positional_name(index))
 
     to_review = total - reviewed
     return ReadinessVerdict(
