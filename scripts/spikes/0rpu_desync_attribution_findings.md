@@ -375,3 +375,54 @@ looks unlikely to help on its own.
 
 All prior rate statistics in this document are WITHDRAWN in favour of the table
 above. Reports: `stt_final.json` beside each run's audio dir.
+
+## ROUND 5 (2026-08-06): NATO arm -- INSTRUCTION IGNORED, but the failure captured cleanly
+
+### The arm did not take
+`SPELLBACK_STYLE=nato` appends an explicit rule ("anchor EVERY letter to a NATO
+word -- 'J as in Juliet ...'"). The model **ignored it completely**: zero
+"as in" markers anywhere in the run's text track; it spelled J-O-H-N /
+J-O-S-H-U-A / J-O-H-N-S-O-N exactly as the control does. Consistent with bd
+9kj4 (two rounds of SI articulation prose failed to change delivery). Prompt
+rules do not appear to reach this model's spoken DELIVERY.
+
+### A fourth instrument defect found and fixed
+The transcript stream LEADS the audio-dump boundaries, so a spelling spoken in
+generation N lands in generation N-1's seq window. This produced symmetric
+false pairs (gen 6 text=JOHN / gen 7 audio=JOHN; gen 12 text=MARIA / gen 13
+audio=MARIA) and the scorer called BOTH sides desyncs. Fixed with an
+adjacent-inclusive comparison window: a spelled run the audio produced is only
+suspicious when it appears NOWHERE in the neighbouring text.
+
+Effect of the fix (spelling desyncs): control 5 -> 2, runRUDE 3 -> 1,
+runPOLITE 3 -> 0. Rates with corrected pairing: control 9.7%, runRUDE 11.5%,
+runPOLITE 6.9%, NATO 22.6%.
+
+### THE CLEANEST EVIDENCE YET (NATO run, gens 9 / 11 / 15)
+
+| gen | text track (the true field) | AUDIO |
+|---|---|---|
+| 9 | Joshua | **"Joe Howa"** |
+| 11 | Johnson | **"Joe Howa"** |
+| 15 | Jose | **"Joe Howa"** |
+
+THREE DIFFERENT names; the audio emits the IDENTICAL corrupted utterance each
+time. This cannot be recognizer error -- a recognizer mishearing three
+different inputs produces three different errors. It is the speech path
+substituting one stored acoustic pattern for the current content. Confidence is
+0.647-0.649 on exactly these rows while healthy rows score 0.93-0.99, so LOW
+CONFIDENCE IS ITSELF A SIGNAL of the corruption, not merely of recognizer
+difficulty.
+
+Contrast, same run, gen 13: audio "M, a r. I a Maria" -- correctly spelled,
+comma-paced, confidence 0.831. The model CAN spell correctly; it
+intermittently substitutes instead.
+
+### Consequence for the fix ladder
+- Gemini's idea 2 (phonetic prompting via the SI) is REJECTED on evidence: the
+  instruction does not reach delivery.
+- Idea 3 (deterministic spell-back TOOL: format/synthesize the spelling outside
+  the model's speech path) rises to primary. It is the only proposal that does
+  not depend on the model choosing to obey.
+- The comma arm is still worth its ~$1 as a cheap check of the same channel,
+  but expectations should be low after NATO.
