@@ -1214,7 +1214,17 @@ export class SchemaFormStateManager {
     fieldId: string,
     method: 'ai_voice' | 'manual_edit'
   ): SchemaFormState {
-    const fieldValue = state.fieldValues[fieldId];
+    // Resolve the `[]`-alias like updateField and markFieldSkipped do. Without
+    // it a confirm for `race` no-ops when the value lives under `race[]` -- and
+    // reconcileFieldValues now actively consolidates a pair onto the schema's
+    // variant, so the model dropping the bracket (bd polyglot-pdf-5k52) reaches
+    // exactly that state. The gate in handleConfirmFieldRequest reads through the
+    // alias too, so without this the gate would pass and the write silently do
+    // nothing -- confirming neither variant.
+    const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+    const targetKey = state.fieldValues[fieldId] !== undefined ? fieldId
+      : (state.fieldValues[aliasKey] !== undefined ? aliasKey : fieldId);
+    const fieldValue = state.fieldValues[targetKey];
     if (!fieldValue) {
       // bd polyglot-pdf-0y7: a confirm for a field with no entry in fieldValues is
       // a no-op (nothing to confirm until a value lands). This was previously
@@ -1234,7 +1244,10 @@ export class SchemaFormStateManager {
       ...state,
       fieldValues: {
         ...state.fieldValues,
-        [fieldId]: {
+        // Write back to the RESOLVED key, not the requested one -- writing to
+        // `fieldId` when the entry was found under the alias would create a
+        // SECOND entry and break the got6 one-entry invariant.
+        [targetKey]: {
           ...fieldValue,
           confirmed: true,
           confirmedAt: new Date().toISOString(),
@@ -1270,27 +1283,53 @@ export class SchemaFormStateManager {
     fieldId: string,
     method: 'ai_voice' | 'manual_edit' = 'manual_edit'
   ): SchemaFormState {
-    const prior = state.fieldValues[fieldId];
+    // Resolve the `[]`-alias like updateField does, and drop the stale variant.
+    // Without this, a skip whose id drops (or adds) the bracket writes a SECOND
+    // key beside the existing one -- breaking the got6 one-entry invariant and
+    // making this the only remaining producer of the both-variants state that
+    // reconcileFieldValues then has to arbitrate (bd polyglot-pdf-8c97).
+    const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+    const priorKey = state.fieldValues[fieldId] !== undefined
+      ? fieldId
+      : (state.fieldValues[aliasKey] !== undefined ? aliasKey : fieldId);
+    const prior = state.fieldValues[priorKey];
+
+    // NOTE the asymmetry with confirmField, which writes to the RESOLVED key:
+    // this writes to the REQUESTED one. Safe because both callers only ever pass
+    // a SCHEMA id -- handleSkipFieldRequest rejects anything else as
+    // `unknown_field` (exact `f.id === field_id`), and the UI passes `field.id`
+    // -- so the requested key IS the schema key. If a caller is ever added that
+    // can pass a non-schema variant, write to priorKey instead.
+    const nextFieldValues = {
+      ...state.fieldValues,
+      [fieldId]: {
+        ...prior,
+        value: null,
+        skipped: true,
+        confirmed: true,
+        confirmedAt: new Date().toISOString(),
+        confirmationMethod: method,
+        lastModified: Date.now(),
+      },
+    };
+    if (priorKey !== fieldId) {
+      delete nextFieldValues[priorKey];
+    }
+
     const newState = {
       ...state,
-      fieldValues: {
-        ...state.fieldValues,
-        [fieldId]: {
-          ...prior,
-          value: null,
-          skipped: true,
-          confirmed: true,
-          confirmedAt: new Date().toISOString(),
-          confirmationMethod: method,
-          lastModified: Date.now(),
-        },
-      },
+      fieldValues: nextFieldValues,
       lastUpdated: Date.now(),
     };
 
     // A skipped field is intentionally empty -- clear any stale validation error.
-    if (newState.validationErrors[fieldId]) {
-      const { [fieldId]: _removed, ...rest } = newState.validationErrors;
+    // Clear it under the PRIOR key too: now that the alias is resolved above, an
+    // error recorded against the variant we just deleted would otherwise outlive
+    // the entry it describes.
+    if (newState.validationErrors[fieldId] || newState.validationErrors[priorKey]) {
+      const rest = { ...newState.validationErrors };
+      delete rest[fieldId];
+      delete rest[priorKey];
       newState.validationErrors = rest;
     }
 
@@ -1430,7 +1469,12 @@ export class SchemaFormStateManager {
       const fv = fieldValues[key];
       if (!fv) continue; // no entry to mark under either variant
       if (fv.steered === true) continue; // already marked
-      fieldValues[key] = { ...fv, steered: true };
+      // Stamp lastModified like every other fieldValues writer. This is a real
+      // write to the entry, and reconcileFieldValues resolves the two-writer
+      // divergence on that stamp -- an unstamped write loses to any stamped one
+      // ("dated beats undated"), which would silently discard the steer marker
+      // and defeat W4's re-arm bound.
+      fieldValues[key] = { ...fv, steered: true, lastModified: Date.now() };
       changed = true;
     }
     if (!changed) return state;

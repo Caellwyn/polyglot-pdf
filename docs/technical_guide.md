@@ -261,7 +261,7 @@ Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
   (`webFormConnection.ts:617-619`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:231`) with a different
+  (`backend/services/callback_handler.py:206`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
@@ -279,22 +279,22 @@ Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:456-674`), deep-copied into the
 live config by `form_filling_service.py:219-229` (which drops `switch_section`
 in continuous mode -- the session ships 6 declarations, not 7) and declared to
-Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1632`;
-tools assembled at :1645). Gemini's tool
-calls come back through the adapter (`live_ai_gemini.py:2398-2585` and :2592+)
-into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:418`),
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1644`;
+tools assembled at :1657). Gemini's tool
+calls come back through the adapter (`live_ai_gemini.py:2248-2440` and :2447+)
+into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:437`),
 which dispatches to the `form_filling_service` handlers that emit the Leg-A
 client messages above. The coupling table (tool -> handler -> client message):
 
 | Gemini tool (args) | Handler (`callback_handler.py`) | Client message |
 |---|---|---|
-| `update_form_fields` (`field_id`, `value`) | :507 | `form_updated` |
-| `get_form_status` (`field_ids`) | :648 | `get_form_state` round-trip |
-| `confirm_field` (`field_id`, `confirmation_method`) | :840 | `confirm_field` round-trip |
-| `skip_field` (`field_id`) | :1098 | `skip_field` round-trip |
-| `switch_to_field` (`field`) | :1239 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
-| `ask_secretary` (`query`) | :710 | none -- answered server-side from the cached `full_schema` |
-| `switch_section` (deprecated; dropped in continuous mode) | :692 | internal session restart + `section_switched` |
+| `update_form_fields` (`field_id`, `value`) | :526 | `form_updated` |
+| `get_form_status` (`field_ids`) | :667 | `get_form_state` round-trip |
+| `confirm_field` (`field_id`, `confirmation_method`) | :859 | `confirm_field` round-trip |
+| `skip_field` (`field_id`) | :1117 | `skip_field` round-trip |
+| `switch_to_field` (`field`) | :1258 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
+| `ask_secretary` (`query`) | :729 | none -- answered server-side from the cached `full_schema` |
+| `switch_section` (deprecated; dropped in continuous mode) | :711 | internal session restart + `section_switched` |
 
 Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`
@@ -348,8 +348,8 @@ The chain: Gemini `confirm_field` tool -> backend request
 (`request_coordinator.py:314-319`) -> client verifies it has a usable value and
 acks (`webFormConnection.ts:1705+`, reply built :2908-2927 -- `reason` is a fixed
 category token, never a field value) -> backend logs ONLY on a positive ack
-(the `recorded` guard at `callback_handler.py:914`; the `log_field_confirmation`
-call it protects at :944-956). Event shape (NO PII, no
+(the `recorded` guard at `callback_handler.py:933`; the `log_field_confirmation`
+call it protects at :967-979). Event shape (NO PII, no
 `value` key anywhere): `backend/utils/confirmation_logger.py:270-285` --
 `{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
 field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL

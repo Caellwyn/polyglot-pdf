@@ -505,6 +505,15 @@ export function createConnectionManager(
 				console.error('[VFF Connection] rehydrateAudio(onSessionRestarted) failed:', err)
 			})
 		},
+		onInterrupted: () => {
+			// Gemini interrupted the current generation (user barge-in, bd
+			// polyglot-pdf-s7uf). Drain the SCHEDULED playback (sources + clock)
+			// so the dead generation's tail stops now; the staging queue was
+			// already cleared in webFormConnection before this fired.
+			// resetPlaybackClock never sets playbackBlocked, so the model's NEXT
+			// generation plays normally (nm7z-immune by construction).
+			audioManager?.resetPlaybackClock()
+		},
 		onNativeVadMode: (enabled) => {
 			// bd polyglot-pdf-333: backend told us whether Gemini's own VAD is
 			// driving turns. Flip the closure flag (gates the activity-signal

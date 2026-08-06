@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed FieldType count to 13 and corrected the mobile-overlay breakpoint to describe its 700/820 dead-zone hysteresis, not a flat 768px rule; the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: FieldType count corrected to 13; the mobile-overlay breakpoint described as its 700/820 dead-zone hysteresis, not a flat 768px rule; the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified. Also current: `fieldValues` has two independent writers -- the React UI and WebFormConnection -- reconciled per logical field by `reconcileFieldValues` (bd polyglot-pdf-uw3w / 3irc / qim7; see "Two writers, one map" below).)*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -77,6 +77,139 @@ interface FieldValue {
 > rides the next validator payload and the (stateless) backend suppresses re-steering
 > it. See [../standards/validation-delegation.md](../standards/validation-delegation.md)
 > (contracts 2/3).
+
+> **`lastModified`** is load-bearing, not decorative: it is the tiebreaker for the
+> two-writer problem below. `updateField` and `markFieldSkipped` stamp it;
+> `confirmField` deliberately does **not**, because confirming changes only
+> confirmation metadata and never the value, so the value's timestamp must stay put.
+
+### Two writers, one map: reconciling `fieldValues`
+
+`fieldValues` has **two independent writers**, and `validationErrors` is a third
+map the UI owns alone (`SchemaForm.tsx`'s blur handler persists it without
+touching `this.state`), so the reconciling handlers adopt the persisted
+`validationErrors` wholesale — a fieldValues-only merge reverted a blur error
+raised during the window, which stopped `isSectionValid` blocking on a genuinely
+invalid field. The connection does not *add* entries to that map, but it does
+**clear** them (`updateField` and `markFieldSkipped` delete the entry for the
+field they write), which is why each adopt must stay *before* its mutator. The React UI (`SchemaForm.tsx`
+`handleFieldChange` / `handleFieldSkip`) persists through `SchemaFormStateManager`
+and never touches `WebFormConnection`'s in-memory `this.state`; the voice layer
+holds `this.state` across turns. Any connection handler ending in
+`SchemaFormStateManager.save(this.state)` can therefore persist a stale in-memory
+copy over an on-screen edit.
+
+**Every `SchemaFormStateManager` mutator spread-replaces the whole state and calls
+`save()` internally**, so *any* of them invoked on a stale `this.state` persists
+that stale copy. `reconcileFieldValues` (`utils/fieldValue.ts`) is the single
+arbiter. The most important call site is **`WebFormConnection.updateField` — the
+chokepoint every AI fill and manual edit funnels through**; its persisting call
+sits two frames below the message handler, which is why six rounds of
+handler-level auditing missed it. The others are `handleSessionReady`,
+`handleConfirmFieldRequest`, `handleSkipFieldRequest`, `handleSectionSwitched`,
+`handleDrainFindingsResult`, `handleValidationResult`, and `handleFormUpdated`
+(bd `polyglot-pdf-qim7` / `uw3w` / `3irc` / `tare` / `6iwn`).
+
+`confirmField` and `markFieldSkipped` both resolve the `[]`-alias and write back to
+the RESOLVED key, exactly as `updateField` does — and `handleConfirmFieldRequest`'s
+usable-value gate reads through the alias too. That matters *because* the reconcile
+consolidates a pair onto one variant: the model routinely drops the bracket
+(bd `polyglot-pdf-5k52`), so an exact-key read would miss the answer, refuse the
+confirm as `no_value`, and the loop-breaker would tell Gemini to stop trying —
+stranding a field that holds the user's answer. `markFieldSkipped` additionally
+deletes the stale variant — it was the last remaining producer of the both-variants
+state the reconcile then had to arbitrate (bd `polyglot-pdf-8c97`).
+
+`handleSwitchFieldRequest` needs no reconcile: it adopts the persisted snapshot
+wholesale at entry (bd `polyglot-pdf-ezg2`), so its write cannot be stale.
+
+**A stale READ is as damaging as a stale write.** `handleFieldUpdate` and
+`handleFormUpdated` reconcile at HANDLER ENTRY, not merely before their writes,
+because their availability gate calls `shouldShowField` against
+`this.state.fieldValues`. On a stale copy, a field whose `show_if` is satisfied by
+a trigger the user answered *on screen* reads as unavailable, so the AI fill is
+REFUSED outright — the value is never stored and the model is told "do not retry
+until then", making the field unfillable for the turn. The `updateField`
+chokepoint's own reconcile sits two frames below that gate, which is too late.
+
+There is a **second staleness shape** that reconciling `this.state` does not
+cover: `const s = load()` … `await` … `mutator(s)`. Here the local snapshot goes
+stale across the await and the mutator persists it. `switchToSection` had exactly
+this — its `waitForBufferDrain` polls for up to a full second — and the fix there
+is to re-read *after* the await, not to reconcile two diverged copies.
+
+`webFormConnection.persistsites.test.ts` pins both shapes: the persist-site list
+as an **allowlist** (a newly-added site fails by default) and a check that no
+persisting mutator reads a snapshot captured before an `await`. Six successive
+review rounds each found one more instance, which is why the enumeration is
+enforced in a test rather than trusted to a convention.
+
+> **Why not just reconcile inside `save()`?** Because `confirmField` deliberately
+> does not bump `lastModified` — it changes only confirmation metadata — so a
+> reconcile there would see a tie, prefer the persisted entry, and silently drop
+> `confirmed: true` on every confirmation. Verified by probe. Hence per-call-site
+> reconciles.
+
+It resolves
+**per logical field**, not per raw key:
+
+- The newer `lastModified` wins; a stamped entry beats an unstamped one; an equal
+  stamp goes to the more authoritative side. The ordering rule and the marker
+  carry each live in exactly ONE helper (`firstWins`, `mergeEntries`), used by
+  both the cross-side comparison and the intra-side collapse — but the
+  **no-ordering-information** case is an explicit argument, because the two
+  callers genuinely differ. Across sides the two maps are two copies of one
+  field's *history*, so a stamped blanking is a real later decision and the
+  in-memory side is the conservative default (bd `pjws`). Within one side the two
+  variants are not a history — they are one answer plus a stray key — so the
+  entry that actually holds an answer must survive; importing the cross-side
+  default there let a dated hollow entry destroy a real confirmed answer. That is deliberate:
+  three review rounds found the intra-side path drifting from the cross-side one
+  a cell at a time — first stamps, then dated-vs-undated, then equal stamps and
+  the marker carry — each time letting a fresher hollow write (a skip, or the
+  user clearing a field) lose to a staler answer on one side while winning across
+  sides. Sharing the helpers makes that divergence structurally impossible rather
+  than something to remember.
+- `[]`-alias variants (`p1_grp` / `p1_grp[]`) collapse into ONE decision, so a
+  merge can never resurrect a key `updateField` deleted on migration — that
+  resurrection is what broke the one-entry invariant (bd `polyglot-pdf-got6`).
+  **The surviving key is the one the SCHEMA declares**, which is why callers pass
+  the schema's field ids; with no schema to consult it is the key of the *winning
+  entry*, derived from the winner rather than computed separately (computing it
+  separately let a bracketed winner land under the bare key). `SchemaForm`, `getProgress` and `isSectionValid` all
+  index `fieldValues[field.id]` exactly, and a shipped kit really does use
+  bracketed ids (`adult_intake_demo_schema.json`: `race[]`, `reason[]`,
+  `risk_concerns[]` and three more) — so re-keying `race[]` → `race` would leave
+  the answer live but invisible: blank on screen, progress down, required section
+  no longer validating.
+- A same-millisecond tie goes to the **persisted** side. `Date.now()` is coarser
+  than the AI-write → on-screen-edit gap, so ties are a real case, and *both*
+  directions are unsafe if the stale in-memory copy wins: a typed answer gets
+  blanked by a skip, **and** a value the user cleared gets revived (and marked
+  confirmed) by a confirm. A "meaningful entry wins" tie-break only covers the
+  first — the cleared-value direction has the stale side holding the meaningful
+  entry — so the durable side wins outright instead. A tie between two *different*
+  meaningful values therefore resolves arbitrarily; that is safe only because it
+  is unreachable, since every connection write stamps `lastModified` **and** saves
+  in one step (so an equal stamp means both sides hold the same write).
+  `markFieldsSteered` stamps for exactly this reason — an unstamped write would
+  lose to any stamped one and the steer marker would be silently discarded.
+  **Adding a path that mutates `this.state.fieldValues` without stamping and
+  persisting would break that assumption.**
+- An entry present on only one side is kept, so an in-memory-only value stays
+  visible to the confirm handler's usable-value gate and the skip handler's
+  already-filled guard (bd `polyglot-pdf-pjws`).
+- The winner decides the VALUE, but sticky markers (`confirmed`, `confirmedAt`,
+  `confirmationMethod`, `steered`, `skipped`) carry across from the losing side
+  **when both sides agree on the value**. `confirmField` sets `confirmed` without
+  bumping `lastModified`, so the loser can be the only side holding it, and
+  dropping it would cause a spurious re-ask; `skipped` is load-bearing the same
+  way, since `isSectionValid` and `getProgress` both honour it. The gate is value
+  agreement, not a stamp tie: a marker describes the answer it was attached to, so
+  it may follow that answer but must never follow a *different* one.
+
+Never merge these maps with a raw key union (`{...persisted, ...inMemory}`) — that
+makes the in-memory side win unconditionally and reintroduces all three bugs.
 
 > **Terminology gotcha:** the frontend's `confirmationMethod` enum is
 > `ai_voice` / `manual_edit`, but the **backend** `confirm_field` tool +

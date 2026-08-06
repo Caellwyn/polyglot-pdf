@@ -28,6 +28,7 @@ export interface AudioManager {
 	stopRecording: () => void
 	playAudio: (audioData: ArrayBuffer) => Promise<void>
 	flushAudioQueue: () => void // Stop all queued audio immediately (full barge-in)
+	resetPlaybackClock: () => void // Drain scheduled playback WITHOUT blocking new audio (Gemini interrupted event)
 	resumePlayback: () => void // Resume audio after barge-in (unblock new chunks)
 	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
 	resumeAudioContext: () => void // Resume audio context (resume after false positive)
@@ -133,6 +134,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// awaits it instead of starting a duplicate setup.
 	let arming: Promise<void> | null = null
 	let playbackTime = 0
+	// Bumped by every drain (resetPlaybackClock, hence also flushAudioQueue):
+	// playAudio captures it before its awaitable section and drops the chunk if
+	// a drain intervened -- the suspended-context resume window otherwise lets a
+	// dead generation's chunk schedule AFTER the drain (bd s7uf, Opus fresh-eyes).
+	let playbackEpoch = 0
 	let playbackChunkCount = 0 // Track playback chunks for debugging
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
 	// Live mic-energy subscriber (bd polyglot-pdf-s3zv). The worklet posts a
@@ -174,7 +180,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let blockedDiscardCount = 0
 
 	// Flag to suppress onended callbacks during flush (prevents spurious watchdog triggers)
-	let isFlushing = false
 
 	// Track if Gemini is currently speaking (for barge-in detection)
 	let geminiIsSpeaking = false
@@ -506,10 +511,27 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 			const ctx = nodes.playbackContext
 
+			// Capture the drain epoch BEFORE the awaitable section: a chunk parked
+			// on the resume() await when a drain (resetPlaybackClock /
+			// flushAudioQueue) lands belongs to the DEAD generation and must not
+			// schedule after the drain returns (bd s7uf).
+			// SCOPE: the suspended-resume window only opens on
+			// the manual-VAD tentative-pause path -- native VAD never suspends, so
+			// there this guard is a no-op by design. The native-VAD ordering
+			// hazard lives a layer up and is owned by the WS
+			// binaryType='arraybuffer' wire-order guarantee (webFormConnection).
+			const epochAtStart = playbackEpoch
+
 			// Resume context if suspended (browser autoplay policy)
 			if (ctx.state === 'suspended') {
 				console.log('[AudioManager] [pause] Resuming suspended AudioContext')
 				await ctx.resume()
+			}
+
+			// Re-check after the await: a drain incremented the epoch (and/or set
+			// the block) while this chunk was parked -- drop it.
+			if (playbackBlocked || epochAtStart !== playbackEpoch) {
+				return
 			}
 
 			// Decode audio data
@@ -575,11 +597,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				// Only mark as not speaking if no more active sources
 				if (activeAudioSources.length === 0) {
 					geminiIsSpeaking = false
-					
+
 					// CRITICAL: Only notify activity watchdog when ALL chunks finished playing naturally
-					// Do NOT fire callback during flush (barge-in) - that would spam the watchdog
-					// This is used for Level 3 farewell disconnect timing (100ms audio silence detection)
-					if (!isFlushing && window.vffOnAudioPlaybackEnd) {
+					// Do NOT fire callback during flush (barge-in) -- a drained source never
+					// reaches this handler at all (the drain swaps in a narrowed onended),
+					// so this fires only for natural playback ends. Used for Level 3
+					// farewell disconnect timing (100ms audio silence detection).
+					if (window.vffOnAudioPlaybackEnd) {
 						window.vffOnAudioPlaybackEnd()
 					}
 				}
@@ -614,37 +638,66 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
-	 * Flush audio queue - Stop all pending/playing audio immediately (for barge-in)
+	 * Drain scheduled playback WITHOUT blocking future audio (bd polyglot-pdf-s7uf).
+	 *
+	 * This is the flush for a Gemini `interrupted` event: the model already
+	 * stopped the old generation and will speak a NEW one on this same
+	 * connection, so we must stop the dead generation's tail and reset the
+	 * scheduling clock -- but NEVER set playbackBlocked, whose unpaired form is
+	 * the nm7z all-audio-killed trap. flushAudioQueue (pause/section-switch)
+	 * delegates here after setting the block.
 	 */
-	function flushAudioQueue(): void {
-		// CRITICAL: Block new audio playback from arriving chunks
-		playbackBlocked = true
-		
-		// Set flag to suppress onended callbacks during flush
-		isFlushing = true
-		
-		// Stop all active audio sources
+	function resetPlaybackClock(): void {
+		// Invalidate chunks parked on an await inside playAudio (the
+		// suspended-context resume window): they belong to the generation being
+		// drained (bd s7uf).
+		playbackEpoch++
+
+		// Stop all active audio sources. Swap in a NARROWED onended first:
+		// stop() delivers onended on a LATER task (no synchronous flag can
+		// suppress it), so a drained source must carry a handler that keeps the
+		// clock-repair responsibility -- playbackTime catch-up when the context
+		// clock moved past a stale cursor, e.g. across a suspended window --
+		// but never fires window.vffOnAudioPlaybackEnd: a drained source is not
+		// a natural playback end. Array
+		// cleanup is unnecessary here (the array is cleared below).
 		activeAudioSources.forEach(source => {
 			try {
+				source.onended = () => {
+					const ctx = nodes.playbackContext
+					if (ctx && playbackTime < ctx.currentTime) {
+						playbackTime = ctx.currentTime
+					}
+				}
 				source.stop()
 				source.disconnect()
 			} catch (e) {
 				// Ignore errors from already-stopped sources
 			}
 		})
-		
+
 		// Clear the array
 		activeAudioSources.length = 0
-		
+
 		// Reset playback time to now (don't queue new audio in the past)
 		if (nodes.playbackContext) {
 			playbackTime = nodes.playbackContext.currentTime
 		}
-		
+
 		geminiIsSpeaking = false
-		
-		// Clear flag after flush completes
-		isFlushing = false
+	}
+
+	/**
+	 * Flush audio queue - Stop all pending/playing audio immediately (for barge-in)
+	 */
+	function flushAudioQueue(): void {
+		// CRITICAL: Block new audio playback from arriving chunks
+		playbackBlocked = true
+		// Structurally nm7z-immune split (bd polyglot-pdf-s7uf): the drain body
+		// lives in resetPlaybackClock, which never touches playbackBlocked;
+		// only THIS entry point (pause/section-switch, always paired with
+		// resumePlayback) sets the block.
+		resetPlaybackClock()
 	}
 	
 	/**
@@ -894,6 +947,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		stopRecording,
 		playAudio,
 		flushAudioQueue,
+		resetPlaybackClock,
 		resumePlayback,
 		pauseAudioContext,
 		resumeAudioContext,

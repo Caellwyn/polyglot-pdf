@@ -68,22 +68,26 @@ closed); the cited code path is the ground truth when a doc and the code disagre
 1. **Beads is the system of record for "what to do next."** Resume work via
    `bd ready` / `bd show <id>`, not by reading a plan file. Pull before reads,
    push after every write. See [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
-2. **Every PR ships through `/closeout`, and BOTH review layers run PRE-PR:** commit,
-   then closeout runs the **fresh-eyes assess loop** (Sonnet/Haiku, scored against
-   the bead's exit criteria, looped to no-gap, with a guaranteed Opus final round),
-   **then** the **Opus-5 outer review** (review-worthy changes only) -- both on the
+2. **Every PR ships through `/closeout`, and BOTH review layers run PRE-PR -- with
+   DIFFERENT jobs:** commit, then closeout runs the **fresh-eyes assess loop**
+   (Sonnet/Haiku: score the bead's exit criteria, get the LOCAL DIFF right, and
+   **enumerate** every changed contract; looped to no-gap at the routed model --
+   there is no Opus round here), **then** ONE looped **Opus-5 outer cross-surface
+   review** (review-worthy changes only: take that enumeration and follow each
+   contract OUT into consumers in untouched files) -- both on the
    LOCAL branch, serial not parallel. Only AFTER both loops clear does closeout open a
    normal PR, close the bead(s), and make the merge decision. **Review is entirely
    Claude-based; there is NO external reviewer** (the maintainer's OpenAI Codex
-   subscription ended 2026-07-08). The Opus outer review is the SAME
-   two-independent-clearing-reviews gate that used to be the "fallback for when Codex
-   was unavailable" -- it is now simply always-on (Codex is permanently
-   unavailable). It spawns the `fresh-eyes-reviewer` agent at `model: opus` on the
-   local diff (`origin/dev...HEAD`) and loops to `NO-GAPS`, then a SECOND independent
-   Opus (or Sonnet if a 2nd Opus is unavailable) must ALSO clear the identical diff; a
-   fix in either re-runs both. The subagents' STATUS lines are read directly -- there
-   is **no bot watcher and no `@codex review` / `pr_review_watcher.py` /
-   `requested_reviewers` trigger** (all dead path). Docs/beads/journal-only changes
+   subscription ended 2026-07-08). The outer review spawns the
+   `cross-surface-reviewer` agent (`model: opus`) on the
+   local diff (`origin/dev...HEAD`) and loops to `NO-GAPS` -- **a single clearing
+   pass is the gate** (the duplicate confirming pass was retired 2026-08-05: it
+   doubled the most expensive step for a marginal catch rate). **Only a BEHAVIORAL
+   fix voids a clear** -- filing a bead, a comment/docstring edit, docs prose, or a
+   journal entry does not re-run the review. The subagents' STATUS lines are read
+   directly -- there is **no bot watcher and no `@codex review` /
+   `pr_review_watcher.py` / `requested_reviewers` trigger** (all dead path).
+   Docs/beads/journal-only changes
    skip the outer review (fresh-eyes `NO-GAPS` is their record). Once both clear,
    **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (no two-call
    watcher pattern), then closeout auto-merges a routine low-risk PR or pings the
@@ -190,15 +194,11 @@ takes the product-owner seat, not the engineering-lead seat: routine, low-risk P
 that a **separate model -- including an adversarial one -- has reviewed CLEAN** are
 **merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
 when **ALL** of these hold:
-   - **An adversarial reviewer cleared the diff.** The Opus-5 outer review
-     returned `NO-GAPS` -- and because it is the only independent adversarial gate,
-     it requires **TWO independent clearing reviews**, not one (the primary looped
-     Opus review + a second independent confirming review on the identical diff; bd
-     polyglot-pdf-dgoa; see
-     [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). (This is the
-     former Codex-unavailable fallback, now the always-on primary -- there is NO
+   - **An adversarial reviewer cleared the diff.** The Opus-5 outer cross-surface
+     review returned `NO-GAPS` -- ONE looped clearing pass (see
+     [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). (There is NO
      external reviewer; the maintainer's Codex subscription ended 2026-07-08.) A
-     separate, independent model instance, adversarially, found it clean -- twice. **A
+     separate, independent model instance, adversarially, found it clean. **A
      review-SKIPPED PR does NOT satisfy this** -- no adversarial review ran, so it
      pings (below).
    - **CI / required status checks are green.**
@@ -466,10 +466,9 @@ Do NOT hand-roll the review cycle. In particular:
   credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). The orchestrator
   judges whether the diff can regress runtime behavior; if so, closeout runs
   the outer review ON THE LOCAL BRANCH, before the PR opens: it spawns the
-  `fresh-eyes-reviewer` agent at `model: opus` on the local diff
-  (`origin/dev...HEAD`), loops it to `NO-GAPS`, then runs a SECOND independent Opus
-  (or Sonnet if a 2nd Opus is unavailable) that must ALSO clear the identical diff --
-  a fix found by either re-runs both (the two-independent-clearing-reviews gate).
+  `cross-surface-reviewer` agent (`model: opus`) on the local diff
+  (`origin/dev...HEAD`) and loops it to `NO-GAPS`. **That single clearing pass is
+  the gate**, and only a BEHAVIORAL fix voids it.
   There is **no `@codex review` trigger, no `pr_review_watcher.py`, and no
   `requested_reviewers` reviewer API** -- all dead path. Docs-only / `.beads`-only /
   journal-only / trivial changes get NO outer review.
@@ -497,8 +496,8 @@ Do NOT hand-roll the review cycle. In particular:
   fixed.
 - **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
   the fresh-eyes assess loop first (scored against the bead's exit criteria,
-  re-spawned until no gap, final clearing round on Opus), THEN the Opus outer review
-  (review-worthy changes only, looped until two independent Opus passes both clear),
+  re-spawned until no gap at the routed haiku/sonnet model), THEN the ONE Opus outer
+  cross-surface review (review-worthy changes only, looped until it clears),
   all on the local branch with fixes committed. Only after both clear does the PR
   open.
 - Once both reviews are `NO-GAPS`, **one `closeout_finish.py` run opens the PR AND

@@ -1,6 +1,6 @@
 ---
 name: closeout
-description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then open a NORMAL (non-draft) PR and loop the Opus-5 outer review (two independent clearing passes) until clean, then close the bead and either auto-merge (routine low-risk PR that reviewed CLEAN) or ping the maintainer (consequence-bearing PR). Review is entirely Claude-based -- NO external reviewer. NO draft PRs. It never force-pushes or force-pushes dolt. Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
+description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then ONE looped Opus-5 outer cross-surface review until clean, then open a NORMAL (non-draft) PR, close the bead and either auto-merge (routine low-risk PR that reviewed CLEAN) or ping the maintainer (consequence-bearing PR). Review is entirely Claude-based -- NO external reviewer. NO draft PRs. It never force-pushes or force-pushes dolt. Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
 ---
 
 # Sprint closeout
@@ -9,7 +9,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 **The bead(s) for this closeout** (if the user passed one): `$1`. If `$1` is empty, infer the primary bead from the branch name (`<type>/<id-suffix>-<slug>`) or ask. A PR may resolve **more than one** bead (small beads are often bundled to avoid a full PR cycle each) -- if so, note every bead this PR closes; you'll close them **all** in Step 6. A PR must close **at least one** bead, and no bead may span multiple PRs (split it first if it would).
 
-> **Portability note.** This skill assumes the claude-swarm-kit stack: beads (`bd`) for issues, GitHub PRs, and git worktrees. **Review is entirely Claude-based** -- an Opus-5 outer review (two independent clearing passes; Step 5.6, PRE-PR), NOT an external bot. (The repo previously used OpenAI Codex, and Copilot before it; both are retired -- the maintainer's Codex subscription ended 2026-07-08.) The integration config (repo slug, bead prefix) lives in `swarm.config.json` -- the scripts read it automatically.
+> **Portability note.** This skill assumes the claude-swarm-kit stack: beads (`bd`) for issues, GitHub PRs, and git worktrees. **Review is entirely Claude-based** -- ONE looped Opus-5 outer cross-surface review (Step 5.6, PRE-PR), NOT an external bot. (The repo previously used OpenAI Codex, and Copilot before it; both are retired -- the maintainer's Codex subscription ended 2026-07-08.) The integration config (repo slug, bead prefix) lives in `swarm.config.json` -- the scripts read it automatically.
 
 > **This repo's layout (polyglot-pdf).** The Python interpreter is the backend
 > venv, which lives ONLY in the main repo at `backend/.venv` -- worktrees do NOT
@@ -37,11 +37,11 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 ## Hard rules (read before doing anything)
 
-- **Review is entirely Claude-based -- there is NO external reviewer, and BOTH layers run PRE-PR.** The outer review (Step 5.6) is an Opus-5 adversarial review: the `fresh-eyes-reviewer` agent spawned at `model: opus` on the LOCAL diff (`git diff origin/dev...HEAD`), requiring **two independent clearing passes** on the identical diff, BEFORE the PR opens. There is **no `@codex review` trigger comment, no `pr_review_watcher.py` bot watcher, and no `requested_reviewers` API** -- all dead path (the maintainer's OpenAI Codex subscription ended 2026-07-08; Codex had succeeded Copilot at the earlier credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). **For a change that does not warrant a review** (see the Step 5.6 review-worthiness gate), skip the outer review entirely; a docs-only / beads-only / journal-only / trivial change gets no outer review (its fresh-eyes `NO-GAPS` from Step 5.5 is the record).
+- **Review is entirely Claude-based -- there is NO external reviewer, and BOTH layers run PRE-PR.** The outer review (Step 5.6) is an Opus-5 adversarial cross-surface review: the `cross-surface-reviewer` agent (`model: opus`) on the LOCAL diff (`git diff origin/dev...HEAD`), looped to a SINGLE clearing `NO-GAPS`, BEFORE the PR opens. There is **no `@codex review` trigger comment, no `pr_review_watcher.py` bot watcher, and no `requested_reviewers` API** -- all dead path (the maintainer's OpenAI Codex subscription ended 2026-07-08; Codex had succeeded Copilot at the earlier credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). **For a change that does not warrant a review** (see the Step 5.6 review-worthiness gate), skip the outer review entirely; a docs-only / beads-only / journal-only / trivial change gets no outer review (its fresh-eyes `NO-GAPS` from Step 5.5 is the record).
 - **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. BOTH review layers run PRE-PR: the fresh-eyes inner loop (Step 5.5) and the Opus-5 outer review (Step 5.6, review-worthy PRs only), both looped to clean on the LOCAL branch. Only then does Step 6 open the PR, close the bead(s), and make the merge decision (Step 6.2): a routine low-risk PR that reviewed CLEAN auto-merges; a consequence-bearing one is pinged to the maintainer. Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** A draft adds a state flip for no benefit. Always open normal.
 - **Merge is autonomous for routine low-risk PRs; the maintainer's for consequence-bearing ones (autonomy increase 2026-07-04).** Once the review is CLEAN and CI is green, apply the auto-merge rule (CLAUDE.md "Auto-merge vs. maintainer merge"): if the PR is NOT consequence-bearing, **run `gh pr merge` yourself** (Step 6.2). If it IS consequence-bearing -- proves the bead direction impossible / substantially changes an approved plan / affects operational cost / affects user-facing features / risks downstream disruption / needs substantial multi-surface rework -- do NOT merge; **ping the maintainer** that the PR is clean and ready for their merge. When unsure which side of the line, treat it as consequence-bearing and ping. Force-push and `bd dolt push --force` stay barred regardless.
-- **Loop the Opus-5 outer review until two independent passes both clear (PRE-PR, only if review-worthy).** This runs on the LOCAL branch BEFORE the PR opens (Step 5.6). After a fix, re-spawn the Opus reviewer on the updated local diff; a fix found by EITHER of the two independent reviews invalidates both clears and re-runs both. The review is CLEAN only when two independent Opus passes (the primary looped review + a second independent confirming review -- fresh Opus, or Sonnet if a 2nd Opus is unavailable) both return `NO-GAPS` on the identical final diff. The reviewers are **subagents whose STATUS lines you read directly** -- there is no bot watcher. **Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean** -- surface it (a failure of the last-resort reviewer is a genuine stop). **One exception:** an effort-unsupported `400` on the spawn ITSELF is a transport failure, not a missing verdict -- take the effort-400 Workflow fallback in Step 5.6 (it applies to EVERY subagent spawn in closeout, at any model and any step, including the Step 6 `closeout-runner`) and do NOT surface it, unless the wrapped retry also fails. A change that skipped review per the Step 5.6 gate has no outer loop at all.
+- **Loop the ONE Opus-5 outer review until it clears (PRE-PR, only if review-worthy).** This runs on the LOCAL branch BEFORE the PR opens (Step 5.6). After a **behavioral** fix, re-spawn the Opus reviewer on the updated local diff. The review is CLEAN when a single Opus pass returns `NO-GAPS`. **A NON-BEHAVIORAL fix does NOT invalidate that clear** -- filing a bead, editing a comment or docstring, `docs/`-only prose, a journal entry, or a `.beads/` sync leaves the clear standing; do not re-spawn for it (full rule + tie-breaker in Step 5.6). The reviewer is a **subagent whose STATUS line you read directly** -- there is no bot watcher. **Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean** -- surface it (a failure of the last-resort reviewer is a genuine stop). **One exception:** an effort-unsupported `400` on the spawn ITSELF is a transport failure, not a missing verdict -- take the effort-400 Workflow fallback in Step 5.6 (it applies to EVERY subagent spawn in closeout, at any model and any step, including the Step 6 `closeout-runner`) and do NOT surface it, unless the wrapped retry also fails. A change that skipped review per the Step 5.6 gate has no outer loop at all.
 - **The outer review is read directly, not watched by a script.** `pr_review_watcher.py` was the GitHub-bot (Codex) path and is retired -- do NOT launch it for the outer review. There is no background watch to leave running, no `--since` floor, no ack window.
 - **All beads writes go through `scripts/bd_safe.py`** (or direct `bd` with pull/push bracketing). Beads writes are main-thread only -- that's you, the orchestrator, not a subagent.
 - **Run every git command with `git -C "<worktree-abs-path>"`** if you're in a worktree -- a bare `cd` can land you in the main repo's checkout (the shell cwd resets between tool calls).
@@ -110,8 +110,8 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
 
 **The flow:** you make ALL the judgments FIRST -- prep is READY, the journal prose
 is written, **and BOTH reviews have cleared on the local branch: Step 5.5's
-fresh-eyes loop to `NO-GAPS`, then Step 5.6's Opus outer review to
-two-independent-`NO-GAPS`** (or the outer review was skipped per the Step 5.6
+fresh-eyes loop to `NO-GAPS`, then Step 5.6's ONE Opus outer cross-surface review
+to `NO-GAPS`** (or the outer review was skipped per the Step 5.6
 gate), with all fixes committed. THEN you hand the `closeout-runner` a structured
 brief (bead id(s) + close reason; the **complete filled journal text**; PR title +
 body, including the Step-5.5 scorecard; branch + base). It
@@ -272,9 +272,9 @@ it):
 Fresh-eyes is the **Assessor**; its mandate is gap-exhaustion against the rubric
 ("find every place the changes do NOT meet the criteria"), never approval. The
 cycle is: spawn fresh-eyes (criteria passed in) -> fix the gaps it finds -> re-spawn
-on the updated diff -> ... until an **Opus** pass returns **`NO-GAPS`** (clause 5:
-a haiku/sonnet `NO-GAPS` is not terminal -- the final clearing round must be Opus),
-THEN proceed to Step 6 (open the PR).
+on the updated diff -> ... until the routed reviewer returns **`NO-GAPS`**. **That
+verdict IS terminal** -- there is no Opus round here; the single Opus pass is the
+Step 5.6 outer cross-surface review, which runs next.
 
 1. **Pick the fresh-eyes model from diff size.** Zero-token router --
    size in, model name out, NO risk judgment (the risk call happens inside the
@@ -294,29 +294,33 @@ THEN proceed to Step 6 (open the PR).
    `Agent({ subagent_type: "general-purpose", model: "<picked>", ... })`. The prompt
    MUST (a) include the bead's `## Exit criteria` verbatim so the assessor scores
    the rubric, not just style; (b) name the branch; (c) tell it to read the REAL
-   diff (`git diff origin/dev...HEAD`), never a summary; (d) tell it to TRACE every
-   changed value/format/contract into its consumers in untouched files before
-   clearing (bd dgoa -- the standing agent file already embeds this mandate; state
-   it in a one-off prompt too, and it is worth naming explicitly for a diff whose
-   changed strings/formats are parsed elsewhere). **If you picked `haiku`,
+   diff (`git diff origin/dev...HEAD`), never a summary; (d) tell it to **ENUMERATE
+   every changed value/format/contract into its `## Changed contracts` block** --
+   NOT to trace them into consumers. Tracing is the Step 5.6 outer reviewer's job,
+   and duplicating it here is the cost the inner/outer split exists to remove; the
+   enumeration is what the outer reviewer starts from, so an omission there becomes
+   an untraced contract downstream. **If you picked `haiku`,
    the prompt MUST tell the reviewer it is running as Haiku** -- that sentence arms
    the self-escalation clause (a Haiku run that finds the change risky stops and
    recommends a Sonnet re-review). Without it the clause is dormant.
 3. **Read its STATUS line gap verdict and act:**
-   - **`NO-GAPS`** -> **check clause 5 FIRST: if this clearing round ran on
-     haiku/sonnet, it is NOT terminal** -- do the Opus final round (re-spawn the
-     same reviewer at `model: opus` on the unchanged diff) and require ITS `NO-GAPS`
-     before proceeding. Once an Opus round returns `NO-GAPS` (or this one already
-     ran on Opus / a forced-Opus session), the inner loop is done: collect any
+   - **`NO-GAPS`** -> the inner loop is **done** (this verdict is terminal at
+     whatever model produced it -- there is no Opus round here). Collect any
      out-of-scope bead IDs it filed (it files genuine out-of-scope bugs itself -- it
-     has Bash) for the journal + merge ping, then proceed to Step 6.
+     has Bash) for the journal + merge ping, **carry its `## Changed contracts`
+     block forward into the Step 5.6 spawn**, then proceed to Step 5.6.
    - **`GAPS-FOUND (n)`** -> **fix the gaps before the PR opens.** A rubric-criterion
      FAIL is a criterion failure, not a deferrable nit -- fix it inline (Step 5.5.a's
-     "any FAIL -> fix before opening the PR" governs here too); fix other
-     high-confidence findings inline as well. A genuinely out-of-scope bug is fresh-eyes'
-     own to file as a separate bead (it has Bash). A rubric gap is never a "true
-     nit" -- fix it inline, do not defer it. Commit the fixes, then **re-spawn
-     fresh-eyes** on the updated diff. This is the recursion.
+     "any FAIL -> fix before opening the PR" governs here too). For every OTHER
+     finding, apply **the same triage rule as Step 5.6** (the pre-existing test, the
+     narrowed blocker test, and the never-swept-under-the-rug rule -- stated once
+     there, and governing here too): fix the blockers inline, and **file
+     pre-existing and non-blocking findings as beads rather than chasing them here.**
+     Chasing a pre-existing finding in this loop expands the diff before the Opus
+     pass ever runs -- the same churn one layer down. A genuinely out-of-scope bug is
+     fresh-eyes' own to file (it has Bash). A rubric gap is never a "true nit" -- fix
+     it inline, do not defer it. Commit the fixes, then **re-spawn fresh-eyes** on
+     the updated diff. This is the recursion.
    - **`BLOCKED`** (Haiku self-escalation) -> re-spawn the SAME reviewer with
      `model: sonnet`.
    - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
@@ -336,36 +340,35 @@ THEN proceed to Step 6 (open the PR).
    classify as incorrect/nit is the signal to escalate (normal step-2), not a round
    ceiling. (A subagent TIMEOUT/ERROR is still surfaced per the bullet above --
    silence is never `NO-GAPS`.)
-5. **The FINAL confirming round MUST run on Opus** (maintainer directive
-   2026-07-05, bd polyglot-pdf-dgoa). The diff-size router (step 1) routes the
-   EARLIER rounds cheaply (haiku/sonnet) -- that stays. But a `NO-GAPS` is only
-   terminal when the round that produced it ran on **Opus**: before you treat the
-   inner loop as done, if the clearing round ran on haiku or sonnet, **re-spawn the
-   SAME reviewer with `model: opus` on the unchanged diff** and require ITS verdict
-   to be `NO-GAPS` too. If that Opus round finds gaps, they are real -- fix and
-   continue the loop (the next clearing round again ends on Opus). Rationale: the
-   strongest reviewer always gets the last look before the PR opens, because the
-   cheaper tiers miss cross-file interaction bugs (a Sonnet `NO-GAPS` shipped the
-   bd bo4m regression; only the stronger tier's trace caught it). This does NOT
-   change the merge decision for the earlier rounds --
-   it is one guaranteed Opus pass at the end. (When the diff is already routed to
-   Opus, or `CLAUDE_CODE_SUBAGENT_MODEL` forces Opus, the clearing round already
-   satisfies this -- no extra pass.)
+5. **This loop stays on the routed model -- there is NO Opus round here.** The
+   diff-size router (step 1) picks haiku or sonnet and that model's `NO-GAPS` is
+   terminal for the inner loop. The strongest reviewer still gets the last look
+   before the PR opens, but it gets it **once**, in Step 5.6, doing the
+   cross-surface job the cheap tiers genuinely cannot do -- not by re-running this
+   same rubric-and-local-bugs pass at a higher price.
 
 Commit any gap fixes (and fold the assess outcome -- the rubric scorecard, the
 fresh-eyes round count, the adopt/reject/defer breakdown, and any filed bead IDs --
 into the journal entry's "What shipped" section) so the tree is clean before
-Step 5.6. **The Opus-5 outer review (Step 5.6) runs next, BEFORE the PR opens.**
-For a review-SKIPPED PR (no outer review) the last fresh-eyes `NO-GAPS` verdict
-here is the review record -- note that in the PR body.
+Step 5.6. **The Opus-5 outer cross-surface review (Step 5.6) runs next, BEFORE the
+PR opens** -- carry the inner reviewer's `## Changed contracts` block into its
+prompt. For a review-SKIPPED PR (no outer review) the last fresh-eyes `NO-GAPS`
+verdict here is the review record -- note that in the PR body.
 
-## Step 5.6 -- Opus-5 outer review (PRE-PR): two independent clearing passes, looped to clean
+## Step 5.6 -- Opus-5 outer cross-surface review (PRE-PR): ONE looped clearing pass
 
 **Both review layers run BEFORE the PR opens (2026-07-08 flow).** The inner
-fresh-eyes loop (Step 5.5) cleared to `NO-GAPS`; the Opus-5 outer review runs now,
-on the LOCAL branch, and must clear to two-independent-`NO-GAPS` BEFORE Step 6 opens
+fresh-eyes loop (Step 5.5) cleared to `NO-GAPS`; the Opus-5 outer cross-surface
+review runs now, on the LOCAL branch, and must clear to `NO-GAPS` BEFORE Step 6 opens
 the PR. Nothing is pushed and no PR exists yet -- the outer review reads the local
 diff (`git diff origin/dev...HEAD`).
+
+**The two layers have DIFFERENT jobs -- that is the point of the split.** The inner
+loop got the local diff right (rubric + in-diff correctness) and **enumerated** every
+changed contract. The outer pass does **not** re-hunt local bugs; it takes that
+enumeration and follows each contract OUT of the diff into consumers in files the
+diff never touched. Finding no local bug is not a failure of the outer pass -- that
+work is already done.
 
 **First, judge whether this PR warrants an outer review at all** (the orchestrator
 makes this call -- there is no script gate). A review of a change that can't contain
@@ -394,9 +397,29 @@ primary). Do NOT put an `@codex review` line anywhere, do NOT use the
 `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all
 retired dead path.
 
-**Two independent clearing reviews are required, not one** (maintainer directive 2026-07-05, bd polyglot-pdf-dgoa). The Opus outer review is the ONLY independent adversarial gate, so a single pass is a single point of failure -- the exact path PR #312 relied on when its regression could have slipped had that one pass missed it. The gate is met only when **TWO independent reviews BOTH return `NO-GAPS` on the same final diff**: the primary looped Opus review below, plus a **second independent confirming review** on the settled diff (a fresh Opus spawn -- a new subagent with no shared context -- OR a fresh Sonnet spawn; use Sonnet only when a second Opus is unavailable, and note which in the merge ping). The second reviewer reviews the SAME final commit the first one cleared; if it finds a correct blocker, that gap is real -- fix it, then BOTH reviews must clear again on the new diff (a fix invalidates a prior clear). Only when two independent passes agree `NO-GAPS` on the identical final diff is the gate satisfied.
+**ONE looped Opus pass is the gate (2026-08-05).** A single `cross-surface-reviewer`
+spawn at `model: opus`, looped fix -> re-spawn until `NO-GAPS`. The duplicate
+confirming pass is **retired**: it doubled the most expensive step and re-ran on every fix, for a
+marginal catch rate that did not justify the bill. Independence -- the property that
+actually mattered -- is preserved: a fresh subagent, no shared context, reading the
+real diff.
 
-**The primary review: spawn the `fresh-eyes-reviewer` agent with `model: opus`** (its adversarial gap-exhaustion SI is exactly the outer-review mandate). The prompt MUST (a) include the bead's `## Exit criteria` verbatim; (b) name the branch; (c) tell it to read the REAL LOCAL diff (`git diff origin/dev...HEAD`), never a summary; (d) NOT mention Haiku (it is the strong model -- the self-escalation clause stays dormant). Read its STATUS line:
+**Only a BEHAVIORAL fix invalidates a clear.** After an Opus `NO-GAPS`, if you then
+make a fix, ask: **does it change what the program does?**
+
+- **Behavioral -> the clear is void.** Re-spawn. No exceptions; this is the whole gate.
+- **Non-behavioral -> the clear STANDS.** Do NOT re-spawn. Covers: deferral
+  bookkeeping (filing a bead, adding a bead ID to the journal or PR body), comment and
+  docstring edits, `docs/`-only prose, journal entries, `.beads/` sync. Re-running a
+  heavy Opus pass because you wrote a journal sentence is pure waste -- and the fear of
+  it is what pushed reviewers to fix nits inline instead of filing them.
+- **The tie-breaker is "does the program do anything different?"** -- not "did I touch
+  a source file." A comment edit inside a `.py` file is non-behavioral. Changing a
+  string another module parses is behavioral even if it looks like prose. When you
+  genuinely cannot tell, treat it as behavioral -- but that is rare, and this carve-out
+  is defeated if you claim it often.
+
+**Spawn the `cross-surface-reviewer` agent** (`.claude/agents/cross-surface-reviewer.md`; it is already `model: opus`, so no override is needed). Its mandate is the blast radius, not the local diff. The prompt MUST (a) include the bead's `## Exit criteria` verbatim; (b) name the branch; (c) tell it to read the REAL LOCAL diff (`git diff origin/dev...HEAD`), never a summary; (d) NOT mention Haiku (it is the strong model -- there is no self-escalation clause in this agent); (e) **paste the inner reviewer's `## Changed contracts` block verbatim** -- that list is where it starts, so omitting it forces the expensive model to re-derive what the cheap one already produced. Read its STATUS line:
 
 > **Spawn-failure fallback -- the effort-400 (added 2026-07-27). This applies to
 > EVERY Agent-tool subagent spawn in closeout, at ANY model, at ANY step** -- the
@@ -426,40 +449,64 @@ retired dead path.
 > review-worthy change. Delete this whole fallback once the underlying bug is fixed
 > upstream.
 
-- **`NO-GAPS`** -> the PRIMARY review is CLEAN, but that is only ONE of the two required passes. **Now run the second independent confirming review** (fresh Opus spawn, or fresh Sonnet if a second Opus is unavailable) on the SAME final commit, with the same prompt requirements (a)-(d):
-  - **Second review `NO-GAPS`** -> the two-reviewer gate is met (the **adversarial clear**). The review is done; **go to Step 6** to open the PR + close the bead(s) + make the merge decision. The merge ping (Step 6) MUST note that TWO independent reviews cleared it (naming the second reviewer's model).
-  - **Second review `GAPS-FOUND`** -> its correct blockers are real (the first reviewer missed them -- exactly why two are required). Fix inline / defer true nits, commit, then **BOTH reviews must clear again on the new diff** (a fix invalidates the prior clear): re-spawn the primary Opus loop to `NO-GAPS`, then the second confirming review, until two independent passes agree on the identical final diff. (No push -- the PR does not exist yet; this all happens on the local branch.)
-- **`GAPS-FOUND (n)`** -> fix blockers inline / defer true nits (the nit-vs-blocker rule below), commit, then **re-spawn the Opus review** on the updated local diff. This is the loop. Re-run the test suite (Step 4) after any code fix. (No push -- pre-PR.)
+- **`NO-GAPS`** -> the outer review is CLEAN and **the gate is met** (the **adversarial clear**). **Go to Step 6** to open the PR + close the bead(s) + make the merge decision. If you make any further fix before Step 6, apply the behavioral test above: a behavioral fix voids this clear and re-spawns; a non-behavioral one does not.
+- **`GAPS-FOUND (n)`** -> triage each finding by the rule below (pre-existing -> bead; blocker -> fix; true nit -> bead), commit, then **re-spawn the Opus review** on the updated local diff. This is the loop. Re-run the test suite (Step 4) after any code fix. (No push -- pre-PR.)
 - **`BLOCKED` / a subagent TIMEOUT or ERROR (no verdict)** -> surface to the maintainer. A failure of the last-resort reviewer is a genuine stop (no further fallback, EXCEPT the effort-400 Workflow retry above -- take that first when the failure is an effort-unsupported 400, and surface only if it too fails), so this is the one branch that escalates. **Never** interpret a missing verdict as CLEAN.
 
 ### The nit-vs-blocker decision rule (bd polyglot-pdf-hrn.5)
 
 The reviewer returns findings, but a subagent cannot reliably tell a nit from a blocker, so **the orchestrator makes that call.** For EACH finding, classify and act:
 
-- **Blocker -- address now, then loop.** Anything that *is*, or *might be*, a correctness / security / data-loss / regression issue. **Ambiguous counts as a blocker** (safe default): if you cannot confidently say "this is purely cosmetic and changes no behavior," treat it as a blocker and fix it. A wasted fix is cheap; a shipped regression is not.
-- **True nit -- defer, don't fix inline.** A finding that is unambiguously cosmetic / stylistic / non-behavioral (naming preference, a comment-wording tweak, an optional micro-refactor with no functional effect). Do **not** fix these inline (that just spawns another review round for no behavior change). Instead **file them as ONE follow-up bead** (see the convention below) and proceed.
-- **When in doubt, it's a blocker.** Do not use "nit" as an excuse to skip a fix you're unsure about -- the whole point of "ambiguous = blocker" is that the cheap mistake (an extra fix) is the one we choose.
+**This rule is stated ONCE, here, and governs Step 5.5's triage too** -- the inner
+loop chasing a pre-existing finding expands the diff before the Opus pass ever runs,
+which is the same churn one layer down.
+
+- **PRE-EXISTING -> always a bead, never fixed here.** Clean checkable test first:
+  does the finding reproduce **UNCHANGED on `origin/dev`**? Check it (`git show
+  origin/dev:<path>`, or run the reproducing case against the base). If the defect is
+  present at the base with no contribution from this diff, **file it as a bead** and
+  move on -- regardless of severity. Fixing it here expands the diff, invalidates the
+  review that just cleared, and buries the actual change. Do NOT ignore it either; an
+  unfiled pre-existing finding is the thing this rule exists to stop. If the diff
+  *worsens* a pre-existing defect, it is **not** pre-existing -- it is a finding.
+- **Blocker -- fix now, then loop.** A finding that is, or might be, a correctness /
+  security / data-loss / regression issue **in the behavior THIS DIFF introduces or
+  changes**. **Ambiguity about the diff's own behavior counts as a blocker.** But
+  scope the ambiguity test correctly: it asks *"am I unsure whether this diff behaves
+  correctly?"* -- **not** *"can I imagine any edge case anywhere?"* Almost every
+  finding has a conceivable edge; treating that as ambiguity swallows the entire nit
+  category and is a leading cause of round count.
+- **Non-blocking -- file a bead, do NOT fix inline.** A finding that **does not change
+  behavior AND does not indicate the behavior is wrong.** Both halves required.
+  Journal nits, doc nits, naming preferences, formatting: file them. **But a comment
+  that contradicts its code is NOT a nit** -- it is evidence the CODE is wrong. Same
+  for a name that contradicts what a function does, a docstring describing different
+  behavior than the body, or a test whose name asserts something it does not check.
+  The question is never "is it just a comment?" -- it is **"does this signal the
+  behavior is wrong?"**
+- **Never swept under the rug.** Every non-blocking and pre-existing finding gets
+  **filed**. "Not a blocker" is a routing decision, not a dismissal. A finding you
+  neither fixed nor filed is the one failure mode this rule does not tolerate.
 
 **Deferred-nit bead convention.** File **one** bead per closeout collecting that change's true nits (not one bead per nit): title `chore(nits): deferred review nits from <bead-id>` (the review runs PRE-PR, so key the title on the bead being closed, not a PR number that does not exist yet), body listing each nit with its source (the review pass) + file:line. Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md).
 
 **Loop-stop rule -- OUTCOME-based, no round cap (maintainer directive 2026-07-04).**
-There is **no hard round ceiling** on the adopt-and-loop cycle. This governs EACH
-review's own loop (the primary Opus loop, and -- if it finds blockers -- the second
-confirming review's). Because closeout can now merge routine PRs autonomously, the
-bar is code quality, not iteration budget: **keep looping as long as each round's
-findings are correct and are blockers.** A lengthy back-and-forth to get the code
-right is expected and fine. You **STOP that review's loop (it is CLEAN)** on a round
-when EVERY remaining finding is one of:
+There is **no hard round ceiling** on the adopt-and-loop cycle. Because closeout can
+now merge routine PRs autonomously, the bar is code quality, not iteration budget:
+**keep looping as long as each round's findings are correct and are blockers.** A
+lengthy back-and-forth to get the code right is expected and fine. You **STOP the
+loop (it is CLEAN)** on a round when EVERY remaining finding is one of:
   - **incorrect** -- the finding is wrong, refuted, or a false positive (you verified
-    it against the code; record the refutation so the maintainer can audit it); or
+    it against the code; record the refutation so the maintainer can audit it);
+  - **pre-existing** -- reproduces unchanged on `origin/dev`, so it is filed as a
+    bead, not fixed here (per the rule above); or
   - **a true nit, not a blocker** -- real but non-blocking, better filed as a
     deferred-nit bead than fixed in this PR (per the nit-vs-blocker rule + the
     deferred-nit bead convention above).
 If any finding is a correct blocker, **fix it and loop again** -- however many
 rounds that takes. Do NOT stop because "it's been N rounds"; the only stop is "no
-correct blocker remains." **A single review reaching CLEAN is not the GATE** -- the
-gate still requires BOTH independent reviews CLEAN on the identical final diff
-(above); a fix in either loop invalidates both clears. (Ambiguous still counts as a
+correct blocker remains." **One Opus review reaching CLEAN IS the gate** (the second
+confirming pass is retired). (Ambiguous-about-this-diff's-behavior still counts as a
 blocker -- keep looping. The escalation branch is a `BLOCKED`/TIMEOUT/ERROR from a
 reviewer, or a gap you can neither fix nor honestly classify -- never a round count.)
 
@@ -509,15 +556,15 @@ first finish anything that does *not* depend on the resolution. (Verification of
 this boundary -- synthetic mechanical conflict resolves inline, synthetic
 structural conflict escalates -- is recorded in this bead's journal entry.)
 
-Keep the working tree clean between rounds (`git status --short`). Both loops run PRE-PR: fresh-eyes (Step 5.5, to `NO-GAPS`), then the Opus outer review (Step 5.6, to two-independent-`NO-GAPS`). They do not interleave. The reviewers are subagents you read directly -- there is no bot watcher.
+Keep the working tree clean between rounds (`git status --short`). Both loops run PRE-PR: fresh-eyes (Step 5.5, to `NO-GAPS`), then the ONE Opus outer cross-surface review (Step 5.6, to `NO-GAPS`). They do not interleave. The reviewers are subagents you read directly -- there is no bot watcher.
 
 ## Step 6 -- Open the PR, close the bead(s), and auto-merge or ping
 
-Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 two-independent-`NO-GAPS`), or the review was skipped per the Step 5.6 gate. So the PR opens with review already done: **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (the two-call watcher pattern is gone -- there was no bot to wait on). Then make the merge decision.
+Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 `NO-GAPS`), or the review was skipped per the Step 5.6 gate. So the PR opens with review already done: **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (the two-call watcher pattern is gone -- there was no bot to wait on). Then make the merge decision.
 
 **There is NO trigger comment and NO watcher.** Do NOT put an `@codex review` line in the PR body, do NOT use the `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all retired dead path.
 
-1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer review, two independent NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
+1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer cross-surface review, NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
    ```bash
    git -C "<WT>" fetch origin && git -C "<WT>" pull --rebase origin dev
    git -C "<WT>" push -u origin <branch>
@@ -528,10 +575,10 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
    echo "PR=$PR"
    ```
    Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. The bead(s) close in the same `closeout_finish.py` run (`--close-beads` is default-on now); if opening by hand, close them with one `scripts/bd_safe.py close <full-id> --reason "..."` per bead.
-2. **Decide the merge: auto-merge or ping** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs. maintainer merge"). Auto-merge requires ALL of: (a) an **adversarial reviewer cleared the diff** -- the Opus-5 outer review gate (TWO independent `NO-GAPS` on the identical final diff, Step 5.6); (b) CI / required checks green; (c) the PR is **not consequence-bearing**. Judge (c): does it prove the bead direction impossible / substantially change an approved plan / affect operational cost / affect user-facing features / risk downstream disruption / need substantial multi-surface rework? (Same line as the step-2 escalation triggers; when unsure, treat as consequence-bearing.)
+2. **Decide the merge: auto-merge or ping** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs. maintainer merge"). Auto-merge requires ALL of: (a) an **adversarial reviewer cleared the diff** -- the Opus-5 outer cross-surface review gate (`NO-GAPS` on the final diff, Step 5.6); (b) CI / required checks green; (c) the PR is **not consequence-bearing**. Judge (c): does it prove the bead direction impossible / substantially change an approved plan / affect operational cost / affect user-facing features / risk downstream disruption / need substantial multi-surface rework? (Same line as the step-2 escalation triggers; when unsure, treat as consequence-bearing.)
    - **All three hold -> AUTO-MERGE.** Capture the exact head SHA the review + CI cleared (`HEAD_SHA="$(gh pr view <pr#> --json headRefOid -q .headRefOid)"`), confirm CI/required checks are green (`gh pr checks <pr#>`), then merge **pinned to that SHA**: `gh pr merge <pr#> --squash --match-head-commit "$HEAD_SHA"` (match the repo's merge style). The `--match-head-commit` guard makes the merge FAIL rather than silently merge an unreviewed head if anything pushed to the branch between the clear and the merge (the review-race). NEVER pass `--admin` (it bypasses the very checks gate condition (b) relies on; it is also settings-denied). Then post a SHORT plain-language note to the maintainer: what shipped + bead id(s), and the defended-decision list (below). This is a notification, not a request -- the merge is done. If the merge fails on the SHA match, a new commit landed -> re-review that commit before retrying, do NOT drop the guard.
    - **Any of the three fails -> PING, do not merge.** That includes: consequence-bearing; review NOT clean; checks red; **or a review-SKIPPED PR** (docs-only / beads-only / trivial per the Step 5.6 gate) -- a skipped PR had no adversarial review, so condition (a) is unmet and it is NOT auto-merge-eligible even though it's low-risk; hand it to the maintainer. Also ping when you're simply unsure which side of the line the PR is on. Hand the maintainer a "clean and ready for your merge" summary and stop.
-3. **Write the merge ping / notification.** Either way the summary is **for the product owner in plain language -- no jargon, no acronyms** (the maintainer's standing checkpoint AND the escalation-rule audit surface; see CLAUDE.md "Escalation vs. autonomy"). Include: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, the review outcome (the Opus outer review's round count, final = two independent `NO-GAPS`, and the second reviewer's model), the PR URL, and **whether you auto-merged or are handing it back**. **Then LIST each judgment call you made autonomously this PR -- INCLUDING the merge decision itself -- and briefly DEFEND it.** Make these easy to scan; this defended decision list is where the maintainer catches anything that was decided (or merged) but should have been escalated.
+3. **Write the merge ping / notification.** Either way the summary is **for the product owner in plain language -- no jargon, no acronyms** (the maintainer's standing checkpoint AND the escalation-rule audit surface; see CLAUDE.md "Escalation vs. autonomy"). Include: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, the review outcome (the Opus outer cross-surface review's round count, final = `NO-GAPS`), the PR URL, and **whether you auto-merged or are handing it back**. **Then LIST each judgment call you made autonomously this PR -- INCLUDING the merge decision itself -- and briefly DEFEND it.** Make these easy to scan; this defended decision list is where the maintainer catches anything that was decided (or merged) but should have been escalated.
 
 **Do NOT go back and rewrite the PR body after opening it.** The fresh-eyes triage breakdown and the outer-review round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 6.3, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` is the only body write. The durable record is the journal.
 

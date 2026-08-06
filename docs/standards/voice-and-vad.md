@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: resolved the tool-call-compliance caveat as historical -- bd polyglot-pdf-i9q8 closed, root cause was an untyped tool param, not the system instruction; the spoken language remains PINNED per session per bd polyglot-pdf-87a9).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: the tool-call-compliance caveat resolved as historical -- bd polyglot-pdf-i9q8 closed, root cause was an untyped tool param, not the system instruction. Also current: the Barge-in section describes the FORWARDED `interrupted` WS message + two-hold client drain via `resetPlaybackClock` (bd polyglot-pdf-s7uf), and the spoken language is PINNED per session -- mid-conversation switching is unsupported and `change_spoken_language` is a misnomer whose only live sender is the reconnect opener re-asserting the same pinned language (bd polyglot-pdf-87a9).)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -238,10 +238,17 @@ latency metrics are collected in metrics.ts (local-only — see
 When the user starts talking while Gemini is speaking, the frontend
 (`connection.ts` `onVADSpeechStart`) immediately flushes its local audio queue
 (`audioManager.flushAudioQueue()`) for instant UX. The backend separately watches
-Gemini's own `server_content.interrupted` flag, but on it the adapter only **logs
-`GEMINI_INTERRUPTED`, resets its audio tracking, and skips the event** — it does
-**not** send any flush signal back to the client (there is no server sentinel; the
-flush is entirely frontend-side). See [voice-ai.md](../components/voice-ai.md#barge-in).
+Gemini's own `server_content.interrupted` flag and **forwards it to the client
+as a `{"type": "interrupted"}` WS message** (bd polyglot-pdf-s7uf; adapter
+`_on_interrupted` -> `callback_handler.on_interrupted`, same detect-and-forward
+discipline as `go_away`). The client reacts by clearing BOTH its audio holds:
+`webFormConnection` empties the staging `audioQueue`, then
+`audioManager.resetPlaybackClock()` stops the scheduled sources and resets the
+playback clock **without setting `playbackBlocked`** (the model speaks a NEW
+generation on the same connection, so an unpaired block would kill it -- the
+nm7z trap; `flushAudioQueue` keeps the blocking behavior for the
+pause/section-switch paths and delegates the drain).
+See [voice-ai.md](../components/voice-ai.md#barge-in).
 **Push-to-talk mode** (`setPushToTalkMode(true)`, the default in `VoiceOverlay`)
 disables the energy-based barge-in path entirely (`onVADSpeechStart`/`End`
 early-return).
@@ -249,9 +256,11 @@ early-return).
 > **Native VAD mode delta (bd polyglot-pdf-333).** In native mode
 > (`DISABLE_GEMINI_VAD=False`, the default) `onVADSpeechStart` early-returns on the
 > `nativeVad` flag, so the **instant client-side flush is disabled** — Gemini owns
-> interruption via its own `server_content.interrupted`. Barge-in latency is then
-> Gemini's interrupt round-trip rather than instant; this is an accepted UX delta
-> for the smoke test.
+> interruption via its own `server_content.interrupted`, and the forwarded
+> `interrupted` message (above) is what drains the client. Barge-in latency is
+> Gemini's interrupt round-trip rather than instant; measured on the RUDE
+> harness arm, the drain cut stale playback backlog at field updates from mean
+> 1.10s to 0.14s (bd s7uf; the wire-order fix is part of that bundle).
 
 There's a barge-in **grace period**: tool calls arriving within
 `BARGE_IN_GRACE_PERIOD_MS` (150ms, a constant in

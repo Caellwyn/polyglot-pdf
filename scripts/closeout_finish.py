@@ -10,9 +10,9 @@ judgment -- so this script collapses the mechanical subset into ONE process wher
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
 
 Review happens BEFORE this script runs (2026-07-08 flow change). Both review
-layers -- the Sonnet/Haiku fresh-eyes inner loop and the Opus-5 outer loop --
-run on the LOCAL branch and clear to their terminal signals (inner ``NO-GAPS``,
-outer two-independent-``NO-GAPS``) before the PR is ever opened. There is NO
+layers -- the Sonnet/Haiku fresh-eyes inner loop and the ONE looped Opus-5 outer
+cross-surface review -- run on the LOCAL branch and each clear to ``NO-GAPS``
+before the PR is ever opened. There is NO
 external reviewer and NO post-PR review watch (the maintainer's Codex subscription
 ended 2026-07-08; the ``pr_review_watcher.py`` bot-watch path is retired). So by
 the time this script runs the review is already CLEAN: it opens the PR AND closes

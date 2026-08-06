@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`callback_handler.py`/`form_filling_service.py`/`schemaFormState.ts` line-number citations, which had drifted from code growth since the last sweep -- no wire-type or handshake-key name changed).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`callback_handler.py`/`form_filling_service.py`/`schemaFormState.ts` line-number citations, which had drifted from code growth since the last sweep -- no wire-type or handshake-key name changed. Also current: the backend->frontend `interrupted` type (bd polyglot-pdf-s7uf) and the manifest-first `kit_id`/`edition_date`/`form_number` handshake keys (bd polyglot-pdf-47r3 / n0em); this doc's message-type union is pinned by backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -109,11 +109,12 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | Type | Source | Purpose |
 |------|--------|---------|
 | `session_ready` | websocket_routes.py:1210 | Handshake ack (see above). |
-| `form_updated` | callback_handler.py:231 | A field value changed; carries `data` payload. |
+| `form_updated` | callback_handler.py:206 | A field value changed; carries `data` payload. |
 | `transcript` | callback_handler.py:261 | AI/user transcript text. |
 | `turn_complete` | callback_handler.py:268 | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
 | `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn (BOTH VAD modes -- manual rides `send_activity_end`, native rides `input_transcription` -> `on_user_activity`, verified firing on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
 | `go_away` | callback_handler.py:392 | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
+| `interrupted` | callback_handler.py (`on_interrupted`) | Gemini stopped the current generation because the user barged in (bd polyglot-pdf-s7uf). The client drains BOTH its audio holds (staging queue + scheduled playback via `resetPlaybackClock`) so the dead generation's tail stops playing; without this, barge-in leaves seconds of stale audio playing behind the model's next generation. No payload; the connection stays live. |
 | `gemini_session_dropped` | callback_handler.py (`on_session_dropped`) | Gemini session died SPONTANEOUSLY behind the still-open WS (e.g. a 1011 "Input data processing failed") -- the client is otherwise frozen on "connected" (bd polyglot-pdf-ppfy). Drives the same pre-emptive reconnect as `go_away`, but the client surfaces a `reconnecting` status so the transient recovery modal shows. No payload. |
 | `idle_timeout` | websocket_routes.py:314 | Backend closing for inactivity; client must NOT auto-reconnect. |
 | `section_switched` | form_filling_service.py:1397 | Same-socket section switch completed. |
