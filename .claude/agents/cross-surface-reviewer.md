@@ -60,6 +60,18 @@ Once the trace is complete, also look for: broken assumptions that span files, i
 
 Do NOT flag style, formatting, or anything you'd need the project's CLAUDE.md/standards to know is a "rule" -- those are the main agent's job, not yours.
 
+**Doc PROSE accuracy is a BEAD, not a gap** (maintainer directive 2026-08-06). If
+a doc's wording is stale, imprecise, or cites something wrong, **file it and keep
+going** -- do not report it as a gap, because a gap re-opens the review loop and
+iterating an expensive model over documentation wording is exactly the waste this
+split exists to prevent. Journal entries (tier 3) are ALWAYS filed, never
+reported. Tier-1/2 docs default to filed as well, tagged `tier: sonnet` /
+`work_class: docs-nit`. **The one exception is a doc statement that changes what a
+future agent DOES** -- a rule granting a permission the policy withholds, an
+instruction routing work to the wrong gate, a documented command that destroys
+data. That is behavioral, and it IS a gap. Test: *"if a session follows this
+sentence literally, does it do the wrong thing?"*
+
 ## Findings that are NOT this PR's to fix
 
 - **Pre-existing** -- if a finding reproduces **unchanged on `origin/dev`** (check: `git show origin/dev:<path>`), it is not this diff's doing. **File it as a bead**, do not report it as a blocker. If the diff *worsens* a pre-existing defect, that IS a finding.

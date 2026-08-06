@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-05 (bd polyglot-pdf-saxh: TDD-cadence rule -- when the same defect class survives your fix TWICE, change the MECHANISM not the instance; generate expectations from the real artifact; verify a mutation actually applied. Same day, docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
+*Last updated: 2026-08-06 (bd polyglot-pdf-9feav: TEST THE TESTS promoted to standard author practice at the top of the TDD cadence -- prove a new test fails before trusting it passes, mutate the real path, confirm the mutation applied. Also bd polyglot-pdf-saxh: when the same defect class survives your fix TWICE, change the MECHANISM not the instance; generate expectations from the real artifact. Also docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -233,6 +233,30 @@ test that pins the contract** (e.g. the VAD-config 1007 fix extracted a pure hel
 specifically so it could be unit-tested — `polyglot-pdf-p1t`). New pure logic gets a
 unit test; new multi-component flows get an integration test. The suite must be
 **green before a PR opens** — `/closeout` will not open a PR on a red suite.
+
+<a name="test-the-tests"></a>
+**TEST THE TESTS — a new test is not done until you have watched it FAIL.** Green
+is not evidence; green *after you broke the thing it pins* is. This is the
+**author's** job, not the reviewer's: a reviewer finding a vacuous test is a review
+round you paid for avoidably, and that has happened repeatedly here — PR #540's
+reviewer reverted an entire route and **6 of 7 tests still passed**, then defeated
+the remaining guard with a one-token mutation. Standard practice, every time:
+
+1. **Break the REAL path, not a convenient neighbour.** Revert the production
+   behavior the test claims to pin — the `if a or b` -> `if a` the regression would
+   actually look like, not a cosmetic edit elsewhere.
+2. **Confirm the mutation APPLIED before trusting the result.** A find-and-replace
+   that silently matched nothing (line wrapping, a reflowed string) "passes" while
+   testing nothing. Assert the file changed.
+3. **Mutate per PARAMETRIZATION, not once per file.** A mutation that reddens some
+   cases says nothing about the rest; parametrize over the whole dimension.
+4. **Restore and re-verify.** A mutation-restore can revert a real edit — re-read
+   the diff after restoring, and write commit messages from the staged diff rather
+   than memory.
+
+The recurring traps this prevents (each cost a bead) are catalogued below: the
+self-fulfilling mock, pinning a bug as correct, guarding a code shape instead of
+the property, and redundant guards where neither layer is actually pinned.
 
 **A green vitest run does not prove a canvas/PDF UI works.** jsdom has no canvas
 backend, so `getContext` returns null and the real `pdfjs-dist` render path — and

@@ -47,6 +47,18 @@ For each of these, if this diff changes it, it belongs in your `## Changed contr
 
 Do NOT flag style, formatting, or anything you'd need the project's CLAUDE.md/standards to know is a "rule" -- those are the main agent's job, not yours.
 
+**Doc PROSE accuracy is a BEAD, not a gap** (maintainer directive 2026-08-06). If
+a doc's wording is stale, imprecise, or cites something wrong, **file it and keep
+going** -- do not report it as a gap, because a gap re-opens the review loop and
+iterating an expensive model over documentation wording is exactly the waste this
+split exists to prevent. Journal entries (tier 3) are ALWAYS filed, never
+reported. Tier-1/2 docs default to filed as well, tagged `tier: sonnet` /
+`work_class: docs-nit`. **The one exception is a doc statement that changes what a
+future agent DOES** -- a rule granting a permission the policy withholds, an
+instruction routing work to the wrong gate, a documented command that destroys
+data. That is behavioral, and it IS a gap. Test: *"if a session follows this
+sentence literally, does it do the wrong thing?"*
+
 ## Pre-existing + out-of-scope findings: file them as beads (don't escalate, don't report as gaps)
 
 Two classes are **not this diff's to fix**, and reporting them as gaps burns review rounds on work the PR never signed up for:

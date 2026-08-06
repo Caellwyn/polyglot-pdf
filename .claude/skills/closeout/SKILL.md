@@ -519,6 +519,28 @@ which is the same churn one layer down.
   behavior than the body, or a test whose name asserts something it does not check.
   The question is never "is it just a comment?" -- it is **"does this signal the
   behavior is wrong?"**
+- **PROSE ACCURACY IN DOCS -> FILE IT, do not fix it inline** (maintainer
+  directive 2026-08-06). A finding about the *wording* of a doc -- a stale claim, a
+  wrong citation, an imprecise sentence, a journal entry that reads badly -- is
+  **filed as a bead**, even when the reviewer is right and the fix is one line.
+  **Rationale:** a prose fix re-opens the review loop, and iterating an expensive
+  model over documentation wording is how a deployable PR turns into a three-hour
+  round-trip. Ship the code; sweep the prose later with a cheap batched runner.
+  - **Tier 3 (journal entries) -- ALWAYS file, never fix inline, no exceptions.**
+    They are a dated chronological record; nobody re-reads them, and their
+    accuracy never blocks a deploy. An Opus model iterating on journal wording is
+    the clearest waste this rule exists to stop.
+  - **Tier 1 / tier 2 (`CLAUDE.md`, `docs/standards/`, `docs/doctrine/`,
+    `docs/components/`) -- default to filing too**, tagged `tier: sonnet` /
+    `work_class: docs-nit`. These matter more (they are auto-loaded or
+    surface-authoritative), but "matters more" is an argument for fixing them
+    *soon*, not for blocking this PR on them.
+  - **The ONE carve-out: a doc statement that changes what an agent DOES.** A rule
+    that grants a permission the policy withholds, an instruction that routes work
+    to the wrong gate, a documented command that would destroy data -- those are
+    behavioral, not prose, and they are blockers. The test is *"if a future session
+    follows this sentence literally, does it do the wrong thing?"* If yes, fix it.
+    If it is merely inaccurate or ugly, file it.
 - **Never swept under the rug.** Every non-blocking and pre-existing finding gets
   **filed**. "Not a blocker" is a routing decision, not a dismissal. A finding you
   neither fixed nor filed is the one failure mode this rule does not tolerate.
