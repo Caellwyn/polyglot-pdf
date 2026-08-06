@@ -91,6 +91,15 @@ revisions stay retrievable) is unchanged; only the location moved.
 - `docs/standards/confirmation-and-audit.md` describes the marker precedence
   this bead consumes but does not change it (author_version is bead xzw5).
 
+## Beads housekeeping
+
+No orphans. Four stale in_progress beads (52qm.1 grouped-control voice fill;
+dft1 client-side resume; ggla DRAFT_ filename; oagt Parts 6/7 invariant) all
+belong to OTHER work streams -- the deployment track and the voice epic -- and
+were left untouched: transitioning another session's claimed bead from here is
+the collision the change-surface guard exists to prevent. This bead's own
+surfaces were narrowed at claim time (see Lessons 3).
+
 ## Files touched
 
 - `backend/services/form_kits.py` (archive primitives, `encode_marker`)
