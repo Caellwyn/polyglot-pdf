@@ -2225,6 +2225,7 @@ async def test_interrupt_reanchor_silent_when_disabled():
     class _InterruptedSession:
         def __init__(self):
             self._generator = None
+            self.text_turns = []
 
         async def send_realtime_input(self, **_kwargs):
             return None
@@ -2232,7 +2233,11 @@ async def test_interrupt_reanchor_silent_when_disabled():
         async def send_tool_response(self, **_kwargs):
             return None
 
-        async def send_client_content(self, **_kwargs):
+        async def send_client_content(self, **kwargs):
+            turns = kwargs.get("turns") or {}
+            for part in turns.get("parts", []):
+                if part.get("text"):
+                    self.text_turns.append(part["text"])
             return None
 
         def receive(self):
@@ -2246,12 +2251,16 @@ async def test_interrupt_reanchor_silent_when_disabled():
                 self._generator = gen()
             return self._generator
 
+    session = _InterruptedSession()
     fake_live = MagicMock()
-    fake_live.connect.return_value = _DummyContextManager(_InterruptedSession())
+    fake_live.connect.return_value = _DummyContextManager(session)
     adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
 
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
-
+    # SESSION boundary, not queue residue: text_sender drains the queue either
+    # way, so an empty-queue assertion would pass even if the gate were ignored.
+    await asyncio.sleep(0.05)
+    assert session.text_turns == []
     assert adapter._text_queue.empty()
     await adapter.finalize()
 
@@ -2301,8 +2310,16 @@ async def test_interrupt_reanchor_send_failure_does_not_crash_loop():
     fake_live.connect.return_value = _DummyContextManager(_InterruptedSession())
     adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
 
-    # Must not raise.
-    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=2.0)
+
+    # "The loop did not raise" is NOT a discriminating assertion here -- the
+    # session loop has its own outer retry that swallows a raised exception
+    # too, so it passes with this clause narrowed away. The observable that
+    # actually pins THIS handler is its own warning.
+    warned = [
+        c[0][0] for c in adapter._log.warning.call_args_list if c[0]
+    ]
+    assert "interrupt_reanchor_error" in warned
     await adapter.finalize()
 
 
