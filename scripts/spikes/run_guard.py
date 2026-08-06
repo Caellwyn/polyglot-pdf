@@ -102,9 +102,26 @@ def main() -> int:
     ap.add_argument("--poll-sec", type=float, default=2.0)
     ap.add_argument("--idle-exit-sec", type=float, default=90.0,
                     help="exit cleanly after this long with no new turns")
+    ap.add_argument("--startup-grace-sec", type=float, default=180.0,
+                    help="how long to wait for the token log to appear before "
+                         "aborting (a guard on a missing log is blind)")
     args = ap.parse_args()
 
     log = Path(args.token_log)
+    # A guard watching a log that never appears is not a guard -- it is a
+    # 12-minute nap. (Observed: the NATO arm ran with the guard pointed at a
+    # token log that had been deleted before the run, so it saw turns=0
+    # throughout and only fired on wall-clock, after the run was already over.)
+    # Wait for the log to APPEAR, and refuse to run if it never does.
+    appear_deadline = time.time() + args.startup_grace_sec
+    while not log.exists():
+        if time.time() > appear_deadline:
+            print(f"[guard] ABORT: {log} never appeared within "
+                  f"{args.startup_grace_sec:.0f}s -- the guard would be blind. "
+                  f"Check --token-log points at the RUN's log.")
+            return 2
+        time.sleep(1.0)
+
     started = time.time()
     last_growth = time.time()
     last_n = 0

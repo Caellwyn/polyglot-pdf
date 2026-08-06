@@ -251,13 +251,25 @@ def main() -> int:
         # and record the basis so a pairing bug is auditable per row.
         lo = d.get("first_seq") or 0
         own_hi = d.get("last_seq") or lo
+        # The transcript stream LEADS the audio-dump boundaries: a spelling
+        # spoken in this generation routinely lands in the PREVIOUS
+        # generation's seq window. Widen the comparison window backwards to
+        # the previous dump's start so the pair is judged on the same
+        # utterance, not on a boundary accident.
+        prev_los = [x.get("first_seq") for x in dumps
+                    if x.get("first_seq") is not None and (x.get("first_seq") or 0) < lo]
+        neighbour_lo = max(prev_los) if prev_los else lo
         next_los = [x.get("first_seq") for x in dumps
                     if (x.get("first_seq") or 0) > own_hi and x.get("first_seq") is not None]
         boundary = min(next_los) if next_los else None
         hi = min(own_hi + args.seq_tail, boundary - 1) if boundary is not None \
             else own_hi + args.seq_tail
         text_track = "".join(t for s, t in transcripts if lo <= s <= hi)
+        # Adjacent-inclusive text used ONLY for spelled-run comparison.
+        text_neighbourhood = "".join(t for s, t in transcripts
+                                     if neighbour_lo <= s <= hi)
         base["seq_window"] = [lo, hi]
+        base["neighbour_window"] = [neighbour_lo, hi]
         base["window_bounded_by_next_gen"] = boundary is not None
         base["transcript_text"] = text_track
 
@@ -287,10 +299,13 @@ def main() -> int:
 
         letters_stt = _letters(rec["text"])
         letters_txt = _letters(text_track)
+        # Spellings anywhere in the adjacent-inclusive neighbourhood.
+        letters_near = _letters(text_neighbourhood)
         cont = _containment(rec["text"], text_track)
         base.update({
             "letters_stt": letters_stt,
             "letters_transcript": letters_txt,
+            "letters_neighbourhood": letters_near,
             "containment": round(cont, 3) if cont is not None else None,
         })
 
@@ -307,8 +322,14 @@ def main() -> int:
         # (b) ONE-SIDED SPELLING is only evidence when the AUDIO spelled
         #     something the text did not, or the two spellings CONFLICT. Text
         #     spelling with silent audio is the classic bleed signature.
-        spelling_conflict = bool(letters_stt) and bool(letters_txt) and letters_stt != letters_txt
-        audio_only_spelling = bool(letters_stt) and not letters_txt
+        # A spelled run the AUDIO produced is only suspicious when it appears
+        # NOWHERE in the adjacent text -- otherwise it is a boundary artifact.
+        audio_spelling_supported = bool(letters_stt) and letters_stt in letters_near
+        spelling_conflict = (bool(letters_stt) and bool(letters_txt)
+                             and letters_stt != letters_txt
+                             and not audio_spelling_supported)
+        audio_only_spelling = (bool(letters_stt) and not letters_txt
+                               and not audio_spelling_supported)
         if cont is None:
             verdict = "NO_SPEECH_DETECTED"
         elif spelling_conflict or audio_only_spelling:
@@ -316,7 +337,9 @@ def main() -> int:
         elif letters_txt and not letters_stt:
             # Text spelled, audio did not: real only if the sentences also
             # diverge; otherwise it is window bleed.
-            verdict = "SPELLING_DESYNC" if cont < 0.6 else "ALIGNED"
+            verdict = ("SPELLING_DESYNC"
+                       if (cont < 0.6 and letters_txt not in letters_near)
+                       else "ALIGNED")
         elif cont >= 0.6:
             verdict = "ALIGNED"
         elif meta["seconds"] < 2.0:
