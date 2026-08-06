@@ -118,31 +118,46 @@ reachable everyday flow, plus four smaller issues:
    bead that will make it true (polyglot-pdf-j8sr).
 
 Filed rather than widened into this bead: polyglot-pdf-j8sr (five routes
-rewrite a schema without re-stamping; local-folder save never stamps) and
+rewrite a schema without re-stamping; local-folder save never stamps),
 polyglot-pdf-drpn (every save now rewrites metadata.json, widening a
-pre-existing concurrent-write revert window).
+pre-existing concurrent-write revert window), polyglot-pdf-lu1i and
+polyglot-pdf-93p8 (client/backend predicate divergences on inputs the current
+lint emitter cannot produce; 93p8 supersedes the earlier polyglot-pdf-wjes,
+which should close as a duplicate when 93p8 is worked), and polyglot-pdf-evt9
+(/label and /status destroy an unparseable metadata.json the same way the save
+path did -- pre-existing, and found because C4 fixed that shape on its own new
+writer, leaving the asymmetry visible). polyglot-pdf-eh2i was filed against
+this bead's parity harness and is FIXED here, so it closes with this PR.
 
-**Rounds 3-6 continued to find real defects** -- the assess loop ran six rounds
-because each round's findings were correct and blocking, not because of thrash.
-Beyond those already listed: a stamp could HIDE a schema-corruption notice
-(the notice was gated on the percentage being absent, which stopped being true
-once the percentage came from the stamp); `bool()`/`int()` coercions let a
-hand-edited stamp read differently in hosted vs local mode; the whole
-publish-path stamp could be deleted with the entire backend suite green; and a
-save over a kit whose metadata.json was UNPARSEABLE replaced the file with just
-the stamp, deleting its status and label (both stores collapse a malformed file
-to None, indistinguishable from absent -- pre-C4 the save wrote no metadata, so
-this diff had made an ordinary Cmd+S destructive).
+**The assess loop ran EIGHT rounds** (4, 8, 7, 3, 5, 7, 4 findings, then
+NO-GAPS) -- every round because its findings were correct and blocking, not
+because of thrash. Beyond those already listed:
+
+- a stamp could HIDE a schema-corruption notice (the notice was gated on the
+  percentage being absent, which stopped being true once the percentage came
+  from the stamp);
+- `bool()`/`int()` coercions let a hand-edited stamp read differently in hosted
+  vs local mode -- `bool("no")` is True, so a string flipped the honesty bit on;
+- the whole publish-path stamp, and separately the publish RE-LINT decision,
+  could each be deleted with the entire backend suite green;
+- a save over a kit whose metadata.json was UNPARSEABLE replaced the file with
+  just the stamp, deleting its status and label. Pre-C4 the save wrote no
+  metadata at all, so this diff had made an ordinary Cmd+S destructive;
+- and the FIX for that over-corrected: it skipped whenever load_metadata
+  returned None, but None means absent OR unparseable, so a kit with no
+  metadata.json (form-kits/w9-heldout ships that way) could never be stamped.
 
 Three recurring shapes, recorded in Lessons: fixing one half of a mirrored pair
 (strip vs card, hosted vs local, Python vs TS); tests that describe rather than
 pin; and comments that over-claim what the code guarantees.
 
-Final tests: backend 1661+ passed (from a 1595 baseline, zero regressions),
-schema-editor 1206+ passed, typecheck clean. ~20 mutations verified across the
+Final tests: backend 1676 passed (from a 1595 baseline, zero regressions),
+schema-editor 1210 passed, typecheck clean. ~25 mutations verified across the
 predicate, the fingerprint, the rounding (both sides), the structural clause,
 the stale-rule exclusion, both stamp call sites, the publish re-lint, the
-listing, the parsers, and every render path.
+listing, both parsers, the metadata-preservation branches, and every render
+path. The final round additionally fuzzed the fingerprint mirror over 4,000
+randomized inputs and proved the rounding mirror exhaustively (80,199 pairs).
 
 ## Lessons
 
