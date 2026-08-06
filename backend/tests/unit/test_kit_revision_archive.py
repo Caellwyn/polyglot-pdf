@@ -334,9 +334,9 @@ def test_sibling_suffix_matches_the_real_fingerprint_format(tmp_path):
 
     rkr = _read_kit_revision()
     encoded_suffix = encode_marker(fingerprint)
-    assert rkr._is_sibling_of(f"12-2024--{encoded_suffix}", "12-2024")
+    assert rkr._is_sibling_of(f"12-2024--{encoded_suffix}", "12-2024", "12/2024")
     # ...and a non-fingerprint suffix is not a sibling.
-    assert not rkr._is_sibling_of("12-2024--rev2", "12-2024")
+    assert not rkr._is_sibling_of("12-2024--rev2", "12-2024", "12/2024")
 
 
 def test_a_shorter_unrelated_markers_sibling_is_not_ours(tmp_path):
@@ -357,9 +357,37 @@ def test_a_shorter_unrelated_markers_sibling_is_not_ours(tmp_path):
 
     # A short base is only legitimate at the writer's exact trim budget, which
     # "12-20" is nowhere near -- so this is an impostor, not our sibling.
-    assert not rkr._is_sibling_of(sib, enc("12/2024"))
+    assert not rkr._is_sibling_of(sib, enc("12/2024"), "12/2024")
     # ...while it IS the sibling of its own marker.
-    assert rkr._is_sibling_of(sib, enc("12/20"))
+    assert rkr._is_sibling_of(sib, enc("12/20"), "12/20")
+
+
+@pytest.mark.parametrize("base_len", [8, 50, 106, 107, 108, 127, 128, 200])
+def test_a_prefix_sharing_marker_never_matches_at_any_length(base_len):
+    """The false-POSITIVE direction across the WHOLE length range, including
+    the trim boundary where the writer actually trims.
+
+    Length-equality plus a prefix test was not sound: trimming is lossy, so any
+    two markers sharing the trimmed prefix cross-matched (measured in review at
+    thousands of pairs, concentrated at exactly the lengths where trimming
+    happens -- which is why a parametrization that only varied ONE marker per
+    case never saw it). The writer now tags a trimmed base with a digest of the
+    full base, so the reader verifies rather than guesses.
+    """
+    from backend.services.form_kits import encode_marker as enc, sibling_marker
+
+    rkr = _read_kit_revision()
+    mine = "E" * base_len
+    # A DIFFERENT marker that shares every character of `mine` as a prefix.
+    theirs = mine + "-REALLY-DIFFERENT-EDITION"
+    fp = "sha256:1a2b3c4d5e6f"
+
+    # Their sibling must never answer to my marker, or vice versa...
+    assert not rkr._is_sibling_of(sibling_marker(theirs, fp), enc(mine), mine)
+    assert not rkr._is_sibling_of(sibling_marker(mine, fp), enc(theirs), theirs)
+    # ...while each still matches its own marker at every length.
+    assert rkr._is_sibling_of(sibling_marker(mine, fp), enc(mine), mine)
+    assert rkr._is_sibling_of(sibling_marker(theirs, fp), enc(theirs), theirs)
 
 
 def test_an_unrelated_prefix_marker_resolves_to_not_found(tmp_path):
@@ -393,7 +421,7 @@ def test_sibling_round_trips_for_markers_with_dash_runs(tmp_path, raw):
 
     rkr = _read_kit_revision()
     sib = sibling_marker(raw, "sha256:1a2b3c4d5e6f")
-    assert rkr._is_sibling_of(sib, enc(raw)), f"round trip failed for {raw!r}"
+    assert rkr._is_sibling_of(sib, enc(raw), raw), f"round trip failed for {raw!r}"
 
 
 def test_sibling_marker_never_exceeds_the_segment_cap():

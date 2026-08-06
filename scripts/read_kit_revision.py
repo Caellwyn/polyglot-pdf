@@ -47,6 +47,7 @@ reported honestly instead of returning a confident wrong schema.
 """
 import argparse
 import asyncio
+import hashlib
 import json
 import re
 import sys
@@ -69,20 +70,12 @@ if str(_REPO_ROOT) not in sys.path:
 # (fresh-eyes round 3, reproduced live).
 _SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
 
-
-def _marker_max_len() -> int:
-    """The writer's segment cap, imported rather than duplicated.
-
-    The trim budget must be computed from the SAME constant the writer uses --
-    a local copy here would drift silently and make genuine siblings
-    unresolvable.
-    """
-    from backend.services.form_kits import _MARKER_MAX_LEN
-
-    return _MARKER_MAX_LEN
+# The digest `sibling_marker` appends to a TRIMMED base so the trim stays
+# verifiable (8 hex chars of sha256 over the full encoded base).
+_BASE_TAG_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
-def _is_sibling_of(segment: str, base: str) -> bool:
+def _is_sibling_of(segment: str, base: str, raw_marker: str | None = None) -> bool:
     """True when `segment` is a fingerprint-disambiguated sibling of `base`.
 
     A sibling is "<base>--<encoded fingerprint>". Three things have to hold at
@@ -92,13 +85,14 @@ def _is_sibling_of(segment: str, base: str) -> bool:
        ordinary marker that merely encodes with a "--" run (e.g. "12/2024//rev2")
        looks like a sibling of "12/2024" and produces a false ambiguity.
     2. An equal base matches, obviously.
-    3. A SHORTER stored base matches ONLY at the writer's exact trim budget.
-       The writer trims the base to fit the fingerprint under the segment cap
-       while this reader holds the UNTRIMMED base, so requiring equality made
-       every sibling of a long marker invisible. But accepting any prefix is
-       worse: a revision published under "12/20" would then answer to a record
-       naming "12/2024". Reconstructing the budget admits the genuine trimmed
-       sibling and rejects the impostor.
+    3. A TRIMMED base is verified by its DIGEST, never by a prefix. The writer
+       trims long bases to fit the fingerprint under the segment cap, so this
+       reader's untrimmed base will not compare equal -- but prefix matching
+       cannot substitute, because trimming is lossy and any two markers sharing
+       the trimmed prefix become indistinguishable (measured in review at
+       thousands of cross-matching pairs; narrowing to the exact trim budget
+       still left thousands). So the writer appends a digest of the raw marker
+       and we recompute it: it either matches ours or it does not.
     """
     marker_pos = segment.rfind("--")
     if marker_pos <= 0:
@@ -108,16 +102,29 @@ def _is_sibling_of(segment: str, base: str) -> bool:
         return False
     if seg_base == base:
         return True
-    # A SHORTER stored base is legitimate only when it is exactly what the
-    # writer's trim would have produced. A bare prefix test is not enough: it
-    # matches an unrelated SHORTER marker's sibling too, so a record naming
-    # "12/2024" would resolve to a revision published under "12/20" -- an
-    # unrelated schema returned at exit 0, which is worse than the false
-    # NEGATIVE this replaced (that one at least returned a real revision of the
-    # right marker). Reconstructing the writer's budget keeps every genuine
-    # trimmed sibling and rejects the impostor.
-    budget = max(8, _marker_max_len() - len(suffix) - 2)
-    return len(seg_base) == budget and base.startswith(seg_base)
+    # A TRIMMED base carries a digest of the full base it came from, so verify
+    # it by RECOMPUTING that digest -- never by prefix.
+    #
+    # Prefix matching cannot be made sound here: trimming is lossy, so two
+    # distinct markers sharing the trimmed prefix are indistinguishable
+    # afterwards, and a record naming one would resolve to the other's revision
+    # (measured in review: thousands of cross-matching pairs at trim-range
+    # lengths, and narrowing the window to the exact budget still left
+    # thousands). The writer therefore emits "<head>-<tag>" and we check the
+    # tag, which either matches our own marker or does not.
+    _head, sep, tag = seg_base.rpartition("-")
+    if not sep or not _BASE_TAG_RE.fullmatch(tag):
+        return False
+    # The tag digests the RAW marker (encode_marker truncates at the cap, so
+    # two markers differing only past it share an encoded base -- a digest over
+    # THAT would still collide), which is why the caller's raw marker is
+    # required. No prefix check accompanies this: a matching digest already
+    # establishes the segment came from this marker, and a redundant-looking
+    # guard that no test can kill is worse than none -- it reads as protection
+    # while pinning nothing.
+    if raw_marker is None:
+        return False
+    return hashlib.sha256(raw_marker.encode("utf-8")).hexdigest()[:len(tag)] == tag
 
 
 class AmbiguousRevision(Exception):
@@ -174,7 +181,7 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
     # looking up only the plain segment silently returns the first revision's
     # schema for a record that meant the second.
     for segment in await store.list_archived_markers(kit_id):
-        if segment == base or _is_sibling_of(segment, base):
+        if segment == base or _is_sibling_of(segment, base, marker):
             archived = await store.load_archived_revision_or_none(kit_id, segment)
             if archived is not None:
                 candidates.append((f"archive:{segment}", archived))

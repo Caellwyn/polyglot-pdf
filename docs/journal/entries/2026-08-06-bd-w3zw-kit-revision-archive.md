@@ -140,6 +140,26 @@ segment longer than the cap it budgets against (failing on exactly the
 pathological fingerprint it was written for), and the `rfind("--")` split is
 now pinned by a round-trip parametrization over markers containing dash runs.
 
+**The design was wrong, not the tuning -- and the next round proved it.** Every
+attempt to match a trimmed sibling by its NAME failed, because trimming is
+lossy: exact-base hid genuine siblings, bare-prefix admitted impostors, and
+prefix-at-the-exact-budget still cross-matched (measured: 8556 pairs, and 3444
+with the narrow patch). No reader-side rule can recover information the writer
+threw away. So the fix moved to the WRITER: when `sibling_marker` must trim, it
+appends an 8-hex digest of the RAW marker, and the reader RECOMPUTES that
+digest instead of guessing. A sweep over lengths 1-199 in both directions now
+reports zero false positives and zero false negatives.
+
+Two follow-ons from that redesign. The digest must cover the RAW marker, not
+the encoded base -- `encode_marker` truncates at the cap, so two markers
+differing only past it share an encoded base and a digest over THAT would still
+collide (caught by the new boundary parametrization at lengths 128/200). And
+once the digest verifies, the accompanying `startswith` guard became genuinely
+redundant: a mutation deleting it left all 53 tests green, and rather than
+manufacture a test for a check that pins nothing, it was removed -- a
+redundant-looking guard no test can kill reads as protection while providing
+none.
+
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
 from the segment's name. `encode_marker` collapses any run of unsafe characters
@@ -232,7 +252,27 @@ fingerprint) instead of any `--` run, with a test pinning the coupling to
    literals, so no two stood in a prefix relationship and half the contract was
    untested.
 
-9. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+9. **When three fixes to one function each create the next defect, the DESIGN
+   is wrong -- stop tuning it.** Sibling matching went exact-base (hid real
+   siblings) -> bare-prefix (admitted impostors) -> prefix-at-exact-budget
+   (still cross-matched at trim-range lengths). Each fix was locally reasonable
+   and each moved the bug rather than removing it, because all three tried to
+   recover, on the READ side, information the WRITE side had destroyed. Lossy
+   transformations cannot be inverted by pattern-matching their output: either
+   the writer preserves what the reader needs (here, a digest of the raw
+   marker), or the reader must honestly refuse. The signal to look for is the
+   shape of the iteration -- adjacent defects in the same small function -- not
+   any one finding.
+
+10. **A guard no mutation can kill is not a guard.** After the digest check
+    landed, deleting the accompanying `startswith` left all 53 tests green. The
+    tempting response is to write a test for it; the correct one was to notice
+    it had become genuinely redundant and delete it. Per the repo's
+    redundant-guard lesson, unkillable code that reads as protection is worse
+    than absent code, because it stops the next reader from asking whether the
+    real check is sound.
+
+11. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow

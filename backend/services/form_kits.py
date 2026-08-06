@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Form kit storage helpers for loading schemas/PDFs in dev and prod."""
 
+import hashlib
 import json
 import os
 import re
@@ -112,14 +113,32 @@ def sibling_marker(marker: str, fingerprint: str) -> str:
 	differ and no revision is lost -- the failure degrades to a less readable
 	name, never to overwritten bytes.
 	"""
-	# Cap the FINGERPRINT first so the 8-char base floor below cannot push the
-	# result past the segment limit. Without this the floor breaks the very
-	# invariant it exists to protect on the one input it was written for -- a
-	# pathological (non-sha256) fingerprint would emit an over-long segment.
-	encoded_fp = encode_marker(fingerprint)[:max(1, _MARKER_MAX_LEN - 8 - 2)]
-	# 2 for the "--" join. Always leave at least 8 chars of base.
+	# Cap the FINGERPRINT first so the base floor below cannot push the result
+	# past the segment limit. Without this the floor breaks the very invariant
+	# it exists to protect on the one input it was written for -- a pathological
+	# (non-sha256) fingerprint would emit an over-long segment.
+	encoded_fp = encode_marker(fingerprint)[:max(1, _MARKER_MAX_LEN - 24 - 2)]
+	encoded_base = encode_marker(marker)
+	# 2 for the "--" join. Leave room for the base tag below.
 	base_budget = max(8, _MARKER_MAX_LEN - len(encoded_fp) - 2)
-	return f"{encode_marker(marker)[:base_budget]}--{encoded_fp}"
+	if len(encoded_base) <= base_budget:
+		return f"{encoded_base}--{encoded_fp}"
+
+	# TRIMMING IS LOSSY, so a trimmed base must carry proof of what it came
+	# from. Without it the reader can only prefix-match, and two distinct
+	# markers sharing the trimmed prefix become indistinguishable -- a record
+	# naming one resolves to the other's revision (measured: thousands of
+	# cross-matching pairs at these lengths). Appending a short digest of the
+	# FULL encoded base makes the trim verifiable: the reader recomputes it
+	# from its own marker and compares, so a prefix collision no longer
+	# resolves. 8 hex chars of sha256 -- this disambiguates sibling directory
+	# names, it is not a security boundary.
+	# Digest the RAW marker, not the encoded base: encode_marker itself
+	# truncates at the cap, so two markers differing only past that point share
+	# an encoded base and a digest over it would still collide.
+	tag = hashlib.sha256(marker.encode("utf-8")).hexdigest()[:8]
+	head_budget = max(1, base_budget - len(tag) - 1)  # 1 for the "-" join
+	return f"{encoded_base[:head_budget]}-{tag}--{encoded_fp}"
 
 
 def _replace_with_retry(src: "Path", dst: "Path") -> None:
