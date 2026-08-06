@@ -552,10 +552,14 @@ which is the same churn one layer down.
     Ugly -> file. Do not reason forward about whether a future agent might act on
     it; that test is vague, and agents resolve vague tests conservatively, which
     turns every doc nit back into a blocker.
-  - **Note:** if a tier-1/2 doc contains *history or rationale* at all, that is
-    itself a current-state-only violation (`doc-architecture.md` §3) -- file it as
-    a docs-nit rather than treating it as licence to skip the accuracy bar.
-    (`docs/sprint_<N>_*.md` plans are the one exemption: they are deliberately
+  - **Note:** a CHRONOLOGICAL NARRATIVE in a tier-1/2 doc -- a `Previously:`/`Prior:`
+    stamp chain, an `## Update history` / `## Changelog` heading, or a "Sprint NN
+    did X" narrative threaded through prose -- is a current-state-only violation
+    (`doc-architecture.md` section 3); file it as a docs-nit. **Design RATIONALE
+    is NOT a violation**: section 3 bans those three chronological shapes only,
+    and `review-flow.md` preserves its rationale deliberately "so it is not
+    re-litigated". Do not file a doc for explaining why it is as it is.
+    (`docs/sprint_<N>_*.md` plans are the one exemption: deliberately
     chronological.)
 - **Never swept under the rug.** Every non-blocking and pre-existing finding gets
   **filed**. "Not a blocker" is a routing decision, not a dismissal. A finding you

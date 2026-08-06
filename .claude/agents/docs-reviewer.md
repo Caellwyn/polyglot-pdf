@@ -68,9 +68,14 @@ this sentence WRONG about the code, or just ugly?"* Wrong -> gap. Ugly -> file. 
 NOT reason forward about whether a future agent might act on it -- that test is
 vague, and resolving it conservatively turns every doc nit into a blocker.
 
-If a tier-1/2 doc carries *history or rationale* at all, that is itself a
-current-state-only violation -- file it as a docs-nit. (`docs/sprint_<N>_*.md`
-plans are exempt; they are deliberately chronological.)
+If a tier-1/2 doc carries a CHRONOLOGICAL NARRATIVE -- a `Previously:`/`Prior:`
+stamp chain, an `## Update history` / `## Changelog` heading, or a "Sprint NN
+did X" narrative threaded through the prose -- that is a current-state-only
+violation (`doc-architecture.md` section 3); file it as a docs-nit. **Design
+RATIONALE is NOT a violation** -- section 3 bans those three chronological
+shapes only, and `review-flow.md` preserves its rationale deliberately "so it
+is not re-litigated". Do not file a doc for explaining why it is as it is.
+(`docs/sprint_<N>_*.md` plans are exempt; they are deliberately chronological.)
 
 Two further classes are never this PR's to fix:
 

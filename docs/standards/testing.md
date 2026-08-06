@@ -254,9 +254,9 @@ the remaining guard with a one-token mutation. Standard practice, every time:
    the diff after restoring, and write commit messages from the staged diff rather
    than memory.
 
-The recurring traps this prevents (each cost a bead) are catalogued below: the
-self-fulfilling mock, pinning a bug as correct, guarding a code shape instead of
-the property, and redundant guards where neither layer is actually pinned.
+The trap this most often prevents is the **self-fulfilling mock** (below): a test
+that constructs the expected payload, feeds it to a mock, and asserts the mock got
+it -- deleting the production code leaves it green.
 
 **A green vitest run does not prove a canvas/PDF UI works.** jsdom has no canvas
 backend, so `getContext` returns null and the real `pdfjs-dist` render path — and

@@ -296,7 +296,13 @@ consumers -- that is the outer reviewer's job, and duplicating it is the cost th
 split removes. Triage: a **rubric-criterion gap is FIXED before the PR opens** (a
 criterion failure, never a deferrable nit) -- as is any other correct blocker;
 **pre-existing and non-blocking findings are FILED as beads, not chased inline**; a
-rejected finding gets its reason recorded. The orchestrator runs this loop to
+rejected finding gets its reason recorded. **Doc findings route by TIER** (bd
+`polyglot-pdf-9feav`): tier 3 (`docs/journal/`, research, plans) is ALWAYS filed,
+never a gap; in tier 1/2 -- including `.claude/` agent and skill files, which load
+into a session's context -- a WRONG claim about the code is a gap and merely UGLY
+wording is filed. The test is mechanical (*which file, and is the claim wrong or
+just ugly?*), deliberately not predictive: a "might this change what an agent
+does?" test gets resolved conservatively and turns every doc nit into a blocker. The orchestrator runs this loop to
 `NO-GAPS` pre-PR (no round cap -- loop while gaps are correct blockers), folds the
 adopt/reject/defer breakdown into the journal entry, and carries the final scorecard
 into the PR body's `## Exit criteria` section.
