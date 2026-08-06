@@ -107,6 +107,15 @@ describe('readKitProgress', () => {
     expect(prog.schemaError).toBe(false);
     // The version line IS still derived (no stamp carries it).
     expect(prog.version).not.toBeNull();
+    // The counts are inert too. This is what makes the catalogue's one-truth
+    // property hold BY CONSTRUCTION rather than by convention: the strip and
+    // the card can only render what this returns, so with no percentage here
+    // there is nothing for a re-added `?? progress[id].reviewPercent`
+    // fallback to surface (Opus outer review measured that a one-line
+    // fallback survives on its own -- it survives precisely BECAUSE this is
+    // null, and this test is what keeps it null).
+    expect(prog.completeFields).toBe(0);
+    expect(prog.totalFields).toBe(0);
   });
 
   it('returns null percent (no schemaError) for a kit with no schema', async () => {
