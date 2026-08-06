@@ -115,6 +115,17 @@ message told operators to compare "each revision's archived metadata" while
 offering no way to read it -- it now prints each candidate's `published_at`
 beside a copy-pasteable `--segment` command.
 
+**And the next Opus pass caught the other half of that fix.** `sibling_marker`
+trims the base to fit the fingerprint, but `_resolve` held the UNTRIMMED base
+and required an exact prefix -- so every sibling of a marker >=108 chars was
+invisible to retrieval, which returned the other revision at exit 0 with no
+ambiguity report. The data-loss band was closed and the wrong-answer band had
+simply moved (115-127 -> 108+). `_is_sibling_of` now accepts a stored base that
+is a PREFIX of ours (the fingerprint suffix is still validated exactly, so the
+round-3 false-ambiguity protection holds -- verified against all five prefix
+cases). It also found that the length-parametrized test could not have caught
+this; see Lessons 6.
+
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
 from the segment's name. `encode_marker` collapses any run of unsafe characters
@@ -176,7 +187,27 @@ fingerprint) instead of any `--` run, with a test pinning the coupling to
    leaving them to drift. Same family as the round-1 lesson: verify the
    property, don't infer it from a proxy.
 
-6. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+6. **A parametrized test can certify a broken band as green when an unrelated
+   candidate satisfies the assertion.** The marker-length test asserted that
+   retrieval raises `AmbiguousRevision`, and it passed at every length -- but
+   the LIVE schema also answered to the marker, so it supplied a second
+   candidate by itself. Ambiguity was raised whether or not the sibling was
+   ever found, so the assertion held while siblings were invisible from 108
+   chars up. Parametrizing the length dimension was necessary and not
+   sufficient: the fixture has to ISOLATE the thing under test (move the live
+   schema out of the candidate set) and assert on the CANDIDATE COUNT, not just
+   that the exception fired. Corrected, the same test fails at 114-300 and
+   passes at 10/60 -- which is what "mutation-verified" has to mean.
+
+7. **Fixing a write path can leave the matching read path broken at the same
+   inputs.** This is lesson 4 recurring one layer deeper: the truncation fix
+   made both revisions survive on disk, and the band where retrieval could not
+   SEE the second one merely shifted (115-127 -> 108+). After any fix to a
+   round-trip, re-ask the original question of the whole round trip -- "can a
+   record still resolve to the wrong schema?" -- not just of the side that
+   changed.
+
+8. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow

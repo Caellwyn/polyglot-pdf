@@ -444,12 +444,23 @@ def test_colliding_revisions_survive_at_every_marker_length(tmp_path, marker_len
     assert _run(store.load_archived_revision("w7", edition)) == rev_1
     assert second is not None
     assert _run(store.load_archived_revision("w7", second)) == rev_2
-    # ...and retrieval must SEE the sibling (not silently return only the first).
+
+    # Move the LIVE schema to an unrelated revision first. Otherwise the live
+    # copy answers to this marker too and supplies a second candidate on its
+    # own -- so AmbiguousRevision would be raised whether or not the sibling
+    # was ever found, and this assertion would pass over a broken band (it did:
+    # the writer's trimmed base made siblings invisible to the reader at >=108
+    # chars while this test stayed green). Isolate the ARCHIVE lookup.
+    (tmp_path / "w7" / "schema.json").write_text(
+        json.dumps(_schema("z", edition="01/2030")), encoding="utf-8"
+    )
     rkr = _read_kit_revision()
-    with pytest.raises(rkr.AmbiguousRevision):
-        # The live schema is rev_2, which also answers to this marker, so the
-        # honest answer is ambiguity -- never a silent single result.
+    with pytest.raises(rkr.AmbiguousRevision) as exc:
         _resolve_revision(store, "w7", edition)
+    # Exactly the two ARCHIVED revisions -- proving the sibling was visible.
+    assert len(exc.value.candidates) == 2, (
+        f"the sibling was invisible to retrieval at marker_len={marker_len}"
+    )
 
 
 def test_repeating_the_same_colliding_revision_still_skips(tmp_path):

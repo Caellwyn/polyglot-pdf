@@ -71,11 +71,26 @@ _SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
 
 
 def _is_sibling_of(segment: str, base: str) -> bool:
-    """True when `segment` is a fingerprint-disambiguated sibling of `base`."""
-    prefix = f"{base}--"
-    if not segment.startswith(prefix):
+    """True when `segment` is a fingerprint-disambiguated sibling of `base`.
+
+    A sibling is "<base>--<encoded fingerprint>", but the WRITER trims its base
+    to make room for the fingerprint inside the segment length cap, while this
+    reader holds the UNTRIMMED base. So the comparison must accept a segment
+    base that is a PREFIX of ours -- requiring equality made every sibling of a
+    long marker invisible, and retrieval then returned the other revision at
+    exit 0 with no ambiguity report (fresh-eyes reproduced this end to end).
+
+    The fingerprint suffix is still validated exactly, which is what keeps an
+    unrelated marker that merely encodes with a "--" run from matching.
+    """
+    marker_pos = segment.rfind("--")
+    if marker_pos <= 0:
         return False
-    return bool(_SIBLING_SUFFIX_RE.fullmatch(segment[len(prefix):]))
+    seg_base, suffix = segment[:marker_pos], segment[marker_pos + 2:]
+    if not _SIBLING_SUFFIX_RE.fullmatch(suffix):
+        return False
+    # Ours may be longer (untrimmed) than the stored one, never shorter.
+    return base.startswith(seg_base)
 
 
 class AmbiguousRevision(Exception):
