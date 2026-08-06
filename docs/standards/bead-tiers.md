@@ -1,6 +1,6 @@
 # Bead tiers -- routing work to the right model
 
-**Tracks:** .claude/agents/ .claude/skills/next-bead/SKILL.md scripts/next_bead.py
+**Tracks:** .claude/agents/ .claude/skills/next-bead/SKILL.md .claude/skills/plan-epic/SKILL.md scripts/next_bead.py
 
 *Last updated: 2026-08-05. See [../journal/entries/2026-08-05-bd-1bsx-bead-tier-routing.md](../journal/entries/2026-08-05-bd-1bsx-bead-tier-routing.md) for closeout details.*
 
