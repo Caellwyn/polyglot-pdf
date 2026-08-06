@@ -444,9 +444,9 @@ The top-level container for the entire form definition.
 - `require_if`: Make the field required if condition is true
 
 There is **no `hide_if`** on the model -- to hide, invert the `show_if`
-condition. A schema carrying `hide_if` is accepted and the key is SILENTLY
-dropped (`FormSchema` uses `extra="ignore"`), leaving the field
-unconditionally visible.
+condition. A field carrying `hide_if` is accepted and the key is SILENTLY
+dropped (`FormField`, like every model here, inherits Pydantic's default
+`extra="ignore"`), leaving the field unconditionally visible.
 
 **Example (Show spouse details if married)**:
 ```json

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`callback_handler.py`/`form_filling_service.py`/`schemaFormState.ts` line-number citations, which had drifted from code growth since the last sweep -- no wire-type or handshake-key name changed).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`callback_handler.py`/`form_filling_service.py`/`schemaFormState.ts` line-number citations, which had drifted from code growth since the last sweep -- no wire-type or handshake-key name changed).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
