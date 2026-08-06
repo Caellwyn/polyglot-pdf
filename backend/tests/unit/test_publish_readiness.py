@@ -214,10 +214,16 @@ def test_percentage_rounds_ties_up_like_the_client(reviewed, total, expected):
     assert counts.percentage == expected
 
 
-def test_uncovered_structural_error_mirrors_the_client_clause():
+def test_uncovered_structural_error_clause_and_backend_robustness():
     """The clause reviewStatus.ts hasUncoveredStructuralError applies, which
     the server MUST compute identically (fresh-eyes gap 3) -- otherwise a field
-    counts reviewed in the stamp while the open editor renders it red."""
+    counts reviewed in the stamp while the open editor renders it red.
+
+    The WELL-FORMED cases below are genuine parity claims (and the shared
+    fixture reviewPredicateParity.json runs the same shapes through both
+    predicates). The malformed-options cases at the end are backend-only
+    robustness and say so -- see the comment there.
+    """
     signed = {"status": "reviewed_correct"}
 
     # A choice field where neither the field nor every option names a widget:
@@ -254,7 +260,16 @@ def test_uncovered_structural_error_mirrors_the_client_clause():
     assert is_counted_reviewed({"type": "text", "_review": signed}) is False
     assert is_counted_reviewed({"id": "x", "_review": signed}) is False
 
-    # Malformed options entries must not throw.
+    # BACKEND-ONLY robustness -- deliberately NOT a parity claim. On these
+    # exact shapes the CLIENT mirror THROWS (options.some is not a function; a
+    # property read on null), so asserting them here as "mirrors the client"
+    # would document a parity that does not hold (Opus fresh-eyes round 7
+    # measured 12 divergent shapes out of 720, all client-throws). The backend
+    # degrades instead of throwing because it runs over hand-edited and legacy
+    # kits at publish time, where a crash would be a 500 rather than a blank
+    # panel. The client-side crash is pre-existing (C1, reviewStatus.ts is
+    # untouched by this bead) and tracked as bd polyglot-pdf-93p8; when it is
+    # fixed, these shapes belong in the shared parity fixture instead.
     assert has_uncovered_structural_error(
         {"id": "c", "type": "radio", "options": ["junk", None]}) is True
     assert has_uncovered_structural_error(
@@ -383,9 +398,13 @@ def test_predicate_parity_with_the_client(name, case):
     # hardcoding a value the two sides could disagree about.
     identity = identity_sha1(field)
     if isinstance(review, dict) and "ackSha1" in review:
-        review["guidance_ack_sha1"] = (
-            identity if review.pop("ackSha1") == "@identity" else review.pop("ackSha1")
-        )
+        # Pop ONCE: the earlier form popped in the condition and again in the
+        # else branch, so any literal (non-"@identity") hash raised KeyError
+        # instead of asserting -- a trap laid directly in the path the
+        # fixture's own header invites future authors down (Opus fresh-eyes
+        # round 7).
+        raw_ack = review.pop("ackSha1")
+        review["guidance_ack_sha1"] = identity if raw_ack == "@identity" else raw_ack
     findings = [
         _finding(
             f["rule"],

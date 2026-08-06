@@ -540,6 +540,38 @@ def test_save_never_destroys_unparseable_metadata(client):
     assert (root / "i-90" / "metadata.json").read_text(encoding="utf-8") == corrupt
 
 
+def test_save_stamps_a_kit_that_has_no_metadata_file(client):
+    """An ABSENT metadata.json is a normal state -- stamp into a fresh dict.
+
+    A metadata-less kit ships in this repo (form-kits/w9-heldout), and
+    list_kit_files treats any subdirectory as a kit. Round 6 collapsed "absent"
+    and "unparseable" into one skip, so such a kit could never show a
+    percentage however many times it was saved (Opus fresh-eyes round 7). The
+    two cases are told apart by the kit's filename set, which the route already
+    holds -- no extra store round-trip.
+    """
+    c, _store, root = client
+    kit = root / "bare"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps({"fields": []}), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7 test")
+    assert not (kit / "metadata.json").exists()
+
+    r = c.put(
+        "/api/editor/kits/bare/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text",
+                          "_review": {"status": "reviewed_correct"}}]},
+    )
+    assert r.status_code == 200, r.text
+    # The stamp is returned...
+    assert r.json()["readiness"]["percent"] == 100
+    # ...and persisted into a metadata.json created for the purpose.
+    meta = json.loads((kit / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["readiness"]["reviewed"] == 1
+    assert meta["readiness"]["verified"] is True
+
+
 def test_kits_listing_returns_the_readiness_stamp(client):
     """GET /kits must carry each kit's stamp -- the catalogue's only source of
     a percentage (sprint-18 C4).

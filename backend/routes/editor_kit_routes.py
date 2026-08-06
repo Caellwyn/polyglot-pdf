@@ -570,8 +570,12 @@ def _readiness_stamp(schema: dict, findings, verified: bool) -> dict:
     }
 
 
+_METADATA_FILE = "metadata.json"
+
+
 async def _stamp_readiness(store, kit_id: str, schema: dict,
-                           meta: Optional[dict]) -> Optional[dict]:
+                           meta: Optional[dict],
+                           files: Optional[set] = None) -> Optional[dict]:
     """Compute and persist a kit's readiness stamp; return the stamp.
 
     Best-effort BY DESIGN: a stamp is a display/gate convenience, never the
@@ -590,19 +594,37 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
         _log.warning("editor_readiness_lint_failed", kit_id=kit_id, exc_info=True)
         findings = []
         verified = False
+    # `meta is None` means EITHER the file is ABSENT or it is UNPARSEABLE --
+    # both stores collapse the two to None -- and the right action differs:
+    #
+    #   unparseable -> SKIP. Merging into `{}` would replace a corrupt but
+    #     recoverable file with just the stamp, deleting the kit's status,
+    #     label and any custom schema/pdf filenames (a complete kit would
+    #     silently unpublish -- deploy-all.sh greps `status` -- and a kit
+    #     pointing at custom.json would orphan its real schema). Pre-C4 the
+    #     save wrote no metadata at all, so a corrupt file passed through
+    #     untouched; this diff must not make an ordinary Cmd+S destructive.
+    #   absent -> STAMP into a fresh dict. A metadata-less kit is a normal,
+    #     shipped state (form-kits/w9-heldout has no metadata.json), and there
+    #     is nothing to lose. Round 6 collapsed both cases into "skip", which
+    #     meant such a kit could never show a percentage however many times it
+    #     was saved (Opus fresh-eyes rounds 6 + 7).
+    #
+    # `files` is the kit's filename set, already in the caller's hand from
+    # _load_meta_or_404 -- no extra store round-trip to tell the cases apart.
     if meta is None:
-        # NO metadata dict in hand -- and `None` means EITHER absent OR
-        # unparseable (both stores collapse a malformed metadata.json to None).
-        # Merging into `{}` would REPLACE a corrupt-but-recoverable file with
-        # just the stamp, deleting the kit's status, label and any custom
-        # schema/pdf filenames: a complete kit would silently unpublish (the
-        # deploy greps `status`), and a kit pointing at custom.json would
-        # orphan its real schema. Pre-C4 the save path wrote no metadata at
-        # all, so a corrupt file passed through untouched -- this diff must not
-        # make an ordinary Cmd+S destructive (Opus fresh-eyes round 6). Skip
-        # the stamp; the card shows the verify hint, which is honest.
-        _log.warning("editor_readiness_stamp_skipped_no_metadata", kit_id=kit_id)
-        return None
+        unparseable = files is not None and _METADATA_FILE in files
+        if unparseable:
+            _log.warning("editor_readiness_stamp_skipped_bad_metadata",
+                         kit_id=kit_id)
+            return None
+        if files is None:
+            # No filename set supplied: cannot distinguish, so take the SAFE
+            # branch (never destroy). Callers that can tell should pass it.
+            _log.warning("editor_readiness_stamp_skipped_no_metadata",
+                         kit_id=kit_id)
+            return None
+        meta = {}
     try:
         stamp = _readiness_stamp(schema, findings, verified)
         await store.put_metadata(kit_id, {**meta, _READINESS_KEY: stamp})
@@ -834,7 +856,7 @@ async def save_editor_kit_schema(
             detail="Schema must be a JSON object with a 'fields' list",
         )
     store = get_form_kit_store()
-    meta, _ = await _load_meta_or_404(store, kit_id)
+    meta, kit_files = await _load_meta_or_404(store, kit_id)
     # A PUBLISHED (complete) kit's schema blob is exactly what the public read
     # routes stream to voice users, so a lenient draft save over it would go
     # live instantly, bypassing the promote-time validation gate (Codex P1,
@@ -858,7 +880,7 @@ async def save_editor_kit_schema(
     # and deliberately non-fatal: the save is the editor's work, the stamp is a
     # display convenience, so a stamp failure leaves the card showing the verify
     # hint rather than losing the edit.
-    stamp = await _stamp_readiness(store, kit_id, schema, meta)
+    stamp = await _stamp_readiness(store, kit_id, schema, meta, kit_files)
     _log.info("editor_schema_saved", kit_id=kit_id, role=role,
               field_count=len(schema.get("fields", [])),
               readiness_percent=(stamp or {}).get("percent"),
