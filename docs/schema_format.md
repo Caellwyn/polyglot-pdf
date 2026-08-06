@@ -2,7 +2,7 @@
 
 **Version**: 1.0
 **Date**: October 26, 2025
-**Status**: Draft
+**Status**: Living reference
 
 ---
 
@@ -14,7 +14,7 @@ The FormSchema format is a comprehensive JSON/Python structure for representing 
 - Conditional logic (show/hide fields based on other values)
 - Multi-entry/repeating fields (children, employment history, etc.)
 - Validation rules (required, format, patterns, date constraints)
-- Supplement mapping (overflow to Supplement A/B)
+- Supplement mapping (overflow to Supplement A -- the only modeled supplement type)
 - Multi-language support
 - Hierarchical structure (Form > Parts > Sections > Fields)
 
@@ -34,7 +34,7 @@ FormSchema
 ├── fields (List[FormField])
 │   └── All form fields (flat list)
 ├── supplements (List[FormSupplement]) - Optional
-│   └── Supplement A, Supplement B
+│   └── Supplement A (the only modeled supplement type today)
 └── extraction_info (ExtractionInfo) - For PDF forms
 ```
 
@@ -68,7 +68,7 @@ The top-level container for the entire form definition.
     "version": "1.0",
     "edition_date": "2025-01-20",
     "expiration_date": "2027-09-30",
-    "omn_number": "1615-0067",
+    "omb_number": "1615-0067",
     "page_count": 12,
     "agency": "U.S. Citizenship and Immigration Services",
     "language": "en"
@@ -164,7 +164,9 @@ The top-level container for the entire form definition.
 **Common Optional Fields**:
 - `validation`: Validation rules object
 - `help`: Help text object (inline, tooltip, instructions, warning, legal_reference)
-- `show_if` / `hide_if`: Conditional display logic
+- `show_if`: Conditional display logic (there is NO `hide_if` -- invert the
+  condition instead; an unknown key is silently dropped by the model's
+  `extra="ignore"`)
 - `placeholder`: Placeholder text
 - `description`: Field description
 - `pdf_field_name`: Original PDF fillable field name
@@ -190,7 +192,7 @@ The top-level container for the entire form definition.
 
 **Signature Fields**:
 - `signature_method`: `"draw"`, `"upload"`, or `"type"`
-- `signature_box_style`: `"bracketed"` or `"standard"`
+- `signature_box_style`: free-form string (e.g. `"bracketed"` for I-589 Part D); not an enforced enum
 
 **Table Fields**:
 - `columns`: Array of column definitions
@@ -297,7 +299,7 @@ The top-level container for the entire form definition.
     "instructions": "Explain: 1) What happened, 2) When it occurred, 3) Who caused it, 4) Why you believe it occurred",
     "warning": "Provide detailed and truthful information. False statements may result in denial."
   },
-  "overflow_to_supplement": "supplement_b"
+  "overflow_to_supplement": "supplement_a"
 }
 ```
 
@@ -369,6 +371,7 @@ The top-level container for the entire form definition.
 | `signature` | Signature capture | Applicant signature, preparer signature |
 | `address_group` | Compound address | Residence, mailing address |
 | `table` | Repeating rows | Children, employment history, addresses |
+| `checkbox_group` | v2 multi-select modeled as ONE field | "Basis for asylum" (select all that apply) -- see Section 15 |
 
 ---
 
@@ -397,7 +400,7 @@ The top-level container for the entire form definition.
 - `pattern`: Regex string
 - `custom_error`: Custom error message
 - `date_constraint`: `"past_only"`, `"future_only"`, `"within_5_years"`
-- `format_preset`: `"ssn"`, `"a_number"`, `"phone"`, `"email"`, `"zip"`
+- `format_preset`: `"ssn"`, `"a_number"`, `"phone"`, `"email"`, `"zip"`, `"uscis_account"`
 
 **Date Constraints**:
 - `past_only`: Date must be in the past (e.g., birth date)
@@ -410,6 +413,7 @@ The top-level container for the entire form definition.
 - `phone`: Phone number ((###) ###-####)
 - `email`: Email address
 - `zip`: ZIP code (#####)
+- `uscis_account`: USCIS Online Account Number (strips punctuation before length/pattern checks)
 
 ---
 
@@ -437,7 +441,13 @@ The top-level container for the entire form definition.
 
 **Usage**:
 - `show_if`: Show field if condition is true
-- `hide_if`: Hide field if condition is true
+- `require_if`: Make the field required if condition is true
+
+There is **no `hide_if`** on the model -- to hide, invert the `show_if`
+condition. A field carrying `hide_if` is accepted and the key is SILENTLY
+dropped (`FormField` inherits Pydantic's default `extra="ignore"`; only
+`ConditionGroup` sets `extra="forbid"`), leaving the field unconditionally
+visible.
 
 **Example (Show spouse details if married)**:
 ```json
@@ -494,13 +504,16 @@ The top-level container for the entire form definition.
 - `add_button_label`: Label for "Add" button
 - `remove_button_label`: Label for "Remove" button
 - `overflow_instruction`: Message when max reached
-- `overflow_to_supplement`: Which supplement to use (`"supplement_a"` or `"supplement_b"`)
+- `overflow_to_supplement`: Which supplement to use -- `"supplement_a"` is the
+  only value the `SupplementType` enum accepts today
+  (`backend/models/form_models.py`); the feature is not fully implemented
+  beyond this one generic supplement type
 
 **Example Use Cases**:
 - **Children**: Min 0, Max unlimited, Initial 4, Overflow to Supplement A
-- **U.S. Entries**: Min 1, Max unlimited, Initial 3, Overflow to Supplement B
-- **Employment History**: Min 0, Max unlimited, Initial 4, Overflow to Supplement B
-- **Addresses (Last 5 Years)**: Min 1, Max unlimited, Initial 5, Overflow to Supplement B
+- **U.S. Entries**: Min 1, Max unlimited, Initial 3, Overflow to Supplement A
+- **Employment History**: Min 0, Max unlimited, Initial 4, Overflow to Supplement A
+- **Addresses (Last 5 Years)**: Min 1, Max unlimited, Initial 5, Overflow to Supplement A
 
 ---
 
@@ -525,10 +538,9 @@ The top-level container for the entire form definition.
 - Header: A-Number, Date, Applicant Name, Signature
 - Content: Repeating child entries (2 per page)
 
-**Supplement B (I-589)**: Additional information/narratives
-- Header: A-Number, Date, Applicant Name, Signature
-- Content: Part, Question, Large textarea
-- Used for: Long narratives, overflow from any question
+Only `supplement_a` is modeled by `SupplementType`
+(`backend/models/form_models.py`) today; a second supplement type is not
+implemented.
 
 ---
 
@@ -611,9 +623,12 @@ spoken-language NAME** ("spanish", "chinese") -- settled by bd polyglot-pdf-2h9j
 field-level counterpart -- session-language translations of the field's
 `spoken_name`, same canonical lowercase-name keys, baked by the SAME
 authoring pass/CLI/editor route as the option labels (labels + spoken names
-ride one batched translate call per language). All 4 kits are fully baked
-for every code-backed language. Runtime delivery to the voice model is epic
-polyglot-pdf-tupu step 2.
+ride one batched translate call per language). All 3 kits (f1040, i-90, w7)
+are fully baked for every code-backed language. Runtime delivery to the voice
+model shipped in bd polyglot-pdf-tupu.2
+(`backend/services/form_filling_service.py`: `_spoken_name_translations`,
+`get_spoken_name_overrides`, threaded into `render_field_guidance` and the
+greeting-hint substitution).
 
 ```json
 {
@@ -801,6 +816,60 @@ placeholder that would read as a real position downstream.
 
 ---
 
+### 15. Schema v2 (`schema_version`, `checkbox_group`, `require_if`, `ConditionGroup`)
+
+**`schema_version`** (root, `FormSchema`): `None`/`"1"` = legacy, `"2"` = strict
+v2. As of bd polyglot-pdf-h76m.16, the strict v2 rules are enforced on EVERY
+schema regardless of the stamped version -- v2 is the only shape the model
+accepts; all stored kits (f1040, i-90, w7) are migrated to v2. Only the exact
+string `"2"` is treated as opted-in for tooling gates (e.g. the mark-complete
+check, bd polyglot-pdf-t96a); other stamps take the legacy read path but are
+still subject to the v2 structural rules.
+
+**`checkbox_group`** (FieldType): a v2 standalone field type for modeling a
+"select all that apply" group as ONE field (rather than the legacy
+`allow_multiple` checkbox convention). A `checkbox_group` field carries no
+field-level `pdf_field_name`; each `FieldOption` supplies its own
+`pdf_field_name` + `pdf_on_value` (see below), since each checkbox is an
+independent PDF widget.
+
+**`FieldOption.pdf_on_value`**: the PDF "on" state name that selects this
+option. For true-AcroForm radio groups, the kids share ONE field name (the
+FIELD's `pdf_field_name`) and differ only by this state; for per-widget
+`checkbox_group` options, it is the widget's own on-value (paired with the
+option's own `pdf_field_name`).
+
+**`require_if`** (FormField): a sibling of `show_if` -- marks a
+field conditionally REQUIRED (rather than conditionally visible) based on
+another field's value. Same condition shape as `show_if`.
+
+**`ConditionGroup`** (composite condition, bd polyglot-pdf-h76m.3): one level
+of boolean structure over atomic conditions, for `show_if`/`require_if`
+fields that need more than a single equality check:
+
+```json
+{
+  "all_of": [
+    {"field": "a1_marital_status", "operator": "equals", "value": "married"}
+  ],
+  "any_of": [
+    {"field": "a2_spouse_in_us", "operator": "equals", "value": "yes"}
+  ],
+  "none_of": [
+    {"field": "a2_spouse_deceased", "operator": "is_checked"}
+  ]
+}
+```
+
+Visible/required when ALL of `all_of` hold, AND at least one of `any_of`
+holds (if present), AND none of `none_of` hold. Buckets are flat -- a nested
+group is a validation error; at least one non-empty bucket is required. This
+sits alongside the legacy single-condition shape (a plain
+`{"field", "operator", "value"}` object) as an alternative for `show_if` /
+`require_if`, not a replacement for it.
+
+---
+
 ## Schema Validation
 
 The FormSchema model includes validation methods:
@@ -831,9 +900,9 @@ Validates all field/section/part ID references are correct.
 4. **Help Text**: Provide inline hints for optional fields (`"(if any)"`)
 5. **Conditionals**: Test conditional logic thoroughly
 6. **Multi-Entry**: Set realistic `initial_rows` based on common use cases
-7. **Supplements**: Map overflow explicitly to correct supplement type
+7. **Supplements**: Map overflow explicitly to `supplement_a` (the only modeled supplement type)
 8. **PDF Mapping**: Preserve original PDF field names for export accuracy
-9. **Multi-Language**: Add translations for common languages (ES, ZH, VI, AR)
+9. **Multi-Language**: Add translations for the app's supported spoken languages (see `backend/utils/language_codes.py::SPOKEN_LANGUAGE_BCP47` for the current, growing list)
 10. **Legal Warnings**: Include warnings for legally significant fields
 
 ---
@@ -850,5 +919,6 @@ Validates all field/section/part ID references are correct.
 ---
 
 **Document Owner**: Development Team
-**Last Updated**: October 26, 2025
-**Status**: Draft - Ready for review
+**Status**: Living reference
+
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed supplement_b/omn_number typos, added schema v2 (checkbox_group/schema_version/require_if/ConditionGroup) + uscis_account format_preset, corrected kit count and tupu.2 status, dropped unsupported-language list).*

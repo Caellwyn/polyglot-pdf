@@ -1,6 +1,6 @@
 # Schema-key visibility matrix -- which model sees what
 
-*Last updated: 2026-08-01 (bd `polyglot-pdf-52qm.4`).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed pattern-row visibility, reconciled the getProgress fix, and re-measured the size/ratio numbers).*
 
 Two models read the form and they must read **different** things. This doc is the
 single answer to "if I add a key to a form-kit schema, who sees it?"
@@ -33,7 +33,7 @@ is a **cost** bug, not a tidiness one.
 | `type` | YES | YES | |
 | `validation.required` | YES | via `shown`/values tail | rendered as `Required: true` |
 | `validation.format`, `min`/`max`, `*_length` | YES | no | steering hints only |
-| `validation.pattern` / regex | no | no | internal-only, both surfaces |
+| `validation.pattern` / regex | YES | no | steering hint, rendered as `pattern: <regex>` in the per-field voice block (`ai_context.render_field_guidance`) |
 | `options[].value` | YES | YES | the token the validator accepts -- rendered as `(use value: X)` |
 | `options[].label` | YES | YES | translated via `option_label_overrides` (bd `ow1e`) |
 | `options[].spoken_label` | YES | YES | stripped when a translation override applies |
@@ -54,9 +54,12 @@ is a **cost** bug, not a tidiness one.
 - Form-level booklet: 9,487 chars. Present in secretary catalog, **absent from
   all 53 per-field voice blocks**.
 - Secretary static catalog: ~142.6k chars (~35.7k tokens) -- the cacheable prefix.
-- Largest single voice block: `reason` at 6,906 chars (~1.7k tokens), well under
-  the 20k inline clamp, so nothing ships truncated.
-- Voice per-field vs secretary whole-form ratio: >4x smaller worst-case.
+- Largest single voice block: `reason` at 6,968 chars (~1.7k tokens), well under
+  the 20k inline clamp, so nothing ships truncated. (Point-in-time snapshot --
+  drifts a little with kit-content edits.)
+- Voice per-field vs secretary whole-form ratio: ~20x smaller worst-case (the
+  pinning test only requires >4x, as a regression floor, not the measured
+  ratio).
 
 ## Known gap (bd `polyglot-pdf-52qm.7`)
 
@@ -69,11 +72,14 @@ On W-7 that is the 7 `agent_*` Acceptance-Agent fields. Pinned by
 `backend/tests/unit/test_52qm7_static_field_states.py` as characterization tests
 (they assert the CURRENT behavior and say what to flip when fixed).
 
-The same flags are also missing from every completion denominator
-(`schema.fields.length` in `SchemaFormStateManager.getProgress`, `VoiceOverlay`,
-`VoiceOverlayMobile`), so W-7 progress caps at 46/53. Pinned by
+`SchemaFormStateManager.getProgress` filters its denominator correctly (fixed in
+bd `polyglot-pdf-jtbg`, 2026-08-04) -- it no longer counts statically hidden
+fields. The flags are **still** missing from `VoiceOverlay.tsx` (4 inline
+`schema.fields.length` sites) and `VoiceOverlayMobile.tsx` (1 site), and from the
+backend's own unfiltered `Progress: N/M` render in `ai_context.py`. Pinned by
 `frontend/src/schema-forms/state/hiddenFieldCounting.test.ts`, which drives the
-real `getProgress` so a fix flips it.
+real `getProgress` as a regression guard and documents the remaining unfixed
+sites in its header comment.
 
 ## Logging a rejected field id
 

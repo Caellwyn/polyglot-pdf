@@ -1,8 +1,18 @@
 # Go/no-go brief: sliding-window context management
 
+> **ARCHIVED (2026-08-05, docs audit bd polyglot-pdf-2zk3).** This brief
+> recommended "Go (lean-schema path)"; the maintainer decision at the time
+> (the 6x1y gate) was SHELVE in favor of SI reduction. The analysis and
+> numbers remain accurate as history; the recommendation was not adopted
+> as written. Sliding-window compression later shipped separately (bd
+> polyglot-pdf-x8rt) and is the production default today (bd
+> polyglot-pdf-7872) -- see
+> [`../components/context-compression.md`](../components/context-compression.md).
+> Do not cite this brief as current.
+
 *2026-06-12, bd polyglot-pdf-6x1y (epic hcsl). Written for the product owner.
 Every number traces to the analysis notebook
-([`scripts/spikes/cost_matrix_analysis.ipynb`](../scripts/spikes/cost_matrix_analysis.ipynb))
+([`scripts/spikes/cost_matrix_analysis.ipynb`](../../scripts/spikes/cost_matrix_analysis.ipynb))
 and its tidy data exports; the computation code passed a 3-round adversarial
 review before any conclusion was written on top of it.*
 

@@ -196,10 +196,9 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-04 (bd polyglot-pdf-47r3: the confirmation event now
-records `kit_id` + `edition_date` alongside `form_id` -- a form NUMBER
-identifies neither which kit was used nor which government edition the client
-confirmed against). Prior: 2026-08-03 (bd polyglot-pdf-z2is: durable Firestore mirror for
-deployed envs — the file-only trail died with the Cloud Run instance; also fixed
-the session-lifecycle pair's latent structlog TypeError). Prior: 2026-07-05 (bd
-polyglot-pdf-mpoe staleness sweep). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-06 (post-merge freshness check against
+backend/services/callback_handler.py: `_handle_confirm_field_tool` (default
+`confirmation_method="verbal"`), the `recorded`-guard, and the
+`log_field_confirmation(...)` call site (gated on `self._form_id and
+self._form_session_id`, carrying `kit_id`/`edition_date`) all re-verified
+line-for-line, no drift found).*

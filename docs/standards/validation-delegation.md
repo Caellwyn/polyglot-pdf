@@ -2,16 +2,21 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-07-25 (bd polyglot-pdf-9ikj: the `ITextAI` port grew the verify/rectify trio -- `back_translate()`, `judge_translations()`, `rectify_translations()` -- and `bake_label_translations` gained the default-ON verify gate (`TRANSLATION_VERIFY_ENABLED`); see the contract-5 note and [../journal/entries/2026-07-25-bd-9ikj-v3-verify-rectify-loop.md](../journal/entries/2026-07-25-bd-9ikj-v3-verify-rectify-loop.md)). Prior: 2026-07-24 (bd polyglot-pdf-ch7j: the `ITextAI` port grew a fourth method, `translate_items()` -- context-carrying translation for the translation-gate epic -- and `translate_labels`' temperature moved 0.1 -> 0.0; see the contract-5 note and [../journal/entries/2026-07-24-bd-ch7j-v2-context-carrying-translate-items-glossary.md](../journal/entries/2026-07-24-bd-ch7j-v2-context-carrying-translate-items-glossary.md)). Prior: 2026-07-17 (bd polyglot-pdf-ow1e: the `ITextAI` port grew a third method, `translate_labels()` -- runtime option-label translation; see the contract-5 note and [../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md](../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md)). Prior: 2026-07-13 (bd polyglot-pdf-gbus (W6, async validator): `form_complete` now runs the whole-form gemini-2.5-pro pass (`handle_form_complete_pro`, thinking bounded 512) as the SOLE end-of-form report -- catching cross-page far pairs the lite windows miss (W5 recall 1.000), report-only through the same drain path, fed + deduped against already-steered fields, with an anti-over-flag prompt for the Part 5/6 cert block; gated by `FORM_COMPLETE_PRO_VALIDATOR` default-off. See the W6 note.). Prior: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): the async-validator path's `validation_result` is now REPORT-ONLY -- contract 1's "conflicts -> validation_result with a steer" is the legacy synchronous path; the async path enqueues the conflicts client-side and injects the steer via a finding-driven `drain_findings` round-trip. See the contract-1 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the B-pillar "replaces the SI prose" framing to defense-in-depth per the 2026-06-17 RESCOPE; fixed the stale `ITextAI.ask()` signature to its real `tuple[str, list[dict], bool]` return; fixed stale line pointers (confirm handler, ADDRESS CONSISTENCY block); corrected the bd polyglot-pdf-89mt citation; and added a note on `CONTINUOUS_SESSION=true` as the production default and which validation path it selects).*
 
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
 form boundaries, reads the client's current form state and catches cross-field
 contradictions (zip-vs-state, contradictory addresses, future-dated births) that
-field-level validation cannot see. It exists so the LIVE voice model no longer
-has to carry the in-system-instruction ADDRESS-CONSISTENCY check itself -- that
-prose is what pillar B replaces.
+field-level validation cannot see. It exists as a defense-in-depth second-pass
+net, ADDITIVE TO (not a replacement for) the in-system-instruction
+ADDRESS-CONSISTENCY prose the Live model still carries: the B-pillar rescope of
+2026-06-17 (bd polyglot-pdf-jnjj) found flash-lite contradiction recall (0.853)
+below the in-SI check's recall (1.000) and kept the prose as the primary check
+(`backend/config.py:872` and `:1116`; see `backend/services/validator_service.py`'s
+module docstring). The validator adds zero false positives on the G1 corpus, so
+it is safe to run as an extra pass, but it does not replace the SI prose.
 
 Multiple agents build B's beads (B2-B5) against the shapes frozen here, so they
 can work in parallel without colliding on the verdict / payload / steering
@@ -47,10 +52,17 @@ The Live API path (audio + tool-calling) is unchanged:
 The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
 
 - Port: `backend/ports/text_ai_port.py::ITextAI` -- two methods:
-  `validate(payload) -> verdict` (B-pillar validator) and `ask(query, context) -> str`
+  `validate(payload) -> verdict` (B-pillar validator) and
+  `ask(query, context) -> tuple[str, list[dict], bool]`
   (A-pillar secretary, implemented in jnjj.45: maps a prose form query to a prose
-  answer over the whole-form catalog + current values; fail-open `""` on error so
-  the principal asks the user directly).
+  answer over the whole-form catalog + current values; returns `(answer, sources,
+  resolved)` -- `sources` is the list of `{field_id, spoken_name}` dicts the
+  secretary grounded the answer in / identified for navigation (bd
+  polyglot-pdf-2af7/3vby), letting the caller hand an exact field id to
+  `switch_to_field`; `resolved` is `False` when the secretary deliberately could
+  not identify a requested navigation target (the semantic-pushback signal, bd
+  polyglot-pdf-y76q). Fail-open `("", [], True)` on error so the principal asks
+  the user directly).
 - Adapter: `backend/adapters/text_ai_gemini.py::TextAIGemini` -- mirrors
   `LiveAIGemini`'s three-way client construction (Vertex/AI-Studio/bare). Calls
   `client.aio.models.generate_content`, NOT the Live bidi path. Accepts
@@ -195,9 +207,29 @@ accounting; set the env var to `false` to disable without a redeploy, in which c
 `handle_form_complete_pro` no-ops clean and `form_complete` reports nothing). Cost is
 bounded by the client's dirty-snapshot guard (see contract 4): ~1 pro call per form
 plus one per post-completion edit. The precision re-measure the W5 condition called for
-has NOT run -- expect some Part 5/6 false positives until bd polyglot-pdf-89mt; they
-surface as report-only questions, never blocks. The lite window pass
-(`validate_windows`) + section_complete are unchanged.
+has NOT run -- expect some Part 5/6 false positives until it does; they surface as
+report-only questions, never blocks. No bead currently tracks this re-measure (bd
+polyglot-pdf-89mt is a general cost/accuracy re-measure on the deployed W-7 form and
+does not cover Part 5/6 precision on the I-90 validator -- file a bead if this
+re-measure becomes a priority). The lite window pass (`validate_windows`) +
+section_complete are unchanged.
+
+**Continuous-DTI mode is the production default.** `CONTINUOUS_SESSION` defaults
+to `true` (`backend/config.py:234`) -- production runs the whole form as ONE Live
+session with no section-to-section restart. In this mode `proceedSectionSwitch`
+(the section-reset path the "Ordering" subsection below describes) is a no-op
+guard (`frontend/src/webFormConnection.ts`, `continuousSessionEnabled` check) and
+is marked `DEPRECATED (bd polyglot-pdf-55jg)` -- kept as a fallback for
+`CONTINUOUS_SESSION=false`, not the live path. The validator path that actually
+runs in production is the async stride mechanism this doc already describes
+above: `validate_windows` (fired on every confirm/manual edit as fields become
+eligible, W1-W3) and `section_complete` (still emitted and validated, but with no
+section-restart race to gate against, since there is no session restart in
+continuous mode) both report FINDING-DRIVEN through `validatorFindingsQueue` /
+`drain_findings`; `form_complete` runs the whole-form pro pass (W6) once at
+completion. Selection of which path is live is entirely a frontend/session-mode
+concern -- the backend spawns validation the same way (`_spawn_validation` in
+`backend/routes/websocket_routes.py`) regardless of `CONTINUOUS_SESSION`.
 
 ---
 
@@ -287,11 +319,11 @@ from, not separate wire fields.
 
 Two invariants this shape MUST preserve:
 
-1. **User-override escape hatch.** The directive MUST carry the legacy semantics
-   from the SI prose it replaces: "Accept the user's answer if they confirm." A
+1. **User-override escape hatch.** The directive MUST carry the same semantics
+   as the SI prose it augments: "Accept the user's answer if they confirm." A
    user who says "yes, both are correct" overrides the validator -- the validator
    flags a possible conflict, it does NOT block. (This is the same escape hatch
-   the in-SI ADDRESS-CONSISTENCY block had at `config.py:354` / `:418`.)
+   the in-SI ADDRESS-CONSISTENCY block carries at `config.py:872` / `:1116`.)
 2. **Max-resteer bound: a given field is re-flagged at most ONCE.** After the
    live model has steered the user back to a field once and the user resolved or
    overrode it, that field is NOT re-flagged on a later validator pass -- no
@@ -390,13 +422,22 @@ confirmed:
 
 ### Ordering: the validator must run BEFORE the section auto-switch
 
-Today, when the last field of a section is confirmed, the client auto-advances to
-the next section IN THE SAME confirm handler
-(`frontend/src/webFormConnection.ts`, the confirm-field handler around line 1583
--> `computeNextField` -> `switchToSection`, which restarts the Live session into
-the next section). If
-`section_complete` simply fires alongside that, **the validator's verdict arrives
-after Gemini has already been restarted into the next section**, and the
+**This subsection describes the section-reset fallback path, not the production
+default.** Under `CONTINUOUS_SESSION=true` (the production default -- see
+"Continuous-DTI mode is the production default" above), the whole form is one
+Live session and there is no section boundary to race; the ordering problem below
+does not arise in production. It remains relevant for the deprecated
+section-reset fallback, kept for when `CONTINUOUS_SESSION=false`.
+
+When the last field of a section is confirmed, the client auto-advances to the
+next section IN THE SAME confirm handler
+(`frontend/src/webFormConnection.ts::handleConfirmFieldRequest`, line 1705 ->
+`computeNextField` -> `proceedSectionSwitch`, which restarts the Live session
+into the next section). `proceedSectionSwitch` itself is marked
+`DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+continuous-DTI is the live flow. Kept as a fallback, not deleted.` If
+`section_complete` simply fires alongside the switch, **the validator's verdict
+arrives after Gemini has already been restarted into the next section**, and the
 steer-back-to-the-problem-field flow cannot work (the live model is no longer in
 the section that owns the conflicting fields).
 
@@ -426,20 +467,25 @@ class ITextAI(ABC):
         timeout/error the caller advances unchecked (see PII sign-off)."""
         ...
 
-    async def ask(self, query: str, context: dict) -> str:
+    async def ask(self, query: str, context: dict) -> tuple[str, list[dict], bool]:
         """Send a prose query + current-values context to the secretary agent
-        and return its prose answer. Fail-open: on error returns "" so the Live
-        model can ask the user directly. Non-abstract with a NotImplementedError
-        default (the A-pillar secretary, jnjj.45)."""
+        and return (answer, sources, resolved). `sources` is the list of
+        {field_id, spoken_name} dicts the answer was grounded in / identified
+        for navigation (bd polyglot-pdf-2af7/3vby); `resolved` is False when the
+        secretary could not identify a requested navigation target (bd
+        polyglot-pdf-y76q). Fail-open: on error returns ("", [], True) so the
+        Live model can ask the user directly. Non-abstract with a
+        NotImplementedError default (the A-pillar secretary, jnjj.45)."""
         ...
 ```
 
 - Method: `async validate(payload) -> verdict` -- payload is contract 2, verdict
-  is contract 1 (B pillar). `async ask(query, context) -> str` is the A-pillar
-  secretary method (jnjj.45): a plain prose query in, a prose answer out,
-  fail-open to `""`. `ask()` is declared non-abstract (default raises
-  `NotImplementedError`) so an adapter that predates the secretary bead fails
-  loudly rather than silently; `TextAIGemini` implements both.
+  is contract 1 (B pillar). `async ask(query, context) -> tuple[str, list[dict],
+  bool]` is the A-pillar secretary method (jnjj.45): a plain prose query in, an
+  `(answer, sources, resolved)` triple out, fail-open to `("", [], True)`.
+  `ask()` is declared non-abstract (default raises `NotImplementedError`) so an
+  adapter that predates the secretary bead fails loudly rather than silently;
+  `TextAIGemini` implements both.
 - The port's third method is `async translate_labels(labels, language_name,
   language_code) -> dict | None` (bd polyglot-pdf-ow1e, runtime option-label
   translation): one batched JSON call translating option labels into the

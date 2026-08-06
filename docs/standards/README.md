@@ -1,5 +1,7 @@
 # Standards (tier 2)
 
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: clarified that README index stubs are exempt from Tracks/stamp requirement).*
+
 Cross-cutting rules that span surfaces: `standards/<concern>.md`. Typical set:
 `testing.md`, `security.md`, `performance.md`, `conventions.md`, `review.md`.
 
@@ -13,7 +15,7 @@ Two non-typical members:
   required), so a cheap session can query the tracker for work sized to it and the
   expensive sessions stay on work only they can do (`polyglot-pdf-1bsx`).
 
-Each carries a `**Tracks:**` line + a `*Last updated:*` stamp, CURRENT STATE
+Each doc (this README excepted) carries a `**Tracks:**` line + a `*Last updated:*` stamp, CURRENT STATE
 ONLY. When a journal lesson generalizes, add a one-liner here (with an
 `<a name="...">` anchor) citing the entry -- this is how a per-sprint lesson
 becomes a standing rule. Promote the ones that bite repeatedly up to CLAUDE.md's

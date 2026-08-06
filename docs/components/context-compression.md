@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-07-12 (continuous-DTI is the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, not a candidate, validated by the jnjj.25 cost gate + the G3 correctness gate). The section-reset comparison below is the DEPRECATED fallback (bd polyglot-pdf-55jg). Prior 2026-07-06, bd polyglot-pdf-x8rt: the sliding-window shipped as continuous-session mode -- ctu8 validated window 3500; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified), so `_build_live_config` clamps the derived/configured trigger into range and re-asserts window < trigger after the clamp.
+*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -31,7 +31,7 @@ the authoritative SDK reference ([../genai_docs/README.md](../genai_docs/README.
 the original exploration plan
 ([../archive/sprint_4_sliding-window-context_plan.md](../archive/sprint_4_sliding-window-context_plan.md)),
 and the go/no-go brief that came out of it
-([../sliding-window-go-no-go-brief.md](../sliding-window-go-no-go-brief.md)).
+([../archive/sliding-window-go-no-go-brief.md](../archive/sliding-window-go-no-go-brief.md)).
 
 ## Why -- and what compression actually buys us
 
@@ -67,7 +67,7 @@ The "Section resets" column is the DEPRECATED fallback (bd polyglot-pdf-55jg).
 | | Section resets (DEPRECATED fallback) | Sliding window (SHIPPED default) |
 |---|---|---|
 | Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: conversation history capped at `target_tokens`. Under DTI the SI floor is ~one field, so the whole-form SI no longer dominates and the window is a real saving (not the ~2% wash the wyhh matrix saw under the full-form SI) |
-| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted; the session-duration GoAway STILL arrives (~13-15 min, bd wyhh, WITH compression evicting), handled by the GoAway -> reconnect -> resumption path (c5t / l3a.2 / wnt) |
+| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted; the session-duration GoAway STILL arrives (~13-15 min, bd wyhh, WITH compression evicting), handled by the GoAway -> reconnect path, which opens a FRESH session rehydrated from the client handshake (c5t / l3a.2; SDK session resumption was rejected, bd polyglot-pdf-l3a.3 wont-do) |
 | Conversational continuity | Lost at every boundary (re-greeting suppressed by `vmxx` resume, but context is gone) | Preserved (subject to eviction of old turns) |
 | Moving parts | Reset orchestration: `switch_to_section` finalize/restart, section chopping, carried-over `previous_spoken_names` | One server-side config; eviction timing is the server's |
 
@@ -151,8 +151,8 @@ per-form** (below); the static token values are the override:
 |---|---|---|
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
-| `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (lifts the I-90's ~1601 ESTIMATED floor to the validated ~2200 window, which clears the ~1978 MEASURED floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `600` (window `~2200` -> trigger `~2800`) |
+| `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (calibrated against the I-90's measured eviction floor -- see below) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6278/7778 with the clamp NOT firing -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -168,31 +168,60 @@ therefore wrong for any form whose floor differs. So when `USE_DTI` and
 
 ```
 floor   = (len(rendered SI) + len(serialized tool declarations)) / 4   # ~ tokens
-window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS
+window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS + injection_budget_tokens
 trigger = window + CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS
 trigger = clamp(trigger, 5000, 128000)   # Live API hard bound -- see below
 ```
 
+Two inputs are easy to miss and both move the result by thousands of tokens:
+
+- **The tool declarations are the SESSION's, not the raw settings list.**
+  `_build_tool_declarations` (`backend/services/form_filling_service.py:219-229`)
+  drops `switch_section` whenever `CONTINUOUS_SESSION` is on (the production
+  default) -- 6 declarations, not 7. Deriving against the unfiltered
+  `settings.TOOL_DECLARATIONS` overstates the floor by ~92 tokens.
+- **`injection_budget_tokens` is a real third addend**, passed from
+  `guidance_contract.inline_injection_budget_tokens(full_schema)`
+  (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1787`).
+  It reserves
+  room for the largest per-field inline guidance injection the form can produce.
+  It is `0` for a form with no `help.details`, so it is invisible on some kits and
+  decisive on others -- on the W-7 it is **1652 tokens**. Without it, a
+  details-bearing initiating message can exceed the assembled window and Vertex
+  closes `1007` AT SESSION ASSEMBLE (the wsao.2 measured failure). It is computed
+  at `backend/services/guidance_contract.py:246` and passed in from TWO sites in
+  `backend/services/form_filling_service.py` -- `:478` (start) and `:1102`
+  (restart); the restart site is the one that regressed wsao.2 when it was
+  missed.
+
 **The Live API enforces `trigger_tokens` within `[5000, 128000]`** (wire-verified
 2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
-must be within [5000, 128000]"` -- the session never opens). The DTI-derived I-90
-trigger (~2800) is BELOW that minimum, so `_build_live_config` clamps the trigger
-into the legal range and logs `compression_trigger_clamped_to_api_bounds`. When
-the DERIVED trigger is raised by the clamp, the derived window is RE-TUNED with
-it (`window = max(derived, trigger - TRIGGER_MARGIN)`, logged as
-`compression_window_retuned_with_clamped_trigger`): keeping the raw
-floor+headroom window (~2200) under a 5000 trigger makes each eviction chop
-~2800 tokens down to just above the SI floor -- stripping the current-field
-guidance DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
-post-eviction; wider windows stayed coherent). The retune preserves the
-derivation's margin semantic: only ~margin tokens are evicted per cycle.
-**CAVEAT: the retuned I-90 derive pair (5000/4400) is an untested interim** --
-the only live-validated coherent configuration is the explicit 5000/3500 (the
-clean 30-question continuous run, 2026-07-05); `ctu8`'s sweep must validate or
-replace the retuned value before the DTI+compression flags flip on. The old
-2800/2200 "winning calibration" numbers were measured on AI Studio before this
-bound existed on the connect path; any sweep (`ctu8`) must place triggers at
->= 5000 and sweep the WINDOW as the independent variable.
+must be within [5000, 128000]"` -- the session never opens). The clamp exists for
+forms whose derived trigger falls below that minimum; when it fires it logs
+`compression_trigger_clamped_to_api_bounds` and RE-TUNES the window with the
+raised trigger (`window = max(derived, trigger - TRIGGER_MARGIN)`, logged as
+`compression_window_retuned_with_clamped_trigger`) -- otherwise each eviction
+would chop all the way down to just above the SI floor, stripping the
+current-field guidance DTI depends on (measured 2026-07-05: the 5000/2200 run
+drifted post-eviction; wider windows stayed coherent).
+
+**On the CURRENT default DTI form the clamp does NOT fire.** The SI has grown
+substantially since the jnjj.35-era example, so the derivation now lands well
+above the API minimum on its own. Executed against the shipped config
+(`derive_compression_window`, today's `DTI_SYSTEM_INSTRUCTION`, the SESSION's 6
+tool declarations, headroom 599 / margin 1500): **floor 5679 -> window 6278 ->
+trigger 7778** with no injection budget (i-90, f1040), and **window 7930 ->
+trigger 9430** on the W-7 (injection budget 1652). Since every one of those
+triggers is > 5000, neither the clamp nor the retune runs and neither log line
+appears -- don't go looking for them on a normal session. The clamp-and-retune
+path is reached only by a form with a much smaller SI floor. These numbers are
+derived from the SI TEXT and the kit, so they move whenever either grows: treat
+them as a point-in-time reading and RE-EXECUTE the function (with the session's
+filtered tool list and the kit's injection budget) rather than trusting any
+written-down figure -- including the rounded ones in
+`derive_compression_window`'s own docstring. The old 2800/2200
+"winning calibration" numbers were measured on AI Studio before the
+`[5000, 128000]` bound existed on the connect path and no longer apply.
 
 The floor is the **rendered (filled) SI plus the tool declarations** -- both
 unevictable, both re-billed every turn -- NOT the SI template alone.
@@ -203,12 +232,14 @@ Gemini's tokenizer plus conversation framing bill MORE than `chars/4` of the raw
 text. On the measured I-90 DTI run (jnjj.25 `*.meta.json`) the rendered SI is 3786
 chars -> ~946 estimated tok, + ~655 tok tools = **~1601 ESTIMATED floor**, while
 the live eviction landing zone was **~1978-2034 MEASURED tok** -- a ~377-tok
-undershoot. So the headroom default (599) is sized to lift the ~1601 ESTIMATE to
-the validated ~2200 window, which sits just above the ~1978 REAL floor. A naive
-small headroom (e.g. 222) would derive a ~1823 window -- BELOW the real floor ->
-compression fires turn 1 and evicts all conversation (the Codex P1 on PR #239).
-The headroom is anchored to the one form with measured eviction data; re-measure
-it when a second form's eviction floor is known. (`estimate_si_floor_tokens` /
+undershoot. The headroom default (599) is sized to cover that undershoot: on
+that measurement it lifted the ~1601 ESTIMATE to a ~2200 window sitting just
+above the ~1978 REAL floor. A naive small headroom (e.g. 222) would have derived
+a ~1823 window -- BELOW the real floor -> compression fires turn 1 and evicts all
+conversation (the Codex P1 on PR #239). The headroom is anchored to the one form
+with measured eviction data; the absolute numbers above are from that
+measurement's smaller SI, not today's (see the derivation reading above).
+Re-measure when a second form's eviction floor is known. (`estimate_si_floor_tokens` /
 `derive_compression_window` in
 `backend/adapters/live_ai_gemini.py`; `~4 chars/token` is the file's coarse
 estimate, and the headroom/margin bands absorb its slop -- the window only has to
@@ -257,43 +288,18 @@ connection. Both were resolved separately from compression:
   client so it can reconnect ahead of the close. See
   [websocket-routing.md](websocket-routing.md) ("GoAway"). The reconnect POLICY
   (acting on the signal) is a follow-up (`l3a.2`).
-- **Session resumption -- adopt for UNINTENTIONAL disconnects only** (`wnt`). The
-  decision turns on the CAUSE of the reconnect:
-  - **Unintentional** (network drop / `GoAway`) -- the WebSocket genuinely closed and
-    the client AUTO-reconnects. Here we WANT the context kept, so resume the same
-    Gemini session. First connect opts in by setting
-    `LiveConnectConfig.session_resumption = SessionResumptionConfig()` (handle=None);
-    the server then emits `LiveServerSessionResumptionUpdate` messages -- capture
-    `new_handle`, store it CLIENT-side (`sessionStorage`), and pass it back via
-    `SessionResumptionConfig(handle=...)` on the auto-reconnect handshake. The
-    reconnect is then truly invisible (same context), not merely de-greeted.
-  - **Intentional reset** -- a fresh session is the POINT (clear context AND bound
-    cost -- see above). Covers two shapes: (a) a SERVER-side restart that keeps the
-    WebSocket open (section switch `finalize`->`start_session`; the Level-3
-    idle-FAREWELL `restart_gemini_session`), and (b) a CLIENT-side WS close+reopen
-    that is still intentional -- the section advance via
-    `webFormConnection.startSection`/`switchToSection`. Never pass a handle on any
-    of these.
-
-  **The correct hook (verified):** the handle must ride ONLY `handleOpen`'s
-  auto-reconnect handshake -- the same `resume:true` path gated on `hasConnectedOnce`
-  (`webFormConnection.ts`). `startSection`/`switchToSection` deliberately BYPASS
-  `handleOpen` (it early-returns while `isSectionSwitching`) and send their own
-  handshake, so they get a fresh session for free as long as the handle is attached
-  to the `handleOpen` path and nowhere else. (Do NOT key it on "client- vs
-  server-initiated" -- `startSection` is a client-initiated reconnect that must NOT
-  carry a handle.)
-
-  Stateless invariant holds (handle lives client-side; backend stores nothing).
-  `vmxx`'s `is_reconnect` RESUME override stays as the FALLBACK when no valid handle
-  exists (expired >2h, or first connect). Open implementation edges (for the impl
-  bead): (1) an unintentional reconnect carries both a handle AND the client's
-  current form-state handshake; if the handle is stale relative to form state, prefer
-  the fresh handshake as source of truth (the handle restores conversational
-  continuity, not form state); (2) the idle-TIMEOUT watchdog (distinct from the
-  farewell) closes the WS and requires a MANUAL user reconnect -- treat that like a
-  fresh start (no handle / vmxx fallback), since the user re-initiated and the handle
-  is likely expired. Decided here; implementation is a separate bead (`l3a.3`).
+- **Session resumption -- designed, then rejected** (bd polyglot-pdf-l3a.3,
+  wont-do, 2026-06-15). A design existed to adopt `session_resumption` for
+  unintentional disconnects only (network drop / `GoAway`), resuming the same
+  Gemini session via a client-stored handle instead of reconnecting fresh. The
+  maintainer reversed course: reconnect already rebuilds full context from the
+  client-owned handshake (field values + section state replay via
+  `sessionStorage`), so a handle would only add non-deterministic
+  conversational/prosodic continuity across an involuntary drop -- a marginal
+  UX gain not worth the adapter+frontend+stateless-boundary handle-plumbing.
+  `session_resumption` is not implemented anywhere in this codebase; the
+  fresh-reconnect path (`vmxx`'s `is_reconnect` RESUME override) is the only
+  mechanism, for every reconnect cause.
 
 ## What compression replaced -- and what it must not touch
 
@@ -362,7 +368,9 @@ polyglot-pdf-7872):
    correctness gate (bd polyglot-pdf-jnjj.7) confirmed no fill-accuracy
    regression vs the full-SI baseline.
 3. A whole-form FLOW survives past the session-duration limit -- compression
-   (context-size cap) PLUS GoAway-triggered reconnect with session resumption
+   (context-size cap) PLUS GoAway-triggered reconnect (a FRESH session
+   rehydrated from the client handshake; SDK session resumption was designed
+   and rejected, bd polyglot-pdf-l3a.3 wont-do)
    (duration limit): a compression-on session is still terminated by the
    duration GoAway at ~13-15 min (bd wyhh), so the continuous flow COMPOSES
    compression with the l3a.2 GoAway pre-emptive resume -- DONE.

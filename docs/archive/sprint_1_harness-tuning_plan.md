@@ -1,7 +1,12 @@
 # Sprint 1 — Harness tuning: reduce token burn, increase bounded autonomy
 
-*Active sprint plan. Lives at `docs/` root while active; archived to `docs/archive/`
-at sprint closeout (see [`doc-architecture.md`](doc-architecture.md) §sprint-archive).
+> **ARCHIVED (2026-08-05, docs audit bd polyglot-pdf-2zk3).** Epic
+> `polyglot-pdf-hrn` is closed; the R1-R4 harness-autonomy roadmap continues as
+> open epic `polyglot-pdf-h2r`. Kept verbatim below as the sprint's plan of
+> record -- read it as history, not as current direction.
+
+*Archived sprint plan. Sprint plans live at `docs/` root while active and move to
+`docs/archive/` at sprint closeout (see [`doc-architecture.md`](../doc-architecture.md) §sprint-archive).
 This is the maintainer-approved plan of record for this sprint — per the
 plan-traceability goal (R3 below), every bead in this sprint should trace back to a
 section here. Owning epic: `polyglot-pdf-hrn` (harness near-term);
@@ -11,7 +16,7 @@ roadmap epic: `polyglot-pdf-h2r`.*
 > plan a formally always-loaded tier-1 doc so every orchestrator shares current scope.
 > That doctrine change (adding sprint plans to `TIER1_DOCS` + the doc-architecture
 > rules) is itself a bead under R3. Until it lands, this plan is reached via the
-> "Active sprint plans" row in [`INDEX.md`](INDEX.md).
+> "Active sprint plans" row in [`INDEX.md`](../INDEX.md).
 
 ---
 
@@ -49,7 +54,7 @@ decisions, which are the orchestrator's. It is **never** for inventing features,
 making product/direction judgment calls, or longer-term commitments a bead doesn't
 authorize. The full rule (the 3-step decision procedure, the NEVER list, and the
 defended-decision merge report) is the **Escalation vs. autonomy** section of
-[`CLAUDE.md`](../CLAUDE.md) (`polyglot-pdf-hrn.11`).
+[`CLAUDE.md`](../../CLAUDE.md) (`polyglot-pdf-hrn.11`).
 
 ### What the review found (the system is already good — don't regress these)
 
@@ -176,7 +181,7 @@ nit from a blocker):
   (SUPERSEDED 2026-07-04, bd `polyglot-pdf-16pj`: the hard round ceiling is retired
   in favor of an outcome-based loop-stop — loop while findings are correct blockers,
   stop when they are incorrect or nit-file-able. See
-  [`review-flow.md`](doctrine/review-flow.md) + the closeout skill.)
+  [`review-flow.md`](../doctrine/review-flow.md) + the closeout skill.)
 
 So #3 is **decision-rule prose in the skill** + the deferred-nit bead convention, not a
 new classifier script.
