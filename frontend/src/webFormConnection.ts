@@ -436,18 +436,22 @@ export class WebFormConnection {
 
       try {
         const socket = new WebSocket(finalUrl);
-        // ArrayBuffer delivery, NOT the "blob" default (bd polyglot-pdf-s7uf,
-        // Opus outer review): a Blob frame forces an async arrayBuffer() decode
+        // ArrayBuffer delivery, NOT the "blob" default (bd polyglot-pdf-s7uf):
+        // a Blob frame forces an async arrayBuffer() decode
         // in handleAudioFrame, and onmessage does not wait for the previous
         // handler's promise -- so audio frames could be PARKED on their decode
         // while a later synchronous control message (e.g. `interrupted`)
         // executed first. That inversion let a dead generation's tail chunks
         // slip past the interrupted drain and re-schedule after it. With
-        // arraybuffer delivery the handler takes no await and messages process
-        // in WIRE ORDER -- which is also the ordering guarantee that makes the
-        // `interrupted` drain correct without a correlation token (Gemini
-        // emits interrupted BEFORE the next generation's audio, so everything
-        // scheduled at drain time is by construction the dead generation's).
+        // arraybuffer delivery the AUDIO path takes no await, so audio frames
+        // and the (fully synchronous) `interrupted` case process in WIRE
+        // ORDER -- the guarantee that makes the drain correct without a
+        // correlation token (Gemini emits interrupted BEFORE the next
+        // generation's audio, so everything scheduled at drain time is by
+        // construction the dead generation's). SCOPE: this covers the audio +
+        // interrupted pair only; other switch cases are async and may
+        // interleave -- do not add an await to handleAudioFrame's ArrayBuffer
+        // branch or to the interrupted case without revisiting this.
         socket.binaryType = 'arraybuffer';
         this.ws = socket;
 
@@ -757,7 +761,7 @@ export class WebFormConnection {
           // the model is about to speak a NEW generation on this connection.
           console.log('[WebFormConnection] [interrupt] Gemini generation interrupted; draining stale audio');
           this.audioQueue = [];
-          // Mirror the section-switch drain exactly (Opus outer review): the
+          // Mirror the section-switch drain exactly: the
           // pump flag must reset with the queue, or a future async change to
           // processAudioQueue could strand it true and starve all later audio.
           this.isProcessingAudio = false;
@@ -1341,12 +1345,17 @@ export class WebFormConnection {
     // sibling next-field producers already follow (handleSwitchFieldRequest,
     // handleManualUpdateHint). This is the PRIMARY per-turn hint producer (the
     // confirm_field next-field round-trip), and `this.state` is an in-memory
-    // copy that changeSpokenLanguage() does NOT mutate: it persists the new
-    // language through SchemaFormStateManager.setSelectedLanguage, which builds
-    // a NEW state object and saves it. Without this refresh the hint resolved
-    // option labels against the PREVIOUS language for the rest of the session,
-    // so a Spanish -> Ukrainian switch sent the model Spanish option labels
-    // beside a Ukrainian guidance block (bd polyglot-pdf-pjws).
+    // copy, while every SchemaFormStateManager mutator builds a NEW state object
+    // and save()s it -- so anything written outside this object (in the UI, or by
+    // a sibling handler) is in storage but not in `this.state`. Reading the stale
+    // copy makes the hint disagree with what the form actually holds
+    // (bd polyglot-pdf-pjws).
+    //
+    // NOT about mid-session language switching: that is unsupported -- the spoken
+    // language is pinned for the whole form (bd polyglot-pdf-87a9,
+    // docs/standards/voice-and-vad.md). The pjws fix was originally written up
+    // that way; the refresh is right regardless, because it is the general
+    // read-stale-state defect, not a language one.
     const persisted = SchemaFormStateManager.load();
     if (persisted) this.state = persisted;
 
@@ -1396,14 +1405,14 @@ export class WebFormConnection {
    * The session's CURRENT spoken language, read through to the persisted
    * snapshot (bd polyglot-pdf-pjws).
    *
-   * changeSpokenLanguage() (shared/connection.ts) persists a mid-session switch
-   * via SchemaFormStateManager.setSelectedLanguage / acceptDisclaimer, both of
-   * which build a NEW state object and save() it -- they never touch this
-   * object's in-memory `this.state`. Any hint formatted off `this.state`
-   * directly therefore resolves option labels in the PREVIOUS language for the
-   * rest of the session, which is worse than the pre-0rm1 English fallback: the
-   * model gets confident labels in a language the user just switched away from,
-   * beside a guidance block in the new one.
+   * The language is PINNED per session (bd polyglot-pdf-87a9,
+   * docs/standards/voice-and-vad.md), so this is not about switching languages.
+   * It is about WHERE the pinned value lives: `acceptDisclaimer` /
+   * `setSelectedLanguage` build a NEW state object and save() it, and never touch
+   * this object's in-memory `this.state`. A producer formatting off `this.state`
+   * before it has synced would resolve option labels against a language the
+   * session no longer holds -- reading through to storage removes that class
+   * entirely rather than relying on every caller having refreshed.
    *
    * Reading only the LANGUAGE through to storage (rather than reloading all of
    * `this.state`) keeps this safe for the section-switch callers, which hold a
@@ -1745,10 +1754,12 @@ export class WebFormConnection {
     // Refresh before reading OR writing (bd polyglot-pdf-pjws). This handler
     // ends in SchemaFormStateManager.save(this.state), so running it on a stale
     // in-memory copy does not merely read the wrong values -- it PERSISTS them,
-    // reverting any field written outside this object since the last sync. The
-    // observed case is selectedLanguage: changeSpokenLanguage() saves the new
-    // language straight to storage, and the next confirm wrote the old one back
-    // over it, silently undoing the switch.
+    // reverting any field written outside this object since the last sync -- a
+    // value the user typed on screen, or anything a sibling handler persisted.
+    // (The originally-reported symptom was selectedLanguage being written back;
+    // that framing assumed mid-session language switching, which is unsupported
+    // -- bd polyglot-pdf-87a9. The stale-write class is real either way, and is
+    // what this refresh fixes.)
     //
     // fieldValues are MERGED with in-memory winning, NOT replaced. The rest of
     // this handler is gated on the field holding a usable VALUE, and a plain
@@ -2073,10 +2084,11 @@ export class WebFormConnection {
     // (bd polyglot-pdf-pjws). This handler also ends in
     // SchemaFormStateManager.save(this.state), so on a stale in-memory copy it
     // does not merely read wrong values, it PERSISTS them: a skip landing after
-    // a mid-session language change wrote the OLD selectedLanguage back over the
-    // new one, silently undoing the switch. A skip is as routine a per-turn tool
-    // call as a confirm; both final Opus outer reviews found this sibling path
-    // independently.
+    // it reverts whatever was written outside this object since the last sync.
+    // A skip is as routine a per-turn tool call as a confirm; both final Opus
+    // outer reviews found this sibling path independently. (Originally written
+    // up as a language-clobber; mid-session language switching is unsupported --
+    // bd polyglot-pdf-87a9 -- but the stale-write class is real regardless.)
     //
     // fieldValues are MERGED, not replaced, and in-memory wins. Everything below
     // is gated on a DATA-LOSS guard (markFieldSkipped BLANKS the value), and a

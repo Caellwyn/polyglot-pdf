@@ -1106,6 +1106,62 @@ describe('FormCatalogue -- run extraction', () => {
       expect(meta.status).toBe('draft');
     });
 
+    it('mirrors the refusal up through onStatusRefusal for the strip line (s18 C1)', async () => {
+      // The producer side of the strip's refusal/error line (decision 1): a
+      // refused completion of the OPEN kit reaches the host (cleared to null
+      // first on entry). Only the open kit mirrors -- see the NON-open test.
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 409,
+        json: async () => ({ detail: '16 of 17 translations complete' }),
+      } as unknown as Response));
+      const onStatusRefusal = vi.fn();
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId="i-90"
+        serverActionsOk onStatusRefusal={onStatusRefusal} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('I-90');
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      await waitFor(() => expect(onStatusRefusal).toHaveBeenCalledWith(
+        expect.stringContaining('16 of 17 translations complete')));
+      expect(onStatusRefusal.mock.calls[0]).toEqual([null]);
+    });
+
+    it('a refusal about a NON-open kit never reaches the strip (Opus outer r2)', async () => {
+      // Local mode offers Mark complete on EVERY card, so a refusal about
+      // kit B must stay on B's card -- mirrored onto the strip below open
+      // kit A, its "Go to:" links would select unrelated fields of A.
+      // The open kit (i-90) is COMPLETE, so the only "Mark complete" button
+      // on screen belongs to w-7 -- the non-open kit under test.
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+        mockKit('w-7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 409,
+        json: async () => ({ detail: 'refused: fields (id=b_field)' }),
+      } as unknown as Response));
+      const onStatusRefusal = vi.fn();
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId="i-90"
+        serverActionsOk onStatusRefusal={onStatusRefusal} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('W-7');
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      // The card shows the refusal...
+      await screen.findByText(/refused: fields/);
+      // ...but the strip mirror was never touched (no clear, no detail).
+      expect(onStatusRefusal).not.toHaveBeenCalled();
+    });
+
     it('falls back to a local write with NO backend, and says it was unchecked', async () => {
       const root = mockRoot([
         mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),

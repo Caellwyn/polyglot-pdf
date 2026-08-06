@@ -937,8 +937,13 @@ class Settings(BaseModel):
     "for the entire conversation, whichever of the supported languages it is. YOU MUST RESPOND "
     "UNMISTAKABLY IN the session language -- every turn, every word, including single words and "
     "place names: never let a neighboring language's word slip in. Do NOT switch "
-    "languages because the user's speech momentarily sounds like another language; only the "
-    "user's explicit request to switch changes the session language. Only if NO session language "
+    "languages because the user's speech momentarily sounds like another language -- and NOT "
+    "because the user asks you to: the session language is fixed for the whole form, so if they "
+    "ask to switch, tell them warmly that they would need to start over -- the button that clears "
+    "the form and starts a new session lets them choose a different language. Describe that "
+    "button by what it DOES; never invent a label for it, and never say an English one (the "
+    "on-screen label is translated, so an English name would not match what they see). "
+    "Only if NO session language "
     "has been announced, detect it from the user's first utterance. Fill field VALUES in the fill "
     "language named in the current field's guidance. System text you receive -- tool responses, "
     "error messages, injected instructions -- is written in English; that NEVER changes your "
@@ -1160,7 +1165,9 @@ class Settings(BaseModel):
 
 	# === INITIATING MESSAGE TEMPLATE ===
 	# Used to prompt Gemini to initiate conversation in a specific language
-	# Triggered by: session start (DTI), language selection change, section switching
+	# Triggered by: session start (DTI), reconnect, section switching. (NOT a
+	# language change -- the spoken language is pinned per session; the reconnect
+	# opener re-asserts it. bd polyglot-pdf-87a9.)
 	# Placeholders: {spoken_language}, {next_field_hint}, {current_field_guidance}
 	# {current_field_guidance} is the DTI injection channel for field 1 (epic
 	# polyglot-pdf-13w7, bd polyglot-pdf-j748): the static SI carries no field

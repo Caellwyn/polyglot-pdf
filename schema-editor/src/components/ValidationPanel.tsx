@@ -1,7 +1,8 @@
 import React from 'react';
 import type { FormSchema } from '../types/schema';
-import { getCompletionStats, validateSchema } from '../utils/validation';
-import { needsAckFieldIds } from '../utils/guidanceStaleness';
+import { validateSchema } from '../utils/validation';
+import { reviewCounts } from '../utils/reviewStatus';
+import { bucketFindingsByField } from '../utils/lintFindings';
 import {
   AuthError,
   hasBackend,
@@ -11,198 +12,216 @@ import {
   type LintReport,
 } from '../utils/remoteKitStore';
 
+/**
+ * The one-truth strip (sprint-18 C1, bd polyglot-pdf-o7y9).
+ *
+ * The old warnings PANE -- a second copy of per-field truth that drifted from
+ * the field statuses ("0 need review" beside "7 to review") -- is gone.
+ * Findings now render AT their fields (FieldEditor property anchors, FieldList
+ * flagged rows + the pinned Form row); this component keeps the pane's four
+ * non-display responsibilities plus the single count line:
+ *
+ *   1. the lint round-trip (kit-scoped when a kit is open, so the strip lints
+ *      with the SAME dump-loaded inputs as the publish gate; monotonic
+ *      staleness guard; auth-error surfacing; keep-last-report-on-blip),
+ *   2. the onReport mirror App's field list and overlay feed from,
+ *   3. the Repair-all button (mechanical bulk action, errors only),
+ *   4. the limited-checking / checks-did-not-run notices -- which matter MORE
+ *      under status-derived counts (a failed lint must never render as
+ *      "reviewed and clean"),
+ * and from birth: 5. a refusal/error line where server refusal details
+ * (publish gate, translation coverage) render with field links -- so no
+ * mid-chain state exists where a refusal has no home (C2 upgrades this line
+ * into the guided-flow staging).
+ *
+ * The counts derive from the PINNED predicate (reviewStatus.isCountedReviewed:
+ * reviewed_correct, not demoted by the ack gate or the timeliness rule, no
+ * field lint ERROR) -- one definition shared with the field list's jump, so
+ * the strip and the rows can never disagree. "M to review" is a CONTROL:
+ * click jumps to the next review target; right-click (or the filter toggle)
+ * filters the field list to flagged fields -- the overview that used to
+ * justify a pane.
+ */
 interface ValidationPanelProps {
   schema: FormSchema;
-  // Click-to-focus: selecting a finding's field jumps the editor to it (P4.3
-  // "findings with field focus"). Optional so a bare panel still renders.
+  // The open kit's id, when server actions are trusted for it (hosted, or a
+  // local folder that passed the same-folder handshake). Present -> the lint
+  // round-trip uses the kit-scoped route (dump-loaded, same inputs as the
+  // publish gate); absent -> the dump-less route (no kit identity).
+  kitId?: string | null;
+  // Click-to-focus for the refusal line's field links: selecting a named field
+  // jumps the editor to it. Optional so a bare strip still renders.
   onSelectField?: (fieldId: string) => void;
+  // "M to review" click: jump to the next review target (App owns the ordered
+  // field walk). Optional -- without it the count renders as plain text.
+  onJumpToReview?: () => void;
+  // Secondary action on the count: filter the field list to flagged fields.
+  onToggleReviewFilter?: () => void;
+  reviewFilterActive?: boolean;
   // A rotated/expired access code surfaced while linting -- let the host drop
   // back to the access gate, same as every other editorFetch caller.
   onAuthError?: () => void;
   // One-click Repair-all (bd polyglot-pdf-zgln, P5.3b): when provided (author
   // tier on a stored kit), a "Repair all (N)" button runs the server-side repair
-  // and the host reloads the repaired schema. Omitted -> no button (the panel is
-  // read-only for the editor tier / local mode / an unsaved schema).
+  // and the host reloads the repaired schema. Omitted -> no button.
   onRepairAll?: () => Promise<void>;
-  // Report escape hatch (bd polyglot-pdf-0x10.6): the panel owns the lint
-  // round-trip, but the FIELD LIST also wants the findings (to explain a red
-  // row where the author is looking). Fired with each fresh report.
+  // Report escape hatch (bd polyglot-pdf-0x10.6): the strip owns the lint
+  // round-trip, but the FIELD LIST and FieldEditor render the findings (at
+  // their fields). Fired with each fresh report.
   onReport?: (report: LintReport | null) => void;
+  // The latest server refusal (publish gate 409/422, translation coverage) --
+  // the strip is its home. Field ids embedded as "(id=x)" render as links.
+  refusal?: string | null;
+  onDismissRefusal?: () => void;
 }
-
-// Human-readable rule labels: the backend rule ids are stable/terse (bd h76m.5);
-// the panel shows a friendlier prefix while keeping the id available for the
-// hover title. Unmapped ids fall back to the raw id (forward-compatible with new
-// rules the backend adds).
-const RULE_LABELS: Record<string, string> = {
-  'unknown-operator': 'Unrecognized comparison',
-  'value-arity': 'Wrong comparison value',
-  'option-value-missing': 'Answer choice has no value',
-  'option-value-duplicate': 'Duplicate answer value',
-  'option-value-comma': 'Comma in answer value',
-  'option-value-slug': 'Answer value in wrong format',
-  'ref-unresolved-field': 'Points at a missing field',
-  'operator-trigger': 'Comparison not valid here',
-  'ref-option-value': 'Not a real answer choice',
-  'condition-malformed': 'Broken condition',
-  'composite-depth': 'Condition nested too deep',
-  'show-if-cycle': 'Show/hide rules loop forever',
-  'dump-widget-multiclaim': 'PDF box claimed twice',
-  // PDF-mapping + review-state rules. These were reaching reviewers as their
-  // raw internal ids ("field-claim-unresolvable"), which reads as a system
-  // error rather than something to fix -- caught by the rule-label parity test
-  // (backend/tests/unit/test_lint_rule_parity.py, bd polyglot-pdf-cpiw).
-  'dump-widget-unclaimed': 'PDF box not used by any field',
-  'field-claim-unresolvable': 'Field points at a missing PDF box',
-  'field-unbacked': 'Field has no PDF box',
-  'readonly-conditional-no-unlock': 'Locked field can never be filled',
-  'unlock-missing-flag-change': 'Unlock is missing its PDF flag change',
-  'required-top-level': 'Required in the wrong place',
-  'legacy-trigger-side-logic': 'Old-style trigger logic',
-  'to-review-pending': 'Still needs re-filing',
-  // Translation verify/rectify gate flags (bd polyglot-pdf-9djc): persisted by
-  // the bake into _bakeoff provenance and re-emitted by the backend linter.
-  // All WARNING -- the human-review worklist for baked translations.
-  'translation-drift-rectified': 'Translation auto-corrected',
-  'translation-drift-unresolved': 'Translation needs human review',
-  'translation-ambiguous-source': 'Ambiguous source text',
-  'translation-mechanical': 'Translation check failed',
-  'translation-coverage': 'Translation coverage gap',
-  // Guidance-content rules (bd wsao.3, sprint-16): the instructions/details
-  // authoring worklist. All WARNING; the coverage rule is ONE aggregated
-  // finding per schema (path $.fields, no field focus by design).
-  'help-instructions-missing': 'No spoken guidance yet',
-  'help-instructions-too-long': 'Instructions too long',
-  'help-instructions-label-restatement': 'Instructions just repeat the label',
-  'help-instructions-screen-ref': 'Instructions refer to the screen',
-  'help-details-not-contained': 'Details not a verbatim quote',
-  'help-details-no-reference-floor': 'No booklet text to check details against',
-  'help-details-oversize': 'Details too long to reach the assistant',
-  'help-details-headings-missing': 'Details missing headings',
-  // The staleness gate (bd anim): computed FRESH each lint pass by
-  // _check_guidance_identity_drift, not re-emitted from the bake report.
-  'guidance-identity-stale': 'Guidance may be out of date',
-  // Guidance verify-loop flags (bd wsao.5), re-emitted from the persisted
-  // bake report -- the instructions_enrich analog of the translation flags.
-  'instructions-rectified': 'Guidance auto-corrected',
-  'instructions-ungrounded-dropped': 'Guidance dropped (failed a safety check)',
-  'instructions-enrich-unavailable': 'Guidance quality check unavailable',
-};
-
-// One imperative-sentence remedy per rule -- the action a reviewer takes,
-// independent of the (already-plain) message text. NOT rendered anywhere
-// yet (bd polyglot-pdf-xfdb, sprint-18 C12); a later bead (C1's embedded
-// findings) consumes this to show "what to do" beside each finding. Keep
-// every entry a single imperative sentence -- this is the "do this" line,
-// the message above already carries the "what happened" / "why it
-// matters" explanation.
-export const RULE_REMEDIES: Record<string, string> = {
-  'unknown-operator': 'Change the comparison to one of the allowed types.',
-  'value-arity': 'Fix the comparison value to match what this comparison type expects.',
-  'option-value-missing': 'Set a stored value for this answer choice.',
-  'option-value-duplicate': 'Give each answer choice its own unique value.',
-  'option-value-comma': 'Remove the comma from the answer value.',
-  'option-value-slug': 'Regenerate the value from the label.',
-  'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
-  'operator-trigger': 'Pick a comparison type that is valid for this field.',
-  'ref-option-value': 'Pick one of the trigger field\'s real answer choices.',
-  'condition-malformed': 'Rebuild this condition under the Conditional Logic section of the field.',
-  'composite-depth': 'Flatten the nested condition to one level.',
-  'show-if-cycle': 'Remove or change one of the rules to break the loop.',
-  'dump-widget-multiclaim': 'Unclaim the PDF box from all but one field or choice.',
-  'dump-widget-unclaimed': 'Add a field for this PDF box, or map it onto an existing field.',
-  'field-claim-unresolvable': 'Reconnect this field to a real PDF box.',
-  'field-unbacked': 'Connect this field to a PDF box, or mark it ignored.',
-  'readonly-conditional-no-unlock': 'Set the unlock method to flip_readonly_bit.',
-  'unlock-missing-flag-change': 'Add a pdf_field_flag_change next to the unlock method.',
-  'required-top-level': 'Move the required setting into the field\'s validation rules.',
-  'legacy-trigger-side-logic': 'Rebuild this as a show_if / require_if rule on the target field.',
-  'to-review-pending': 'File the field into a real section; if the holding section lists leftover ids no field uses, delete those ids.',
-  'translation-drift-rectified': 'Review the auto-corrected translation.',
-  'translation-drift-unresolved': 'Review and correct this translation by hand.',
-  'translation-ambiguous-source': 'Add context or a glossary entry for this source text.',
-  'translation-mechanical': 'Fix the translation as described in the message.',
-  'translation-coverage': 'Re-run the translation pass to fill the missing strings.',
-  'help-instructions-missing': 'Write spoken instructions for this field.',
-  'help-instructions-too-long': 'Shorten the instructions and move detail into Details.',
-  'help-instructions-label-restatement': 'Rewrite the instructions to add real guidance, or clear them.',
-  'help-instructions-screen-ref': 'Rewrite the instructions to say the requirement in words.',
-  'help-details-not-contained': 'Replace the details with a verbatim excerpt from the booklet.',
-  'help-details-no-reference-floor': 'Add the booklet text for this form.',
-  'help-details-oversize': 'Trim the details down to the most important excerpt.',
-  'help-details-headings-missing': 'Add headings from the booklet to the details text.',
-  'guidance-identity-stale': 'Confirm the guidance still reads correctly, or re-author it.',
-  'instructions-rectified': 'Review the auto-corrected guidance.',
-  'instructions-ungrounded-dropped': 'Write guidance for this field by hand.',
-  'instructions-enrich-unavailable': 'Re-run guidance authoring for this kit.',
-};
 
 // LAST-RESORT fallback for a session with NO backend reachable at all: the
 // network-free client-side validateSchema, mapped into the same LintFinding
-// rows the panel renders so field-focus and display still work (bd
-// polyglot-pdf-h903).
+// rows the embedded-finding surfaces render so field-focus and display still
+// work (bd polyglot-pdf-h903).
 //
 // This is NOT the normal local path any more (bd polyglot-pdf-cpiw): local dev
 // runs the backend and gets the authoritative Python rules, same as hosted.
 // This ruleset is deliberately lighter AND emits rule:'' for every finding, so
 // any rule the UI keys on by id (the guidance-staleness ack gate) is invisible
 // here. Treat reaching this path as degraded, not equivalent.
+// A short, stable discriminator derived from a fallback finding's CONTENT.
+//
+// The fallback has no backend rule id, so without this every finding on a
+// field fingerprints identically (rule + field + path, message excluded) and
+// the timeliness demotion silently never fires there (Opus outer review,
+// pass 7). A positional ordinal fixed that but introduced two new bugs --
+// removing an unrelated finding shifts every later ordinal (false demotion)
+// and lets a different finding inherit a retired one (missed demotion; pass
+// 8). Hashing the message makes the discriminator move only when the finding
+// itself changes, which is precisely what the timeliness rule wants.
+//
+// Note this is the ONE place a fallback fingerprint tracks message text: on
+// the backend path the message is excluded because a copy pass rewrites it,
+// but the fallback's messages are authored in-repo (validation.ts) and are
+// this ruleset's only distinguishing content.
+function localFindingKey(message: string): string {
+  let h = 5381;
+  for (let i = 0; i < message.length; i++) {
+    h = ((h << 5) + h + message.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
+
 function localLintReport(schema: FormSchema): LintReport {
-  const findings: LintFinding[] = validateSchema(schema).map((e) => ({
-    // validateSchema does not carry the backend rule ids; render the message
-    // as-is (no RULE_LABELS prefix) by tagging it with a sentinel the renderer
-    // treats as label-less.
+  // Occurrence counter per (field, message): two IDENTICAL messages on one
+  // field (validateSchema can emit the same complaint for each duplicate of
+  // a repeated id) must stay distinguishable, and the counter is scoped to
+  // that pair -- so it does not move when an unrelated finding elsewhere is
+  // fixed, unlike the global ordinal it replaces.
+  const seenCount = new Map<string, number>();
+  const findings: LintFinding[] = validateSchema(schema).map((e) => {
+    const key = `${e.field_id}#${localFindingKey(e.message)}`;
+    const n = seenCount.get(key) ?? 0;
+    seenCount.set(key, n + 1);
+    return {
+    // validateSchema does not carry the backend rule ids; the embedded
+    // surfaces render the message as-is (no RULE_LABELS prefix) by tagging it
+    // with a sentinel treated as label-less.
     severity: e.type === 'error' ? 'ERROR' : 'WARNING',
     rule: '',
-    path: e.field_id,
+    // Content-keyed, NOT positional -- see localFindingKey.
+    path: n === 0 ? key : `${key}~${n}`,
     message: e.message,
     // e.field_id is a field id for field-level errors and a section/_metadata
     // id otherwise; only real field ids focus, but the string is a safe target
     // (App's setSelectedFieldId simply no-ops for a non-field id).
     field_id: e.field_id || null,
-  }));
+    };
+  });
   const errorCount = findings.filter((f) => f.severity === 'ERROR').length;
   return { findings, errorCount, warningCount: findings.length - errorCount };
 }
 
+// How long an edit must settle before the next lint round-trip fires. Short
+// enough that findings feel live; long enough that typing a sentence is one
+// request, not fifteen (exported for the debounce test).
+export const LINT_DEBOUNCE_MS = 400;
+
+// Ids a server refusal names inline as "(id=x)" (the same token the lint
+// paths carry, formatted by the backend's gate message). Raw parse only --
+// the strip filters the result against schema.fields before rendering links,
+// because the token can name a SECTION (to-review-pending anchors at
+// `sections[i] (id=sec_to_review_x)`) and a link to a non-field would
+// silently mis-navigate through the selection recovery (Opus outer review,
+// pass 6; the same resolves-to-a-field rule formLevelFindings applies). The
+// char class is the backend's own `(id=(.*?))` width, not a narrower fork of
+// the id grammar (bd h76m.11 centralized that parse in Python).
+export function refusalFieldIds(refusal: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const re = /\(id=([^)]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(refusal)) !== null) {
+    if (!seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
+  }
+  return out;
+}
+
 export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   schema,
+  kitId,
   onSelectField,
+  onJumpToReview,
+  onToggleReviewFilter,
+  reviewFilterActive = false,
   onAuthError,
   onRepairAll,
   onReport,
+  refusal,
+  onDismissRefusal,
 }) => {
   const backendAvailable = React.useMemo(hasBackend, []);
   const hosted = React.useMemo(isHostedMode, []);
 
   const [report, setReport] = React.useState<LintReport | null>(null);
-  // The completion figure honours the guidance-ack gate (bd anim): a
-  // reviewed_correct field whose guidance drifted un-acknowledged renders
-  // amber in the FieldList, so it must not count complete here either --
-  // before the (async, hosted) report lands the figure is gate-blind for that
-  // one render cycle, same as every other lint-fed surface.
-  const stats = React.useMemo(
-    () => getCompletionStats(
-      schema, needsAckFieldIds(schema.fields, report?.findings)),
-    [schema, report],
-  );
   const [lintError, setLintError] = React.useState<string | null>(null);
   const [linting, setLinting] = React.useState(false);
   const [repairing, setRepairing] = React.useState(false);
 
+  // The counts derive from _review + the current findings ONLY -- both already
+  // in hand -- so a confirm/fix moves them in the SAME render pass, no lint
+  // round trip in between (C1 exit criterion 1). The SHARED
+  // bucketFindingsByField is the one bucketing definition App's mirror also
+  // uses, so the strip and the rows can never bucket differently.
+  const findingsByField = React.useMemo(
+    () => bucketFindingsByField(report?.findings), [report]);
+  const counts = React.useMemo(
+    () => reviewCounts(schema.fields, findingsByField),
+    [schema.fields, findingsByField],
+  );
+
   // Re-lint whenever the schema changes, through the backend's AUTHORITATIVE
-  // Python linter (P4.3) whenever one is reachable -- which is now local dev
-  // too, not just hosted (bd polyglot-pdf-cpiw). A monotonic token drops a
-  // stale in-flight result: the schema edits faster than the round trip, so an
-  // earlier lint must never overwrite a newer one (same staleness guard the
-  // remote-open path uses).
+  // Python linter whenever one is reachable -- kit-scoped when a kit is open,
+  // so the dump-gated rules the publish gate runs are visible here too
+  // (sprint-18 C1; the dump-less POST /lint cannot see them). A monotonic
+  // token drops a stale in-flight result: the schema edits faster than the
+  // round trip, so an earlier lint must never overwrite a newer one.
   //
-  // The client-side ruleset below is a genuine FALLBACK now (no backend
-  // configured at all), not the normal local path. It is lighter than the
-  // Python one and drops rule ids, which is why the guidance-staleness gate
-  // silently never fired in local mode: GUIDANCE_STALE_RULE never matched, so
-  // the acknowledgment checkbox never rendered and edited fields read green.
+  // The client-side ruleset below is a genuine FALLBACK (no backend configured
+  // at all), not the normal local path. It is lighter than the Python one and
+  // drops rule ids, which is why the guidance-staleness gate silently never
+  // fired in local mode before bd cpiw: GUIDANCE_STALE_RULE never matched.
   const seqRef = React.useRef(0);
+  // First lint per mount fires IMMEDIATELY (the component is keyed per form,
+  // so every opened form lints at once); subsequent re-lints are debounced.
+  // Without the debounce every keystroke re-fired the round trip -- now a
+  // kit-scoped route that also loads the AcroForm dump from the store, i.e.
+  // a metered read per keystroke on the hosted path (Opus outer review,
+  // pass 1). The monotonic seq guard already discards stale RESULTS; the
+  // debounce stops the REQUESTS.
+  const firstLintRef = React.useRef(true);
+  // A kitId TRANSITION also lints instantly: in local mode the first lint
+  // fires dump-less (undefined) before the same-folder handshake resolves,
+  // and riding the debounce for the kit-scoped re-lint would leave the strip
+  // dump-blind -- confidently clean of the widget-claim rules -- for the
+  // debounce window plus a round trip (Opus outer review, pass 2).
+  const lastKitIdRef = React.useRef(kitId);
   React.useEffect(() => {
     if (!backendAvailable) {
       // Synchronous, network-free: no staleness window, no failure path.
@@ -213,7 +232,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
     }
     const seq = ++seqRef.current;
     setLinting(true);
-    lintSchema(schema)
+    const run = () => lintSchema(schema, kitId ?? undefined)
       .then((r) => {
         if (seq !== seqRef.current) return;
         setReport(r);
@@ -226,7 +245,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
           // HOSTED re-prompts with the access-code gate, so returning here is
           // enough. LOCAL has no gate screen (App renders it on `hosted &&
           // !role`), so a 401 would otherwise render NOTHING: no findings, no
-          // banner, green completion -- the exact silent-clean state this bead
+          // banner, green completion -- the exact silent-clean state bd cpiw
           // exists to remove. It is reachable: relaunching the editor mints a
           // FRESH per-run token while an already-open tab still holds the
           // previous one. Fall through to the banner instead.
@@ -236,7 +255,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
             + 'may be from an earlier run -- reload this page)');
           return;
         }
-        // A lint failure is non-blocking: the editor stays usable, the panel
+        // A lint failure is non-blocking: the editor stays usable, the strip
         // just notes it could not lint (e.g. the backend is transiently down).
         // Keep the last successful report visible rather than clearing it, so a
         // blip does not wipe the findings.
@@ -245,18 +264,26 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       .finally(() => {
         if (seq === seqRef.current) setLinting(false);
       });
-  }, [schema, backendAvailable, hosted, onAuthError]);
+    const kitChanged = lastKitIdRef.current !== kitId;
+    lastKitIdRef.current = kitId;
+    if (firstLintRef.current || kitChanged) {
+      firstLintRef.current = false;
+      void run();
+      return;
+    }
+    const timer = window.setTimeout(() => void run(), LINT_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [schema, kitId, backendAvailable, hosted, onAuthError]);
 
-  // Mirror each fresh report up to the host (App feeds it to the field list).
-  // An effect, not a call inside the fetch handlers, so the local-mode
-  // synchronous path and the async backend path share one notification point.
+  // Mirror each fresh report up to the host (App feeds it to the field list
+  // and the field editor -- the surfaces that now RENDER findings). An effect,
+  // not a call inside the fetch handlers, so the local-mode synchronous path
+  // and the async backend path share one notification point.
   React.useEffect(() => {
     onReport?.(report);
   }, [report, onReport]);
 
-  const findings = report?.findings ?? [];
   const errorCount = report?.errorCount ?? 0;
-  const warningCount = report?.warningCount ?? 0;
 
   const handleRepairAll = React.useCallback(async () => {
     if (!onRepairAll || repairing) return;
@@ -270,84 +297,87 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
     }
   }, [onRepairAll, repairing]);
 
-  const renderFinding = (finding: LintFinding, idx: number) => {
-    const isError = finding.severity === 'ERROR';
-    // Backend findings carry a rule id (mapped to a friendly label); the local
-    // fallback leaves it empty, so the message stands alone with no label span.
-    const label = finding.rule ? RULE_LABELS[finding.rule] ?? finding.rule : '';
-    const canFocus = Boolean(finding.field_id && onSelectField);
-    const body = (
-      <>
-        {label && <span className="font-medium">{label} </span>}
-        {finding.field_id && (
-          <span className="font-mono">{finding.field_id}</span>
-        )}
-        {(label || finding.field_id) ? ': ' : ''}
-        {finding.message}
-      </>
-    );
-    const className = `w-full text-left text-xs p-2 rounded ${
-      isError ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
-    } ${canFocus ? 'hover:ring-1 hover:ring-current cursor-pointer' : ''}`;
-    const title = finding.rule
-      ? (canFocus ? `${finding.rule} -- click to focus ${finding.field_id}` : finding.rule)
-      : undefined;
-    // Field-anchored findings are buttons (click focuses the field); the rest
-    // are plain divs -- there is nothing to jump to.
-    return canFocus ? (
-      <button
-        key={idx}
-        type="button"
-        className={className}
-        title={title}
-        onClick={() => onSelectField?.(finding.field_id as string)}
-      >
-        {body}
-      </button>
-    ) : (
-      <div key={idx} className={className} title={title}>
-        {body}
-      </div>
-    );
-  };
+  const toReviewTitle = [
+    onJumpToReview ? 'Click: jump to the next field needing review.' : null,
+    onToggleReviewFilter
+      ? 'Right-click: show only the fields needing review in the list.'
+      : null,
+  ].filter(Boolean).join(' ');
 
   return (
-    // A SLIM strip (bd tynm): auto height instead of the old fixed h-48 + big
-    // stat cards -- every pixel saved here goes straight to the editing area.
-    // One line carries the progress bar + counts + lint summary + Repair-all;
-    // the findings list (when any) expands below in its own capped scroller.
-    <div className="border-t border-gray-200 bg-white px-4 py-2">
+    // ONE line (sprint-18 C1): progress bar + counts + Repair-all. The
+    // degraded-mode notices and the refusal line append as their own compact
+    // rows only when their condition holds -- with a healthy lint and no
+    // refusal this renders exactly the single line, and never a findings list.
+    <div className="border-t border-gray-200 bg-white px-4 py-2" data-testid="review-strip">
       <div className="flex items-center gap-3 text-xs text-gray-600">
         <span className="font-semibold text-gray-900 whitespace-nowrap">Progress</span>
         <div className="flex-1 min-w-[80px] bg-gray-200 rounded-full h-2">
           <div
             className="bg-green-500 h-2 rounded-full transition-all"
-            style={{ width: `${stats.percentage}%` }}
+            style={{ width: `${counts.percentage}%` }}
           />
         </div>
-        <span className="whitespace-nowrap">
-          {stats.percentage}% &middot; {stats.complete} complete, {stats.needsReview} need review, {stats.total} total
+        <span className="whitespace-nowrap" data-testid="strip-reviewed">
+          {counts.reviewed} reviewed
         </span>
-        {errorCount > 0 && (
-          <span className="text-red-600 font-medium whitespace-nowrap">
-            {errorCount} error{errorCount !== 1 ? 's' : ''}
+        <span aria-hidden="true">&middot;</span>
+        {(onJumpToReview || onToggleReviewFilter) ? (
+          <button
+            type="button"
+            data-testid="strip-to-review"
+            className={`whitespace-nowrap font-medium rounded px-1.5 py-0.5 border ${
+              reviewFilterActive
+                ? 'text-amber-900 bg-amber-100 border-amber-300'
+                : counts.toReview > 0
+                  ? 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100'
+                  : 'text-gray-500 bg-gray-50 border-gray-200'
+            }`}
+            title={toReviewTitle || undefined}
+            onClick={() => onJumpToReview?.()}
+            onContextMenu={(e) => {
+              if (!onToggleReviewFilter) return;
+              e.preventDefault();
+              onToggleReviewFilter();
+            }}
+          >
+            {counts.toReview} to review
+          </button>
+        ) : (
+          <span className="whitespace-nowrap" data-testid="strip-to-review">
+            {counts.toReview} to review
           </span>
         )}
-        {warningCount > 0 && (
-          <span className="text-yellow-600 font-medium whitespace-nowrap">
-            {warningCount} warning{warningCount !== 1 ? 's' : ''}
-          </span>
+        {/* The filter toggle as a REAL control (Opus outer review, pass 9):
+            right-click alone is unreachable by keyboard (Enter/Space fire
+            click, never contextmenu) and never fires on touch, so the
+            "overview that replaced the pane" did not exist for those users.
+            The count's right-click stays as the power-user shortcut. */}
+        {onToggleReviewFilter && (
+          <button
+            type="button"
+            data-testid="strip-filter-toggle"
+            aria-pressed={reviewFilterActive}
+            className={`whitespace-nowrap rounded px-1.5 py-0.5 border ${
+              reviewFilterActive
+                ? 'text-amber-900 bg-amber-100 border-amber-300'
+                : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50'
+            }`}
+            title={reviewFilterActive
+              ? 'Show all fields in the list'
+              : 'Show only the fields needing review in the list'}
+            onClick={onToggleReviewFilter}
+          >
+            {reviewFilterActive ? 'Showing flagged' : 'Show flagged only'}
+          </button>
         )}
-        {findings.length === 0 && !lintError && (
-          <span className="text-green-600 flex items-center gap-1 whitespace-nowrap">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clipRule="evenodd"
-              />
-            </svg>
-            {linting ? 'Checking for issues...' : 'No validation errors'}
+        <span aria-hidden="true">&middot;</span>
+        <span className="whitespace-nowrap" data-testid="strip-total">
+          {counts.total} total
+        </span>
+        {linting && (
+          <span className="text-gray-400 whitespace-nowrap" role="status">
+            checking...
           </span>
         )}
         {/* One-click Repair-all (bd zgln): author tier on a stored kit, only
@@ -376,15 +406,13 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
 
       {/* The checks did NOT fully run -- say so LOUDLY (bd polyglot-pdf-cpiw
           exit criterion 2). Two ways to get here, and both look identical to a
-          clean form if we stay quiet, which is exactly how the staleness gate
-          went unnoticed in local mode for so long:
+          clean form if we stay quiet:
             - no backend at all  -> the reduced client-side ruleset ran
             - backend present but the lint call FAILED (503 unconfigured, 401,
-              server down mid-session) -> NOTHING ran, and `findings` is empty
-              or a stale earlier report.
-          The small gray "could not check" line above is not enough on its own:
-          an empty finding list next to a green completion figure reads as
-          "this form is fine". */}
+              server down mid-session) -> NOTHING ran, and the counts derive
+              from a stale earlier report or none.
+          This matters MORE now that the counts derive from field statuses: a
+          failed lint must never let a form read "reviewed and clean". */}
       {(!backendAvailable || lintError) && (
         <div
           className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1"
@@ -394,7 +422,8 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
             <>
               Checks did not run: the editor could not reach its backend, so
               this form has NOT been fully checked. Issues (including
-              out-of-date guidance) may be missing from the list above.
+              out-of-date guidance) may be missing from the fields and the
+              counts above.
             </>
           ) : (
             <>
@@ -407,10 +436,58 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         </div>
       )}
 
-      {/* Errors and Warnings from the backend linter */}
-      {findings.length > 0 && (
-        <div className="mt-2 max-h-28 overflow-auto custom-scrollbar space-y-1">
-          {findings.map(renderFinding)}
+      {/* The refusal/error line (sprint-18 C1, decision 1): server refusal
+          details -- the publish gate's 409/422, the translation-coverage
+          refusal -- render HERE with field links, so a refusal always has a
+          home at the strip the moment it happens. */}
+      {refusal && (
+        <div
+          className="mt-1 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 flex items-start gap-2"
+          role="alert"
+          data-testid="strip-refusal"
+        >
+          <span className="flex-1">
+            {refusal}
+            {onSelectField && (() => {
+              // Only ids that resolve to a REAL field become links: a
+              // section-anchored token would mis-navigate (Opus outer
+              // review, pass 6 -- the refusalFieldIds doc has the trace).
+              const linkable = refusalFieldIds(refusal)
+                .filter(fid => schema.fields.some(f => f.id === fid));
+              if (linkable.length === 0) return null;
+              return (
+                <span className="block mt-0.5">
+                  Go to:{' '}
+                  {linkable.map((fid) => (
+                    <button
+                      key={fid}
+                      type="button"
+                      className="font-mono underline mr-2"
+                      onClick={() => onSelectField(fid)}
+                    >
+                      {fid}
+                    </button>
+                  ))}
+                </span>
+              );
+            })()}
+          </span>
+          {onDismissRefusal && (
+            <button
+              type="button"
+              aria-label="Dismiss"
+              className="text-red-400 hover:text-red-600 shrink-0"
+              onClick={onDismissRefusal}
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -21,7 +21,6 @@ import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
-import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
@@ -208,7 +207,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// the "disclaimer re-shows while Gemini talks" desync
 			// (bd polyglot-pdf-fn1m). So gate the disclaimer step on
 			// disclaimerAccepted here, mirroring the alreadyLive branch above and
-			// the language handler: reconnect either way (to resume the session),
+			// the initial language-selection handler: reconnect either way (to resume the session),
 			// but only surface the agree step when it has NOT been accepted.
 			const alreadyAccepted = SchemaFormStateManager.load()?.disclaimerAccepted
 			// Trigger the same flow as handleInitialLanguageSelect
@@ -1132,59 +1131,15 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 	}
 
-	// Handle language selection change (from dropdown - for changing language later)
-	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-		const newLanguage = event.target.value
-
-		// If clearing selection, just update state
-		if (!newLanguage) {
-			setSelectedLanguage('')
-			return
-		}
-
-		console.log('[VoiceOverlay] Language selected:', newLanguage)
-		setSelectedLanguage(newLanguage)
-
-		// Check if disclaimer already accepted (returning user)
-		const state = SchemaFormStateManager.load()
-		if (state?.disclaimerAccepted) {
-			console.log('[VoiceOverlay] Disclaimer already accepted - proceeding to connection')
-			// Already accepted, just change language if connected
-			if (connectionManager && isConnected) {
-				try {
-					const nextField = computeNextField(state)
-					const nextFieldHint = nextField
-						? formatNextFieldHint(nextField, undefined, newLanguage)
-						: 'all fields are complete'
-					connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
-				} catch (err) {
-					console.error('[VoiceOverlay] Failed to change spoken language:', err)
-					setError(err instanceof Error ? err.message : 'Failed to change language')
-				}
-			}
-			return
-		}
-
-		// First time - connect to Gemini, THEN show disclaimer modal
-		console.log('[VoiceOverlay] First language selection - connecting to Gemini...')
-		try {
-			// Set pending flag so disclaimer will be read when connection is ready
-			setPendingDisclaimerRead(true)
-
-			// Start connection
-			await handleConnect()
-
-			// Show disclaimer modal
-			console.log('[VoiceOverlay] Connection initiated - showing disclaimer modal')
-			setShowDisclaimerModal(true)
-
-			// The useEffect watching status will send the disclaimer prompt when ready
-		} catch (err) {
-			console.error('[VoiceOverlay] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
-			setPendingDisclaimerRead(false) // Clear flag on error
-		}
-	}
+	// NOTE: there is deliberately NO mid-session language change here.
+	// The spoken language is PINNED for the whole form -- chosen once in
+	// LanguageSelectionModal (handleInitialLanguageSelect above), carried into the
+	// Gemini config + system instruction at session start, and held for every turn.
+	// The only way to change it is a NEW session: 'clear form', then pick again in
+	// the modal. A handleLanguageChange() that swapped the language on a live
+	// session used to sit here, wired to nothing; it was removed rather than left
+	// as a trap, because its presence implied a supported flow that does not exist
+	// (bd polyglot-pdf-87a9). See docs/standards/voice-and-vad.md.
 
 	// Handle "Listen Again" button in disclaimer modal
 	const handleDisclaimerListenAgain = () => {

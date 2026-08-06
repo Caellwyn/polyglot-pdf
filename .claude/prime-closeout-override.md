@@ -15,11 +15,13 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
   pulled `dev`.
 - **PR into `dev`** — opened and driven by the `/closeout` skill (NOT
   `gh pr create` by hand). Reviewed in two serial layers, both Claude, BOTH PRE-PR
-  (on the local branch) — a fresh-eyes assess loop (Sonnet/Haiku, scored against the
-  bead's exit criteria), then an Opus-5 outer review (two independent clearing
-  passes) when the change is review-worthy — each looped to clean. Only after both
-  clear does the PR open (and close the bead(s), one run). There is NO external
-  reviewer (the maintainer's Codex subscription ended 2026-07-08). On CLEAN,
+  (on the local branch), with DIFFERENT jobs — a fresh-eyes assess loop
+  (Sonnet/Haiku: score the exit criteria, get the local diff right, enumerate every
+  changed contract), then ONE looped Opus-5 outer cross-surface review (follow those
+  contracts out into untouched consumers) when the change is review-worthy — each
+  looped to clean. Only after both clear does the PR open (and close the bead(s),
+  one run). There is NO external reviewer (the maintainer's Codex subscription ended
+  2026-07-08). On CLEAN,
   closeout **auto-merges a routine low-risk PR** (`gh pr merge`) or **pings the
   maintainer** for a consequence-bearing one (autonomy increase 2026-07-04;
   CLAUDE.md "Auto-merge vs. maintainer merge").

@@ -60,12 +60,69 @@ project's `StructuredLogger` / the Cloud Run→BigQuery typed-event path describ
   "timestamp": "<ISO-8601 UTC>",
   "event": "field_confirmed",
   "form_id": "I-90",
+  "kit_id": "i-90",
+  "edition_date": "01/20/25",
   "form_session_id": "fss_abc123_xyz789",
   "field_id": "p1_line1_aliennumber",
   "field_name": "p1_line1_aliennumber",
   "confirmation_method": "verbal"
 }
 ```
+
+**Why three identity fields, not one** (bd `polyglot-pdf-47r3`). `form_id` is a
+form NUMBER and identifies neither of the things a liability record needs:
+
+- **`kit_id`** -- `form_number` is **not unique**. Two kits can carry the same
+  one (a standard W-7 and a firm-specific variant, which the firm-tier epic
+  anticipates via per-firm proprietary forms), so only the kit key distinguishes
+  them.
+- **`edition_date`** -- agencies revise forms and enforce edition dates. Without
+  it, a form filled against the 12/2024 W-7 and one filled after a later
+  revision read identically, and a disputed filing cannot answer "which edition
+  did the client confirm against?".
+
+`edition_date` comes from `form_metadata.edition_date`, **never**
+`form_metadata.version`: `version` is a schema-AUTHORING field whose values
+differ in meaning per kit (`"v9_conformant"` = extraction output format,
+`"draft"` = kit status), so recording it would put a version-shaped field with
+per-kit semantics into a legal record. Both keys are always written (as `null`
+when unavailable) so every record has a uniform shape and a missing value reads
+as "not recorded" rather than as a different edition.
+
+**Both are established once per form-session and PRESERVED across section
+switches.** The internal section-switch restart re-enters `start_session` with
+only the new section's schema, so `FormFillingService` keeps `self._kit_id` /
+`self._edition_date` rather than re-deriving them (same pattern as
+`_form_session_id` and `_full_schema`). Without that, `kit_id` reset to `null`
+after section 1 and the fingerprint was recomputed from a single-section schema
+-- so the "pinned" marker changed mid-session, which is the opposite of pinning
+(caught in review on bd `polyglot-pdf-47r3`; pinned by
+`test_switch_to_section_preserves_kit_id_and_edition_in_callback_handler`).
+
+### Kits with no government edition
+
+A **custom form** -- a firm's own intake sheet, which the firm-tier epic
+(`polyglot-pdf-02ye`) exists to support -- has no government edition date, so
+requiring one would make the product unusable for those customers. Schema-lint
+therefore emits `audit-identity-no-edition` as a **WARNING, never an ERROR**: it
+advises an author who forgot to set one on an official form, and is correctly
+ignorable for an in-house form.
+
+The record still pins a revision. `resolve_edition_marker`
+(`backend/utils/confirmation_logger.py`) falls back to a short fingerprint of
+the kit's **answerable shape** -- field ids + types + option values --
+formatted `sha256:<12 hex>`. It deliberately excludes labels and guidance prose,
+so a copy edit does not read as a new revision while adding/removing/retyping a
+field or changing an option value does. Not human-readable, but it answers the
+question a disputed filing actually asks: *was this the same version of the form
+the client saw?*
+
+A better fallback is coming. The editor stamps `metadata.published_at` when a
+kit is marked complete (shipped with this change), and epic
+`polyglot-pdf-7jmy` will surface that publish date plus an author-supplied
+version into the record -- both more meaningful to a human than a digest. They
+live in kit metadata, which the audit path does not currently receive, so
+reaching them needs a manifest/wire change.
 
 Note what is **absent**: the field's value. The module docstring is explicit —
 "Only log metadata, NEVER log actual field values or user data." `field_name` is
@@ -139,7 +196,10 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: durable Firestore mirror for
+*Last updated: 2026-08-04 (bd polyglot-pdf-47r3: the confirmation event now
+records `kit_id` + `edition_date` alongside `form_id` -- a form NUMBER
+identifies neither which kit was used nor which government edition the client
+confirmed against). Prior: 2026-08-03 (bd polyglot-pdf-z2is: durable Firestore mirror for
 deployed envs — the file-only trail died with the Cloud Run instance; also fixed
 the session-lifecycle pair's latent structlog TypeError). Prior: 2026-07-05 (bd
 polyglot-pdf-mpoe staleness sweep). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*

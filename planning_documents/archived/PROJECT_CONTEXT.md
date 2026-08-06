@@ -409,7 +409,9 @@ The existing voice form filler is fully functional with these capabilities:
 - Manual reconnect button (no wasted resources)
 
 **Core Capabilities**:
-- 18+ spoken languages with real-time switching
+- 18 spoken languages (STALE AS WRITTEN: "real-time switching" was never a
+  supported flow and the dead code behind it was removed -- the language is
+  pinned per session; bd polyglot-pdf-87a9)
 - 174-field forms tested and working
 - <50ms barge-in latency
 - Hybrid voice/keyboard workflow

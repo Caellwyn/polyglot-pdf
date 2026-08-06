@@ -12,6 +12,9 @@ from datetime import datetime
 from backend.config import Settings, get_settings
 from backend.ports.live_ai_port import ILiveAI
 from backend.services import guidance_contract
+from backend.utils.confirmation_logger import (
+    resolve_edition_marker as _resolve_edition_marker,
+)
 from backend.utils.language_codes import bcp47_codes_for_spoken_language
 from .field_utils import (
     build_fields_from_schema,
@@ -128,6 +131,10 @@ class FormFillingService:
         # _switch_to_section_locked can thread it into the rebuilt CallbackHandler
         # without needing to re-derive it from the handshake -- bd rwjy).
         self._form_session_id: Optional[str] = None
+        # Kit identity + government edition for the audit trail (bd
+        # polyglot-pdf-47r3), stored for the same reason as _form_session_id.
+        self._kit_id: Optional[str] = None
+        self._edition_date: Optional[str] = None
         # Resume flag: True when the handshake carried resume:true (mid-section
         # reconnect). Suppresses the greeting in send_initiating_message so Gemini
         # resumes silently rather than re-introducing the form/section.
@@ -233,6 +240,7 @@ class FormFillingService:
         current_values: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
         form_session_id: Optional[str] = None,
+        kit_id: Optional[str] = None,
         current_section_id: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
@@ -301,6 +309,63 @@ class FormFillingService:
         # Extract form_id here so it can be passed to CallbackHandler (confirmation
         # audit logging guard requires both ids at construction time, bd rwjy).
         form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+        # Kit identity + government EDITION for the audit trail (bd
+        # polyglot-pdf-47r3). form_id alone identifies neither which KIT was used
+        # (two kits can share a form number) nor which EDITION the client
+        # confirmed against (agencies revise forms and enforce edition dates).
+        # edition_date rides form_metadata like form_number; kit_id is not a
+        # form_metadata key (it names the kit, not the form) so it arrives as an
+        # argument. Both stored so _switch_to_section_locked can thread them into
+        # the rebuilt CallbackHandler without re-deriving them.
+        # A CUSTOM form (a firm's own intake sheet -- the firm-tier epic's case)
+        # has no government edition date, so resolve_edition_marker falls back to
+        # a fingerprint of the kit's field structure: not a date, but stable per
+        # revision and changing when the form changes, which is what a disputed
+        # filing needs. Prefer the FULL schema for the fingerprint -- the
+        # per-section/JIT `schema` carries only one field, so hashing it would
+        # yield a different marker per section of the same form.
+        # PRESERVE both across the internal section-switch restart, exactly as
+        # _full_schema does above (fresh-eyes on 47r3). _switch_to_section_locked
+        # re-enters start_session with the NEW SECTION's schema and NO kit_id /
+        # full_schema. Overwriting here reset kit_id to None and recomputed the
+        # fingerprint from a single-field section schema -- the marker CHANGED
+        # mid-session, the opposite of "pins a revision", and every confirmation
+        # after section 1 lost its kit.
+        #
+        # The edition marker is computed ONLY on a client (re)connect -- the one
+        # caller that supplies full_schema. Guarding merely on "not already set"
+        # would NOT be enough: the section schema still yields a fingerprint from
+        # its own single section, which would overwrite the session's real
+        # whole-form marker. A reconnect recomputes from the same full schema and
+        # so yields the same marker (pinned by
+        # test_edition_marker_is_stable_across_a_reconnect).
+        #
+        # A session that never receives a full_schema (a pre-p68s client) keeps
+        # edition_date None rather than pinning a section-derived digest --
+        # deliberate: "not recorded" is honest, a one-section fingerprint
+        # masquerading as the form's revision is not (bd polyglot-pdf-n41r).
+        if kit_id is not None:
+            self._kit_id = kit_id
+        if full_schema is not None:
+            # Look for the government edition in the per-section schema FIRST
+            # (where a 47r3-aware client puts it via the handshake key), then in
+            # full_schema (bd polyglot-pdf-kdrz). A currently-deployed pre-47r3
+            # client sends no top-level edition_date but DOES send full_schema
+            # with the real "12/2024" inside -- reading only the former threw
+            # away an agency edition we were handed and recorded a fingerprint
+            # instead, which is strictly weaker evidence. The fingerprint stays
+            # the last resort, for kits that genuinely have no edition.
+            # Both reads are isinstance-guarded: a malformed payload whose
+            # form_metadata is a string/list would otherwise raise AttributeError
+            # inside .get() and kill the WS session. websocket_routes only
+            # validates that full_schema itself is a dict, never the nested key.
+            def _declared_edition(source: dict | None) -> str | None:
+                metadata = source.get("form_metadata") if isinstance(source, dict) else None
+                value = metadata.get("edition_date") if isinstance(metadata, dict) else None
+                return value if isinstance(value, str) and value.strip() else None
+
+            declared_edition = _declared_edition(schema) or _declared_edition(full_schema)
+            self._edition_date = _resolve_edition_marker(declared_edition, full_schema)
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
         self._form_session_id = form_session_id or session_id
@@ -313,6 +378,12 @@ class FormFillingService:
             send_transcript=send_transcript,
             form_id=form_id,
             form_session_id=self._form_session_id,
+            # The PRESERVED values (self._*), not the local args: on the internal
+            # section-switch restart the args are None, and passing them would
+            # rebuild the handler without the kit/edition the session started
+            # with -- same reason form_session_id is threaded from self.
+            kit_id=self._kit_id,
+            edition_date=self._edition_date,
         )
 
         # Inject tool handler methods into callback handler
@@ -670,7 +741,10 @@ class FormFillingService:
         """
         Send initiating message to Gemini to prompt conversation in specific language.
 
-        This is triggered when user changes spoken language or when switching sections.
+        Triggered on a RECONNECT/section switch -- the client's opener re-asserting
+        the session's PINNED spoken language on a fresh Gemini session. It is NOT a
+        language switch: mid-conversation switching is unsupported (bd
+        polyglot-pdf-87a9, docs/standards/voice-and-vad.md).
         Uses session.send_client_content() to initiate Gemini's response.
 
         Args:
@@ -691,9 +765,13 @@ class FormFillingService:
             return
 
         # Store spoken language for section switching (persists across sections).
-        # If mid-session language switching ever becomes a supported flow, this is
-        # where the option-label translation would re-fire for the new language
-        # (bd polyglot-pdf-ow1e; today it runs at session start only).
+        # This is an idempotent re-write under current policy: the spoken language
+        # is PINNED per session (bd polyglot-pdf-87a9,
+        # docs/standards/voice-and-vad.md), and the only caller of this path is the
+        # client's reconnect opener re-asserting the SAME pinned language -- so
+        # option-label translation correctly builds once, at session start
+        # (bd polyglot-pdf-ow1e). Changing language means a NEW session, which
+        # rebuilds the overrides from scratch.
         self._spoken_language = spoken_language
 
         # Strip the technical "(field_id: ...)" parenthetical so Gemini doesn't
@@ -708,8 +786,8 @@ class FormFillingService:
         # render_field_guidance that delivers fields 2..N in the confirm_field
         # response. The current field is whatever next_field_hint points at -- resolve
         # it by the field_id embedded in the UNSTRIPPED hint, NOT schema["fields"][0]:
-        # this same opener fires on a mid-form spoken-language change (where the
-        # current field is field N, not the handshake's field 1), and on a full-section
+        # this same opener fires on a mid-form RECONNECT (where the current field is
+        # field N, not the handshake's field 1), and on a full-section
         # handshake schema["fields"][0] is merely the positional first field, not the
         # client's computeNextField selection (Codex PR #254). The id is NOT stripped
         # here: this block is CONTEXT the model acts on (and copies the id verbatim
@@ -741,7 +819,7 @@ class FormFillingService:
             if field:
                 # Track the current field for update_form_fields coercion (bd
                 # polyglot-pdf-h1bn): this opener fires at session/section start
-                # (field 1) and on a spoken-language change (field N); in every case
+                # (field 1) and on a mid-form RECONNECT (field N); in every case
                 # `field` is the field the model is about to fill.
                 if field.get("id"):
                     self._current_field_id = field["id"]

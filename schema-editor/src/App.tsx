@@ -41,8 +41,10 @@ import {
   type LintReport,
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
-import { getCompletionStats } from './utils/validation';
-import { needsAckFieldIds } from './utils/guidanceStaleness';
+import { isReviewTargetFromFindings, reviewCounts } from './utils/reviewStatus';
+import {
+  bucketFindingsByField, visibleFormFindings, withFormFindingDismissed,
+} from './utils/lintFindings';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
 import {
   recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
@@ -70,12 +72,14 @@ export function liveStats(
   schema: FormSchema,
   lintFindings: LintFinding[] | undefined,
 ): { percent: number; complete: number; total: number; version: KitVersionInfo } {
-  // The guidance-ack gate (bd anim) demotes a drifted reviewed_correct field
-  // to amber in the FieldList; the catalogue bar's live % must agree.
-  const s = getCompletionStats(
-    schema, needsAckFieldIds(schema.fields, lintFindings));
+  // ONE count predicate (sprint-18 C1, decision 2): the catalogue bar's live %
+  // computes the same reviewCounts the bottom strip shows -- reviewed_correct,
+  // not demoted by the ack gate or the timeliness rule, no field lint ERROR --
+  // over the same shared bucketing, so the two surfaces can never disagree
+  // about the open kit.
+  const s = reviewCounts(schema.fields, bucketFindingsByField(lintFindings));
   return {
-    percent: s.percentage, complete: s.complete, total: s.total,
+    percent: s.percentage, complete: s.reviewed, total: s.total,
     version: versionInfoFromSchema(schema),
   };
 }
@@ -145,16 +149,96 @@ export const App: React.FC = () => {
   const handleLintReport = React.useCallback((report: LintReport | null) => {
     setLintFindings(report?.findings ?? []);
   }, []);
-  const lintFindingsByField = React.useMemo(() => {
-    const map = new Map<string, LintFinding[]>();
-    for (const f of lintFindings) {
-      if (!f.field_id) continue;
-      const bucket = map.get(f.field_id);
-      if (bucket) bucket.push(f);
-      else map.set(f.field_id, [f]);
+  const lintFindingsByField = React.useMemo(
+    () => bucketFindingsByField(lintFindings), [lintFindings]);
+  // Form-level findings (no field anchor) for the pinned Form row at the top
+  // of the field list -- minus standalone-dismissed WARNINGs (sprint-18 C1).
+  const formFindings = React.useMemo(
+    () => (schema ? visibleFormFindings(schema, lintFindings) : []),
+    [schema, lintFindings],
+  );
+  // Standalone dismiss for a form-level WARNING -- the ONLY standalone dismiss
+  // in the editor (no field review can cover a schema-level finding). A
+  // normal undoable commit, like any other schema edit.
+  const handleDismissFormFinding = React.useCallback((finding: LintFinding) => {
+    if (!schema) return;
+    const next = withFormFindingDismissed(schema, finding);
+    if (next !== schema) commitSchema(next);
+  }, [schema, commitSchema]);
+  // "M to review" as a CONTROL (sprint-18 C1, decision 2): the strip's count
+  // jumps to the next review target; its secondary action filters the field
+  // list to flagged fields -- the overview that used to justify a pane.
+  const [reviewFilterActive, setReviewFilterActive] = React.useState(false);
+  // The latest server refusal (publish gate / translation coverage), homed on
+  // the strip's refusal line (decision 1: no refusal is ever homeless).
+  const [publishRefusal, setPublishRefusal] = React.useState<string | null>(null);
+  // All three are PER-FORM state, so every open/close path resets them
+  // alongside selectedFieldId/viewMode -- a refusal naming form A's fields
+  // (with dead "Go to:" links) must not sit on form B's strip, A's review
+  // filter must not narrow B's list, and A's FINDINGS must not leak onto B:
+  // visibleFormFindings promotes any finding whose id resolves to no field
+  // onto the pinned Form row, so stale findings from A would render as B's
+  // form-level errors -- and dismissing one would write A's fingerprint into
+  // B's schema (Opus outer review, pass 1). The strip and field list are
+  // additionally KEYED per form below, so their internal state (last lint
+  // report, Form-row expansion, search) resets with the switch.
+  const resetPerFormReviewUi = React.useCallback(() => {
+    setReviewFilterActive(false);
+    setPublishRefusal(null);
+    // NOTE: lintFindings is deliberately NOT cleared here. This runs at the
+    // TOP of an open, before the async load can fail -- and a failed open
+    // leaves the previous form on screen with its strip (which keys on the
+    // unchanged kit id, so it neither remounts nor re-fires onReport).
+    // Clearing the mirror there would blank every row's findings while the
+    // strip still counted them: the strip-vs-rows disagreement this bead
+    // exists to end (Opus outer review, pass 9). The mirror is instead
+    // cleared on SUCCESS, beside loadSchemaState, via clearLintMirror.
+  }, []);
+  // Clear the findings mirror at the point a DIFFERENT form actually becomes
+  // the open one. The strip remounts on the same transition (it is keyed per
+  // form) and re-lints, so this only covers the window before its first
+  // report lands -- but in that window a stale finding from the previous
+  // form would otherwise resolve to no field here and be promoted onto the
+  // new form's pinned Form row.
+  const clearLintMirror = React.useCallback(() => setLintFindings([]), []);
+  // The fields in reading order -- sections as listed, then orphans -- the
+  // same order the FieldList renders, so the strip's jump and the list's own
+  // "Next to review" walk one order.
+  const orderedFields = React.useMemo(() => {
+    if (!schema) return [] as FormField[];
+    // Defensive `?? []`s: a hand-authored or legacy schema can lack sections
+    // (the editor opens it fine; only the publish gate demands the full shape).
+    const fields = schema.fields ?? [];
+    const byId = new Map(fields.map(f => [f.id, f]));
+    const seen = new Set<string>();
+    const ordered: FormField[] = [];
+    for (const section of schema.sections ?? []) {
+      for (const id of section.fields ?? []) {
+        const f = byId.get(id);
+        if (f && !seen.has(id)) { ordered.push(f); seen.add(id); }
+      }
     }
-    return map;
-  }, [lintFindings]);
+    for (const f of fields) {
+      if (!f.section_id && !seen.has(f.id)) ordered.push(f);
+    }
+    return ordered;
+  }, [schema]);
+  const handleJumpToReview = React.useCallback(() => {
+    if (orderedFields.length === 0) return;
+    // Option rows select as "<fieldId>:option:<n>" -- start from the base.
+    const baseId = selectedFieldId ? selectedFieldId.split(':option:')[0] : null;
+    const current = baseId ? orderedFields.findIndex(f => f.id === baseId) : -1;
+    for (let step = 1; step <= orderedFields.length; step++) {
+      const candidate = orderedFields[(current + step) % orderedFields.length];
+      if (isReviewTargetFromFindings(
+            candidate, lintFindingsByField.get(candidate.id))) {
+        setViewMode('edit');
+        setSelectedFieldId(candidate.id);
+        return;
+      }
+    }
+    // Every field is reviewed -> nothing to jump to.
+  }, [orderedFields, selectedFieldId, lintFindingsByField]);
   // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
   // is the set of fields ticked for a merge; insertion order is preserved (the
   // first ticked field is the merge primary). Separate from selectedFieldId,
@@ -206,6 +290,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     // A new form means a new destination -- drop the prior file handle so the
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
@@ -219,6 +304,7 @@ export const App: React.FC = () => {
 
     try {
       const loadedSchema = await loadSchema(form.schemaPath);
+      clearLintMirror(); // a DIFFERENT form is now open (s18 C1)
       loadSchemaState(loadedSchema); // fresh baseline -> history cleared
       setSelectedForm(form);
     } catch (err) {
@@ -227,7 +313,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState]);
+  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi, clearLintMirror]);
 
   // Open a kit from the catalogue (bd b0pe): read its schema from the directory
   // handle and build a blob URL for its PDF, then drive the existing schema +
@@ -246,6 +332,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
@@ -271,6 +358,7 @@ export const App: React.FC = () => {
       if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = pdfUrl || null;
 
+      clearLintMirror(); // a DIFFERENT kit is now open (s18 C1)
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
       setSelectedKitId(entry.id);
@@ -282,7 +370,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState]);
+  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi, clearLintMirror]);
 
   // A remote call answered 401 mid-session (rotated/revoked code): drop back to
   // the access gate. The gate re-probes the stored code, finds it dead, clears
@@ -340,6 +428,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]);
     setViewMode('edit');
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
     fileHandleRef.current = null; // hosted mode never saves via a file handle
     localEntryRef.current = null;  // hosted reloads go through the remote store
     try {
@@ -367,6 +456,7 @@ export const App: React.FC = () => {
       if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = pdfUrl || null;
 
+      clearLintMirror(); // a DIFFERENT kit is now open (s18 C1)
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
       setSelectedKitId(entry.id);
@@ -383,7 +473,8 @@ export const App: React.FC = () => {
     } finally {
       if (seq === openSeqRef.current) setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
+  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired, resetPerFormReviewUi,
+      clearLintMirror]);
 
   // Guard a folder switch: returns false to ABORT when the user declines to
   // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
@@ -410,6 +501,8 @@ export const App: React.FC = () => {
     setSavingToKit(false);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
+    resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
+    clearLintMirror();      // no form open -> no findings
     clearSchema();
     fileHandleRef.current = null;
     localEntryRef.current = null;
@@ -417,7 +510,7 @@ export const App: React.FC = () => {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
     }
-  }, [clearSchema]);
+  }, [clearSchema, resetPerFormReviewUi, clearLintMirror]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {
@@ -1155,6 +1248,9 @@ export const App: React.FC = () => {
             selectedKitId={selectedKitId}
             role={role}
             onAuthError={handleAuthExpired}
+            // A Mark-complete refusal is homed on the strip's refusal line
+            // beside the counts it contradicts (sprint-18 C1, decision 1).
+            onStatusRefusal={setPublishRefusal}
             liveProgress={
               selectedKitId && schema
                 ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema, lintFindings) }
@@ -1167,6 +1263,8 @@ export const App: React.FC = () => {
             confirmFolderChange={confirmFolderChange}
             clearOpenKit={clearOpenKit}
             onRootChange={handleRootChange}
+            // Same refusal home as the hosted catalogue (sprint-18 C1).
+            onStatusRefusal={setPublishRefusal}
             // Lets Mark-complete run the server's publish gates + translation
             // drift sweep instead of writing metadata.json blind (bd rh5v).
             serverActionsOk={serverActionsOk}
@@ -1174,7 +1272,7 @@ export const App: React.FC = () => {
             liveProgress={
               // Keep the open kit's catalogue bar in sync with in-editor edits:
               // the disk-scanned % is stale after an edit/save, so feed the live
-              // in-memory stats (same getCompletionStats the ValidationPanel uses).
+              // in-memory stats (same reviewCounts predicate the strip shows).
               // `saved` lets the catalogue cache only persisted values: an UNSAVED
               // edit still shows live on the open card, but is not remembered after
               // the kit closes (else a discarded edit would leave phantom progress).
@@ -1436,6 +1534,12 @@ export const App: React.FC = () => {
             </div>
             <div className="flex-1 overflow-hidden">
               <FieldList
+                // Remount per form (same idiom as PreviewPane): the list's
+                // local state -- search, section expansion, the Form row's
+                // expand/collapse -- is per-form, and a survived collapse
+                // latch hid the NEXT kit's blocking form ERROR behind an
+                // unopened chevron (Opus outer review, pass 1).
+                key={selectedKitId ?? selectedForm.schemaPath}
                 schema={schema}
                 selectedFieldId={selectedFieldId}
                 onSelectField={setSelectedFieldId}
@@ -1449,6 +1553,10 @@ export const App: React.FC = () => {
                 lintFindingsByField={lintFindingsByField}
                 pageCount={pdfPageCount}
                 onRestoreField={handleRestoreField}
+                formFindings={formFindings}
+                onDismissFormFinding={handleDismissFormFinding}
+                reviewFilterActive={reviewFilterActive}
+                onClearReviewFilter={() => setReviewFilterActive(false)}
               />
             </div>
           </div>
@@ -1551,13 +1659,28 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom: Validation Panel. Findings come from the backend's single
-          Python linter (bd h76m.11); clicking a field-anchored finding focuses
-          that field (and, in preview mode, drops back to edit so the selection
-          is visible). */}
+      {/* Bottom: the one-truth strip (sprint-18 C1). It owns the lint
+          round-trip (kit-scoped when a kit is open, so the strip lints with
+          the same dump-loaded inputs as the publish gate) and the single
+          count line; findings themselves render at their fields. */}
       {schema && (
         <ValidationPanel
+          // Remount per form: the strip's last lint REPORT is per-form state
+          // (keep-last-report-on-blip is for a transient failure on the SAME
+          // form, never for carrying form A's findings across a switch --
+          // Opus outer review, pass 1).
+          key={selectedKitId ?? selectedForm?.schemaPath ?? 'no-form'}
           schema={schema}
+          // Kit-scope the lint only when server actions are trusted for this
+          // kit (hosted, or a local folder that passed the same-folder
+          // handshake) -- a mismatched local folder must not pull ANOTHER
+          // copy's AcroForm dump into this schema's findings.
+          kitId={serverActionsOk && selectedKitId ? selectedKitId : undefined}
+          onJumpToReview={handleJumpToReview}
+          onToggleReviewFilter={() => setReviewFilterActive(v => !v)}
+          reviewFilterActive={reviewFilterActive}
+          refusal={publishRefusal}
+          onDismissRefusal={() => setPublishRefusal(null)}
           onSelectField={(fieldId) => {
             // A finding can point at a field that is now QUARANTINED (bd mzkw)
             // -- lint flags persisted before it was ignored still name it. The

@@ -107,7 +107,6 @@ function makeResizeFlipMock(): ConnectionManager & {
     isPaused: vi.fn(() => false),
     rearmAudioCapture: rearmSpy,
     changeFillLanguage: vi.fn(async () => {}),
-    changeSpokenLanguage: vi.fn(),
     readDisclaimer: vi.fn(),
     switchToFirstSection: vi.fn(async () => {}),
     startSection: vi.fn(async () => {}),

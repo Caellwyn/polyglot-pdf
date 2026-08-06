@@ -41,6 +41,7 @@ import subprocess
 import sys
 import tempfile
 import weakref
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 
@@ -662,16 +663,91 @@ async def lint_editor_schema(
     Never 4xx on schema shape -- lint_schema never raises, and a malformed draft
     IS the thing the contractor needs the findings for (a structural problem
     surfaces as a condition-malformed finding, not an HTTP error). No dump is
-    passed: this route lints the POSTED schema (no kit id), so it has no kit dump
-    to load -- the dump-aware widget-claim rule runs at the kit-scoped gates (the
-    extract route + the promotion gate, bd v96b) where the acroform.json artifact
-    is available.
+    passed: this route has no kit id, so it has no kit dump to load. An OPEN
+    kit's editor lints through the kit-scoped POST /kits/{kit_id}/lint twin
+    below, which loads acroform.json exactly as the promotion gate does -- this
+    dump-less route remains for schemas with no kit identity (nothing opened
+    from the store).
     """
     findings = lint_schema(schema)
     out = [LintFindingOut(**f.as_dict()) for f in findings]
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
     _log.info("editor_schema_linted", role=role,
+              errors=error_count, warnings=warning_count)
+    return LintResponse(
+        findings=out, errorCount=error_count, warningCount=warning_count,
+    )
+
+
+@router.post("/kits/{kit_id}/lint", response_model=LintResponse)
+async def lint_editor_kit_schema(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+    schema: Annotated[dict, Body()],
+) -> LintResponse:
+    """Lint the POSTED schema WITH the kit's persisted AcroForm dump.
+
+    The kit-scoped twin of POST /lint (sprint-18 C1, bd polyglot-pdf-o7y9).
+    The dumpless route structurally cannot run the two dump-gated rules
+    (dump-widget-multiclaim ERROR, dump-widget-unclaimed WARNING), so an
+    editor strip fed by it could read clean -- and its progress reach a
+    confident 100% -- while the promotion gate still 409s on a dump-only
+    ERROR. This route loads acroform.json exactly as the /status complete
+    gate does and passes it to the SAME lint_schema call, so the editor's
+    live findings and the gate share one input set. The schema still comes
+    from the request body (the on-screen, possibly-unsaved draft), never
+    from the store: the strip lints what the human is looking at.
+
+    A kit without a persisted dump (pre-v96b) degrades to the dump-less
+    rules -- identical to the gate's own degradation, so the two still agree.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    if not isinstance(schema.get("fields"), list):
+        raise HTTPException(
+            status_code=422,
+            detail="Schema must be a JSON object with a 'fields' list",
+        )
+    store = get_form_kit_store()
+    # 404 for an unknown kit rather than silently linting dump-less: a typo'd
+    # kit id must not masquerade as a legitimate no-dump kit. Existence is
+    # probed with TWO direct reads (metadata + dump), NOT _load_meta_or_404:
+    # that helper answers "does the kit exist" via list_kit_files, which on
+    # the GCS store lists EVERY blob under form-kits/ -- a whole-bucket LIST
+    # on the editor's hottest route, growing with total kit count (Opus outer
+    # review). Every onboarded kit has metadata.json, so metadata-or-dump
+    # present <=> the kit exists; both absent <=> 404. A transient store
+    # failure on the metadata read surfaces as 502 via FormKitStoreError.
+    try:
+        meta = await store.load_metadata(kit_id)
+    except FormKitStoreError as exc:
+        _log.error("editor_kit_lint_meta_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(status_code=502, detail="Unable to read kit") from exc
+    # The dump read does NOT go through _load_kit_dump here: that helper
+    # swallows transient store failures into "no dump", which on THIS route
+    # would silently downgrade the lint to dump-blind and return a 200 the
+    # strip presents as authoritative -- the exact confident-clean state the
+    # route exists to end (Opus outer review, pass 4). A missing dump is the
+    # legitimate pre-v96b case; a FAILED read is a 502 the strip renders as
+    # its "checks did not run" degraded state.
+    try:
+        raw_dump = await store.load_json_artifact(kit_id, _ACROFORM_ARTIFACT)
+        dump_data: Optional[dict] = raw_dump if isinstance(raw_dump, dict) else None
+    except FormKitNotFound:
+        dump_data = None
+    except FormKitStoreError as exc:
+        _log.error("editor_kit_lint_dump_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to read the kit's PDF form data"
+        ) from exc
+    if meta is None and dump_data is None:
+        raise HTTPException(status_code=404, detail=f"Kit {kit_id} not found")
+    findings = lint_schema(schema, dump_data)
+    out = [LintFindingOut(**f.as_dict()) for f in findings]
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_kit_schema_linted", kit_id=kit_id, role=role,
+              has_dump=dump_data is not None,
               errors=error_count, warnings=warning_count)
     return LintResponse(
         findings=out, errorCount=error_count, warningCount=warning_count,
@@ -1537,6 +1613,22 @@ async def set_editor_kit_status(
         )
 
     next_meta = {**(meta or {}), "status": body.status}
+    # Stamp the PUBLISH DATE on promotion (bd polyglot-pdf-47r3, maintainer
+    # 2026-08-04). It is the revision marker for a kit with no government
+    # edition date -- a firm's own intake form has no "12/2024", but it does
+    # have "the version published on <date>", which is human-readable, real,
+    # and meaningful in a liability record. Written only on the promotion to
+    # complete: a revert to draft leaves the last publish date intact (the kit
+    # WAS published then), and re-publishing after an edit moves it.
+    #
+    # Precisely: this stamps EVERY complete-status POST, including an idempotent
+    # complete->complete re-press with no schema edit, so it records "when this
+    # kit was last published", NOT "when it last changed" (Opus review on 47r3;
+    # an earlier comment here overclaimed the latter). Inert today -- nothing
+    # reads it -- but epic polyglot-pdf-7jmy will, and its author-supplied
+    # version is the field that will carry edit intent.
+    if body.status == "complete":
+        next_meta["published_at"] = datetime.now(timezone.utc).isoformat()
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:

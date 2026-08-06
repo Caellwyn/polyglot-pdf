@@ -17,6 +17,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -44,7 +45,14 @@ VALID_SCHEMA = {
     # Post the P6.2 flip (bd h76m.16) a complete kit MUST be v2 -- the
     # mark-complete gate requires schema_version=="2".
     "schema_version": "2",
-    "form_metadata": {"title": "Test Form", "version": "unknown"},
+    # edition_date present so this fixture stays CLEAN under the bd
+    # polyglot-pdf-47r3 audit-identity lint (a kit with form_metadata but no
+    # government edition now legitimately carries an advisory WARNING -- the
+    # audit trail falls back to a content fingerprint). Same pattern as the
+    # help.instructions note below: keep the "clean" fixture genuinely clean.
+    "form_metadata": {
+        "title": "Test Form", "version": "unknown", "edition_date": "12/2024",
+    },
     "sections": [{"id": "s1", "label": "Section 1", "order": 1, "fields": ["f1"]}],
     "fields": [
         # help.instructions authored so this fixture is CLEAN under the
@@ -872,6 +880,133 @@ def test_lint_never_4xxs_on_a_malformed_draft(client):
     assert any(f["rule"] == "condition-malformed" for f in body["findings"])
 
 
+# --- POST /kits/{id}/lint: kit-scoped lint with the persisted dump ----------
+# (sprint-18 C1, bd polyglot-pdf-o7y9): the editor strip for an OPEN kit must
+# lint with the SAME inputs as the /status promotion gate -- schema + the kit's
+# acroform.json -- or the two dump-gated rules stay structurally invisible to
+# the strip and a confident 100% can still 409 at the gate.
+
+# Two fields claiming ONE dump widget: the dump-widget-multiclaim ERROR fires
+# only when the dump is passed to lint_schema, which is exactly the difference
+# between the dumpless /lint route and this kit-scoped one.
+_MULTICLAIM_DRAFT = {
+    "source": "pdf",
+    "form_metadata": {"title": "T", "version": "unknown"},
+    "sections": [],
+    "fields": [
+        {"id": "a", "type": "text", "pdf_field_name": "form1[0].shared[0]",
+         "spoken_name": "a", "help": {"instructions": "Enter A."}},
+        {"id": "b", "type": "text", "pdf_field_name": "form1[0].shared[0]",
+         "spoken_name": "b", "help": {"instructions": "Enter B."}},
+    ],
+}
+
+_MULTICLAIM_DUMP = {"fields": [{"name": "form1[0].shared[0]"}]}
+
+
+def test_kit_lint_is_token_gated_and_404s_unknown_kits(client):
+    c, _store, _root = client
+    assert c.post(
+        "/api/editor/kits/i-90/lint", json={"fields": []},
+    ).status_code == 401
+    assert c.post(
+        "/api/editor/kits/no-such-kit/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": []},
+    ).status_code == 404
+
+
+def test_kit_lint_surfaces_the_dump_gated_error_the_dumpless_route_cannot(client):
+    # The C1 exit criterion's backend half: the same draft lints CLEAN of
+    # widget-claim findings through the dumpless route but reports the
+    # dump-widget-multiclaim ERROR through the kit-scoped route -- the same
+    # lint_schema(schema, dump) inputs the /status promotion gate uses.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=_MULTICLAIM_DRAFT)
+    _run(store.put_json_artifact("i-90", _MULTICLAIM_DUMP, "acroform.json"))
+
+    dumpless = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert dumpless.status_code == 200
+    assert not any(
+        f["rule"] == "dump-widget-multiclaim"
+        for f in dumpless.json()["findings"]
+    )
+
+    scoped = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert scoped.status_code == 200
+    body = scoped.json()
+    multi = [f for f in body["findings"] if f["rule"] == "dump-widget-multiclaim"]
+    assert multi and multi[0]["severity"] == "ERROR"
+    assert body["errorCount"] >= 1
+
+
+def test_kit_lint_without_a_dump_degrades_to_the_dumpless_rules(client):
+    # A pre-v96b kit has no acroform.json: the kit-scoped route must then agree
+    # with the dumpless route (and with the gate, which degrades identically).
+    c, _store, root = client
+    _make_kit(root, "old-kit", schema=_MULTICLAIM_DRAFT)
+    scoped = c.post(
+        "/api/editor/kits/old-kit/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    dumpless = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert scoped.status_code == dumpless.status_code == 200
+    assert scoped.json() == dumpless.json()
+
+
+def test_kit_lint_502s_on_a_transient_dump_read_failure(client, monkeypatch):
+    # A FAILED dump read must not silently downgrade the lint to dump-blind
+    # with a 200 the strip presents as authoritative (the confident-clean
+    # state the route exists to end) -- it 502s like the metadata read, which
+    # the strip renders as its "checks did not run" degraded state (Opus
+    # outer review, pass 4). A MISSING dump (pre-v96b kit) still degrades to
+    # the dumpless rules, pinned by the degradation test above.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=_MULTICLAIM_DRAFT)
+
+    async def _boom(_kit_id, _name):
+        raise FormKitStoreError("gcs blip")
+
+    monkeypatch.setattr(store, "load_json_artifact", _boom)
+    r = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert r.status_code == 502
+
+
+def test_kit_lint_lints_the_posted_schema_not_the_stored_one(client):
+    # The strip lints what is ON SCREEN (possibly unsaved), never the stored
+    # copy: post a draft that differs from the stored schema and confirm the
+    # findings describe the posted one.
+    c, store, root = client
+    _make_kit(root, "i-90", schema=VALID_SCHEMA)
+    _run(store.put_json_artifact("i-90", _MULTICLAIM_DUMP, "acroform.json"))
+    r = c.post(
+        "/api/editor/kits/i-90/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=_MULTICLAIM_DRAFT,
+    )
+    assert r.status_code == 200
+    assert any(
+        f["rule"] == "dump-widget-multiclaim" for f in r.json()["findings"]
+    )
+
+
 # --- POST /repair: one-click Repair-all (bd polyglot-pdf-zgln, P5.3b) ---------
 
 # A draft with a repairable defect: duplicate/invalid option values that repair
@@ -1063,6 +1198,105 @@ def test_status_flip_preserves_other_metadata(client):
     assert meta["status"] == "complete"
     assert meta["label"] == "Form I-90"          # preserved
     assert meta["description"] == "Green card"   # preserved
+
+
+# --- publish date (bd polyglot-pdf-47r3) --------------------------------------
+#
+# The marked-complete date is the revision marker for a kit with no government
+# edition: a firm's own intake form has no "12/2024", but it does have "the
+# version published on <date>" (maintainer, 2026-08-04). Stamped here so the
+# data accumulates; surfacing it into the audit record is epic
+# polyglot-pdf-7jmy, which needs a manifest/wire change to carry it.
+
+
+def test_a_kit_with_no_edition_date_can_still_be_published(client):
+    """A custom form MUST stay publishable (bd polyglot-pdf-47r3, maintainer call).
+
+    The audit-identity lint rule is a WARNING precisely so a firm's own intake
+    sheet -- which has no government edition date -- is not blocked; the record
+    falls back to a content fingerprint instead.
+
+    This asserts the BEHAVIOR at the gate that can actually block, not the
+    severity label. The lint-level test (test_missing_edition_date_warns_but_
+    never_blocks) pins the label, but set_editor_kit_status 409s on ANY lint
+    ERROR and never sees that assertion -- an Opus review proved a severity flip
+    to ERROR left all 132 tests in this file green while making every
+    edition-less kit un-publishable.
+    """
+    c, _store, root = client
+    schema = {
+        **VALID_SCHEMA,
+        "form_metadata": {"title": "Acme Intake", "version": "unknown"},
+    }
+    assert "edition_date" not in schema["form_metadata"]
+    _make_kit(root, "acme-intake", status="draft", schema=schema)
+
+    r = c.post(
+        "/api/editor/kits/acme-intake/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "acme-intake" / "metadata.json").read_text())
+    assert meta["status"] == "complete"
+
+
+def test_promotion_stamps_the_publish_date(client):
+    c, _store, root = client
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200
+    meta = json.loads((root / "i-90" / "metadata.json").read_text())
+    # ISO-8601 UTC, parseable -- not a free-text date.
+    stamped = datetime.fromisoformat(meta["published_at"])
+    assert stamped.tzinfo is not None
+    assert abs((datetime.now(timezone.utc) - stamped).total_seconds()) < 60
+
+
+def test_revert_to_draft_keeps_the_last_publish_date(client):
+    """A revert must not erase it: the kit WAS published then.
+
+    Erasing on revert would lose the marker for every confirmation recorded
+    while it was live -- the exact evidence the date exists to preserve.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", status="complete", schema=VALID_SCHEMA,
+              extra_meta={"published_at": "2026-01-15T00:00:00+00:00"})
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "draft"},
+    )
+
+    assert r.status_code == 200
+    meta = json.loads((root / "i-90" / "metadata.json").read_text())
+    assert meta["status"] == "draft"
+    assert meta["published_at"] == "2026-01-15T00:00:00+00:00"
+
+
+def test_republishing_moves_the_publish_date(client):
+    """Re-publishing after an edit updates it -- that IS the revision signal."""
+    c, _store, root = client
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA,
+              extra_meta={"published_at": "2026-01-15T00:00:00+00:00"})
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200
+    meta = json.loads((root / "i-90" / "metadata.json").read_text())
+    assert meta["published_at"] != "2026-01-15T00:00:00+00:00"
 
 
 # --- POST status: the drift re-translation sweep (bd polyglot-pdf-783r) ------
@@ -1646,7 +1880,11 @@ def test_extract_runs_and_stores_the_draft(client, monkeypatch):
     # A clean v2 draft (validates + lint-clean): a standalone text field.
     draft = {
         "source": "pdf", "schema_version": "2",
-        "form_metadata": {"title": "T", "version": "unknown"},
+        # edition_date keeps this lint-clean under the bd polyglot-pdf-47r3
+        # audit-identity WARNING (see the VALID_SCHEMA note at the top).
+        "form_metadata": {
+            "title": "T", "version": "unknown", "edition_date": "12/2024",
+        },
         "sections": [{"id": "s1", "label": "S1", "order": 1, "fields": ["a"]}],
         "fields": [{"id": "a", "name": "A", "spoken_name": "a", "type": "text",
                     "section_id": "s1", "pdf_field_name": "form1[0].a[0]",

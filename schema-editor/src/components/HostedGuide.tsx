@@ -75,7 +75,7 @@ const SECTIONS: GuideSection[] = [
           <li>
             <K>Pick a form</K> from the catalogue at the top. Its PDF opens on
             the left, the field list in the middle, and the selected field's
-            properties on the right; the validation and preview panels sit below.
+            properties on the right; the progress strip sits below.
           </li>
           <li>
             <K>Fix the fields that need attention.</K> Yellow and red icons mark
@@ -353,9 +353,13 @@ const SECTIONS: GuideSection[] = [
       <>
         <UL>
           <li>
-            The <K>Validation &amp; Progress</K> panel shows the completion bar
-            and how many fields are complete, need review, or total. Click any
-            listed error to jump straight to its field.
+            The <K>progress strip</K> at the bottom shows how many fields are
+            reviewed, still to review, and total. Click the <K>to review</K>{' '}
+            count to jump to the next field needing attention (right-click it
+            to show only those fields in the list). Problems appear ON the
+            fields themselves: flagged rows in the field list (form-wide
+            problems on the pinned <K>Form</K> row at the top), and each
+            finding under the exact setting it concerns in the field editor.
           </li>
           <li>
             Author tier: a <K>Repair all</K> button appears when there are

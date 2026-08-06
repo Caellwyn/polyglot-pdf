@@ -13,7 +13,7 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
-import { getCompletionStats } from './validation';
+import { reviewCounts } from './reviewStatus';
 import { migrateLegacyRequired } from './schemaMigrate';
 
 export type KitStatus = 'draft' | 'complete' | 'unknown';
@@ -180,13 +180,13 @@ export async function setKitLabel(
 
 // --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
 //
-// "Review progress" for a form is the SAME field-completion signal the editor
-// already shows per field and the ValidationPanel already aggregates: a field is
-// `complete` when checkFieldComplete() passes (has id/type/pdf_field_name, a
-// spoken_name, and non-placeholder help). Per-form progress is the percentage of
-// fields that are complete -- i.e. getCompletionStats(schema).percentage. We reuse
-// that single definition rather than inventing a second one so the catalogue %
-// and the in-editor % can never disagree.
+// "Review progress" for a form is THE pinned count predicate (sprint-18 C1,
+// decision 2): reviewCounts / isCountedReviewed -- the same one App.liveStats
+// computes for the open kit -- so the catalogue % and the in-editor % can never
+// disagree (bd polyglot-pdf-q3rm: a second predicate here briefly made the same
+// kit show two numbers). The scan has no lint report, so the lint clause is
+// honestly gate-blind (findings = undefined), exactly like liveStats before
+// findings arrive.
 
 /** A catalogue entry plus its computed review progress (null if no schema). */
 /**
@@ -236,7 +236,7 @@ export function versionInfoFromSchema(schema: FormSchema): KitVersionInfo {
 
 /**
  * Compute one kit's review progress by loading its schema and reusing
- * getCompletionStats. A kit with no schema (PDF-only, pre-extraction) or an
+ * reviewCounts. A kit with no schema (PDF-only, pre-extraction) or an
  * unparseable schema yields reviewPercent=null so the UI can show "no schema".
  */
 export async function readKitProgress(
@@ -253,7 +253,7 @@ export async function readKitProgress(
   }
   // Validate the shape BEFORE measuring: a schema can parse as JSON yet be
   // structurally wrong in ways that don't throw -- e.g. `fields: "abc"` is
-  // iterable, and `fields: ["abc"]` is an array whose entries getCompletionStats
+  // iterable, and `fields: ["abc"]` is an array whose entries reviewCounts
   // reads properties off without throwing -- either would silently report a bogus
   // % with schemaError=false. Require an actual array of objects (an empty [] is a
   // valid 0% schema). Anything else is a broken extraction, surfaced as schemaError.
@@ -264,14 +264,14 @@ export async function readKitProgress(
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null };
   }
   try {
-    // Belt-and-suspenders: any remaining failure inside getCompletionStats is a
+    // Belt-and-suspenders: any remaining failure inside reviewCounts is a
     // measurable-progress failure (schemaError), never an unhandled rejection
     // that would reject the catalogue-wide Promise.all and wipe every bar.
-    const stats = getCompletionStats(schema);
+    const stats = reviewCounts(schema.fields, undefined);
     return {
       entry,
       reviewPercent: stats.percentage,
-      completeFields: stats.complete,
+      completeFields: stats.reviewed,
       totalFields: stats.total,
       schemaError: false,
       version: versionInfoFromSchema(schema),

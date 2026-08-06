@@ -24,7 +24,11 @@ import re
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[3]
-_PANEL_TSX = _REPO / "schema-editor" / "src" / "components" / "ValidationPanel.tsx"
+# RULE_LABELS moved from ValidationPanel.tsx to the shared lintFindings module
+# when the warnings pane dissolved into embedded findings (sprint-18 C1, bd
+# polyglot-pdf-o7y9) -- the label vocabulary is now consumed by the FieldEditor
+# anchors and the FieldList Form row, not a pane.
+_PANEL_TSX = _REPO / "schema-editor" / "src" / "utils" / "lintFindings.ts"
 
 _LINT_PY = _REPO / "backend" / "services" / "schema_lint.py"
 
@@ -68,12 +72,12 @@ def _backend_rule_ids() -> set[str]:
 
 
 def _panel_labelled_rule_ids() -> set[str]:
-    """The rule ids RULE_LABELS in ValidationPanel.tsx has a label for."""
+    """The rule ids RULE_LABELS in lintFindings.ts has a label for."""
     src = _PANEL_TSX.read_text(encoding="utf-8")
     block = re.search(
         r"const RULE_LABELS: Record<string, string> = \{(.*?)\n\};",
         src, re.DOTALL)
-    assert block, "RULE_LABELS not found in ValidationPanel.tsx"
+    assert block, "RULE_LABELS not found in lintFindings.ts"
     return set(re.findall(r"'([a-z0-9-]+)':", block.group(1)))
 
 
@@ -84,7 +88,7 @@ def test_the_panel_labels_every_rule_the_backend_emits():
 
     unlabelled = sorted(backend - panel - set(_UNLABELLED_OK))
     assert unlabelled == [], (
-        "these lint rules have no human-readable label in ValidationPanel.tsx, "
+        "these lint rules have no human-readable label in lintFindings.ts, "
         f"so a reviewer sees the raw internal id: {unlabelled}. Add them to "
         "RULE_LABELS (or to _UNLABELLED_OK here, with a reason)."
     )
@@ -95,19 +99,19 @@ def test_the_panel_has_no_labels_for_rules_that_no_longer_exist():
     panel = _panel_labelled_rule_ids()
     stale = sorted(panel - backend)
     assert stale == [], (
-        "ValidationPanel.tsx labels rule ids the backend no longer emits: "
+        "lintFindings.ts labels rule ids the backend no longer emits: "
         f"{stale}. A renamed rule leaves its old label behind and the NEW id "
         "renders unlabelled, which is the silent-drift this pins."
     )
 
 
 def _panel_remedy_rule_ids() -> set[str]:
-    """The rule ids RULE_REMEDIES in ValidationPanel.tsx has a remedy for."""
+    """The rule ids RULE_REMEDIES in lintFindings.ts has a remedy for."""
     src = _PANEL_TSX.read_text(encoding="utf-8")
     block = re.search(
         r"export const RULE_REMEDIES: Record<string, string> = \{(.*?)\n\};",
         src, re.DOTALL)
-    assert block, "RULE_REMEDIES not found in ValidationPanel.tsx"
+    assert block, "RULE_REMEDIES not found in lintFindings.ts"
     return set(re.findall(r"'([a-z0-9-]+)':", block.group(1)))
 
 

@@ -457,7 +457,7 @@ async def test_resume_initiating_message_carries_field1_guidance():
 @pytest.mark.asyncio
 async def test_initiating_message_resolves_field_from_hint_not_position():
     """The rendered field is the one the HINT points at, NOT schema['fields'][0].
-    This is the Codex PR #254 fix: on a mid-form spoken-language change the current
+    This is the Codex PR #254 fix: on a mid-form RECONNECT the current
     field is field N (held in _dti_extra_fields), while schema['fields'][0] is the
     stale handshake field 1; rendering fields[0] would inject the WRONG field_id and
     the static SI tells the model to copy that stale id. Would FAIL against the old

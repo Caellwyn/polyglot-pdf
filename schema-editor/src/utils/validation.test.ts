@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkFieldComplete, getCompletionStats, validateSchema } from './validation';
+import { checkFieldComplete, validateSchema } from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
 // Minimal valid field; override per test. read_only/pdf_field_name are the
@@ -341,79 +341,5 @@ describe('checkFieldComplete position diagnostics (bd g63j)', () => {
       ...complete, pdf_position: { ...rect, page: 7 },
     } as Partial<FormField>);
     expect(checkFieldComplete(offDoc, 0).reviewReasons).toEqual([]);
-  });
-});
-
-describe('getCompletionStats reflects human review status (bd u8t6)', () => {
-  const complete = { spoken_name: 'spoken', help: { instructions: 'Done.' } };
-
-  it('counts a reviewed_correct auto-amber field as complete', () => {
-    // A bare field is auto-amber (no spoken name / help). Signing it off should
-    // move it from needsReview into complete, matching the FieldList green icon.
-    const stats = getCompletionStats(schemaWith([
-      field('amber', { _review: { status: 'reviewed_correct' } } as Partial<FormField>),
-    ]));
-    expect(stats).toMatchObject({ complete: 1, needsReview: 0, total: 1, percentage: 100 });
-  });
-
-  it('counts a needs_followup field as needs-review even when auto-complete', () => {
-    const stats = getCompletionStats(schemaWith([
-      field('ok', { ...complete, _review: { status: 'needs_followup' } } as Partial<FormField>),
-    ]));
-    expect(stats).toMatchObject({ complete: 0, needsReview: 1, total: 1 });
-  });
-
-  it('never counts a real ERROR field as complete, even when reviewed_correct', () => {
-    // No pdf_field_name -> local ERROR. A sign-off must not green it in the stats
-    // any more than in the list icon (error always wins).
-    const stats = getCompletionStats(schemaWith([
-      field('broken', {
-        ...complete, pdf_field_name: undefined,
-        _review: { status: 'reviewed_correct' },
-      } as Partial<FormField>),
-    ]));
-    expect(stats).toMatchObject({ complete: 0, needsReview: 0, total: 1 });
-  });
-
-  it('un-reviewed fields count as needs-review however clean (bd g63j)', () => {
-    // Both fields are un-reviewed -- one machine-spotless, one auto-amber. The
-    // progress figure answers "how much has a HUMAN reviewed?", so: 0%.
-    const stats = getCompletionStats(schemaWith([
-      field('done', complete as Partial<FormField>),
-      field('amber', {} as Partial<FormField>),
-    ]));
-    expect(stats).toMatchObject({ complete: 0, needsReview: 2, total: 2, percentage: 0 });
-  });
-
-  it('the percentage tracks sign-off progress (bd g63j)', () => {
-    const stats = getCompletionStats(schemaWith([
-      field('signed', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
-      field('untouched', complete as Partial<FormField>),
-    ]));
-    expect(stats).toMatchObject({ complete: 1, needsReview: 1, total: 2, percentage: 50 });
-  });
-});
-
-describe('getCompletionStats honours the guidance-ack gate (bd anim)', () => {
-  const complete = { spoken_name: 'spoken', help: { instructions: 'Done.' } };
-
-  it('a reviewed_correct field needing a guidance ack is NOT complete', () => {
-    // The FieldList renders this row amber (effectiveStatus demotes an
-    // un-acknowledged drift even over an explicit sign-off), so the kit-wide %
-    // must agree -- otherwise the progress dashboard reports a gated kit as
-    // done while its own field list shows amber (fresh-eyes, closeout round 1).
-    const stats = getCompletionStats(schemaWith([
-      field('drifted', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
-      field('fine', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
-    ]), new Set(['drifted']));
-    expect(stats).toMatchObject({ complete: 1, needsReview: 1, total: 2, percentage: 50 });
-  });
-
-  it('an empty or omitted gate set leaves the counts unchanged', () => {
-    const fields = [
-      field('signed', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
-    ];
-    expect(getCompletionStats(schemaWith(fields)).complete).toBe(1);
-    expect(getCompletionStats(schemaWith(fields), new Set()).complete).toBe(1);
   });
 });

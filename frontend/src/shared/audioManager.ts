@@ -55,13 +55,6 @@ export interface AudioManager {
 	// loop) rather than a subscription, because the only consumer is an avatar
 	// that already animates per-frame.
 	getOutputEnergy: () => number
-	// Diagnostic snapshot of the playback backlog (bd polyglot-pdf-0rpu): how far
-	// ahead of "now" the scheduling cursor sits (seconds of already-scheduled,
-	// not-yet-played audio), how many sources are still live, and whether
-	// playback is blocked. Read at tool-response time to attribute a wrong
-	// read-back: large aheadSec = stale CLIENT audio playing late; ~0 = whatever
-	// was heard came fresh from the model.
-	getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean }
 	destroy: () => void
 }
 
@@ -187,7 +180,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let blockedDiscardCount = 0
 
 	// Flag to suppress onended callbacks during flush (prevents spurious watchdog triggers)
-	let isFlushing = false
 
 	// Track if Gemini is currently speaking (for barge-in detection)
 	let geminiIsSpeaking = false
@@ -229,17 +221,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 * feed either into the same visualisation. Returns 0 when nothing is playing,
 	 * so a consumer polling every frame does not need its own silence check.
 	 */
-	// Diagnostic playback-backlog snapshot (bd polyglot-pdf-0rpu). Pure read --
-	// no side effects; safe to call from any handler.
-	function getPlaybackBacklog(): { aheadSec: number; activeSources: number; blocked: boolean } {
-		const ctx = nodes.playbackContext
-		return {
-			aheadSec: ctx ? Math.max(0, playbackTime - ctx.currentTime) : 0,
-			activeSources: activeAudioSources.length,
-			blocked: playbackBlocked,
-		}
-	}
-
 	function getOutputEnergy(): number {
 		if (!geminiIsSpeaking || !outputAnalyser || !outputBuf) return 0
 		outputAnalyser.getByteTimeDomainData(outputBuf)
@@ -533,8 +514,8 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// Capture the drain epoch BEFORE the awaitable section: a chunk parked
 			// on the resume() await when a drain (resetPlaybackClock /
 			// flushAudioQueue) lands belongs to the DEAD generation and must not
-			// schedule after the drain returns (Opus fresh-eyes gap 3, bd s7uf).
-			// SCOPE (Opus outer review): the suspended-resume window only opens on
+			// schedule after the drain returns (bd s7uf).
+			// SCOPE: the suspended-resume window only opens on
 			// the manual-VAD tentative-pause path -- native VAD never suspends, so
 			// there this guard is a no-op by design. The native-VAD ordering
 			// hazard lives a layer up and is owned by the WS
@@ -616,11 +597,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				// Only mark as not speaking if no more active sources
 				if (activeAudioSources.length === 0) {
 					geminiIsSpeaking = false
-					
+
 					// CRITICAL: Only notify activity watchdog when ALL chunks finished playing naturally
-					// Do NOT fire callback during flush (barge-in) - that would spam the watchdog
-					// This is used for Level 3 farewell disconnect timing (100ms audio silence detection)
-					if (!isFlushing && window.vffOnAudioPlaybackEnd) {
+					// Do NOT fire callback during flush (barge-in) -- a drained source never
+					// reaches this handler at all (the drain swaps in a narrowed onended),
+					// so this fires only for natural playback ends. Used for Level 3
+					// farewell disconnect timing (100ms audio silence detection).
+					if (window.vffOnAudioPlaybackEnd) {
 						window.vffOnAudioPlaybackEnd()
 					}
 				}
@@ -667,22 +650,25 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	function resetPlaybackClock(): void {
 		// Invalidate chunks parked on an await inside playAudio (the
 		// suspended-context resume window): they belong to the generation being
-		// drained (Opus fresh-eyes gap 3, bd s7uf).
+		// drained (bd s7uf).
 		playbackEpoch++
 
-		// Set flag to suppress onended callbacks during flush
-		isFlushing = true
-
-		// Stop all active audio sources. Detach onended FIRST: stop() delivers
-		// onended on a LATER task, when isFlushing is already false again -- so
-		// without the detach every drained source would fire
-		// window.vffOnAudioPlaybackEnd, and under native VAD that is every
-		// barge-in (Opus outer review). A drained source is not a playback end;
-		// detaching keeps useGeminiSpeaking's documented "flush fires no end
-		// event" contract true.
+		// Stop all active audio sources. Swap in a NARROWED onended first:
+		// stop() delivers onended on a LATER task (no synchronous flag can
+		// suppress it), so a drained source must carry a handler that keeps the
+		// clock-repair responsibility -- playbackTime catch-up when the context
+		// clock moved past a stale cursor, e.g. across a suspended window --
+		// but never fires window.vffOnAudioPlaybackEnd: a drained source is not
+		// a natural playback end. Array
+		// cleanup is unnecessary here (the array is cleared below).
 		activeAudioSources.forEach(source => {
 			try {
-				source.onended = null
+				source.onended = () => {
+					const ctx = nodes.playbackContext
+					if (ctx && playbackTime < ctx.currentTime) {
+						playbackTime = ctx.currentTime
+					}
+				}
 				source.stop()
 				source.disconnect()
 			} catch (e) {
@@ -699,9 +685,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		}
 
 		geminiIsSpeaking = false
-
-		// Clear flag after flush completes
-		isFlushing = false
 	}
 
 	/**
@@ -978,7 +961,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setNativeVad,
 		setEnergyCallback,
 		getOutputEnergy,
-		getPlaybackBacklog,
 		destroy,
 	}
 }

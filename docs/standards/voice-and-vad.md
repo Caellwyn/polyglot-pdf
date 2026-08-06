@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-16 (bd polyglot-pdf-yo5t: new "Pause / unpause" section -- the debounced post-unpause level-1 re-prompt, its cancel/fire guards, and the recovery_prompt channel's first production caller; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
+*Last updated: 2026-08-05 (bd polyglot-pdf-s7uf: the Barge-in section now describes the FORWARDED `interrupted` WS message + two-hold client drain via `resetPlaybackClock` -- the adapter no longer swallows the event; the native-VAD delta note carries the measured backlog numbers.) Prior: 2026-08-04 (bd polyglot-pdf-87a9: the spoken language is PINNED per session -- a new SPEC section under "fill-language vs spoken-language" states that mid-conversation switching is unsupported, that the ONLY change path is a new session ("clear form" -> language modal), and that `change_spoken_language` is now a misnomer whose only live sender is the reconnect opener re-asserting the SAME pinned language. The dead UI switchers (`handleLanguageChange` in both overlays, `connectionManager.changeSpokenLanguage`) were removed.) Prior: 2026-07-16 (bd polyglot-pdf-yo5t: new "Pause / unpause" section -- the debounced post-unpause level-1 re-prompt, its cancel/fire guards, and the recovery_prompt channel's first production caller; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -232,10 +232,17 @@ latency metrics are collected in metrics.ts (local-only — see
 When the user starts talking while Gemini is speaking, the frontend
 (`connection.ts` `onVADSpeechStart`) immediately flushes its local audio queue
 (`audioManager.flushAudioQueue()`) for instant UX. The backend separately watches
-Gemini's own `server_content.interrupted` flag, but on it the adapter only **logs
-`GEMINI_INTERRUPTED`, resets its audio tracking, and skips the event** — it does
-**not** send any flush signal back to the client (there is no server sentinel; the
-flush is entirely frontend-side). See [voice-ai.md](../components/voice-ai.md#barge-in).
+Gemini's own `server_content.interrupted` flag and **forwards it to the client
+as a `{"type": "interrupted"}` WS message** (bd polyglot-pdf-s7uf; adapter
+`_on_interrupted` -> `callback_handler.on_interrupted`, same detect-and-forward
+discipline as `go_away`). The client reacts by clearing BOTH its audio holds:
+`webFormConnection` empties the staging `audioQueue`, then
+`audioManager.resetPlaybackClock()` stops the scheduled sources and resets the
+playback clock **without setting `playbackBlocked`** (the model speaks a NEW
+generation on the same connection, so an unpaired block would kill it -- the
+nm7z trap; `flushAudioQueue` keeps the blocking behavior for the
+pause/section-switch paths and delegates the drain).
+See [voice-ai.md](../components/voice-ai.md#barge-in).
 **Push-to-talk mode** (`setPushToTalkMode(true)`, the default in `VoiceOverlay`)
 disables the energy-based barge-in path entirely (`onVADSpeechStart`/`End`
 early-return).
@@ -243,9 +250,11 @@ early-return).
 > **Native VAD mode delta (bd polyglot-pdf-333).** In native mode
 > (`DISABLE_GEMINI_VAD=False`, the default) `onVADSpeechStart` early-returns on the
 > `nativeVad` flag, so the **instant client-side flush is disabled** — Gemini owns
-> interruption via its own `server_content.interrupted`. Barge-in latency is then
-> Gemini's interrupt round-trip rather than instant; this is an accepted UX delta
-> for the smoke test.
+> interruption via its own `server_content.interrupted`, and the forwarded
+> `interrupted` message (above) is what drains the client. Barge-in latency is
+> Gemini's interrupt round-trip rather than instant; measured on the RUDE
+> harness arm, the drain cut stale playback backlog at field updates from mean
+> 1.10s to 0.14s (bd s7uf; the wire-order fix is part of that bundle).
 
 There's a barge-in **grace period**: tool calls arriving within
 `BARGE_IN_GRACE_PERIOD_MS` (150ms, a constant in
@@ -322,9 +331,52 @@ Two independent language axes — don't conflate them:
 
 - **fill-language** — the language values are written into the form in. Changed via
   `change_fill_language` (`service.change_fill_language`); defaults to `English`.
-- **spoken-language** — the language Gemini *converses* in. Changed via
-  `change_spoken_language`, which makes the backend send an *initiating message* so
-  Gemini greets and resumes in the new language.
+- **spoken-language** — the language Gemini *converses* in. **PINNED for the whole
+  form.** See the rule below; the two axes differ here, and that asymmetry is
+  deliberate: fill-language is data, spoken-language is session config.
+
+### SPEC: the spoken language is pinned per session (maintainer policy)
+
+**Mid-conversation language switching is NOT supported.** The spoken language is
+chosen once, before the form starts, and held for every turn of that session:
+
+- The **system instruction** tells the model the language is fixed for the whole
+  form, and to answer a user who asks to switch by explaining they would need to
+  start over via the control that clears the form. **The SI describes that
+  control by what it DOES and must never name it** -- the on-screen label is
+  translated per session language (`frontend/src/demo/overlayTranslations.ts`;
+  Spanish shows "Borrar formulario"), so an English label in the SI would have
+  the model name a button the user cannot see. That is the bd polyglot-pdf-s863
+  defect, which the disclaimer path solves differently -- by threading the
+  client's TRANSLATED label through `{agree_button_label}`. There is no such
+  placeholder here (this clause is static SI, not a per-turn template), hence the
+  describe-don't-name rule.
+  (The SI previously said the opposite of the whole policy -- "only the user's
+  explicit request to switch changes the session language" -- which told the
+  model to honor a switch the app cannot service; bd polyglot-pdf-87a9.)
+- The user picks it in `LanguageSelectionModal` — a one-time entry gate, bound only
+  to `handleInitialLanguageSelect` in both overlays.
+- It is pinned into the per-connect Gemini config (the ASR `language_codes` bias,
+  `backend/utils/language_codes.py`) and into the system instruction, at session
+  start. The model is expected to hold it for the entire form.
+- **The only way to change it is a NEW session:** "clear form", then choose again
+  in the modal.
+
+So a session's spoken language never changes after it starts. Code that assumes
+otherwise is wrong, not merely unused.
+
+**`change_spoken_language` is a misnomer for what it now does.** The WS message
+survives, but its ONLY live sender is `webFormConnection`'s reconnect opener
+(`webFormConnection.ts`, the `session_ready` path), which **re-asserts the SAME
+pinned language** after a socket teardown — a section switch or a reconnect drops
+the Gemini session, and the opener re-establishes the language and the current
+field. It is a re-assertion, not a switch. The backend handler
+(`websocket_routes.py`) correspondingly re-sends the initiating message.
+
+The UI paths that once switched language on a live session
+(`handleLanguageChange` in both overlays, `connectionManager.changeSpokenLanguage`)
+were **removed** in bd polyglot-pdf-87a9: they were wired to nothing, but their
+presence implied a supported flow that does not exist.
 
 ## Hallucination reduction
 

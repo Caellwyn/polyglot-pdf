@@ -92,6 +92,8 @@ def test_confirmation_event_mirrors_to_firestore(fake_db):
         field_id="p1_line1_aliennumber",
         field_name=None,
         confirmation_method="verbal",
+        kit_id="i-90",
+        edition_date="01/20/25",
     )
     cl.flush_confirmation_sink()  # drain the background writer
 
@@ -100,10 +102,14 @@ def test_confirmation_event_mirrors_to_firestore(fake_db):
     doc = added[0]
     # ALLOWLIST: exactly these keys, nothing else -- a `value` key appearing
     # here would be a PII regression (pin-with-allowlist, never a blacklist).
+    # kit_id + edition_date joined under bd polyglot-pdf-47r3: both are form
+    # METADATA (which kit, which government edition), never user data.
     assert set(doc) == {
         "timestamp",
         "event",
         "form_id",
+        "kit_id",
+        "edition_date",
         "form_session_id",
         "field_id",
         "field_name",
@@ -112,6 +118,29 @@ def test_confirmation_event_mirrors_to_firestore(fake_db):
     assert doc["event"] == "field_confirmed"
     assert doc["form_session_id"] == "fss_test_1"
     assert doc["confirmation_method"] == "verbal"
+    assert doc["kit_id"] == "i-90"
+    assert doc["edition_date"] == "01/20/25"
+
+
+def test_confirmation_event_keys_present_even_when_unset(fake_db):
+    """An older client omitting kit_id/edition_date still yields a uniform shape.
+
+    The keys are always written (as None) so every record has the same shape and
+    a query cannot silently skip pre-47r3 sessions -- and so a missing edition
+    reads as 'not recorded', never as a different edition.
+    """
+    cl.log_field_confirmation(
+        form_id="I-90",
+        form_session_id="fss_legacy_1",
+        field_id="f1",
+        field_name=None,
+        confirmation_method="verbal",
+    )
+    cl.flush_confirmation_sink()
+
+    doc = fake_db.collections[cl._FIRESTORE_COLLECTION].added[0]
+    assert doc["kit_id"] is None
+    assert doc["edition_date"] is None
 
 
 def test_session_lifecycle_events_mirror_too(fake_db):
@@ -333,3 +362,73 @@ def test_read_falls_back_to_file_when_firestore_empty(fake_db, tmp_path, monkeyp
     events = cl.read_confirmation_log("fss_test_6")
     assert len(events) == 1
     assert events[0]["event"] == "field_confirmed"
+
+
+# --- revision marker fallback (bd polyglot-pdf-47r3) --------------------------
+#
+# A disputed filing must pin WHICH revision of the form the client confirmed
+# against. A government edition_date is the right answer for an official form,
+# but a CUSTOM form (a firm's own intake sheet -- the firm-tier case) has none,
+# and recording nothing would leave those confirmations unable to pin anything.
+
+
+_SCHEMA = {
+    "fields": [
+        {"id": "a", "type": "text"},
+        {"id": "b", "type": "select",
+         "options": [{"value": "x"}, {"value": "y"}]},
+    ]
+}
+
+
+def test_government_edition_wins_over_the_fingerprint():
+    assert cl.resolve_edition_marker("12/2024", _SCHEMA) == "12/2024"
+
+
+def test_blank_edition_falls_back_to_the_fingerprint():
+    """A whitespace-only edition must not be recorded AS an edition."""
+    marker = cl.resolve_edition_marker("   ", _SCHEMA)
+    assert marker.startswith("sha256:")
+
+
+def test_fingerprint_is_stable_for_one_revision():
+    assert (cl.resolve_edition_marker(None, _SCHEMA)
+            == cl.resolve_edition_marker(None, _SCHEMA))
+
+
+def test_fingerprint_moves_when_the_answerable_shape_changes():
+    """Adding a field, retyping one, or changing an option VALUE is a revision."""
+    base = cl.resolve_edition_marker(None, _SCHEMA)
+
+    added = {"fields": _SCHEMA["fields"] + [{"id": "c", "type": "text"}]}
+    retyped = {"fields": [{"id": "a", "type": "date"}, _SCHEMA["fields"][1]]}
+    reoptioned = {"fields": [
+        _SCHEMA["fields"][0],
+        {"id": "b", "type": "select",
+         "options": [{"value": "x"}, {"value": "DIFFERENT"}]},
+    ]}
+
+    assert cl.resolve_edition_marker(None, added) != base
+    assert cl.resolve_edition_marker(None, retyped) != base
+    assert cl.resolve_edition_marker(None, reoptioned) != base
+
+
+def test_fingerprint_ignores_prose_edits():
+    """A label/guidance typo fix must NOT read as a new revision.
+
+    Otherwise every copy edit would look like a form change in the audit trail,
+    and the marker would stop meaning anything.
+    """
+    base = cl.resolve_edition_marker(None, _SCHEMA)
+    reworded = {"fields": [
+        {"id": "a", "type": "text", "label": "Totally rewritten prose",
+         "help": {"instructions": "new guidance"}},
+        _SCHEMA["fields"][1],
+    ]}
+
+    assert cl.resolve_edition_marker(None, reworded) == base
+
+
+def test_no_edition_and_no_schema_yields_none():
+    assert cl.resolve_edition_marker(None, None) is None
+    assert cl.resolve_edition_marker(None, {"fields": []}) is None

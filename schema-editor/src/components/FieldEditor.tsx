@@ -16,10 +16,12 @@ import {
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
-import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
-  from '../utils/reviewStatus';
+import { getReview, newFindingsSinceReview, withGuidanceAck, withReviewNote,
+  withReviewStatus } from '../utils/reviewStatus';
 import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
   from '../utils/guidanceStaleness';
+import { propertyAnchor, resolveOptionIndex, ruleLabel, RULE_REMEDIES }
+  from '../utils/lintFindings';
 import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
@@ -64,9 +66,11 @@ interface FieldEditorProps {
   // box to a group. Optional -- provided only in hosted author mode on an open
   // kit; when absent the picker is not offered (local mode has no backend dump).
   onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
-  // Backend lint findings anchored to THIS field (lifted from the
-  // ValidationPanel's report by App), shown as a banner so the author sees why
-  // a field is flagged while editing it (bd polyglot-pdf-0x10.6).
+  // Backend lint findings anchored to THIS field (lifted from the strip's
+  // report by App), rendered at the PROPERTY each one names -- Instructions,
+  // an option row, the condition builders -- with the banner as the home for
+  // the field-anchored residue (sprint-18 C1; formerly all-banner, bd
+  // polyglot-pdf-0x10.6).
   lintFindings?: LintFinding[];
   // The loaded PDF's page count (bd polyglot-pdf-g63j) so the flagged-reasons
   // banner can name a field claiming a page the document does not have.
@@ -256,6 +260,43 @@ const FormMetadataEditor: React.FC<{
   );
 };
 
+// Findings rendered AT the property they concern (sprint-18 C1, decision 1):
+// the warnings pane is gone, so a finding about the Instructions box, an
+// option row, or a condition renders directly under that control -- label,
+// plain message, and the imperative remedy line (RULE_REMEDIES, authored by
+// the C12 copy pass for exactly this surface).
+const EmbeddedFindings: React.FC<{
+  findings: LintFinding[];
+  anchor: string;
+}> = ({ findings, anchor }) => {
+  if (findings.length === 0) return null;
+  const hasError = findings.some(f => f.severity === 'ERROR');
+  return (
+    <div
+      className={`mt-1 rounded-md border p-2 space-y-1 ${
+        hasError ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+      }`}
+      role="alert"
+      data-embedded-finding={anchor}
+      data-testid={`embedded-findings-${anchor}`}
+    >
+      {findings.map((f, i) => {
+        const label = ruleLabel(f.rule);
+        const remedy = f.rule ? RULE_REMEDIES[f.rule] : undefined;
+        return (
+          <div key={`${f.rule}|${f.path}|${i}`} className="text-xs space-y-0.5">
+            <div className={f.severity === 'ERROR' ? 'text-red-700' : 'text-amber-800'}>
+              {label && <span className="font-medium">{label}: </span>}
+              {f.message}
+            </div>
+            {remedy && <div className="text-gray-600">{remedy}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // Human review sign-off + notes for the selected field (bd polyglot-pdf-u8t6).
 // Distinct from the AUTOMATIC "Why this field is flagged" banner above: this is
 // where an editor records THEIR judgment -- mark an auto-amber field
@@ -284,9 +325,39 @@ const FieldReviewEditor: React.FC<{
   // Why ignoring is currently refused (required / has dependents), or null when
   // it is allowed. Drives the disabled option + its inline explanation.
   ignoreBlocked?: string | null;
-}> = ({ field, onUpdateField, onIgnoreField, ignoreBlocked }) => {
+  // The field's current lint findings (sprint-18 C1): marking reviewed_correct
+  // is the SIGN-OFF, which stamps their fingerprints into
+  // _review.seen_fingerprints -- the timeliness rule's baseline. Pass what is
+  // in hand; undefined (no report) stamps the empty set, so later findings
+  // honestly count as new.
+  lintFindings?: LintFinding[];
+}> = ({ field, onUpdateField, onIgnoreField, ignoreBlocked, lintFindings }) => {
   const review = getReview(field);
   const [ignoreError, setIgnoreError] = React.useState<string | null>(null);
+  // The field is signed off, but a finding has appeared since -- so the
+  // effective status is amber while the STORED status still reads
+  // reviewed_correct (the demotion is a derivation, never a stored write).
+  // Drives the re-confirm control below (Opus outer review, pass 9).
+  //
+  // NOT offered while a lint ERROR is anchored to the field (pass 10): red
+  // wins over the timeliness clause in effectiveStatus AND in
+  // isCountedReviewed, so re-stamping there would change nothing visible --
+  // a success-shaped no-op that teaches the reviewer the control is
+  // unreliable. An ERROR is fixed, never confirmed away.
+  // Scoped ONCE and used for every read AND write below: the prop type
+  // invites a whole-schema list, and this is the one WRITE path (the sign-off
+  // stamps seen_fingerprints), so an unscoped list would persist another
+  // field's fingerprints here -- permanently masking a genuine later finding
+  // that happens to match one. The read paths in this file were hardened the
+  // same way in earlier rounds; this closes the last seam (second confirming
+  // review).
+  const ownFindings = React.useMemo(
+    () => (lintFindings ?? []).filter(f => f.field_id === field.id),
+    [lintFindings, field.id],
+  );
+  const hasErrorFinding = ownFindings.some(f => f.severity === 'ERROR');
+  const staleSignoff = !hasErrorFinding
+    && newFindingsSinceReview(field, ownFindings);
 
   const handleStatusChange = (value: string) => {
     setIgnoreError(null);
@@ -305,7 +376,8 @@ const FieldReviewEditor: React.FC<{
       if (reason) setIgnoreError(reason);
       return;
     }
-    onUpdateField(withReviewStatus(field, value as FieldReviewStatus));
+    onUpdateField(
+      withReviewStatus(field, value as FieldReviewStatus, ownFindings));
   };
 
   return (
@@ -336,6 +408,32 @@ const FieldReviewEditor: React.FC<{
           confirmation under Instructions. A real error (red) always stays red
           until fixed.
         </p>
+        {/* The EXIT from the timeliness demotion (Opus outer review, pass 9).
+            A finding that appeared after the sign-off sends the field back to
+            needs-review, but the stored status is still reviewed_correct --
+            so the <select> above already reads "Reviewed - correct" and
+            re-picking it fires no change event. Without this the field is
+            permanently amber with no control that can clear it, which is the
+            dead end the ack gate had one layer down. Re-signing off re-stamps
+            seen_fingerprints with what is on screen NOW. */}
+        {staleSignoff && (
+          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2">
+            <p className="text-xs text-amber-900">
+              New problems have been found on this field since it was marked
+              reviewed, so it is back in the "to review" count. Read them
+              above, then confirm you have seen them.
+            </p>
+            <button
+              type="button"
+              className="btn-sm btn-primary mt-1"
+              data-testid="reconfirm-review"
+              onClick={() => onUpdateField(
+                withReviewStatus(field, 'reviewed_correct', ownFindings))}
+            >
+              I have seen these -- still reviewed
+            </button>
+          </div>
+        )}
         {onIgnoreField && ignoreBlocked && (
           <p className="text-xs text-gray-500 mt-1">{ignoreBlocked}</p>
         )}
@@ -666,6 +764,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   ignoreBlocked,
   onRegenerateGuidance,
 }) => {
+  // For the header chip's scroll-to-first-finding (sprint-18 C1). Declared
+  // unconditionally, before the no-field early return, per the rules of hooks.
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
     // version/edition/OMB/expiration are reachable without picking a field.
@@ -676,72 +778,148 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     onUpdateField({ ...field, ...updates });
   };
 
+  // Bucket this field's findings by the PROPERTY they concern (sprint-18 C1,
+  // decision 1): the finding paths already name it, so each renders under the
+  // control it is about instead of in a detached list. The staleness finding
+  // (GUIDANCE_STALE_RULE) is excluded here -- its rendering IS the dedicated
+  // amber ack-gate box under Instructions, which also owns its acked-state
+  // suppression (bd hii0).
+  const anchored: {
+    instructions: LintFinding[];
+    details: LintFinding[];
+    conditions: LintFinding[];
+    field: LintFinding[];
+    byOption: Map<number, LintFinding[]>;
+  } = {
+    instructions: [], details: [], conditions: [], field: [],
+    byOption: new Map(),
+  };
+  const optionValues = (field.options ?? []).map(o =>
+    o.value !== undefined ? String(o.value) : undefined);
+  // The Options block below renders only for these types -- an option bucket
+  // on any OTHER options-carrying field (backend lint checks options[] on
+  // every field regardless of type) would be counted by the chip yet render
+  // nowhere, the same homeless class the Form-row fix closed (fresh-eyes
+  // round 3). Those findings fall to the banner instead.
+  const optionsBlockRenders = field.type === 'select'
+    || field.type === 'radio' || field.type === 'checkbox_group';
+  for (const f of lintFindings ?? []) {
+    // Scope to THIS field: the sole caller passes a pre-scoped array, but the
+    // prop type invites a whole-schema list, and anchoring another field's
+    // finding at this field's controls would mis-locate the problem (same
+    // hazard the gate lookup below guards against -- fresh-eyes, closeout
+    // round 1).
+    if (f.field_id !== field.id) continue;
+    if (f.rule === GUIDANCE_STALE_RULE) continue;
+    const a = propertyAnchor(f);
+    if (a.kind === 'options') {
+      // The token may be an option INDEX (schema_lint's option rules) or an
+      // option VALUE (the translation-flag writers) -- resolveOptionIndex
+      // disambiguates per rule. An unresolvable token (option gone mid-edit,
+      // ambiguous value) -- or a field whose Options block never renders --
+      // falls back to the field bucket rather than rendering nowhere or at a
+      // wrong row.
+      const idx = optionsBlockRenders && a.optionToken !== undefined
+        ? resolveOptionIndex(optionValues, f, a.optionToken)
+        : undefined;
+      if (idx !== undefined) {
+        const bucket = anchored.byOption.get(idx);
+        if (bucket) bucket.push(f);
+        else anchored.byOption.set(idx, [f]);
+      } else {
+        anchored.field.push(f);
+      }
+    } else if (a.kind === 'field') {
+      anchored.field.push(f);
+    } else {
+      anchored[a.kind].push(f);
+    }
+  }
+  const embeddedCount =
+    anchored.instructions.length + anchored.details.length
+    + anchored.conditions.length
+    + [...anchored.byOption.values()].reduce((n, b) => n + b.length, 0);
+  // Scoped to THIS field like the bucketing loop above -- an unscoped count
+  // let another field's ERROR turn this field's chip red ("N to fix") when a
+  // caller passes a multi-field list (fresh-eyes round 1).
+  const anchoredErrorTotal = (lintFindings ?? [])
+    .filter(f => f.field_id === field.id
+      && f.rule !== GUIDANCE_STALE_RULE && f.severity === 'ERROR').length;
+  const anchoredTotal = embeddedCount + anchored.field.length;
+
   return (
-    <div className="h-full overflow-auto custom-scrollbar">
+    <div className="h-full overflow-auto custom-scrollbar" ref={rootRef}>
       <div className="p-4 space-y-6">
         {/* Header. key={field.id} remounts the id editor on rename/selection
             change so its draft state never leaks across fields. */}
         <div className="border-b border-gray-200 pb-4">
-          {onRenameField ? (
-            <FieldIdHeader key={field.id} fieldId={field.id} onRenameField={onRenameField} />
-          ) : (
-            <h3 className="text-lg font-semibold text-gray-900">{field.id}</h3>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            {onRenameField ? (
+              <FieldIdHeader key={field.id} fieldId={field.id} onRenameField={onRenameField} />
+            ) : (
+              <h3 className="text-lg font-semibold text-gray-900">{field.id}</h3>
+            )}
+            {/* The field's finding count as a CONTROL (sprint-18 C1): click
+                scrolls to the first finding, which renders at the property it
+                concerns. */}
+            {anchoredTotal > 0 && (
+              <button
+                type="button"
+                data-testid="field-findings-chip"
+                className={`shrink-0 text-[11px] font-semibold rounded-full px-2 py-0.5 border ${
+                  anchoredErrorTotal > 0
+                    ? 'bg-red-100 text-red-700 border-red-200'
+                    : 'bg-amber-100 text-amber-800 border-amber-200'
+                }`}
+                title="Jump to the first finding on this field"
+                onClick={() => {
+                  // Prefer a property-anchored finding; the advisory banner is
+                  // only the fallback. A combined selector resolved in DOCUMENT
+                  // order, and the banner (rendered above every anchor, often
+                  // for advisory reasons the chip did not count) swallowed the
+                  // scroll whenever it existed (fresh-eyes round 3).
+                  const target =
+                    rootRef.current?.querySelector('[data-embedded-finding]')
+                    ?? rootRef.current?.querySelector('[data-testid="field-problems"]');
+                  target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              >
+                {anchoredErrorTotal > 0
+                  ? `${anchoredTotal} to fix`
+                  : `${anchoredTotal} notice${anchoredTotal !== 1 ? 's' : ''}`}
+              </button>
+            )}
+          </div>
           <p className="text-sm text-gray-500 font-mono">{field.pdf_field_name}</p>
         </div>
 
         {/* Why this field is flagged (bd polyglot-pdf-0x10.6): the list's red X /
-            amber clock and the bottom strip's findings, explained AT the field.
-            Local completeness errors + backend lint findings; hidden when clean.
+            amber clock, explained AT the field. Since sprint-18 C1 this banner
+            carries only what has no property home -- the local completeness
+            errors/reasons (the advisory WHY-list) and the FIELD-anchored lint
+            findings (no backing widget, review-state rules). A finding about a
+            specific property (Instructions, an option row, a condition)
+            renders UNDER that control instead, where the fix happens.
             Severity-aware styling (bd polyglot-pdf-6hhc): ERROR-class findings
             (and local completeness errors, which ARE errors) render red to
             match FieldList.getFieldStatus's red row; WARNING-class findings
-            render amber -- a WARNING-only field showed a green row but a red
-            banner before this. */}
+            render amber. */}
         {(() => {
           const completeness = checkFieldComplete(field, pageCount);
           const errors = [
             ...completeness.errors,
-            ...(lintFindings ?? [])
+            ...anchored.field
               .filter(f => f.severity === 'ERROR')
               .map(f => f.message),
           ];
-          // An ACKNOWLEDGED staleness finding is no longer a reason the field
-          // is flagged (bd polyglot-pdf-hii0). Post-ack every other surface
-          // agrees the field is clear -- FieldList paints the row green,
-          // the Instructions textarea drops its amber ring, getCompletionStats
-          // counts it complete -- but the banner kept repeating an instruction
-          // ("confirm it still reads correctly BEFORE MARKING THE FIELD
-          // REVIEWED") the human had just carried out two inches below. The
-          // reviewer could not tell whether their click registered, which
-          // trains exactly the click-through-the-gate habit the feature exists
-          // to prevent. The ack pins the CURRENT identity, so the next drift
-          // moves that identity and the line returns on its own.
-          const ackedIdentity = currentIdentity(lintFindings, field.id);
-          // Suppress when the ack covers the current identity -- OR when there
-          // is no parseable identity at all. The latter is the FAIL-OPEN case
-          // needsGuidanceAck and the gate control below both already take: with
-          // nothing to pin an ack to, the row stays green and no checkbox
-          // renders. Without matching it here the banner alone would show an
-          // amber warning next to a green row and no control to act on it --
-          // re-creating, on this very surface, the cross-surface contradiction
-          // hii0 exists to remove (Opus outer review, pass 2). Unreachable from
-          // today's contract-pinned backend, like the g5vj parse it pairs with.
-          const staleAcked = ackedIdentity === undefined
-            || isAcknowledged(field, ackedIdentity);
           const warnings = [
-            // The automatic amber reasons (bd polyglot-pdf-g63j): the banner
-            // used to show only errors + lint, so a field flagged amber in the
-            // list -- e.g. a named widget with no drawable position -- gave no
-            // explanation in the pane the author is actually editing in.
+            // The automatic amber reasons (bd polyglot-pdf-g63j): a field
+            // flagged amber in the list -- e.g. a named widget with no
+            // drawable position -- is explained in the pane the author is
+            // actually editing in.
             ...completeness.reviewReasons,
-            ...(lintFindings ?? [])
+            ...anchored.field
               .filter(f => f.severity !== 'ERROR')
-              // Scope the suppression to THIS field's staleness finding and to
-              // that rule alone: no other finding's banner behavior changes.
-              .filter(f => !(staleAcked
-                && f.rule === GUIDANCE_STALE_RULE
-                && f.field_id === field.id))
               .map(f => f.message),
           ];
           if (errors.length === 0 && warnings.length === 0) return null;
@@ -784,6 +962,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           onUpdateField={onUpdateField}
           onIgnoreField={onIgnoreField}
           ignoreBlocked={ignoreBlocked}
+          lintFindings={lintFindings}
         />
 
         {/* Basic Properties */}
@@ -1050,6 +1229,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   }
                   placeholder="Instructions for filling out this field..."
                 />
+                {/* Findings ABOUT the instructions render here, at the box
+                    they concern (sprint-18 C1) -- too long, label
+                    restatement, screen references, missing guidance. */}
+                <EmbeddedFindings
+                  findings={anchored.instructions}
+                  anchor="instructions"
+                />
                 {gated && (
                   <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2">
                     <p className="text-xs text-amber-900">
@@ -1115,6 +1301,9 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               }
               placeholder="Verbatim excerpts from the official instructions booklet for this field (AI reference only -- never shown to users)..."
             />
+            {/* Findings ABOUT the details render at their box (sprint-18 C1):
+                not a verbatim quote, oversize, missing headings... */}
+            <EmbeddedFindings findings={anchored.details} anchor="details" />
           </div>
 
           <div>
@@ -1226,6 +1415,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             schema={schema}
             onChange={(next) => updateField({ require_if: next })}
           />
+
+          {/* Findings ABOUT this field's conditions render at the builders
+              they concern (sprint-18 C1): unknown operator, unresolved
+              reference, malformed shape... */}
+          <EmbeddedFindings findings={anchored.conditions} anchor="conditions" />
         </div>
 
         {/* Un-group: split a consolidated options[] field back into one field
@@ -1262,6 +1456,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               <div className="space-y-2">
                 {field.options.map((option, idx) => (
                   <div key={idx} className="space-y-1 border-l-2 border-gray-100 pl-2">
+                    {/* Findings ABOUT this option render at its row
+                        (sprint-18 C1): missing/duplicate/comma value, wrong
+                        slug format, translation flags... */}
+                    <EmbeddedFindings
+                      findings={anchored.byOption.get(idx) ?? []}
+                      anchor={`option-${idx}`}
+                    />
                     <div className="flex gap-2 items-center">
                       <input
                         type="text"

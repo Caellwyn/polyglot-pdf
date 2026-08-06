@@ -131,10 +131,24 @@ describe('audioManager resetPlaybackClock (bd polyglot-pdf-s7uf)', () => {
 
     mgr.resetPlaybackClock()
     expect(ctx.sources[0].stop).toHaveBeenCalledTimes(1)
-    // Drained sources must fire NO playback-end events: onended is detached
-    // before stop() (its delivery lands after isFlushing already cleared, so
-    // the flag cannot suppress it -- Opus outer review finding 4).
-    expect(ctx.sources[0].onended).toBeNull()
+    // Drained sources carry a NARROWED onended (Opus outer review, both
+    // passes): when the browser delivers the stop()-triggered onended on its
+    // later task, it must NEVER fire the playback-end watchdog -- a drain is
+    // not a natural end, and the array is already empty so the original
+    // handler's all-sources-done branch would fire it. (The handler's other
+    // responsibility, the playbackTime catch-up, is kept as defense-in-depth
+    // but is behaviorally redundant by construction: playbackTime's only
+    // consumer is playAudio's startAt = max(playbackTime, now + 0.01), and
+    // every past-cursor value loses that max identically -- so only the
+    // suppression half is assertable.)
+    const endSpy = vi.fn()
+    ;(globalThis as any).window.vffOnAudioPlaybackEnd = endSpy
+    try {
+      ctx.sources[0].onended?.()
+      expect(endSpy).not.toHaveBeenCalled()
+    } finally {
+      delete (globalThis as any).window.vffOnAudioPlaybackEnd
+    }
 
     await mgr.playAudio(pcmChunk())
     mgr.resetPlaybackClock()

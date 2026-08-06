@@ -20,6 +20,32 @@ had already investigated and left notes on.
 
 ## What shipped
 
+> **CORRECTION (2026-08-04, bd polyglot-pdf-87a9).** Everything below about
+> **pjws** is framed as fixing a *mid-session spoken-language switch*. That
+> framing is **wrong**: the app does not support mid-conversation language
+> switching. The spoken language is PINNED for the whole form -- set once before
+> the form starts, carried into the Gemini config + SI, held for every turn -- and
+> the only way to change it is a NEW session ("clear form", then pick from the
+> modal). The maintainer stated this policy when reviewing this entry; the UI
+> paths that appeared to switch language on a live session (`handleLanguageChange`
+> in both overlays, `connectionManager.changeSpokenLanguage`) were dead code,
+> wired to nothing, and have since been removed.
+>
+> **The pjws fix itself stands.** Refreshing before reading, and before a handler
+> `save()`s, is correct regardless: every `SchemaFormStateManager` mutator builds a
+> new state object and saves it without touching `WebFormConnection`'s in-memory
+> copy, so a handler can read state that disagrees with the form or persist a
+> stale copy over something written elsewhere. That is a general stale-state
+> defect. Only its *justification* was wrong -- `selectedLanguage` was the symptom
+> I reached for, and I took the symptom for the disease.
+>
+> **What I should have done:** checked whether the flow I was "fixing" was one the
+> product supports before writing it up as such. The bead described the scenario,
+> and I verified the code did what the bead said without asking whether the bead's
+> premise was right. Two beads filed off this entry (`mpqs`, `qim7`) inherited the
+> same bad premise and are re-scoped.
+
+
 **575i + 9tuu -- the two-option marker is now gated on more than the count.**
 The `Options (2 -- ask ONE natural question ...)` marker asserts an *exclusive*
 choice between two *short* labels. Neither half held universally:

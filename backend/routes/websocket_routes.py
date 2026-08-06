@@ -184,6 +184,7 @@ async def _handle_fill_session(
 	previous_spoken_names: list | None = None,  # Phase 3: Spoken names from completed sections
 	initial_field_hint: str | None = None,  # Initial field hint from frontend (pre-computed)
 	form_session_id: str | None = None,  # Persistent form session ID from frontend
+	kit_id: str | None = None,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
 	is_reconnect: bool = False,  # True when handshake carries resume:true (mid-section reconnect)
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
@@ -272,6 +273,7 @@ async def _handle_fill_session(
 			current_values=current_values,  # Pre-filled values for reconnect
 			system_instruction=system_instruction,  # Include in initial Gemini config
 			form_session_id=form_session_id,  # Persistent ID from frontend
+			kit_id=kit_id,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
 			current_section_id=section_id,  # Current section for token-log context (bd polyglot-pdf-tb7)
 		)
 
@@ -688,8 +690,19 @@ async def _handle_fill_session(
 						await websocket.send_json({"type": "language_changed", "language": new_language})
 					continue
 				elif mtype == "change_spoken_language":
-					# Frontend requests to change the spoken conversation language
-					# Backend sends initiating message to Gemini to switch language and greet user
+					# MISNOMER, kept for wire compatibility: this does NOT switch the
+					# session's language. The spoken language is PINNED for the whole
+					# form -- chosen once before the form starts, carried into the
+					# per-connect Gemini config + SI, and held for every turn; changing
+					# it requires a NEW session ("clear form" -> language modal). See
+					# docs/standards/voice-and-vad.md ("the spoken language is pinned
+					# per session") and bd polyglot-pdf-87a9.
+					#
+					# The ONLY live sender is the frontend's reconnect opener, which
+					# RE-ASSERTS the same pinned language after a socket teardown (a
+					# section switch or reconnect drops the Gemini session). So the work
+					# here is re-establishing the language + current field on a fresh
+					# Gemini session, which is exactly what the initiating message does.
 					spoken_language = obj.get("spoken_language")
 					next_field_hint = obj.get("next_field_hint")
 					if not spoken_language or not isinstance(spoken_language, str):
@@ -1033,6 +1046,13 @@ async def fill_form_from_schema(
 
 	# Extract persistent form session ID (frontend-managed, survives reconnects)
 	form_session_id = handshake.get("form_session_id")
+	# Kit identity for the audit trail (bd polyglot-pdf-47r3). Read at the SHARED
+	# scope, not inside the JIT branch: kit_id identifies the KIT (not the form),
+	# so unlike form_number/edition_date it is not a form_metadata key and cannot
+	# ride the schema dict -- both transports thread it separately. Two kits can
+	# share a form_number (a standard W-7 and a firm-specific variant), and only
+	# kit_id distinguishes them in the confirmation record.
+	kit_id = handshake.get("kit_id")
 
 	if is_jit_mode:
 		# Manifest-first transport: extract the manifest + first field schema.
@@ -1051,6 +1071,15 @@ async def fill_form_from_schema(
 		# recorded form_id="unknown" and the liability record could not name the
 		# form. An older client that omits the key still degrades to "unknown".
 		jit_form_number = handshake.get("form_number")
+		# The government EDITION for the audit trail (bd polyglot-pdf-47r3): a
+		# form NUMBER does not say which revision the client confirmed against,
+		# and agencies revise forms and enforce edition dates. Rides the
+		# handshake for the same reason form_number does -- the minimal JIT
+		# schema has no form_metadata to derive it from.
+		# (kit_id is NOT read here: it identifies the KIT rather than the form,
+		# so it is not a form_metadata key and is read once at the shared scope
+		# above, where BOTH transports can thread it.)
+		jit_edition_date = handshake.get("edition_date")
 
 		# Build minimal schema from manifest for validation
 		# The manifest contains field_id|spoken_name pairs, we'll use it for context
@@ -1068,12 +1097,18 @@ async def fill_form_from_schema(
 		# form_number rides the same dict so the confirmation audit trail's
 		# schema.form_metadata.form_number lookup resolves on this transport too
 		# (bd polyglot-pdf-n0em) -- built even when only one of the two is present.
-		if jit_form_title or jit_form_number:
+		# edition_date joins them so the audit trail can name the EDITION the
+		# client actually confirmed against (bd polyglot-pdf-47r3). kit_id is
+		# NOT a form_metadata key -- it identifies the kit, not the form -- so it
+		# is threaded separately below.
+		if jit_form_title or jit_form_number or jit_edition_date:
 			schema["form_metadata"] = {}
 			if jit_form_title:
 				schema["form_metadata"]["title"] = jit_form_title
 			if jit_form_number:
 				schema["form_metadata"]["form_number"] = jit_form_number
+			if jit_edition_date:
+				schema["form_metadata"]["edition_date"] = jit_edition_date
 		# manifest_field_count reads the REAL section field list
 		# (manifest.current_section.fields), not a non-existent top-level
 		# manifest.fields that always logged 0 (gap E).
@@ -1212,5 +1247,6 @@ async def fill_form_from_schema(
 		previous_spoken_names=previous_spoken_names,  # Phase 3: Completed sections lookup
 		initial_field_hint=initial_field_hint,  # Computed by frontend before connection
 		form_session_id=form_session_id,  # Persistent ID from frontend (survives reconnects)
+		kit_id=kit_id,  # Kit identity for the confirmation audit trail (bd polyglot-pdf-47r3)
 		is_reconnect=is_reconnect,  # Suppresses greeting on mid-section reconnect (bd polyglot-pdf-vmxx)
 	)
