@@ -325,81 +325,49 @@ def test_an_unrelated_marker_that_encodes_with_a_dash_run_is_not_a_sibling(tmp_p
 
 
 def test_sibling_suffix_matches_the_real_fingerprint_format(tmp_path):
-    """The sibling test keys on the ENCODED shape of resolve_edition_marker's
-    fingerprint. If that format ever changes, siblings stop being found and
-    retrieval silently returns only the first revision -- so pin the coupling
-    rather than trusting the two to stay in step."""
+    """The sibling detector keys on the ENCODED shape of
+    resolve_edition_marker's fingerprint. If that format changes, siblings stop
+    being FOUND -- and a missed sibling drops the candidate count to 1, so
+    retrieval hands back a single revision as if it were unambiguous. Pin the
+    coupling rather than trusting the two to stay in step."""
     fingerprint = resolve_edition_marker(None, _schema("a", "b"))
     assert fingerprint.startswith("sha256:")
 
     rkr = _read_kit_revision()
     encoded_suffix = encode_marker(fingerprint)
-    assert rkr._is_sibling_of(f"12-2024--{encoded_suffix}", "12-2024", "12/2024")
-    # ...and a non-fingerprint suffix is not a sibling.
-    assert not rkr._is_sibling_of("12-2024--rev2", "12-2024", "12/2024")
-
-
-def test_a_shorter_unrelated_markers_sibling_is_not_ours(tmp_path):
-    """The false-POSITIVE dimension: no revision published under a marker that
-    merely PREFIXES ours may ever answer to ours.
-
-    Accepting any prefix (to make writer-trimmed siblings visible) let a
-    revision published under "12/20" answer to a record naming "12/2024" --
-    an unrelated schema returned at exit 0, worse than the false negative it
-    replaced. Every marker in this file used to be "E"*n or an unrelated
-    literal, so no two stood in a prefix relationship and the whole dimension
-    was unpinned.
-    """
-    from backend.services.form_kits import encode_marker as enc, sibling_marker
-
-    rkr = _read_kit_revision()
-    sib = sibling_marker("12/20", "sha256:1a2b3c4d5e6f")
-
-    # A short base is only legitimate at the writer's exact trim budget, which
-    # "12-20" is nowhere near -- so this is an impostor, not our sibling.
-    assert not rkr._is_sibling_of(sib, enc("12/2024"), "12/2024")
-    # ...while it IS the sibling of its own marker.
-    assert rkr._is_sibling_of(sib, enc("12/20"), "12/20")
+    assert rkr._might_be_sibling_of(f"12-2024--{encoded_suffix}", "12-2024")
+    # ...and a non-fingerprint suffix is not a sibling candidate at all.
+    assert not rkr._might_be_sibling_of("12-2024--rev2", "12-2024")
 
 
 @pytest.mark.parametrize("base_len", [8, 50, 106, 107, 108, 127, 128, 200])
-def test_a_prefix_sharing_marker_never_matches_at_any_length(base_len):
-    """The false-POSITIVE direction across the WHOLE length range, including
-    the trim boundary where the writer actually trims.
-
-    Length-equality plus a prefix test was not sound: trimming is lossy, so any
-    two markers sharing the trimmed prefix cross-matched (measured in review at
-    thousands of pairs, concentrated at exactly the lengths where trimming
-    happens -- which is why a parametrization that only varied ONE marker per
-    case never saw it). The writer now tags a trimmed base with a digest of the
-    full base, so the reader verifies rather than guesses.
-    """
+def test_a_genuine_sibling_is_found_at_every_length(base_len):
+    """The direction that MATTERS for correctness: a real sibling must never be
+    missed. Over-matching only adds an ambiguity candidate (safe); UNDER-matching
+    drops the count to 1 and returns one revision as if unambiguous, which on a
+    legal surface is the outcome that must never happen -- verified in review by
+    stubbing the detector to False, which silently resolved to the first
+    revision alone."""
     from backend.services.form_kits import encode_marker as enc, sibling_marker
 
     rkr = _read_kit_revision()
     mine = "E" * base_len
-    # A DIFFERENT marker that shares every character of `mine` as a prefix.
-    theirs = mine + "-REALLY-DIFFERENT-EDITION"
     fp = "sha256:1a2b3c4d5e6f"
 
-    # Their sibling must never answer to my marker, or vice versa...
-    assert not rkr._is_sibling_of(sibling_marker(theirs, fp), enc(mine), mine)
-    assert not rkr._is_sibling_of(sibling_marker(mine, fp), enc(theirs), theirs)
-    # ...while each still matches its own marker at every length.
-    assert rkr._is_sibling_of(sibling_marker(mine, fp), enc(mine), mine)
-    assert rkr._is_sibling_of(sibling_marker(theirs, fp), enc(theirs), theirs)
+    assert rkr._might_be_sibling_of(sibling_marker(mine, fp), enc(mine)), (
+        f"a real sibling was missed at base_len={base_len}"
+    )
 
 
-def test_a_marker_ending_in_our_digest_is_not_our_sibling(tmp_path):
-    """The impostor that shares NO prefix with us at all.
+def test_an_unrelated_marker_never_yields_a_schema(tmp_path):
+    """The impostor cases -- a shorter prefix marker, and one ending in our own
+    digest -- must never produce a RESOLVED schema.
 
-    A trimmed sibling is verified by a digest of the raw marker -- but the
-    digest is derivable from any confirmation record, so an UNTRIMMED base that
-    merely ends in "-<our 8 hex>" would take the trimmed path and answer to our
-    marker, returning an unrelated schema at exit 0. The length gate is what
-    establishes the segment was trimmed at all; a mutation deleting it survived
-    because every existing false-positive case was a PREFIX pair, which this
-    one deliberately is not (fresh-eyes, reproduced end to end).
+    The detector is deliberately loose, so an impostor may become an ambiguity
+    CANDIDATE; what must never happen is a wrong schema returned at exit 0.
+    Assert the outcome (no resolution), not the mechanism -- earlier versions of
+    these tests asserted an exact-match property that three successive designs
+    each failed to deliver.
     """
     import hashlib
 
@@ -407,22 +375,28 @@ def test_a_marker_ending_in_our_digest_is_not_our_sibling(tmp_path):
 
     victim = "12/2024"
     tag = hashlib.sha256(victim.encode("utf-8")).hexdigest()[:8]
-    attacker = f"TOTALLY-UNRELATED-{tag}"  # shares no prefix with the victim
+    for attacker in (
+        "12/20",                                    # a shorter prefix of ours
+        f"TOTALLY-UNRELATED-{tag}",                 # ends in our digest
+        "Q" * 98 + "-" + tag,                       # ...and at budget length
+    ):
+        root = tmp_path / f"kits_{abs(hash(attacker))}"
+        root.mkdir()
+        store = LocalFormKitStore(root)
+        _make_kit(root, "w7", _schema("a", edition=attacker))
+        _archive_hook(store, "w7", {"status": "complete"})
+        (root / "w7" / "schema.json").write_text(
+            json.dumps(_schema("a", "b", "c", edition=attacker)), encoding="utf-8"
+        )
+        _archive_hook(store, "w7", {"status": "complete"})
+        # Nothing was EVER archived under the victim's marker.
+        (root / "w7" / "schema.json").write_text(
+            json.dumps(_schema("z", edition="09/2030")), encoding="utf-8"
+        )
 
-    store = LocalFormKitStore(tmp_path)
-    rev_1 = _schema("a", edition=attacker)
-    _make_kit(tmp_path, "w7", rev_1)
-    _archive_hook(store, "w7", {"status": "complete"})
-    rev_2 = _schema("a", "b", "c", edition=attacker)
-    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
-    _archive_hook(store, "w7", {"status": "complete"})
-    # Nothing was EVER archived under the victim's marker.
-    (tmp_path / "w7" / "schema.json").write_text(
-        json.dumps(_schema("z", edition="09/2030")), encoding="utf-8"
-    )
-
-    with pytest.raises(FormKitNotFound):
-        _resolve_revision(store, "w7", victim)
+        rkr = _read_kit_revision()
+        with pytest.raises((FormKitNotFound, rkr.AmbiguousRevision)):
+            _resolve_revision(store, "w7", victim)
 
 
 def test_an_unrelated_prefix_marker_resolves_to_not_found(tmp_path):
@@ -456,7 +430,7 @@ def test_sibling_round_trips_for_markers_with_dash_runs(tmp_path, raw):
 
     rkr = _read_kit_revision()
     sib = sibling_marker(raw, "sha256:1a2b3c4d5e6f")
-    assert rkr._is_sibling_of(sib, enc(raw), raw), f"round trip failed for {raw!r}"
+    assert rkr._might_be_sibling_of(sib, enc(raw)), f"round trip failed for {raw!r}"
 
 
 def test_sibling_marker_never_exceeds_the_segment_cap():

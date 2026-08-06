@@ -161,6 +161,30 @@ revision returned at exit 0, with the digest being public knowledge derivable
 from any confirmation record. Restored, with the impostor case (which shares no
 prefix, so no existing test could reach it) now pinned. See Lessons 10.
 
+**The final round reframed the whole mechanism, and the answer was to stop
+trying to VERIFY.** The reviewer established something none of the five
+matching designs had noticed: a sibling is only ever WRITTEN when the plain
+base already exists with different bytes, so whenever a sibling exists there
+are always >= 2 candidates and `_resolve` ALWAYS raises AmbiguousRevision. The
+digest checks, budget arithmetic and tag parsing were paying for an
+auto-resolution that cannot occur.
+
+That inverts the requirement. A sibling match may OVER-match freely -- a false
+match only adds an ambiguity candidate, pushing toward the honest "cannot tell"
+answer -- but must never UNDER-match, since a missed sibling drops the count to
+1 and returns a single revision as though unambiguous (verified: stubbing the
+detector to False silently resolved to the first revision). So `_is_sibling_of`
+became `_might_be_sibling_of`: a loose bidirectional prefix test with the trim
+tag stripped, and no verification at all.
+
+The safety then lives where it belongs -- in `_resolve`, which now separates
+EXACT matches (the segment IS our encoded marker; authoritative) from LOOSE
+ones (corroborating only). A lone candidate that came only from a loose match
+is reported NOT FOUND rather than returned, because it may belong to another
+marker entirely. All four impostor shapes -- shorter prefix, digest tail,
+budget-length digest tail, and the reviewer's own reproduction -- now return
+NOT FOUND end to end.
+
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
 from the segment's name. `encode_marker` collapses any run of unsafe characters
@@ -279,7 +303,18 @@ fingerprint) instead of any `--` run, with a test pinning the coupling to
     question is "what case does no test cover?", not "is this code dead?" --
     deleting on the strength of a survived mutation is exactly inverted.
 
-11. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+11. **Ask what a predicate's answer is USED for before making it precise.**
+    Five designs tried to verify "is this segment my sibling?" exactly, each
+    admitting a wrong answer or hiding a real sibling. None of that effort was
+    needed: a sibling only ever exists ALONGSIDE its plain base, so a match can
+    only ever produce an ambiguity report, never a returned schema. Once that
+    was seen, the predicate could be loose and ~8 lines, with the safety moved
+    to the caller (a lone LOOSE match is not an answer). The expensive mistake
+    was optimising the precision of a value whose consumer made precision
+    irrelevant -- and the cheap check that would have caught it is "what
+    happens downstream if this returns True wrongly?"
+
+12. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow

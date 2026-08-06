@@ -47,7 +47,6 @@ reported honestly instead of returning a confident wrong schema.
 """
 import argparse
 import asyncio
-import hashlib
 import json
 import re
 import sys
@@ -75,35 +74,35 @@ _SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
 _BASE_TAG_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
-def _marker_max_len() -> int:
-    """The writer's segment cap, imported rather than duplicated.
+def _might_be_sibling_of(segment: str, base: str) -> bool:
+    """True when `segment` MIGHT be a disambiguated sibling of `base`.
 
-    The trim budget must be computed from the SAME constant the writer uses --
-    a local copy would drift silently and make genuine siblings unresolvable.
-    """
-    from backend.services.form_kits import _MARKER_MAX_LEN
+    Deliberately a loose "might", not a verified "is" -- and that asymmetry is
+    the whole design:
 
-    return _MARKER_MAX_LEN
+    A sibling segment is only ever WRITTEN when the plain-base segment already
+    exists holding different bytes (see `_archive_published_revision`). So
+    whenever a sibling exists at all, the plain base exists too, retrieval
+    collects >= 2 distinct candidates, and `_resolve` raises AmbiguousRevision.
+    This predicate can therefore NEVER cause a schema to be returned -- a match
+    only ever ADDS a candidate, pushing toward the honest "cannot tell" answer
+    and the operator's --segment read.
 
+    That means over-matching is SAFE and under-matching is not: a missed
+    sibling silently drops the candidate count to 1 and hands back a single
+    revision as if it were unambiguous, which on a legal surface is the one
+    outcome that must never happen (verified in review by stubbing this to
+    False -- retrieval then resolved to the first revision alone).
 
-def _is_sibling_of(segment: str, base: str, raw_marker: str) -> bool:
-    """True when `segment` is a fingerprint-disambiguated sibling of `base`.
+    Earlier versions tried to VERIFY the relationship exactly -- exact base,
+    then prefix, then prefix-at-trim-budget, then a digest of the raw marker.
+    Every one admitted a wrong-schema case or hid a real sibling, because the
+    writer's trim is lossy and the reader cannot invert it. All of that
+    machinery was paying for an auto-resolution that cannot occur. A loose
+    match is both simpler and strictly safer.
 
-    A sibling is "<base>--<encoded fingerprint>". Three things have to hold at
-    once, and getting any one wrong returns the WRONG revision:
-
-    1. The suffix must be an encoded `sha256:<12hex>` EXACTLY -- otherwise an
-       ordinary marker that merely encodes with a "--" run (e.g. "12/2024//rev2")
-       looks like a sibling of "12/2024" and produces a false ambiguity.
-    2. An equal base matches, obviously.
-    3. A TRIMMED base needs BOTH a trim-length check and a digest match.
-       Prefix matching cannot substitute for either: trimming is lossy, so any
-       two markers sharing the trimmed prefix become indistinguishable
-       (measured in review at thousands of cross-matching pairs; narrowing to
-       the exact trim budget still left thousands). So the writer appends a
-       digest of the raw marker, and the length says the segment was trimmed AT
-       ALL -- without which an untrimmed base merely ENDING in "-<8 hex>" takes
-       this path and answers to whatever marker digests to it.
+    The one hard requirement is the fingerprint suffix, which keeps an ordinary
+    marker that merely encodes with a "--" run from matching every base.
     """
     marker_pos = segment.rfind("--")
     if marker_pos <= 0:
@@ -113,38 +112,14 @@ def _is_sibling_of(segment: str, base: str, raw_marker: str) -> bool:
         return False
     if seg_base == base:
         return True
-    # A TRIMMED base carries a digest of the full base it came from, so verify
-    # it by RECOMPUTING that digest -- never by prefix.
-    #
-    # Prefix matching cannot be made sound here: trimming is lossy, so two
-    # distinct markers sharing the trimmed prefix are indistinguishable
-    # afterwards, and a record naming one would resolve to the other's revision
-    # (measured in review: thousands of cross-matching pairs at trim-range
-    # lengths, and narrowing the window to the exact budget still left
-    # thousands). The writer therefore emits "<head>-<tag>" and we check the
-    # tag, which either matches our own marker or does not.
-    _head, sep, tag = seg_base.rpartition("-")
-    if not sep or not _BASE_TAG_RE.fullmatch(tag):
-        return False
-    # TWO independent conditions, and BOTH are load-bearing:
-    #
-    # (a) the base must be exactly the length the writer's trim produces. This
-    #     is what establishes the segment was TRIMMED at all. Without it, any
-    #     untrimmed base that merely ENDS in "-<8 hex>" takes this path -- and
-    #     since the tag digests the marker (public, derivable from any record),
-    #     a kit published under an unrelated edition string ending in the
-    #     victim's digest answers to the victim's marker, returning a wrong
-    #     schema at exit 0. Reproduced end to end in review; deleting this
-    #     because a mutation "survived" was the error -- the mutation survived
-    #     because no test covered the case, not because the guard was dead.
-    #
-    # (b) the tag must match a digest of the RAW marker. encode_marker
-    #     truncates at the cap, so two markers differing only past it share an
-    #     encoded base; a digest over that would still collide.
-    budget = max(8, _marker_max_len() - len(suffix) - 2)
-    if len(seg_base) != budget:
-        return False
-    return hashlib.sha256(raw_marker.encode("utf-8")).hexdigest()[:len(tag)] == tag
+    # Strip the writer's optional "-<8hex>" trim tag before comparing: a
+    # trimmed base is NOT a prefix of the plain base while that tag is on it.
+    head, sep, tag = seg_base.rpartition("-")
+    if sep and _BASE_TAG_RE.fullmatch(tag):
+        seg_base = head
+    # Compare BOTH ways: encode_marker truncates both sides at the cap, so
+    # either can be the shorter one.
+    return base.startswith(seg_base) or seg_base.startswith(base)
 
 
 class AmbiguousRevision(Exception):
@@ -200,11 +175,26 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
     # the same plain marker as the first, so the siblings MUST be searched --
     # looking up only the plain segment silently returns the first revision's
     # schema for a record that meant the second.
+    # Archived revisions filed under this marker. Two KINDS of match, and the
+    # difference decides what may be returned:
+    #   EXACT   -- the segment IS our encoded marker. Authoritative.
+    #   LOOSE   -- a "<base>--<fingerprint>" sibling that MIGHT be ours. The
+    #              writer's trim is lossy, so this cannot be verified (three
+    #              designs tried and each admitted a wrong answer). It is only
+    #              ever CORROBORATING: enough to prove ambiguity, never enough
+    #              to be the answer on its own.
+    exact_count = 0
     for segment in await store.list_archived_markers(kit_id):
-        if segment == base or _is_sibling_of(segment, base, marker):
-            archived = await store.load_archived_revision_or_none(kit_id, segment)
-            if archived is not None:
-                candidates.append((f"archive:{segment}", archived))
+        is_exact = segment == base
+        if not is_exact and not _might_be_sibling_of(segment, base):
+            continue
+        archived = await store.load_archived_revision_or_none(kit_id, segment)
+        if archived is not None:
+            candidates.append((f"archive:{segment}", archived))
+            if is_exact:
+                exact_count += 1
+    if current is not None and any(s == "current" for s, _ in candidates):
+        exact_count += 1  # the live schema matched the marker exactly
 
     if not candidates:
         raise FormKitNotFound(
@@ -217,6 +207,16 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
             distinct.append((source, schema))
     if len(distinct) > 1:
         raise AmbiguousRevision([source for source, _ in distinct])
+    if exact_count == 0:
+        # The single candidate came ONLY from a loose sibling match, so it may
+        # belong to a different marker entirely -- e.g. a revision published
+        # under "12/20" when the record names "12/2024". Returning it would be
+        # the confident-wrong-answer failure this tool exists to avoid.
+        raise FormKitNotFound(
+            f"No revision found for {kit_id} at marker {marker} "
+            f"(a stored revision resembles it but cannot be confirmed as the "
+            f"same marker; use --list/--segment to inspect)"
+        )
     return distinct[0]
 
 
