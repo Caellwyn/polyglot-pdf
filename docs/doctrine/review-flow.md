@@ -1,4 +1,4 @@
-# Review-flow doctrine: pre-PR adversarial assess + Opus outer review, looped to clean
+# Review-flow doctrine: pre-PR adversarial assess + ONE outer review (Opus for source, Haiku for docs), looped to clean
 
 *Last updated: 2026-08-05 (bd `polyglot-pdf-saxh`): **the outer review is now a THREE-way fork.** A source diff gets the ONE Opus cross-surface pass; a **docs-only diff gets ONE adversarial Haiku review** (the new `docs-reviewer` agent -- prose review, not a contract trace); only a genuinely trivial diff skips adversarial review. This closes a gap opened by bd ofh6 below: retiring the guaranteed-Opus inner round removed the only adversarial look a docs-only PR used to get. Auto-merge is deliberately UNCHANGED -- a Haiku-cleared docs PR still pings, and whether it should is an open maintainer question. Prior, same day (bd `polyglot-pdf-ofh6` + `polyglot-pdf-0arm`): **the review layers were given DIFFERENT jobs, and the Opus passes collapsed from three to exactly ONE.** The inner fresh-eyes loop (Sonnet/Haiku) scores the rubric, gets the LOCAL DIFF right, and ENUMERATES every changed contract; the outer Opus-5 cross-surface review takes that enumeration and follows each contract OUT into consumers in untouched files. Two of the three bd `polyglot-pdf-dgoa` safeguards are **superseded**: the guaranteed-Opus final round of the INNER loop is retired (the inner loop's verdict is terminal at its routed model), and the duplicate confirming outer pass is retired (one clearing pass is the gate). Rationale: three serial Opus passes running the SAME prompt on the SAME diff cost 14 hours over 9 review cycles in a day and quadrupled token burn, for a marginal catch rate -- and it violated this repo's own tiering rule (expensive models at decision gates, never bug-hunting). **Safeguard (1) -- the trace mandate that caught bd `polyglot-pdf-bo4m` -- is RETAINED and HARDENED** into a hard gate: the outer reviewer may not render `NO-GAPS` until it has traced every enumerated contract and NAMED the consumer files it opened. Also new: only a BEHAVIORAL fix voids a clear, and pre-existing/non-blocking findings are FILED as beads rather than chased inline. **External model reviewers remain retired** -- the maintainer's Codex (OpenAI) subscription ended 2026-07-08 and the repo uses NO external reviewer; the Codex trigger/watch machinery (`@codex review`, `pr_review_watcher.py`, `requested_reviewers`) is dead path, never invoked. See [the bd bo4m journal entry](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md) for the motivating regression, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`). The Opus outer reviewer was introduced under bd `polyglot-pdf-n6ks` (then Opus 4.8; moved to Opus 5 under bd `polyglot-pdf-wntz`, 2026-07-27); the auto-merge-vs-ping rule under bd `polyglot-pdf-16pj`.*
 
@@ -10,11 +10,16 @@ Review is **two layers, both Claude, BOTH run BEFORE the PR opens, and they have
 DIFFERENT JOBS** (flow change 2026-07-08; layers differentiated 2026-08-05): an
 **inner** adversarial fresh-eyes loop (Sonnet/Haiku) that scores the local diff
 against the bead's exit-criteria rubric, hunts in-diff bugs, and **enumerates every
-changed contract**; then ONE **outer** Opus-5 cross-surface review on the same local
-branch that takes that enumeration and **follows each contract out into consumers in
-files the diff never touched.** Fresh-eyes is the gap-exhaustion assessor for the
-local diff; the Opus pass is the independent adversarial backstop for the blast
-radius (a fresh subagent, no shared context). There is NO external reviewer. The PR
+changed contract**; then ONE **outer** adversarial pass on the same local branch.
+**Which outer reviewer runs depends on the diff type** (the three-way gate, bd
+`polyglot-pdf-saxh`): a **source** diff gets the Opus-5 `cross-surface-reviewer`,
+which takes that enumeration and **follows each contract out into consumers in files
+the diff never touched**; a **docs-only** diff gets the Haiku `docs-reviewer`, an
+adversarial *prose* review (claims vs. the code they document, stale refs,
+doc-vs-doc conflict) since there is no runtime contract to trace; only a genuinely
+**trivial** diff gets no outer pass. Fresh-eyes is the gap-exhaustion assessor for
+the local diff; the outer pass is the independent adversarial backstop (a fresh
+subagent, no shared context). There is NO external reviewer. The PR
 opens only AFTER both loops clear -- so opening the PR, closing the bead(s), and the
 merge decision are the final steps, not a review surface.
 

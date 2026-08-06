@@ -51,57 +51,80 @@ def test_names_both_outer_reviewers(text):
         "CLAUDE.md must name the Haiku docs reviewer agent (bd saxh)"
 
 
-def test_no_statement_says_docs_get_no_adversarial_review(text):
-    """The property, stated paraphrase-independently.
+def test_every_docs_only_mention_is_allowlisted(text):
+    """Enumerate the sentences that pair a docs-only subject with a denial verb.
 
-    Any SENTENCE that mentions docs-only changes AND denies them a review is a
-    defect, however it is phrased -- "skip", "no outer review", "gets none",
-    "zero".
+    HOW THIS WORKS, and why it is shaped this way. Three fresh-eyes rounds each
+    found one more CLAUDE.md sentence describing the retired two-way gate, so
+    this file exists to stop the fourth. But two drafts of a "detect the bad
+    sentence" regex were defeated in opposite directions -- one missed
+    "bypass adversarial review entirely" (vocabulary narrower than English),
+    the next flagged the legitimate baseline (exemption logic that swallowed
+    the rule). Regexes do not parse English, and a pin that is wrong in either
+    direction is worse than none: a false negative is silent, a false positive
+    gets the test deleted.
 
-    Operate on SENTENCES, not lines. The round-3 defect wrapped as:
+    So this does NOT try to judge sentences. It ENUMERATES every sentence where
+    a docs/journal/beads-only subject co-occurs with a denial verb, and asserts
+    the set equals a hand-reviewed allowlist. Adding such a sentence -- in ANY
+    phrasing, including ones nobody thought to grep for -- fails the test and
+    forces a human to read it and either fix the doc or consciously allowlist
+    it. That is the property worth pinning; "is this particular sentence OK?" is
+    a judgment call, and this file's job is to make sure the judgment gets made.
 
-        ... Docs-only / `.beads`-only /
-        journal-only / trivial changes get NO outer review.
-
-    so a line-based check sees "docs-only" and the denial on DIFFERENT lines,
-    and a naive per-line 'trivial' exemption fires on the wrapped remainder --
-    which is exactly how a first draft of this test passed against the real
-    historical text. Collapse whitespace first, then split on sentence ends.
-
-    The trivial arm is the ONLY legitimate no-review case. A sentence is exempt
-    only when the denial applies SOLELY to trivial changes -- i.e. it says
-    "trivial" and does NOT also sweep docs/journal into the same denial.
+    Operate on SENTENCES, not lines: the round-3 defect wrapped mid-sentence, so
+    a line-based check saw the subject and the denial on different lines.
     """
     flat = re.sub(r"\s+", " ", text)
+    # Denial verbs, deliberately broad. An earlier draft listed only
+    # skip/no/zero/none/without and a fresh-eyes round defeated it live with
+    # "bypass adversarial review entirely" -- a pin whose vocabulary is narrower
+    # than English is not a pin. Prefer a false positive (loud, fixable) over a
+    # false negative (silent, and the whole reason this file exists).
     denial = re.compile(
-        r"(skips?|skipped|no|zero|none|without)\b[^.]{0,80}?"
-        r"(outer review|adversarial review|review at all|review entirely)",
+        r"\b(skips?|skipped|skipping|bypass(es|ed)?|forgo(es)?|waive[sd]?|"
+        r"exempt(ed)?|excluded|omit(s|ted)?|no|not|zero|none|never|without)\b"
+        r"[^.]{0,80}?"
+        r"(outer review|adversarial review|review at all|review entirely|"
+        r"adversarial (model )?(review|pass|look)|reviewed adversarially)",
         re.IGNORECASE,
     )
-    subject = re.compile(r"docs-only|docs/|journal-only|`\.beads`-only", re.IGNORECASE)
+    # The subject must be the CHANGE CLASS, not an incidental path mention.
+    # `docs/` alone matched citation paths ("see docs/doctrine/..."), which is a
+    # false-positive source, so require the change-class phrasing.
+    subject = re.compile(
+        r"docs[- ]only|journal[- ]only|`?\.?beads`?[- ]only|"
+        r"docs,? (beads|journal)|prose[- ]only",
+        re.IGNORECASE,
+    )
     offenders = []
     for sentence in re.split(r"(?<=\.)\s+", flat):
         lo = sentence.lower()
         if not subject.search(lo) or not denial.search(sentence):
             continue
-        # Exempt ONLY when the denial is scoped to trivial alone -- a sentence
-        # naming docs AND trivial together in one denial is the defect, not an
-        # exemption (that is precisely the round-3 wording).
-        only_trivial = "trivial" in lo and not re.search(
-            r"(docs-only|journal-only|`\.beads`-only|docs/)[^.]{0,40}"
-            r"(/|,|and|or)?\s*trivial[^.]{0,40}(get|receive)s?\s+(no|none|zero)",
-            lo,
-        ) and not re.search(r"docs-only[^.]{0,60}(get|receive)s?\s+no\b", lo)
-        if only_trivial:
-            continue
-        # Exempt explicit history ("was retired", "before bd saxh ...").
-        if re.search(r"\bretired\b|\bbefore bd\b|\bused to\b|\bformerly\b", lo):
-            continue
         offenders.append(sentence.strip())
-    assert not offenders, (
-        "CLAUDE.md sentence(s) still deny docs-only changes an adversarial "
-        "review; since bd saxh they get ONE Haiku docs-reviewer pass and only "
-        "TRIVIAL changes get none:\n  " + "\n  ".join(offenders)
+
+    # Hand-reviewed 2026-08-05 (bd saxh). Each entry was read and confirmed to
+    # state the CURRENT three-way rule. Match on a distinctive fragment so
+    # ordinary rewording does not churn the list, while a NEW sentence -- or a
+    # rewrite that changes what one of these claims -- still trips it.
+    ALLOWED = (
+        # Scar tissue #2: states the Haiku arm, then scopes the denial to trivial.
+        "**Docs-only changes get ONE adversarial HAIKU review** instead",
+        # The Closeout section's summary of the same three-way fork.
+        "the Haiku `docs-reviewer` for a docs-only one (only a trivial diff gets neither)",
+        # The auto-merge condition: names what does NOT satisfy the Opus gate.
+        "or a trivial PR with no",
+        # The "Never merge" rule, same scoping.
+        "a trivial PR with no\n   adversarial review at all",
+    )
+    unexpected = [s for s in offenders if not any(frag in s for frag in ALLOWED)]
+    assert not unexpected, (
+        "New or reworded CLAUDE.md sentence(s) pair a docs-only subject with a "
+        "denial of review. Since bd saxh, docs-only changes get ONE Haiku "
+        "`docs-reviewer` pass and ONLY genuinely trivial changes get none. "
+        "Read each sentence below: fix the doc, or -- if it is correct -- add a "
+        "fragment of it to this test's ALLOWED tuple.\n  " + "\n  ".join(unexpected)
     )
 
 
