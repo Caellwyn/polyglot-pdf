@@ -218,8 +218,8 @@ path is reached only by a form with a much smaller SI floor. These numbers are
 derived from the SI TEXT and the kit, so they move whenever either grows: treat
 them as a point-in-time reading and RE-EXECUTE the function (with the session's
 filtered tool list and the kit's injection budget) rather than trusting any
-written-down figure -- including the ones in `derive_compression_window`'s own
-docstring, which are older still. The old 2800/2200
+written-down figure -- including the rounded ones in
+`derive_compression_window`'s own docstring. The old 2800/2200
 "winning calibration" numbers were measured on AI Studio before the
 `[5000, 128000]` bound existed on the connect path and no longer apply.
 
