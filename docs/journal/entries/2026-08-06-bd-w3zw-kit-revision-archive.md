@@ -126,6 +126,20 @@ round-3 false-ambiguity protection holds -- verified against all five prefix
 cases). It also found that the length-parametrized test could not have caught
 this; see Lessons 6.
 
+**And that fix over-corrected into a WORSE bug.** Accepting any prefix made a
+revision published under "12/20" answer to a record naming "12/2024" -- an
+unrelated schema returned at exit 0, where the false negative it replaced at
+least returned a real revision of the right marker. A shorter stored base is
+now accepted ONLY at the writer's exact trim budget (reconstructed from the
+same `_MARKER_MAX_LEN` the writer uses, imported rather than copied), which
+admits every genuine trimmed sibling and rejects the impostor. The suite had
+no two markers in a prefix relationship, so that whole dimension was unpinned;
+it now has direct and end-to-end cases in both directions. Two adjacent
+fragilities fixed alongside: `sibling_marker`'s 8-char base floor could emit a
+segment longer than the cap it budgets against (failing on exactly the
+pathological fingerprint it was written for), and the `rfind("--")` split is
+now pinned by a round-trip parametrization over markers containing dash runs.
+
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
 from the segment's name. `encode_marker` collapses any run of unsafe characters
@@ -207,7 +221,18 @@ fingerprint) instead of any `--` run, with a test pinning the coupling to
    record still resolve to the wrong schema?" -- not just of the side that
    changed.
 
-8. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
+8. **Loosening a match to fix a false negative invites a false positive, and
+   for a lookup the false positive is the worse one.** Exact-base matching hid
+   genuine siblings; bare-prefix matching then let an unrelated shorter
+   marker's revision answer. The stable fix was neither loose nor strict but
+   RECONSTRUCTIVE -- accept a shorter base only at exactly the value the writer
+   would have produced. When a reader must undo a writer's transformation,
+   re-derive the transformation rather than pattern-matching its output, and
+   pin BOTH directions: this file's markers were all `"E"*n` or unrelated
+   literals, so no two stood in a prefix relationship and half the contract was
+   untested.
+
+9. **A coarse `surfaces` declaration blocks unrelated work.** The bead declared
    `scripts/` (the retrieval script's name was unknown at planning time), which
    collided with an active P0 voice-bug claim writing spike scripts under the
    same directory. The guard refused the claim, correctly. The fix was to narrow

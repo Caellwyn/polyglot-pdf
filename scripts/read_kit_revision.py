@@ -70,18 +70,35 @@ if str(_REPO_ROOT) not in sys.path:
 _SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
 
 
+def _marker_max_len() -> int:
+    """The writer's segment cap, imported rather than duplicated.
+
+    The trim budget must be computed from the SAME constant the writer uses --
+    a local copy here would drift silently and make genuine siblings
+    unresolvable.
+    """
+    from backend.services.form_kits import _MARKER_MAX_LEN
+
+    return _MARKER_MAX_LEN
+
+
 def _is_sibling_of(segment: str, base: str) -> bool:
     """True when `segment` is a fingerprint-disambiguated sibling of `base`.
 
-    A sibling is "<base>--<encoded fingerprint>", but the WRITER trims its base
-    to make room for the fingerprint inside the segment length cap, while this
-    reader holds the UNTRIMMED base. So the comparison must accept a segment
-    base that is a PREFIX of ours -- requiring equality made every sibling of a
-    long marker invisible, and retrieval then returned the other revision at
-    exit 0 with no ambiguity report (fresh-eyes reproduced this end to end).
+    A sibling is "<base>--<encoded fingerprint>". Three things have to hold at
+    once, and getting any one wrong returns the WRONG revision:
 
-    The fingerprint suffix is still validated exactly, which is what keeps an
-    unrelated marker that merely encodes with a "--" run from matching.
+    1. The suffix must be an encoded `sha256:<12hex>` EXACTLY -- otherwise an
+       ordinary marker that merely encodes with a "--" run (e.g. "12/2024//rev2")
+       looks like a sibling of "12/2024" and produces a false ambiguity.
+    2. An equal base matches, obviously.
+    3. A SHORTER stored base matches ONLY at the writer's exact trim budget.
+       The writer trims the base to fit the fingerprint under the segment cap
+       while this reader holds the UNTRIMMED base, so requiring equality made
+       every sibling of a long marker invisible. But accepting any prefix is
+       worse: a revision published under "12/20" would then answer to a record
+       naming "12/2024". Reconstructing the budget admits the genuine trimmed
+       sibling and rejects the impostor.
     """
     marker_pos = segment.rfind("--")
     if marker_pos <= 0:
@@ -89,8 +106,18 @@ def _is_sibling_of(segment: str, base: str) -> bool:
     seg_base, suffix = segment[:marker_pos], segment[marker_pos + 2:]
     if not _SIBLING_SUFFIX_RE.fullmatch(suffix):
         return False
-    # Ours may be longer (untrimmed) than the stored one, never shorter.
-    return base.startswith(seg_base)
+    if seg_base == base:
+        return True
+    # A SHORTER stored base is legitimate only when it is exactly what the
+    # writer's trim would have produced. A bare prefix test is not enough: it
+    # matches an unrelated SHORTER marker's sibling too, so a record naming
+    # "12/2024" would resolve to a revision published under "12/20" -- an
+    # unrelated schema returned at exit 0, which is worse than the false
+    # NEGATIVE this replaced (that one at least returned a real revision of the
+    # right marker). Reconstructing the writer's budget keeps every genuine
+    # trimmed sibling and rejects the impostor.
+    budget = max(8, _marker_max_len() - len(suffix) - 2)
+    return len(seg_base) == budget and base.startswith(seg_base)
 
 
 class AmbiguousRevision(Exception):

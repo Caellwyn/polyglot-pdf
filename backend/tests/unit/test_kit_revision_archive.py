@@ -339,6 +339,72 @@ def test_sibling_suffix_matches_the_real_fingerprint_format(tmp_path):
     assert not rkr._is_sibling_of("12-2024--rev2", "12-2024")
 
 
+def test_a_shorter_unrelated_markers_sibling_is_not_ours(tmp_path):
+    """The false-POSITIVE dimension: no revision published under a marker that
+    merely PREFIXES ours may ever answer to ours.
+
+    Accepting any prefix (to make writer-trimmed siblings visible) let a
+    revision published under "12/20" answer to a record naming "12/2024" --
+    an unrelated schema returned at exit 0, worse than the false negative it
+    replaced. Every marker in this file used to be "E"*n or an unrelated
+    literal, so no two stood in a prefix relationship and the whole dimension
+    was unpinned.
+    """
+    from backend.services.form_kits import encode_marker as enc, sibling_marker
+
+    rkr = _read_kit_revision()
+    sib = sibling_marker("12/20", "sha256:1a2b3c4d5e6f")
+
+    # A short base is only legitimate at the writer's exact trim budget, which
+    # "12-20" is nowhere near -- so this is an impostor, not our sibling.
+    assert not rkr._is_sibling_of(sib, enc("12/2024"))
+    # ...while it IS the sibling of its own marker.
+    assert rkr._is_sibling_of(sib, enc("12/20"))
+
+
+def test_an_unrelated_prefix_marker_resolves_to_not_found(tmp_path):
+    """End to end: the prefix bleed must surface as an honest NOT FOUND, never
+    as another revision's schema."""
+    from backend.services.form_kits import FormKitNotFound
+
+    store = LocalFormKitStore(tmp_path)
+    # Two distinct revisions under "12/20" -- and NONE under "12/2024".
+    rev_1 = _schema("a", edition="12/20")
+    _make_kit(tmp_path, "w7", rev_1)
+    _archive_hook(store, "w7", {"status": "complete"})
+    rev_2 = _schema("a", "b", edition="12/20")
+    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
+    _archive_hook(store, "w7", {"status": "complete"})
+    # Live schema is unrelated, so nothing answers to "12/2024" at all.
+    (tmp_path / "w7" / "schema.json").write_text(
+        json.dumps(_schema("z", edition="09/2030")), encoding="utf-8"
+    )
+
+    with pytest.raises(FormKitNotFound):
+        _resolve_revision(store, "w7", "12/2024")
+
+
+@pytest.mark.parametrize("raw", ["12/2024", "12//2024", "12/2024/", "12-2024-", "a"])
+def test_sibling_round_trips_for_markers_with_dash_runs(tmp_path, raw):
+    """The split point (rfind('--')) must survive markers that themselves
+    encode with dashes or trailing dash runs -- otherwise the reader mis-splits
+    a legitimate sibling and loses it."""
+    from backend.services.form_kits import encode_marker as enc, sibling_marker
+
+    rkr = _read_kit_revision()
+    sib = sibling_marker(raw, "sha256:1a2b3c4d5e6f")
+    assert rkr._is_sibling_of(sib, enc(raw)), f"round trip failed for {raw!r}"
+
+
+def test_sibling_marker_never_exceeds_the_segment_cap():
+    """The 8-char base floor must not push the segment past the cap -- the one
+    input the floor exists for is a pathological fingerprint."""
+    from backend.services.form_kits import _MARKER_MAX_LEN, sibling_marker
+
+    assert len(sibling_marker("12/2024", "f" * 200)) <= _MARKER_MAX_LEN
+    assert len(sibling_marker("E" * 300, "sha256:1a2b3c4d5e6f")) <= _MARKER_MAX_LEN
+
+
 def test_retrieval_of_an_unknown_marker_is_not_found(tmp_path):
     """Absent must stay absent -- never silently the nearest sibling."""
     from backend.services.form_kits import FormKitNotFound

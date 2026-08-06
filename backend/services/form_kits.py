@@ -112,9 +112,12 @@ def sibling_marker(marker: str, fingerprint: str) -> str:
 	differ and no revision is lost -- the failure degrades to a less readable
 	name, never to overwritten bytes.
 	"""
-	encoded_fp = encode_marker(fingerprint)
-	# 2 for the "--" join. Guard against a pathological fingerprint eating the
-	# whole budget: always leave at least 8 chars of base.
+	# Cap the FINGERPRINT first so the 8-char base floor below cannot push the
+	# result past the segment limit. Without this the floor breaks the very
+	# invariant it exists to protect on the one input it was written for -- a
+	# pathological (non-sha256) fingerprint would emit an over-long segment.
+	encoded_fp = encode_marker(fingerprint)[:max(1, _MARKER_MAX_LEN - 8 - 2)]
+	# 2 for the "--" join. Always leave at least 8 chars of base.
 	base_budget = max(8, _MARKER_MAX_LEN - len(encoded_fp) - 2)
 	return f"{encode_marker(marker)[:base_budget]}--{encoded_fp}"
 
