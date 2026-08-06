@@ -266,10 +266,22 @@ twice more on *scope* rather than vocabulary: matching one sentence at a time lo
 to an `e.g.` mid-sentence split, and widening to a two-sentence sliding window lost
 to a three-sentence phrasing. Each fix was a bigger N, and each invited the next
 phrasing just outside it. What held was dropping N entirely and scoping to the
-**paragraph** -- the unit the prose itself uses for one claim, so no
-sentence-splitting artifact can separate a subject from its own context. When you
-find yourself tuning a window, span, or threshold, ask what natural boundary the
+**paragraph** -- the unit the prose itself uses for one claim. When you find
+yourself tuning a window, span, or threshold, ask what natural boundary the
 artifact already has.
+
+**Then STOP, and name what you are not covering.** A natural scope is better than
+a tuned one, not perfect: the very next round split a claim across a paragraph
+break and escaped that too. Every scope has an adjacent-scope escape, so a prose
+heuristic cannot be made evasion-proof and iterating toward one is the trap in a
+new costume. The discriminating question is **what failure are you actually
+defending against?** Here it is DRIFT -- a maintainer updating one statement of a
+rule and missing another -- and all three real regressions were single
+in-paragraph sentences in ordinary vocabulary, because whoever edits a rule is by
+definition describing it. The later escapes were *constructed by a reviewer trying
+to evade the check*, and none has occurred naturally. Cover the realistic class
+well, then pin the rest as accepted limits (below) instead of buying each one with
+another round.
 
 **Keep the escapes as a committed battery, not a claim.** Each phrasing that
 defeated a draft lives on as a parametrized case in
@@ -282,14 +294,16 @@ called that unverifiable.) Note the battery injects mid-document, not at
 end-of-file: an EOF append can be caught coincidentally by merging into the
 unterminated tail fragment, which would falsely suggest the enumeration is sound.
 
-**Pin the limits you accept, so they stay decisions.** No prose pin catches
-everything -- this one cannot see a denial phrased with no review vocabulary at all
-("docs-only edits never get a look from anyone"), and chasing that with more
-synonyms would both restart the trap and make the pin so broad it becomes noise and
-gets deleted. The accepted limit is therefore itself a test
-(`test_known_limit_still_holds`) that fails if the limit ever closes, with a
-docstring saying what to check before celebrating. A known limit with a test is a
-reviewed decision; the same limit in a comment is a hole the next round rediscovers.
+**Pin the limits you accept, so they stay decisions.** This pin has two: a denial
+using no review vocabulary at all ("docs-only edits never get a look from anyone"),
+and one split across a paragraph break. Chasing either -- more synonyms, or N
+paragraphs -- would restart the trap, and an over-broad matcher makes the pin noisy
+enough to get deleted, which is a worse outcome than a named gap. Each accepted
+limit is therefore itself a test (`test_known_limit_still_holds`) that FAILS if the
+limit ever closes, with a docstring saying what to check before celebrating. **A
+known limit with a test is a reviewed decision; the same limit in a comment is a
+hole the next round rediscovers -- and the same limit unstated is one a reviewer
+will keep finding, correctly, forever.**
 
 Tells you are in this trap: your fix is "add another alternation / synonym /
 exemption"; the new repro differs from the last only in wording; you can list the

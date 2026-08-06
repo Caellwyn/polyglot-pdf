@@ -92,6 +92,18 @@ def test_every_docs_only_mention_is_allowlisted(text):
 
     Operate on SENTENCES, not lines: the round-3 defect wrapped mid-sentence, so
     a line-based check saw the subject and the denial on different lines.
+
+    SCOPE, stated honestly. This catches a SENTENCE pairing a docs-only subject
+    with review vocabulary, inside one paragraph. It does NOT catch a denial that
+    uses no review vocabulary at all, nor one split across a paragraph break.
+    Those are accepted and PINNED as known limits in
+    `test_claude_md_review_flow_battery.py::UNENUMERABLE_BY_DESIGN`. The failure
+    mode this exists for is DRIFT -- a maintainer updating one statement of the
+    rule and missing another -- and all three real regressions (rounds 3-5,
+    verifiable via `git show origin/dev:CLAUDE.md`) were single in-paragraph
+    sentences using ordinary review vocabulary. A prose heuristic cannot be made
+    evasion-proof; every scope has an adjacent-scope escape. So it covers the
+    realistic class well and NAMES the rest rather than chasing them.
     """
     # ENUMERATION half. Deliberately over-broad: any sentence mentioning the
     # docs-only change class AND containing a review word is a candidate. It does

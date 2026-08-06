@@ -80,22 +80,40 @@ REGRESSIONS = [
     "No adversarial pass applies to them, by the way, at all, ever.",
 ]
 
-# KNOWN LIMIT, deliberately not "fixed". The enumerator keys on a subject AND a
-# review word. A sentence that denies review using NO review vocabulary at all --
-# "Docs-only edits never get a look from anyone." -- cannot be enumerated, and
-# widening `review_word` toward every synonym for "look at" is precisely the
-# patch-the-instance trap this file's history documents
-# (docs/standards/testing.md#change-the-mechanism): each addition invites the next
-# synonym, and an over-broad review_word turns every docs paragraph into a
-# candidate and the pin into noise that gets deleted.
+# KNOWN LIMITS, deliberately not "fixed" -- see the scope note below.
 #
-# Accepted because the realistic failure mode is DRIFT, not adversarial evasion:
-# the four real regressions this pin was built for (rounds 3-8) all used ordinary
-# review vocabulary, because whoever writes them is describing the review flow.
-# Recorded here so the limit is a known, reviewed decision rather than a silent
-# hole a future round rediscovers.
+# This pin catches a SENTENCE that pairs a docs-only subject with review
+# vocabulary, within one paragraph. Two shapes fall outside that and are accepted:
+#
+#   1. NO REVIEW VOCABULARY at all ("...never get a look from anyone"). Widening
+#      `review_word` toward every synonym for "look at" restarts the
+#      patch-the-instance trap AND makes the pin so broad that every docs
+#      paragraph is a candidate -- which is how such tests get deleted.
+#   2. SPLIT ACROSS PARAGRAPHS -- topic sentence in one paragraph, the denial in
+#      the next ("...handled by a separate path.\n\nThat path involves no
+#      adversarial review step."). Widening to N paragraphs is the same tuned
+#      constant that already failed at N sentences (rounds 7, 8).
+#
+# WHY ACCEPTING THEM IS THE RIGHT CALL, and not just fatigue: the failure mode
+# this pin exists for is DRIFT -- a maintainer updating one statement of the rule
+# and missing another. All THREE real regressions it was built from (found in
+# rounds 3, 4 and 5, verifiable in `git show origin/dev:CLAUDE.md`) were single
+# sentences inside one paragraph, using ordinary review vocabulary, because
+# someone editing this rule is by definition describing the review flow. Both
+# shapes above were constructed by an adversarial reviewer *trying* to evade the
+# check; neither has ever occurred naturally. A prose heuristic cannot be made
+# evasion-proof -- each scope has an adjacent-scope escape -- so the honest design
+# is to cover the realistic class well and PIN the rest as known.
+#
+# Each limit is a test below: if one ever closes, that test fails and tells the
+# reader what to check. A known limit with a test is a reviewed decision; the same
+# limit in a comment is a hole the next round rediscovers.
 UNENUMERABLE_BY_DESIGN = [
+    # no review vocabulary at all
     "Docs-only edits (e.g. journal notes, i.e. prose) never get a look from anyone.",
+    # subject and denial split across a paragraph break
+    "Docs-only and journal-only changes are handled by a separate path.\n\n"
+    "That path involves no adversarial review step of any kind.",
 ]
 
 REVERSALS = [
