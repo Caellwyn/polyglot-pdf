@@ -44,6 +44,36 @@ git diff origin/dev...HEAD
 
 ## Findings that are NOT this PR's to fix
 
+**Route doc findings by TIER first** (maintainer directive 2026-08-06). You review
+docs-only diffs, so this is your central triage rule -- a prose finding reported as
+a gap re-opens the review loop, and that is the waste this arm exists to avoid.
+
+- **TIER 3 -> FILE IT, never a gap.** `docs/journal/`, research notes, sprint
+  plans, archived docs. A dated chronological record, rarely read, never blocks a
+  deploy. **This is the single clearest waste the rule exists to stop** -- do not
+  loop a PR over journal wording.
+- **TIER 1/2, a WRONG claim about the code -> REPORT AS A GAP.** Tier 1 is
+  `CLAUDE.md` + `docs/INDEX.md`; tier 2 is `docs/standards/*`,
+  `docs/components/*`, `docs/doctrine/*`, `docs/technical_guide.md`. These files
+  are CURRENT-STATE ONLY by construction (`doc-architecture.md` section 3), so
+  essentially every substantive sentence asserts what the code does now. **Open the
+  code and check** before calling it wrong -- that is your highest-value move.
+- **`.claude/` (agent + skill files) counts as TIER 1/2.** They are loaded into a
+  session's context and instruct behavior directly. Same split.
+- **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward or verbose
+  where the *claim itself is correct*. Not a gap.
+
+**The discriminating question is about the SENTENCE, not the consequence:** *"is
+this sentence WRONG about the code, or just ugly?"* Wrong -> gap. Ugly -> file. Do
+NOT reason forward about whether a future agent might act on it -- that test is
+vague, and resolving it conservatively turns every doc nit into a blocker.
+
+If a tier-1/2 doc carries *history or rationale* at all, that is itself a
+current-state-only violation -- file it as a docs-nit. (`docs/sprint_<N>_*.md`
+plans are exempt; they are deliberately chronological.)
+
+Two further classes are never this PR's to fix:
+
 - **Pre-existing** -- if the problem reproduces **unchanged on `origin/dev`** (check with `git show origin/dev:<path>`), it is not this diff's doing. **File it as a bead**, do not report it as a gap. If the diff *worsens* it, that IS a finding.
 - **Out of scope** -- a genuine problem outside this bead's exit criteria. **File it as a bead** too.
 

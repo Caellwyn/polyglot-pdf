@@ -153,7 +153,7 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    passed**; the guard was defeated by a one-token mutation. Confirm the mutation
    actually applied (a no-op edit that "passes" proves nothing) and re-verify per
    parametrization, not once per file. Full rules + the recurring traps:
-   [`docs/standards/testing.md`](docs/standards/testing.md).
+   [`docs/standards/testing.md`](docs/standards/testing.md#test-the-tests).
 
 ---
 

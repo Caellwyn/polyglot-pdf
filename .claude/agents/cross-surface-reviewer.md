@@ -77,6 +77,10 @@ wording is exactly the waste this split exists to prevent. So:
   route's auth, a file's responsibility, a rule an agent must follow, a command to
   run. They are auto-loaded or surface-authoritative, so a wrong one actively
   misleads the next session. **Open the code and check** before calling it wrong.
+- **`.claude/` (agent + skill files) counts as TIER 1/2.** These are loaded into a
+  session's context and instruct behavior directly, so a wrong claim in one is at
+  least as consequential as a wrong claim in `docs/standards/`. Same split: wrong
+  about the code or the flow -> gap; merely ugly -> file.
 - **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward, verbose, or
   could be phrased better, where the *claim itself is correct*. Not a gap.
 

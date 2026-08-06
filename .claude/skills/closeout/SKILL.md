@@ -539,6 +539,9 @@ which is the same churn one layer down.
     command to run. They are auto-loaded or surface-authoritative, so a wrong one
     actively misleads the next session. **Wrong = blocker.** Open the code and
     check before calling it wrong.
+  - **`.claude/` (agent + skill files) counts as TIER 1/2.** They are loaded into a
+    session's context and instruct behavior directly, so a wrong claim in one is at
+    least as consequential as a wrong claim in `docs/standards/`. Same split.
   - **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward, verbose,
     inconsistently formatted, or could be phrased better, where the *claim itself
     is correct*. Tagged `tier: sonnet` / `work_class: docs-nit`. Blocking a
