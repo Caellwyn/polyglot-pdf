@@ -445,8 +445,9 @@ The top-level container for the entire form definition.
 
 There is **no `hide_if`** on the model -- to hide, invert the `show_if`
 condition. A field carrying `hide_if` is accepted and the key is SILENTLY
-dropped (`FormField`, like every model here, inherits Pydantic's default
-`extra="ignore"`), leaving the field unconditionally visible.
+dropped (`FormField` inherits Pydantic's default `extra="ignore"`; only
+`ConditionGroup` sets `extra="forbid"`), leaving the field unconditionally
+visible.
 
 **Example (Show spouse details if married)**:
 ```json
