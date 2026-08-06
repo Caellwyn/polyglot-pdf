@@ -215,7 +215,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
 Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:929`)
-/ `getJITHandshakePayload` (DTI, :973), sent by `frontend/src/webFormConnection.ts:595`.
+/ `getJITHandshakePayload` (DTI, :973), sent by `frontend/src/webFormConnection.ts:618`.
 Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:976`;
 handshake keys parsed :1044-1168).
 **No Pydantic model or TS interface pins this shape** -- every key is read with
@@ -245,7 +245,7 @@ handshake keys parsed :1044-1168).
 ### 3. WS control messages: client <-> backend (post-handshake)
 
 Client->server: one `if mtype == ...` switch at `websocket_routes.py:476-956`.
-Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:612-782`.
+Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:635-826`.
 Message senders are object literals; a renamed `type` logs
 `unknown_control_message_type` (or falls to the TS `default`) and a renamed
 sub-key reads as absent. The request/response pairs ride
@@ -255,11 +255,11 @@ sub-key reads as absent. The request/response pairs ride
 `confirm_field`/`confirm_field_response` (:314/:630),
 `skip_field`/`skip_field_response` (:390/:656),
 `switch_field`/`switch_field_response` (:454/:680). Client reply builders:
-`webFormConnection.ts:2908-2950` (confirm/skip), :2290 (switch).
+`webFormConnection.ts:3169-3211` (confirm/skip), :2474 (switch).
 
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
-  (`webFormConnection.ts:617-619`, expecting an `updates: Record<name, value>`
+  (`webFormConnection.ts:640-642`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
   (`backend/services/callback_handler.py:206`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
@@ -271,7 +271,7 @@ Known traps (all deliberate, all pinned only by comments):
   contract pinned in `standards/validation-delegation.md`).
 - The `session_ready` message's `native_vad` flag (`websocket_routes.py:1209-1229`)
   must agree with the backend's `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`frontend/src/shared/connection.ts:508-516`).
+  activity-signal behavior from it (`frontend/src/shared/connection.ts:517-527`).
 
 ### 4. Backend <-> Gemini Live (tools + session config)
 
@@ -281,7 +281,7 @@ live config by `form_filling_service.py:219-229` (which drops `switch_section`
 in continuous mode -- the session ships 6 declarations, not 7) and declared to
 Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1644`;
 tools assembled at :1657). Gemini's tool
-calls come back through the adapter (`live_ai_gemini.py:2248-2440` and :2447+)
+calls come back through the adapter (`live_ai_gemini.py:2426-2612` and :2620+)
 into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:437`),
 which dispatches to the `form_filling_service` handlers that emit the Leg-A
 client messages above. The coupling table (tool -> handler -> client message):
@@ -312,7 +312,7 @@ THREE call sites assemble the request -- download and print
 plus the in-browser preview
 (`frontend/src/pdf-view/FilledPreviewModal.tsx:62`, with its own unwrap loop
 :58-61). All run every value through `unwrapFieldValue`
-(`frontend/src/schema-forms/utils/fieldValue.ts:77-82`) --
+(`frontend/src/schema-forms/utils/fieldValue.ts:341`) --
 **dropping `confirmed`/`skipped`/`steered` flags entirely** -- and POST
 `{kit_id, pdf_filename, field_values, form_schema}`
 (`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`). A payload-shape change
@@ -346,10 +346,10 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-45`).
 
 The chain: Gemini `confirm_field` tool -> backend request
 (`request_coordinator.py:314-319`) -> client verifies it has a usable value and
-acks (`webFormConnection.ts:1705+`, reply built :2908-2927 -- `reason` is a fixed
+acks (`webFormConnection.ts:1896+`, reply built :3169-3190 -- `reason` is a fixed
 category token, never a field value) -> backend logs ONLY on a positive ack
 (the `recorded` guard at `callback_handler.py:933`; the `log_field_confirmation`
-call it protects at :967-979). Event shape (NO PII, no
+call it protects at :967-975). Event shape (NO PII, no
 `value` key anywhere): `backend/utils/confirmation_logger.py:270-285` --
 `{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
 field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL

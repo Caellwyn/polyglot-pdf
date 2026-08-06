@@ -240,7 +240,8 @@ def derive_compression_window(
     grown since the jnjj.35-era ~1601-floor example; the clamp-up + retune
     path in _build_live_config now fires only for forms with a much smaller
     SI floor). Re-execute this function rather than trusting these figures --
-    they move with the SI text and the kit's injection budget. injection_budget_tokens (bd wsao.8) adds headroom for the largest
+    they move with the SI text and the kit's injection budget.
+    injection_budget_tokens (bd wsao.8) adds headroom for the largest
     per-field inline guidance injection on top. bd jnjj.35 / A6.
     """
     floor = estimate_si_floor_tokens(system_instruction, function_declarations)
