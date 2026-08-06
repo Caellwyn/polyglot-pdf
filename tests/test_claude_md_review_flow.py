@@ -228,3 +228,82 @@ def test_no_retired_multi_opus_gate(text):
     for phrase in ("two independent", "clause 5", "final clearing round"):
         assert phrase not in lo, \
             "CLAUDE.md must not reinstate the retired multi-Opus gate: " + phrase
+
+
+# --------------------------------------------------------------------------
+# The prime override: same rules, higher blast radius.
+#
+# `.claude/prime-closeout-override.md` is appended VERBATIM to every session by
+# scripts/bd_prime.py, which makes it the most-read statement of the review and
+# merge rules in the repo -- and it is the one that regressed TWICE during bd
+# saxh, both times invisible to a 1093-test suite:
+#
+#   1. it still described the retired two-way review gate; then
+#   2. the fix for (1) widened "reviewed CLEAN" to three reviewers and left the
+#      adjacent auto-merge sentence unqualified, so it read as authorizing an
+#      autonomous merge of a Haiku-cleared docs PR -- a permission boundary the
+#      maintainer had deliberately left undecided.
+#
+# (2) is why these pins exist. A prose drift here does not fail loudly; it
+# silently teaches every future session a merge permission it should not have.
+# --------------------------------------------------------------------------
+
+PRIME_OVERRIDE_PATH = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / ".claude" / "prime-closeout-override.md"
+)
+
+
+@pytest.fixture(scope="module")
+def prime_text():
+    assert PRIME_OVERRIDE_PATH.is_file(), \
+        "the bd-prime closeout override must exist at .claude/"
+    return PRIME_OVERRIDE_PATH.read_text(encoding="utf-8")
+
+
+def test_prime_override_states_the_three_way_fork(prime_text):
+    """It must name all three outer arms, not the retired two-way gate."""
+    lo = prime_text.lower()
+    assert "docs-reviewer" in lo or "haiku" in lo, \
+        "the prime override must name the Haiku docs-review arm (bd saxh)"
+    assert "cross-surface" in lo or "opus" in lo, \
+        "the prime override must name the Opus cross-surface arm"
+    assert "trivial" in lo, \
+        "the prime override must name the trivial (no adversarial review) arm"
+
+
+def test_prime_override_does_not_widen_auto_merge(prime_text):
+    """A Haiku-cleared docs PR must PING, never auto-merge.
+
+    This is a PERMISSION boundary, not prose: the maintainer explicitly left
+    "should a Haiku clear qualify for auto-merge?" undecided (bd saxh), so any
+    wording here that authorizes it grants an autonomy the policy withholds.
+    This file regressed exactly that way once already -- widening "reviewed
+    CLEAN" from one reviewer to three left the auto-merge sentence unqualified,
+    and a 1093-test suite saw nothing.
+
+    Pin the CLAIM, positively, rather than trying to detect an unscoped
+    sentence. Two detection drafts failed in opposite directions here (an
+    exemption list that the offending text already satisfied; then a paragraph
+    scope that let a neighbouring scoped sentence mask it) -- the same
+    matching-vs-enumerating trap documented at
+    docs/standards/testing.md#change-the-mechanism. A positive pin cannot be
+    evaded by rephrasing the *other* sentences: if the file stops saying the
+    Opus clear is required, or stops naming the Haiku PR as a ping case, this
+    fails.
+    """
+    flat = re.sub(r"\s+", " ", prime_text).lower()
+    assert re.search(r"auto-merge requires[^.]{0,80}opus", flat), (
+        "the prime override must state that auto-merge requires the OPUS "
+        "cross-surface clear specifically -- without it, this always-injected "
+        "file reads as authorizing an autonomous merge of a Haiku-cleared "
+        "docs-only PR (bd saxh left that widening to the maintainer)"
+    )
+    assert re.search(r"haiku-cleared docs-only pr\s+\*{0,2}pings", flat), (
+        "the prime override must name the Haiku-cleared docs-only PR as a PING "
+        "case, not an auto-merge one"
+    )
+    assert re.search(r"not widen it autonomously", flat), (
+        "the prime override must carry the do-not-widen-autonomously note, so a "
+        "future session cannot read the open question as permission"
+    )
