@@ -509,6 +509,42 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_readiness_stamp_leaves_status_values_byte_identical(client):
+    """Adding the readiness stamp must not perturb metadata.json's STATUS
+    values (sprint-18 C4 exit criterion).
+
+    deploy-all.sh greps `status` out of this file with shell tooling to decide
+    which kits ship, so the stored token must stay exactly "draft"/"complete" --
+    a stamp that re-serialized the value (or the key) differently would silently
+    change which forms reach users. This asserts the raw stored bytes, not the
+    parsed object, because that is what the deploy actually reads.
+    """
+    c, _store, root = client
+    kit = _make_kit(root, "i-90", schema={"fields": [{"id": "a"}]})
+    meta_path = kit / "metadata.json"
+
+    before = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert before["status"] == "draft"
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a"}]},
+    )
+    assert r.status_code == 200
+
+    raw = meta_path.read_text(encoding="utf-8")
+    after = json.loads(raw)
+    # The stamp landed...
+    assert "readiness" in after
+    # ...and the status token is untouched, as the exact string deploy greps.
+    assert after["status"] == "draft"
+    assert '"status": "draft"' in raw or '"status":"draft"' in raw
+    # Every pre-existing key survived the read-merge-write.
+    for key, value in before.items():
+        assert after[key] == value
+
+
 def test_put_schema_survives_a_failing_readiness_stamp(client, monkeypatch):
     """A stamp failure must NEVER fail the save (sprint-18 C4).
 
