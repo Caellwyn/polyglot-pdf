@@ -472,8 +472,10 @@ Do NOT hand-roll the review cycle. In particular:
   (`origin/dev...HEAD`) and loops it to `NO-GAPS`. **That single clearing pass is
   the gate**, and only a BEHAVIORAL fix voids it.
   There is **no `@codex review` trigger, no `pr_review_watcher.py`, and no
-  `requested_reviewers` reviewer API** -- all dead path. Docs-only / `.beads`-only /
-  journal-only / trivial changes get NO outer review.
+  `requested_reviewers` reviewer API** -- all dead path. **Docs-only / `.beads`-only /
+  journal-only changes get the cheap arm instead: ONE adversarial HAIKU review** (the
+  `docs-reviewer` agent, same loop, prose review rather than a contract trace). Only a
+  genuinely TRIVIAL change gets no adversarial review at all.
 - **The outer review's subagents are read directly, never watched by a script.**
   Closeout reads each Opus reviewer's `NO-GAPS` / `GAPS-FOUND` STATUS line straight
   from the subagent result -- there is no GitHub bot to poll, so the old
@@ -498,8 +500,10 @@ Do NOT hand-roll the review cycle. In particular:
   fixed.
 - **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
   the fresh-eyes assess loop first (scored against the bead's exit criteria,
-  re-spawned until no gap at the routed haiku/sonnet model), THEN the ONE Opus outer
-  cross-surface review (review-worthy changes only, looped until it clears),
+  re-spawned until no gap at the routed haiku/sonnet model), THEN ONE outer
+  adversarial pass looped until it clears -- the Opus `cross-surface-reviewer` for a
+  source diff, or the Haiku `docs-reviewer` for a docs-only one (only a trivial diff
+  gets neither),
   all on the local branch with fixes committed. Only after both clear does the PR
   open.
 - Once both reviews are `NO-GAPS`, **one `closeout_finish.py` run opens the PR AND
