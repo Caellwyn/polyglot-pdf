@@ -465,6 +465,19 @@ async def _load_kit_dump(store, kit_id: str) -> Optional[dict]:
 _READINESS_KEY = "readiness"
 
 
+def _require_int(value):
+    """The value if it is a real int, else raise so the caller yields None.
+
+    Deliberately rejects bool (True is an int in Python) and str/float, which
+    `int()` would happily coerce -- the client's parser accepts neither, and a
+    stamp that parses differently per mode is the two-readings bug this bead
+    exists to end.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("expected int")
+    return value
+
+
 def _require_str(value):
     """The value if it is a real string, else raise so the caller yields None.
 
@@ -490,12 +503,21 @@ def _readiness_out(meta: Optional[dict]):
         return None
     try:
         return ReadinessStamp(
-            reviewed=int(raw["reviewed"]),
-            toReview=int(raw["toReview"]),
-            total=int(raw["total"]),
-            errors=int(raw["errors"]),
-            percent=int(raw["percent"]),
-            ready=bool(raw["ready"]),
+            # Typed, not int()-coerced: int("75") is 75 and int(75.9) is 75,
+            # where the client's parser rejects both and shows the verify hint.
+            # Same file, two readings by mode -- the divergence this bead
+            # exists to end (Opus fresh-eyes round 5).
+            reviewed=_require_int(raw["reviewed"]),
+            toReview=_require_int(raw["toReview"]),
+            total=_require_int(raw["total"]),
+            errors=_require_int(raw["errors"]),
+            percent=_require_int(raw["percent"]),
+            # `is True` for the SAME reason as `verified` below -- bool("no") is
+            # True, and the client's parser requires an exact `=== true`, so a
+            # loose read here means one metadata.json yields two answers
+            # depending on which mode reads it (Opus fresh-eyes round 5: this
+            # sibling boolean was missed one line above the round-4 fix).
+            ready=raw["ready"] is True,
             # `is True`, NOT bool(): bool("no") is True, so a hand-edited or
             # older-shaped stamp carrying a STRING would promote itself from
             # "not fully checked" to a confident percentage on every card --
@@ -509,7 +531,13 @@ def _readiness_out(meta: Optional[dict]):
             # Latent until bd polyglot-pdf-j8sr compares hashes, and a wrong
             # diagnosis is worse than none.
             schemaSha1=_require_str(raw["schema_sha1"]),
-            stampedAt=raw.get("stamped_at"),
+            # A junk timestamp DEGRADES to None rather than failing the whole
+            # stamp: it is decoration (nothing gates on it), and the client's
+            # parser keeps the stamp in that case. Dropping the stamp here
+            # would mean a card showing the verify hint in hosted mode and a
+            # percentage in local mode for one file (Opus fresh-eyes round 5).
+            stampedAt=(raw.get("stamped_at")
+                       if isinstance(raw.get("stamped_at"), str) else None),
         )
     except (KeyError, TypeError, ValueError):
         return None

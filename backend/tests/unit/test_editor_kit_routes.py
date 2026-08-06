@@ -610,6 +610,119 @@ def test_kits_listing_tolerates_a_malformed_stamp(client):
     assert bad["readiness"] is None
 
 
+def test_mark_complete_stamps_readiness_from_the_published_schema(client):
+    """Publishing STAMPS the kit -- the other half of exit criterion 2.
+
+    Unpinned until Opus fresh-eyes round 5: deleting the entire publish-path
+    stamp block left all 1659 backend tests green, because the only publish
+    test asserted the FAILURE case ("readiness" not in meta), which a deleted
+    stamp satisfies trivially. Publish is the more consequential half -- it is
+    the number a completed kit carries into deploy.
+
+    Also pins the RE-LINT decision: the stamp must describe the POST-sweep
+    schema (the translation sweep mutates and re-persists it), so swapping the
+    re-lint back to the gate's pre-sweep findings must not silently pass.
+    """
+    c, _store, root = client
+    # The gate-clean fixture, with its one field signed off so the stamp has a
+    # non-trivial number to record.
+    reviewed = json.loads(json.dumps(VALID_SCHEMA))
+    reviewed["fields"][0]["_review"] = {"status": "reviewed_correct"}
+    _make_kit(root, "i-90", schema=reviewed)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.text
+
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    stamp = meta["readiness"]
+    # One field, signed off -> fully reviewed and ready.
+    assert stamp["reviewed"] == 1
+    assert stamp["total"] == 1
+    assert stamp["percent"] == 100
+    assert stamp["ready"] is True
+    # The publish path HAS a lint report in hand, so the stamp is verified.
+    assert stamp["verified"] is True
+    # The hash describes the schema that was actually published.
+    published = json.loads((root / "i-90" / "schema.json").read_text(encoding="utf-8"))
+    assert stamp["schema_sha1"] == ekr._schema_hash(published)
+
+
+def test_publish_stamp_measures_the_POST_sweep_schema(client, monkeypatch):
+    """The stamp must describe the schema as PUBLISHED, not as gated.
+
+    The translation drift sweep runs AFTER the gate's lint and mutates +
+    re-persists the schema. Reusing the gate's pre-sweep findings would stamp
+    counts describing one schema under a hash computed from another --
+    internally inconsistent, and contradicted by the editor the moment anyone
+    opens the kit.
+
+    The default sweep stub is a no-op, which makes pre- and post-sweep findings
+    identical and the re-lint decision unfalsifiable (measured: swapping the
+    re-lint for gate_findings left all 152 tests green). This stub MUTATES the
+    schema the way the real sweep does, so the two differ and the choice is
+    pinned.
+    """
+    c, _store, root = client
+    reviewed = json.loads(json.dumps(VALID_SCHEMA))
+    # The sign-off stamps exactly the findings that exist BEFORE the sweep --
+    # computed from the real linter, not hardcoded, so this cannot rot when a
+    # rule's path changes. That makes the field reviewed under the gate's lint
+    # and NOT reviewed under a post-sweep lint (whose extra flag is new since
+    # the sign-off), which is the only observable difference between the two
+    # runs. An absent slot would be the grandfather case (no timeliness claim,
+    # rule never fires) and could not distinguish them at all.
+    from backend.services.publish_readiness import finding_fingerprint
+    from backend.services.schema_lint import lint_schema as _lint
+    reviewed["fields"][0]["_review"] = {
+        "status": "reviewed_correct",
+        "seen_fingerprints": [finding_fingerprint(f) for f in _lint(reviewed, None)],
+    }
+    _make_kit(root, "i-90", schema=reviewed)
+
+    async def _mutating_sweep(store, kit_id, schema, schema_file):
+        # What the real sweep does: write translation flags into _bakeoff
+        # provenance and re-persist. schema_lint RE-EMITS those flags as
+        # field-anchored findings, so a post-sweep lint sees a finding the
+        # gate's lint could not have -- which is the whole difference between
+        # the two, and what makes this test able to tell them apart.
+        schema.setdefault("_bakeoff", {}).setdefault("authoring", {})[
+            "option_translation"] = {
+            "flags": [{"rule": "translation-drift-unresolved", "field_id": "f1",
+                       "path": "fields[0] (id=f1).options[x].label_translations.es",
+                       "message": "needs review", "severity": "WARNING"}],
+            "model": "gemini-2.5-pro",
+        }
+        await store.put_schema(kit_id, schema, schema_file)
+        return 1, "gemini-2.5-pro"
+
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _mutating_sweep)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.text
+
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    published = json.loads((root / "i-90" / "schema.json").read_text(encoding="utf-8"))
+    # The sweep's write reached disk...
+    assert "option_translation" in published["_bakeoff"]["authoring"]
+    # ...the stamp's hash describes THAT schema, not the pre-sweep one...
+    assert meta["readiness"]["schema_sha1"] == ekr._schema_hash(published)
+    # ...and -- the part that actually distinguishes the two lint runs -- the
+    # COUNTS reflect the post-sweep finding. It is newer than the field's
+    # sign-off, so the timeliness rule demotes the field: 0 of 1, not 1 of 1.
+    # Reusing the gate's pre-sweep findings would stamp a confident 100% here.
+    assert meta["readiness"]["reviewed"] == 0
+    assert meta["readiness"]["percent"] == 0
+    assert meta["readiness"]["total"] == 1
+
+
 def test_mark_complete_survives_a_failing_readiness_stamp(client, monkeypatch):
     """A stamp failure must not fail a PUBLISH either (fresh-eyes gap 4).
 
