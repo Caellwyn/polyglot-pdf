@@ -1,6 +1,6 @@
 # Sprint 1 — Harness tuning: reduce token burn, increase bounded autonomy
 
-> **ARCHIVED (2026-08-06, docs audit bd polyglot-pdf-2zk3).** Epic
+> **ARCHIVED (2026-08-05, docs audit bd polyglot-pdf-2zk3).** Epic
 > `polyglot-pdf-hrn` is closed; the R1-R4 harness-autonomy roadmap continues as
 > open epic `polyglot-pdf-h2r`. Kept verbatim below as the sprint's plan of
 > record -- read it as history, not as current direction.

@@ -1,6 +1,6 @@
 # Drain / handover doctrine (R2)
 
-*Last updated: 2026-06-12.*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: plan-of-record link repointed to the archived sprint-1 plan; mechanism otherwise unchanged and re-confirmed against `scripts/drain_flag.py`).*
 
 How a long-running orchestrator session retires **cleanly** when it approaches
 context-fill, instead of degrading turn-by-turn through repeated auto-compaction.

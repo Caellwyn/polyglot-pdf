@@ -182,7 +182,7 @@ Two inputs are easy to miss and both move the result by thousands of tokens:
   `settings.TOOL_DECLARATIONS` overstates the floor by ~92 tokens.
 - **`injection_budget_tokens` is a real third addend**, passed from
   `guidance_contract.inline_injection_budget_tokens(full_schema)`
-  (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1772`).
+  (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1774`).
   It reserves
   room for the largest per-field inline guidance injection the form can produce.
   It is `0` for a form with no `help.details`, so it is invisible on some kits and
