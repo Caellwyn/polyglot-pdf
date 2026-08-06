@@ -151,6 +151,18 @@ _FLOOR_CHARS_PER_TOKEN = 4
 _COMPRESSION_TRIGGER_MIN_TOKENS = 5000
 _COMPRESSION_TRIGGER_MAX_TOKENS = 128_000
 
+# Queued after an interrupted generation when INTERRUPT_REANCHOR_ENABLED is on
+# (bd polyglot-pdf-oagw). Deliberately short, generic, and value-free: the
+# backend is stateless (it holds no current field or value -- both live in the
+# guidance block the model already has), and repeating a value in text next to
+# the user's spoken confirmation is the suspected acoustic-loop feed this bead
+# must not add to. ASCII only.
+_REANCHOR_TEXT = (
+    "You were interrupted mid-sentence. Continue from the CURRENT field in the "
+    "most recent guidance block -- do not repeat an earlier question and do not "
+    "reuse an earlier field's name or spelling."
+)
+
 
 # WS close codes that count as a SPONTANEOUS drop worth forwarding to the client
 # so it can reconnect (bd polyglot-pdf-ppfy). 1011 is the intermittent Gemini 2.5
@@ -313,6 +325,18 @@ class LiveAIGemini(ILiveAI):
         # dev-log session_id is "<instance_id>#<attempt>"; ws_session_id still groups
         # all attempts of one form session. Bumped at each session_open.
         self._live_attempt = 0
+
+        # Interrupt re-anchor gate (bd polyglot-pdf-oagw), latched at construction:
+        # the receive loop has no `settings` in scope, and a NameError there would
+        # vanish into the surrounding except-pass. Imported LOCALLY like every
+        # other get_settings() use in this module -- a module-scope import here
+        # would be shadowed by those function-local ones (the
+        # websocket_routes UnboundLocalError trap). getattr-guarded so a minimal
+        # settings stub in unit tests falls back to OFF rather than raising.
+        from backend.config import get_settings as _get_settings
+        self._reanchor_enabled = bool(
+            getattr(_get_settings(), "INTERRUPT_REANCHOR_ENABLED", False)
+        )
 
         # Store these as instance variables for later use
         self._vertexai = vertexai
@@ -2506,6 +2530,29 @@ class LiveAIGemini(ILiveAI):
                                                     await self._on_interrupted()
                                                 except Exception:
                                                     self._log.warning("on_interrupted_callback_error")
+
+                                            # RE-ANCHOR (bd polyglot-pdf-oagw): an interrupted
+                                            # generation leaves the native-audio model's speech
+                                            # path on stale continuation state -- measured, it
+                                            # then regresses to an earlier question or blends a
+                                            # previous name's spelling into the current one,
+                                            # while the text + tool paths stay correct (bd 0rpu
+                                            # attribution: 7/7 divergences on interrupted edges,
+                                            # 0 on clean completions). Queue ONE short text turn
+                                            # pointing the model back at its latest guidance
+                                            # block. Deliberately GENERIC: it names no field and
+                                            # echoes no value -- the backend is stateless (it
+                                            # holds neither), and repeating a value next to the
+                                            # user's spoken confirmation is itself suspected of
+                                            # feeding the acoustic loop. Flag-gated OFF until
+                                            # the A/B validates it. Swallowed like the rest of
+                                            # this block: a queue failure must not kill the loop.
+                                            if self._reanchor_enabled:
+                                                try:
+                                                    await self.send_text_message(_REANCHOR_TEXT)
+                                                    self._log.info("interrupt_reanchor_queued")
+                                                except Exception:
+                                                    self._log.warning("interrupt_reanchor_error")
 
                                             # Skip further processing of this event
                                             continue

@@ -220,6 +220,22 @@ class Settings(BaseModel):
 	# *SI mode* was removed.
 	USE_DTI: bool = os.getenv("USE_DTI", "true").lower() == "true"
 
+	# === Interrupt re-anchor (bd polyglot-pdf-oagw) ===
+	# After a barge-in interrupts a generation, the native-audio model's SPEECH
+	# path resumes from stale continuation state: measured on the bd 0rpu
+	# attribution runs, every audio/text divergence (a regressed question, a
+	# previous name's spelling blended onto the current one) landed on an
+	# interrupted generation and none on a cleanly-completed one. When this is on
+	# the adapter queues ONE short, generic, value-free text turn after each
+	# interruption, pointing the model back at its latest guidance block.
+	# Default OFF until the A/B (post-#550 baseline vs re-anchor, RUDE harness
+	# arm, STT-scored) justifies the flip -- the injection is itself a text
+	# anchor near the user's spoken confirmation, the shape suspected of feeding
+	# the acoustic loop, so it must be measured rather than assumed helpful.
+	INTERRUPT_REANCHOR_ENABLED: bool = (
+		os.getenv("INTERRUPT_REANCHOR_ENABLED", "false").lower() == "true"
+	)
+
 	# === Continuous-session mode (bd polyglot-pdf-x8rt) ===
 	# When on, the whole form runs as ONE Gemini session bounded by the compression
 	# window, instead of chopping the form into sections and resetting the session

@@ -2152,3 +2152,172 @@ async def test_run_session_loop_interrupted_callback_error_swallowed():
     # Must not raise despite the callback exploding.
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
     await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_reanchor_queues_one_text_turn_when_enabled():
+    """With the flag on, an interruption queues EXACTLY ONE re-anchor text turn
+    (bd polyglot-pdf-oagw). The generation-side half of the interrupt fix: the
+    audio head resumes an interrupted generation from stale continuation state,
+    so it is pointed back at its latest guidance block."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini, _REANCHOR_TEXT
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._reanchor_enabled = True
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _InterruptedSession:
+        def __init__(self):
+            self._generator = None
+            self.text_turns = []
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **kwargs):
+            turns = kwargs.get("turns") or {}
+            for part in turns.get("parts", []):
+                if part.get("text"):
+                    self.text_turns.append(part["text"])
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    yield SimpleNamespace(
+                        server_content=SimpleNamespace(
+                            interrupted=True, model_turn=None
+                        )
+                    )
+                self._generator = gen()
+            return self._generator
+
+    session = _InterruptedSession()
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    # The loop's own text_sender task drains the queue, so assert at the SESSION
+    # boundary (what Gemini actually received), not on the queue's residue.
+    await asyncio.sleep(0.05)
+    assert session.text_turns == [_REANCHOR_TEXT]
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_reanchor_silent_when_disabled():
+    """Flag OFF (the default) queues NOTHING -- the pre-oagw behavior, so the
+    A/B has a real control arm."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._reanchor_enabled = False
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _InterruptedSession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    yield SimpleNamespace(
+                        server_content=SimpleNamespace(
+                            interrupted=True, model_turn=None
+                        )
+                    )
+                self._generator = gen()
+            return self._generator
+
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(_InterruptedSession())
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    assert adapter._text_queue.empty()
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_reanchor_send_failure_does_not_crash_loop():
+    """A queue failure is swallowed like every other callback in the interrupted
+    block -- the receive loop must survive (bd oagw)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._reanchor_enabled = True
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    async def _boom(_text):
+        raise RuntimeError("queue closed")
+
+    adapter.send_text_message = _boom
+
+    class _InterruptedSession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    yield SimpleNamespace(
+                        server_content=SimpleNamespace(
+                            interrupted=True, model_turn=None
+                        )
+                    )
+                self._generator = gen()
+            return self._generator
+
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(_InterruptedSession())
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    # Must not raise.
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    await adapter.finalize()
+
+
+def test_reanchor_text_is_generic_and_value_free():
+    """The injected line must name NO field and echo NO value (bd oagw): the
+    backend is stateless (it holds neither), and a value repeated in text next
+    to the user's spoken confirmation is the acoustic-loop feed this fix must
+    not add to. Pins the property, not the wording."""
+    from backend.adapters.live_ai_gemini import _REANCHOR_TEXT
+
+    assert _REANCHOR_TEXT.isascii()          # CLAUDE.md scar #6
+    assert len(_REANCHOR_TEXT) < 400         # one short turn, not a mini-SI
+    # It must point AT the guidance block rather than restate its content.
+    assert "guidance block" in _REANCHOR_TEXT
+    # No template/interpolation hooks -- a future edit must not make it
+    # value-bearing without failing here.
+    for forbidden in ("{", "}", "%s", "field_id", "stored"):
+        assert forbidden not in _REANCHOR_TEXT
