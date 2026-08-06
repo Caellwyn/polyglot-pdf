@@ -87,7 +87,13 @@ describe('summarizeCatalogue', () => {
 });
 
 describe('readKitProgress', () => {
-  it('computes review percent from field completion (2 of 4 complete -> 50%)', async () => {
+  it('does NOT compute a review percent -- that is the stamp\'s job (bd g687)', async () => {
+    // Sprint-18 C4: the percentage comes from the kit's readiness stamp in
+    // metadata.json, never from a client-side re-derivation here. This scan
+    // survives only for schemaError + version. Computing a percentage "just in
+    // case" would leave a live SECOND definition of the number the epic
+    // centralized -- which is how the fallback creeps back (bd q3rm was that
+    // exact fallback disagreeing with the open kit).
     const schema = {
       source: 'pdf', form_metadata: { form_number: 'T-1' }, parts: [], sections: [],
       fields: [
@@ -96,9 +102,11 @@ describe('readKitProgress', () => {
       ],
     };
     const prog = await readKitProgress(entryServingSchema('k', schema));
-    expect(prog.reviewPercent).toBe(50);
-    expect(prog.completeFields).toBe(2);
-    expect(prog.totalFields).toBe(4);
+    // Null even though the schema is perfectly measurable -- the point.
+    expect(prog.reviewPercent).toBeNull();
+    expect(prog.schemaError).toBe(false);
+    // The version line IS still derived (no stamp carries it).
+    expect(prog.version).not.toBeNull();
   });
 
   it('returns null percent (no schemaError) for a kit with no schema', async () => {
@@ -163,26 +171,33 @@ describe('readKitProgress', () => {
     expect(prog.schemaError).toBe(true);
   });
 
-  it('reports 0% (not null) for a valid schema with zero fields', async () => {
-    // An extracted-but-empty schema is distinct from a pre-extraction kit: it has
-    // a measurable (0%) progress, so the bar renders rather than being hidden.
+  it('distinguishes an extracted-but-empty schema from a broken one', async () => {
+    // Still the meaningful distinction after C4 (the percentage moved to the
+    // stamp): an empty-but-valid schema is READABLE (schemaError false, so the
+    // card shows the verify hint), while an unparseable one is not.
     const prog = await readKitProgress(
       entryServingSchema('k', { form_metadata: { form_number: 'T' }, sections: [], fields: [] }),
     );
-    expect(prog.reviewPercent).toBe(0);
-    expect(prog.totalFields).toBe(0);
+    expect(prog.schemaError).toBe(false);
+    expect(prog.reviewPercent).toBeNull();
   });
 });
 
-describe('the scan and the open kit share ONE count predicate (bd polyglot-pdf-q3rm)', () => {
-  it('a reviewed_correct field with no pdf_field_name counts identically in both', async () => {
-    // THE divergence this bead fixes: checkFieldComplete ERRORs a text field
-    // with no pdf_field_name, so the old getCompletionStats scan excluded it
-    // while App.liveStats' reviewCounts counted it (a non-choice field with no
-    // widget mapping is not a structural error; flagging the missing mapping
-    // is the lint layer's job). The same kit showed 100% while open and 0%
-    // after a refresh. One predicate now: both sides must report the SAME
-    // number, and the sign-off counts.
+describe('the disk scan can no longer disagree with the open kit (bd polyglot-pdf-q3rm, carried to C4)', () => {
+  it('the scan offers NO percentage for a kit the open editor measures at 100%', async () => {
+    // q3rm's original divergence: checkFieldComplete ERRORs a text field with
+    // no pdf_field_name, so the old scan showed 0% while the open kit showed
+    // 100% -- the same card flipping between two numbers. q3rm fixed it by
+    // making both sides run one predicate; C4 removes the second computation
+    // ENTIRELY, which is stronger: the scan now yields null and the card reads
+    // the backend's stamp instead, so there is no client-side number left to
+    // disagree with.
+    //
+    // The "both sides agree" property itself did not go away -- it moved to
+    // the shared cross-language fixture
+    // (src/utils/__fixtures__/reviewPredicateParity.json), which pins the
+    // predicate against the BACKEND's implementation, the pairing that
+    // actually matters now.
     const schema = {
       source: 'pdf', form_metadata: { form_number: 'T-1' }, parts: [], sections: [],
       fields: [{
@@ -193,11 +208,10 @@ describe('the scan and the open kit share ONE count predicate (bd polyglot-pdf-q
     };
     const prog = await readKitProgress(entryServingSchema('k', schema));
     const live = liveStats(schema as unknown as FormSchema, []);
-    expect(prog.reviewPercent).toBe(live.percent);
-    expect(prog.completeFields).toBe(live.complete);
-    expect(prog.totalFields).toBe(live.total);
-    // Pin the direction too: the shared predicate COUNTS the sign-off (the old
-    // scan's 0% was the bug, not the live 100%).
-    expect(prog.reviewPercent).toBe(100);
+    // The open kit still measures it (the sign-off counts -- q3rm's direction).
+    expect(live.percent).toBe(100);
+    // ...and the scan declines to answer at all, rather than answering
+    // differently. No second number exists to drift.
+    expect(prog.reviewPercent).toBeNull();
   });
 });

@@ -196,8 +196,10 @@ class ReadinessStamp(BaseModel):
     `verified` is False when the counts were computed WITHOUT a usable lint
     report: the numbers are then honest-but-unchecked and the card must render
     the verify hint, never a confident percentage. `schemaSha1` scopes the stamp
-    to the schema it measured, so an out-of-band edit reads as stale rather than
-    as truth.
+    to the schema it measured, FOR A CALLER THAT HOLDS THE SCHEMA and can
+    compare. The catalogue listing does not hold one (not re-reading every kit
+    is the point of the stamp), so it cannot detect an out-of-band edit today --
+    bd polyglot-pdf-j8sr tracks re-stamping the routes that rewrite a schema.
     """
 
     reviewed: int
@@ -454,8 +456,11 @@ async def _load_kit_dump(store, kit_id: str) -> Optional[dict]:
 # what it knows but marks itself unverified, and the card renders the
 # "not fully checked" hint instead of a confident percentage (decision 4). A
 # stamp is also only meaningful for the schema it measured, so it carries that
-# schema's hash: a kit edited out of band (hand-edited JSON, a git checkout)
-# has a stamp whose hash no longer matches, which reads as stale, not as truth.
+# schema's hash, so a caller HOLDING the schema can tell the stamp no longer
+# describes it. The catalogue listing holds no schema (not re-reading every kit
+# is the point), so today the hash is recorded but not yet compared there --
+# bd polyglot-pdf-j8sr tracks the routes that rewrite a schema without
+# re-stamping, which is the reachable way a stamp goes stale in-app.
 
 _READINESS_KEY = "readiness"
 
@@ -1778,22 +1783,29 @@ async def set_editor_kit_status(
     if body.status == "complete":
         next_meta["published_at"] = datetime.now(timezone.utc).isoformat()
         # Re-stamp readiness from the RELOADED schema this transition just
-        # gated on (sprint-18 C4). The gate's own lint findings are reused --
-        # re-linting here could only produce a DIFFERENT answer than the gate
-        # just acted on, which is precisely the two-definitions bug this bead
-        # exists to end. Folded into the single metadata write below rather
-        # than issuing a second one.
+        # gated on (sprint-18 C4).
+        #
+        # RE-LINTED rather than reusing the gate's findings: the translation
+        # drift sweep above MUTATES `schema` in place and re-persists it, and
+        # the flags it writes are re-emitted as field-anchored findings by the
+        # next lint. Reusing gate_findings (computed BEFORE the sweep) would
+        # stamp counts describing the pre-sweep schema under a schema_sha1
+        # computed from the POST-sweep one -- an internally inconsistent stamp
+        # that the editor contradicts the moment anyone opens the kit (Opus
+        # fresh-eyes round 2). The lint is over the same in-memory schema the
+        # hash is taken from, so counts and hash now describe one object.
+        #
         # Guarded for the SAME reason the save path guards its stamp: by the
         # time this runs the kit has cleared validation, the v2 stamp, the lint
-        # gate and the translation sweep (which may already have WRITTEN
-        # re-translations), so letting a stamp failure raise would 500 a
-        # publish that legitimately passed every gate -- and the caller would
-        # retry a transition that partly happened. An unstamped publish is a
-        # card showing the verify hint; a 500 is a broken publish
-        # (fresh-eyes gap 4 -- this asymmetry with the save path was the tell).
+        # gate and the sweep (which may already have WRITTEN re-translations),
+        # so letting a stamp failure raise would 500 a publish that legitimately
+        # passed every gate -- and the caller would retry a transition that
+        # partly happened. An unstamped publish is a card showing the verify
+        # hint; a 500 is a broken publish.
         try:
+            post_sweep_findings = lint_schema(schema, dump_data)
             next_meta[_READINESS_KEY] = _readiness_stamp(
-                schema, gate_findings, verified=True,
+                schema, post_sweep_findings, verified=True,
             )
         except Exception:  # noqa: BLE001 -- never fail a gated publish
             _log.warning("editor_status_stamp_failed", kit_id=kit_id,

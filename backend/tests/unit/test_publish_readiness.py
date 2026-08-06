@@ -19,6 +19,7 @@ ASCII only.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -334,6 +335,67 @@ def test_parity_cases_cover_every_client_rule_that_folds_in_the_message():
     client_rules = set(re.findall(r"'([a-z0-9-]+)'", m.group(1)))
     from backend.services.publish_readiness import _MESSAGE_LOCALIZED_RULES
     assert client_rules == set(_MESSAGE_LOCALIZED_RULES)
+
+
+# --------------------------------------------------------------------------- #
+# Shared cross-language predicate parity
+# --------------------------------------------------------------------------- #
+
+_PARITY_FIXTURE = (
+    _REPO / "schema-editor" / "src" / "utils" / "__fixtures__"
+    / "reviewPredicateParity.json"
+)
+
+
+def _parity_cases():
+    data = json.loads(_PARITY_FIXTURE.read_text(encoding="utf-8"))
+    return [(c["name"], c) for c in data["cases"]]
+
+
+def test_parity_fixture_is_non_trivial():
+    """Guards against an emptied or one-sided fixture silently passing."""
+    cases = [c for _n, c in _parity_cases()]
+    assert len(cases) >= 15
+    assert any(c["expected"] for c in cases)
+    assert any(not c["expected"] for c in cases)
+
+
+@pytest.mark.parametrize("name,case", _parity_cases())
+def test_predicate_parity_with_the_client(name, case):
+    """THE count predicate must return the same answer as the client's.
+
+    The catalogue renders the backend's STAMPED number while the open editor
+    renders reviewStatus.isCountedReviewed's -- so a divergence means one saved
+    kit shows two percentages, the bug this bead exists to end. The same cases
+    run through the TS predicate in
+    schema-editor/src/utils/reviewStatus.parity.test.ts.
+
+    This fixture exists because prose could not hold the mirror together: the
+    timeliness rule here had omitted the guidance-staleness exclusion the
+    client makes, so sign-off -> drift -> ack counted reviewed in the editor and
+    NOT in the stamp. Both sides' own unit tests passed (Opus fresh-eyes
+    round 2).
+    """
+    field = json.loads(json.dumps(case["field"]))
+    review = field.get("_review")
+    # `@identity` in the fixture means "this field's OWN current identity hash",
+    # which each language computes natively -- resolve it here rather than
+    # hardcoding a value the two sides could disagree about.
+    identity = identity_sha1(field)
+    if isinstance(review, dict) and "ackSha1" in review:
+        review["guidance_ack_sha1"] = (
+            identity if review.pop("ackSha1") == "@identity" else review.pop("ackSha1")
+        )
+    findings = [
+        _finding(
+            f["rule"],
+            f["path"].replace("@identity", identity),
+            severity=f["severity"],
+            message=f["message"],
+        )
+        for f in case["findings"]
+    ]
+    assert is_counted_reviewed(field, findings) is case["expected"], name
 
 
 def test_container_indices_are_stripped_but_option_indices_are_not():

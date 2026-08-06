@@ -36,8 +36,12 @@ export type EditorRole = 'editor' | 'author';
  *
  *   verified   false when the counts were computed with NO usable lint report.
  *              The card must then show the verify hint, never a confident %.
- *   schemaSha1 the schema the stamp measured. A kit edited out of band leaves
- *              a stamp whose hash no longer matches -- that is STALE, not truth.
+ *   schemaSha1 the schema the stamp measured, for callers that HOLD the schema
+ *              and can compare. The catalogue listing deliberately does not
+ *              (not re-reading every kit is the point of the stamp), so it
+ *              cannot detect an out-of-band edit -- see readStamp's own doc and
+ *              bd polyglot-pdf-j8sr, which tracks re-stamping the routes that
+ *              rewrite a schema without one.
  *
  * Absent entirely on a kit not saved since C4 shipped: also the verify hint.
  */

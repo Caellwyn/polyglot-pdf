@@ -13,7 +13,6 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
-import { reviewCounts } from './reviewStatus';
 import { readStampFromMetadata } from './readinessStamp';
 import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
@@ -250,9 +249,10 @@ export function versionInfoFromSchema(schema: FormSchema): KitVersionInfo {
 }
 
 /**
- * Compute one kit's review progress by loading its schema and reusing
- * reviewCounts. A kit with no schema (PDF-only, pre-extraction) or an
- * unparseable schema yields reviewPercent=null so the UI can show "no schema".
+ * Read one kit's schema for its VERSION line and readability, NOT its review
+ * percentage (that comes from the kit's readiness stamp since sprint-18 C4 --
+ * see the body). A kit with no schema (PDF-only, pre-extraction) or an
+ * unparseable schema yields schemaError so the UI can distinguish the two.
  */
 export async function readKitProgress(
   entry: CatalogueEntry,
@@ -279,15 +279,24 @@ export async function readKitProgress(
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null };
   }
   try {
-    // Belt-and-suspenders: any remaining failure inside reviewCounts is a
-    // measurable-progress failure (schemaError), never an unhandled rejection
-    // that would reject the catalogue-wide Promise.all and wipe every bar.
-    const stats = reviewCounts(schema.fields, undefined);
+    // reviewPercent is deliberately NULL: since sprint-18 C4 the percentage
+    // comes from the kit's readiness STAMP (metadata.json), never from a
+    // client-side re-derivation here -- that fallback is what let a card and
+    // the open editor disagree (bd polyglot-pdf-q3rm). Computing it "just in
+    // case" would leave a live second definition of the very number this bead
+    // centralized, which is exactly how the fallback creeps back (its
+    // RemoteCatalogue twin nulls the field for the same reason; Opus
+    // fresh-eyes round 2 caught this side still computing it).
+    //
+    // This function survives for schemaError + version, which no stamp carries.
+    // Belt-and-suspenders try/catch retained: a malformed schema must surface
+    // as schemaError, never as an unhandled rejection that would reject the
+    // catalogue-wide Promise.all and wipe every card.
     return {
       entry,
-      reviewPercent: stats.percentage,
-      completeFields: stats.reviewed,
-      totalFields: stats.total,
+      reviewPercent: null,
+      completeFields: 0,
+      totalFields: 0,
       schemaError: false,
       version: versionInfoFromSchema(schema),
     };

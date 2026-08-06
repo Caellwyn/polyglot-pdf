@@ -1,0 +1,183 @@
+{
+  "_comment": [
+    "SHARED cross-language fixture for THE count predicate (sprint-18 C4, bd polyglot-pdf-g687).",
+    "",
+    "Consumed by BOTH schema-editor/src/utils/reviewStatus.parity.test.ts (running the real",
+    "isCountedReviewed) and backend/tests/unit/test_publish_readiness.py (running the real",
+    "is_counted_reviewed). Every case must produce the SAME boolean on both sides.",
+    "",
+    "This file exists because a mirror pinned only by prose drifted: the Python side omitted",
+    "the guidance-staleness exclusion from the timeliness rule, so the ordinary",
+    "sign-off -> drift -> ack flow counted reviewed in the editor and NOT reviewed in the",
+    "stamp -- one saved kit, two numbers, which is the exact bug this bead exists to end",
+    "(Opus fresh-eyes round 2). Per-side unit tests could not catch it; only a shared",
+    "expectation can.",
+    "",
+    "ADD A CASE whenever either predicate gains or changes a clause. `ackSha1: \"@identity\"`",
+    "is a placeholder each side replaces with the field's own natively-computed identity",
+    "hash (the two languages compute it differently but must agree on the value)."
+  ],
+  "cases": [
+    {
+      "name": "unreviewed field never counts",
+      "field": { "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]" },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "plain sign-off counts",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "needs_followup never counts",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "needs_followup" }
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "a lint ERROR excludes a signed-off field",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [
+        { "severity": "ERROR", "rule": "field-unbacked", "path": "fields[0] (id=a)", "message": "no widget", "field_id": "a" }
+      ],
+      "expected": false
+    },
+    {
+      "name": "a WARNING the sign-off stamped does NOT demote",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": {
+          "status": "reviewed_correct",
+          "seen_fingerprints": ["help-instructions-too-long|a|fields[] (id=a).help.instructions"]
+        }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "help-instructions-too-long", "path": "fields[0] (id=a).help.instructions", "message": "long", "field_id": "a" }
+      ],
+      "expected": true
+    },
+    {
+      "name": "a finding NEWER than the sign-off demotes (timeliness)",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct", "seen_fingerprints": [] }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "help-details-oversize", "path": "fields[0] (id=a).help.details", "message": "big", "field_id": "a" }
+      ],
+      "expected": false
+    },
+    {
+      "name": "absent seen_fingerprints is grandfathered (no timeliness claim)",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "help-details-oversize", "path": "fields[0] (id=a).help.details", "message": "big", "field_id": "a" }
+      ],
+      "expected": true
+    },
+    {
+      "name": "drift with NO ack is gated",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct", "seen_fingerprints": [] }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+      ],
+      "expected": false
+    },
+    {
+      "name": "sign-off THEN drift THEN ack counts -- the ack gate is the stale rule's sole owner",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "ackSha1": "@identity" }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+      ],
+      "expected": true
+    },
+    {
+      "name": "an ack for a SUPERSEDED identity stays gated",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "guidance_ack_sha1": "0000000000000000000000000000000000000000" }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+      ],
+      "expected": false
+    },
+    {
+      "name": "an acked field with an UNRELATED new finding still demotes",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "ackSha1": "@identity" }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" },
+        { "severity": "WARNING", "rule": "help-details-oversize", "path": "fields[0] (id=a).help.details", "message": "big", "field_id": "a" }
+      ],
+      "expected": false
+    },
+    {
+      "name": "choice field with an unmapped option is a structural error",
+      "field": {
+        "id": "c", "type": "select", "name": "C", "spoken_name": "c",
+        "options": [{ "value": "x", "pdf_field_name": "X[0]" }, { "value": "y" }],
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "choice field with every option mapped counts",
+      "field": {
+        "id": "c", "type": "select", "name": "C", "spoken_name": "c",
+        "options": [{ "value": "x", "pdf_field_name": "X[0]" }, { "value": "y", "pdf_field_name": "Y[0]" }],
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "choice field mapped at the FIELD level counts",
+      "field": {
+        "id": "c", "type": "select", "name": "C", "spoken_name": "c", "pdf_field_name": "C[0]",
+        "options": [{ "value": "x" }],
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "a NON-choice field with no widget is not a structural error here",
+      "field": {
+        "id": "t", "type": "text", "name": "T", "spoken_name": "t",
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": true
+    },
+    {
+      "name": "a field with no type at all is uncovered",
+      "field": { "id": "a", "name": "A", "_review": { "status": "reviewed_correct" } },
+      "findings": [],
+      "expected": false
+    }
+  ]
+}

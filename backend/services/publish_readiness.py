@@ -239,6 +239,17 @@ def is_counted_reviewed(
     seen = _seen_fingerprints(review)
     if seen is not None:
         for f in findings:
+            # The guidance-staleness rule is EXCLUDED here, exactly as the
+            # client excludes it (reviewStatus.ts newFindingsSinceReview): the
+            # ack gate above is that rule's SOLE owner. Counting it here too
+            # makes sign-off -> drift -> ack a DEAD END -- the ack writer
+            # deliberately preserves seen_fingerprints, so the one control that
+            # can clear the drift never touches this slot, leaving the field
+            # permanently un-reviewed with no exit. Measured: without this
+            # clause Python said False where the client said True for the
+            # ordinary ack flow (Opus fresh-eyes round 2).
+            if f.rule == GUIDANCE_STALE_RULE:
+                continue
             if finding_fingerprint(f) not in seen:
                 return False
 
