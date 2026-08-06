@@ -8,7 +8,12 @@
     - Backend  : uvicorn backend.main:app on http://localhost:8000
                  (port 8000 is what the frontend's dev WS URL defaults to:
                  ws://localhost:8000/ws/fill -- see frontend/src/shared/config.ts)
-    - Frontend : vite dev server on http://localhost:5173 (npm run dev)
+    - Frontend : vite dev server on http://localhost:5173, started with
+                 `--mode demo` + a process-env VITE_WS_URL pointing at the LOCAL
+                 backend. Both are load-bearing: without --mode demo the
+                 Firebase config is undefined and the SPA renders a BLANK WHITE
+                 SCREEN; without the WS override it would silently talk to the
+                 DEPLOYED backend instead of the one this script just started.
 
   Local dev runs on VERTEX by default (ADC + GOOGLE_CLOUD_PROJECT), so ALL local
   spend lands on the ONE Vertex billing account -- never AI Studio (bd
@@ -39,6 +44,34 @@
   Do NOT create backend/.env.DEV. Use when you explicitly want production-style
   (redacted) logging locally. Full message bodies will NOT be captured.
 
+.PARAMETER Temperature
+  LOCAL-DEV-ONLY sampling temperature for the Live session (bd
+  polyglot-pdf-0rpu). Omit to send nothing and keep Google's default (1.0).
+
+  Why you would set it: at the default 1.0 the model sometimes prefers a
+  conversationally-plausible continuation over the literal tool response. A
+  logged session shows it handed "Stored value: name_1b_last = 'Smith'" and
+  telling the user "You said Jose" -- a value from two fields earlier. Lower
+  temperature biases toward literal instruction-following.
+
+  SWEEP 0.3-0.6. Do NOT pass 0: googleapis/js-genai#1578 reports runaway /
+  no-audio output and a 1011 session close at temperature 0 on native audio.
+  Values <=0 or >2 are rejected by the adapter and ignored.
+
+  This knob is DOUBLE-GATED on backend/.env.DEV, so it does nothing in a
+  deployed service even if the env var is set -- deliberately.
+
+.PARAMETER Transcripts
+  LOCAL-DEV-ONLY: capture what was SAID (both sides) into
+  backend/logs/gemini_YYYY-MM-DD.jsonl as `transcript` records.
+
+  Without it, the log proves what was STORED but not what reached the user's
+  ears -- which is why bd 0rpu took three rounds to diagnose. Turn this on when
+  chasing any "she said the wrong thing" report.
+
+  PRIVACY: transcripts are PHI. Gated on backend/.env.DEV (gitignored, never
+  deployed) AND this opt-in, so it cannot turn on in production.
+
 .EXAMPLE
   ./scripts/dev-local.ps1
   Start both servers on the 2.5 model (the deployed default) with full dev logging.
@@ -46,6 +79,18 @@
 .EXAMPLE
   ./scripts/dev-local.ps1 -Model premium
   Same, but on the 3.1 model (A/B comparison).
+
+.EXAMPLE
+  ./scripts/dev-local.ps1 -Temperature 0.4 -Transcripts
+  The bd 0rpu prototyping loop: lower the sampling temperature AND record what
+  was said, so a wrong read-back can be read straight out of the log instead of
+  inferred. Sweep 0.6 -> 0.4 -> 0.3, restarting between values, and grep the log:
+
+    Select-String -Path backend/logs/gemini_*.jsonl -Pattern '"transcript"'
+
+  Each hit carries {heard_from_user, spoken_by_model}; compare spoken_by_model
+  against the `stored_values` in the neighbouring tool_response to see whether
+  the model read back the value it was actually handed.
 
 .NOTES
   Stop everything with Ctrl-C in this window; the script tears down both child
@@ -56,7 +101,14 @@ param(
     [ValidateSet('premium', 'standard')]
     [string]$Model = 'standard',
     [switch]$BackendOnly,
-    [switch]$NoDevLog
+    [switch]$NoDevLog,
+    # 0 is rejected on purpose: it is a KNOWN native-audio session killer
+    # (googleapis/js-genai#1578 -- runaway/no-audio output + a 1011 close), so
+    # the runner refuses it up front rather than letting the adapter silently
+    # drop it. Leave unset to send no temperature at all (Google default 1.0).
+    [ValidateRange(0.1, 2.0)]
+    [double]$Temperature = 0,
+    [switch]$Transcripts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -207,6 +259,19 @@ $BackendEnvVars = @{
     'VFF_DISABLE_AUTH'     = $DisableAuth
     'PYTHONPATH'           = $RepoRoot
     'PYTHONUNBUFFERED'     = '1'
+    # LOCAL-DEV-ONLY knobs (bd polyglot-pdf-0rpu). Both are additionally gated
+    # backend-side on backend/.env.DEV, so setting them here can never affect a
+    # deployed service. Empty string = "do not send" (Google's default stands).
+    'LIVE_TEMPERATURE'     = $(if ($Temperature -gt 0) { "$Temperature" } else { '' })
+    'LIVE_DEV_TRANSCRIPTS' = $(if ($Transcripts) { 'true' } else { 'false' })
+}
+if ($Temperature -gt 0 -and $NoDevLog) {
+    # The backend gate is the .env.DEV marker, not this flag -- say so plainly
+    # rather than letting the run look configured when it is not.
+    Write-Host "WARNING: -Temperature is ignored with -NoDevLog (the backend gates it on backend/.env.DEV)." -ForegroundColor Yellow
+}
+if ($Transcripts -and $NoDevLog) {
+    Write-Host "WARNING: -Transcripts is ignored with -NoDevLog (the backend gates it on backend/.env.DEV)." -ForegroundColor Yellow
 }
 $PriorEnv = @{}
 foreach ($k in $BackendEnvVars.Keys) {
@@ -215,7 +280,10 @@ foreach ($k in $BackendEnvVars.Keys) {
 }
 
 Write-Host ""
+$TempLabel = if ($Temperature -gt 0) { "$Temperature" } else { 'default(1.0)' }
+$TxLabel = if ($Transcripts) { 'ON' } else { 'off' }
 Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth)..." -ForegroundColor Cyan
+Write-Host "  temperature=$TempLabel   transcripts=$TxLabel   (both LOCAL-DEV ONLY)" -ForegroundColor DarkGray
 
 try {
     $BackendProc = Start-Process -FilePath $VenvPython -ArgumentList $BackendArgs `
@@ -233,11 +301,41 @@ try {
 
 $FrontendProc = $null
 if (-not $BackendOnly) {
-    Write-Host "Starting frontend (vite dev :5173)..." -ForegroundColor Cyan
+    # --mode demo is LOAD-BEARING, not a preference: plain `npm run dev` loads
+    # only .env/.env.local/.env.development, NONE of which exist here, so every
+    # VITE_FIREBASE_* var is undefined and the SPA dies on
+    # "auth/invalid-api-key" -- a BLANK WHITE SCREEN with no server-side clue.
+    # `--mode demo` makes vite read the committed frontend/.env.demo, which
+    # carries the Firebase web config. dev-local.sh has always done this; this
+    # script did not, which is why it rendered nothing (maintainer 2026-08-05).
+    #
+    # VITE_WS_URL must be a PROCESS env var, not a .env entry: vite's precedence
+    # is `.env.[mode]` > `.env.local`, so under --mode demo a .env.local CANNOT
+    # override .env.demo's CLOUD RUN WS url. Without this override the SPA would
+    # come up looking fine while talking to the DEPLOYED backend -- so a local
+    # backend change (or a temperature sweep) would appear to do nothing.
+    #
+    # build:worklet first: plain `vite` has no worklet build hook, and the audio
+    # worklet is required for the mic path.
+    $LocalWsUrl = 'ws://127.0.0.1:8000/ws/fill'
+    Write-Host "Starting frontend (vite :5173, --mode demo, WS -> $LocalWsUrl)..." -ForegroundColor Cyan
     $FrontendDir = Join-Path $RepoRoot 'frontend'
-    # npm is resolved from PATH; run 'npm run dev' (the schema-forms voice SPA).
-    $FrontendProc = Start-Process -FilePath 'npm.cmd' -ArgumentList @('run', 'dev') `
-        -WorkingDirectory $FrontendDir -PassThru -NoNewWindow
+    $PriorWsUrl = [Environment]::GetEnvironmentVariable('VITE_WS_URL', 'Process')
+    Set-Item -Path 'Env:VITE_WS_URL' -Value $LocalWsUrl
+    try {
+        # Worklet build is a prerequisite, so run it to completion first.
+        & 'npm.cmd' 'run' 'build:worklet' --prefix $FrontendDir 2>&1 | Out-Host
+        $FrontendProc = Start-Process -FilePath 'npm.cmd' `
+            -ArgumentList @('run', 'dev', '--', '--mode', 'demo') `
+            -WorkingDirectory $FrontendDir -PassThru -NoNewWindow
+    } finally {
+        # The child already inherited VITE_WS_URL; restore this shell.
+        if ($null -eq $PriorWsUrl) {
+            Remove-Item -Path 'Env:VITE_WS_URL' -ErrorAction SilentlyContinue
+        } else {
+            Set-Item -Path 'Env:VITE_WS_URL' -Value $PriorWsUrl
+        }
+    }
 }
 
 Write-Host ""

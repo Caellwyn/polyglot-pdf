@@ -29,6 +29,7 @@ export interface AudioManager {
 	playAudio: (audioData: ArrayBuffer) => Promise<void>
 	flushAudioQueue: () => void // Stop all queued audio immediately (full barge-in)
 	resetPlaybackClock: () => void // Drain scheduled playback WITHOUT blocking new audio (Gemini interrupted event)
+	getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean } // MEASUREMENT-ONLY (bd 0rpu experiment branch)
 	resumePlayback: () => void // Resume audio after barge-in (unblock new chunks)
 	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
 	resumeAudioContext: () => void // Resume audio context (resume after false positive)
@@ -231,6 +232,21 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		}
 		// Same *100 scaling the capture worklet applies to its RMS.
 		return Math.min(100, Math.sqrt(sum / outputBuf.length) * 100)
+	}
+
+	/**
+	 * MEASUREMENT-ONLY (bd 0rpu, experiment branch -- never merged to dev).
+	 * Playback-backlog snapshot: how far ahead of the audio clock the scheduled
+	 * queue runs. The harness reads it to pace injections (polite vs rude arms)
+	 * and to measure stale-playback drain. Pure read, no side effects.
+	 */
+	function getPlaybackBacklog(): { aheadSec: number; activeSources: number; blocked: boolean } {
+		const ctx = nodes.playbackContext
+		return {
+			aheadSec: ctx ? Math.max(0, playbackTime - ctx.currentTime) : 0,
+			activeSources: activeAudioSources.length,
+			blocked: playbackBlocked,
+		}
 	}
 
 	/**
@@ -948,6 +964,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		playAudio,
 		flushAudioQueue,
 		resetPlaybackClock,
+		getPlaybackBacklog,
 		resumePlayback,
 		pauseAudioContext,
 		resumeAudioContext,

@@ -717,32 +717,3 @@ def build_form_context(
     # handler for a manifest-first schema regardless of the flag.
     if getattr(settings, "USE_DTI", False) or schema.get("jit_mode"):
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION
-    else:
-        # Legacy mode: Use full schema with SYSTEM_INSTRUCTION template
-        system_instruction = settings.SYSTEM_INSTRUCTION.format(
-            form_title=form_title,
-            section_number=section_num_text,
-            total_sections=total_sections_text,
-            section_label=section_label_text,
-            section_list=section_list_text,
-            filled_count=filled_count,
-            total_fields=total_fields,
-            unfilled_count=unfilled_count,
-            fields_json=fields_text,  # Still using fields_json placeholder name for compatibility
-            fill_language=fill_language,
-            previous_spoken_names=previous_names_text,
-            confirmation_policy=confirmation_policy,
-            next_field_hint=next_field_hint or "the first unfilled field"
-        )
-
-    # On mid-section reconnects, override any greet directive so Gemini resumes
-    # silently rather than re-introducing the form/section (bd polyglot-pdf-vmxx).
-    if is_reconnect:
-        system_instruction = (
-            system_instruction
-            + "\n\nRESUME: The user has reconnected mid-session. "
-            "Do NOT greet them. Do NOT re-introduce the form or section. "
-            "Simply ask for the next field as if continuing naturally."
-        )
-
-    return system_instruction

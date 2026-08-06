@@ -37,6 +37,9 @@ declare global {
 			// multi-section scenario can confirm one VOICE field and trigger the real
 			// section auto-advance. Returns false if no form state is loaded yet.
 			seedFieldConfirmed: (fieldId: string, value: string) => boolean
+			// MEASUREMENT-ONLY (bd 0rpu experiment branch): playback-backlog read
+			// used by the harness pacing arms. Never merged to dev.
+			getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean }
 		}
 	}
 }
@@ -537,6 +540,15 @@ export function createConnectionManager(
 		},
 		onFieldUpdate: (updates) => {
 			console.log('[VFF Connection] [tool] Tool call: update_form_fields (' + updates.length + ' field(s))')
+			// Playback-backlog snapshot at tool-response time (bd polyglot-pdf-0rpu):
+			// if a wrong read-back is heard, a large aheadSec here means STALE
+			// CLIENT audio was still queued (client-side fault); ~0 means the audio
+			// came fresh from the model (model-side fault). Console lines are
+			// captured into the dev JSONL by the console-log forwarder.
+			if (audioManager) {
+				const backlog = audioManager.getPlaybackBacklog()
+				console.log('[VFF Audio] backlog at form_updated ' + JSON.stringify(backlog))
+			}
 
 			// Log each update attempt for debugging
 			updates.forEach(update => {
@@ -1275,6 +1287,14 @@ export function createConnectionManager(
 				sendActivityEnd: () => manager.sendActivityEnd(),
 				isNativeVad: () => manager.isNativeVad(),
 				getLastNextField: () => lastNextField,
+				// bd 0rpu round 2: playback-backlog read for the pacing arms. The
+				// POLITE arm injects only after the model's audio has drained
+				// (aheadSec ~0); the RUDE arm injects mid-speech (aheadSec high).
+				// Pure read, same dev double-gate as the rest of this hook.
+				getPlaybackBacklog: () =>
+					audioManager
+						? audioManager.getPlaybackBacklog()
+						: { aheadSec: 0, activeSources: 0, blocked: false },
 				// bd polyglot-pdf-o1c: same-page-rerun-safe field clear. Route through
 				// SchemaFormStateManager.save (fires schemaFormStateChange so SchemaForm's
 				// React state reloads), then refresh BOTH this closure's `state` and the
