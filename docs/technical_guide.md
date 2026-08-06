@@ -235,10 +235,11 @@ handshake keys parsed :1044-1168).
 - `full_schema` (sent at :953/:1028): type-checked `isinstance(dict)` only
   (`websocket_routes.py:1152-1154`), cached in
   `form_filling_service.py:289-290` (preserved across internal restarts), then
-  consumed by the secretary catalog (:1617 ->
+  consumed by the secretary catalog (`form_filling_service.py:1619` ->
   `secretary_context.py:246`), the edition fingerprint
   (`form_filling_service.py:362-368`), the injection
-  budget (:478-479), and runtime translation overrides (:678 ->
+  budget (`form_filling_service.py:478-479`), and runtime translation overrides
+  (`form_filling_service.py:679` ->
   `option_translation.py`). *Breaks if malformed:* each consumer degrades
   independently and silently (secretary falls back to per-section schema, audit
   edition falls back to a fingerprint, translations revert to English).
