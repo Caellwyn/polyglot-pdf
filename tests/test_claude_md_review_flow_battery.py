@@ -96,8 +96,8 @@ REGRESSIONS = [
 #
 # WHY ACCEPTING THEM IS THE RIGHT CALL, and not just fatigue: the failure mode
 # this pin exists for is DRIFT -- a maintainer updating one statement of the rule
-# and missing another. All THREE real regressions it was built from (found in
-# rounds 3, 4 and 5, verifiable in `git show origin/dev:CLAUDE.md`) were single
+# and missing another. All THREE real regressions it was built from (visible at
+# `git show origin/dev:CLAUDE.md` lines 89, 218 and 470) were single
 # sentences inside one paragraph, using ordinary review vocabulary, because
 # someone editing this rule is by definition describing the review flow. Both
 # shapes above were constructed by an adversarial reviewer *trying* to evade the

@@ -7,14 +7,20 @@ auto-merge condition, the "Never merge" rule, the Closeout section), and nothing
 kept those statements in agreement.
 
 That gap is not hypothetical. Landing the three-way review gate (bd
-polyglot-pdf-saxh) took THREE fresh-eyes rounds, each finding one more spot in
-CLAUDE.md still describing the OLD rule, because each fix was made per-instance
-and no test covered this file at all:
+polyglot-pdf-saxh) took three fresh-eyes rounds to find THREE REAL REGRESSIONS --
+each one more spot in CLAUDE.md still describing the OLD rule -- because each fix
+was made per-instance and no test covered this file at all. On `origin/dev` they
+are at:
 
-  round 1 -> the auto-merge condition (:199)
-  round 2 -> the "Never merge" rule (:223), 20 lines below the round-1 fix
-  round 3 -> the Closeout section (:475), which said docs get "NO outer review"
-             -- the same claim in words the earlier greps did not match
+  :89  -- the Closeout section, "changes get NO outer review"
+  :218 -- the "Never merge" rule, "skipped review under the docs-only gate"
+  :470 -- scar tissue #2, "skip the outer review"
+
+(NB: "real regression" here means a defect that actually shipped in CLAUDE.md.
+The sibling battery file numbers a DIFFERENT sequence -- later rounds in which a
+reviewer defeated a draft of THIS TEST. The two numberings are unrelated; refer
+to real regressions by their `origin/dev` line, and to test-defeat rounds by
+their escape class.)
 
 These tests pin the PROPERTY ("no statement in this file says a docs-only change
 gets no adversarial review") rather than any one sentence's wording, so the next
@@ -99,8 +105,9 @@ def test_every_docs_only_mention_is_allowlisted(text):
     Those are accepted and PINNED as known limits in
     `test_claude_md_review_flow_battery.py::UNENUMERABLE_BY_DESIGN`. The failure
     mode this exists for is DRIFT -- a maintainer updating one statement of the
-    rule and missing another -- and all three real regressions (rounds 3-5,
-    verifiable via `git show origin/dev:CLAUDE.md`) were single in-paragraph
+    rule and missing another -- and all three real regressions (the ones listed
+    in this module's docstring above, verifiable at `git show
+    origin/dev:CLAUDE.md` lines 89, 218 and 470) were single in-paragraph
     sentences using ordinary review vocabulary. A prose heuristic cannot be made
     evasion-proof; every scope has an adjacent-scope escape. So it covers the
     realistic class well and NAMES the rest rather than chasing them.

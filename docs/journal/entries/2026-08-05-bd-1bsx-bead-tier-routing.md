@@ -132,12 +132,33 @@ spawns a reviewer (its STOP list forbids it).
   5 hand-typed allowlist entries described sentences that did not exist), and verify
   a mutation actually APPLIED before trusting green (2 of mine silently no-op'd on a
   line-wrap mismatch and "passed" while testing nothing).
+- **Prefer a NATURAL scope over a tuned constant -- then STOP and name what you are
+  not covering.** The mechanism swap above was not the end of it. The rebuilt pin
+  was defeated twice more on *scope* rather than vocabulary: single-sentence
+  matching lost to an `e.g.` mid-sentence split, and a two-sentence sliding window
+  lost to a three-sentence phrasing. Each fix was a bigger N, and each invited the
+  phrasing just outside it. What held was dropping N entirely and scoping to the
+  **paragraph** -- the unit the prose itself uses for one claim. But the next round
+  escaped *that* with a blank-line split, which is when the real lesson landed:
+  **every scope has an adjacent-scope escape, so a prose heuristic cannot be made
+  evasion-proof, and iterating toward one is the same trap in a new costume.** The
+  discriminating question is *what failure am I actually defending against?* Here it
+  is DRIFT -- a maintainer updating one statement of a rule and missing another --
+  and all three real regressions (`git show origin/dev:CLAUDE.md` lines 89, 218,
+  470) were single in-paragraph sentences in ordinary vocabulary, because whoever
+  edits a rule is by definition describing it. Every escape found from that point on
+  was *constructed by a reviewer trying to evade the check*; none had occurred
+  naturally. So the remaining two shapes became **accepted, pinned limits**
+  (`UNENUMERABLE_BY_DESIGN` + `test_known_limit_still_holds`, which fails if a limit
+  ever closes) rather than two more rounds. Promoted to
+  [`docs/standards/testing.md`](../../standards/testing.md#change-the-mechanism).
 - **The loop-stop rule has no "you are not converging" clause.** It stops on
   outcome (no correct blocker remains), which is right, but nothing says *"the same
-  class has now beaten you twice -- change approach."* That absence is what turned a
-  three-round PR into a six-round one; the rounds themselves were all finding real
-  defects. Worth considering as a future harness change rather than a rule I invent
-  here.
+  class has now beaten you twice -- change approach"* or *"you are defending against
+  constructed evasion rather than the real failure mode."* That absence is what
+  stretched this PR to ten rounds; the rounds themselves were all finding real
+  defects, and the reviewer was right every time. Worth considering as a future
+  harness change rather than a rule I invent here.
 
 ## Doc freshness
 
