@@ -472,3 +472,58 @@ STATUS: comma arm = instruction obeyed, corruption persists (2/6 spelled
 read-backs wrong). No arm has yet fixed the defect. Idea 3 (deterministic
 spell-back tool, outside the model's speech path) remains the only proposal
 that does not depend on the model's cooperation.
+
+## ROUND 7 (2026-08-06): ECHO arm -- value repeated ONCE instead of 3x. NO FIX.
+
+`ECHO_STYLE=once` removes the stored_values dict and the "Stored value: <fid> =
+'X'" restatement, leaving the value exactly once inside the imperative (h7wx's
+guarantee preserved: the read-back still comes from a value the backend
+actually stored). Verified applied: 30 tool responses with 1x echo, 0 with 3x.
+
+Result: **12.9% desync (4/31)** vs control 9.7%. The echo-repetition hypothesis
+(maintainer's Gemini research) is NOT supported -- thinning the text anchors
+did not reduce the corruption.
+
+### The single clearest capture of the defect (gen 9)
+
+  AUDIO : "J0hn John Joshua, is that correct?"
+  TEXT  : "Joshua - is that correct?"
+
+The speech path spells J-O-H-N, says "John", AND says "Joshua" -- a stale name
+concatenated with the correct one -- at recognizer confidence 0.864 (high; this
+is not a transcription artifact). Gen 15 repeats the shape exactly: spells
+J-O-H-N, says "Jose".
+
+### The invariant across every arm tested
+
+The audio head keeps emitting **JOHN -- the FIRST name it ever spelled in the
+session** -- regardless of which field is current:
+
+| arm | gen | true field | audio spelled |
+|---|---|---|---|
+| control | 9 | Joshua | JOHN |
+| NATO | 9/11/15 | Joshua/Johnson/Jose | "Joe Howa" (x3, identical) |
+| comma | 11 | Johnson | JOHN |
+| comma | 15 | Jose | J-O-H |
+| echo=once | 9 | Joshua | JOHN |
+| echo=once | 15 | Jose | JOHN |
+
+This is a STICKY FIRST-SPELLING failure, not random corruption: the first
+spelled run of a session becomes an attractor the speech path returns to.
+
+### Arms tested and rejected (all four)
+1. interrupt re-anchor -- runaway loop, $9.93/105s (round 3)
+2. NATO phonetic prompting -- instruction ignored outright (round 5)
+3. comma pacing -- instruction OBEYED, corruption persists 2/6 (round 6)
+4. echo thinning 3x -> 1x -- no improvement, 12.9% vs 9.7% control (round 7)
+
+Prompt-level and payload-level interventions are exhausted. The remaining
+candidate is the DETERMINISTIC SPELL-BACK TOOL: format/synthesize the spelling
+outside the model's speech path entirely, so a sticky acoustic attractor cannot
+reach it. That is the only proposal that does not require the model's
+cooperation.
+
+NOTE ON RATES: arm-to-arm differences here (9.7% / 11.5% / 12.9% / 22.6%) are
+single runs of ~30 generations with ~4-6 spelled read-backs each. They are NOT
+powered to rank arms against each other; they are powered only to say "the
+corruption still occurs." No arm eliminated it.
