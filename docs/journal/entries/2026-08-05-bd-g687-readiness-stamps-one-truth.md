@@ -117,6 +117,23 @@ reachable everyday flow, plus four smaller issues:
    that branch is unreachable in production. Corrected, with a pointer to the
    bead that will make it true (polyglot-pdf-j8sr).
 
+**The OUTER review then found three more** that eight inner rounds had missed,
+all in the same blind spot: the inner loop kept checking the two stamp parsers
+for VALUE mismatches and never for SHAPE ones. A stamp missing `ready` made
+Python drop the whole stamp while the client kept it and rendered a percentage;
+`percent: 75.0` (what any jq or Python round-trip of the stamp produces, since
+JSON has one number type) parsed on the client and not on the server; and BOTH
+parsers accepted `percent: 999`, which the card renders as a bar WIDTH. Fixed
+on both sides and re-probed against both real implementations.
+
+Two further out-of-scope bugs came out of that review and are filed:
+polyglot-pdf-dm3c8 (the verdict's `ready` flag ignores SCHEMA-LEVEL lint
+ERRORs, so it reads True for a kit /status will 409 on -- latent because
+nothing reads `ready` yet, and now a HARD BLOCKER on C2/polyglot-pdf-apmo,
+which is exactly where it would go live) and polyglot-pdf-kwh3t (a corrupt
+acroform.json degrades to a dump-blind lint that still stamps verified:true,
+where the /lint route deliberately 502s on the same condition).
+
 Filed rather than widened into this bead: polyglot-pdf-j8sr (five routes
 rewrite a schema without re-stamping; local-folder save never stamps),
 polyglot-pdf-drpn (every save now rewrites metadata.json, widening a
