@@ -4,7 +4,7 @@ import {
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type EditorRole, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
-import { readStamp, stampHint } from '../utils/readinessStamp';
+import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
 
 interface RemoteCatalogueProps {
@@ -569,7 +569,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
-                  {stripUnmeasured ? ' (not measured)' : ''}
+                  {stripUnmeasured ? STAMP_MARKER_SHORT : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
                 </option>
               );

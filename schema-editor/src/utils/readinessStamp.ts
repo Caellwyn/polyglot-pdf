@@ -113,3 +113,12 @@ export const STAMP_HINTS: Record<StampGap, string> = {
 export function stampHint(reason: StampGap): string {
   return STAMP_HINTS[reason];
 }
+
+/**
+ * The compact strip's marker for the same condition the card explains in a
+ * sentence. An <option> cannot carry STAMP_HINTS' full prose, so the strip
+ * says the short version -- but it lives HERE, beside the sentences, so the
+ * two surfaces cannot drift into describing the same state differently
+ * (bd polyglot-pdf-lmgih criterion 2).
+ */
+export const STAMP_MARKER_SHORT = ' (not measured)';

@@ -11,7 +11,7 @@ import {
 import {
   isExtractionAvailable, runExtraction, verifyExtractorFolder,
 } from '../utils/extractionClient';
-import { readStamp, stampHint } from '../utils/readinessStamp';
+import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 // Completion routes through the SAME editor endpoint the hosted catalogue uses
 // (bd polyglot-pdf-rh5v) so the publish gates and the translation drift sweep
 // run in local mode too -- one implementation, not two that disagree.
@@ -615,7 +615,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                 <option key={k.id} value={k.id}>
                   {k.label} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
-                  {stripUnmeasured ? ' (not measured)' : ''}
+                  {stripUnmeasured ? STAMP_MARKER_SHORT : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
                 </option>
               );

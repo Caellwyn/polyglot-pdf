@@ -509,6 +509,45 @@ class _PublishedStore:
         self.saved = (kit_id, schema, schema_file)
 
 
+def test_a_failed_lint_stamps_UNVERIFIED(client, monkeypatch):
+    """When lint cannot run, the stamp must say its checks did not run.
+
+    Seven parametrized tests pin how `verified` is READ; nothing pinned how it
+    is WRITTEN -- flipping the degrade branch to True left all 227 backend
+    tests green (measured, Opus outer review). `verified` is the single flag
+    between an unchecked count and a confident percentage on every card, so
+    the write side needs its own guard.
+
+    (bd polyglot-pdf-kwh3t covers the adjacent case where a CORRUPT AcroForm
+    dump degrades to a dump-blind lint that still stamps verified:true; this
+    pins the branch that already behaves correctly so kwh3t's fix cannot
+    silently regress it.)
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": []})
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("lint exploded")
+
+    monkeypatch.setattr(ekr, "lint_schema", boom)
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text",
+                          "_review": {"status": "reviewed_correct"}}]},
+    )
+    assert r.status_code == 200, r.text
+    stamp = r.json()["readiness"]
+    # The counts are still recorded (honest: what we know without lint)...
+    assert stamp["total"] == 1
+    # ...but the stamp says plainly that the checks did not run, so the card
+    # shows the verify hint rather than a confident 100%.
+    assert stamp["verified"] is False
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["readiness"]["verified"] is False
+
+
 def test_save_never_destroys_unparseable_metadata(client):
     """A save must not REPLACE a corrupt metadata.json with just the stamp.
 
