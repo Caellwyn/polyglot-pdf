@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -841,7 +841,50 @@ export class WebFormConnection {
     // back -- the in-memory-vs-persisted divergence the opener diagnostic
     // exists to surface (the state-staleness hypothesis, bd polyglot-pdf-xp4q)
     // is only observable here.
-    const storageDisclaimerAtEntry = !!SchemaFormStateManager.load()?.disclaimerAccepted;
+    const persistedAtEntry = SchemaFormStateManager.load();
+    const storageDisclaimerAtEntry = !!persistedAtEntry?.disclaimerAccepted;
+
+    // Refresh before writing (bd polyglot-pdf-qim7). The three mutators below
+    // (setSessionId / setJitMode / setContinuousSession) each spread this.state
+    // and save() it, so on a stale in-memory copy this handler PERSISTS that copy
+    // over anything written outside this object since the last sync -- most
+    // realistically a field value the user typed on screen, which SchemaForm.tsx's
+    // handleFieldChange persists through SchemaFormStateManager without ever
+    // touching this.state. Same stale-write class the confirm and skip handlers
+    // refresh against (bd polyglot-pdf-pjws), on the reconnect path: session_ready
+    // is routine (idle-timeout reconnect, network drop, section switch).
+    //
+    // fieldValues are reconciled per field rather than replaced wholesale, for
+    // the same reason as those handlers -- an entry that exists only in memory
+    // (written by a tool call whose save has not landed) must survive.
+    //
+    // Scope is deliberately fieldValues ONLY, not a whole-state adopt: the
+    // field-1 opener diagnostic below compares this.state.disclaimerAccepted
+    // against the persisted value at entry to surface in-memory-vs-storage
+    // staleness (bd polyglot-pdf-xp4q). Adopting persisted state wholesale would
+    // force those two to agree and silently destroy that signal. fieldValues is
+    // the map with two independent writers, so it is the map that needs merging.
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedAtEntry.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
+    }
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
@@ -999,11 +1042,59 @@ export class WebFormConnection {
   /**
    * Handle field_update from AI
    */
+  /**
+   * The schema's own field ids, for reconcileFieldValues' alias collapse.
+   *
+   * Collapsing a `p1_grp` / `p1_grp[]` pair means keeping one key and dropping
+   * the other, and that is only safe if the surviving key is the one the SCHEMA
+   * declares -- SchemaForm.tsx, getProgress and isSectionValid all index
+   * `fieldValues[field.id]` exactly. A shipped kit really does use bracketed ids
+   * (adult_intake_demo_schema.json: race[], reason[], risk_concerns[] and three
+   * more), so without this a reconcile could re-key `race[]` -> `race` and leave
+   * the answer live but invisible: blank on screen, progress down, and a
+   * required section that no longer validates.
+   */
+  private schemaFieldIds(): string[] {
+    return this.state?.schema?.fields?.map(f => f.id) ?? [];
+  }
+
   private handleFieldUpdate(message: any): void {
     const { updates } = message;
 
     if (!updates || typeof updates !== "object") {
       return;
+    }
+
+    // Reconcile before READING, not just before writing (bd polyglot-pdf-uw3w /
+    // qim7). The availability gate below calls shouldShowField against
+    // this.state.fieldValues, and the updateField chokepoint's own reconcile
+    // sits TWO FRAMES BELOW it -- too late. On a stale copy a field whose
+    // show_if is satisfied by a trigger the user answered ON SCREEN reads as
+    // unavailable, so the fill is REFUSED outright: the value is never stored
+    // and the model is told "do not retry until then", making the field
+    // unfillable for the turn. A stale READ is as damaging as a stale write
+    // here.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedAtEntry.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
     }
 
     // Apply updates to state
@@ -1124,6 +1215,35 @@ export class WebFormConnection {
 
     if (!formState || typeof formState !== "object") {
       return;
+    }
+
+    // Reconcile at HANDLER ENTRY, before any read or write (bd polyglot-pdf-uw3w
+    // / qim7). This must not sit inside the JIT branch below: the value-applying
+    // path further down reads this.state.fieldValues regardless of whether a
+    // next_field_schema was sent, and markFieldSchemaLoaded spreads this.state --
+    // fieldValues included -- and save()s it. A stale READ here is as damaging as
+    // a stale write: the availability gate can refuse a fill outright.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedAtEntry.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
     }
 
     // Handle JIT mode: mark next field as loaded if schema provided
@@ -1739,7 +1859,34 @@ export class WebFormConnection {
       this.callbacks.onSectionChanged();
     }
 
-    // Also save the updated state
+    // Also save the updated state -- reconciled first, for the same reason as
+    // the confirm/skip/session_ready handlers (bd polyglot-pdf-uw3w / qim7).
+    // This is a bare save(this.state), so on a stale in-memory copy it reverts
+    // anything written outside this object since the last sync. The window is
+    // real: a section switch is a round-trip (handlePrepareSectionSwitchRequest
+    // out, section_switched back), and an on-screen edit can land inside it.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedAtEntry.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
+    }
     SchemaFormStateManager.save(this.state);
   }
 
@@ -1761,31 +1908,24 @@ export class WebFormConnection {
     // -- bd polyglot-pdf-87a9. The stale-write class is real either way, and is
     // what this refresh fixes.)
     //
-    // fieldValues are MERGED with in-memory winning, NOT replaced. The rest of
-    // this handler is gated on the field holding a usable VALUE, and a plain
+    // fieldValues are RECONCILED per field (last-writer-wins on lastModified),
+    // not replaced and not key-unioned -- see reconcileFieldValues. A plain
     // overwrite could drop an entry that exists only in memory, turning a
-    // legitimate confirm into a spurious 'no_value' refusal that the
-    // loop-breaker escalates into a re-prompt.
-    //
-    // This merge is deliberately CONSERVATIVE, not correct-in-general: where the
-    // two maps disagree it preserves dev's existing behavior (this handler read
-    // `this.state` unconditionally before), so the pjws language fix does not
-    // also change which field VALUE wins. It does NOT make the divergence safe.
-    // SchemaForm.tsx's handleFieldChange is a real production writer that
-    // persists through SchemaFormStateManager without touching this object, so
-    // an on-screen edit can lose to a stale in-memory entry here -- pre-existing
-    // on dev, out of scope for these beads, and filed as bd polyglot-pdf-uw3w
-    // (with the `[]`-alias resurrection it enables as bd polyglot-pdf-3irc).
-    // Fixing the write-ownership properly is that bead's job, not a side effect
-    // of a language fix.
+    // legitimate confirm into a spurious 'no_value' refusal that the loop-breaker
+    // escalates into a re-prompt; a key union would let a stale in-memory entry
+    // revive a value the user cleared on screen (bd polyglot-pdf-uw3w) and
+    // resurrect a deleted `[]`-alias key (bd polyglot-pdf-3irc). The reconcile
+    // keeps the in-memory-only entry visible while letting a NEWER on-screen edit
+    // win, and collapses each alias pair to one entry.
     const persistedAtEntry = SchemaFormStateManager.load();
     if (persistedAtEntry) {
       this.state = {
         ...persistedAtEntry,
-        fieldValues: {
-          ...persistedAtEntry.fieldValues,
-          ...this.state.fieldValues,
-        },
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
       };
     }
 
@@ -1799,7 +1939,16 @@ export class WebFormConnection {
     // backend re-requests it forever (a tight confirm/next-field-hint spin that strands
     // the session and silences Gemini). Detect that, do not record a bogus confirmation,
     // and re-prompt Gemini to collect the value.
-    const fieldValue = this.state.fieldValues[field_id]?.value;
+    // Read through the `[]`-alias fallback, exactly as the skip handler's
+    // already-filled guard does (bd polyglot-pdf-5k52). An exact-key-only read
+    // MISSES an aliased filled value -- and the reconcile now actively
+    // CONSOLIDATES an alias pair onto the schema's variant and deletes the other,
+    // so a model that drops the bracket (which it does) can send `race` for an
+    // answer now living under `race[]`. That read returns undefined, the
+    // usable-value gate refuses a legitimate confirm as 'no_value', and the
+    // loop-breaker then tells Gemini to stop trying -- stranding a field that
+    // holds the user's answer.
+    const fieldValue = readFieldEntryWithAlias(this.state.fieldValues, field_id)?.value;
     // NOTE on empty arrays (fresh-eyes PR #145 rounds 4+5): an empty `[]` on a
     // checkbox group is deliberately NOT treated as unusable here. A blank OPTIONAL
     // group ("the user selected none") is a legitimate, confirmable end state;
@@ -2085,31 +2234,25 @@ export class WebFormConnection {
     // SchemaFormStateManager.save(this.state), so on a stale in-memory copy it
     // does not merely read wrong values, it PERSISTS them: a skip landing after
     // it reverts whatever was written outside this object since the last sync.
-    // A skip is as routine a per-turn tool call as a confirm; both final Opus
-    // outer reviews found this sibling path independently. (Originally written
-    // up as a language-clobber; mid-session language switching is unsupported --
-    // bd polyglot-pdf-87a9 -- but the stale-write class is real regardless.)
+    // A skip is as routine a per-turn tool call as a confirm.
     //
-    // fieldValues are MERGED, not replaced, and in-memory wins. Everything below
-    // is gated on a DATA-LOSS guard (markFieldSkipped BLANKS the value), and a
-    // plain overwrite would drop an entry that exists only in memory, letting a
-    // skip through on a field the guard would have refused (pinned by
-    // webFormConnection.skipfield.test.ts, which caught exactly that).
-    //
-    // Same caveat as the confirm handler above: this is CONSERVATIVE, preserving
-    // dev's behavior where the maps disagree, not a fix for the divergence. The
-    // opposite direction has its own failure -- an on-screen edit persisted by
-    // SchemaForm.tsx can lose to a stale in-memory entry, so a skip can still
-    // blank a real answer. Pre-existing on dev and out of scope here; filed as
-    // bd polyglot-pdf-uw3w / polyglot-pdf-3irc.
+    // fieldValues are RECONCILED per field (last-writer-wins on lastModified) --
+    // see reconcileFieldValues. Everything below is gated on a DATA-LOSS guard
+    // (markFieldSkipped BLANKS the value): a plain overwrite would drop an entry
+    // that exists only in memory, letting a skip through on a field the guard
+    // would have refused (pinned by webFormConnection.skipfield.test.ts), while a
+    // key union would let a STALE in-memory empty mask an answer the user just
+    // typed on screen, so the guard passes and the skip blanks it
+    // (bd polyglot-pdf-uw3w). The reconcile keeps both directions safe.
     const persistedAtEntry = SchemaFormStateManager.load();
     if (persistedAtEntry) {
       this.state = {
         ...persistedAtEntry,
-        fieldValues: {
-          ...persistedAtEntry.fieldValues,
-          ...this.state.fieldValues,
-        },
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
       };
     }
 
@@ -2281,6 +2424,9 @@ export class WebFormConnection {
     // skipped), so the hint, the DTI drip, and any stall-recovery all point at
     // it. A pin on an already-CONFIRMED field is dormant until the model
     // updates the value (which resets confirmed) -- the correction flow.
+    // No reconcile needed before pinField (which spreads this.state and save()s
+    // it): this handler already ADOPTED the persisted snapshot wholesale at
+    // entry above (bd polyglot-pdf-ezg2), so this.state cannot be stale here.
     this.state = SchemaFormStateManager.pinField(this.state, fieldId);
 
     // Move UI focus immediately (the same callback the next-field flow uses).
@@ -2493,6 +2639,36 @@ export class WebFormConnection {
         field_names: (c.field_names && typeof c.field_names === 'object') ? c.field_names : {},
       });
     }
+    // Reconcile before writing, same rule as the other save sites
+    // (bd polyglot-pdf-uw3w / qim7). enqueueValidatorFindings spreads this.state
+    // -- fieldValues included -- and save()s it, so a stale in-memory copy is
+    // persisted over anything written outside this object. The window here is
+    // WIDE: validation_result arrives asynchronously after a backend validator
+    // round-trip, so an on-screen edit made while it is in flight would be
+    // reverted, or dropped outright if this object never saw that field.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedAtEntry.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
+    }
+
     const before = this.state.validatorFindingsQueue.length;
     this.state = SchemaFormStateManager.enqueueValidatorFindings(this.state, findings);
     // Cancel the parked switch (if any): stay in-section to let the steer play out.
@@ -2554,6 +2730,38 @@ export class WebFormConnection {
       // maybeEmitValidateWindows, not the drain.)
       return;
     }
+    // Reconcile before writing, same rule as the confirm/skip/session_ready/
+    // section-switch handlers (bd polyglot-pdf-uw3w / qim7). Both mutators below
+    // persist a whole fieldValues copy taken from this.state, so on a stale
+    // in-memory copy they do not merely revert a field written outside this
+    // object -- markFieldsSteered rebuilds the map from this.state.fieldValues,
+    // so a field this object has never seen (typed on screen during the drain
+    // round-trip) is dropped outright, not just staled. The window is a routine
+    // validator round-trip: validation_result -> drain_findings ->
+    // drain_findings_result.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedAtEntry.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
+    }
+
     const steeredIds: string[] = [];
     for (const c of delivered) {
       const ids = c && Array.isArray(c.field_ids) ? c.field_ids : [];
@@ -2756,6 +2964,15 @@ export class WebFormConnection {
     // snapshot -- confirmField/markFieldSchemaLoaded etc. all spread-replace rather
     // than mutate in place). A settled window's region cannot become unsettled, so
     // once marked sent it stays sent.
+    //
+    // NOTE this save() persists fieldValues too, so it carries the same
+    // stale-write risk as the handlers that reconcile explicitly
+    // (bd polyglot-pdf-uw3w / qim7). It does NOT reconcile here because it is not
+    // an entry point: all four callers (handleSessionReady,
+    // handleConfirmFieldRequest, handleSkipFieldRequest, sendManualFieldUpdate)
+    // reconcile or refresh this.state earlier in the SAME synchronous run, with
+    // no intervening await. Keep that true -- a new caller that has not
+    // reconciled must reconcile before calling this.
     if (sentIndices.length > 0) {
       this.state = {
         ...this.state,
@@ -3672,6 +3889,47 @@ export class WebFormConnection {
     const finalConfirmed = confirmed || isManualEdit;
     const confirmationMethod = confirmed ? 'ai_voice' : (isManualEdit ? 'manual_edit' : undefined);
 
+    // Reconcile before writing (bd polyglot-pdf-uw3w / qim7). This is the
+    // CHOKEPOINT for field writes -- every AI fill (handleFieldUpdate,
+    // handleFormUpdated -> applyAiValueWithValidation) and every manual edit
+    // funnels through here -- and SchemaFormStateManager.updateField spreads
+    // this.state, fieldValues included, and save()s it. Without this, a routine
+    // second AI fill DROPS a field the user typed on screen in between: the
+    // connection object never saw that field, so it is not in the map that gets
+    // persisted (total loss, not staleness).
+    //
+    // Reconciling HERE rather than at each calling handler is deliberate: the
+    // persisting call is two frames deep, so it is invisible to a handler-level
+    // audit -- five review rounds of enumerating handlers by hand missed it.
+    // It is also SAFE here specifically because the write below stamps
+    // lastModified, so this call's own entry always wins its own reconcile.
+    // (The same reconcile could NOT be pushed down into
+    // SchemaFormStateManager.save(): confirmField deliberately does not bump
+    // lastModified, so a reconcile there would tie, prefer the persisted entry,
+    // and silently drop confirmed:true on every confirmation.)
+    const persistedBeforeUpdate = SchemaFormStateManager.load();
+    if (persistedBeforeUpdate) {
+      this.state = {
+        ...this.state,
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
+        // during this window and the section gate would stop blocking on a
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
+        validationErrors: persistedBeforeUpdate.validationErrors,
+        fieldValues: reconcileFieldValues(
+          persistedBeforeUpdate.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
+    }
+
     this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, {
       confirmed: finalConfirmed,
       confirmationMethod: confirmationMethod
@@ -4207,8 +4465,18 @@ export class WebFormConnection {
     // throw (e.g. corrupted sessionStorage in extractSectionFields) releases the
     // guard immediately rather than leaving it stuck until the watchdog fires.
     try {
+      // Re-read AFTER the await (bd polyglot-pdf-uw3w / qim7). `currentState` was
+      // captured BEFORE waitForBufferDrain, which polls for up to a full second,
+      // and switchToSection spreads that snapshot -- fieldValues included -- and
+      // save()s it. A field typed on screen during the drain would otherwise be
+      // overwritten in sessionStorage AND omitted from the current_values this
+      // method sends to the backend below. This is the same stale-write class the
+      // message handlers reconcile against; here the staleness comes from the
+      // intervening await rather than from an unrefreshed this.state, so the fix
+      // is to re-read rather than to reconcile two diverged copies.
+      const freshState = SchemaFormStateManager.load() ?? currentState;
       // Switch to target section in local state
-      const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
+      const updatedState = SchemaFormStateManager.switchToSection(freshState, sectionId);
       this.state = updatedState;
 
       // Build section info to send to backend (avoid round-trip delay)

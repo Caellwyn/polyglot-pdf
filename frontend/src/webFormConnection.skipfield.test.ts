@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
+import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue'
 
 class MockWebSocket {
   static instances: MockWebSocket[] = []
@@ -157,9 +158,26 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
     expect(acks).toHaveLength(1)
     expect(acks[0].recorded).toBe(false)
     expect(acks[0].reason).toBe('already_filled')
-    // The aliased real value is INTACT and the bare-key entry was NOT skip-shadowed.
-    expect((conn as any).state.fieldValues['p1_uscis_number[]'].value).toEqual(['x'])
-    expect((conn as any).state.fieldValues['p1_uscis_number']?.skipped).toBeFalsy()
+    // The real value is INTACT and was NOT skip-shadowed. Read through the
+    // alias fallback rather than a hardcoded key: the reconcile normalizes an
+    // alias pair onto the key the SCHEMA declares (here the bare
+    // `p1_uscis_number`), so asserting the bracketed key would pin a key
+    // placement the reconcile deliberately changed -- the VALUE surviving
+    // un-shadowed is what this test guards (bd polyglot-pdf-5k52).
+    const entry = readFieldEntryWithAlias(
+      (conn as any).state.fieldValues,
+      'p1_uscis_number'
+    )
+    expect(entry?.value).toEqual(['x'])
+    // Assert the SHADOW separately, across BOTH variants. Checking `skipped` on
+    // the alias-read alone is not enough: that read is meaningful-wins, so it
+    // would return the real ['x'] entry (skipped undefined) even if a hollow
+    // skipped entry HAD been written beside it -- passing while the exact data
+    // loss this test is named for occurred.
+    const fv = (conn as any).state.fieldValues
+    for (const k of ['p1_uscis_number', 'p1_uscis_number[]']) {
+      expect(fv[k]?.skipped, `${k} must not be skip-shadowed`).toBeFalsy()
+    }
   })
 
   it('acks recorded:false for an unknown field id', async () => {
