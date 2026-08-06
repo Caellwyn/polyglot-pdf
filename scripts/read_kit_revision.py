@@ -151,6 +151,23 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
     return distinct[0]
 
 
+async def _archived_published_at(store, kit_id: str, segment: str):
+    """The archived revision's publish date, or None when unavailable.
+
+    Best-effort: this only enriches an error message, so a missing or
+    unreadable metadata.json degrades to None rather than turning an honest
+    AMBIGUOUS report into a crash.
+    """
+    try:
+        meta = await store.load_archived_metadata_or_none(kit_id, segment)
+    except Exception:
+        return None
+    if isinstance(meta, dict):
+        value = meta.get("published_at")
+        return value if isinstance(value, str) else None
+    return None
+
+
 def _schema_file(meta) -> str:
     from backend.services.form_kits import safe_filename
 
@@ -185,6 +202,17 @@ def main() -> int:
 
     if not args.list and not args.marker and not args.segment:
         parser.error("one of --marker, --segment or --list is required")
+
+    # structlog's default factory prints to STDOUT, and creating the store logs
+    # (form_kits.local_store / .gcs_store). stdout here is the schema JSON an
+    # operator redirects to a file and diffs -- a log line in front of it makes
+    # the file invalid JSON while the script still exits 0. Bind logs to stderr
+    # BEFORE anything backend-side is imported or constructed.
+    import structlog
+
+    structlog.configure(
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr)
+    )
 
     from backend.services.form_kits import (
         FormKitNotFound,
@@ -242,13 +270,27 @@ def main() -> int:
         # NEVER pick one. The marker on a confirmation record is not unique when
         # an author revised fields without bumping the edition date, and handing
         # over a confident wrong schema is the worst outcome for a legal record.
+        # Print each candidate WITH its publish date: the message used to tell
+        # the operator to compare "each revision's archived metadata" while
+        # giving them no way to read it (fresh-eyes finding). published_at is
+        # what makes the confirmation event's timestamp actionable.
+        lines = []
+        for candidate in exc.candidates:
+            when = ""
+            if candidate.startswith("archive:"):
+                published = asyncio.run(
+                    _archived_published_at(store, args.kit_id, candidate[len("archive:"):])
+                )
+                when = f"  published_at: {published}" if published else "  published_at: (unrecorded)"
+            else:
+                when = "  (the kit's CURRENT schema)"
+            lines.append(f"  --segment {candidate.removeprefix('archive:')}{when}")
         print(f"AMBIGUOUS for {args.kit_id}/{args.marker}: "
-              f"{len(exc.candidates)} distinct revisions answer to this marker "
-              f"({', '.join(exc.candidates)}). The record's marker alone cannot "
-              "say which one it was confirmed against -- inspect each with "
-              "--segment <name> and use the confirmation event's timestamp "
-              "against each revision's archived metadata to choose.",
-              file=sys.stderr)
+              f"{len(exc.candidates)} distinct revisions answer to this marker. "
+              "The record's marker alone cannot say which one it was confirmed "
+              "against, so this refuses to guess. Compare the confirmation "
+              "event's timestamp against these, then read the one you want:\n"
+              + "\n".join(lines), file=sys.stderr)
         return 3
     except FormKitNotFound:
         print(f"No revision found for {args.kit_id} at marker {args.marker}. "

@@ -414,6 +414,44 @@ def test_two_revisions_sharing_one_edition_date_both_survive(tmp_path):
     assert _run(store.load_archived_revision("w7", second)) == rev_2
 
 
+@pytest.mark.parametrize("marker_len", [10, 60, 114, 120, 127, 128, 140, 300])
+def test_colliding_revisions_survive_at_every_marker_length(tmp_path, marker_len):
+    """The sibling suffix must survive segment-length truncation AT EVERY
+    LENGTH, not just short ones.
+
+    Joining the raw marker and truncating afterwards loses the fingerprint on a
+    long edition_date: at >=128 the sibling encodes IDENTICALLY to the base and
+    the second revision OVERWRITES the first on disk (retrieval then hands back
+    the wrong schema, with the original gone); just under that the suffix
+    survives mangled, so the reader's fingerprint pattern misses it and the
+    sibling is invisible. edition_date is unbounded free text, so both are
+    reachable. Parametrized over the WHOLE dimension because the bug lives in
+    specific bands (fresh-eyes on this bead reproduced 115-127 and >=128).
+    """
+    edition = "E" * marker_len
+    store = LocalFormKitStore(tmp_path)
+    rev_1 = _schema("a", "b", edition=edition)
+    _make_kit(tmp_path, "w7", rev_1)
+    _archive_hook(store, "w7", {"status": "complete"})
+
+    rev_2 = _schema("a", "b", "c", edition=edition)
+    (tmp_path / "w7" / "schema.json").write_text(json.dumps(rev_2), encoding="utf-8")
+    second = _archive_hook(store, "w7", {"status": "complete"})
+
+    # BOTH revisions must still exist -- neither overwritten.
+    markers = _run(store.list_archived_markers("w7"))
+    assert len(markers) == 2, f"a revision was lost at marker_len={marker_len}"
+    assert _run(store.load_archived_revision("w7", edition)) == rev_1
+    assert second is not None
+    assert _run(store.load_archived_revision("w7", second)) == rev_2
+    # ...and retrieval must SEE the sibling (not silently return only the first).
+    rkr = _read_kit_revision()
+    with pytest.raises(rkr.AmbiguousRevision):
+        # The live schema is rev_2, which also answers to this marker, so the
+        # honest answer is ambiguity -- never a silent single result.
+        _resolve_revision(store, "w7", edition)
+
+
 def test_repeating_the_same_colliding_revision_still_skips(tmp_path):
     """The disambiguated sibling must itself stay idempotent -- a repeated
     revert of the SAME revision must not pile up copies."""

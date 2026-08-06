@@ -86,6 +86,7 @@ from backend.services.form_kits import (
     encode_marker,
     get_form_kit_store,
     safe_filename,
+    sibling_marker,
 )
 from backend.utils.confirmation_logger import resolve_edition_marker
 
@@ -884,7 +885,12 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
             # distinguishes it (and is stable, so a repeat of THIS revision
             # re-collides with itself and skips above on the next pass).
             fingerprint = resolve_edition_marker(None, schema) or "revision"
-            store_marker = f"{marker}--{fingerprint}"
+            # sibling_marker budgets the fingerprint against the segment length
+            # cap FIRST: naively joining the raw marker would let a long
+            # edition_date truncate the fingerprint away, at which point the
+            # sibling collides with the base and OVERWRITES the earlier
+            # revision (verified live by fresh-eyes on this bead).
+            store_marker = sibling_marker(marker, fingerprint)
             if await store.load_archived_revision_or_none(kit_id, store_marker) == schema:
                 return None
         await store.put_archived_revision(kit_id, store_marker, schema, meta)

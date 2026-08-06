@@ -97,6 +97,24 @@ carries archives -- that bucket IS the authenticated store the operator read
 goes through. Doc wording narrowed to "runtime catalogues", which is what the
 structural guarantee actually covers.
 
+**A later Opus pass put criterion 1 back to FAIL on two more, both fixed:**
+(a) the sibling was built as `f"{marker}--{fingerprint}"` from the RAW marker
+and truncated afterwards, so a long `edition_date` (unbounded free text) cut the
+fingerprint off -- at >=128 chars the sibling encoded IDENTICALLY to the base
+and the second revision OVERWROTE the first on disk, with retrieval then
+returning the wrong schema and the original gone (worse than the pre-bead state
+for that kit); just under that the mangled suffix stopped matching the reader's
+pattern, making the sibling invisible. Fixed with `sibling_marker`, which
+budgets the fingerprint FIRST and trims the base around it, pinned by a test
+parametrized over eight marker lengths. (b) the script's stdout was not
+machine-readable -- structlog defaults to stdout, so the documented
+`> revision.json` workflow produced an invalid file while exiting 0, defeating
+criterion 1's own "diff clean" check. Fixed by binding structlog to stderr
+before the store is constructed. Also fixed rather than deferred: the AMBIGUOUS
+message told operators to compare "each revision's archived metadata" while
+offering no way to read it -- it now prints each candidate's `published_at`
+beside a copy-pasteable `--segment` command.
+
 **Round 3 cleared all three criteria** and found one last defect in that fix:
 sibling matching used `startswith(f"{base}--")`, which INFERS the relationship
 from the segment's name. `encode_marker` collapses any run of unsafe characters

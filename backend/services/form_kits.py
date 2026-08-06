@@ -66,6 +66,10 @@ _ARCHIVE_DIR = "_archive"
 # collision costs an extra sibling directory, never a wrong schema.
 _MARKER_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
 
+# Path segments stay well under filesystem/GCS limits. `sibling_marker` budgets
+# the fingerprint against this same cap, so the two must not drift apart.
+_MARKER_MAX_LEN = 128
+
 
 def encode_marker(marker: str) -> str:
 	"""Encode a revision marker into a safe single path segment.
@@ -84,10 +88,35 @@ def encode_marker(marker: str) -> str:
 	"""
 	encoded = _MARKER_UNSAFE_RE.sub("-", marker or "")
 	encoded = re.sub(r"\.{2,}", "-", encoded)
-	encoded = encoded[:128]
+	encoded = encoded[:_MARKER_MAX_LEN]
 	if not encoded or set(encoded) <= {".", "-"}:
 		return "unmarked"
 	return encoded
+
+
+def sibling_marker(marker: str, fingerprint: str) -> str:
+	"""A disambiguated sibling marker that SURVIVES encoding.
+
+	The naive `f"{marker}--{fingerprint}"` is a data-loss bug: `encode_marker`
+	truncates at 128 chars, and `edition_date` is unbounded free text, so a long
+	marker pushes the fingerprint off the end. At >=128 the sibling then encodes
+	IDENTICALLY to the base -- the second revision overwrites the first on disk
+	and retrieval hands back the wrong schema. Just under that, the suffix
+	survives but mangled, so the reader's fingerprint pattern no longer matches
+	it and the sibling becomes invisible (retrieval silently returns only the
+	first revision). Both were reproduced live (fresh-eyes on this bead).
+
+	So the fingerprint gets its budget FIRST and the base is trimmed to fit
+	around it. Trimming the base can make two long markers collide, but that
+	collision is then between DIFFERENT fingerprints, so the segments still
+	differ and no revision is lost -- the failure degrades to a less readable
+	name, never to overwritten bytes.
+	"""
+	encoded_fp = encode_marker(fingerprint)
+	# 2 for the "--" join. Guard against a pathological fingerprint eating the
+	# whole budget: always leave at least 8 chars of base.
+	base_budget = max(8, _MARKER_MAX_LEN - len(encoded_fp) - 2)
+	return f"{encode_marker(marker)[:base_budget]}--{encoded_fp}"
 
 
 def _replace_with_retry(src: "Path", dst: "Path") -> None:
@@ -304,6 +333,19 @@ class FormKitStore:
 
 		Empty for a kit with no archive -- never an error, since "no superseded
 		revisions" is the normal state.
+		"""
+		raise NotImplementedError
+
+	async def load_archived_metadata_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		"""The archived revision's metadata.json, or None when absent/unreadable.
+
+		`put_archived_revision` snapshots the kit's metadata alongside the
+		schema; its `published_at` is what lets an operator tell two revisions
+		apart when one marker names both. Degrades to None (never raises) --
+		this only enriches an ambiguity report, so a missing snapshot must not
+		turn an honest "cannot tell" into a failure.
 		"""
 		raise NotImplementedError
 
@@ -568,6 +610,25 @@ class LocalFormKitStore(FormKitStore):
 			raise FormKitStoreError(
 				f"Invalid or unreadable archived revision for {kit_id}/{marker}: {exc}"
 			) from exc
+
+	async def load_archived_metadata_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		path = self._archive_dir(kit_id, marker) / "metadata.json"
+
+		def _read() -> Optional[dict]:
+			if not path.exists():
+				return None
+			try:
+				loaded = json.loads(path.read_text(encoding="utf-8"))
+			except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+				return None
+			return loaded if isinstance(loaded, dict) else None
+
+		try:
+			return await anyio.to_thread.run_sync(_read)
+		except OSError:
+			return None
 
 	async def list_archived_markers(self, kit_id: str) -> list[str]:
 		root = self._kit_dir(kit_id) / _ARCHIVE_DIR
@@ -838,6 +899,33 @@ class GCSFormKitStore(FormKitStore):
 			raise FormKitStoreError(
 				f"Invalid archived revision for {kit_id}/{marker}: {exc}"
 			) from exc
+
+	async def load_archived_metadata_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		segment = encode_marker(marker)
+		blob_path = self._build_blob_path(
+			kit_id, _ARCHIVE_DIR, segment, "metadata.json"
+		)
+
+		def _download() -> Optional[bytes]:
+			blob = self._bucket.blob(blob_path)
+			try:
+				return blob.download_as_bytes()
+			except self._not_found_exc:
+				return None
+
+		try:
+			data = await anyio.to_thread.run_sync(_download)
+		except Exception:
+			return None  # best-effort: enriches a message, never fails the read
+		if data is None:
+			return None
+		try:
+			loaded = json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError):
+			return None
+		return loaded if isinstance(loaded, dict) else None
 
 	async def list_archived_markers(self, kit_id: str) -> list[str]:
 		base = self._build_blob_path(kit_id, _ARCHIVE_DIR) + "/"
