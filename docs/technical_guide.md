@@ -266,7 +266,7 @@ Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
   (`webFormConnection.ts:640-642`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:206`) with a different
+  (`backend/services/callback_handler.py:231`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
@@ -284,7 +284,7 @@ Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:456-674`), deep-copied into the
 live config by `form_filling_service.py:219-229` (which drops `switch_section`
 in continuous mode -- the session ships 6 declarations, not 7) and declared to
-Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1644`;
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1645`;
 tools assembled at :1657). Gemini's tool
 calls come back through the adapter (`live_ai_gemini.py:2426-2612` and :2620+)
 into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:437`),

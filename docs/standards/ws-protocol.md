@@ -109,7 +109,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | Type | Source | Purpose |
 |------|--------|---------|
 | `session_ready` | websocket_routes.py:1210 | Handshake ack (see above). |
-| `form_updated` | callback_handler.py:206 | A field value changed; carries `data` payload. |
+| `form_updated` | callback_handler.py:231 | A field value changed; carries `data` payload. |
 | `transcript` | callback_handler.py:261 | AI/user transcript text. |
 | `turn_complete` | callback_handler.py:268 | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
 | `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn (BOTH VAD modes -- manual rides `send_activity_end`, native rides `input_transcription` -> `on_user_activity`, verified firing on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
