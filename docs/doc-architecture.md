@@ -1,6 +1,6 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3). This file documents the doc SYSTEM (current state); it is itself a tier-2 doc, reached via [`INDEX.md`](INDEX.md).*
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3). This file documents the doc SYSTEM (current state). It is a meta-doc about that system, not a doc about the product: it sits outside the three product tiers below, is reached on demand via [`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no code path.*
 
 This project organizes its docs for **progressive discovery**: a small always-loaded core points at on-demand docs, so an agent (or human) loads only what the task needs and context stays lean. This file explains the system and the discipline that keeps it from rotting. It is the most transferable artifact in the claude-swarm-kit -- the structure below works for any codebase.
 
