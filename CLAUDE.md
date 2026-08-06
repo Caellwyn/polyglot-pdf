@@ -220,8 +220,9 @@ when **ALL** of these hold:
    that it is clean and ready for their merge is the handoff that ends closeout (not
    "asking to merge"). When unsure which side of the line a PR is on, treat it as
    consequence-bearing and ping. **Never** merge a PR whose review wasn't CLEAN,
-   whose checks are red, or that skipped review under the docs-only gate -- those
-   ping too. (Deliberately conservative while this ramps; it will loosen if it
+   whose checks are red, or whose adversarial review was not the Opus cross-surface
+   gate specifically (a Haiku-cleared docs-only PR, or a trivial PR with no
+   adversarial review at all) -- those ping too. (Deliberately conservative while this ramps; it will loosen if it
    over-pings.)
 2. **Does it make a longer-term commitment the bead doesn't explicitly call for,
    or is it a product-owner call?** -> Escalate (ask). This is the case you ask:
