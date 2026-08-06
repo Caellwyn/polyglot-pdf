@@ -131,6 +131,12 @@ export interface ConnectionCallbacks {
   // null). The handler can pre-emptively reconnect before the abrupt close; the
   // reconnect POLICY is intentionally left to the consumer (see bd follow-on).
   onGoAway?: (timeLeft: string | null) => void;
+  // Gemini interrupted the current generation (user barge-in, bd
+  // polyglot-pdf-s7uf). The consumer should drain any locally scheduled
+  // playback (audioManager.resetPlaybackClock) so the user stops hearing the
+  // dead generation's tail; the staging audioQueue here is cleared before this
+  // fires (TWO queues exist -- clearing one leaves ghost audio in the other).
+  onInterrupted?: () => void;
   // UI lifecycle hooks fired during the auto-switch at section completion: stop
   // mic capture just before the section switch, and signal the whole form is
   // done. Both are optional and defensively guarded at the call sites (no
@@ -430,6 +436,23 @@ export class WebFormConnection {
 
       try {
         const socket = new WebSocket(finalUrl);
+        // ArrayBuffer delivery, NOT the "blob" default (bd polyglot-pdf-s7uf):
+        // a Blob frame forces an async arrayBuffer() decode
+        // in handleAudioFrame, and onmessage does not wait for the previous
+        // handler's promise -- so audio frames could be PARKED on their decode
+        // while a later synchronous control message (e.g. `interrupted`)
+        // executed first. That inversion let a dead generation's tail chunks
+        // slip past the interrupted drain and re-schedule after it. With
+        // arraybuffer delivery the AUDIO path takes no await, so audio frames
+        // and the (fully synchronous) `interrupted` case process in WIRE
+        // ORDER -- the guarantee that makes the drain correct without a
+        // correlation token (Gemini emits interrupted BEFORE the next
+        // generation's audio, so everything scheduled at drain time is by
+        // construction the dead generation's). SCOPE: this covers the audio +
+        // interrupted pair only; other switch cases are async and may
+        // interleave -- do not add an await to handleAudioFrame's ArrayBuffer
+        // branch or to the interrupted case without revisiting this.
+        socket.binaryType = 'arraybuffer';
         this.ws = socket;
 
         this.ws.onopen = () => {
@@ -724,6 +747,27 @@ export class WebFormConnection {
           // drop. The onGoAway callback above still fires for any UI consumer, but
           // the reconnect no longer depends on one being wired.
           this.handleGoAwayReconnect();
+          break;
+
+        case "interrupted":
+          // Gemini stopped the current generation because the user barged in
+          // (bd polyglot-pdf-s7uf). Without this, the dead generation's
+          // already-received tail keeps playing -- the reason barge-in feels
+          // broken. Clear BOTH client audio holds: the staging queue here, and
+          // (via onInterrupted -> audioManager.resetPlaybackClock) the
+          // scheduled sources + playback clock. Deliberately NOT
+          // flushAudioQueue: that sets playbackBlocked, which without a paired
+          // resumePlayback kills all subsequent audio (the nm7z trap) -- and
+          // the model is about to speak a NEW generation on this connection.
+          console.log('[WebFormConnection] [interrupt] Gemini generation interrupted; draining stale audio');
+          this.audioQueue = [];
+          // Mirror the section-switch drain exactly: the
+          // pump flag must reset with the queue, or a future async change to
+          // processAudioQueue could strand it true and starve all later audio.
+          this.isProcessingAudio = false;
+          if (this.callbacks.onInterrupted) {
+            this.callbacks.onInterrupted();
+          }
           break;
 
         case "gemini_session_dropped":

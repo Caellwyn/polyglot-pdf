@@ -1995,3 +1995,160 @@ def test_thinking_config_gate_documents_model_family_fallback():
     cfg = _build_cfg("totally-made-up-model-xyz", disable_thinking=True)
     assert cfg.get("thinking_config") == {"thinking_budget": 0}
 
+
+
+@pytest.mark.asyncio
+async def test_run_session_loop_invokes_on_interrupted():
+    """A server_content.interrupted event fires on_interrupted exactly once
+    (bd polyglot-pdf-s7uf / 0rpu Stage 2). The forward is what lets the client
+    flush the dead generation's tail; detection must not break the loop."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    fired = []
+
+    async def on_interrupted():
+        fired.append(True)
+
+    adapter._on_interrupted = on_interrupted
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _InterruptedSession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    # Mirror the SDK shape: LiveServerMessage.server_content
+                    # with interrupted=True and no model_turn (a barge-in that
+                    # cancelled no tool calls).
+                    yield SimpleNamespace(
+                        server_content=SimpleNamespace(
+                            interrupted=True, model_turn=None
+                        )
+                    )
+                self._generator = gen()
+            return self._generator
+
+    session = _InterruptedSession()
+    ctx = _DummyContextManager(session)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    assert fired == [True]
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_run_session_loop_interrupted_without_callback_does_not_crash():
+    """With no on_interrupted registered, an interruption stays logged-only and
+    the loop completes cleanly (the callback is optional -- bd s7uf)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._on_interrupted = None
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _InterruptedSession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    yield SimpleNamespace(
+                        server_content=SimpleNamespace(
+                            interrupted=True, model_turn=None
+                        )
+                    )
+                self._generator = gen()
+            return self._generator
+
+    session = _InterruptedSession()
+    ctx = _DummyContextManager(session)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    # Must not raise.
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_run_session_loop_interrupted_callback_error_swallowed():
+    """An exception inside on_interrupted is logged and swallowed -- a client
+    send failure must never crash the receive loop (bd s7uf, same discipline
+    as on_go_away)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    async def exploding(_=None):
+        raise RuntimeError("ws closed")
+
+    adapter._on_interrupted = exploding
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _InterruptedSession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    yield SimpleNamespace(
+                        server_content=SimpleNamespace(
+                            interrupted=True, model_turn=None
+                        )
+                    )
+                self._generator = gen()
+            return self._generator
+
+    session = _InterruptedSession()
+    ctx = _DummyContextManager(session)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    # Must not raise despite the callback exploding.
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    await adapter.finalize()
