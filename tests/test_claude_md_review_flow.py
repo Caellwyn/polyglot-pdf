@@ -83,10 +83,15 @@ def test_every_docs_only_mention_is_allowlisted(text):
     # false negative (silent, and the whole reason this file exists).
     denial = re.compile(
         r"\b(skips?|skipped|skipping|bypass(es|ed)?|forgo(es)?|waive[sd]?|"
-        r"exempt(ed)?|excluded|omit(s|ted)?|no|not|zero|none|never|without)\b"
+        r"exempt(ed)?|excused|excluded|omit(s|ted)?|no|not|zero|none|never|without)\b"
         r"[^.]{0,80}?"
-        r"(outer review|adversarial review|review at all|review entirely|"
-        r"adversarial (model )?(review|pass|look)|reviewed adversarially)",
+        # The reviewed-noun. Tolerate an arbitrary short qualifier between the
+        # adjective and the noun: the real prose says "adversarial HAIKU review",
+        # and an earlier draft that only allowed a literal "model " infix was
+        # defeated live -- flipping ONE->NO in that exact sentence was not even
+        # ENUMERATED, so it passed clean. Keep this deliberately permissive.
+        r"((outer|adversarial)(\s+\w+){0,3}\s+(review|pass|look)|"
+        r"review (at all|entirely)|reviewed adversarially)",
         re.IGNORECASE,
     )
     # The subject must be the CHANGE CLASS, not an incidental path mention.

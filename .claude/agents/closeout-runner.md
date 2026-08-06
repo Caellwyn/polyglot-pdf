@@ -31,7 +31,7 @@ The orchestrator's spawn prompt gives you a structured brief. It will contain:
 - the **PR title** and the **PR body text**;
 - the **feature branch name** and the **base** (usually `origin/dev`).
 
-Both review layers (fresh-eyes + the Opus outer review) already cleared on the
+Both review layers (fresh-eyes + the outer adversarial pass) already cleared on the
 local branch BEFORE you were spawned, so `closeout_finish.py` opens the PR AND
 closes the bead(s) in one run -- there is no review-worthiness flag to pass and no
 deferred close. (`--close-beads` is the script's default now; you do not need to

@@ -110,9 +110,10 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
 
 **The flow:** you make ALL the judgments FIRST -- prep is READY, the journal prose
 is written, **and BOTH reviews have cleared on the local branch: Step 5.5's
-fresh-eyes loop to `NO-GAPS`, then Step 5.6's ONE Opus outer cross-surface review
-to `NO-GAPS`** (or the outer review was skipped per the Step 5.6
-gate), with all fixes committed. THEN you hand the `closeout-runner` a structured
+fresh-eyes loop to `NO-GAPS`, then Step 5.6's ONE outer adversarial pass (Opus
+cross-surface for a source diff, Haiku `docs-reviewer` for a docs-only one)
+to `NO-GAPS`** (or the change was trivial enough to skip the outer pass per the
+Step 5.6 gate), with all fixes committed. THEN you hand the `closeout-runner` a structured
 brief (bead id(s) + close reason; the **complete filled journal text**; PR title +
 body, including the Step-5.5 scorecard; branch + base). It
 runs the glue -- open PR, close bead(s) -- and **stops back at every
@@ -583,7 +584,7 @@ first finish anything that does *not* depend on the resolution. (Verification of
 this boundary -- synthetic mechanical conflict resolves inline, synthetic
 structural conflict escalates -- is recorded in this bead's journal entry.)
 
-Keep the working tree clean between rounds (`git status --short`). Both loops run PRE-PR: fresh-eyes (Step 5.5, to `NO-GAPS`), then the ONE Opus outer cross-surface review (Step 5.6, to `NO-GAPS`). They do not interleave. The reviewers are subagents you read directly -- there is no bot watcher.
+Keep the working tree clean between rounds (`git status --short`). Both loops run PRE-PR: fresh-eyes (Step 5.5, to `NO-GAPS`), then the ONE outer adversarial pass -- Opus `cross-surface-reviewer` or Haiku `docs-reviewer` by diff type (Step 5.6, to `NO-GAPS`). They do not interleave. The reviewers are subagents you read directly -- there is no bot watcher.
 
 ## Step 6 -- Open the PR, close the bead(s), and auto-merge or ping
 
