@@ -12,7 +12,7 @@ re-deriving "is this dangerous?" from scratch** -- specifically the
 routed to the cheap model (Haiku) by [`pick_review_model.py`](../../scripts/pick_review_model.py),
 a touch of a **high-risk** file here is one of the triggers to stop and recommend
 a Sonnet re-review. The size router makes **no** risk judgment by design; this doc
-is the risk half of that split. (Plan of record: `docs/sprint_1_harness-tuning_plan.md`
+is the risk half of that split. (Plan of record: `docs/archive/sprint_1_harness-tuning_plan.md`
 §Supporting #5, bead `polyglot-pdf-hrn.3`.)
 
 This is a discipline, not an enforced gate: no script parses this file today. It

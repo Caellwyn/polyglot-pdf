@@ -234,11 +234,13 @@ def derive_compression_window(
 
     Returns a dict ready to drop into the adapter's compression config. With
     the config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872)
-    the CURRENT default DTI form derives a ~4.5k floor -> ~5.1k window ->
-    ~6.6k trigger, above the API minimum 5000 (the SI has grown since the
-    jnjj.35-era ~1601-floor example; the clamp-up + retune path in
-    _build_live_config now fires only for forms with a much smaller SI
-    floor). injection_budget_tokens (bd wsao.8) adds headroom for the largest
+    and the session's tool list (6 declarations -- continuous mode drops
+    switch_section), the CURRENT default DTI form derives a ~5.7k floor ->
+    ~6.3k window -> ~7.8k trigger, above the API minimum 5000 (the SI has
+    grown since the jnjj.35-era ~1601-floor example; the clamp-up + retune
+    path in _build_live_config now fires only for forms with a much smaller
+    SI floor). Re-execute this function rather than trusting these figures --
+    they move with the SI text and the kit's injection budget. injection_budget_tokens (bd wsao.8) adds headroom for the largest
     per-field inline guidance injection on top. bd jnjj.35 / A6.
     """
     floor = estimate_si_floor_tokens(system_instruction, function_declarations)
@@ -250,7 +252,7 @@ def derive_compression_window(
     # session never opens (the wsao.2 measured failure). 0 for a details-less
     # form -> the FORMULA is unchanged from pre-wsao.8 (the derived numbers
     # still move whenever the SI text itself grows). The default DTI form
-    # currently derives ~5.1k window / ~6.6k trigger -- above the API minimum
+    # currently derives ~6.3k window / ~7.8k trigger -- above the API minimum
     # (already true before wsao.8), so the clamp-to-5000 path fires only for
     # forms with a much smaller SI floor.
     window = floor + max(1, window_headroom_tokens) + max(0, injection_budget_tokens)

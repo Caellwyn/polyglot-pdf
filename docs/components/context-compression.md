@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed the TRIGGER_MARGIN_TOKENS default (1500, not 600) and its derivation; removed the stale "untested 5000/4400" caveat now that `ctu8` and `polyglot-pdf-7872` are both closed and the shipped margin retunes to the validated 5000/3500; shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3), since client-owned rehydration already covers reconnects. Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified), so `_build_live_config` clamps the derived/configured trigger into range and re-asserts window < trigger after the clamp.
+*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -168,10 +168,26 @@ therefore wrong for any form whose floor differs. So when `USE_DTI` and
 
 ```
 floor   = (len(rendered SI) + len(serialized tool declarations)) / 4   # ~ tokens
-window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS
+window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS + injection_budget_tokens
 trigger = window + CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS
 trigger = clamp(trigger, 5000, 128000)   # Live API hard bound -- see below
 ```
+
+Two inputs are easy to miss and both move the result by thousands of tokens:
+
+- **The tool declarations are the SESSION's, not the raw settings list.**
+  `_build_tool_declarations` (`backend/services/form_filling_service.py:219-229`)
+  drops `switch_section` whenever `CONTINUOUS_SESSION` is on (the production
+  default) -- 6 declarations, not 7. Deriving against the unfiltered
+  `settings.TOOL_DECLARATIONS` overstates the floor by ~92 tokens.
+- **`injection_budget_tokens` is a real third addend**, passed from
+  `guidance_contract.inline_injection_budget_tokens(full_schema)`
+  (`backend/adapters/live_ai_gemini.py:1772`, bd polyglot-pdf-wsao.8). It reserves
+  room for the largest per-field inline guidance injection the form can produce.
+  It is `0` for a form with no `help.details`, so it is invisible on some kits and
+  decisive on others -- on the W-7 it is **1652 tokens**. Without it, a
+  details-bearing initiating message can exceed the assembled window and Vertex
+  closes `1007` AT SESSION ASSEMBLE (the wsao.2 measured failure).
 
 **The Live API enforces `trigger_tokens` within `[5000, 128000]`** (wire-verified
 2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
@@ -186,15 +202,19 @@ drifted post-eviction; wider windows stayed coherent).
 
 **On the CURRENT default DTI form the clamp does NOT fire.** The SI has grown
 substantially since the jnjj.35-era example, so the derivation now lands well
-above the API minimum on its own. Measured against the shipped config
-(`derive_compression_window` with today's `DTI_SYSTEM_INSTRUCTION` + tool
-declarations, headroom 599 / margin 1500): **floor ~5771 -> window ~6370 ->
-trigger ~7870**. Since 7870 > 5000, neither the clamp nor the retune runs, and
-neither log line appears -- don't go looking for them on a normal session. The
-clamp-and-retune path is reached only by a form with a much smaller SI floor.
-Because these numbers are derived from the SI TEXT, they move whenever the SI
-grows; treat the figures here as a point-in-time reading of the formula, and
-re-derive rather than trusting them after any SI change. The old 2800/2200
+above the API minimum on its own. Executed against the shipped config
+(`derive_compression_window`, today's `DTI_SYSTEM_INSTRUCTION`, the SESSION's 6
+tool declarations, headroom 599 / margin 1500): **floor 5679 -> window 6278 ->
+trigger 7778** with no injection budget (i-90, f1040), and **window 7930 ->
+trigger 9430** on the W-7 (injection budget 1652). Since every one of those
+triggers is > 5000, neither the clamp nor the retune runs and neither log line
+appears -- don't go looking for them on a normal session. The clamp-and-retune
+path is reached only by a form with a much smaller SI floor. These numbers are
+derived from the SI TEXT and the kit, so they move whenever either grows: treat
+them as a point-in-time reading and RE-EXECUTE the function (with the session's
+filtered tool list and the kit's injection budget) rather than trusting any
+written-down figure -- including the ones in `derive_compression_window`'s own
+docstring, which are older still. The old 2800/2200
 "winning calibration" numbers were measured on AI Studio before the
 `[5000, 128000]` bound existed on the connect path and no longer apply.
 
