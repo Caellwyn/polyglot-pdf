@@ -151,8 +151,8 @@ per-form** (below); the static token values are the override:
 |---|---|---|
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
-| `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (lifts the I-90's ~1601 ESTIMATED floor to the validated ~2200 window, which clears the ~1978 MEASURED floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (window `~2200` -> trigger `~3700` pre-clamp -> clamped/retuned to the validated `5000`/`3500` pair; see below) |
+| `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (calibrated against the I-90's measured eviction floor -- see below) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6370/7870 with the clamp NOT firing -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -175,24 +175,28 @@ trigger = clamp(trigger, 5000, 128000)   # Live API hard bound -- see below
 
 **The Live API enforces `trigger_tokens` within `[5000, 128000]`** (wire-verified
 2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
-must be within [5000, 128000]"` -- the session never opens). The DTI-derived I-90
-trigger (~2800) is BELOW that minimum, so `_build_live_config` clamps the trigger
-into the legal range and logs `compression_trigger_clamped_to_api_bounds`. When
-the DERIVED trigger is raised by the clamp, the derived window is RE-TUNED with
-it (`window = max(derived, trigger - TRIGGER_MARGIN)`, logged as
-`compression_window_retuned_with_clamped_trigger`): keeping the raw
-floor+headroom window (~2200) under a 5000 trigger makes each eviction chop
-~2800 tokens down to just above the SI floor -- stripping the current-field
-guidance DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
-post-eviction; wider windows stayed coherent). The retune preserves the
-derivation's margin semantic: only ~margin tokens are evicted per cycle.
-With `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` at its shipped default (`1500`,
-bd polyglot-pdf-7872), the retune lands on the explicit **5000/3500** pair --
-the configuration `ctu8`'s sweep live-validated (the clean 30-question
-continuous run, 2026-07-05), not the earlier untested 5000/4400 interim (that
-was what the old `600` margin default retuned to). The old 2800/2200 "winning
-calibration" numbers were measured on AI Studio before the `[5000, 128000]`
-bound existed on the connect path and no longer apply.
+must be within [5000, 128000]"` -- the session never opens). The clamp exists for
+forms whose derived trigger falls below that minimum; when it fires it logs
+`compression_trigger_clamped_to_api_bounds` and RE-TUNES the window with the
+raised trigger (`window = max(derived, trigger - TRIGGER_MARGIN)`, logged as
+`compression_window_retuned_with_clamped_trigger`) -- otherwise each eviction
+would chop all the way down to just above the SI floor, stripping the
+current-field guidance DTI depends on (measured 2026-07-05: the 5000/2200 run
+drifted post-eviction; wider windows stayed coherent).
+
+**On the CURRENT default DTI form the clamp does NOT fire.** The SI has grown
+substantially since the jnjj.35-era example, so the derivation now lands well
+above the API minimum on its own. Measured against the shipped config
+(`derive_compression_window` with today's `DTI_SYSTEM_INSTRUCTION` + tool
+declarations, headroom 599 / margin 1500): **floor ~5771 -> window ~6370 ->
+trigger ~7870**. Since 7870 > 5000, neither the clamp nor the retune runs, and
+neither log line appears -- don't go looking for them on a normal session. The
+clamp-and-retune path is reached only by a form with a much smaller SI floor.
+Because these numbers are derived from the SI TEXT, they move whenever the SI
+grows; treat the figures here as a point-in-time reading of the formula, and
+re-derive rather than trusting them after any SI change. The old 2800/2200
+"winning calibration" numbers were measured on AI Studio before the
+`[5000, 128000]` bound existed on the connect path and no longer apply.
 
 The floor is the **rendered (filled) SI plus the tool declarations** -- both
 unevictable, both re-billed every turn -- NOT the SI template alone.
@@ -203,12 +207,14 @@ Gemini's tokenizer plus conversation framing bill MORE than `chars/4` of the raw
 text. On the measured I-90 DTI run (jnjj.25 `*.meta.json`) the rendered SI is 3786
 chars -> ~946 estimated tok, + ~655 tok tools = **~1601 ESTIMATED floor**, while
 the live eviction landing zone was **~1978-2034 MEASURED tok** -- a ~377-tok
-undershoot. So the headroom default (599) is sized to lift the ~1601 ESTIMATE to
-the validated ~2200 window, which sits just above the ~1978 REAL floor. A naive
-small headroom (e.g. 222) would derive a ~1823 window -- BELOW the real floor ->
-compression fires turn 1 and evicts all conversation (the Codex P1 on PR #239).
-The headroom is anchored to the one form with measured eviction data; re-measure
-it when a second form's eviction floor is known. (`estimate_si_floor_tokens` /
+undershoot. The headroom default (599) is sized to cover that undershoot: on
+that measurement it lifted the ~1601 ESTIMATE to a ~2200 window sitting just
+above the ~1978 REAL floor. A naive small headroom (e.g. 222) would have derived
+a ~1823 window -- BELOW the real floor -> compression fires turn 1 and evicts all
+conversation (the Codex P1 on PR #239). The headroom is anchored to the one form
+with measured eviction data; the absolute numbers above are from that
+measurement's smaller SI, not today's (see the derivation reading above).
+Re-measure when a second form's eviction floor is known. (`estimate_si_floor_tokens` /
 `derive_compression_window` in
 `backend/adapters/live_ai_gemini.py`; `~4 chars/token` is the file's coarse
 estimate, and the headroom/margin bands absorb its slop -- the window only has to

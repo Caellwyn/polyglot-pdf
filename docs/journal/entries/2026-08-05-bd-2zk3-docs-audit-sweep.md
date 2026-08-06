@@ -55,6 +55,18 @@ never catches; every touched doc now carries the one-line stamp.
 - Fix agents must re-verify findings before applying: verifier suggestions
   were occasionally wrong in detail (a swapped line-order, a mis-attributed
   apply site) and the re-verification step caught them.
+- **The dangerous fix is the confident one.** context-compression.md's fix
+  agent correctly updated a stale constant (margin 600 -> 1500) and then
+  narrated a clamp/retune derivation on top of it that the shipped code never
+  executes -- replacing an honest "untested interim" caveat with a wrong
+  certainty. A derived number must be DERIVED (run the function against the
+  live config) before it is written down, not reasoned forward from the
+  formula. Round-3 review caught it; the doc now records the executed reading
+  (floor ~5771 / window ~6370 / trigger ~7870, clamp does not fire) and says
+  it moves with the SI.
+- A link sweep scoped to CHANGED files cannot see the links a MOVE breaks in
+  files that did not change; sweep the whole live corpus after any archive
+  move (now bd polyglot-pdf-3qgw: teach check_doc_freshness.py to do it).
 
 ## Doc freshness
 
@@ -67,6 +79,6 @@ conventions); tests/test_doc_freshness.py 42/42; relative-link sweep over all
 43 docs: CLAUDE.md, docs/INDEX.md, docs/doc-architecture.md,
 docs/schema_format.md, docs/beads-setup.md, docs/branch-protection-setup.md,
 docs/archive_completed_plans.md, docs/components/*.md (11),
-docs/standards/*.md (15), docs/doctrine/*.md (3, incl. drain-handover.md's
+docs/standards/*.md (15), docs/doctrine/*.md (4, incl. drain-handover.md's
 repointed plan-of-record link), five files moved into docs/archive/, plus this
 entry.
