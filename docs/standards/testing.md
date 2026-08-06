@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-07-17 (bd polyglot-pdf-1rgr: schema-editor CI job now runs a `tsc --noEmit` typecheck step, mirroring frontend's).*
+*Last updated: 2026-08-05 (bd polyglot-pdf-saxh: new TDD-cadence rule -- when the same defect class survives your fix TWICE, change the MECHANISM not the instance; plus generate expectations from the real artifact, and verify a mutation actually applied. See [journal/entries/2026-08-05-bd-1bsx-bead-tier-routing.md](../journal/entries/2026-08-05-bd-1bsx-bead-tier-routing.md)). Prior: 2026-07-17 (bd polyglot-pdf-1rgr: schema-editor CI job now runs a `tsc --noEmit` typecheck step, mirroring frontend's).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -246,3 +246,37 @@ real unit and let IT drive the mock; a cheap guard against writing the fake vers
 is to mutate one production assertion (e.g. flip a close code) and confirm the test
 goes red. (`polyglot-pdf-uov.9` found this in `test_idle_timeout.py`; the honest
 idle-watchdog spec drives the real `_handle_fill_session` watchdog.)
+
+<a name="change-the-mechanism"></a>
+**When the same defect class survives your fix TWICE, change the MECHANISM, not
+the instance.** A third occurrence is not bad luck -- it is evidence the approach
+is wrong. `polyglot-pdf-saxh` burned six review rounds on one PR because rounds 4,
+5 and 6 each defeated a test written in the round before, and each of my fixes
+patched the case in hand: the pin's verb list was too narrow (added verbs), then
+its noun pattern allowed only one literal infix (widened the infix), then it
+required the denial *before* the noun **and** its allowlist matched by substring
+so a sentence could quote an allowed fragment verbatim while asserting the
+opposite. All three escapes shared one root -- the test was **matching** prose
+instead of **enumerating** it. Replacing the mechanism (enumerate every candidate
+sentence with no denial test at all, then require exact whole-sentence equality
+against an allowlist) held against all 17 earlier escapes at once.
+
+Tells you are in this trap: your fix is "add another alternation / synonym /
+exemption"; the new repro differs from the last only in wording; you can list the
+cases the test catches but cannot state a **property** it holds. Two corollaries,
+both of which also bit in that bead:
+
+- **Generate expectations from the real artifact, never hand-type them.** Two of
+  five hand-typed allowlist entries described sentences that did not exist in the
+  file.
+- **Verify the mutation actually APPLIED before trusting a green result.** Two
+  mutation checks silently no-op'd (a multi-line string did not match the wrapped
+  source) and "passed" while testing nothing -- assert the text changed first. A
+  mutation you did not confirm landed is worth less than no mutation at all,
+  because it manufactures false confidence in the pin.
+
+Related: **regexes do not parse English.** A prose pin that must judge meaning
+will be wrong in one direction or the other -- a false negative is silent, a false
+positive gets the test deleted. Prefer enumerate-and-allowlist, and accept that it
+fails loudly whenever the prose changes; that IS the design, and the failure
+message should say so.

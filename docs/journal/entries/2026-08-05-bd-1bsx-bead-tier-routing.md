@@ -114,6 +114,30 @@ spawns a reviewer (its STOP list forbids it).
   being retired. Recording *why* the gate is three-way (in `review-flow.md`'s gate
   bullet and its dateline) keeps a future reader from "simplifying" it back to a
   binary and silently reopening the gap.
+- **When the same defect class survives your fix TWICE, change the MECHANISM, not
+  the instance.** This bead cost **six** inner review rounds, and rounds 4, 5 and 6
+  each defeated a test written in the round before -- every time live-reproduced by
+  the reviewer. My fixes were: add more verbs to the regex; widen its literal infix;
+  then handle noun-first word order. All three escapes shared one root I kept not
+  seeing -- the test was **matching** prose rather than **enumerating** it, and a
+  substring allowlist let a sentence quote an allowed fragment verbatim while
+  asserting the opposite. Replacing the mechanism (enumerate every candidate
+  sentence with no denial test at all; exact whole-sentence equality against an
+  allowlist generated from the real file) held against all 17 earlier escapes at
+  once. **The tell:** each fix was "add another alternation"; each new repro
+  differed from the last only in wording; and I could list cases the test caught but
+  not state a property it held. Promoted to
+  [`docs/standards/testing.md`](../../standards/testing.md#change-the-mechanism)
+  with its two corollaries -- generate expectations from the real artifact (2 of my
+  5 hand-typed allowlist entries described sentences that did not exist), and verify
+  a mutation actually APPLIED before trusting green (2 of mine silently no-op'd on a
+  line-wrap mismatch and "passed" while testing nothing).
+- **The loop-stop rule has no "you are not converging" clause.** It stops on
+  outcome (no correct blocker remains), which is right, but nothing says *"the same
+  class has now beaten you twice -- change approach."* That absence is what turned a
+  three-round PR into a six-round one; the rounds themselves were all finding real
+  defects. Worth considering as a future harness change rather than a rule I invent
+  here.
 
 ## Doc freshness
 
