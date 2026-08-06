@@ -65,71 +65,104 @@ def test_every_docs_only_mention_is_allowlisted(text):
     gets the test deleted.
 
     So this does NOT try to judge sentences. It ENUMERATES every sentence where
-    a docs/journal/beads-only subject co-occurs with a denial verb, and asserts
-    the set equals a hand-reviewed allowlist. Adding such a sentence -- in ANY
-    phrasing, including ones nobody thought to grep for -- fails the test and
-    forces a human to read it and either fix the doc or consciously allowlist
+    a docs/journal/beads-only subject co-occurs with any review word, and asserts
+    the set EXACTLY EQUALS a hand-reviewed allowlist. Adding such a sentence --
+    in ANY phrasing, including ones nobody thought to grep for -- fails the test
+    and forces a human to read it and either fix the doc or consciously allowlist
     it. That is the property worth pinning; "is this particular sentence OK?" is
     a judgment call, and this file's job is to make sure the judgment gets made.
+
+    Two later rounds defeated weaker versions of even that design, and both
+    escapes came from MATCHING rather than enumerating:
+
+      - The enumerator originally required a denial VERB before the review noun,
+        so "The adversarial Haiku review is never run for docs-only changes"
+        (noun first) was never enumerated. Fixed by dropping the denial test
+        entirely -- any review word now makes a sentence a candidate.
+      - The allowlist originally matched by SUBSTRING, so a sentence could quote
+        an allowed fragment verbatim while asserting the opposite ("Docs-only
+        changes get ZERO adversarial review going forward; the older line
+        '<allowed fragment>' has been superseded.") and pass. Fixed by exact
+        whole-sentence equality: any edit to an allowlisted sentence, including
+        appending a clause that reverses it, changes the string and re-trips.
+
+    Consequence, by design: this test fails whenever a docs+review sentence is
+    added or reworded, even correctly. That is the point -- the failure is a
+    prompt to review the prose, and the message says so.
 
     Operate on SENTENCES, not lines: the round-3 defect wrapped mid-sentence, so
     a line-based check saw the subject and the denial on different lines.
     """
     flat = re.sub(r"\s+", " ", text)
-    # Denial verbs, deliberately broad. An earlier draft listed only
-    # skip/no/zero/none/without and a fresh-eyes round defeated it live with
-    # "bypass adversarial review entirely" -- a pin whose vocabulary is narrower
-    # than English is not a pin. Prefer a false positive (loud, fixable) over a
-    # false negative (silent, and the whole reason this file exists).
-    denial = re.compile(
-        r"\b(skips?|skipped|skipping|bypass(es|ed)?|forgo(es)?|waive[sd]?|"
-        r"exempt(ed)?|excused|excluded|omit(s|ted)?|no|not|zero|none|never|without)\b"
-        r"[^.]{0,80}?"
-        # The reviewed-noun. Tolerate an arbitrary short qualifier between the
-        # adjective and the noun: the real prose says "adversarial HAIKU review",
-        # and an earlier draft that only allowed a literal "model " infix was
-        # defeated live -- flipping ONE->NO in that exact sentence was not even
-        # ENUMERATED, so it passed clean. Keep this deliberately permissive.
-        r"((outer|adversarial)(\s+\w+){0,3}\s+(review|pass|look)|"
-        r"review (at all|entirely)|reviewed adversarially)",
-        re.IGNORECASE,
-    )
-    # The subject must be the CHANGE CLASS, not an incidental path mention.
-    # `docs/` alone matched citation paths ("see docs/doctrine/..."), which is a
-    # false-positive source, so require the change-class phrasing.
+    # ENUMERATION half. Deliberately over-broad: any sentence mentioning the
+    # docs-only change class AND containing a review word is a candidate. It does
+    # NOT try to decide whether the sentence denies anything -- two drafts tried
+    # and were defeated live, once by vocabulary ("bypass"), once by word order
+    # ("The adversarial review is never run for docs-only changes" puts the
+    # denial AFTER the noun, so a directional pattern missed it). Dropping the
+    # denial test entirely removes that whole class of escape.
     subject = re.compile(
         r"docs[- ]only|journal[- ]only|`?\.?beads`?[- ]only|"
         r"docs,? (beads|journal)|prose[- ]only",
         re.IGNORECASE,
     )
-    offenders = []
-    for sentence in re.split(r"(?<=\.)\s+", flat):
-        lo = sentence.lower()
-        if not subject.search(lo) or not denial.search(sentence):
-            continue
-        offenders.append(sentence.strip())
+    review_word = re.compile(r"review|adversarial|haiku|opus|gate", re.IGNORECASE)
+    candidates = [
+        s.strip() for s in re.split(r"(?<=\.)\s+", flat)
+        if subject.search(s) and review_word.search(s)
+    ]
 
-    # Hand-reviewed 2026-08-05 (bd saxh). Each entry was read and confirmed to
-    # state the CURRENT three-way rule. Match on a distinctive fragment so
-    # ordinary rewording does not churn the list, while a NEW sentence -- or a
-    # rewrite that changes what one of these claims -- still trips it.
-    ALLOWED = (
-        # Scar tissue #2: states the Haiku arm, then scopes the denial to trivial.
-        "**Docs-only changes get ONE adversarial HAIKU review** instead",
-        # The Closeout section's summary of the same three-way fork.
-        "the Haiku `docs-reviewer` for a docs-only one (only a trivial diff gets neither)",
-        # The auto-merge condition: names what does NOT satisfy the Opus gate.
-        "or a trivial PR with no",
-        # The "Never merge" rule, same scoping.
-        "a trivial PR with no\n   adversarial review at all",
-    )
-    unexpected = [s for s in offenders if not any(frag in s for frag in ALLOWED)]
+    # ALLOWLIST half: EXACT whole-sentence equality, never substring containment.
+    # A substring allowlist was defeated live by a sentence that QUOTED an allowed
+    # fragment verbatim while asserting the opposite ("Docs-only changes get ZERO
+    # adversarial review going forward; the older line '<allowed fragment>' has
+    # been superseded."). Exact equality makes that impossible: any edit to an
+    # allowlisted sentence -- including appending a clause that reverses it --
+    # changes the string and re-trips the test.
+    #
+    # Hand-reviewed 2026-08-05 (bd saxh). Each sentence below was read and
+    # confirmed to state the CURRENT three-way rule. Whitespace is collapsed, so
+    # copy the failure output verbatim when updating.
+    ALLOWED = {
+        "**Docs-only changes get ONE adversarial HAIKU review** instead "
+        "(the `docs-reviewer` agent -- prose review, not a contract trace); "
+        "only a genuinely TRIVIAL diff skips adversarial review entirely "
+        "(fresh-eyes `NO-GAPS` is its record).",
+
+        "**This condition means the OPUS cross-surface gate specifically** "
+        "-- a docs-only PR cleared by the Haiku `docs-reviewer`, or a "
+        "trivial PR with no adversarial review, does NOT satisfy it and "
+        "pings (below).",
+
+        "**Never** merge a PR whose review wasn't CLEAN, whose checks are "
+        "red, or whose adversarial review was not the Opus cross-surface "
+        "gate specifically (a Haiku-cleared docs-only PR, or a trivial PR "
+        "with no adversarial review at all) -- those ping too.",
+
+        "**Docs-only / `.beads`-only / journal-only changes get the cheap "
+        "arm instead: ONE adversarial HAIKU review** (the `docs-reviewer` "
+        "agent, same loop, prose review rather than a contract trace).",
+
+        "- **BOTH review layers run PRE-PR, serial not parallel** (closeout "
+        "Steps 5.5 + 5.6): the fresh-eyes assess loop first (scored against "
+        "the bead's exit criteria, re-spawned until no gap at the routed "
+        "haiku/sonnet model), THEN ONE outer adversarial pass looped until "
+        "it clears -- the Opus `cross-surface-reviewer` for a source diff, "
+        "or the Haiku `docs-reviewer` for a docs-only one (only a trivial "
+        "diff gets neither), all on the local branch with fixes committed.",
+    }
+    unexpected = [s for s in candidates if s not in ALLOWED]
     assert not unexpected, (
-        "New or reworded CLAUDE.md sentence(s) pair a docs-only subject with a "
-        "denial of review. Since bd saxh, docs-only changes get ONE Haiku "
-        "`docs-reviewer` pass and ONLY genuinely trivial changes get none. "
-        "Read each sentence below: fix the doc, or -- if it is correct -- add a "
-        "fragment of it to this test's ALLOWED tuple.\n  " + "\n  ".join(unexpected)
+        "CLAUDE.md sentence(s) about docs-only changes and review are new or "
+        "reworded.\n\n"
+        "THIS FAILURE IS EXPECTED whenever such a sentence is added or edited -- "
+        "it is not necessarily a bug. The test cannot judge prose, so it asks a "
+        "human to. Since bd saxh, docs-only changes get ONE Haiku "
+        "`docs-reviewer` pass and ONLY genuinely trivial changes get none.\n\n"
+        "READ each sentence below. If it states that rule correctly, paste it "
+        "VERBATIM into this test's ALLOWED set (whitespace is collapsed, so copy "
+        "from this output, not from the file). If it does not, fix CLAUDE.md.\n\n"
+        "  " + "\n\n  ".join(unexpected)
     )
 
 
