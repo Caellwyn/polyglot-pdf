@@ -438,6 +438,10 @@ class LiveAIGemini(ILiveAI):
 
         # Whether Gemini should be asked to return transcripts/text
         self._enable_transcripts = False
+        # Local-dev transcript capture (bd polyglot-pdf-0rpu); set from settings
+        # in _build_live_config, read by the receive loop. Default False so a
+        # session that never built a config cannot log PHI.
+        self._dev_transcripts = False
 
         # Background task and queue for audio streaming
         self._audio_queue: Optional[asyncio.Queue] = None
@@ -560,6 +564,79 @@ class LiveAIGemini(ILiveAI):
         # captured gemini_<date>.jsonl can be re-ordered into the exact
         # send/receive sequence even across interleaved turns (bd polyglot-pdf-kbf).
         self._dev_io_seq: int = 0
+
+        # LOCAL-DEV-ONLY output-audio dump state (bd polyglot-pdf-0rpu). Latched
+        # from settings in _build_live_config; default False so a session that
+        # never built a config cannot write PHI.
+        self._dev_audio_dump: bool = False
+        self._dump_buf: bytearray = bytearray()
+        self._dump_gen: int = 0
+        self._dump_first_seq: Optional[int] = None
+        # Output sample rate, latched with the flag (settings is not in scope in
+        # the receive loop or here-adjacent helpers).
+        self._dump_rate: int = 24000
+
+    # Cap a single generation's dump buffer: 30 MB is ~10.5 minutes of 24 kHz
+    # PCM16 mono -- far beyond any real generation, so hitting it means a
+    # runaway; force-flush rather than grow without bound.
+    _DUMP_BUF_CAP_BYTES = 30 * 1024 * 1024
+
+    def _dev_dump_audio(self, audio_bytes: bytes) -> None:
+        """Append one output-audio chunk to the per-generation dump buffer.
+
+        DEV-ONLY (double-gated: .env.DEV marker AND LIVE_DEV_AUDIO_DUMP). Broad
+        guard: diagnostics must never break the receive loop (_dev_log_io rule).
+        """
+        try:
+            if not self._dev_audio_dump:
+                return
+            if self._dump_first_seq is None:
+                self._dump_first_seq = self._dev_io_seq
+            self._dump_buf.extend(audio_bytes)
+            if len(self._dump_buf) > self._DUMP_BUF_CAP_BYTES:
+                self._dev_flush_audio_dump("buffer_cap")
+        except Exception:
+            pass
+
+    def _dev_flush_audio_dump(self, reason: str) -> None:
+        """Write the buffered generation to one WAV and log its identity.
+
+        One WAV per generation: called on the interrupted edge, the
+        turn_complete/generation_complete edge, and session close -- so a
+        partial (interrupted) generation still leaves its evidence on disk.
+        Filenames carry ws-session, generation index, and first seq so each WAV
+        correlates to the transcript timeline in the JSONL (no colons: Windows).
+        """
+        try:
+            if not self._dev_audio_dump or not self._dump_buf:
+                return
+            import datetime as _dt
+            import wave as _wave
+            day = _dt.date.today().isoformat()
+            out_dir = Path("backend/logs/audio_out") / f"gemini_{day}"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            sess = (self._form_session_id or self._instance_id or "session").replace(":", "-")
+            attempt = getattr(self, "_live_attempt", 0)
+            name = f"{sess}_a{attempt}_g{self._dump_gen}_s{self._dump_first_seq or 0}.wav"
+            path = out_dir / name
+            with _wave.open(str(path), "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(self._dump_rate)
+                w.writeframes(bytes(self._dump_buf))
+            self._dev_log_io("local", "audio_dump", {
+                "file": str(path),
+                "bytes": len(self._dump_buf),
+                "gen": self._dump_gen,
+                "first_seq": self._dump_first_seq,
+                "last_seq": self._dev_io_seq,
+                "reason": reason,
+            })
+            self._dump_buf = bytearray()
+            self._dump_gen += 1
+            self._dump_first_seq = None
+        except Exception:
+            pass
 
     def _dev_log_io(self, direction: str, message_type: str, content: Dict[str, Any]) -> None:
         """Capture one Gemini send/receive event to the dev file logger.
@@ -1703,6 +1780,46 @@ class LiveAIGemini(ILiveAI):
         if self._enable_transcripts:
             config['output_audio_transcription'] = {}
 
+        # LOCAL-DEV-ONLY transcript capture (bd polyglot-pdf-0rpu, maintainer
+        # 2026-08-05: "turn on transcripts for local dev ONLY... It's important
+        # for privacy that they are turned off for deploy").
+        #
+        # DOUBLE-GATED, and it must stay that way: DEV_LOGGING_ENABLED (the
+        # gitignored backend/.env.DEV marker, which cannot exist on Cloud Run)
+        # AND the explicit LIVE_DEV_TRANSCRIPTS opt-in. Transcripts are PHI --
+        # this is the same marker that already gates raw-body dev logging, so a
+        # deployed service cannot turn it on even if the env var is set.
+        #
+        # WHY: without the spoken text, a voice bug is diagnosable only by
+        # inference. bd 0rpu burned three rounds establishing what the model
+        # SAID, because the tool calls prove what was STORED but nothing records
+        # what reached the user's ears.
+        # Latched onto the instance because the receive loop (_handle_session)
+        # does NOT take `settings` -- reading it there would NameError into the
+        # loop's blanket `except Exception: pass` and silently log nothing.
+        self._dev_transcripts = bool(
+            DEV_LOGGING_ENABLED and getattr(settings, "LIVE_DEV_TRANSCRIPTS", False)
+        )
+        if self._dev_transcripts:
+            config.setdefault('input_audio_transcription', {})
+            config.setdefault('output_audio_transcription', {})
+            self._log.info("[dev] transcript capture ON (LOCAL DEV ONLY -- "
+                           "PHI, never enabled in deploy)")
+
+        # LOCAL-DEV-ONLY per-generation output-audio dump (bd polyglot-pdf-0rpu):
+        # the attribution ground truth for the text/audio desync -- wrong letters
+        # INSIDE the dumped WAV = model-side; WAV correct but heard wrong =
+        # client-side playback. Same double-gate + same instance-latch rationale
+        # as _dev_transcripts above. PHI: WAVs are spoken form values; they land
+        # only under gitignored backend/logs/.
+        self._dev_audio_dump = bool(
+            DEV_LOGGING_ENABLED and getattr(settings, "LIVE_DEV_AUDIO_DUMP", False)
+        )
+        self._dump_rate = int(getattr(settings, "AUDIO_OUT_RATE", 24000) or 24000)
+        if self._dev_audio_dump:
+            self._log.info("[dev] output-audio dump ON (LOCAL DEV ONLY -- "
+                           "PHI, never enabled in deploy)")
+
         # ASR language bias (bd polyglot-pdf-y25o): carry the session language's
         # BCP-47 code on the transcription configs so the ASR listens FOR that
         # language -- the SI only steers the LLM's output language, and an
@@ -1754,6 +1871,48 @@ class LiveAIGemini(ILiveAI):
             )
             self._log.info("[voice] speech_config.voice_config applied",
                           voice_name=voice_name)
+
+        # LOCAL-DEV-ONLY sampling override (bd polyglot-pdf-0rpu, maintainer
+        # 2026-08-05: "add it only for local development... there's not much
+        # point in having a slider for deployment anyway").
+        #
+        # DOUBLE-GATED and it must stay that way: DEV_LOGGING_ENABLED (the
+        # gitignored backend/.env.DEV marker file, which cannot exist on Cloud
+        # Run) AND a non-empty LIVE_TEMPERATURE. A deployed service therefore
+        # sends NO temperature and keeps Google's default, byte-identically to
+        # before this block existed.
+        #
+        # WHY it exists: a logged local session (gemini_2026-08-05.jsonl) shows
+        # the model handed "Stored value: name_1b_last = 'Smith'" and then
+        # telling the user "You said Jose" -- a value from two fields earlier.
+        # The default temperature is 1.0 (maximum variability), where a
+        # conversationally-plausible continuation can outrank the literal tool
+        # response. Lower temperature is the standard lever for that.
+        #
+        # DO NOT set 0 on native audio: googleapis/js-genai#1578 reports
+        # runaway/no-audio output and a 1011 session close at temperature 0, and
+        # Google warns that below-1.0 values can loop or degrade. Sweep 0.3-0.6.
+        if DEV_LOGGING_ENABLED:
+            raw_temp = (getattr(settings, "LIVE_TEMPERATURE", "") or "").strip()
+            if raw_temp:
+                try:
+                    temp = float(raw_temp)
+                except ValueError:
+                    self._log.warn("[dev] LIVE_TEMPERATURE is not a number -- ignoring",
+                                   value=raw_temp)
+                else:
+                    # Clamp away from the known-bad 0 while leaving the useful
+                    # range free; a typo must not silently break every session.
+                    if temp <= 0.0 or temp > 2.0:
+                        self._log.warn(
+                            "[dev] LIVE_TEMPERATURE out of the safe range "
+                            "(0 < t <= 2; 0 is known to 1011 native audio) -- ignoring",
+                            value=temp)
+                    else:
+                        config['temperature'] = temp
+                        self._log.info("[dev] LIVE_TEMPERATURE applied "
+                                       "(LOCAL DEV ONLY -- never set in deploy)",
+                                       temperature=temp)
 
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
         # sliding window bounds the live context so per-turn re-billing stops compounding
@@ -1861,6 +2020,20 @@ class LiveAIGemini(ILiveAI):
                     derived["floor"] if derive else None
                 ),
             )
+            # Mirror the ACTUAL post-clamp config into the dev JSONL (bd 0rpu):
+            # the 2026-08-05 desync investigation could not tell which
+            # trigger/window a recorded session ran because this only ever went
+            # to console. Now every captured session is self-labeling.
+            self._dev_log_io("local", "compression_config", {
+                "enabled": True,
+                "trigger_tokens": trigger_tokens,
+                "window_tokens": window_tokens,
+                "derived_from_si_floor": derive,
+                "si_floor_estimate_tokens": derived["floor"] if derive else None,
+            })
+        else:
+            # A compression-OFF run must be self-labeling too (attribution Run A).
+            self._dev_log_io("local", "compression_config", {"enabled": False})
 
         if self._system_instruction:
             config["system_instruction"] = self._system_instruction
@@ -2159,6 +2332,22 @@ class LiveAIGemini(ILiveAI):
                                             "model_turn_parts": len(getattr(_mt, "parts", []) or []) if _mt else 0,
                                             "tool_call": getattr(event, "tool_call", None) is not None,
                                         })
+                                        # The TEXT itself, not just its length
+                                        # (bd polyglot-pdf-0rpu). Lengths alone
+                                        # cannot answer "what did she SAY?" --
+                                        # the question that made 0rpu take three
+                                        # rounds to diagnose. PHI: gated on the
+                                        # .env.DEV marker AND the explicit
+                                        # LIVE_DEV_TRANSCRIPTS opt-in, so it can
+                                        # never write in a deployed service.
+                                        if getattr(self, "_dev_transcripts", False):
+                                            _it_text = (getattr(_it, "text", "") or "") if _it else ""
+                                            _ot_text = (getattr(_ot, "text", "") or "") if _ot else ""
+                                            if _it_text or _ot_text:
+                                                self._dev_log_io("receive", "transcript", {
+                                                    "heard_from_user": _it_text,
+                                                    "spoken_by_model": _ot_text,
+                                                })
                                     except Exception:
                                         pass
 
@@ -2226,6 +2415,10 @@ class LiveAIGemini(ILiveAI):
                                                     "bytes": self._audio_out_bytes,
                                                 })
 
+                                            # Ground-truth capture BEFORE playback forwarding
+                                            # (bd 0rpu): pre-client bytes, so the dump proves
+                                            # what the MODEL generated, not what was played.
+                                            self._dev_dump_audio(audio_bytes)
                                             await self._on_audio(audio_bytes)
                                             continue
 
@@ -2285,6 +2478,11 @@ class LiveAIGemini(ILiveAI):
                                                 "elapsed_since_audio_start_ms": elapsed_since_audio_start,
                                             })
                                             
+                                            # Flush the dump BEFORE resetting counters: an
+                                            # interrupted generation's PARTIAL audio is exactly
+                                            # the evidence the desync investigation wants (bd 0rpu).
+                                            self._dev_flush_audio_dump("interrupted")
+
                                             # Reset audio tracking since generation was interrupted
                                             self._audio_chunk_count = 0
                                             self._first_audio_time = None
@@ -2331,6 +2529,9 @@ class LiveAIGemini(ILiveAI):
                                         # backstop for the no-audio case.)
                                         if (getattr(server_content, "turn_complete", False)
                                                 or getattr(server_content, "generation_complete", False)):
+                                            # Generation boundary: close out this generation's
+                                            # output-audio dump (bd 0rpu; no-op unless enabled).
+                                            self._dev_flush_audio_dump("turn_complete")
                                             if self._on_processing_done is not None:
                                                 try:
                                                     await self._on_processing_done()
@@ -2420,6 +2621,12 @@ class LiveAIGemini(ILiveAI):
                                                             audio_bytes = getattr(inline_data, "data", None)
                                                             mime_type = getattr(inline_data, "mime_type", None)
                                                             if audio_bytes and self._on_audio:
+                                                                # Rare inline_data path (bd 0rpu): dump raw;
+                                                                # record a non-PCM mime rather than transcode.
+                                                                if mime_type and "pcm" not in str(mime_type).lower():
+                                                                    self._dev_log_io("receive", "audio_dump_mime", {
+                                                                        "mime_type": str(mime_type)})
+                                                                self._dev_dump_audio(audio_bytes)
                                                                 await self._on_audio(audio_bytes)
                                                         
                                                         # Check for function calls in parts (alternative to tool_call events)
@@ -3208,6 +3415,9 @@ class LiveAIGemini(ILiveAI):
                         # Session lifecycle marker (bd polyglot-pdf-2m9): pair to
                         # session_open; records the final audio-in/out rollup so a
                         # closed session shows at a glance whether any audio flowed.
+                        # Leave any partial generation's audio on disk before the
+                        # close marker (bd 0rpu; no-op unless the dump is enabled).
+                        self._dev_flush_audio_dump("session_close")
                         self._dev_log_io("local", "session_close", {
                             "events": event_count if 'event_count' in locals() else 0,
                             "audio_in_frames": getattr(self, "_audio_in_frames", 0),

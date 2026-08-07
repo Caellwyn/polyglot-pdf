@@ -26,6 +26,44 @@
 #   ./scripts/dev-local.sh backend      # backend only
 #   ./scripts/dev-local.sh frontend     # frontend only (talks to whatever WS URL)
 #
+# LOCAL-DEV-ONLY voice knobs (bd polyglot-pdf-0rpu), passed as env vars:
+#
+#   LIVE_TEMPERATURE=0.4 ./scripts/dev-local.sh
+#     Sampling temperature for the Live session. Unset = send nothing, keeping
+#     Google's default of 1.0 -- the MAXIMUM-variability setting, where a
+#     conversationally-plausible reply can outrank the literal tool response.
+#     A logged session shows the model handed "Stored value: name_1b_last =
+#     'Smith'" and telling the user "You said Jose" (a value two fields back).
+#     SWEEP 0.3-0.6. NEVER 0: googleapis/js-genai#1578 reports runaway/no-audio
+#     output and a 1011 session close at temperature 0 on native audio. The
+#     backend rejects <=0 and >2 rather than passing them through.
+#
+#   LIVE_DEV_TRANSCRIPTS=true ./scripts/dev-local.sh
+#     Record WHAT WAS SAID (both sides) into backend/logs/gemini_*.jsonl as
+#     `transcript` records. Without it the log proves what was STORED but never
+#     what reached the user's ears. Read them back with:
+#       grep '"transcript"' backend/logs/gemini_*.jsonl
+#     then compare spoken_by_model against the neighbouring tool_response's
+#     stored_values.
+#
+#   LIVE_DEV_AUDIO_DUMP=true ./scripts/dev-local.sh
+#     Dump the model's OUTPUT audio, one WAV per generation, to
+#     backend/logs/audio_out/gemini_<date>/ -- the ground truth for the
+#     text/audio desync (bd 0rpu): wrong letters INSIDE the WAV = model-side;
+#     WAV correct but heard wrong = client-side playback. Score against the
+#     text track with:
+#       backend/.venv/Scripts/python.exe scripts/spikes/stt_readback_diff.py \
+#         --audio-dir backend/logs/audio_out/gemini_<date> \
+#         --jsonl backend/logs/gemini_<date>.jsonl
+#     PHI: same .env.DEV double-gate as transcripts.
+#
+#   Combined sweep (the bd 0rpu attribution setup):
+#     LIVE_TEMPERATURE=0.4 LIVE_DEV_TRANSCRIPTS=true LIVE_DEV_AUDIO_DUMP=true ./scripts/dev-local.sh
+#
+#   PRIVACY: both are additionally gated backend-side on backend/.env.DEV
+#   (gitignored, never deployed), so neither can turn on in a deployed service
+#   even if the env var is set. Transcripts are PHI.
+#
 # Ctrl+C stops both.
 
 set -euo pipefail
@@ -172,6 +210,9 @@ start_backend() {
     vertexai=true
   fi
   echo "Starting backend (uvicorn :8000, VERTEXAI=$vertexai, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed, DISABLE_GEMINI_VAD=$vad_mode)..."
+  # Echo the local-dev voice knobs so a sweep run is never ambiguous about which
+  # value produced which recording (bd polyglot-pdf-0rpu).
+  echo "  temperature=${LIVE_TEMPERATURE:-default(1.0)}   transcripts=${LIVE_DEV_TRANSCRIPTS:-false}   (both LOCAL-DEV ONLY)"
   # Run from the SOURCE repo root so backend.main imports THIS checkout's code.
   # VFF_DISABLE_AUTH=true bypasses Firebase token verification on /ws/fill: locally,
   # firebase_admin uses ADC and verify_id_token() validates the token against the
@@ -194,6 +235,9 @@ start_backend() {
     VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}" \
     DISABLE_GEMINI_VAD="$vad_mode" \
     SEND_TRANSCRIPT="${SEND_TRANSCRIPT:-true}" \
+    LIVE_TEMPERATURE="${LIVE_TEMPERATURE:-}" \
+    LIVE_DEV_TRANSCRIPTS="${LIVE_DEV_TRANSCRIPTS:-false}" \
+    LIVE_DEV_AUDIO_DUMP="${LIVE_DEV_AUDIO_DUMP:-false}" \
     "$VENV_PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload ) &
   PIDS+=("$!")
 }
