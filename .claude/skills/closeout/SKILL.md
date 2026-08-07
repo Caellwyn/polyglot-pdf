@@ -525,8 +525,7 @@ which is the same churn one layer down.
   change what an agent does?") gets resolved conservatively by every agent that
   reads it, which turns the carve-out back into "block on everything."
   - **TIER 3 -> ALWAYS FILE. Never fix inline, no exceptions.** Journal entries
-    (`docs/journal/`), research notes, and
-`docs/archive/` (completed plans). These are a
+    (`docs/journal/`), research notes, and `docs/archive/` (completed plans). These are a
     dated chronological record, they are rarely read, and their accuracy never
     blocks a deploy. **An expensive model iterating on journal wording is the
     single clearest waste this rule exists to stop.**

@@ -297,7 +297,7 @@ split removes. Triage: a **rubric-criterion gap is FIXED before the PR opens** (
 criterion failure, never a deferrable nit) -- as is any other correct blocker;
 **pre-existing and non-blocking findings are FILED as beads, not chased inline**; a
 rejected finding gets its reason recorded. **Doc findings route by TIER** (bd
-`polyglot-pdf-9feav`): tier 3 (`docs/journal/`, research, plans) is ALWAYS filed,
+`polyglot-pdf-9feav`): tier 3 (`docs/journal/`, research notes, `docs/archive/`) is ALWAYS filed,
 never a gap; in tier 1/2 -- including `.claude/` agent and skill files, which load
 into a session's context -- a WRONG claim about the code is a gap and merely UGLY
 wording is filed. The test is mechanical (*which file, and is the claim wrong or
