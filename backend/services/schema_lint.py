@@ -113,6 +113,13 @@ Rules (stable ids; one finding per violation site):
                                 expected answer shape (bd polyglot-pdf-stkz).
                                 Drives the editor's human acknowledgment gate
                                 -- never an auto re-bake (bd polyglot-pdf-anim)
+- guidance-identity-mass-drift WARNING EVERY comparable field's identity
+                                mismatches its baked stamp at once (>= 3
+                                compared, zero matches) -- the signature of a
+                                hash-formula change or bulk pipeline sweep, not
+                                hand edits. Replaces the N per-field stale
+                                flags with ONE kit-level finding; remedy is a
+                                re-bake/re-verify (bd polyglot-pdf-cf6v)
 
 ASCII only.
 """
@@ -1302,6 +1309,25 @@ def _check_guidance_identity_drift(
 
     The hash comes from guidance_contract.identity_sha1 -- the SAME function the
     bake writes with, so the written and compared values cannot drift.
+
+    MASS-DRIFT COLLAPSE (bd polyglot-pdf-cf6v): when EVERY comparable field
+    mismatches at once (>= 3 compared, zero matches), the cause is almost never
+    N simultaneous hand edits -- it is one mechanical event that moved all the
+    hashes together: a hash-formula change shipped without re-stamping (the
+    measured W-7 wave: bd polyglot-pdf-stkz appended the type token 25 minutes
+    after PR #519 wrote the kit's 52 stamps, lighting up 51 fields with zero
+    author edits), or a bulk pipeline sweep. Per-field acknowledgment is
+    meaningless there -- 51 identical clicks confirm nothing and train editors
+    to click through the gate, which is precisely how the gate loses its
+    credibility. So the wave is reported as ONE kit-level
+    guidance-identity-mass-drift WARNING carrying the count and the re-bake
+    remedy, and the per-field findings (with their ack gates) are suppressed.
+    A PARTIAL drift -- any single field still matching its stamp -- keeps the
+    normal per-field flags: that shape is what real hand edits look like.
+    ACCEPTED TRADEOFF: a deliberate whole-kit rename sweep (every field edited,
+    none spared) also collapses; a sweep that big warrants a kit-level
+    re-verify rather than N clicks anyway, which is the outcome the bead asked
+    for ("mass-drift waves become rare and legible").
     """
     authoring = schema.get("_bakeoff")
     authoring = authoring.get("authoring") if isinstance(authoring, dict) else None
@@ -1312,6 +1338,9 @@ def _check_guidance_identity_drift(
     fields = schema.get("fields")
     if not isinstance(fields, list):
         return
+    compared = 0
+    matched = 0
+    stale: List[LintFinding] = []
     for field in fields:
         if not isinstance(field, dict):
             continue
@@ -1338,7 +1367,9 @@ def _check_guidance_identity_drift(
         # without the other, letting the compared and reported hashes diverge
         # (Opus round 5).
         current = guidance_contract.identity_sha1(field)
+        compared += 1
         if baked == current:
+            matched += 1
             continue
         # The CURRENT identity hash rides the PATH, not the message: the editor
         # pins a human's acknowledgment to the exact content they read, and the
@@ -1352,7 +1383,7 @@ def _check_guidance_identity_drift(
         # silently cover every later edit until the next re-bake (round 1
         # finding 1). field_id_of() ignores the trailing segment, so the
         # editor's click-to-focus still resolves this path.
-        out.append(LintFinding(
+        stale.append(LintFinding(
             SEVERITY_WARNING, "guidance-identity-stale",
             f"fields (id={fid}).help[identity:{current}]",
             # Names EVERY hashed input (bd polyglot-pdf-stkz added type). A
@@ -1366,3 +1397,18 @@ def _check_guidance_identity_drift(
             "match what the assistant says -- confirm it still reads "
             "correctly (or re-author it) before marking the field reviewed",
         ))
+    if compared >= 3 and matched == 0 and stale:
+        # The whole-kit wave: see MASS-DRIFT COLLAPSE in the docstring. Path
+        # "$" carries no field anchor (field_id_of -> None), so the finding
+        # renders on the kit-level Form row, not on any field.
+        out.append(LintFinding(
+            SEVERITY_WARNING, "guidance-identity-mass-drift",
+            "$",
+            f"all {len(stale)} fields with authored guidance changed identity "
+            "at once, which points to a bulk pipeline step or a hash-formula "
+            "change rather than hand edits -- per-field confirmation would be "
+            "meaningless, so re-bake the guidance (or re-verify the kit) to "
+            "restore per-field staleness tracking",
+        ))
+    else:
+        out.extend(stale)

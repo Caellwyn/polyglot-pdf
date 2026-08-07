@@ -79,6 +79,10 @@ export const RULE_LABELS: Record<string, string> = {
   // The staleness gate (bd anim): computed FRESH each lint pass by
   // _check_guidance_identity_drift, not re-emitted from the bake report.
   'guidance-identity-stale': 'Guidance may be out of date',
+  // KIT-LEVEL collapse of the staleness gate (bd cf6v): every compared field
+  // mismatched at once (hash-formula change or bulk pipeline sweep), so one
+  // finding at path "$" replaces the N per-field flags.
+  'guidance-identity-mass-drift': 'All guidance needs a fresh check',
   // Guidance verify-loop flags (bd wsao.5), re-emitted from the persisted
   // bake report -- the instructions_enrich analog of the translation flags.
   'instructions-rectified': 'Guidance auto-corrected',
@@ -132,6 +136,7 @@ export const RULE_REMEDIES: Record<string, string> = {
   'help-details-oversize': 'Trim the details down to the most important excerpt.',
   'help-details-headings-missing': 'Add headings from the booklet to the details text.',
   'guidance-identity-stale': 'Confirm the guidance still reads correctly, or re-author it.',
+  'guidance-identity-mass-drift': 'Re-run guidance authoring for this kit, or re-verify every field\'s guidance by hand.',
   'instructions-rectified': 'Review the auto-corrected guidance.',
   'instructions-ungrounded-dropped': 'Write guidance for this field by hand.',
   'instructions-enrich-unavailable': 'Re-run guidance authoring for this kit.',
