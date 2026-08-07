@@ -90,6 +90,16 @@ and added the cross-module pin above (mutation-verified: disabling the
 collapse reddens it). No findings rejected or deferred; no beads filed by
 the reviewer.
 
+Opus cross-surface round 1: GAPS-FOUND (2), both consumer-side. (1) The
+remedy copy names "re-run guidance authoring" but the editor's only
+regenerate control is per-field inside the now-unreachable gated branch --
+pre-existing feature gap, stays in the reviewer's bead polyglot-pdf-zay5d.
+(2) The mass-drift WARNING was dismissable, making the wave's only
+surviving signal one click from invisible while the ack gate is disarmed --
+fixed inline: guidance-identity-mass-drift joined an
+UNDISMISSABLE_WARNING_RULES set in lintFindings.ts (mutation-verified pin
+in lintFindings.test.ts).
+
 ## Lessons
 
 - A hash formula with persisted outputs is a wire contract with its own past:

@@ -376,11 +376,22 @@ function dismissalKey(f: LintFinding): string {
   return `${findingFingerprint(f)}|${contentDiscriminator(f.message)}`;
 }
 
+/** Form-level WARNINGs that must NOT be dismissable despite their severity.
+ * guidance-identity-mass-drift is the wave collapse's ONLY surviving signal:
+ * it replaces the per-field stale flags AND disarms the per-field ack gate
+ * (publish_readiness's GUIDANCE_STALE_RULE rationale), so one dismiss click
+ * would let a kit read fully reviewed with every guidance_ack_sha1 stale and
+ * nothing on any surface saying so -- the confident-strip-then-surprise class
+ * again. It clears only the honest way: a re-bake/re-verify that re-stamps
+ * (bd polyglot-pdf-cf6v, Opus cross-surface finding 2). */
+const UNDISMISSABLE_WARNING_RULES = new Set(['guidance-identity-mass-drift']);
+
 /** WARNING-severity form-level findings can be standalone-dismissed; an ERROR
  * blocks the publish gate regardless, so hiding it would just recreate the
- * confident-strip-then-409 lie the pane removal exists to end. */
+ * confident-strip-then-409 lie the pane removal exists to end. Sole-signal
+ * WARNINGs (above) are excepted for the same reason. */
 export function isFindingDismissable(f: LintFinding): boolean {
-  return f.severity !== 'ERROR';
+  return f.severity !== 'ERROR' && !UNDISMISSABLE_WARNING_RULES.has(f.rule);
 }
 
 export function isFindingDismissed(schema: FormSchema, f: LintFinding): boolean {
