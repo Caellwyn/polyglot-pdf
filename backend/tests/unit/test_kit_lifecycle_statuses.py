@@ -144,6 +144,52 @@ def test_unpublished_kit_returns_to_service_through_the_publish_gate(client):
     assert _run(store.load_metadata("w7"))["status"] == "complete"
 
 
+def test_republishing_a_retired_kit_still_runs_the_publish_gate(client):
+    """The load-bearing half of "republish THROUGH THE NORMAL GATE".
+
+    Asserting 200 + a status flip is satisfied by a bare metadata write, so it
+    cannot tell a gated republish from an ungated one: a mutation exempting
+    retired kits from every gate left 245 tests green, while the same mutation
+    on the draft path reddened 16 (Opus fresh-eyes). A retired revision going
+    back into service is exactly when the gates matter most -- it is about to
+    be served to clients again.
+    """
+    c, store, root = client
+    # Retired AND missing its PDF: the first publish gate must refuse it.
+    kit = root / "w7"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "unpublished", "label": "w7"}), encoding="utf-8"
+    )
+
+    resp = _status(c, "w7", "complete")
+
+    assert resp.status_code == 409, resp.text
+    assert "form PDF" in resp.json()["detail"]
+    # ...and it stays retired rather than sliding back into service ungated.
+    assert _run(store.load_metadata("w7"))["status"] == "unpublished"
+
+
+def test_republishing_a_retired_kit_is_refused_by_the_lint_gate_too(client):
+    """Not just the cheap PDF check -- the whole gate chain applies. Pins that
+    the republish path shares the draft path's gates rather than a subset."""
+    c, store, root = client
+    broken = json.loads(json.dumps(_SCHEMA))
+    # Two options sharing one value is a lint ERROR (duplicate option values).
+    broken["fields"][0]["type"] = "radio"
+    broken["fields"][0]["options"] = [
+        {"value": "dup", "label": "One"},
+        {"value": "dup", "label": "Two"},
+    ]
+    _make_kit(root, "w7", status="unpublished", schema=broken)
+
+    resp = _status(c, "w7", "complete")
+
+    assert resp.status_code in (409, 422), resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "unpublished"
+
+
 def test_unpublishing_a_draft_is_refused(client):
     """Only a live kit can be retired; anything else is a confused request."""
     c, _store, root = client

@@ -1880,13 +1880,28 @@ async def set_editor_kit_status(
     body: KitStatusBody,
     role: Annotated[str, Depends(require_editor_role)],
 ) -> KitStatusResponse:
-    """Flip a kit's status (draft <-> complete), preserving other metadata keys.
+    """Set a kit's status (draft | complete | unpublished), preserving other
+    metadata keys.
 
     `complete` is the PUBLISH gate: the deploy ships only complete kits to the
     voice app, so that transition requires a schema that exists AND validates
     against the canonical FormSchema -- a broken schema surfaces here, to the
-    person who can fix it, not later in the voice app. Reverting to draft is
-    unconditional.
+    person who can fix it, not later in the voice app. The gate applies to
+    EVERY route into `complete`, including a retired kit returning to service.
+
+    `unpublished` retires a superseded revision (bd polyglot-pdf-6dz0): hidden
+    from clients like a draft, but WRITE-LOCKED like complete, because its
+    schema is what earlier confirmation records were confirmed against. Two
+    transition rules follow: only a live kit can be unpublished, and an
+    unpublished kit can NEVER go back to draft (draft is editable, which would
+    let the bytes an audit record names be rewritten in place) -- it returns
+    only through the publish gate. Reverting a COMPLETE kit to draft stays
+    unconditional; retiring EITHER way archives the revision first.
+
+    `replaces_kit_id` retires another live kit for the same form as part of
+    this publish, so a new edition onboarded as its own kit does not leave two
+    live entries. The outgoing kit is archived early but flipped only after the
+    incoming kit is live: the failure mode is two live entries, never zero.
 
     DRIFT SWEEP (bd polyglot-pdf-783r): before the validate/lint gates, a
     completion re-translates every spoken-name / option-label / section-label

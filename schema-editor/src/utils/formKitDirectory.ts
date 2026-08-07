@@ -39,7 +39,7 @@ export interface KitMetadata {
 export interface CatalogueEntry {
   id: string;                 // the <id> folder name
   label: string;              // metadata.label or a friendly fallback
-  status: KitStatus;          // draft | complete | unknown (no/blank status)
+  status: KitStatus;          // draft | complete | unpublished | unknown
   hasSchema: boolean;         // a schema.json (or custom) is present
   hasPdf: boolean;            // a form.pdf (or custom) is present
   schemaFile: string;         // resolved schema filename
@@ -157,11 +157,15 @@ export async function loadKitSchema(
 }
 
 /**
- * Set a kit's metadata.json `status` (draft|complete), preserving every other
- * metadata field (label, schema, pdf, ...). This is the editor-side promote/
- * demote the deploy gate keys on: only status:complete kits reach GCS / the voice
- * app (deploy-all.sh kit_is_complete). Returns the kit's refreshed CatalogueEntry.
- * bd polyglot-pdf-nr8u (D2).
+ * Set a kit's metadata.json `status` (draft|complete|unpublished), preserving
+ * every other metadata field (label, schema, pdf, ...). This is the editor-side
+ * promote/demote the deploy gate keys on: only status:complete kits reach GCS /
+ * the voice app (deploy-all.sh kit_is_complete). Returns the kit's refreshed
+ * CatalogueEntry. bd polyglot-pdf-nr8u (D2).
+ *
+ * THROWS on a kit already marked `unpublished` (bd polyglot-pdf-6dz0): a
+ * retired revision is write-locked, and this is an unvalidated local write --
+ * see the lock below.
  */
 export async function setKitStatus(
   entry: CatalogueEntry, status: KitStatus,
