@@ -525,7 +525,8 @@ which is the same churn one layer down.
   change what an agent does?") gets resolved conservatively by every agent that
   reads it, which turns the carve-out back into "block on everything."
   - **TIER 3 -> ALWAYS FILE. Never fix inline, no exceptions.** Journal entries
-    (`docs/journal/`), research notes, sprint plans, archived docs. These are a
+    (`docs/journal/`), research notes, and
+`docs/archive/` (completed plans). These are a
     dated chronological record, they are rarely read, and their accuracy never
     blocks a deploy. **An expensive model iterating on journal wording is the
     single clearest waste this rule exists to stop.**
@@ -559,8 +560,9 @@ which is the same churn one layer down.
     is NOT a violation**: section 3 bans those three chronological shapes only,
     and `review-flow.md` preserves its rationale deliberately "so it is not
     re-litigated". Do not file a doc for explaining why it is as it is.
-    (`docs/sprint_<N>_*.md` plans are the one exemption: deliberately
-    chronological.)
+    (ACTIVE `docs/sprint_<N>_*.md` plans are tier 2 but are explicitly EXEMPT from
+    current-state-only -- `doc-architecture.md` says they are deliberately
+    chronological -- so never file one for sequencing a sprint.)
 - **Never swept under the rug.** Every non-blocking and pre-existing finding gets
   **filed**. "Not a blocker" is a routing decision, not a dismissal. A finding you
   neither fixed nor filed is the one failure mode this rule does not tolerate.

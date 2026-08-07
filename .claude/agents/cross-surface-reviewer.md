@@ -66,8 +66,8 @@ re-opens the review loop, and iterating an expensive model over documentation
 wording is exactly the waste this split exists to prevent. So:
 
 - **TIER 3 -> FILE IT, never report as a gap.** `docs/journal/`, research notes,
-  sprint plans, archived docs. Dated chronological record, rarely read, never
-  blocks a deploy.
+  and `docs/archive/` (completed plans). A dated chronological record, rarely
+  read, never blocks a deploy.
 - **TIER 1/2, a WRONG claim about the code -> REPORT AS A GAP.** Tier 1 is
   `CLAUDE.md` + `docs/INDEX.md`; tier 2 is `docs/standards/*`,
   `docs/components/*`, `docs/doctrine/*`, `docs/technical_guide.md`. **These files
@@ -96,7 +96,9 @@ violation (`doc-architecture.md` section 3); file it as a docs-nit. **Design
 RATIONALE is NOT a violation** -- section 3 bans those three chronological
 shapes only, and `review-flow.md` preserves its rationale deliberately "so it
 is not re-litigated". Do not file a doc for explaining why it is as it is.
-(`docs/sprint_<N>_*.md` plans are exempt; they are deliberately chronological.)
+(ACTIVE `docs/sprint_<N>_*.md` plans are tier 2 but are explicitly EXEMPT from
+current-state-only -- `doc-architecture.md` says they are deliberately
+chronological -- so never file one for sequencing a sprint.)
 
 ## Findings that are NOT this PR's to fix
 
