@@ -168,8 +168,23 @@ export async function setKitStatus(
 ): Promise<CatalogueEntry> {
   const dir = entry.dirHandle;
   // Read-merge-write so we never clobber label/schema/pdf or unknown fields.
+  // The write-lock lives HERE, at the primitive that actually writes, not only
+  // in the one component that calls it today (bd polyglot-pdf-6dz0). A
+  // component-level guard protects a single path and cannot be tested through
+  // the UI once the render already hides the control -- so any future caller
+  // would silently reopen the hole. A RETIRED revision's metadata is what its
+  // confirmation records were confirmed against; returning it to service runs
+  // server-side through the publish gate, never through this unvalidated
+  // local write.
   const metaHandle = await tryGetFile(dir, METADATA_FILE);
   const existing = metaHandle ? await readJsonFile<KitMetadata>(metaHandle) : null;
+  if (existing?.status === 'unpublished') {
+    throw new Error(
+      `"${entry.id}" is unpublished (a superseded revision) and cannot be `
+      + 'changed by a local write -- publish it again through the backend, '
+      + 'which runs the full publish gate.',
+    );
+  }
   const next: KitMetadata = { ...(existing || {}), status };
   await writeFile(dir, METADATA_FILE, JSON.stringify(next, null, 2) + '\n');
   return readKitEntry(entry.id, dir);

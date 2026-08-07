@@ -275,12 +275,19 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     // DIRECTLY, with none of those gates -- so without this refusal, an offline
     // editor could republish a retired revision's stale bytes unvalidated. The
     // backend refuses this too; this is the local half of the same lock.
-    if (kit.status === 'unpublished') {
+    // The ONE exception is a republish THROUGH THE BACKEND: a retired revision
+    // returns to service only via the full publish gate, which is exactly what
+    // the server route runs. Refusing that too would make the status a
+    // one-way trip from the local editor even with the backend reachable --
+    // and rubric "republish restores visibility" unreachable here.
+    const republishViaServer = status === 'complete' && serverActionsOk;
+    if (kit.status === 'unpublished' && !republishViaServer) {
       setError(
-        `"${kit.label}" is unpublished (a superseded revision) and cannot be `
-        + 'changed from this folder view. Its schema is what earlier '
-        + 'confirmations were recorded against. Start the backend and publish '
-        + 'it again there if you need it back in service.',
+        `"${kit.label}" is unpublished (a superseded revision). It cannot be `
+        + 'edited or changed from this folder view -- its schema is what '
+        + 'earlier confirmations were recorded against. Start the backend '
+        + '(scripts/run-schema-editor.sh) to publish it again, which runs the '
+        + 'full publish gate.',
       );
       return;
     }
@@ -845,16 +852,28 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                       </button>
                     </>
                   ) : kit.status === 'unpublished' ? (
-                    // A retired revision is write-locked; local mode cannot run
-                    // the publish gate, and handleSetStatus refuses it anyway.
-                    // Say so instead of offering "Mark complete", which reads as
-                    // if this were an unfinished draft.
-                    <span
-                      className="text-xs text-slate-600"
-                      title="This version was retired. Its schema is what earlier confirmations were recorded against, so it cannot be edited here. Start the backend to publish it again."
-                    >
-                      Retired -- publish again from the backend
-                    </span>
+                    // Retired: it returns to service ONLY through the publish
+                    // gate, which lives server-side. Offer that when the
+                    // backend is reachable; otherwise say why it is not
+                    // actionable rather than showing "Mark complete", which
+                    // reads as if this were an unfinished draft.
+                    serverActionsOk ? (
+                      <button
+                        className="btn-sm btn-primary text-xs"
+                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        disabled={busy || deployingId !== null}
+                        title="Publish this retired version again -- runs the full publish gate on the backend"
+                      >
+                        Publish again
+                      </button>
+                    ) : (
+                      <span
+                        className="text-xs text-slate-600"
+                        title="This version was retired. Its schema is what earlier confirmations were recorded against, so it cannot be edited here. Start the backend (scripts/run-schema-editor.sh) to publish it again."
+                      >
+                        Retired -- start the backend to publish again
+                      </span>
+                    )
                   ) : (
                     <button
                       className="btn-sm btn-primary text-xs"

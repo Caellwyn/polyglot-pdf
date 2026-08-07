@@ -38,6 +38,32 @@ function entry(id: string, dirHandle: CatalogueEntry['dirHandle']): CatalogueEnt
 }
 
 describe('setKitStatus', () => {
+  it('REFUSES to write over an unpublished (retired) kit', async () => {
+    // The write-lock lives at this primitive, not only in the component that
+    // calls it: a component guard protects one path, and once the render hides
+    // the control it cannot be pinned through the UI at all (a mutation
+    // disabling the component guard left all 56 catalogue tests green -- Opus
+    // fresh-eyes). A retired revision's metadata is what its confirmation
+    // records were confirmed against; it returns to service only through the
+    // backend's publish gate.
+    const mock = mockKitDir(JSON.stringify({ label: 'Old', status: 'unpublished' }));
+
+    await expect(setKitStatus(entry('old', mock.dirHandle), 'complete'))
+      .rejects.toThrow(/unpublished/);
+
+    // Nothing was written -- the file still holds the retired status.
+    expect(JSON.parse(mock.read()!).status).toBe('unpublished');
+  });
+
+  it('refuses a retired kit for EVERY target status, not just complete', async () => {
+    for (const target of ['draft', 'complete', 'unpublished'] as const) {
+      const mock = mockKitDir(JSON.stringify({ label: 'Old', status: 'unpublished' }));
+      await expect(setKitStatus(entry('old', mock.dirHandle), target))
+        .rejects.toThrow(/unpublished/);
+      expect(JSON.parse(mock.read()!).status).toBe('unpublished');
+    }
+  });
+
   it('promotes draft -> complete, preserving other metadata fields', async () => {
     const mock = mockKitDir(JSON.stringify({ label: 'I-90', schema: 'custom.json', status: 'draft' }));
     const updated = await setKitStatus(entry('i-90', mock.dirHandle), 'complete');
