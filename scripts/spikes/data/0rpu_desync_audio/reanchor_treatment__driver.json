@@ -1,0 +1,17 @@
+{
+  "verdict": "PARTIAL",
+  "confirmed": 0,
+  "total": 15,
+  "steps": [
+    {
+      "fieldId": "application_type",
+      "fixture": "answer_new_itin",
+      "tStart": 1785986730843,
+      "retries": 1,
+      "backlogAtAnswer": 0,
+      "confirmed": false,
+      "aborted": true
+    }
+  ],
+  "done": true
+}

@@ -1,0 +1,914 @@
+{
+  "summary": {
+    "generations": 32,
+    "scoreable": 29,
+    "unscoreable": 3,
+    "desync": 2,
+    "desync_gens": [
+      11,
+      15
+    ],
+    "rate_pct": 6.9,
+    "by_verdict": {
+      "ALIGNED": 22,
+      "LOW_CONFIDENCE": 1,
+      "PARTIAL": 5,
+      "TOO_SHORT_TO_JUDGE": 2,
+      "UTTERANCE_DESYNC": 2
+    }
+  },
+  "results": [
+    {
+      "gen": 0,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g0_s10.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 10,
+      "last_seq": 52,
+      "seconds": 3.992,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 191638,
+      "seq_window": [
+        10,
+        88
+      ],
+      "neighbour_window": [
+        10,
+        88
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " an application for a new ITIN or to renew an existing one?You said",
+      "stt_text": "Is this an application for a new it 10 or to renew an existing 1?",
+      "confidence": 0.925,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.625,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 1,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g1_s89.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 89,
+      "last_seq": 123,
+      "seconds": 3.312,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 158998,
+      "seq_window": [
+        89,
+        143
+      ],
+      "neighbour_window": [
+        10,
+        143
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " \"Apply for a new ITIN.\" Is that correct?Please choose",
+      "stt_text": "You said, apply for a new. I 10. Is that correct?",
+      "confidence": 0.879,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.571,
+      "verdict": "PARTIAL"
+    },
+    {
+      "gen": 2,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g2_s144.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 144,
+      "last_seq": 504,
+      "seconds": 31.512,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 1512598,
+      "seq_window": [
+        144,
+        542
+      ],
+      "neighbour_window": [
+        89,
+        542
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " the one reason that best explains why you need this number: a. Nonresident alien required to get an ITIN to claim tax treaty benefit; b. Nonresident alien filing a U.S. federal tax return; c. U.S. resident alien filing a U.S. federal tax return; d. Dependent of U.S. citizen/resident alien; e. Spouse of U.S. citizen/resident alien; f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception; g. Dependent/spouse of a nonresident alien holding a U.S. visa; h. Other.You chose",
+      "stt_text": "Please choose the 1 reason, that best explains why you need this number non-resident, alien required to get an i 10 to claim tax, treaty benefit, B non-resident, alien filing, a US federal tax return, C, us, resident alien filing a US federal tax return. D dependent of US, citizen resident, alien e, spouse of US, citizen resident alien, F non-resident alien student Professor or researcher filing. A US federal tax return or claiming an exception D dependent or spouse of a non-resident alien. Holding a US Visa 8. Other",
+      "confidence": 0.94,
+      "letters_stt": "",
+      "letters_transcript": "AUSCUSAUSAUSAUS",
+      "letters_neighbourhood": "AUSCUSAUSAUSAUS",
+      "containment": 0.787,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 3,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g3_s543.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 543,
+      "last_seq": 582,
+      "seconds": 3.992,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 191638,
+      "seq_window": [
+        543,
+        604
+      ],
+      "neighbour_window": [
+        144,
+        604
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " \"Spouse of U.S. citizen/resident alien.\" Is that correct?Please provide",
+      "stt_text": "You chose spouse of US, citizen resident alien. Is that correct?",
+      "confidence": 0.968,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "AUSCUSAUSAUSAUS",
+      "containment": 0.714,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 4,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g4_s605.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 605,
+      "last_seq": 662,
+      "seconds": 4.952,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 237718,
+      "seq_window": [
+        605,
+        690
+      ],
+      "neighbour_window": [
+        543,
+        690
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " the full name and Social Security Number or ITIN of the U.S. citizen.Loretta Johnson,",
+      "stt_text": "Please provide the full name and social security number, or itin of the US citizen.",
+      "confidence": 0.981,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.778,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 5,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g5_s691.wav",
+      "flush_reason": "interrupted",
+      "first_seq": 691,
+      "last_seq": 706,
+      "seconds": 2.632,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 126358,
+      "seq_window": [
+        691,
+        724
+      ],
+      "neighbour_window": [
+        605,
+        724
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " 5-5-5-1-2-1-2-1-2.How do",
+      "stt_text": "Lorenna Johnson 555.",
+      "confidence": 0.555,
+      "verdict": "LOW_CONFIDENCE"
+    },
+    {
+      "gen": 6,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g6_s725.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 725,
+      "last_seq": 743,
+      "seconds": 1.752,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 84118,
+      "seq_window": [
+        725,
+        763
+      ],
+      "neighbour_window": [
+        691,
+        763
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " you spell your first name?J-O-H-N,",
+      "stt_text": "How do you spell your first name?",
+      "confidence": 0.971,
+      "letters_stt": "",
+      "letters_transcript": "JOHN",
+      "letters_neighbourhood": "JOHN",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 7,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g7_s764.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 764,
+      "last_seq": 789,
+      "seconds": 3.472,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 166678,
+      "seq_window": [
+        764,
+        809
+      ],
+      "neighbour_window": [
+        725,
+        809
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " John -- is that correct?What is",
+      "stt_text": "J0hn John, is that correct?",
+      "confidence": 0.843,
+      "letters_stt": "JOHN",
+      "letters_transcript": "",
+      "letters_neighbourhood": "JOHN",
+      "containment": 0.667,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 8,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g8_s810.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 810,
+      "last_seq": 854,
+      "seconds": 3.672,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 176278,
+      "seq_window": [
+        810,
+        876
+      ],
+      "neighbour_window": [
+        764,
+        876
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " your middle name? If you don't have one, just say \"not applicable.\"J-O-S-H-U-A,",
+      "stt_text": "What is your middle name? If you don't have 1 just say not applicable.",
+      "confidence": 0.992,
+      "letters_stt": "",
+      "letters_transcript": "JOSHUA",
+      "letters_neighbourhood": "JOSHUA",
+      "containment": 0.857,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 9,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g9_s877.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 877,
+      "last_seq": 903,
+      "seconds": 3.752,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 180118,
+      "seq_window": [
+        877,
+        925
+      ],
+      "neighbour_window": [
+        810,
+        925
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Joshua -- is that correct?How do",
+      "stt_text": "Joe Hua. Joshua, is that correct?",
+      "confidence": 0.73,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "JOSHUA",
+      "containment": 0.5,
+      "verdict": "PARTIAL"
+    },
+    {
+      "gen": 10,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g10_s926.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 926,
+      "last_seq": 944,
+      "seconds": 1.752,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 84118,
+      "seq_window": [
+        926,
+        964
+      ],
+      "neighbour_window": [
+        877,
+        964
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " you spell your last name?J-O-H-N-S-O-N,",
+      "stt_text": "How do you spell your last name?",
+      "confidence": 0.984,
+      "letters_stt": "",
+      "letters_transcript": "JOHNSON",
+      "letters_neighbourhood": "JOHNSON",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 11,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g11_s965.wav",
+      "flush_reason": "interrupted",
+      "first_seq": 965,
+      "last_seq": 987,
+      "seconds": 3.112,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 149398,
+      "seq_window": [
+        965,
+        1003
+      ],
+      "neighbour_window": [
+        926,
+        1003
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Johnson -- isIs the",
+      "stt_text": "J0hns o. N Johnson.",
+      "confidence": 0.605,
+      "letters_stt": "JOHNSON",
+      "letters_transcript": "",
+      "letters_neighbourhood": "JOHNSON",
+      "containment": 0.25,
+      "verdict": "UTTERANCE_DESYNC"
+    },
+    {
+      "gen": 12,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g12_s1004.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1004,
+      "last_seq": 1087,
+      "seconds": 6.792,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 326038,
+      "seq_window": [
+        1004,
+        1111
+      ],
+      "neighbour_window": [
+        965,
+        1111
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " first name on your birth certificate different from your current name? If so, please provide that name; otherwise, say \"not applicable.\"M-A-R-I-A,",
+      "stt_text": "Is the first name on your birth certificate different from your current name if so please provide that name otherwise say not applicable.",
+      "confidence": 0.997,
+      "letters_stt": "",
+      "letters_transcript": "MARIA",
+      "letters_neighbourhood": "MARIA",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 13,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g13_s1112.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1112,
+      "last_seq": 1136,
+      "seconds": 3.432,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 164758,
+      "seq_window": [
+        1112,
+        1158
+      ],
+      "neighbour_window": [
+        1004,
+        1158
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Maria -- is that correct?Is the",
+      "stt_text": "M, a r. I a Maria. Is that correct?",
+      "confidence": 0.888,
+      "letters_stt": "MARIA",
+      "letters_transcript": "",
+      "letters_neighbourhood": "MARIA",
+      "containment": 0.4,
+      "verdict": "PARTIAL"
+    },
+    {
+      "gen": 14,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g14_s1159.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1159,
+      "last_seq": 1242,
+      "seconds": 6.672,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 320278,
+      "seq_window": [
+        1159,
+        1266
+      ],
+      "neighbour_window": [
+        1112,
+        1266
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " middle name on your birth certificate different from your current middle name? If so, please provide that name; otherwise, say \"not applicable.\"J-O-S-E,",
+      "stt_text": "Is the middle name on your birth certificate different from your current middle name if so please provide that name otherwise say not applicable.",
+      "confidence": 0.998,
+      "letters_stt": "",
+      "letters_transcript": "JOSE",
+      "letters_neighbourhood": "JOSE",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 15,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g15_s1267.wav",
+      "flush_reason": "interrupted",
+      "first_seq": 1267,
+      "last_seq": 1289,
+      "seconds": 3.072,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 147478,
+      "seq_window": [
+        1267,
+        1307
+      ],
+      "neighbour_window": [
+        1159,
+        1307
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Jose -- is that correct?Is the",
+      "stt_text": "Joe Hua, Jose is that?",
+      "confidence": 0.666,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "JOSE",
+      "containment": 0.333,
+      "verdict": "UTTERANCE_DESYNC"
+    },
+    {
+      "gen": 16,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g16_s1308.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1308,
+      "last_seq": 1396,
+      "seconds": 6.832,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 327958,
+      "seq_window": [
+        1308,
+        1420
+      ],
+      "neighbour_window": [
+        1267,
+        1420
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " last name on your birth certificate different from your current last name? If so, please provide that name; otherwise, say \"not applicable.\"S-M-I-T-H,",
+      "stt_text": "Is the last name on your birth certificate different from your current last name if so please provide that name otherwise say not applicable.",
+      "confidence": 0.998,
+      "letters_stt": "",
+      "letters_transcript": "SMITH",
+      "letters_neighbourhood": "SMITH",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 17,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g17_s1421.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1421,
+      "last_seq": 1447,
+      "seconds": 3.752,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 180118,
+      "seq_window": [
+        1421,
+        1469
+      ],
+      "neighbour_window": [
+        1308,
+        1469
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Smith -- is that correct?What is",
+      "stt_text": "Smithe Smith. Is that correct?",
+      "confidence": 0.817,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "SMITH",
+      "containment": 0.667,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 18,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g18_s1470.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1470,
+      "last_seq": 1535,
+      "seconds": 5.632,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 270358,
+      "seq_window": [
+        1470,
+        1557
+      ],
+      "neighbour_window": [
+        1421,
+        1557
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " your mailing address, including the street address or PO box, and any apartment or rural route number?123 Main",
+      "stt_text": "what is your mailing address including the street address or PO box and any apartment or rural route number",
+      "confidence": 0.954,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 19,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g19_s1558.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1558,
+      "last_seq": 1580,
+      "seconds": 2.552,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 122518,
+      "seq_window": [
+        1558,
+        1598
+      ],
+      "neighbour_window": [
+        1470,
+        1598
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Street -- is that correct?What is",
+      "stt_text": "123 Main Street. Is that correct?",
+      "confidence": 0.956,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.5,
+      "verdict": "PARTIAL"
+    },
+    {
+      "gen": 20,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g20_s1599.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1599,
+      "last_seq": 1646,
+      "seconds": 4.432,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 212758,
+      "seq_window": [
+        1599,
+        1668
+      ],
+      "neighbour_window": [
+        1558,
+        1668
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " your mailing address city, state, and country, including the ZIP code?Austin, Texas,",
+      "stt_text": "What is your mailing address? City state and Country including the ZIP code.",
+      "confidence": 0.988,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 21,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g21_s1669.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1669,
+      "last_seq": 1696,
+      "seconds": 2.832,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 135958,
+      "seq_window": [
+        1669,
+        1716
+      ],
+      "neighbour_window": [
+        1599,
+        1716
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " United States -- is that correct?What is",
+      "stt_text": "Austin Texas United States. Is that correct?",
+      "confidence": 0.892,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.6,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 22,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g22_s1717.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1717,
+      "last_seq": 1785,
+      "seconds": 5.672,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 272278,
+      "seq_window": [
+        1717,
+        1809
+      ],
+      "neighbour_window": [
+        1669,
+        1809
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " your street address in the country where you permanently or normally live? Please do not use a PO box.Avenida Reforma",
+      "stt_text": "What is your mailing address in the country where you permanently are normally live? Please do not use a p box.",
+      "confidence": 0.921,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.8,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 23,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g23_s1810.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1810,
+      "last_seq": 1831,
+      "seconds": 2.672,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 128278,
+      "seq_window": [
+        1810,
+        1851
+      ],
+      "neighbour_window": [
+        1717,
+        1851
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " 100 -- is that correct?What is",
+      "stt_text": "Aan a reform. A 100 is that correct?",
+      "confidence": 0.68,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.5,
+      "verdict": "PARTIAL"
+    },
+    {
+      "gen": 24,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g24_s1852.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1852,
+      "last_seq": 1904,
+      "seconds": 5.392,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 258838,
+      "seq_window": [
+        1852,
+        1927
+      ],
+      "neighbour_window": [
+        1810,
+        1927
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " the city, state, and country for that address, including the postal code?Mexico City,",
+      "stt_text": "What is your mailing address? City state and Country for that address including the postal code.",
+      "confidence": 0.992,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.9,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 25,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g25_s1928.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1928,
+      "last_seq": 1950,
+      "seconds": 2.632,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 126358,
+      "seq_window": [
+        1928,
+        1969
+      ],
+      "neighbour_window": [
+        1852,
+        1969
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " Mexico -- is that correct?What is",
+      "stt_text": "Mexico City, Mexico. Is that correct?",
+      "confidence": 0.92,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.75,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 26,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g26_s1970.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 1970,
+      "last_seq": 1984,
+      "seconds": 1.472,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 70678,
+      "seq_window": [
+        1970,
+        2004
+      ],
+      "neighbour_window": [
+        1928,
+        2004
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " your date of birth?Sorry about",
+      "stt_text": "What is your date of birth?",
+      "confidence": 0.988,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 27,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g27_s2005.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 2005,
+      "last_seq": 2094,
+      "seconds": 7.552,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 362518,
+      "seq_window": [
+        2005,
+        2134
+      ],
+      "neighbour_window": [
+        1970,
+        2134
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " that, it seems I need the date of birth in a specific format. Could you please state it as the year, then the month, then the day?",
+      "stt_text": "Sorry about that. It seems I need the date of birth in a specific format. Could you please state it as the year, then the month, then the day.",
+      "confidence": 0.99,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.882,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 28,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g28_s2149.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 2149,
+      "last_seq": 2176,
+      "seconds": 3.472,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 166678,
+      "seq_window": [
+        2149,
+        2198
+      ],
+      "neighbour_window": [
+        2005,
+        2198
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " January 1st -- is that correct?Which country",
+      "stt_text": "1990 January 1st? Is that correct?",
+      "confidence": 0.898,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.75,
+      "verdict": "ALIGNED"
+    },
+    {
+      "gen": 29,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g29_s2199.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 2199,
+      "last_seq": 2216,
+      "seconds": 1.672,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 80278,
+      "seq_window": [
+        2199,
+        2236
+      ],
+      "neighbour_window": [
+        2149,
+        2236
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " were you born in?Mexico, is",
+      "stt_text": "Which country were you? Born in?",
+      "confidence": 0.972,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.5,
+      "verdict": "TOO_SHORT_TO_JUDGE"
+    },
+    {
+      "gen": 30,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g30_s2237.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 2237,
+      "last_seq": 2248,
+      "seconds": 1.792,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 86038,
+      "seq_window": [
+        2237,
+        2267
+      ],
+      "neighbour_window": [
+        2199,
+        2267
+      ],
+      "window_bounded_by_next_gen": true,
+      "transcript_text": " that correct?What is",
+      "stt_text": "Mexico, is that correct?",
+      "confidence": 0.918,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 0.5,
+      "verdict": "TOO_SHORT_TO_JUDGE"
+    },
+    {
+      "gen": 31,
+      "file": "fss_msgejlnr_9j2csxjp_a1_g31_s2268.wav",
+      "flush_reason": "turn_complete",
+      "first_seq": 2268,
+      "last_seq": 2304,
+      "seconds": 3.552,
+      "sample_rate": 24000,
+      "channels": 1,
+      "bytes": 170518,
+      "seq_window": [
+        2268,
+        2344
+      ],
+      "neighbour_window": [
+        2237,
+        2344
+      ],
+      "window_bounded_by_next_gen": false,
+      "transcript_text": " the city and state or province of birth? This is optional.",
+      "stt_text": "What is the city and state of province of birth? This is optional.",
+      "confidence": 0.994,
+      "letters_stt": "",
+      "letters_transcript": "",
+      "letters_neighbourhood": "",
+      "containment": 1.0,
+      "verdict": "ALIGNED"
+    }
+  ]
+}

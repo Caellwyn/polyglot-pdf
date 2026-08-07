@@ -1,0 +1,175 @@
+{
+  "verdict": "PASS",
+  "confirmed": 15,
+  "total": 15,
+  "steps": [
+    {
+      "fieldId": "application_type",
+      "fixture": "answer_new_itin",
+      "tStart": 1785921210960,
+      "retries": 1,
+      "value": "apply_new_itin",
+      "tFill": 1785921255032,
+      "confirmed": true,
+      "tConfirm": 1785921257965,
+      "advancedTo": "application_type"
+    },
+    {
+      "fieldId": "reason",
+      "fixture": "answer_reason_spouse",
+      "tStart": 1785921260465,
+      "retries": 0,
+      "value": [
+        "e_spouse_of_us_person"
+      ],
+      "tFill": 1785921264219,
+      "confirmed": true,
+      "tConfirm": 1785921267133,
+      "advancedTo": "us_person_name_ssn_itin"
+    },
+    {
+      "fieldId": "us_person_name_ssn_itin",
+      "fixture": "answer_usperson",
+      "tStart": 1785921269633,
+      "retries": 0,
+      "value": "Loretta Johnson 555121212",
+      "tFill": 1785921277895,
+      "confirmed": true,
+      "tConfirm": 1785921281013,
+      "advancedTo": "name_1a_first"
+    },
+    {
+      "fieldId": "name_1a_first",
+      "fixture": "spell_john",
+      "tStart": 1785921283513,
+      "retries": 0,
+      "value": "JOHN",
+      "tFill": 1785921286526,
+      "confirmed": true,
+      "tConfirm": 1785921289642,
+      "advancedTo": "name_1a_middle"
+    },
+    {
+      "fieldId": "name_1a_middle",
+      "fixture": "spell_joshua",
+      "tStart": 1785921292142,
+      "retries": 0,
+      "value": "JOSHUA",
+      "tFill": 1785921295515,
+      "confirmed": true,
+      "tConfirm": 1785921298630,
+      "advancedTo": "name_1a_last"
+    },
+    {
+      "fieldId": "name_1a_last",
+      "fixture": "spell_johnson",
+      "tStart": 1785921301130,
+      "retries": 0,
+      "value": "JOHNSON",
+      "tFill": 1785921304903,
+      "confirmed": true,
+      "tConfirm": 1785921308018,
+      "advancedTo": "name_1b_first"
+    },
+    {
+      "fieldId": "name_1b_first",
+      "fixture": "spell_maria",
+      "tStart": 1785921310518,
+      "retries": 0,
+      "value": "MARIA",
+      "tFill": 1785921313522,
+      "confirmed": true,
+      "tConfirm": 1785921316641,
+      "advancedTo": "name_1b_middle"
+    },
+    {
+      "fieldId": "name_1b_middle",
+      "fixture": "spell_jose",
+      "tStart": 1785921319141,
+      "retries": 0,
+      "value": "JOSE",
+      "tFill": 1785921322257,
+      "confirmed": true,
+      "tConfirm": 1785921325373,
+      "advancedTo": "name_1b_last"
+    },
+    {
+      "fieldId": "name_1b_last",
+      "fixture": "spell_smith",
+      "tStart": 1785921327873,
+      "retries": 0,
+      "value": "SMITH",
+      "tFill": 1785921331108,
+      "confirmed": true,
+      "tConfirm": 1785921334230,
+      "advancedTo": "mailing_street"
+    },
+    {
+      "fieldId": "mailing_street",
+      "fixture": "answer_street",
+      "tStart": 1785921336730,
+      "retries": 0,
+      "value": "123 Main Street",
+      "tFill": 1785921340221,
+      "confirmed": true,
+      "tConfirm": 1785921343346,
+      "advancedTo": "mailing_city_state_country"
+    },
+    {
+      "fieldId": "mailing_city_state_country",
+      "fixture": "answer_city",
+      "tStart": 1785921345846,
+      "retries": 0,
+      "value": "Austin, Texas, United States",
+      "tFill": 1785921350040,
+      "confirmed": true,
+      "tConfirm": 1785921353152,
+      "advancedTo": "foreign_street"
+    },
+    {
+      "fieldId": "foreign_street",
+      "fixture": "answer_foreign_street",
+      "tStart": 1785921355652,
+      "retries": 0,
+      "value": "Avenida Reforma 100",
+      "tFill": 1785921359724,
+      "confirmed": true,
+      "tConfirm": 1785921362836,
+      "advancedTo": "foreign_city_state_country"
+    },
+    {
+      "fieldId": "foreign_city_state_country",
+      "fixture": "answer_foreign_city",
+      "tStart": 1785921365336,
+      "retries": 0,
+      "value": "Mexico City, Mexico",
+      "tFill": 1785921369513,
+      "confirmed": true,
+      "tConfirm": 1785921372651,
+      "advancedTo": "foreign_city_state_country"
+    },
+    {
+      "fieldId": "date_of_birth",
+      "fixture": "answer_dob",
+      "tStart": 1785921375151,
+      "retries": 1,
+      "value": "1990-01-01",
+      "tFill": 1785921419394,
+      "confirmed": true,
+      "tConfirm": 1785921422531,
+      "advancedTo": "country_of_birth"
+    },
+    {
+      "fieldId": "country_of_birth",
+      "fixture": "answer_country_birth",
+      "tStart": 1785921425031,
+      "retries": 0,
+      "value": "Mexico",
+      "tFill": 1785921427627,
+      "confirmed": true,
+      "tConfirm": 1785921430746,
+      "advancedTo": "city_state_of_birth"
+    }
+  ],
+  "done": true
+}
