@@ -37,7 +37,10 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+# `field` is aliased: this module uses `field` as a local variable name
+# throughout (a schema field), and importing dataclasses.field unaliased would
+# shadow it confusingly at every use site.
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.services.guidance_contract import identity_sha1
@@ -298,16 +301,41 @@ class ReadinessCounts:
 class ReadinessVerdict:
     """Readiness for publication, plus the counts the stamp records.
 
-    `ready` is the publish verdict C2's /status gate refuses on; `blocking_ids`
-    names the fields to show the human (the gate refuses BY NAME, never with a
-    bare count). `ready` is False whenever any field is unreviewed, so it is
-    exactly `to_review == 0` over a non-empty kit -- kept as its own field so a
-    caller reads intent rather than re-deriving it.
+    `ready` is the publish verdict C2's /status gate refuses on. The gate
+    refuses BY NAME, never with a bare count -- but it must read BOTH name
+    lists: `blocking_ids` names the fields, and `blocking_schema_errors` names
+    the blockers no field can carry. A fully-reviewed kit held back only by a
+    schema-level ERROR has an EMPTY `blocking_ids`, so a caller rendering that
+    list alone would produce exactly the unactionable refusal this verdict
+    exists to prevent (Opus fresh-eyes).
+
+    `ready` is NOT merely `to_review == 0`: a kit can have every field signed
+    off and still be unpublishable because of a SCHEMA-LEVEL lint ERROR -- one
+    that no field row can carry, so no field's review can ever clear it. The
+    two classes this bead was filed for are the holding-section leftover-ids
+    ERROR (`to-review-pending` at `sections[i] (id=sec_to_review_x)`, whose id
+    token matches no field) and the widget-claim ERROR
+    (`dump-widget-multiclaim` at `widget '<name>'`, with no id token at all);
+    see _schema_level_errors for the full set of shapes that qualify. The
+    /status gate refuses on ANY
+    lint ERROR regardless of anchoring, so a verdict that ignored these would
+    stamp ready=True for a kit the gate then 409s -- the confident-then-refused
+    shape sprint-18 exists to end, relocated into the stamp (bd
+    polyglot-pdf-dm3c8).
+
+    They get their OWN field rather than being folded into the counts: those
+    count FIELDS, and `reviewed + to_review == total` is a test-pinned
+    invariant. A finding belonging to no field cannot inflate a field tally
+    without breaking it.
     """
 
     ready: bool
     counts: ReadinessCounts
     blocking_ids: List[str]
+    # Schema-level lint ERRORs, as human-readable `<rule> at <path>` strings.
+    # Non-empty forces ready=False. Kept as strings (not LintFinding) so the
+    # verdict stays a plain data shape a stamp can serialize.
+    blocking_schema_errors: List[str] = dataclass_field(default_factory=list)
 
 
 def _positional_name(index: int) -> str:
@@ -324,13 +352,56 @@ def _bucket_by_field(
     findings: Optional[Iterable[LintFinding]],
 ) -> Dict[str, List[LintFinding]]:
     """Group findings by the field they anchor to; field-less ones are skipped
-    (no field's review can cover a schema-level finding)."""
+    (no field's review can cover a schema-level finding).
+
+    A bucket keyed on an id that names no REAL field (the `to-review-pending`
+    ERROR carries `sections[i] (id=sec_to_review_x)`, a section id) is harmless
+    here: the only reader looks buckets up by a real field's own id, so such a
+    bucket is never consulted. An earlier draft of this bead filtered them out
+    anyway, which read as the load-bearing fix but was unreachable -- deleting
+    the filter left every test green, and no test could be written to pin it
+    (Opus fresh-eyes). What actually makes a section-anchored ERROR block is
+    _schema_level_errors below, which does its own `fid in field_ids` test.
+    """
     out: Dict[str, List[LintFinding]] = {}
     for f in findings or ():
         fid = field_id_of(f.path)
         if not fid:
             continue
         out.setdefault(fid, []).append(f)
+    return out
+
+
+def _schema_level_errors(
+    findings: Optional[Iterable[LintFinding]],
+    field_ids: set,
+) -> List[str]:
+    """The ERROR findings no field row can carry, as `<rule> at <path>`.
+
+    These are what the /status gate refuses on but no field's sign-off can
+    clear: it refuses on ANY lint ERROR, while the review counts only ever see
+    field-anchored ones. Ignoring them let a fully-reviewed kit stamp
+    ready=True and then 409 at publish (bd polyglot-pdf-dm3c8).
+
+    "No field row can carry it" means the path's id token does not resolve to a
+    real entry in fields[]. Three shapes reach that:
+      - no id token at all (`widget '<name>'`);
+      - a token naming a SECTION (`sections[i] (id=sec_to_review_x)`);
+      - the literal token "None", which is what `fields[i] (id={f.get('id')})`
+        renders for a field carrying no id. Such a field genuinely has no
+        clickable row, so landing here is right -- but it is ALSO named
+        positionally in blocking_ids, so a caller rendering both lists shows
+        one defect twice (bd polyglot-pdf-7ehws; reporting quality, not a gate
+        error -- `ready` is False either way).
+    """
+    out: List[str] = []
+    for f in findings or ():
+        if f.severity != SEVERITY_ERROR:
+            continue
+        fid = field_id_of(f.path)
+        if fid and fid in field_ids:
+            continue  # a real field owns it; the review counts already saw it
+        out.append(f"{f.rule} at {f.path}")
     return out
 
 
@@ -349,11 +420,29 @@ def publish_readiness(
     if not isinstance(fields, list):
         # A schema whose fields are not a list is unmeasurable, not "0% ready":
         # callers distinguish this via total == 0 plus ready == False.
+        #
+        # It still SAYS SO rather than refusing silently: this path used to
+        # return both name lists empty, so a gate rendering the refusal had
+        # nothing at all to show -- the unactionable-409 shape the verdict
+        # exists to prevent, in the one case where the human most needs a
+        # pointer (Opus fresh-eyes). Reported as a schema-level blocker
+        # because that is exactly what it is: nothing a field's review can fix.
         return ReadinessVerdict(
             ready=False, counts=ReadinessCounts(0, 0, 0, 0), blocking_ids=[],
+            blocking_schema_errors=["unmeasurable-schema at $.fields"],
         )
 
-    by_field = _bucket_by_field(lint_findings)
+    # Materialize the findings once: they are consumed twice below (bucketed
+    # per field, and scanned for schema-level ERRORs), and the parameter is
+    # typed as an Iterable a generator could satisfy -- which the second pass
+    # would find already exhausted.
+    findings = list(lint_findings) if lint_findings is not None else []
+    real_field_ids = {
+        f.get("id") for f in fields
+        if isinstance(f, dict) and isinstance(f.get("id"), str)
+    }
+    by_field = _bucket_by_field(findings)
+    schema_errors = _schema_level_errors(findings, real_field_ids)
     reviewed = 0
     errors = 0
     blocking: List[str] = []
@@ -387,10 +476,24 @@ def publish_readiness(
             blocking.append(_positional_name(index))
 
     to_review = total - reviewed
+    if total == 0:
+        # An EXTRACTED-BUT-EMPTY schema: measurable, but 0 of 0 is not "fully
+        # reviewed" -- publishing a form with no fields is not something a
+        # human signed off on. It says so rather than refusing silently, for
+        # the same reason the unmeasurable-schema return above does: this is
+        # the structurally identical twin, and leaving one silent would read as
+        # deliberate to the next reader (Opus fresh-eyes; bd
+        # polyglot-pdf-4ppnt, which this closes).
+        schema_errors = schema_errors + ["empty-schema at $.fields"]
     return ReadinessVerdict(
-        ready=total > 0 and to_review == 0,
+        # A schema-level ERROR blocks publication no matter how complete the
+        # review is: the /status gate refuses on it, and no field's sign-off
+        # can clear it. Deliberately NOT folded into to_review -- that counts
+        # FIELDS, and reviewed + to_review == total is a pinned invariant.
+        ready=total > 0 and to_review == 0 and not schema_errors,
         counts=ReadinessCounts(
             reviewed=reviewed, to_review=to_review, total=total, errors=errors,
         ),
         blocking_ids=blocking,
+        blocking_schema_errors=schema_errors,
     )
