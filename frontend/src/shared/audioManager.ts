@@ -37,6 +37,7 @@ export interface AudioManager {
 	isSpeaking: () => boolean // Is Gemini currently speaking?
 	muteInput: () => void // Mute mic input (send silence - push-to-talk mode only)
 	unmuteInput: () => void // Unmute mic input (send real audio)
+	setSpellbackHold: (active: boolean) => void // bd 22h1f: hard mic gate while the deterministic spell-back clip plays (any mode)
 	getStream: () => MediaStream | null // Get the active microphone stream (for sharing with VAD)
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
 	setPTTMode: (enabled: boolean) => void // FIX (Nov 7, 2025): Notify worklet about PTT mode
@@ -147,6 +148,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// was actually sent) to an optional UI subscriber.
 	let onEnergyCallback: ((energy: number, sending: boolean) => void) | null = null
 	let inputMuted = false // Track if input should be muted (send silence)
+	// Spell-back playback hold (bd polyglot-pdf-22h1f): while the deterministic
+	// letter-by-letter TTS clip plays, NOTHING from the mic may reach the model
+	// -- regardless of PTT mode or hold state. Under native VAD the stream is
+	// kept alive with silence (like PTT mute); in manual modes chunks are
+	// simply dropped. Cleared by the spell-back path's finally, and the PTT
+	// interrupt path clears it before capturing the user's barge-in.
+	let spellbackHold = false
 	let pttModeEnabled = false // FIX (Nov 7, 2025): Track PTT mode state
 	// Native-VAD mode (bd polyglot-pdf-333): when true, stream ALL audio (incl.
 	// silence) ungated so Gemini's own VAD can detect turn boundaries. Bypasses
@@ -371,9 +379,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// stopping the stream would leave native VAD with no trailing audio and
 			// the turn would never close (Gemini "stops responding" after PTT release).
 			if (nativeVadEnabled) {
-				if (pttModeEnabled && inputMuted) {
-					// Muted under PTT: keep the stream alive with silence so native VAD
-					// keeps detecting boundaries, but do not leak the muted mic.
+				if ((pttModeEnabled && inputMuted) || spellbackHold) {
+					// Muted under PTT -- or during a spell-back clip (bd 22h1f, which
+					// must gate even an open mic so the TTS playback cannot leak back
+					// in as user speech): keep the stream alive with silence so native
+					// VAD keeps detecting boundaries, but do not leak the muted mic.
 					const silence = new ArrayBuffer((pcmData as ArrayBuffer).byteLength)
 					emitEnergy(false)
 					onAudioDataCallback(silence)
@@ -381,6 +391,15 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					emitEnergy(true)
 					onAudioDataCallback(pcmData)
 				}
+				return
+			}
+
+			// Spell-back playback hold (bd 22h1f): in the manual/client-VAD modes
+			// the stream is bursty anyway, so simply send nothing while the
+			// deterministic clip plays. (The native branch above substitutes
+			// silence instead -- its stream must stay continuous.)
+			if (spellbackHold) {
+				emitEnergy(false)
 				return
 			}
 
@@ -813,6 +832,17 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		inputMuted = true
 	}
 
+	/**
+	 * Hold (true) / release (false) the mic for a deterministic spell-back
+	 * clip (bd polyglot-pdf-22h1f). Orthogonal to inputMuted so a PTT press
+	 * during the clip (the interrupt path) can release the hold without
+	 * fighting the PTT mute bookkeeping.
+	 */
+	function setSpellbackHold(active: boolean): void {
+		console.log('[AudioManager] setSpellbackHold:', active)
+		spellbackHold = active
+	}
+
 	function unmuteInput(): void {
 		console.log('[AudioManager] [sound] Unmuting input - audio processing active')
 		inputMuted = false
@@ -972,6 +1002,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		isSpeaking,
 		muteInput,
 		unmuteInput,
+		setSpellbackHold,
 		getStream,
 		setVADActive,
 		setPTTMode,

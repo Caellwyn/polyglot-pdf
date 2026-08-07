@@ -717,6 +717,16 @@ def build_form_context(
     # handler for a manifest-first schema regardless of the flag.
     if getattr(settings, "USE_DTI", False) or schema.get("jit_mode"):
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION
+        # Deterministic spell-back (bd polyglot-pdf-22h1f): while the tool is
+        # declared, the model must stop spelling aloud itself -- double
+        # delivery (its corrupted spelling plus the correct clip) is worse
+        # than either alone. Interim addendum until the SI-slimming session's
+        # cutover marker replaces the base NAMES wording; default-off flag
+        # keeps the shipped SI byte-identical.
+        if getattr(settings, "SPELLBACK_TOOL_ENABLED", False):
+            system_instruction = (
+                system_instruction + settings.DTI_SPELLBACK_SI_ADDENDUM
+            )
     else:
         # Legacy mode: Use full schema with SYSTEM_INSTRUCTION template
         system_instruction = settings.SYSTEM_INSTRUCTION.format(

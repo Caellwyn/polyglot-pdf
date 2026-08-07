@@ -514,6 +514,9 @@ class CallbackHandler:
         if normalized == "skip_field":
             return await self._handle_skip_field_tool(arguments)
 
+        if normalized == "name_spellback":
+            return await self._handle_name_spellback_tool(arguments)
+
         if normalized == "switch_to_field":
             return await self._handle_switch_to_field_tool(arguments)
 
@@ -1252,6 +1255,113 @@ class CallbackHandler:
 
         _log.info("GEMINI TOOL RESPONSE", tool="skip_field", field_id=field_id)
         _dev_log.log_tool_response("skip_field", response, session_id=self._session_id)
+
+        return response
+
+    async def _handle_name_spellback_tool(
+        self,
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle name_spellback tool call from Gemini (bd polyglot-pdf-22h1f).
+
+        Deterministic spell-back: the CLIENT resolves the current field, reads
+        the stored value, fetches a Cloud TTS letter-by-letter clip, and plays
+        it BLOCKING (mic muted, model parked on this pending tool response) --
+        the model's speech path never carries the spelling, which is the fix
+        for the sticky-first-spelling audio defect (bd 0rpu). The tool takes NO
+        arguments on purpose (any model-supplied argument is ignored): the
+        current field is the only spellable target, so there is no id for the
+        model to hallucinate and no value path from model memory (bd h7wx).
+
+        Three response variants, each an explicit behavioral instruction so the
+        model's post-tool generation stays letter-free:
+        - delivered: ask for confirmation, do not repeat the letters;
+        - interrupted (user pressed PTT mid-clip): listen to what the user is
+          saying now -- their audio follows this response;
+        - error/timeout: apologize and re-ask for the spelling; NEVER fall back
+          to spelling from memory (that would reintroduce the defect exactly
+          where it hurts).
+        """
+        del arguments  # No-argument tool; anything sent is deliberately ignored.
+
+        ack = CONFIRM_REQUEST_TIMEOUT
+        if self._request_coordinator is not None:
+            ack = await self._request_coordinator.request_spellback()
+
+        if ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(ack, dict):
+            response = {
+                "success": False,
+                "status": "error",
+                "message": (
+                    "The spelling audio could not be played. Tell the user, in "
+                    "the session language, that there was a technical problem "
+                    "reading the spelling back, and ask them to spell the value "
+                    "again so you can re-check it. Do NOT speak the spelling "
+                    "yourself under any circumstances."
+                ),
+            }
+        else:
+            status = ack.get("status")
+            if status == "delivered":
+                response = {
+                    "success": True,
+                    "status": "delivered",
+                    "message": (
+                        "The stored spelling was played to the user. Do NOT "
+                        "repeat or spell the value yourself. Ask the user, in "
+                        "the session language, whether the spelling is correct, "
+                        "and wait for their answer."
+                    ),
+                }
+            elif status == "interrupted":
+                response = {
+                    "success": True,
+                    "status": "interrupted",
+                    "message": (
+                        "The user interrupted the spelling playback and is "
+                        "speaking now. Listen and respond to what they say. Do "
+                        "NOT speak the spelling yourself; if the user wants to "
+                        "hear it again, call name_spellback again."
+                    ),
+                }
+            else:
+                reason = ack.get("reason")
+                if reason == "no_value":
+                    detail = (
+                        "There is no stored value to spell for the current "
+                        "field yet. Fill the field with update_form_fields "
+                        "first, then call name_spellback."
+                    )
+                else:
+                    detail = (
+                        "Tell the user, in the session language, that there "
+                        "was a technical problem reading the spelling back, "
+                        "and ask them to spell the value again so you can "
+                        "re-check it."
+                    )
+                response = {
+                    "success": False,
+                    "status": "error",
+                    "message": detail + (
+                        " Do NOT speak the spelling yourself under any "
+                        "circumstances."
+                    ),
+                }
+
+        # Timing fields (playback_ms / fetch_ms) feed the bead's latency exit
+        # criterion; they carry no PII.
+        if isinstance(ack, dict):
+            _log.info(
+                "GEMINI TOOL RESPONSE",
+                tool="name_spellback",
+                status=ack.get("status"),
+                reason=ack.get("reason"),
+                playback_ms=ack.get("playback_ms"),
+                fetch_ms=ack.get("fetch_ms"),
+            )
+        else:
+            _log.info("GEMINI TOOL RESPONSE", tool="name_spellback", status="timeout")
+        _dev_log.log_tool_response("name_spellback", response, session_id=self._session_id)
 
         return response
 

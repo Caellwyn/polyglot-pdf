@@ -44,7 +44,8 @@ declare global {
 	}
 }
 
-import { WebFormConnection, type ConnectionCallbacks, type ConnectionStatus } from '../webFormConnection'
+import { WebFormConnection, type ConnectionCallbacks, type ConnectionStatus, type SpellbackPlaybackResult } from '../webFormConnection'
+import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { SchemaFormStateManager, type SchemaFormState } from '../schema-forms/state/schemaFormState'
 import { BUTTON_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
@@ -315,6 +316,103 @@ export function createConnectionManager(
 	// continuous audio. Set from the backend session_ready handshake.
 	let nativeVad: boolean = false
 
+	// --- Deterministic spell-back playback (bd polyglot-pdf-22h1f) ---
+	// While a spell-back clip is up, spellbackResolve is the pending outcome
+	// resolver: the PTT press handler uses it to turn an intentional interrupt
+	// into the 'interrupted' tool-response variant. Null whenever no clip is
+	// pending/playing.
+	let spellbackAudio: HTMLAudioElement | null = null
+	let spellbackResolve: ((outcome: 'delivered' | 'interrupted' | 'error') => void) | null = null
+
+	// The name_spellback tool call can arrive while the model's own framing
+	// sentence for the SAME generation is still streaming/playing, so wait for
+	// a SUSTAINED quiet window on the playback queue before starting the clip
+	// -- an instantaneously empty queue is not proof the sentence finished.
+	// Bounded: on timeout we play anyway (a rare overlap beats wedging the
+	// round-trip).
+	async function waitForModelAudioDrain(maxWaitMs: number): Promise<void> {
+		if (!audioManager) return
+		const deadline = performance.now() + maxWaitMs
+		let quietSince: number | null = null
+		while (performance.now() < deadline) {
+			const b = audioManager.getPlaybackBacklog()
+			const quiet = b.activeSources === 0 && b.aheadSec <= 0.05
+			if (quiet) {
+				if (quietSince === null) quietSince = performance.now()
+				if (performance.now() - quietSince >= 600) return
+			} else {
+				quietSince = null
+			}
+			await new Promise(resolve => setTimeout(resolve, 100))
+		}
+	}
+
+	// The onSpellbackRequest implementation (bd polyglot-pdf-22h1f): fetch the
+	// deterministic letter-by-letter clip of the STORED value and play it
+	// BLOCKING -- the returned promise resolving is what releases the model's
+	// pending tool response, so nothing reaches the model (in either
+	// direction; setSpellbackHold gates the mic) until playback truly ends.
+	// Resolves, never rejects.
+	async function playSpellback(value: string): Promise<SpellbackPlaybackResult> {
+		if (!audioManager) return { status: 'error', reason: 'no_audio_manager' }
+		const am = audioManager
+		am.setSpellbackHold(true)
+		try {
+			await waitForModelAudioDrain(8000)
+
+			let token: string | undefined
+			try {
+				token = getToken ? await getToken() : undefined
+			} catch {
+				token = undefined
+			}
+			const fetchStart = performance.now()
+			let blob: Blob
+			try {
+				const resp = await fetch(getBackendHttpUrl() + '/api/tts/spellback', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						...(token ? { Authorization: 'Bearer ' + token } : {}),
+					},
+					body: JSON.stringify({ value }),
+				})
+				if (!resp.ok) {
+					return { status: 'error', reason: 'tts_http_' + resp.status }
+				}
+				blob = await resp.blob()
+			} catch {
+				return { status: 'error', reason: 'tts_fetch_failed' }
+			}
+			const fetchMs = Math.round(performance.now() - fetchStart)
+
+			const url = URL.createObjectURL(blob)
+			const audio = new Audio(url)
+			spellbackAudio = audio
+			const playStart = performance.now()
+			const outcome = await new Promise<'delivered' | 'interrupted' | 'error'>((resolve) => {
+				let settled = false
+				const settle = (o: 'delivered' | 'interrupted' | 'error') => {
+					if (!settled) {
+						settled = true
+						resolve(o)
+					}
+				}
+				spellbackResolve = settle
+				audio.onended = () => settle('delivered')
+				audio.onerror = () => settle('error')
+				audio.play().catch(() => settle('error'))
+			})
+			const playbackMs = Math.round(performance.now() - playStart)
+			URL.revokeObjectURL(url)
+			return { status: outcome, playback_ms: playbackMs, fetch_ms: fetchMs }
+		} finally {
+			spellbackAudio = null
+			spellbackResolve = null
+			am.setSpellbackHold(false)
+		}
+	}
+
 	// TEST-ONLY (bd polyglot-pdf-g8w): tracks the most recent field id Gemini
 	// advanced to, so the dev-gated E2E voice harness can assert "moved to the
 	// next field" without scraping transcripts. Only meaningful when the harness
@@ -458,6 +556,9 @@ export function createConnectionManager(
 	}
 
 	const callbacks: ConnectionCallbacks = {
+		// Deterministic spell-back playback (bd polyglot-pdf-22h1f): implemented
+		// here because this layer owns the audio manager and the auth token.
+		onSpellbackRequest: playSpellback,
 		onStatusChange: (status) => {
 			// BUG FIX (Nov 10, 2025): Reset paused flag when connection is lost
 			// This ensures reconnect works properly after timeout/error/disconnect
@@ -959,6 +1060,16 @@ export function createConnectionManager(
 			// talking over their turn (bd polyglot-pdf-yo5t).
 			if (held) {
 				clearResumeReprompt()
+				// Intentional interrupt of a spell-back clip (bd polyglot-pdf-22h1f):
+				// stop the clip, release the mic hold FIRST so this press's audio
+				// flows, then resolve the pending round-trip as 'interrupted' -- the
+				// tool response (telling the model to listen) is sent before the
+				// user's buffered speech reaches the model's turn handling.
+				if (spellbackResolve) {
+					spellbackAudio?.pause()
+					audioManager?.setSpellbackHold(false)
+					spellbackResolve('interrupted')
+				}
 			}
 		},
 

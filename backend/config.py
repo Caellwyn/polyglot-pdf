@@ -378,6 +378,29 @@ class Settings(BaseModel):
 		os.getenv("LIVE_DEV_AUDIO_DUMP", "false").lower() == "true"
 	)
 
+	# --- Deterministic spell-back tool (bd polyglot-pdf-22h1f / 0rpu) ---
+	# Routes name spelling OUT of the Live model's speech path: the model calls
+	# the name_spellback tool, the CLIENT plays a Cloud Text-to-Speech clip of
+	# the stored value (letter by letter), and the model only frames/asks in
+	# prose. Fixes the measured sticky-first-spelling audio defect (the speech
+	# head re-emits the session's FIRST spelled name at ~10% of spelled
+	# read-backs while text + tool calls stay correct).
+	#
+	# Default OFF: the tool lands dark, is validated on the W-7 harness with the
+	# flag set locally, and the demo cutover (flag default flip + SI wording
+	# replacement at the SI-slimming session's marker) is a separate, deliberate
+	# change. While ON, the DTI SI gets DTI_SPELLBACK_SI_ADDENDUM appended so
+	# the model stops spelling aloud itself (double delivery -- one corrupted,
+	# one correct -- is worse than either alone).
+	SPELLBACK_TOOL_ENABLED: bool = (
+		os.getenv("SPELLBACK_TOOL_ENABLED", "false").lower() == "true"
+	)
+	# Cloud TTS voice for the spell-back clip. Empty = let the API pick its
+	# default en-US voice. The clip is ALWAYS en-US regardless of session
+	# language -- English letter names in every session language is the SI's
+	# NAMES invariant (the letters are what is written on the English form).
+	SPELLBACK_TTS_VOICE: str = os.getenv("SPELLBACK_TTS_VOICE", "")
+
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
 	# the secretary (lite text model) translates the form's option labels into
 	# the session language (one batched call per form+language per process,
@@ -715,6 +738,62 @@ class Settings(BaseModel):
 			}
 		}
 	]
+
+	# Deterministic spell-back tool declaration (bd polyglot-pdf-22h1f).
+	# Deliberately NOT in TOOL_DECLARATIONS: the flag defaults off, and
+	# TOOL_DECLARATIONS is the production contract the static tests pin.
+	# FormFillingService._build_tool_declarations appends this when
+	# SPELLBACK_TOOL_ENABLED; the cutover PR moves it into the main list.
+	#
+	# No parameters ON PURPOSE: the client resolves the CURRENT field itself
+	# (same pin-aware resolution the confirm path uses), so the model never
+	# supplies a field_id it could hallucinate (bd jnjj.46), and the spelled
+	# value can only ever be the stored value of the field under verification
+	# (bd h7wx). The `parameters` schema is present-but-empty rather than
+	# absent: a name-only declaration (NO parameters key) is the wire-verified
+	# 2.5 native-audio 1011 hazard (bd daa/h04c) -- if early-turn 1011s appear
+	# with this shape, the documented fallback is one optional ignored param.
+	SPELLBACK_TOOL_DECLARATION: dict = {
+		"name": "name_spellback",
+		"description": (
+			"Play the CURRENT field's stored value to the user as deterministic "
+			"letter-by-letter audio, so they can verify the exact spelling. This "
+			"is the ONLY way a spelling is ever read back -- never speak a "
+			"spelling letter by letter yourself. After update_form_fields "
+			"succeeds on a name (or other spelled) field: briefly tell the user, "
+			"in the session language, that you will play the spelling back, call "
+			"this tool, and stop speaking. The audio is generated from the "
+			"STORED value, never from conversation memory. When the tool "
+			"returns, follow its instructions: normally ask the user, in the "
+			"session language, whether the spelling is correct -- without "
+			"repeating any letters yourself."
+		),
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		}
+	}
+
+	# Appended to the DTI SI while SPELLBACK_TOOL_ENABLED (ai_context.py).
+	# INTERIM wording for the flag-on validation window: it overrides the base
+	# SI's NAMES verify-by-spelling delivery without editing that wording (the
+	# SI-slimming session owns it and is leaving a cutover marker -- bd 22h1f
+	# NOTES). The cutover PR replaces the base wording at the marker and
+	# retires this addendum.
+	DTI_SPELLBACK_SI_ADDENDUM: str = (
+		"\n\nSPELL-BACK AUDIO TOOL (overrides any earlier instruction to read "
+		"spellings aloud yourself):\n"
+		"You must NEVER speak a spelling letter by letter -- spelled letter "
+		"sequences in your speech are unreliable. Everything else about NAMES "
+		"handling stays the same (ask for the spelling first, fill exactly what "
+		"the user spells), but verification changes: after filling a name (or "
+		"any spelled value), briefly tell the user, in the session language, "
+		"that you will play the spelling back, then call the name_spellback "
+		"tool and stop speaking. It plays the stored value to the user as "
+		"clear letter-by-letter audio. When it returns, ask the user, in the "
+		"session language, whether the spelling is correct -- do not repeat "
+		"the letters. Then confirm_field once they agree, as usual."
+	)
 
 	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
 	# tiers checked by the /api/editor/* routes: EDITOR (polish provided kits:

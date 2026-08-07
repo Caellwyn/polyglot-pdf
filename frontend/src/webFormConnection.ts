@@ -88,6 +88,19 @@ export function canonicalizeAiCheckboxGroupValue(field: FormField, value: any): 
     .filter((part) => part !== "");
 }
 
+/**
+ * Outcome of a deterministic spell-back playback (bd polyglot-pdf-22h1f),
+ * acked to the backend so the name_spellback tool round-trip completes.
+ * `reason` is a fixed category token, never a field value (PII-safe);
+ * playback_ms / fetch_ms feed the bead's latency measurement.
+ */
+export interface SpellbackPlaybackResult {
+  status: 'delivered' | 'interrupted' | 'error';
+  reason?: string;
+  playback_ms?: number;
+  fetch_ms?: number;
+}
+
 export type ConnectionStatus =
   | "disconnected"
   | "connecting"
@@ -144,6 +157,14 @@ export interface ConnectionCallbacks {
   // react to those transitions).
   onStopCapture?: () => void;
   onFormComplete?: () => void;
+  // Deterministic spell-back playback (bd polyglot-pdf-22h1f): the connection
+  // manager (which owns the audio manager + auth token) fetches the Cloud TTS
+  // letter-by-letter clip for `value`, mutes the mic, plays it BLOCKING, and
+  // resolves with the outcome. The promise resolves -- never rejects -- and
+  // the resolution is what completes the backend tool round-trip, so the model
+  // stays parked until playback truly ends. Unwired (undefined) means this
+  // client has no playback path and the handler acks an error variant.
+  onSpellbackRequest?: (value: string, fieldId: string) => Promise<SpellbackPlaybackResult>;
 }
 
 // Max-duration safety for the "thinking" indicator (bd polyglot-pdf-wpw.5): if no
@@ -674,6 +695,10 @@ export class WebFormConnection {
 
         case "skip_field":
           this.handleSkipFieldRequest(message);
+          break;
+
+        case "spellback":
+          this.handleSpellbackRequest(message);
           break;
 
         case "switch_field":
@@ -3184,6 +3209,99 @@ export class WebFormConnection {
       // section, so the backend can skip the doomed next-field-hint round-trip that
       // would race the imminent socket teardown for switchToSection.
       ...(sectionComplete ? { section_complete: true } : {}),
+    });
+  }
+
+  /**
+   * Deterministic spell-back request (bd polyglot-pdf-22h1f): the backend's
+   * name_spellback tool asks THIS client to play a letter-by-letter Cloud TTS
+   * clip of the CURRENT field's stored value. The tool deliberately carries no
+   * field_id -- the client resolves the current field itself with the same
+   * pin-aware computation the next-field path uses, so the spelled value can
+   * only ever be the stored value of the field under verification (bd h7wx: a
+   * read-back must never come from the model's memory, and bd jnjj.46: never
+   * trust a model-supplied field id).
+   *
+   * The playback itself (mic hold, TTS fetch, blocking play, PTT interrupt)
+   * lives in the connection manager via the onSpellbackRequest callback; this
+   * handler owns field/value resolution and the WS ack. The ack is sent in
+   * EVERY path -- an unacked request leaves the model parked until the
+   * backend's 90s timeout.
+   */
+  private async handleSpellbackRequest(message: any): Promise<void> {
+    const request_id = message.request_id;
+
+    // Refresh from persisted state before reading (bd polyglot-pdf-pjws) so a
+    // value written outside this object (manual edit, sibling handler) is
+    // visible. Read-only here -- no save -- so reconcile-then-read suffices.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...persistedAtEntry,
+        fieldValues: reconcileFieldValues(
+          persistedAtEntry.fieldValues,
+          this.state.fieldValues,
+          this.schemaFieldIds()
+        ),
+      };
+    }
+
+    const currentField = computeNextField(this.state, { skipConfirmed: true });
+    if (!currentField) {
+      this.sendSpellbackResponse(request_id, { status: 'error', reason: 'no_current_field' });
+      return;
+    }
+
+    // Read through the []-alias fallback, exactly as the confirm handler does
+    // (bd polyglot-pdf-5k52): the model-facing id and the stored key can be
+    // alias variants of each other.
+    const rawValue = readFieldEntryWithAlias(this.state.fieldValues, currentField.id)?.value;
+    const value = unwrapFieldValue(rawValue);
+    // Only a non-empty string (or number) is spellable. Booleans/arrays are
+    // checkbox shapes -- a spell-back of those is a mis-targeted call.
+    const spellable =
+      (typeof value === 'string' && value.trim() !== '') ||
+      typeof value === 'number';
+    if (!spellable) {
+      this.sendSpellbackResponse(request_id, { status: 'error', reason: 'no_value' });
+      return;
+    }
+
+    const playback = this.callbacks.onSpellbackRequest;
+    if (!playback) {
+      this.sendSpellbackResponse(request_id, { status: 'error', reason: 'no_playback_path' });
+      return;
+    }
+
+    try {
+      const result = await playback(String(value), currentField.id);
+      this.sendSpellbackResponse(request_id, result);
+    } catch {
+      // The callback contract is resolve-never-reject; this is belt and
+      // braces so a bug there can never strand the tool round-trip.
+      this.sendSpellbackResponse(request_id, { status: 'error', reason: 'playback_exception' });
+    }
+  }
+
+  /**
+   * Ack a spellback request (bd polyglot-pdf-22h1f): the playback outcome,
+   * completing the name_spellback tool round-trip. Carries only fixed tokens
+   * and timings -- never the field value.
+   */
+  private sendSpellbackResponse(
+    request_id: string | undefined,
+    result: SpellbackPlaybackResult
+  ): void {
+    if (!request_id) {
+      return;
+    }
+    this.send({
+      type: 'spellback_response',
+      request_id,
+      status: result.status,
+      ...(result.reason ? { reason: result.reason } : {}),
+      ...(typeof result.playback_ms === 'number' ? { playback_ms: result.playback_ms } : {}),
+      ...(typeof result.fetch_ms === 'number' ? { fetch_ms: result.fetch_ms } : {}),
     });
   }
 

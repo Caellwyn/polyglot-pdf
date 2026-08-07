@@ -12,6 +12,7 @@ load_dotenv()
 from .config import Settings, get_settings, parse_extra_origins
 from .routes import websocket_routes
 from .routes import pdf_fill_routes
+from .routes import tts_routes
 from .routes import disclaimer_routes
 from .routes import form_kit_routes
 from .routes import editor_kit_routes
@@ -75,6 +76,7 @@ app.add_middleware(
 app.include_router(websocket_routes.router)
 app.include_router(websocket_routes.router, prefix="/api")  # Handle Firebase rewrites
 app.include_router(pdf_fill_routes.router)
+app.include_router(tts_routes.router)  # deterministic spell-back TTS (bd 22h1f; 503 unless SPELLBACK_TOOL_ENABLED)
 app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
 app.include_router(editor_kit_routes.router)  # token-gated hosted-editor surface (bd 92qe.1)

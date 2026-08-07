@@ -488,6 +488,96 @@ class RequestCoordinator:
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
+    # Wall-clock cap for the whole spell-back round-trip: model-audio drain
+    # wait + TTS fetch + BLOCKING letter-by-letter playback on the client. The
+    # value cap (spellback_tts.MAX_SPELLBACK_CHARS = 60) bounds the clip at
+    # roughly 60 chars * ~1s/char, so 90s covers the worst legitimate clip;
+    # anything longer means the client died mid-playback and the tool must
+    # return the error variant rather than wedge the session.
+    SPELLBACK_ROUNDTRIP_TIMEOUT = 90.0
+
+    async def request_spellback(self) -> Any:
+        """
+        Ask the frontend to play the deterministic spell-back clip for the
+        CURRENT field (bd polyglot-pdf-22h1f -- the name_spellback tool).
+
+        The frontend owns all field state, so it resolves the current field
+        (same pin-aware resolution the confirm path uses), reads the stored
+        value, fetches the Cloud TTS letter-by-letter clip from
+        /api/tts/spellback, mutes the mic, plays the clip BLOCKING, and acks
+        with the outcome. No field value ever crosses this WS message in
+        either direction.
+
+        Unlike every other coordinator round-trip, this one deliberately holds
+        the Gemini receive loop for the playback duration -- that is the whole
+        point: the model is parked awaiting the tool response and must not
+        speak or hear anything until the clip finishes (maintainer design,
+        2026-08-07). The model generates nothing while a tool response is
+        pending, so nothing queues behind the hold.
+
+        Returns:
+            - The frontend's ack dict ``{"status": "delivered"|"interrupted"|
+              "error", "reason": Optional[str], "playback_ms": Optional[int],
+              "fetch_ms": Optional[int]}``. ``reason`` is a fixed category
+              token (e.g. "no_value"), never a field value (PII-free);
+              the timing fields feed the bead's latency exit criterion.
+            - CONFIRM_REQUEST_TIMEOUT (the module sentinel) when the frontend
+              did NOT answer in time / the request could not be sent. Callers
+              must NOT treat this as delivered.
+        """
+        if not self._websocket:
+            _log.warning("request_spellback_no_websocket", session_id=self._session_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        request_id, future = self._register("spellback")
+
+        try:
+            await self._websocket.send_json({
+                "type": "spellback",
+                "request_id": request_id,
+            })
+        except Exception as exc:
+            _log.error("failed_to_send_spellback_request",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        _t_coord_sb = time.monotonic()
+        try:
+            result = await asyncio.wait_for(
+                future, timeout=self.SPELLBACK_ROUNDTRIP_TIMEOUT)
+            _coord_sb_ms = round((time.monotonic() - _t_coord_sb) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="spellback",
+                request_id=request_id,
+                roundtrip_ms=_coord_sb_ms,
+                session_id=self._session_id,
+            )
+            return result
+        except asyncio.TimeoutError:
+            _log.error("spellback_request_timeout",
+                      session_id=self._session_id,
+                      request_id=request_id)
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+        except Exception as exc:
+            _log.error("spellback_request_error",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+    def handle_spellback_response(self, request_id: str, payload: Dict[str, Any]) -> None:
+        """
+        Handle spellback_response from the frontend (bd polyglot-pdf-22h1f).
+
+        Completes the spell-back round-trip with the frontend's whole ack
+        payload (status + reason/timing -- see request_spellback's docstring).
+        """
+        self._resolve(request_id, "spellback", dict(payload or {}))
+
     async def request_section_info(self, section_identifier: str) -> Optional[Dict[str, Any]]:
         """
         Request section information from frontend.
