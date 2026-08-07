@@ -413,6 +413,11 @@ class FormFillingService:
             # singleton) so it is symmetric with the update-side coercion even when the
             # service is built with a non-global Settings (Codex PR #264).
             get_use_dti=lambda: getattr(self._settings, "USE_DTI", False),
+            # Gates the name_spellback dispatch (bd 22h1f): same injected-
+            # settings source as the declaration builder, so a session whose
+            # declarations omitted the tool also refuses a hallucinated call.
+            get_spellback_enabled=lambda: getattr(
+                self._settings, "SPELLBACK_TOOL_ENABLED", False),
             # Invalidate the current-field pointer on a successful confirm so a later
             # update can't be coerced onto the just-confirmed field if next-field
             # delivery times out (Codex PR #264).

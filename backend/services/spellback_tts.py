@@ -89,6 +89,25 @@ _client = None
 _client_lock = threading.Lock()
 
 
+def resolve_spellback_voice(settings) -> str:
+    """The Cloud TTS voice for the spell-back clip.
+
+    An explicit SPELLBACK_TTS_VOICE wins. Otherwise MATCH THE LIVE MODEL'S
+    VOICE: the Chirp 3 HD family carries the same persona names as the Live
+    API's prebuilt voices (Iapetus, Puck, ...), so the clip sounds like the
+    same speaker as the session (maintainer ask, 2026-08-07;
+    en-US-Chirp3-HD-Iapetus endpoint-verified accepting this module's SSML).
+    Falls back to the API's default en-US voice when neither is set.
+    """
+    explicit = getattr(settings, "SPELLBACK_TTS_VOICE", "") or ""
+    if explicit:
+        return explicit
+    live_voice = getattr(settings, "LIVE_VOICE_NAME", "") or ""
+    if live_voice:
+        return "en-US-Chirp3-HD-%s" % live_voice
+    return ""
+
+
 def _get_client():
     global _client
     if _client is None:

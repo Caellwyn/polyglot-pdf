@@ -43,6 +43,15 @@ const DRAIN_QUIET_MS = 600
 // Well under the backend's 90s round-trip cap, so a hung TTS fetch resolves
 // to the error variant while the tool response can still carry it.
 const FETCH_TIMEOUT_MS = 20000
+// Playback watchdog (Opus cross-surface review, bd polyglot-pdf-fjb2k): an
+// <audio> element that stalls without firing onended/onerror (an OS audio
+// interruption on mobile is the real case) would otherwise gate the mic
+// FOREVER -- and in open-mic mode there is no PTT press to release it. The
+// cap scales with the value (a 60-char clip runs ~55s at the SSML pacing)
+// plus buffer, bounded well under the backend's 90s round-trip cap.
+const PLAYBACK_TIMEOUT_PER_CHAR_MS = 1500
+const PLAYBACK_TIMEOUT_FLOOR_MS = 15000
+const PLAYBACK_TIMEOUT_CAP_MS = 80000
 
 export interface SpellbackPlayerDeps {
   getAudioManager: () => AudioManager | null
@@ -55,6 +64,8 @@ export interface SpellbackPlayerDeps {
   revokeClipUrl?: (url: string) => void
   now?: () => number
   sleep?: (ms: number) => Promise<void>
+  // Playback watchdog seam: schedule fn after ms, return a canceller.
+  watchdog?: (ms: number, fn: () => void) => () => void
 }
 
 export interface SpellbackPlayer {
@@ -83,6 +94,10 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
   const revokeClipUrl = deps.revokeClipUrl ?? ((url: string) => URL.revokeObjectURL(url))
   const now = deps.now ?? (() => performance.now())
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)))
+  const watchdog = deps.watchdog ?? ((ms: number, fn: () => void) => {
+    const t = setTimeout(fn, ms)
+    return () => clearTimeout(t)
+  })
 
   // Monotonic call counter. The finally-cleanup and cancel() compare against
   // it so only the LIVE call can clear shared state or release the mic hold.
@@ -204,7 +219,13 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
             ...(token ? { Authorization: 'Bearer ' + token } : {}),
           },
           body: JSON.stringify({ value }),
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          // Guarded: AbortSignal.timeout is missing on older mobile Safari;
+          // without it the fetch simply has no client-side timeout (the
+          // backend's 90s cap still bounds the round-trip).
+          signal:
+            typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+              ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+              : undefined,
         })
         if (!resp.ok) {
           return { status: 'error', reason: 'tts_http_' + resp.status }
@@ -219,6 +240,11 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
       const url = makeClipUrl(blob)
       const audio = createAudio(url)
       const playStart = now()
+      const playbackCapMs = Math.min(
+        PLAYBACK_TIMEOUT_CAP_MS,
+        Math.max(PLAYBACK_TIMEOUT_FLOOR_MS, value.length * PLAYBACK_TIMEOUT_PER_CHAR_MS),
+      )
+      let stopWatchdog: () => void = () => {}
       const outcome = await new Promise<'delivered' | 'interrupted' | 'error'>((resolve) => {
         let settled = false
         const settle = (o: 'delivered' | 'interrupted' | 'error') => {
@@ -229,10 +255,17 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
         }
         activeAudio = audio
         activeResolve = settle
+        // Watchdog: a stalled element that never fires onended/onerror must
+        // not gate the mic forever (bd polyglot-pdf-fjb2k).
+        stopWatchdog = watchdog(playbackCapMs, () => {
+          audio.pause()
+          settle('error')
+        })
         audio.onended = () => settle('delivered')
         audio.onerror = () => settle('error')
         audio.play().catch(() => settle('error'))
       })
+      stopWatchdog()
       const playbackMs = Math.round(now() - playStart)
       revokeClipUrl(url)
       return { status: outcome, playback_ms: playbackMs, fetch_ms: fetchMs }

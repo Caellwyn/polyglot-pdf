@@ -56,7 +56,7 @@ def mock_coordinator():
 
 @pytest.fixture
 def callback_handler(mock_websocket, mock_coordinator):
-    return CallbackHandler(
+    handler = CallbackHandler(
         websocket=mock_websocket,
         session_id="test_session_123",
         request_coordinator=mock_coordinator,
@@ -64,6 +64,10 @@ def callback_handler(mock_websocket, mock_coordinator):
         form_id="I-90",
         form_session_id="fss_test_12345",
     )
+    # The dispatch is flag-gated (fail closed when the getter is absent);
+    # these tests exercise the ENABLED tool's variants.
+    handler._get_spellback_enabled = lambda: True
+    return handler
 
 
 class TestNameSpellbackTool:
@@ -174,6 +178,33 @@ class TestNameSpellbackTool:
         mock_coordinator.request_spellback.assert_awaited_once_with()
 
     @pytest.mark.asyncio
+    async def test_flag_off_call_refuses_without_round_trip(
+        self, mock_websocket, mock_coordinator
+    ):
+        """The declaration is flag-gated, so a call while the flag is off is a
+        hallucinated/undeclared call: refuse in-band IMMEDIATELY -- no client
+        round-trip (mic hold, receive-loop block, PII value POSTed to a 503
+        route). Opus cross-surface review, bd polyglot-pdf-dtywl. The default
+        (no getter injected) fails closed the same way."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            session_id="test_session_123",
+            request_coordinator=mock_coordinator,
+            send_transcript=False,
+            form_id="I-90",
+            form_session_id="fss_test_12345",
+        )
+        for getter in (None, (lambda: False)):
+            handler._get_spellback_enabled = getter
+            response = await handler.on_tool_call(
+                tool_name="name_spellback", arguments={}
+            )
+            assert response.get("success") is not True
+            assert "not available" in response["message"]
+            assert "Do not call it again" in response["message"]
+        mock_coordinator.request_spellback.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_no_coordinator_is_error_variant(self, mock_websocket):
         handler = CallbackHandler(
             websocket=mock_websocket,
@@ -248,7 +279,11 @@ class TestSpellbackSiAddendum:
     def test_flag_on_appends_addendum(self):
         si = self._si(enabled=True)
         assert "name_spellback" in si
-        assert "NEVER speak a spelling letter by letter" in si
+        assert "NEVER speak a LETTER spelling letter by letter" in si
+        # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
+        # SPEECH STYLE block in the same assembled SI requires digit-by-digit
+        # number read-back, and the addendum must not suppress it.
+        assert "digit by digit yourself" in si
 
     def test_flag_on_appends_addendum_in_legacy_si_mode_too(self):
         """The tool declaration gates only on SPELLBACK_TOOL_ENABLED, not on
@@ -267,7 +302,11 @@ class TestSpellbackSiAddendum:
                 current_values={},
             )
         assert "name_spellback" in si
-        assert "NEVER speak a spelling letter by letter" in si
+        assert "NEVER speak a LETTER spelling letter by letter" in si
+        # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
+        # SPEECH STYLE block in the same assembled SI requires digit-by-digit
+        # number read-back, and the addendum must not suppress it.
+        assert "digit by digit yourself" in si
 
     def test_flag_off_leaves_si_untouched(self):
         si = self._si(enabled=False)
@@ -349,6 +388,24 @@ class TestSpellbackSsml:
     def test_digits_are_spoken_as_characters(self):
         ssml = build_spellback_ssml("A1")
         assert '<say-as interpret-as="characters">1</say-as>' in ssml
+
+    def test_voice_resolution_matches_live_model_by_default(self):
+        """Default (no explicit SPELLBACK_TTS_VOICE): the clip uses the SAME
+        persona as the Live model via the Chirp 3 HD family (maintainer ask,
+        2026-08-07). An explicit voice wins; no voices at all -> API default."""
+        from backend.services.spellback_tts import resolve_spellback_voice
+
+        s = Settings()
+        s.SPELLBACK_TTS_VOICE = ""
+        s.LIVE_VOICE_NAME = "Iapetus"
+        assert resolve_spellback_voice(s) == "en-US-Chirp3-HD-Iapetus"
+
+        s.SPELLBACK_TTS_VOICE = "en-US-Neural2-F"
+        assert resolve_spellback_voice(s) == "en-US-Neural2-F"
+
+        s.SPELLBACK_TTS_VOICE = ""
+        s.LIVE_VOICE_NAME = ""
+        assert resolve_spellback_voice(s) == ""
 
     def test_char_cap_matches_frontend_mirror(self):
         """MAX_SPELLBACK_CHARS is mirrored (not shared) as SPELLBACK_MAX_CHARS

@@ -395,10 +395,16 @@ class Settings(BaseModel):
 	SPELLBACK_TOOL_ENABLED: bool = (
 		os.getenv("SPELLBACK_TOOL_ENABLED", "false").lower() == "true"
 	)
-	# Cloud TTS voice for the spell-back clip. Empty = let the API pick its
-	# default en-US voice. The clip is ALWAYS en-US regardless of session
-	# language -- English letter names in every session language is the SI's
-	# NAMES invariant (the letters are what is written on the English form).
+	# Cloud TTS voice for the spell-back clip. Empty (the default) = MATCH THE
+	# LIVE MODEL'S VOICE: the Chirp 3 HD family carries the same persona set as
+	# the Live API's prebuilt voices, so LIVE_VOICE_NAME derives
+	# en-US-Chirp3-HD-<name> (endpoint-verified accepting our SSML with
+	# Iapetus, 2026-08-07) and the clip sounds like the same speaker
+	# (maintainer ask, 2026-08-07). Set explicitly to pin a different voice;
+	# resolution lives in spellback_tts.resolve_spellback_voice. The clip is
+	# ALWAYS en-US regardless of session language -- English letter names in
+	# every session language is the SI's NAMES invariant (the letters are what
+	# is written on the English form).
 	SPELLBACK_TTS_VOICE: str = os.getenv("SPELLBACK_TTS_VOICE", "")
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
@@ -782,12 +788,17 @@ class Settings(BaseModel):
 	# retires this addendum.
 	DTI_SPELLBACK_SI_ADDENDUM: str = (
 		"\n\nSPELL-BACK AUDIO TOOL (overrides any earlier instruction to read "
-		"spellings aloud yourself):\n"
-		"You must NEVER speak a spelling letter by letter -- spelled letter "
-		"sequences in your speech are unreliable. Everything else about NAMES "
+		"LETTER spellings aloud yourself):\n"
+		"You must NEVER speak a LETTER spelling letter by letter -- spelled "
+		"letter sequences in your speech are unreliable. This applies to "
+		"LETTERS only: digit-by-digit read-back of numbers (dates, phone "
+		"numbers, ZIP codes, id numbers) is unchanged -- keep reading those "
+		"back digit by digit yourself, slowly, as your speech-style "
+		"instructions describe. Everything else about NAMES "
 		"handling stays the same (ask for the spelling first, fill exactly what "
 		"the user spells), but verification changes: after filling a name (or "
-		"any spelled value), briefly tell the user, in the session language, "
+		"any letter-spelled value), briefly tell the user, in the session "
+		"language, "
 		"that you will play the spelling back, then call the name_spellback "
 		"tool and stop speaking. It plays the stored value to the user as "
 		"clear letter-by-letter audio. When it returns, ask the user, in the "

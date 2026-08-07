@@ -151,8 +151,51 @@ Round 3: GAPS-FOUND (1 + 1 note) -> both adopted:
 2. ADOPTED (note): the mirrored 60-char cap (backend MAX_SPELLBACK_CHARS /
    frontend SPELLBACK_MAX_CHARS) is now pinned to each other by a backend
    static test, so the constants cannot drift silently.
-Round 4 verdict: see the PR body scorecard. Scorer note: both runs reported
-`needs_hand_check: []` -- no rows required hand adjudication.
+Round 4 verdict: NO-GAPS (two low-confidence notes, non-blocking). Scorer
+note: both runs reported `needs_hand_check: []` -- no rows required hand
+adjudication.
+
+## Outer (Opus cross-surface) triage -- round 1: GAPS-FOUND (8)
+
+Fixed inline (the filed beads close with this PR):
+1. bd 4uytx: texttospeech.googleapis.com was missing from BOTH deploy scripts'
+   API-enable lists -- the cutover flag-flip would 502 opaquely. Added (no
+   extra IAM role needed; synthesis needs only an authenticated principal).
+2. bd fjb2k: the blocking playback await had no timeout -- a stalled <audio>
+   (OS audio interruption on mobile) would gate the mic FOREVER, with no PTT
+   press available in open-mic mode. Added a value-proportional playback
+   watchdog (15-80s), mutation-style pinned by a test.
+3. bd dtywl: the name_spellback dispatch arm was not flag-gated -- a
+   hallucinated call while dark ran the whole round-trip (mic hold,
+   receive-loop block, PII value POSTed to a 503 route). Now refuses in-band
+   immediately via an injected-settings getter (same principle as
+   _get_use_dti), fail-closed; test added.
+4. bd j6fxt: the SI addendum's blanket wording contradicted SPEECH STYLE's
+   digit-by-digit number read-back. Re-scoped to LETTERS only, with the digit
+   behavior explicitly preserved; pinned by test.
+5. (unfiled note) AbortSignal.timeout is unpolyfilled on older mobile Safari
+   -- now feature-guarded (degrades to no client-side fetch timeout; the
+   backend's 90s cap still bounds).
+Deferred as beads (open, future work):
+6. bd a43y4: the E2E harness bypasses the mic hold and cannot observe clips
+   -- a harness-observability improvement for future measurement runs.
+7. bd flnz1: the interrupted variant is PTT-only; open-mic native-VAD users
+   cannot barge into a clip (clips are short + now watchdog-capped; whether
+   voice barge-in should interrupt a clip is a product/UX call at cutover).
+   ws-protocol row now documents the mode-dependence.
+Raised to the maintainer (design consequence, not a defect):
+8. The 90s tool-response hold blocks the Gemini receive loop, so a GoAway or
+   interrupted event arriving mid-clip is processed late (worst case ~its
+   duration; typical clips 5-7s, watchdog-capped). Bounding this would
+   revisit the maintainer-approved blocking design -- reported in the PR.
+
+## Voice matching (maintainer ask, mid-review 2026-08-07)
+
+The clip now defaults to the SAME persona as the Live model: Cloud TTS's
+Chirp 3 HD family carries the Live API's prebuilt voice names, so
+LIVE_VOICE_NAME derives en-US-Chirp3-HD-<name> (endpoint-verified accepting
+this feature's SSML with Iapetus). SPELLBACK_TTS_VOICE overrides explicitly;
+resolution in spellback_tts.resolve_spellback_voice, pinned by test.
 
 ## Doc freshness
 

@@ -113,6 +113,9 @@ class CallbackHandler:
         # non-global Settings(USE_DTI=True) would otherwise coerce updates but not
         # confirms, stranding the field.
         self._get_use_dti = None
+        # Live getter for SPELLBACK_TOOL_ENABLED (bd 22h1f) -- see
+        # set_tool_handlers. None/absent reads as disabled (fail closed).
+        self._get_spellback_enabled = None
         # Invalidates the service's current-field pointer (bd polyglot-pdf-h1bn, Codex
         # PR #264): on a successful confirm the current field is DONE, so the pointer is
         # cleared until fresh next-field guidance is delivered. Otherwise, if the
@@ -146,6 +149,7 @@ class CallbackHandler:
         is_known_field=None,
         get_option_label_overrides=None,
         get_spoken_name_overrides=None,
+        get_spellback_enabled=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -161,6 +165,13 @@ class CallbackHandler:
         self._get_use_dti = get_use_dti
         self._clear_current_field = clear_current_field
         self._is_known_field = is_known_field
+        # Live getter for SPELLBACK_TOOL_ENABLED from the SERVICE's settings
+        # (bd 22h1f; same injected-settings principle as _get_use_dti). Gates
+        # the name_spellback dispatch: the declaration is flag-gated, but a
+        # hallucinated call while dark must be a fast in-band refusal, not a
+        # full round-trip (mic hold + receive-loop block + a PII value POSTed
+        # to a 503 route) -- Opus cross-surface review, bd polyglot-pdf-dtywl.
+        self._get_spellback_enabled = get_spellback_enabled
 
     def _option_overrides(self):
         """The current session-language option-label overrides, or None (bd
@@ -1283,6 +1294,24 @@ class CallbackHandler:
           where it hurts).
         """
         del arguments  # No-argument tool; anything sent is deliberately ignored.
+
+        # Flag gate (Opus cross-surface review, bd polyglot-pdf-dtywl): the
+        # DECLARATION is flag-gated, so a call arriving while the flag is off
+        # is a hallucinated/undeclared tool call. Refuse in-band immediately --
+        # running the round-trip anyway would hold the mic, block the receive
+        # loop, and POST a PII field value to a route that 503s.
+        enabled = (self._get_spellback_enabled()
+                   if self._get_spellback_enabled else False)
+        if not enabled:
+            return {
+                "success": False,
+                "status": "error",
+                "message": (
+                    "The name_spellback tool is not available in this "
+                    "session. Do not call it again. Verify the value with "
+                    "the user according to your instructions."
+                ),
+            }
 
         ack = CONFIRM_REQUEST_TIMEOUT
         if self._request_coordinator is not None:

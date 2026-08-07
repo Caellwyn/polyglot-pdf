@@ -49,6 +49,7 @@ interface Harness {
 function makePlayer(overrides: {
   fetchImpl?: (...a: any[]) => Promise<Response>
   am?: AudioManager | null
+  watchdogs?: Array<() => void>
 } = {}): Harness {
   const holdLog: boolean[] = []
   const audios: FakeAudio[] = []
@@ -56,6 +57,14 @@ function makePlayer(overrides: {
   const fetchImpl = vi.fn(overrides.fetchImpl ?? (async () => okResponse()))
   const am = overrides.am === undefined ? fakeAudioManager(holdLog) : overrides.am
   const player = createSpellbackPlayer({
+    ...(overrides.watchdogs
+      ? {
+          watchdog: (_ms: number, fn: () => void) => {
+            overrides.watchdogs!.push(fn)
+            return () => {}
+          },
+        }
+      : {}),
     getAudioManager: () => am,
     getHttpBase: () => 'http://test',
     fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -203,6 +212,26 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
 
     // After everything settled, an idle press is a no-op again.
     expect(player.interruptForPtt()).toBe(false)
+  })
+
+  it('playback watchdog: a stalled audio element cannot gate the mic forever (bd fjb2k)', async () => {
+    const watchdogs: Array<() => void> = []
+    const { player, holdLog, audios } = makePlayer({ watchdogs })
+
+    const done = player.play('NGUYEN')
+    await settleMicrotasks()
+    expect(watchdogs).toHaveLength(1) // armed alongside playback
+    expect(player.isPlaying()).toBe(true)
+
+    // The element never fires onended/onerror (OS audio interruption). The
+    // watchdog must stop it and resolve the error variant -- releasing the
+    // mic hold even with no PTT press available (open-mic mode).
+    watchdogs[0]()
+    const result = await done
+    expect(result.status).toBe('error')
+    expect(audios[0].pause).toHaveBeenCalled()
+    expect(holdLog[holdLog.length - 1]).toBe(false)
+    expect(player.isPlaying()).toBe(false)
   })
 
   it('fails fast on over-length values without fetching', async () => {

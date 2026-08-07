@@ -25,6 +25,7 @@ from backend.config import get_settings
 from backend.services.auth import require_auth
 from backend.services.spellback_tts import (
     MAX_SPELLBACK_CHARS,
+    resolve_spellback_voice,
     synthesize_spellback,
 )
 
@@ -53,7 +54,7 @@ async def spellback_tts(
 
     try:
         audio = await synthesize_spellback(
-            value, getattr(settings, "SPELLBACK_TTS_VOICE", "")
+            value, resolve_spellback_voice(settings)
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid value")
