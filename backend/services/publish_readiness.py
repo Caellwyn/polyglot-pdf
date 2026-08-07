@@ -466,6 +466,15 @@ def publish_readiness(
             blocking.append(_positional_name(index))
 
     to_review = total - reviewed
+    if total == 0:
+        # An EXTRACTED-BUT-EMPTY schema: measurable, but 0 of 0 is not "fully
+        # reviewed" -- publishing a form with no fields is not something a
+        # human signed off on. It says so rather than refusing silently, for
+        # the same reason the unmeasurable-schema return above does: this is
+        # the structurally identical twin, and leaving one silent would read as
+        # deliberate to the next reader (Opus fresh-eyes; bd
+        # polyglot-pdf-4ppnt, which this closes).
+        schema_errors = schema_errors + ["empty-schema at $.fields"]
     return ReadinessVerdict(
         # A schema-level ERROR blocks publication no matter how complete the
         # review is: the /status gate refuses on it, and no field's sign-off

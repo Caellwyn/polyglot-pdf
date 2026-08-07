@@ -269,6 +269,11 @@ def test_an_empty_kit_is_never_ready():
     assert v.ready is False
     assert v.counts.percentage == 0
     assert v.counts.total == 0
+    # ...and it names the reason, like its unmeasurable-schema twin. Refusing
+    # with both name lists empty leaves a gate with nothing to show, and two
+    # structurally identical paths behaving differently reads as deliberate to
+    # the next reader (Opus fresh-eyes, bd polyglot-pdf-4ppnt).
+    assert v.blocking_schema_errors == ["empty-schema at $.fields"]
 
 
 def test_a_malformed_fields_value_is_unmeasurable_not_zero_percent():
