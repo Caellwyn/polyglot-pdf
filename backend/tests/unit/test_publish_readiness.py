@@ -165,6 +165,81 @@ def test_ready_only_when_every_field_is_reviewed():
     assert v.blocking_ids == []
 
 
+@pytest.mark.parametrize("rule,path", [
+    # The holding-section leftover-ids ERROR. Its path DOES carry an (id=)
+    # token, but the token names a SECTION -- so a bucketing rule keyed on
+    # "has an id token" files it under a field that does not exist and
+    # silently drops it. The client draws the same distinction for the same
+    # reason (lintFindings.formLevelFindings keys on "resolves to no field in
+    # fields[]", not on "has no id token").
+    ("to-review-pending", "sections[0] (id=sec_to_review_x)"),
+    # The widget-claim ERROR: no id token at all.
+    ("dump-widget-multiclaim", "widget 'form1[0].name[0]'"),
+])
+def test_a_schema_level_ERROR_blocks_a_fully_reviewed_kit(rule, path):
+    """ready must be False for a kit the /status gate will 409 on.
+
+    The gate refuses on ANY lint ERROR regardless of anchoring, while the
+    review counts only ever see FIELD-anchored findings -- so a schema-level
+    ERROR left ready=True for a kit that then 409s: the confident-then-refused
+    shape sprint-18 exists to end, relocated into the stamp (bd
+    polyglot-pdf-dm3c8). No field's sign-off can clear these, because no field
+    row can carry them.
+    """
+    schema = {"fields": [_reviewed("a"), _reviewed("b")]}
+    err = _finding(rule, path, severity="ERROR")
+    v = publish_readiness(schema, [err])
+
+    assert v.ready is False
+    # ...and the refusal NAMES it (exit criterion 2): a gate that refuses
+    # without saying what to fix is unactionable.
+    assert v.blocking_schema_errors == [f"{rule} at {path}"]
+
+    # The FIELD counts are untouched: every field really is reviewed, and the
+    # percentage stays honest at 100%. Folding a field-less finding into
+    # to_review would break the invariant below AND understate the review work
+    # actually done (exit criterion 3).
+    assert v.counts.reviewed == 2
+    assert v.counts.to_review == 0
+    assert v.counts.percentage == 100
+    assert v.counts.reviewed + v.counts.to_review == v.counts.total
+    assert v.blocking_ids == []
+
+
+def test_a_schema_level_WARNING_does_not_block():
+    """Only ERRORs block -- the gate refuses on ERROR severity alone, and the
+    aggregate guidance/translation WARNINGs are field-less by design."""
+    schema = {"fields": [_reviewed("a")]}
+    warn = _finding("help-instructions-missing", "$.fields")
+    v = publish_readiness(schema, [warn])
+    assert v.ready is True
+    assert v.blocking_schema_errors == []
+
+
+def test_a_field_anchored_ERROR_is_not_double_counted_as_schema_level():
+    """An ERROR a real field OWNS is already handled by the review counts; it
+    must not ALSO appear as a schema-level blocker, or the gate would report
+    one defect twice under two different headings."""
+    schema = {"fields": [_reviewed("a")]}
+    err = _finding("field-unbacked", "fields[0] (id=a)", severity="ERROR")
+    v = publish_readiness(schema, [err])
+    assert v.ready is False                # demoted by its own ERROR
+    assert v.blocking_ids == ["a"]         # named as a FIELD...
+    assert v.blocking_schema_errors == []  # ...and not again as schema-level
+    assert v.counts.errors == 1
+
+
+def test_findings_may_be_a_one_shot_iterable():
+    """The parameter is typed Iterable, and the verdict now consumes it twice
+    (bucket per field, then scan for schema-level ERRORs). A generator must not
+    arrive exhausted at the second pass."""
+    schema = {"fields": [_reviewed("a")]}
+    err = _finding("dump-widget-multiclaim", "widget 'x[0]'", severity="ERROR")
+    v = publish_readiness(schema, (f for f in [err]))
+    assert v.ready is False
+    assert len(v.blocking_schema_errors) == 1
+
+
 def test_an_empty_kit_is_never_ready():
     """0 of 0 is not 'fully reviewed' -- publishing an empty form is not a thing
     a human signed off on, and 0/0 rendering as 100% would gate open."""

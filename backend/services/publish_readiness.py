@@ -37,7 +37,10 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+# `field` is aliased: this module uses `field` as a local variable name
+# throughout (a schema field), and importing dataclasses.field unaliased would
+# shadow it confusingly at every use site.
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.services.guidance_contract import identity_sha1
@@ -300,14 +303,33 @@ class ReadinessVerdict:
 
     `ready` is the publish verdict C2's /status gate refuses on; `blocking_ids`
     names the fields to show the human (the gate refuses BY NAME, never with a
-    bare count). `ready` is False whenever any field is unreviewed, so it is
-    exactly `to_review == 0` over a non-empty kit -- kept as its own field so a
-    caller reads intent rather than re-deriving it.
+    bare count).
+
+    `ready` is NOT merely `to_review == 0`: a kit can have every field signed
+    off and still be unpublishable because of a SCHEMA-LEVEL lint ERROR -- one
+    that no field row can carry, so no field's review can ever clear it. The
+    two reachable classes are the holding-section leftover-ids ERROR
+    (`to-review-pending` at `sections[i] (id=sec_to_review_x)`, whose id token
+    matches no field) and the widget-claim ERROR (`dump-widget-multiclaim` at
+    `widget '<name>'`, with no id token at all). The /status gate refuses on ANY
+    lint ERROR regardless of anchoring, so a verdict that ignored these would
+    stamp ready=True for a kit the gate then 409s -- the confident-then-refused
+    shape sprint-18 exists to end, relocated into the stamp (bd
+    polyglot-pdf-dm3c8).
+
+    They get their OWN field rather than being folded into the counts: those
+    count FIELDS, and `reviewed + to_review == total` is a test-pinned
+    invariant. A finding belonging to no field cannot inflate a field tally
+    without breaking it.
     """
 
     ready: bool
     counts: ReadinessCounts
     blocking_ids: List[str]
+    # Schema-level lint ERRORs, as human-readable `<rule> at <path>` strings.
+    # Non-empty forces ready=False. Kept as strings (not LintFinding) so the
+    # verdict stays a plain data shape a stamp can serialize.
+    blocking_schema_errors: List[str] = dataclass_field(default_factory=list)
 
 
 def _positional_name(index: int) -> str:
@@ -322,15 +344,52 @@ def _positional_name(index: int) -> str:
 
 def _bucket_by_field(
     findings: Optional[Iterable[LintFinding]],
+    field_ids: Optional[set] = None,
 ) -> Dict[str, List[LintFinding]]:
     """Group findings by the field they anchor to; field-less ones are skipped
-    (no field's review can cover a schema-level finding)."""
+    (no field's review can cover a schema-level finding).
+
+    `field_ids` is the set of ids that actually EXIST in fields[]. When given, a
+    finding whose parsed id matches no real field is treated as schema-level
+    rather than silently dropped -- the `to-review-pending` ERROR carries
+    `sections[i] (id=sec_to_review_x)`, which parses to an id token that is a
+    SECTION, not a field. The client makes the same distinction for the same
+    reason (lintFindings.formLevelFindings keys on "resolves to no field in
+    fields[]", not on "has no id token").
+    """
     out: Dict[str, List[LintFinding]] = {}
     for f in findings or ():
         fid = field_id_of(f.path)
         if not fid:
             continue
+        if field_ids is not None and fid not in field_ids:
+            continue
         out.setdefault(fid, []).append(f)
+    return out
+
+
+def _schema_level_errors(
+    findings: Optional[Iterable[LintFinding]],
+    field_ids: set,
+) -> List[str]:
+    """The ERROR findings no field row can carry, as `<rule> at <path>`.
+
+    These are what the /status gate refuses on but no field's sign-off can
+    clear: it refuses on ANY lint ERROR, while the review counts only ever see
+    field-anchored ones. Ignoring them let a fully-reviewed kit stamp
+    ready=True and then 409 at publish (bd polyglot-pdf-dm3c8).
+
+    "No field row can carry it" means either no id token at all (`widget
+    '<name>'`) or an id token naming something that is not a field (a section).
+    """
+    out: List[str] = []
+    for f in findings or ():
+        if f.severity != SEVERITY_ERROR:
+            continue
+        fid = field_id_of(f.path)
+        if fid and fid in field_ids:
+            continue  # a real field owns it; the review counts already saw it
+        out.append(f"{f.rule} at {f.path}")
     return out
 
 
@@ -353,7 +412,17 @@ def publish_readiness(
             ready=False, counts=ReadinessCounts(0, 0, 0, 0), blocking_ids=[],
         )
 
-    by_field = _bucket_by_field(lint_findings)
+    # Materialize the findings once: they are consumed twice below (bucketed
+    # per field, and scanned for schema-level ERRORs), and the parameter is
+    # typed as an Iterable a generator could satisfy -- which the second pass
+    # would find already exhausted.
+    findings = list(lint_findings) if lint_findings is not None else []
+    real_field_ids = {
+        f.get("id") for f in fields
+        if isinstance(f, dict) and isinstance(f.get("id"), str)
+    }
+    by_field = _bucket_by_field(findings, real_field_ids)
+    schema_errors = _schema_level_errors(findings, real_field_ids)
     reviewed = 0
     errors = 0
     blocking: List[str] = []
@@ -388,9 +457,14 @@ def publish_readiness(
 
     to_review = total - reviewed
     return ReadinessVerdict(
-        ready=total > 0 and to_review == 0,
+        # A schema-level ERROR blocks publication no matter how complete the
+        # review is: the /status gate refuses on it, and no field's sign-off
+        # can clear it. Deliberately NOT folded into to_review -- that counts
+        # FIELDS, and reviewed + to_review == total is a pinned invariant.
+        ready=total > 0 and to_review == 0 and not schema_errors,
         counts=ReadinessCounts(
             reviewed=reviewed, to_review=to_review, total=total, errors=errors,
         ),
         blocking_ids=blocking,
+        blocking_schema_errors=schema_errors,
     )
