@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found).*
+*Last updated: 2026-08-06. See [docs/journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md](../journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -161,6 +161,39 @@ artifacts such as the persisted AcroForm dump `acroform.json`, bd
 `polyglot-pdf-92qe.1`). PDF filling and the public `/api/form-kits*` routes never
 call the write surface; drafts stay invisible to the voice app (the complete-only
 manifest gate is unchanged).
+
+**Revision archive** (bd `polyglot-pdf-w3zw`): `put_archived_revision`,
+`load_archived_revision`, and `list_archived_markers` keep SUPERSEDED schemas
+readable at `<kit_id>/_archive/<marker>/`. Kit storage is one slot per kit_id, so
+a republish overwrites in place -- and the confirmation audit trail records
+`kit_id` + a revision marker that is *not* a storage address, so without this a
+republish destroyed the schema an old record was confirmed against. The marker is
+resolved from the superseded revision's OWN schema (`resolve_edition_marker`) and
+encoded into one safe path segment by `encode_marker` (it encodes rather than
+rejects: real markers contain `/` and `:`, which `safe_filename` bars). The
+archive is written on the **revert-to-draft** transition: every editor route
+that writes `schema.json` refuses while status is `complete` (save, repair,
+translate-options, derive-divisions, regenerate-guidance, and extract -- the
+last of these was ungated until bd `polyglot-pdf-w3zw` and is now pinned by a
+property test), so the revert is the last moment the published bytes exist. A
+marker is not a unique key -- two revisions can share one `edition_date` -- so
+the archive skips only when the stored copy IS the same schema, and a distinct
+revision under a taken marker lands on a fingerprint-disambiguated sibling
+(`<marker>--<fingerprint>`). Retrieval therefore searches the marker AND its
+siblings: `scripts/read_kit_revision.py` returns the revision when exactly one
+answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
+several do -- for a confirmation record, a confident wrong schema is worse than
+an honest "cannot tell". `--segment` reads one exact archived segment after the
+operator disambiguates from `--list`. Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
+ignores anything deeper than `<kit>/<file>` in both backends, and `_archive` is
+outside `_KIT_ID_RE`. The static-bundle copy is a separate matter and needed an
+explicit fix -- `copyKitsToPublic` in `frontend/scripts/generate-form-manifest.ts`
+is recursive, so it now filters underscore-prefixed dirs at EVERY level (the
+deploy scripts' own `_*` guards skip only top-level entries like
+`form-kits/_translation`, which is why a nested `_archive` slipped past them).
+Archives DO belong in the GCS bucket: that is the authenticated backend store
+the operator read goes through. `scripts/read_kit_revision.py` is the operator read
+(current-or-archived, by `kit_id` + marker).
 
 ## Debugging
 

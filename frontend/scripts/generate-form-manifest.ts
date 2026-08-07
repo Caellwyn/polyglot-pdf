@@ -2,6 +2,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 
+import { shouldCopyKitPath } from "./kitCopyFilter";
+
 interface KitMetadata {
   label?: string;
   description?: string;
@@ -127,7 +129,13 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
 async function copyKitsToPublic() {
   await fs.rm(FORM_KITS_PUBLIC_DIR, { recursive: true, force: true });
   await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
-  await fs.cp(FORM_KITS_SOURCE_DIR, FORM_KITS_PUBLIC_DIR, { recursive: true });
+  // shouldCopyKitPath keeps <kit>/_archive/** (superseded revisions, bd
+  // polyglot-pdf-w3zw) out of the PUBLIC bundle. It lives in its own module so
+  // this script and its test share one definition -- see kitCopyFilter.ts.
+  await fs.cp(FORM_KITS_SOURCE_DIR, FORM_KITS_PUBLIC_DIR, {
+    recursive: true,
+    filter: shouldCopyKitPath,
+  });
 }
 
 async function writeManifest(forms: FormKitDescriptor[]) {

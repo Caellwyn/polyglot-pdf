@@ -92,6 +92,15 @@ form-kits/*/*instructions*.pdf
 form-kits/*/*instr*.pdf
 !form-kits/w7/w7-instructions.pdf
 
+# Superseded kit revisions (bd polyglot-pdf-w3zw). The archive lives in the GCS
+# bucket -- the authenticated store scripts/read_kit_revision.py reads -- and is
+# deliberately NOT a git artifact: scripts/pull-form-kits.sh rsyncs the bucket
+# back into this tree, so without this rule every superseded schema (hundreds of
+# KB each, one per republish) would be committed by the workflow that script's
+# own header prescribes. ANCHORED to form-kits/ for the same reason as the
+# acroform rule above: an unanchored _archive/ would swallow unrelated dirs.
+form-kits/*/_archive/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

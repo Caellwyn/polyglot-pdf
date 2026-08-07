@@ -83,9 +83,12 @@ from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
     LocalFormKitStore,
+    encode_marker,
     get_form_kit_store,
     safe_filename,
+    sibling_marker,
 )
+from backend.utils.confirmation_logger import resolve_edition_marker
 
 _log = structlog.get_logger().bind(module="editor_kit_routes")
 
@@ -811,6 +814,93 @@ async def _load_meta_or_404(store, kit_id: str) -> tuple[Optional[dict], set[str
             status_code=502, detail="Unable to read kit metadata"
         ) from exc
     return meta, set(files_by_kit[kit_id])
+
+
+async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) -> Optional[str]:
+    """Copy the currently-PUBLISHED revision into the archive before it can be
+    edited. Returns the marker archived under, or None when nothing was archived.
+
+    bd polyglot-pdf-w3zw. The confirmation audit trail records kit_id + a
+    revision marker, but a marker is not a storage address and kit storage is
+    one slot per kit -- so overwriting a published schema used to destroy the
+    only copy of what an old record was confirmed against.
+
+    WHY THIS HOOK IS ON REVERT-TO-DRAFT, not on promotion: a published kit's
+    schema cannot be written at all (every editing route refuses while status is
+    complete -- the publish gate). The ONLY way to a new revision is
+    complete -> draft -> save -> complete, so the revert is the LAST moment the
+    published bytes still exist. By promotion time the new schema has already
+    replaced them.
+
+    The marker is resolved from the SUPERSEDED revision's OWN schema, so it
+    matches what that revision's confirmation records carry (an edition_date if
+    the form has one, else the shape fingerprint) -- that is what makes a
+    fingerprint-era record still retrievable later.
+
+    Best-effort by design: an archive failure must not block the revert (which
+    would strand a kit published-and-uneditable). It is logged LOUDLY instead --
+    the same posture as the confirmation sink, where losing the record is worse
+    than a slow path but never worth failing the user's action over.
+    """
+    schema_file, _pdf = _resolve_meta_names(meta)
+    try:
+        schema = await store.load_schema(kit_id, schema_file)
+    except (FormKitNotFound, FormKitStoreError) as exc:
+        _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error=str(exc))
+        return None
+
+    marker = resolve_edition_marker(
+        (schema.get("form_metadata") or {}).get("edition_date")
+        if isinstance(schema.get("form_metadata"), dict) else None,
+        schema,
+    )
+    if not marker:
+        # No edition date AND no fingerprintable shape (an empty/fieldless
+        # schema): nothing a confirmation record could name, so nothing to key
+        # an archive on.
+        _log.warning("kit_revision_archive_no_marker", kit_id=kit_id)
+        return None
+
+    # Idempotence (exit criterion 2) vs. NOT LOSING A REVISION: skip only when
+    # the archived copy IS this schema, never merely because the marker name is
+    # taken. Markers are not unique keys -- an author who edits fields without
+    # bumping the government edition string produces two DIFFERENT revisions
+    # under one edition_date, and a marker-only check would treat the second as
+    # "already archived" and destroy it (fresh-eyes on this bead, reproduced
+    # live: retrieval then returns the WRONG schema, which for a legal record is
+    # worse than a missing one).
+    #
+    # So: same marker + same bytes -> skip (the cheap re-press case). Same marker
+    # + different bytes -> archive under a disambiguated segment so BOTH survive.
+    # Retrieval by the plain marker still finds the first; the sibling keeps the
+    # later revision recoverable instead of silently gone.
+    try:
+        existing = await store.load_archived_revision_or_none(kit_id, marker)
+        if existing == schema:
+            return None
+        store_marker = marker
+        if existing is not None:
+            # Distinct revision under a taken marker: suffix with this
+            # revision's own shape fingerprint, which is what actually
+            # distinguishes it (and is stable, so a repeat of THIS revision
+            # re-collides with itself and skips above on the next pass).
+            fingerprint = resolve_edition_marker(None, schema) or "revision"
+            # sibling_marker budgets the fingerprint against the segment length
+            # cap FIRST: naively joining the raw marker would let a long
+            # edition_date truncate the fingerprint away, at which point the
+            # sibling collides with the base and OVERWRITES the earlier
+            # revision (verified live by fresh-eyes on this bead).
+            store_marker = sibling_marker(marker, fingerprint)
+            if await store.load_archived_revision_or_none(kit_id, store_marker) == schema:
+                return None
+        await store.put_archived_revision(kit_id, store_marker, schema, meta)
+    except FormKitStoreError as exc:
+        _log.error("kit_revision_archive_failed", kit_id=kit_id, marker=marker,
+                   error=str(exc))
+        return None
+    _log.info("kit_revision_archived", kit_id=kit_id, marker=marker,
+              store_marker=store_marker)
+    return store_marker
 
 
 @router.get("/kits/{kit_id}/schema")
@@ -1773,6 +1863,14 @@ async def set_editor_kit_status(
     retranslated = 0
     translation_model: Optional[str] = None
 
+    # Reverting a PUBLISHED kit to draft is the gateway to a new revision: every
+    # editing route refuses to write while status is complete, so this is the
+    # last moment the published revision's bytes still exist. Archive them first
+    # (bd polyglot-pdf-w3zw) so a confirmation record naming that revision can
+    # still be resolved to the exact schema it was confirmed against.
+    if body.status == "draft" and _status_of(meta) == "complete":
+        await _archive_published_revision(store, kit_id, meta)
+
     if body.status == "complete":
         # The voice app serves BOTH the schema and the PDF of a complete kit;
         # the deploy manifest falls back to a conventional pdf name when none
@@ -2231,6 +2329,22 @@ async def extract_editor_kit(
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
     schema_file, pdf_file = _resolve_meta_names(meta)
+    # A PUBLISHED kit's schema is what the voice app streams AND what its
+    # confirmation records were confirmed against. force=true would overwrite it
+    # in place -- going live unvalidated (the same hazard the lenient-save gate
+    # closes) and destroying the superseded revision without passing through the
+    # revert-to-draft archive hook, so an old record could name a schema the
+    # store can no longer produce (bd polyglot-pdf-w3zw; this route was the one
+    # write path missing the gate). Require the explicit revert first, exactly
+    # like save/repair/translate/derive/regenerate.
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to "
+                   "draft first, then re-extract -- otherwise the published "
+                   "schema would be overwritten in place, and the revision its "
+                   "confirmation records name would be lost.",
+        )
     if pdf_file not in files:
         raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
     if schema_file in files and not force:

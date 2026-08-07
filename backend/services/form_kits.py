@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Form kit storage helpers for loading schemas/PDFs in dev and prod."""
 
+import hashlib
 import json
 import os
 import re
@@ -42,6 +43,102 @@ def safe_filename(name: Any, default: str) -> str:
 	if "/" in name or "\\" in name or ".." in name or not _SAFE_FILENAME_RE.fullmatch(name):
 		return default
 	return name
+
+
+# The per-kit subdirectory holding SUPERSEDED revisions (bd polyglot-pdf-w3zw).
+# Kit storage is one flat slot per kit_id, so republishing used to overwrite the
+# schema an old confirmation record points at -- the audit trail could name a
+# revision the store could no longer produce. Archived revisions live at
+# <kit_id>/_ARCHIVE_DIR/<marker>/, which is INVISIBLE to both catalogues for
+# free: `list_kit_files` ignores anything deeper than <kit>/<file> in both
+# stores, and the leading underscore is outside _KIT_ID_RE, so an archive dir
+# can never be mistaken for a kit.
+_ARCHIVE_DIR = "_archive"
+
+# A revision marker is kit-CONTROLLED (an edition_date typed by an author, or a
+# computed `sha256:<12hex>`), and it becomes a PATH SEGMENT -- so it is
+# untrusted exactly like a filename. It cannot go through `safe_filename`: real
+# markers contain characters that guard rejects (a "12/2024" edition date, the
+# ":" in a fingerprint). Encode instead of reject, so every marker round-trips:
+# any character outside the conservative set becomes "-", which keeps the
+# segment a bare, traversal-free name. Distinct markers can collide after
+# encoding (12/2024 and 12-2024 both -> "12-2024"); the caller disambiguates
+# with the published_at suffix, and retrieval matches on the encoded form, so a
+# collision costs an extra sibling directory, never a wrong schema.
+_MARKER_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+# Path segments stay well under filesystem/GCS limits. `sibling_marker` budgets
+# the fingerprint against this same cap, so the two must not drift apart.
+_MARKER_MAX_LEN = 128
+
+
+def encode_marker(marker: str) -> str:
+	"""Encode a revision marker into a safe single path segment.
+
+	Never raises and never returns an empty or traversal-capable segment: a
+	marker that encodes to nothing (or to dots/dashes only) degrades to
+	"unmarked", so an archive write always lands somewhere addressable under the
+	kit.
+
+	Dot RUNS collapse to a single "-": replacing separators alone already makes
+	traversal impossible (the result is one segment, so ".." can never be a path
+	component), but leaving a literal ".." inside the name is a trap for the next
+	reader -- and for any future code that joins or re-splits these segments.
+	Collapse it here so the invariant is visible in the value itself, not just
+	in an argument about how the value gets used.
+	"""
+	encoded = _MARKER_UNSAFE_RE.sub("-", marker or "")
+	encoded = re.sub(r"\.{2,}", "-", encoded)
+	encoded = encoded[:_MARKER_MAX_LEN]
+	if not encoded or set(encoded) <= {".", "-"}:
+		return "unmarked"
+	return encoded
+
+
+def sibling_marker(marker: str, fingerprint: str) -> str:
+	"""A disambiguated sibling marker that SURVIVES encoding.
+
+	The naive `f"{marker}--{fingerprint}"` is a data-loss bug: `encode_marker`
+	truncates at 128 chars, and `edition_date` is unbounded free text, so a long
+	marker pushes the fingerprint off the end. At >=128 the sibling then encodes
+	IDENTICALLY to the base -- the second revision overwrites the first on disk
+	and retrieval hands back the wrong schema. Just under that, the suffix
+	survives but mangled, so the reader's fingerprint pattern no longer matches
+	it and the sibling becomes invisible (retrieval silently returns only the
+	first revision). Both were reproduced live (fresh-eyes on this bead).
+
+	So the fingerprint gets its budget FIRST and the base is trimmed to fit
+	around it. Trimming the base can make two long markers collide, but that
+	collision is then between DIFFERENT fingerprints, so the segments still
+	differ and no revision is lost -- the failure degrades to a less readable
+	name, never to overwritten bytes.
+	"""
+	# Cap the FINGERPRINT first so the base floor below cannot push the result
+	# past the segment limit. Without this the floor breaks the very invariant
+	# it exists to protect on the one input it was written for -- a pathological
+	# (non-sha256) fingerprint would emit an over-long segment.
+	encoded_fp = encode_marker(fingerprint)[:max(1, _MARKER_MAX_LEN - 24 - 2)]
+	encoded_base = encode_marker(marker)
+	# 2 for the "--" join. Leave room for the base tag below.
+	base_budget = max(8, _MARKER_MAX_LEN - len(encoded_fp) - 2)
+	if len(encoded_base) <= base_budget:
+		return f"{encoded_base}--{encoded_fp}"
+
+	# TRIMMING IS LOSSY, so a trimmed base must carry proof of what it came
+	# from. Without it the reader can only prefix-match, and two distinct
+	# markers sharing the trimmed prefix become indistinguishable -- a record
+	# naming one resolves to the other's revision (measured: thousands of
+	# cross-matching pairs at these lengths). Appending a short digest of the
+	# FULL encoded base makes the trim verifiable: the reader recomputes it
+	# from its own marker and compares, so a prefix collision no longer
+	# resolves. 8 hex chars of sha256 -- this disambiguates sibling directory
+	# names, it is not a security boundary.
+	# Digest the RAW marker, not the encoded base: encode_marker itself
+	# truncates at the cap, so two markers differing only past that point share
+	# an encoded base and a digest over it would still collide.
+	tag = hashlib.sha256(marker.encode("utf-8")).hexdigest()[:8]
+	head_budget = max(1, base_budget - len(tag) - 1)  # 1 for the "-" join
+	return f"{encoded_base[:head_budget]}-{tag}--{encoded_fp}"
 
 
 def _replace_with_retry(src: "Path", dst: "Path") -> None:
@@ -215,6 +312,64 @@ class FormKitStore:
 	async def list_kit_ids(self) -> list[str]:
 		"""Every kit id in the store, drafts included (sorted)."""
 		return sorted((await self.list_kit_files()).keys())
+
+	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
+	# Kit storage is ONE slot per kit_id, so a republish overwrites in place. The
+	# confirmation audit trail records kit_id + a revision marker, but a marker is
+	# not a storage address -- so before this, replacing a schema destroyed the
+	# only copy of what an old record was confirmed against. These methods keep
+	# the superseded bytes addressable by that same marker.
+
+	async def put_archived_revision(
+		self, kit_id: str, marker: str, schema: dict, metadata: Optional[dict] = None
+	) -> None:
+		"""Copy a superseded revision's schema (+ metadata) into the archive.
+
+		`marker` is the revision marker resolved from the SUPERSEDED revision's
+		own schema, so it matches what that revision's confirmation records
+		carry. Implementations encode it into a single safe path segment.
+		"""
+		raise NotImplementedError
+
+	async def load_archived_revision(self, kit_id: str, marker: str) -> dict:
+		"""The archived schema stored under `marker` (FormKitNotFound if absent)."""
+		raise NotImplementedError
+
+	async def load_archived_revision_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		"""`load_archived_revision`, with absence as None instead of an exception.
+
+		For the "is this revision already archived?" question, where absent is a
+		normal answer rather than a failure. A genuine store failure still raises
+		FormKitStoreError -- absent and unreadable must stay distinguishable, or
+		a transient error would read as "not archived yet" and overwrite.
+		"""
+		try:
+			return await self.load_archived_revision(kit_id, marker)
+		except FormKitNotFound:
+			return None
+
+	async def list_archived_markers(self, kit_id: str) -> list[str]:
+		"""Encoded markers this kit has archived revisions for (sorted).
+
+		Empty for a kit with no archive -- never an error, since "no superseded
+		revisions" is the normal state.
+		"""
+		raise NotImplementedError
+
+	async def load_archived_metadata_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		"""The archived revision's metadata.json, or None when absent/unreadable.
+
+		`put_archived_revision` snapshots the kit's metadata alongside the
+		schema; its `published_at` is what lets an operator tell two revisions
+		apart when one marker names both. Degrades to None (never raises) --
+		this only enriches an ambiguity report, so a missing snapshot must not
+		turn an honest "cannot tell" into a failure.
+		"""
+		raise NotImplementedError
 
 
 class LocalFormKitStore(FormKitStore):
@@ -448,6 +603,73 @@ class LocalFormKitStore(FormKitStore):
 		except OSError as exc:
 			raise FormKitStoreError(f"Unable to list form kits: {exc}") from exc
 
+	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
+
+	def _archive_dir(self, kit_id: str, marker: str) -> Path:
+		return self._kit_dir(kit_id) / _ARCHIVE_DIR / encode_marker(marker)
+
+	async def put_archived_revision(
+		self, kit_id: str, marker: str, schema: dict, metadata: Optional[dict] = None
+	) -> None:
+		target = self._archive_dir(kit_id, marker)
+		# Reuse the atomic temp+replace writer: an archive read concurrent with
+		# the write must never see half a schema, same as a live one.
+		await self._write_json(target / "schema.json", schema)
+		if metadata is not None:
+			await self._write_json(target / "metadata.json", metadata)
+
+	async def load_archived_revision(self, kit_id: str, marker: str) -> dict:
+		path = self._archive_dir(kit_id, marker) / "schema.json"
+		if not path.exists():
+			raise FormKitNotFound(
+				f"No archived revision for {kit_id} at marker {marker}"
+			)
+		try:
+			return await anyio.to_thread.run_sync(
+				lambda: json.loads(path.read_text(encoding="utf-8"))
+			)
+		except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Invalid or unreadable archived revision for {kit_id}/{marker}: {exc}"
+			) from exc
+
+	async def load_archived_metadata_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		path = self._archive_dir(kit_id, marker) / "metadata.json"
+
+		def _read() -> Optional[dict]:
+			if not path.exists():
+				return None
+			try:
+				loaded = json.loads(path.read_text(encoding="utf-8"))
+			except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+				return None
+			return loaded if isinstance(loaded, dict) else None
+
+		try:
+			return await anyio.to_thread.run_sync(_read)
+		except OSError:
+			return None
+
+	async def list_archived_markers(self, kit_id: str) -> list[str]:
+		root = self._kit_dir(kit_id) / _ARCHIVE_DIR
+
+		def _scan() -> list[str]:
+			if not root.exists():
+				return []
+			return sorted(
+				d.name for d in root.iterdir()
+				if d.is_dir() and (d / "schema.json").exists()
+			)
+
+		try:
+			return await anyio.to_thread.run_sync(_scan)
+		except OSError as exc:
+			raise FormKitStoreError(
+				f"Unable to list archived revisions for {kit_id}: {exc}"
+			) from exc
+
 
 class GCSFormKitStore(FormKitStore):
 	"""Form kit store using authenticated Google Cloud Storage client."""
@@ -654,6 +876,92 @@ class GCSFormKitStore(FormKitStore):
 					continue  # the manifest itself, folder markers, deep nesting
 				out.setdefault(parts[0], []).append(parts[1])
 			return {k: sorted(v) for k, v in out.items()}
+
+		try:
+			return await anyio.to_thread.run_sync(_scan)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to list gs://{self.bucket_name}/{base}: {exc}"
+			) from exc
+
+	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
+
+	async def put_archived_revision(
+		self, kit_id: str, marker: str, schema: dict, metadata: Optional[dict] = None
+	) -> None:
+		segment = encode_marker(marker)
+		await self._upload_json(
+			self._build_blob_path(kit_id, _ARCHIVE_DIR, segment, "schema.json"), schema
+		)
+		if metadata is not None:
+			await self._upload_json(
+				self._build_blob_path(kit_id, _ARCHIVE_DIR, segment, "metadata.json"),
+				metadata,
+			)
+
+	async def load_archived_revision(self, kit_id: str, marker: str) -> dict:
+		segment = encode_marker(marker)
+		blob_path = self._build_blob_path(kit_id, _ARCHIVE_DIR, segment, "schema.json")
+		# Same discipline as load_json_artifact: an ABSENT archive is
+		# FormKitNotFound (the caller reports "no such revision"), but a transient
+		# google error must not escape raw as an uncaught 500.
+		try:
+			data = await self._fetch_bytes(blob_path)
+		except FormKitNotFound:
+			raise FormKitNotFound(
+				f"No archived revision for {kit_id} at marker {marker}"
+			) from None
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+		try:
+			return json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Invalid archived revision for {kit_id}/{marker}: {exc}"
+			) from exc
+
+	async def load_archived_metadata_or_none(
+		self, kit_id: str, marker: str
+	) -> Optional[dict]:
+		segment = encode_marker(marker)
+		blob_path = self._build_blob_path(
+			kit_id, _ARCHIVE_DIR, segment, "metadata.json"
+		)
+
+		def _download() -> Optional[bytes]:
+			blob = self._bucket.blob(blob_path)
+			try:
+				return blob.download_as_bytes()
+			except self._not_found_exc:
+				return None
+
+		try:
+			data = await anyio.to_thread.run_sync(_download)
+		except Exception:
+			return None  # best-effort: enriches a message, never fails the read
+		if data is None:
+			return None
+		try:
+			loaded = json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError):
+			return None
+		return loaded if isinstance(loaded, dict) else None
+
+	async def list_archived_markers(self, kit_id: str) -> list[str]:
+		base = self._build_blob_path(kit_id, _ARCHIVE_DIR) + "/"
+
+		def _scan() -> list[str]:
+			out = set()
+			for blob in self._client.list_blobs(self.bucket_name, prefix=base):
+				rel = blob.name[len(base):]
+				parts = rel.split("/")
+				# <marker>/schema.json exactly -- ignore folder markers and any
+				# deeper nesting, mirroring list_kit_files' flat-shape rule.
+				if len(parts) == 2 and parts[0] and parts[1] == "schema.json":
+					out.add(parts[0])
+			return sorted(out)
 
 		try:
 			return await anyio.to_thread.run_sync(_scan)
