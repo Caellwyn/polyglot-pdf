@@ -104,10 +104,16 @@ export async function readKitEntry(
   const hasSchema = (await tryGetFile(dir, schemaFile)) !== null;
   const hasPdf = (await tryGetFile(dir, pdfFile)) !== null;
 
+  // Every status the type admits must be RECOGNIZED here, not just declared:
+  // widening KitStatus without widening this producer degraded an unpublished
+  // kit to 'unknown', which the catalogue then treated as editable and offered
+  // to publish -- through the offline path, with no write-lock and none of the
+  // server-side gates (bd polyglot-pdf-6dz0 fresh-eyes).
   const status: KitStatus =
     meta?.status === 'complete' ? 'complete'
       : meta?.status === 'draft' ? 'draft'
-        : 'unknown';
+        : meta?.status === 'unpublished' ? 'unpublished'
+          : 'unknown';
 
   return {
     id,

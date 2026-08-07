@@ -238,6 +238,44 @@ def test_replaces_is_ignored_when_the_request_is_not_a_publish(client):
     assert _run(store.load_metadata("w7-2024"))["status"] == "complete"
 
 
+def test_a_failed_incoming_write_leaves_the_outgoing_kit_live(client):
+    """The ordering that matters: the outgoing kit is retired only AFTER the
+    incoming one is actually live.
+
+    The publish GATES protect against a validation failure, but not against the
+    final metadata write failing. Retiring first and then failing there leaves
+    the form with ZERO live versions -- worse than the two-entry state the
+    supersede fixes. Publishing first makes the failure mode two live entries:
+    visible, and fixable by unpublishing the old one (fresh-eyes finding).
+    """
+    from backend.services.form_kits import FormKitStoreError
+
+    c, store, root = client
+    _make_kit(root, "w7-2024")
+    _make_kit(root, "w7-2026", status="draft")
+
+    real_put = store.put_metadata
+    calls = {"n": 0}
+
+    async def _fail_incoming(kit_id, metadata):
+        # Fail the INCOMING kit's own status write, after every gate passed.
+        if kit_id == "w7-2026":
+            calls["n"] += 1
+            raise FormKitStoreError("simulated store failure")
+        return await real_put(kit_id, metadata)
+
+    store.put_metadata = _fail_incoming  # type: ignore[method-assign]
+    try:
+        resp = _status(c, "w7-2026", "complete", replaces="w7-2024")
+    finally:
+        store.put_metadata = real_put  # type: ignore[method-assign]
+
+    assert resp.status_code == 502
+    assert calls["n"] == 1, "the incoming write was never attempted"
+    # The form still has its live version -- the outgoing kit was NOT retired.
+    assert _run(store.load_metadata("w7-2024"))["status"] == "complete"
+
+
 def test_a_failed_publish_leaves_the_outgoing_kit_live(client):
     """Ordering guard: the outgoing kit is retired only AFTER the incoming one
     clears every gate. Retiring first and then failing would leave the form

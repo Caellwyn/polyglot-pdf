@@ -224,7 +224,7 @@ class EditorKitInfo(BaseModel):
     id: str
     label: str
     description: Optional[str] = None
-    status: str  # draft | complete | unknown
+    status: str  # draft | complete | unpublished | unknown
     hasSchema: bool
     hasPdf: bool
     schemaFile: str
@@ -2062,6 +2062,7 @@ async def set_editor_kit_status(
     # Same-kit republish needs no flag: one kit_id is one catalogue slot, so a
     # kit always replaces itself.
     superseded_kit: Optional[str] = None
+    superseded_meta: Optional[dict] = None
     if body.status == "complete" and body.replaces_kit_id:
         superseded_kit = _safe_kit_id(body.replaces_kit_id)
         if superseded_kit == kit_id:
@@ -2070,32 +2071,18 @@ async def set_editor_kit_status(
                 detail="A form cannot replace itself -- republishing the same "
                        "kit already replaces its own catalogue entry.",
             )
-        old_meta, _old_files = await _load_meta_or_404(store, superseded_kit)
-        if _status_of(old_meta) != "complete":
+        superseded_meta, _old_files = await _load_meta_or_404(store, superseded_kit)
+        if _status_of(superseded_meta) != "complete":
             raise HTTPException(
                 status_code=409,
                 detail=f"Cannot replace {superseded_kit}: it is not published "
-                       f"(status {_status_of(old_meta)}), so there is nothing "
-                       "to retire.",
+                       f"(status {_status_of(superseded_meta)}), so there is "
+                       "nothing to retire.",
             )
-        # Archive its bytes before retiring it, exactly as a same-kit revert
-        # does -- its confirmation records point at this revision.
-        await _archive_published_revision(store, superseded_kit, old_meta)
-        try:
-            await store.put_metadata(
-                superseded_kit, {**(old_meta or {}), "status": "unpublished"}
-            )
-        except FormKitStoreError as exc:
-            _log.error("editor_supersede_failed", kit_id=kit_id,
-                       superseded=superseded_kit, error=str(exc))
-            raise HTTPException(
-                status_code=502,
-                detail=f"Unable to unpublish {superseded_kit}; {kit_id} was NOT "
-                       "published, so the form still has exactly one live "
-                       "version.",
-            ) from exc
-        _log.info("editor_kit_superseded", kit_id=kit_id,
-                  superseded=superseded_kit, role=role)
+        # Archive its bytes now -- the archive is additive and harmless even if
+        # the publish below fails, whereas the STATUS flip is not, so that is
+        # deferred until the incoming kit is actually live (see below).
+        await _archive_published_revision(store, superseded_kit, superseded_meta)
 
     next_meta = {**(meta or {}), "status": body.status}
     # Stamp the PUBLISH DATE on promotion (bd polyglot-pdf-47r3, maintainer
@@ -2147,6 +2134,32 @@ async def set_editor_kit_status(
     except FormKitStoreError as exc:
         _log.error("editor_status_save_failed", kit_id=kit_id, error=str(exc))
         raise HTTPException(status_code=502, detail="Unable to update status") from exc
+
+    # RETIRE THE OUTGOING KIT LAST -- only once the incoming one is actually
+    # live (bd polyglot-pdf-6dz0). The gates above protect against a validation
+    # failure, but not against this final store write failing: retiring first
+    # and then failing here would leave the form with ZERO live versions, which
+    # is worse than the two-entry state the supersede exists to fix. Publishing
+    # first means the failure mode is TWO live entries -- visible, and fixable
+    # by unpublishing the old one.
+    if superseded_kit:
+        try:
+            await store.put_metadata(
+                superseded_kit,
+                {**(superseded_meta or {}), "status": "unpublished"},
+            )
+        except FormKitStoreError as exc:
+            _log.error("editor_supersede_failed", kit_id=kit_id,
+                       superseded=superseded_kit, error=str(exc))
+            raise HTTPException(
+                status_code=502,
+                detail=f"{kit_id} was published, but {superseded_kit} could not "
+                       "be unpublished -- BOTH are live for this form now. "
+                       f"Unpublish {superseded_kit} to finish the swap.",
+            ) from exc
+        _log.info("editor_kit_superseded", kit_id=kit_id,
+                  superseded=superseded_kit, role=role)
+
     _log.info("editor_status_set", kit_id=kit_id, status=body.status, role=role,
               retranslated=retranslated, translation_model=translation_model)
     return KitStatusResponse(

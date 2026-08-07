@@ -264,6 +264,21 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const handleSetStatus = React.useCallback(async (kit: CatalogueEntry, status: KitStatus) => {
     if (!root) return;
     setNotice(null);
+    // An UNPUBLISHED kit is a superseded revision: its schema is what earlier
+    // confirmation records were confirmed against (bd polyglot-pdf-w3zw), so it
+    // is write-locked server-side. The local fallback below writes metadata.json
+    // DIRECTLY, with none of those gates -- so without this refusal, an offline
+    // editor could republish a retired revision's stale bytes unvalidated. The
+    // backend refuses this too; this is the local half of the same lock.
+    if (kit.status === 'unpublished') {
+      setError(
+        `"${kit.label}" is unpublished (a superseded revision) and cannot be `
+        + 'changed from this folder view. Its schema is what earlier '
+        + 'confirmations were recorded against. Start the backend and publish '
+        + 'it again there if you need it back in service.',
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     // The strip's refusal line describes the OPEN form only. Both catalogues

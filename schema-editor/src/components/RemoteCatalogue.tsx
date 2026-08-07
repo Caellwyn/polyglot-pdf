@@ -528,6 +528,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           {summary.noSchema > 0 && (
             <span className="text-gray-500">{summary.noSchema} awaiting extraction</span>
           )}
+          {/* Rendered so the sub-counts still add up to the total: a retired
+              revision is neither complete nor pending work, so without this it
+              would silently vanish from the breakdown. */}
+          {summary.unpublished > 0 && (
+            <span className="text-slate-600">{summary.unpublished} retired</span>
+          )}
         </div>
       )}
 
@@ -856,13 +862,37 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                 {kit.hasSchema && (
                   <div className="mt-1 flex items-center justify-end gap-2 px-1">
                     {kit.status === 'complete' ? (
+                      <>
+                        <button
+                          className="btn-sm btn-secondary text-xs"
+                          onClick={() => void handleSetStatus(kit, 'draft')}
+                          disabled={busy}
+                          title="Revert to draft to edit it (archives the published version first, and removes it from the next deploy)"
+                        >
+                          Revert to draft
+                        </button>
+                        <button
+                          className="btn-sm btn-secondary text-xs"
+                          onClick={() => void handleSetStatus(kit, 'unpublished')}
+                          disabled={busy}
+                          title="Retire this version: clients stop seeing it, the files stay, and it cannot be edited -- earlier confirmations point at it. Publish again to restore."
+                        >
+                          Unpublish
+                        </button>
+                      </>
+                    ) : kit.status === 'unpublished' ? (
+                      // Retired: back into service ONLY through the publish
+                      // gate, never via draft (which would make its
+                      // audit-referenced bytes editable again).
                       <button
-                        className="btn-sm btn-secondary text-xs"
-                        onClick={() => void handleSetStatus(kit, 'draft')}
-                        disabled={busy}
-                        title="Revert to draft (removes it from the next deploy)"
+                        className="btn-sm btn-primary text-xs"
+                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        disabled={busy || completingId !== null}
+                        title="Publish this retired version again (runs the full publish gate)"
                       >
-                        Revert to draft
+                        {completingId === kit.id
+                          ? `Re-translating & validating... ${completeElapsed}s`
+                          : 'Publish again'}
                       </button>
                     ) : (
                       <button
