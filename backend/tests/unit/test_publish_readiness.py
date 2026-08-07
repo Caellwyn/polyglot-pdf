@@ -206,6 +206,28 @@ def test_a_schema_level_ERROR_blocks_a_fully_reviewed_kit(rule, path):
     assert v.blocking_ids == []
 
 
+def test_both_schema_level_ERROR_classes_at_once_are_each_named():
+    """The two classes can co-occur, and BOTH must be named.
+
+    The parametrized test above exercises them one at a time, which cannot
+    catch a collection bug that keeps only the first (or the last). A gate that
+    reports one of two blockers sends the human back for a second round trip
+    (fresh-eyes coverage note).
+    """
+    schema = {"fields": [_reviewed("a")]}
+    sec = _finding("to-review-pending", "sections[0] (id=sec_to_review_x)",
+                   severity="ERROR")
+    wid = _finding("dump-widget-multiclaim", "widget 'form1[0].name[0]'",
+                   severity="ERROR")
+    v = publish_readiness(schema, [sec, wid])
+    assert v.ready is False
+    assert v.blocking_schema_errors == [
+        "to-review-pending at sections[0] (id=sec_to_review_x)",
+        "dump-widget-multiclaim at widget 'form1[0].name[0]'",
+    ]
+    assert v.counts.reviewed + v.counts.to_review == v.counts.total
+
+
 def test_a_schema_level_WARNING_does_not_block():
     """Only ERRORs block -- the gate refuses on ERROR severity alone, and the
     aggregate guidance/translation WARNINGs are field-less by design."""
