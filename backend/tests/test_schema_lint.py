@@ -1246,80 +1246,91 @@ def test_a_field_baked_before_identity_tracking_never_reads_stale():
         f"got {len(hits)} findings")
 
 
-# Fields whose voice-facing identity (name / spoken_name / option bindings)
-# was edited AFTER their guidance was baked, so the acknowledgment gate is
-# correctly raised on them. Pinned as a real-kit signal, NOT waived: the
-# mutation test above proves the rule stays silent on hash-less records, but
-# only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
-# change lighting up every field) or a silent regression (the rule going dark).
+# --- guidance-identity-mass-drift (bd polyglot-pdf-cf6v) -------------------- #
 #
-# WHY these are stale, stated as what is PROVABLE from the data, because this
-# comment is the only thing telling a maintainer the fix is a re-bake rather
-# than a label re-check:
-#
-# The set jumped 14 -> 51 when bd polyglot-pdf-stkz (PR #518) added `type` to
-# identity_payload. That is a deliberate HASH-FORMULA change, so every
-# previously-baked field legitimately reads stale at once -- the mass alarm
-# this pin exists to make VISIBLE, firing correctly rather than spuriously.
-# The field identities themselves did NOT change (verified: identity_payload
-# for date_of_birth / name_1a_first / reason is byte-identical from #519 to
-# #518) and no provenance hash was rewritten; only the formula moved.
-#
-# Underneath that, some provenance shas describe the field ONE POSITION OVER --
-# the ivh9 off-by-one fossilized in the bake metadata. Reproduce with:
-#   cur = {identity_sha1(f): f["id"] for f in schema["fields"]}
-#   [(k, cur.get(r["identity_sha1"])) for k, r in prov.items()]
-#
-# Note what this is NOT: the set was byte-identical before and after the
-# bd polyglot-pdf-fjxe 'name' correction, so those corrected names neither
-# caused nor cleared any of it.
-#
-# Clearing them means RE-BAKING the guidance against the current fields, which
-# is maintainer work (bd polyglot-pdf-im2u criterion 2, bd polyglot-pdf-aliu)
-# -- not something a test should paper over.
-_W7_EXPECTED_STALE = {
-    "agent_company_name", "agent_ein", "agent_fax",
-    "agent_name_and_title", "agent_office_code", "agent_phone",
-    "agent_ptin", "application_type", "city_state_of_birth",
-    "college_city_and_state", "college_or_company_name",
-    "countries_of_citizenship", "country_of_birth", "date_of_birth",
-    "date_of_entry_us", "delegate_relationship",
-    "foreign_city_state_country", "foreign_street",
-    "foreign_tax_id_number", "id_document_expiration_date",
-    "id_document_issued_by", "id_document_number",
-    "id_document_other_detail", "id_document_type", "irsn_part1",
-    "irsn_part2", "irsn_part3", "itin_issued_first_name",
-    "itin_issued_last_name", "itin_issued_middle_name", "itin_part1",
-    "itin_part2", "itin_part3", "length_of_stay",
-    "mailing_city_state_country", "mailing_street", "name_1a_first",
-    "name_1a_last", "name_1a_middle", "name_1b_first", "name_1b_last",
-    "name_1b_middle", "name_of_delegate", "phone_number",
-    "previously_received_itin_or_irsn", "reason", "reason_h_details",
-    "relationship_to_us_person", "treaty_country",
-    "us_person_name_ssn_itin", "us_visa_type_number_expiration"
-}
+# The measured W-7 wave this rule exists for (root-cause evidence in the
+# 2026-08-07 cf6v journal entry): bd polyglot-pdf-stkz (PR #518) appended the
+# type token to identity_payload 25 minutes AFTER PR #519 wrote the kit's 52
+# stamps, so every stamp mismatched at once with zero author edits (the stale
+# set jumped 14 -> 51; under the pre-#518 3-element payload, 35 of the 51
+# match again). Underneath, the pre-existing 14 are bake-time fossils: stamps
+# describing the field one position over (the ivh9 off-by-one) or a
+# pre-hand-verify identity. Per-field acknowledgment of such a wave is 51
+# meaningless clicks, so the linter collapses it to ONE kit-level finding.
 
 
-def test_w7_identity_stale_set_is_pinned():
-    """The shipped kit's stale set must match reality, not drift silently.
+def _mass(findings):
+    return [f for f in findings if f.rule == "guidance-identity-mass-drift"]
 
-    A count that JUMPS means the hash formula changed and every baked field lit
-    up at once (the mass false alarm bd anim guards against). A count that
-    DROPS to zero unexpectedly means the rule went dark. Either way a human
-    should look, so this pins the exact set."""
+
+def _drift_kit(n_fields, n_drifted):
+    """A kit with n_fields guidance-carrying stamped fields, the first
+    n_drifted of which have drifted (spoken_name edited after the bake)."""
+    from backend.services import guidance_contract as gc
+    fields, prov = [], {}
+    for i in range(n_fields):
+        f = {"id": f"f{i}", "name": f"Field {i}", "spoken_name": f"field {i}",
+             "type": "text", "help": {"instructions": "x"}}
+        prov[f["id"]] = {"source": "llm-verified",
+                        "identity_sha1": gc.identity_sha1(f)}
+        if i < n_drifted:
+            f = dict(f, spoken_name=f"renamed {i}")
+        fields.append(f)
+    return {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": fields, "sections": [], "parts": [],
+        "_bakeoff": {"authoring": {"instructions_enrich": {
+            "provenance": prov, "flags": []}}},
+    }
+
+
+def test_whole_kit_drift_collapses_to_one_kit_level_finding():
+    """REGRESSION (bd cf6v): every compared field mismatching at once is the
+    signature of a formula change / bulk sweep, not hand edits -- one legible
+    kit-level WARNING replaces the N per-field ack gates."""
+    findings = lint_schema(_drift_kit(3, 3))
+    assert _stale(findings) == []
+    hits = _mass(findings)
+    assert len(hits) == 1
+    assert hits[0].severity == "WARNING"
+    assert field_id_of(hits[0].path) is None   # kit-level: no field anchor
+    assert "3 fields" in hits[0].message
+
+
+def test_partial_drift_keeps_per_field_flags_and_no_mass_finding():
+    """One surviving match is what real hand edits look like -- the per-field
+    ack gate must keep firing, and the collapse must stay silent."""
+    findings = lint_schema(_drift_kit(3, 2))
+    assert len(_stale(findings)) == 2
+    assert _mass(findings) == []
+
+
+def test_small_kit_full_drift_stays_per_field():
+    """Below 3 compared fields "all mismatch" is too weak a signature to
+    suppress the ack gate -- 1- and 2-field kits keep per-field flags."""
+    for n in (1, 2):
+        findings = lint_schema(_drift_kit(n, n))
+        assert len(_stale(findings)) == n
+        assert _mass(findings) == []
+
+
+def test_w7_wave_is_pinned_as_one_mass_drift_finding():
+    """The shipped kit's wave must surface as exactly ONE kit-level finding
+    and ZERO per-field flags (the 51-flag wall was the bd cf6v bug). If the
+    per-field set comes back, either the guidance was re-baked (good: delete
+    this pin's zero-assert and re-pin the residual set) or the collapse
+    regressed. If BOTH sets are empty, the rule went dark -- also look."""
     import json, pathlib
     kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
     if not kit.exists():          # kit not present in this checkout
         return
-    schema = json.loads(kit.read_text(encoding="utf-8"))
-    got = {field_id_of(f.path) for f in lint_schema(schema)
-           if f.rule == "guidance-identity-stale"}
-    assert got == _W7_EXPECTED_STALE, (
-        f"w7 guidance-identity-stale set changed.\n"
-        f"  newly stale: {sorted(got - _W7_EXPECTED_STALE)}\n"
-        f"  no longer stale: {sorted(_W7_EXPECTED_STALE - got)}\n"
-        f"If guidance was re-baked, shrink the pin; if the hash formula moved, "
-        f"check for a mass false alarm before widening it.")
+    findings = lint_schema(json.loads(kit.read_text(encoding="utf-8")))
+    assert _stale(findings) == [], (
+        "w7 emitted per-field stale flags again -- re-baked (re-pin) or "
+        "collapse regressed?")
+    hits = _mass(findings)
+    assert len(hits) == 1, "w7 mass-drift finding missing: rule went dark?"
+    assert "51 fields" in hits[0].message
 
 
 # --- audit identity (bd polyglot-pdf-47r3) ------------------------------------

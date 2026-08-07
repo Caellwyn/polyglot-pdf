@@ -244,6 +244,25 @@ describe('the Form row standalone dismiss (s18 C1, decision 1)', () => {
     expect(withFormFindingDismissed(SCHEMA, multiclaim)).toBe(SCHEMA);
   });
 
+  it('mass-drift is not dismissable despite WARNING severity -- it is the ' +
+     'wave collapse\'s only surviving signal (bd cf6v)', () => {
+    // The collapse suppresses the per-field stale flags AND disarms the
+    // per-field ack gate; dismissing this one finding would leave a kit
+    // reading fully reviewed with every guidance_ack_sha1 stale and nothing
+    // on any surface saying so. It clears only via re-bake/re-verify.
+    const wave = f({
+      rule: 'guidance-identity-mass-drift', path: '$',
+      message: 'all 51 fields with authored guidance changed identity at once',
+      severity: 'WARNING',
+    });
+    expect(isFindingDismissable(wave)).toBe(false);
+    expect(withFormFindingDismissed(SCHEMA, wave)).toBe(SCHEMA);
+    expect(visibleFormFindings(SCHEMA, [wave])).toEqual([wave]);
+    // ...and an ordinary WARNING remains dismissable (the exception is
+    // rule-scoped, not a severity flip).
+    expect(isFindingDismissable(coverage)).toBe(true);
+  });
+
   it('visibleFormFindings hides dismissed WARNINGs and always shows ERRORs', () => {
     let schema = withFormFindingDismissed(SCHEMA, coverage);
     expect(visibleFormFindings(schema, [coverage, unclaimed, multiclaim]))

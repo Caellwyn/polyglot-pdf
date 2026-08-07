@@ -364,3 +364,36 @@ def test_w7_kit_coverage_matches_reality():
         "hand-verified gold pass (bd polyglot-pdf-fjxe)")
     # Fully covered means the rule must stay SILENT, not emit an empty worklist.
     assert missing == []
+
+
+# --- the formula tripwire (bd polyglot-pdf-cf6v) -----------------------------
+
+def test_identity_payload_golden_pin_forces_a_migration_decision():
+    """CHANGING identity_payload INVALIDATES EVERY SHIPPED STAMP AT ONCE.
+
+    Root cause of the W-7 wave (bd cf6v journal, 2026-08-07): bd
+    polyglot-pdf-stkz appended the type token 25 minutes after PR #519 wrote
+    the kit's 52 identity stamps. The change was self-justified by a "0 of 44
+    provenance records exist" check that was true on its own branch and false
+    at merge time -- and no test made the collision visible, so all 51
+    guidance-carrying fields lit up stale with zero author edits.
+
+    This pin makes any future formula change fail HERE, where the author can
+    see the consequence. If you are editing identity_payload deliberately:
+    every kit baked before your change will collapse to a kit-level
+    guidance-identity-mass-drift finding until it is re-baked (that collapse
+    is the designed containment, not a bug) -- update these golden strings in
+    the SAME commit and say in it how shipped kits get re-stamped.
+    """
+    from backend.services.guidance_contract import identity_payload
+    scalar = {"id": "a", "name": "Phone", "spoken_name": "phone number",
+              "type": "text"}
+    choice = {"id": "b", "name": "Status", "spoken_name": "marital status",
+              "type": "radio",
+              "options": [
+                  {"label": "Married", "spoken_label": "married", "value": "m"},
+                  {"label": "Single", "spoken_label": "single", "value": "s"}]}
+    assert identity_payload(scalar) == '["Phone","phone number",[],"text"]'
+    assert identity_payload(choice) == (
+        '["Status","marital status",'
+        '[["Married","married","m"],["Single","single","s"]],"choice"]')

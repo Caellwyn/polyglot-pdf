@@ -49,6 +49,24 @@ from backend.services.schema_lint import LintFinding, SEVERITY_ERROR, field_id_o
 # The rule id whose finding means "this field's guidance may no longer match
 # its content". Its presence is what arms the ack gate below; the ack itself is
 # compared against a NATIVELY computed hash, not the one in the finding path.
+#
+# ACCEPTED LOOSENING during a mass-drift wave (bd polyglot-pdf-cf6v, a
+# deliberate design decision, not an oversight): when EVERY compared field's
+# identity mismatches at once, the linter suppresses the per-field
+# guidance-identity-stale findings in favor of ONE kit-level
+# guidance-identity-mass-drift WARNING (see _check_guidance_identity_drift's
+# MASS-DRIFT COLLAPSE note). With no per-field finding, this ack gate never
+# arms, so a field reviewed before the wave counts reviewed again even though
+# its stored guidance_ack_sha1 is stale. That is intended: the measured wave
+# (the W-7 case) was a hash-formula change with ZERO author edits -- pure
+# false staleness -- and demanding 51 identical re-acks trains editors to
+# click through the gate. The kit-level finding carries the honest remedy
+# (re-bake / re-verify), and a re-bake re-stamps and restores per-field
+# tracking. The interaction is pinned by
+# test_mass_drift_wave_disarms_the_ack_gate_by_design in
+# backend/tests/unit/test_publish_readiness.py; the client mirror
+# (reviewStatus.ts) inherits the same behavior because it keys on the same
+# per-field finding.
 GUIDANCE_STALE_RULE = "guidance-identity-stale"
 
 # --------------------------------------------------------------------------- #

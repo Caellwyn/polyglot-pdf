@@ -565,3 +565,73 @@ def test_message_is_excluded_from_the_ordinary_fingerprint():
     a = finding_fingerprint(_finding("field-unbacked", "fields[0] (id=x)", message="old wording"))
     b = finding_fingerprint(_finding("field-unbacked", "fields[0] (id=x)", message="new wording"))
     assert a == b
+
+
+# --------------------------------------------------------------------------- #
+# The mass-drift collapse x the ack gate (bd polyglot-pdf-cf6v)
+# --------------------------------------------------------------------------- #
+
+
+def _wave_schema(n_fields: int, n_drifted: int) -> dict:
+    """A kit with n_fields stamped guidance-carrying fields, the first
+    n_drifted of which drifted after the bake. Field f0 is reviewed_correct
+    with an ack for its PRE-drift identity (i.e. a now-stale ack)."""
+    fields, prov = [], {}
+    for i in range(n_fields):
+        f = _field(f"f{i}", help={"instructions": "x"})
+        prov[f["id"]] = {"source": "llm-verified",
+                        "identity_sha1": identity_sha1(f)}
+        if i == 0:
+            f["_review"] = {"status": "reviewed_correct",
+                            "guidance_ack_sha1": identity_sha1(f)}
+        if i < n_drifted:
+            f = dict(f, spoken_name=f"renamed {i}")
+        fields.append(f)
+    return {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": fields, "sections": [], "parts": [],
+        "_bakeoff": {"authoring": {"instructions_enrich": {
+            "provenance": prov, "flags": []}}},
+    }
+
+
+def test_mass_drift_wave_disarms_the_ack_gate_by_design():
+    """PINS AN ACCEPTED DESIGN DECISION, not an invariant of nature (bd
+    polyglot-pdf-cf6v; rationale at the GUIDANCE_STALE_RULE constant):
+
+    During a whole-kit drift wave the linter suppresses the per-field
+    guidance-identity-stale findings (one kit-level mass-drift WARNING
+    replaces them), so the ack gate here -- which arms on the per-field
+    finding -- never fires. A field reviewed BEFORE the wave with a
+    now-stale guidance_ack_sha1 therefore counts reviewed again. That is
+    intended: the measured wave was a hash-formula change with zero author
+    edits (pure false staleness), and N identical re-acks train editors to
+    click through the gate. If this test fails because the field stopped
+    counting, someone re-armed the gate during waves -- make that change
+    deliberately, with the click-through cost in view, and update the
+    GUIDANCE_STALE_RULE rationale with it.
+
+    The CONTROL half: under a partial drift (any surviving match) the
+    per-field findings still flow and the same stale ack correctly excludes
+    the field. That contrast is the whole design -- waves collapse, real
+    hand edits still gate."""
+    from backend.services.schema_lint import lint_schema
+
+    # Full wave: every compared field drifted -> collapse -> f0 counts.
+    wave = _wave_schema(3, 3)
+    verdict = publish_readiness(wave, lint_schema(wave))
+    assert "f0" not in verdict.blocking_ids
+    assert verdict.counts.reviewed == 1     # f0; f1/f2 lack sign-off
+    # ...and the wave IS surfaced, kit-level (severity WARNING: informs,
+    # never blocks -- blocking would rebuild the N-click wall as one lump).
+    mass = [f for f in lint_schema(wave)
+            if f.rule == "guidance-identity-mass-drift"]
+    assert len(mass) == 1 and mass[0].severity == "WARNING"
+    assert verdict.ready is False           # f1/f2 unreviewed, not the wave
+
+    # Partial drift: f0 and f1 drifted, f2 matches -> per-field findings
+    # flow -> f0's stale ack excludes it (the gate working as always).
+    partial = _wave_schema(3, 2)
+    verdict = publish_readiness(partial, lint_schema(partial))
+    assert "f0" in verdict.blocking_ids
+    assert verdict.counts.reviewed == 0
