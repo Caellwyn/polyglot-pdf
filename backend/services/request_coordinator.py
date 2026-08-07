@@ -502,7 +502,9 @@ class RequestCoordinator:
         CURRENT field (bd polyglot-pdf-22h1f -- the name_spellback tool).
 
         The frontend owns all field state, so it resolves the current field
-        (same pin-aware resolution the confirm path uses), reads the stored
+        client-side (computeNextField with the pin honored -- the NEXT-FIELD
+        computation; NOTE this is a client-only resolution, distinct from
+        confirm_field's backend-supplied-and-coerced field_id), reads the stored
         value, fetches the Cloud TTS letter-by-letter clip from
         /api/tts/spellback, mutes the mic, plays the clip BLOCKING, and acks
         with the outcome. No field value ever crosses this WS message in

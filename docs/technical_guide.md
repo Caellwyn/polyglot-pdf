@@ -1,6 +1,9 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-06 (bd polyglot-pdf-n18q: the Surface contracts section --
+*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: Surface contracts gained the
+flag-gated `name_spellback` tool row, the `spellback`/`spellback_response`
+round-trip, and the `/api/tts/spellback` route. Section framing from bd
+polyglot-pdf-n18q: the Surface contracts section --
 the code-derived cross-surface data-contract map for blast-radius review).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
@@ -260,8 +263,12 @@ sub-key reads as absent. The request/response pairs ride
 `get_next_field_hint`/`next_field_hint_response` (:237/:592),
 `confirm_field`/`confirm_field_response` (:314/:630),
 `skip_field`/`skip_field_response` (:390/:656),
-`switch_field`/`switch_field_response` (:454/:680). Client reply builders:
-`webFormConnection.ts:3169-3211` (confirm/skip), :2474 (switch).
+`switch_field`/`switch_field_response` (:454/:680),
+`spellback`/`spellback_response` (bd polyglot-pdf-22h1f; flag-gated, the ONE
+round-trip that deliberately holds the pending tool response for the client's
+blocking TTS clip playback, 90s cap). Client reply builders:
+`webFormConnection.ts:3169-3211` (confirm/skip), :2474 (switch),
+`sendSpellbackResponse` (spellback).
 
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
@@ -284,7 +291,9 @@ Known traps (all deliberate, all pinned only by comments):
 Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:456-674`), deep-copied into the
 live config by `form_filling_service.py:219-229` (which drops `switch_section`
-in continuous mode -- the session ships 6 declarations, not 7) and declared to
+in continuous mode -- the session ships 6 declarations, not 7 -- and appends
+the flag-gated `SPELLBACK_TOOL_DECLARATION` as a 7th only while
+`SPELLBACK_TOOL_ENABLED`, bd polyglot-pdf-22h1f) and declared to
 Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1645`;
 tools assembled at :1657). Gemini's tool
 calls come back through the adapter (`live_ai_gemini.py:2426-2612` and :2620+)
@@ -301,6 +310,7 @@ client messages above. The coupling table (tool -> handler -> client message):
 | `switch_to_field` (`field`) | :1258 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
 | `ask_secretary` (`query`) | :729 | none -- answered server-side from the cached `full_schema` |
 | `switch_section` (deprecated; dropped in continuous mode) | :711 | internal session restart + `section_switched` |
+| `name_spellback` (no args; FLAG-GATED `SPELLBACK_TOOL_ENABLED`, declared only while on via `SPELLBACK_TOOL_DECLARATION`) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`

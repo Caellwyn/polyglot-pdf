@@ -39,7 +39,10 @@ dark; cutover is a later deliberate change):
   appended to the DTI SI while the flag is on so the model stops spelling
   aloud (double delivery -- corrupted then correct -- is worse than either).
 - **Frontend**: `handleSpellbackRequest` resolves the CURRENT field with the
-  same pin-aware computation the confirm path uses (the tool takes NO
+  pin-aware NEXT-FIELD computation, computeNextField (a client-only
+  resolution -- deliberately NOT confirm_field's backend-coerced field_id
+  mechanism; fresh-eyes round 1 corrected the docs that claimed parity) (the
+  tool takes NO
   arguments -- nothing for the model to hallucinate, bd jnjj.46), reads the
   stored value through the []-alias fallback (bd h7wx: never model memory),
   and delegates to the connection manager: sustained-quiet drain wait on the
@@ -107,6 +110,33 @@ generation across 2 runs -- met (zero model-spelled generations; clips are
 deterministic functions of the stored value; harness values verified per
 field); (3) latency/turn cost measured, ride-along achieved (no extra turn) --
 this entry + the PR report.
+
+## Fresh-eyes triage (Step 5.5, round 1: GAPS-FOUND (4) -> all adopted)
+
+1. ADOPTED (blocker-adjacent): the SI addendum was appended only in the DTI
+   branch while the tool declaration gates only on the flag -- a legacy-SI
+   session with the flag on would keep its spell-it-yourself wording alongside
+   the live tool (double delivery). Fix: the addendum now rides BOTH SI modes;
+   pinned by a new legacy-mode test.
+2. ADOPTED: disconnect()/pause() mid-clip left the HTMLAudioElement audibly
+   playing and the playback promise pending forever. Fix: `cancelSpellback()`
+   on both paths.
+3. ADOPTED (docs): the docstrings/doc claimed the client's field resolution was
+   "the same as the confirm path" -- it is the pin-aware NEXT-FIELD computation
+   (client-only), distinct from confirm_field's backend-coerced field_id.
+   Reworded in code, ws-protocol.md, and this entry.
+4. ADOPTED (nit): client-side 60-char pre-check before the TTS fetch (mirrors
+   the backend cap) so a mis-targeted long value fails fast.
+Round 2 verdict: see the PR body scorecard. Scorer note: both runs reported
+`needs_hand_check: []` -- no rows required hand adjudication.
+
+## Doc freshness
+
+Bumped: voice-ai.md, tool-call-flow.md, websocket-routing.md, ws-protocol.md,
+voice-and-vad.md (spell-back hold), technical_guide.md (Surface contracts).
+Reviewed-and-left: testing.md (tracks requirements.txt; the dep add changes no
+testing policy), validation-delegation.md (stale only via files this branch did
+not touch -- pre-existing).
 
 ## Traps for the future
 

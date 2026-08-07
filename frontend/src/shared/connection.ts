@@ -324,6 +324,19 @@ export function createConnectionManager(
 	let spellbackAudio: HTMLAudioElement | null = null
 	let spellbackResolve: ((outcome: 'delivered' | 'interrupted' | 'error') => void) | null = null
 
+	// Stop an in-flight spell-back clip on a teardown/pause path (bd 22h1f,
+	// fresh-eyes round 1): without this, disconnect() mid-clip leaves the
+	// HTMLAudioElement audibly playing past the teardown and the playSpellback
+	// promise pending forever. Resolving 'error' settles the round-trip;
+	// playSpellback's finally releases the mic hold, and the ack send is a
+	// harmless no-op if the socket is already gone.
+	function cancelSpellback(): void {
+		if (spellbackResolve) {
+			spellbackAudio?.pause()
+			spellbackResolve('error')
+		}
+	}
+
 	// The name_spellback tool call can arrive while the model's own framing
 	// sentence for the SAME generation is still streaming/playing, so wait for
 	// a SUSTAINED quiet window on the playback queue before starting the clip
@@ -355,6 +368,12 @@ export function createConnectionManager(
 	// Resolves, never rejects.
 	async function playSpellback(value: string): Promise<SpellbackPlaybackResult> {
 		if (!audioManager) return { status: 'error', reason: 'no_audio_manager' }
+		// Mirror the backend's MAX_SPELLBACK_CHARS (spellback_tts.py, 60): an
+		// over-length value is a mis-targeted call (an address, a narrative) --
+		// fail fast without the network round-trip.
+		if (value.length > 60) {
+			return { status: 'error', reason: 'value_too_long' }
+		}
 		const am = audioManager
 		am.setSpellbackHold(true)
 		try {
@@ -838,6 +857,10 @@ export function createConnectionManager(
 		pause() {
 			console.log('[VFF Connection] Pausing (keeping connection warm)...')
 			paused = true
+			// A user-initiated pause mid-clip stops the spell-back too -- the
+			// user has stopped listening; the model gets the error variant and
+			// re-offers when they resume (bd 22h1f).
+			cancelSpellback()
 			// Flutter guard (bd polyglot-pdf-yo5t): a re-pause inside the re-prompt
 			// window cancels the pending re-prompt; the next resume re-arms it.
 			clearResumeReprompt()
@@ -930,6 +953,10 @@ export function createConnectionManager(
 		disconnect() {
 			// End metrics session and print summary
 			metrics.endSession()
+
+			// Stop an in-flight spell-back clip so audio does not keep playing
+			// past the teardown (bd 22h1f).
+			cancelSpellback()
 
 			// A tear-down must not leave a pending post-resume re-prompt behind
 			// (bd polyglot-pdf-yo5t).

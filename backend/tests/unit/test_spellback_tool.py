@@ -250,6 +250,25 @@ class TestSpellbackSiAddendum:
         assert "name_spellback" in si
         assert "NEVER speak a spelling letter by letter" in si
 
+    def test_flag_on_appends_addendum_in_legacy_si_mode_too(self):
+        """The tool declaration gates only on SPELLBACK_TOOL_ENABLED, not on
+        USE_DTI -- so the addendum must ride BOTH SI modes, or a legacy-SI
+        session with the flag on keeps its spell-it-yourself NAMES wording
+        while the tool is live: double delivery, the exact failure the
+        addendum prevents (fresh-eyes round 1)."""
+        from backend.services import ai_context
+
+        settings = Settings()
+        settings.USE_DTI = False
+        settings.SPELLBACK_TOOL_ENABLED = True
+        with patch.object(ai_context, "get_settings", return_value=settings):
+            si = ai_context.build_form_context(
+                schema={"fields": []},  # legacy (non-jit) branch
+                current_values={},
+            )
+        assert "name_spellback" in si
+        assert "NEVER speak a spelling letter by letter" in si
+
     def test_flag_off_leaves_si_untouched(self):
         si = self._si(enabled=False)
         assert "name_spellback" not in si
