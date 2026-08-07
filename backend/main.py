@@ -15,6 +15,7 @@ from .routes import pdf_fill_routes
 from .routes import disclaimer_routes
 from .routes import form_kit_routes
 from .routes import editor_kit_routes
+from .routes import editor_readiness_routes
 from .routes import dev_console_routes
 from .utils.confirmation_logger import (
     confirmation_sink_status,
@@ -78,6 +79,7 @@ app.include_router(pdf_fill_routes.router)
 app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
 app.include_router(editor_kit_routes.router)  # token-gated hosted-editor surface (bd 92qe.1)
+app.include_router(editor_readiness_routes.router)  # local-save stamp refresh (bd na1zy)
 app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)
 
 

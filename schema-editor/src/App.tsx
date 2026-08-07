@@ -21,6 +21,9 @@ import {
   type FsFileHandle,
 } from './utils/fileSystemAccess';
 import {
+  invalidateLocalStamp, stampKitReadinessRemote,
+} from './utils/localStamp';
+import {
   loadKitSchema, verifySameFolder, versionInfoFromSchema,
   type CatalogueEntry, type FolderCheck, type KitVersionInfo,
 } from './utils/formKitDirectory';
@@ -759,6 +762,11 @@ export const App: React.FC = () => {
 
     try {
       let handle = fileHandleRef.current;
+      // Computed BEFORE the state flip below: setSavingToKit is async, so the
+      // stamp guard cannot read the updated state in this same closure -- a
+      // Save-As would still stamp the kit it was opened from (the exact
+      // cross-stamping C4's savingToKit gate exists to prevent, bd na1zy).
+      const pickedNow = !handle || forcePicker;
       if (!handle || forcePicker) {
         handle = await pickSchemaFile(suggestedFileName());
         fileHandleRef.current = handle;
@@ -770,13 +778,45 @@ export const App: React.FC = () => {
       setSavedFileName(handle.name);
       markSaved();
       setSaveError(null);
+
+      // C4b (bd na1zy): an IN-PLACE kit save must not leave the kit's stamp
+      // describing the pre-save schema. One writer preserved: when the
+      // backend serves this same folder (the s2bf handshake proved it), IT
+      // recomputes and persists the stamp exactly like the hosted save;
+      // otherwise the old stamp is only INVALIDATED (verified: false) so the
+      // card shows the verify hint instead of a stale confident percentage.
+      // Best-effort like the backend's own stamping: the SAVE above already
+      // succeeded and must stay succeeded.
+      if (!pickedNow && savingToKit && selectedKitId && localEntryRef.current) {
+        const entry = localEntryRef.current;
+        const canStamp = hasBackend() && folderCheck?.ok === true;
+        try {
+          if (canStamp) {
+            await stampKitReadinessRemote(selectedKitId, schema);
+          } else {
+            await invalidateLocalStamp(entry.dirHandle);
+          }
+        } catch (stampErr) {
+          // The backend refresh failed mid-flight: fall back to retracting
+          // the old claim so nothing stale survives. If even that fails the
+          // card may show a stale number until the next successful save --
+          // logged, never blocking the completed save.
+          try {
+            await invalidateLocalStamp(entry.dirHandle);
+          } catch {
+            /* fall through to the log below */
+          }
+          console.warn('Could not refresh the kit readiness stamp:', stampErr);
+        }
+      }
     } catch (err) {
       if (isUserAbort(err)) return; // human cancelled the picker -- no-op
       setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
       console.error('Failed to save schema:', err);
     }
   }, [schema, selectedForm, fsAccess, suggestedFileName, markSaved,
-      hosted, selectedKitId, saving, handleAuthExpired]);
+      hosted, selectedKitId, saving, handleAuthExpired, savingToKit,
+      folderCheck]);
 
   // Reload the schema FROM the saved file handle (verifies the round-trip: the
   // edit just saved is read back, satisfying criterion 1's "reloads cleanly with
