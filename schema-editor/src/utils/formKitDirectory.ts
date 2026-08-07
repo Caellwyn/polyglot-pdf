@@ -17,7 +17,10 @@ import { readStampFromMetadata } from './readinessStamp';
 import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
 
-export type KitStatus = 'draft' | 'complete' | 'unknown';
+// 'unpublished' is a SUPERSEDED revision (bd polyglot-pdf-6dz0): hidden from
+// the voice app like a draft, but write-locked like complete, because its
+// schema is what earlier confirmation records were confirmed against.
+export type KitStatus = 'draft' | 'complete' | 'unpublished' | 'unknown';
 
 export interface KitMetadata {
   label?: string;

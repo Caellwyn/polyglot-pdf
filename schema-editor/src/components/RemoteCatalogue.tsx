@@ -2,7 +2,7 @@ import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
-  type EditorRole, type RemoteKitEntry,
+  type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
@@ -52,6 +52,9 @@ interface RemoteKitProgress {
 const STATUS_STYLE: Record<string, string> = {
   complete: 'bg-green-100 text-green-700',
   draft: 'bg-yellow-100 text-yellow-700',
+  // A retired revision reads as neutral-but-deliberate: it is not a draft
+  // awaiting work, and not an error (bd polyglot-pdf-6dz0).
+  unpublished: 'bg-slate-200 text-slate-700',
   unknown: 'bg-gray-100 text-gray-600',
 };
 
@@ -245,7 +248,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // retry), so a complete flip shows the elapsed ticker via completingId, and a
   // 409 "N of M translations complete" refusal surfaces as the error to re-press.
   const handleSetStatus = React.useCallback(async (
-    kit: RemoteKitEntry, status: 'draft' | 'complete',
+    kit: RemoteKitEntry, status: KitLifecycleStatus,
   ) => {
     setNotice(null);
     setBusy(true);
@@ -457,13 +460,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   }, [translatingId, selectedKitId, onOpenKit, onAuthError]);
 
   const summary = React.useMemo(() => {
-    let complete = 0, inProgress = 0, noSchema = 0;
+    let complete = 0, inProgress = 0, noSchema = 0, unpublished = 0;
     for (const k of kits) {
       if (!k.hasSchema) noSchema++;
       else if (k.status === 'complete') complete++;
+      // A retired revision is NOT pending work -- counting it as in-progress
+      // would inflate the backlog with forms nobody is expected to finish.
+      else if (k.status === 'unpublished') unpublished++;
       else inProgress++;
     }
-    return { total: kits.length, complete, inProgress, noSchema };
+    return { total: kits.length, complete, inProgress, noSchema, unpublished };
   }, [kits]);
 
   return (
@@ -644,13 +650,37 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   {kit.status}
                 </span>
                 {kit.hasSchema && (kit.status === 'complete' ? (
+                  <>
+                    <button
+                      className="btn-sm btn-secondary text-xs"
+                      onClick={() => void handleSetStatus(kit, 'draft')}
+                      disabled={busy}
+                      title="Revert to draft to edit it (archives the published version first, and removes it from the next deploy)"
+                    >
+                      Revert to draft
+                    </button>
+                    <button
+                      className="btn-sm btn-secondary text-xs"
+                      onClick={() => void handleSetStatus(kit, 'unpublished')}
+                      disabled={busy}
+                      title="Retire this version: clients stop seeing it, the files stay, and it cannot be edited -- earlier confirmations point at it. Publish again to restore."
+                    >
+                      Unpublish
+                    </button>
+                  </>
+                ) : kit.status === 'unpublished' ? (
+                  // A retired revision returns to service ONLY through the full
+                  // publish gate -- never via draft, which would make its
+                  // audit-referenced bytes editable again.
                   <button
-                    className="btn-sm btn-secondary text-xs"
-                    onClick={() => void handleSetStatus(kit, 'draft')}
-                    disabled={busy}
-                    title="Revert to draft (removes it from the next deploy)"
+                    className="btn-sm btn-primary text-xs"
+                    onClick={() => void handleSetStatus(kit, 'complete')}
+                    disabled={busy || completingId !== null}
+                    title="Publish this retired version again (runs the full publish gate)"
                   >
-                    Revert to draft
+                    {completingId === kit.id
+                      ? `Re-translating & validating... ${completeElapsed}s`
+                      : 'Publish again'}
                   </button>
                 ) : (
                   <button
@@ -668,7 +698,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       : 'Mark complete'}
                   </button>
                 ))}
-                {isAuthor && kit.hasSchema && kit.status !== 'complete' && (
+                {isAuthor && kit.hasSchema && kit.status !== 'complete'
+                  && kit.status !== 'unpublished' && (
                   <button
                     className="btn-sm btn-secondary text-xs"
                     onClick={() => void handleTranslateOptions(kit)}

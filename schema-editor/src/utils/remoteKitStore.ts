@@ -57,11 +57,21 @@ export interface ReadinessStamp {
   stampedAt?: string | null;
 }
 
+/** A kit's lifecycle status (bd polyglot-pdf-6dz0).
+ *  draft       -- editable, hidden from the voice app.
+ *  complete    -- published and served; write-locked.
+ *  unpublished -- a SUPERSEDED revision: hidden like a draft but still
+ *                 write-locked, because its schema is what earlier
+ *                 confirmation records were confirmed against. It returns to
+ *                 service only through the full publish gate, never via draft.
+ */
+export type KitLifecycleStatus = 'draft' | 'complete' | 'unpublished';
+
 export interface RemoteKitEntry {
   id: string;
   label: string;
   description?: string | null;
-  status: 'draft' | 'complete' | 'unknown';
+  status: KitLifecycleStatus | 'unknown';
   hasSchema: boolean;
   hasPdf: boolean;
   schemaFile: string;
@@ -448,9 +458,11 @@ export async function loadUnclaimedWidgets(kitId: string): Promise<UnclaimedWidg
  * message, surfaced by errorDetail below. */
 export interface KitStatusResult {
   ok: boolean;
-  status: 'draft' | 'complete';
+  status: KitLifecycleStatus;
   retranslated: number;
   translationModel: string | null;
+  /** The kit retired by a cross-kit supersede, when one was named. */
+  supersededKitId: string | null;
 }
 
 /** Flip a kit's status. Promotion to complete is validated server-side (the
@@ -461,12 +473,14 @@ export interface KitStatusResult {
  * complete" message means some language is still missing -- re-press to retry
  * only the gaps. */
 export async function setRemoteStatus(
-  kitId: string, status: 'draft' | 'complete',
+  kitId: string, status: KitLifecycleStatus, replacesKitId?: string,
 ): Promise<KitStatusResult> {
   const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(
+      replacesKitId ? { status, replaces_kit_id: replacesKitId } : { status },
+    ),
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the status'));
   return (await res.json()) as KitStatusResult;

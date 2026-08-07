@@ -49,8 +49,7 @@ beforeEach(() => {
   // Default: a clean complete flip with no drift (bd polyglot-pdf-783r). Tests
   // that exercise the drift notice / refusal override this per-case.
   vi.mocked(setRemoteStatus).mockResolvedValue({
-    ok: true, status: 'complete', retranslated: 0, translationModel: null,
-  });
+    ok: true, status: 'complete', retranslated: 0, translationModel: null, supersededKitId: null });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -196,8 +195,7 @@ describe('RemoteCatalogue', () => {
 
   it('notes the drift sweep in the complete notice when it re-translated (bd 783r)', async () => {
     vi.mocked(setRemoteStatus).mockResolvedValue({
-      ok: true, status: 'complete', retranslated: 3, translationModel: 'gemini-2.5-pro',
-    });
+      ok: true, status: 'complete', retranslated: 3, translationModel: 'gemini-2.5-pro', supersededKitId: null });
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
@@ -569,8 +567,7 @@ describe('RemoteCatalogue mark-complete drift-sweep ticker (bd 783r)', () => {
         expect(screen.getByText(/Re-translating & validating\.\.\. \d+s/)).toBeInTheDocument());
 
       resolveStatus({
-        ok: true, status: 'complete', retranslated: 2, translationModel: 'gemini-2.5-pro',
-      });
+        ok: true, status: 'complete', retranslated: 2, translationModel: 'gemini-2.5-pro', supersededKitId: null });
       await waitFor(() =>
         expect(screen.getByText(/marked complete/)).toBeInTheDocument());
       // Ticker gone once the flip resolved.

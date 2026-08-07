@@ -239,7 +239,16 @@ class EditorKitListResponse(BaseModel):
 
 
 class KitStatusBody(BaseModel):
-    status: Literal["draft", "complete"]
+    # "unpublished" retires a published revision: hidden from clients, but
+    # write-locked so its bytes stay exactly what its confirmation records were
+    # confirmed against (bd polyglot-pdf-6dz0). Omitting it here would 422 the
+    # unpublish request before the route ever ran.
+    status: Literal["draft", "complete", "unpublished"]
+    # Cross-kit supersede: when publishing a kit while ANOTHER live kit serves
+    # the same form, name it here and it is unpublished in the same request, so
+    # the catalogue never shows two entries for one form. Same-kit republish
+    # needs no flag -- one kit_id is one catalogue slot, so it replaces itself.
+    replaces_kit_id: Optional[str] = None
 
 
 class KitStatusResponse(BaseModel):
@@ -259,6 +268,9 @@ class KitStatusResponse(BaseModel):
     status: str
     retranslated: int = 0
     translationModel: Optional[str] = None
+    # The kit retired by a cross-kit supersede, so the editor can confirm what
+    # it actually took out of service rather than the author inferring it.
+    supersededKitId: Optional[str] = None
 
 
 class KitLabelBody(BaseModel):
@@ -417,9 +429,48 @@ def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
     return schema_file, pdf_file
 
 
+# A kit's lifecycle status (bd polyglot-pdf-6dz0).
+#   draft       -- work in progress. Editable, invisible to the voice app.
+#   complete    -- published. Write-locked, served to clients.
+#   unpublished -- SUPERSEDED. Invisible like a draft, write-locked like
+#                  complete. A retired revision's bytes are what its
+#                  confirmation records were confirmed against (bd
+#                  polyglot-pdf-w3zw), so it must never become editable again;
+#                  it returns to complete only through the full publish gate.
+_KIT_STATUSES = ("draft", "complete", "unpublished")
+
+# Statuses whose schema may NOT be rewritten. The distinction that matters is
+# write-locked vs editable, NOT "is it complete" -- every write gate asks this
+# rather than comparing to "complete" directly, so adding a fourth status
+# cannot silently reopen a lock (the two-value checks were the trap: an
+# unpublished kit coerced to "unknown" and fell through every one of them).
+_WRITE_LOCKED_STATUSES = ("complete", "unpublished")
+
+
 def _status_of(meta: Optional[dict]) -> str:
     status = (meta or {}).get("status")
-    return status if status in ("draft", "complete") else "unknown"
+    return status if status in _KIT_STATUSES else "unknown"
+
+
+def _is_write_locked(meta: Optional[dict]) -> bool:
+    """True when this kit's schema must not be rewritten in place."""
+    return _status_of(meta) in _WRITE_LOCKED_STATUSES
+
+
+def _lock_reason(meta: Optional[dict]) -> str:
+    """The 409 detail for a write refused by the lock, naming the real state."""
+    if _status_of(meta) == "unpublished":
+        return (
+            "This form is unpublished (a superseded revision). Its schema is "
+            "what earlier confirmation records were confirmed against, so it "
+            "cannot be edited -- publish it again if you need to change it, "
+            "which archives the retired copy first."
+        )
+    return (
+        "This form is published (status complete). Revert it to draft first, "
+        "then edit -- otherwise work-in-progress would go live to users "
+        "immediately."
+    )
 
 
 # The kit's persisted AcroForm dump artifact filename (bd polyglot-pdf-v96b). The
@@ -981,13 +1032,8 @@ async def save_editor_kit_schema(
     # PR #279). Require the explicit revert-to-draft first -- which unpublishes
     # the kit immediately (the public routes honor live status on the shared
     # store), so work-in-progress never reaches users.
-    if _status_of(meta) == "complete":
-        raise HTTPException(
-            status_code=409,
-            detail="This form is published (status complete). Revert it to "
-                   "draft first, then edit -- otherwise work-in-progress would "
-                   "go live to users immediately.",
-        )
+    if _is_write_locked(meta):
+        raise HTTPException(status_code=409, detail=_lock_reason(meta))
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         await store.put_schema(kit_id, schema, schema_file)
@@ -1139,11 +1185,10 @@ async def repair_editor_kit(
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     meta, _files = await _load_meta_or_404(store, kit_id)
-    if _status_of(meta) == "complete":
+    if _is_write_locked(meta):
         raise HTTPException(
             status_code=409,
-            detail="This form is published (status complete). Revert it to draft "
-                   "before repairing -- repair rewrites the schema.",
+            detail=f"{_lock_reason(meta)} (Repair rewrites the schema.)",
         )
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
@@ -1220,11 +1265,11 @@ async def translate_editor_kit_options(
     # perfectly working claude-cli local session (bd polyglot-pdf-cpiw).
     store = get_form_kit_store()
     meta, _files = await _load_meta_or_404(store, kit_id)
-    if _status_of(meta) == "complete":
+    if _is_write_locked(meta):
         raise HTTPException(
             status_code=409,
-            detail="This form is published (status complete). Revert it to "
-                   "draft before translating -- the bake rewrites the schema.",
+            detail=f"{_lock_reason(meta)} (The translation bake rewrites the "
+                   "schema.)",
         )
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
@@ -1321,12 +1366,11 @@ async def derive_editor_kit_divisions(
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
-    if _status_of(meta) == "complete":
+    if _is_write_locked(meta):
         raise HTTPException(
             status_code=409,
-            detail="This form is published (status complete). Revert it to "
-                   "draft before regenerating divisions -- they rewrite the "
-                   "schema.",
+            detail=f"{_lock_reason(meta)} (Regenerating divisions rewrites the "
+                   "schema.)",
         )
     schema_file, pdf_file = _resolve_meta_names(meta)
     if pdf_file not in files:
@@ -1508,12 +1552,11 @@ async def regenerate_editor_kit_guidance(
     settings = get_settings()
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
-    if _status_of(meta) == "complete":
+    if _is_write_locked(meta):
         raise HTTPException(
             status_code=409,
-            detail="This form is published (status complete). Revert it to "
-                   "draft before regenerating guidance -- it rewrites the "
-                   "schema.",
+            detail=f"{_lock_reason(meta)} (Regenerating guidance rewrites the "
+                   "schema.)",
         )
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
@@ -1863,12 +1906,38 @@ async def set_editor_kit_status(
     retranslated = 0
     translation_model: Optional[str] = None
 
-    # Reverting a PUBLISHED kit to draft is the gateway to a new revision: every
-    # editing route refuses to write while status is complete, so this is the
-    # last moment the published revision's bytes still exist. Archive them first
-    # (bd polyglot-pdf-w3zw) so a confirmation record naming that revision can
+    current_status = _status_of(meta)
+
+    # An UNPUBLISHED kit may never walk back to draft (bd polyglot-pdf-6dz0).
+    # Draft is editable, and this kit's schema is what earlier confirmation
+    # records were confirmed against -- letting it become editable would make
+    # the archive pointless, since the bytes an audit record names could then
+    # be rewritten in place. It returns to service only through the full
+    # publish gate, which archives first.
+    if body.status == "draft" and current_status == "unpublished":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is unpublished (a superseded revision) and "
+                   "cannot be reverted to draft -- its schema is what earlier "
+                   "confirmation records were confirmed against. Publish it "
+                   "again to put it back in service; that archives the retired "
+                   "copy first.",
+        )
+
+    # Unpublishing is only meaningful for a kit that is actually live.
+    if body.status == "unpublished" and current_status != "complete":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only a published form can be unpublished (this one is "
+                   f"{current_status}).",
+        )
+
+    # Retiring a PUBLISHED revision -- to draft for editing, or to unpublished
+    # for good -- is the last moment its bytes exist unaltered: every editing
+    # route refuses to write while it is locked. Archive them first (bd
+    # polyglot-pdf-w3zw) so a confirmation record naming that revision can
     # still be resolved to the exact schema it was confirmed against.
-    if body.status == "draft" and _status_of(meta) == "complete":
+    if body.status in ("draft", "unpublished") and current_status == "complete":
         await _archive_published_revision(store, kit_id, meta)
 
     if body.status == "complete":
@@ -1980,6 +2049,54 @@ async def set_editor_kit_status(
             store, kit_id, schema, schema_file,
         )
 
+    # CROSS-KIT SUPERSEDE (bd polyglot-pdf-6dz0). A new government edition is
+    # usually onboarded as its own kit, so publishing it would leave TWO live
+    # entries for one form -- the thing the client's form list must never show.
+    # Naming the outgoing kit here unpublishes it as part of this publish.
+    #
+    # Ordering is deliberate: the outgoing kit is retired only AFTER every gate
+    # above has passed for the incoming one. Retiring first and then failing a
+    # gate would leave the form with NO live kit at all -- strictly worse than
+    # the two-entry state we are fixing.
+    #
+    # Same-kit republish needs no flag: one kit_id is one catalogue slot, so a
+    # kit always replaces itself.
+    superseded_kit: Optional[str] = None
+    if body.status == "complete" and body.replaces_kit_id:
+        superseded_kit = _safe_kit_id(body.replaces_kit_id)
+        if superseded_kit == kit_id:
+            raise HTTPException(
+                status_code=409,
+                detail="A form cannot replace itself -- republishing the same "
+                       "kit already replaces its own catalogue entry.",
+            )
+        old_meta, _old_files = await _load_meta_or_404(store, superseded_kit)
+        if _status_of(old_meta) != "complete":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot replace {superseded_kit}: it is not published "
+                       f"(status {_status_of(old_meta)}), so there is nothing "
+                       "to retire.",
+            )
+        # Archive its bytes before retiring it, exactly as a same-kit revert
+        # does -- its confirmation records point at this revision.
+        await _archive_published_revision(store, superseded_kit, old_meta)
+        try:
+            await store.put_metadata(
+                superseded_kit, {**(old_meta or {}), "status": "unpublished"}
+            )
+        except FormKitStoreError as exc:
+            _log.error("editor_supersede_failed", kit_id=kit_id,
+                       superseded=superseded_kit, error=str(exc))
+            raise HTTPException(
+                status_code=502,
+                detail=f"Unable to unpublish {superseded_kit}; {kit_id} was NOT "
+                       "published, so the form still has exactly one live "
+                       "version.",
+            ) from exc
+        _log.info("editor_kit_superseded", kit_id=kit_id,
+                  superseded=superseded_kit, role=role)
+
     next_meta = {**(meta or {}), "status": body.status}
     # Stamp the PUBLISH DATE on promotion (bd polyglot-pdf-47r3, maintainer
     # 2026-08-04). It is the revision marker for a kit with no government
@@ -2035,6 +2152,7 @@ async def set_editor_kit_status(
     return KitStatusResponse(
         ok=True, status=body.status,
         retranslated=retranslated, translationModel=translation_model,
+        supersededKitId=superseded_kit,
     )
 
 
@@ -2337,13 +2455,12 @@ async def extract_editor_kit(
     # store can no longer produce (bd polyglot-pdf-w3zw; this route was the one
     # write path missing the gate). Require the explicit revert first, exactly
     # like save/repair/translate/derive/regenerate.
-    if _status_of(meta) == "complete":
+    if _is_write_locked(meta):
         raise HTTPException(
             status_code=409,
-            detail="This form is published (status complete). Revert it to "
-                   "draft first, then re-extract -- otherwise the published "
-                   "schema would be overwritten in place, and the revision its "
-                   "confirmation records name would be lost.",
+            detail=f"{_lock_reason(meta)} (Re-extraction overwrites the schema "
+                   "in place, losing the revision its confirmation records "
+                   "name.)",
         )
     if pdf_file not in files:
         raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
