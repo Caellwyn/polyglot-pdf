@@ -171,11 +171,13 @@ republish destroyed the schema an old record was confirmed against. The marker i
 resolved from the superseded revision's OWN schema (`resolve_edition_marker`) and
 encoded into one safe path segment by `encode_marker` (it encodes rather than
 rejects: real markers contain `/` and `:`, which `safe_filename` bars). The
-archive is written on the **revert-to-draft** transition: every editor route
-that writes `schema.json` refuses while status is `complete` (save, repair,
+archive is written whenever a PUBLISHED revision is retired -- on
+revert-to-draft, on unpublish, and on the outgoing kit of a `replaces_kit_id`
+supersede (bd `polyglot-pdf-6dz0`): every editor route
+that writes `schema.json` refuses while the kit is write-locked (save, repair,
 translate-options, derive-divisions, regenerate-guidance, and extract -- the
 last of these was ungated until bd `polyglot-pdf-w3zw` and is now pinned by a
-property test), so the revert is the last moment the published bytes exist. A
+property test), so retirement is the last moment the published bytes exist. A
 marker is not a unique key -- two revisions can share one `edition_date` -- so
 the archive skips only when the stored copy IS the same schema, and a distinct
 revision under a taken marker lands on a fingerprint-disambiguated sibling
