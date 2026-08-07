@@ -127,7 +127,21 @@ this entry + the PR report.
    Reworded in code, ws-protocol.md, and this entry.
 4. ADOPTED (nit): client-side 60-char pre-check before the TTS fetch (mirrors
    the backend cap) so a mis-targeted long value fails fast.
-Round 2 verdict: see the PR body scorecard. Scorer note: both runs reported
+Round 2: GAPS-FOUND (2 + 2 notes) -> all adopted:
+1. ADOPTED (blocker-adjacent): playSpellback's module-scoped clip state had no
+   reentrancy guard -- a retry after a hung fetch could let the STALE call's
+   cleanup release the mic hold mid-clip of the LIVE call (the feature's core
+   safety invariant). Fix: extracted the whole state machine to
+   `spellbackPlayer.ts` with pre-emption + a per-call generation guard +
+   cancellation poisoning + a 20s fetch timeout; the guard is mutation-verified.
+2. ADOPTED: `getPlaybackBacklog`'s MEASUREMENT-ONLY comment was made false by
+   this very diff (the drain-wait now gates on it) -- re-commented LOAD-BEARING.
+3. ADOPTED (coverage): the player now has its own unit suite (delivered / PTT
+   interrupt ordering / cancel mid-playback / cancel mid-fetch / reentrancy /
+   fail-fast / error mapping).
+4. ADOPTED (doc nit): ws-protocol reason-token list completed
+   (value_too_long, no_audio_manager, cancelled).
+Round 3 verdict: see the PR body scorecard. Scorer note: both runs reported
 `needs_hand_check: []` -- no rows required hand adjudication.
 
 ## Doc freshness

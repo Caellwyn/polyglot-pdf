@@ -29,7 +29,7 @@ export interface AudioManager {
 	playAudio: (audioData: ArrayBuffer) => Promise<void>
 	flushAudioQueue: () => void // Stop all queued audio immediately (full barge-in)
 	resetPlaybackClock: () => void // Drain scheduled playback WITHOUT blocking new audio (Gemini interrupted event)
-	getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean } // MEASUREMENT-ONLY (bd 0rpu experiment branch)
+	getPlaybackBacklog: () => { aheadSec: number; activeSources: number; blocked: boolean } // Pure read; LOAD-BEARING: spellbackPlayer's drain-wait gates on it (bd 22h1f); also read by the E2E harness pacing
 	resumePlayback: () => void // Resume audio after barge-in (unblock new chunks)
 	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
 	resumeAudioContext: () => void // Resume audio context (resume after false positive)
@@ -243,10 +243,12 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
-	 * MEASUREMENT-ONLY (bd 0rpu, experiment branch -- never merged to dev).
 	 * Playback-backlog snapshot: how far ahead of the audio clock the scheduled
-	 * queue runs. The harness reads it to pace injections (polite vs rude arms)
-	 * and to measure stale-playback drain. Pure read, no side effects.
+	 * queue runs. Pure read, no side effects -- but LOAD-BEARING since bd
+	 * 22h1f: spellbackPlayer's drain-wait gates the deterministic spell-back
+	 * clip's start on this (sustained-quiet check), in addition to the E2E
+	 * harness reading it to pace injections (polite vs rude arms). Do not
+	 * remove as "measurement-only".
 	 */
 	function getPlaybackBacklog(): { aheadSec: number; activeSources: number; blocked: boolean } {
 		const ctx = nodes.playbackContext
