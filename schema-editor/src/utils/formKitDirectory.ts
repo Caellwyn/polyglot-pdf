@@ -325,7 +325,8 @@ export async function readKitProgress(
 export interface CatalogueSummary {
   total: number;          // every kit in the folder
   complete: number;       // has a schema AND metadata status === 'complete'
-  inProgress: number;     // has a schema but not marked complete (drafts/unknown)
+  inProgress: number;     // has a schema, still being worked (drafts/unknown)
+  unpublished: number;    // a RETIRED revision -- not live, and not pending work
   noSchema: number;       // no schema -- awaiting extraction (deploy would skip it)
 }
 
@@ -339,6 +340,7 @@ export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary 
   let complete = 0;
   let inProgress = 0;
   let noSchema = 0;
+  let unpublished = 0;
   for (const e of entries) {
     // hasSchema is checked FIRST: deploy-all.sh skips a kit with no resolved
     // schema file BEFORE it evaluates kit_is_complete, so a complete-marked kit
@@ -347,9 +349,14 @@ export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary 
     // kit belongs in "awaiting extraction".
     if (!e.hasSchema) noSchema++;
     else if (e.status === 'complete') complete++;
+    // A RETIRED revision is neither live nor pending work: counting it as
+    // in-progress inflates the review backlog with a form nobody is expected
+    // to finish. Kept in step with RemoteCatalogue's summary, its hosted twin
+    // (bd polyglot-pdf-6dz0).
+    else if (e.status === 'unpublished') unpublished++;
     else inProgress++;
   }
-  return { total: entries.length, complete, inProgress, noSchema };
+  return { total: entries.length, complete, inProgress, unpublished, noSchema };
 }
 
 async function writeFile(

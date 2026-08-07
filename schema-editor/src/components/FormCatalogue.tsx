@@ -582,6 +582,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           {summary.noSchema > 0 && (
             <span className="text-gray-500">{summary.noSchema} awaiting extraction</span>
           )}
+          {/* Rendered for the same reason as the hosted catalogue's: without
+              it a retired kit vanishes from the breakdown and the sub-counts
+              stop summing to the total. */}
+          {summary.unpublished > 0 && (
+            <span className="text-slate-600">{summary.unpublished} retired</span>
+          )}
         </div>
       )}
 
