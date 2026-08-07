@@ -52,11 +52,20 @@ change, not a pipeline stage, so there is nothing to make re-stamp itself:
   pinned Form row) carrying the count and the re-bake remedy, and suppresses
   the per-field flags: 51 identical acknowledgment clicks confirm nothing and
   train editors to click through the gate. Any surviving match keeps the
-  normal per-field flags (real hand edits leave survivors). Because
-  publish_readiness's ack gate and the client staleness gate both key on the
-  per-field finding, the collapse flows through both mirrors with no
-  readiness or client logic change; the new rule got its label + remedy in
-  schema-editor/src/utils/lintFindings.ts.
+  normal per-field flags (real hand edits leave survivors). The new rule got
+  its label + remedy in schema-editor/src/utils/lintFindings.ts.
+- **A deliberate, documented loosening rides along:** publish_readiness's ack
+  gate and the client staleness gate both ARM on the per-field finding, so
+  during a full wave a field reviewed before the wave counts reviewed again
+  despite a stale guidance_ack_sha1. Accepted by design -- the measured wave
+  was pure false staleness (zero author edits), and N identical re-acks train
+  editors to click through the gate; the kit-level finding carries the honest
+  remedy, and a re-bake re-stamps and restores per-field tracking. The
+  decision is recorded at the GUIDANCE_STALE_RULE constant
+  (publish_readiness.py) and pinned cross-module by
+  test_mass_drift_wave_disarms_the_ack_gate_by_design (wave -> stale-acked
+  field counts, with the partial-drift control showing the gate still fires
+  on real hand edits).
 - `test_identity_payload_golden_pin_forces_a_migration_decision`
   (backend/tests/unit/test_guidance_contract.py) pins the exact payload
   serialization so the next formula edit fails a test whose docstring
@@ -74,7 +83,12 @@ Clearing W-7 for real still means re-baking the guidance against the current
 fields -- maintainer work already tracked (bd polyglot-pdf-im2u criterion 2,
 bd polyglot-pdf-aliu). This bead deliberately does not touch the gold kit.
 
-(Fresh-eyes triage breakdown filled at closeout.)
+Fresh-eyes (sonnet, 2 rounds): round 1 GAPS-FOUND (1) -- the collapse
+silently disarms the readiness ack gate during a wave, undocumented and
+unpinned. Adopted: documented the accepted loosening at GUIDANCE_STALE_RULE
+and added the cross-module pin above (mutation-verified: disabling the
+collapse reddens it). No findings rejected or deferred; no beads filed by
+the reviewer.
 
 ## Lessons
 
