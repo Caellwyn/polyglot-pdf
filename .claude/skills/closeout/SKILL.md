@@ -519,6 +519,49 @@ which is the same churn one layer down.
   behavior than the body, or a test whose name asserts something it does not check.
   The question is never "is it just a comment?" -- it is **"does this signal the
   behavior is wrong?"**
+- **DOC FINDINGS: split by TIER, then by CURRENT-STATE vs. everything else**
+  (maintainer directive 2026-08-06). The split is deliberately mechanical -- *which
+  file* and *what kind of sentence* -- because a judgment-shaped test ("might this
+  change what an agent does?") gets resolved conservatively by every agent that
+  reads it, which turns the carve-out back into "block on everything."
+  - **TIER 3 -> ALWAYS FILE. Never fix inline, no exceptions.** Journal entries
+    (`docs/journal/`), research notes, and `docs/archive/` (completed plans). These are a
+    dated chronological record, they are rarely read, and their accuracy never
+    blocks a deploy. **An expensive model iterating on journal wording is the
+    single clearest waste this rule exists to stop.**
+  - **TIER 1/2, a WRONG claim about the code -> FIX IT before `NO-GAPS`.** Tier 1
+    is `CLAUDE.md` + `docs/INDEX.md`; tier 2 is `docs/standards/*`,
+    `docs/components/*`, `docs/doctrine/*`, `docs/technical_guide.md`. **These
+    files are CURRENT-STATE ONLY by construction** (`doc-architecture.md` §3 --
+    history and rationale belong in the tier-3 journal), so essentially every
+    substantive sentence in them asserts what the code does *now*: a default
+    value, a route's auth, a file's responsibility, a rule an agent must follow, a
+    command to run. They are auto-loaded or surface-authoritative, so a wrong one
+    actively misleads the next session. **Wrong = blocker.** Open the code and
+    check before calling it wrong.
+  - **`.claude/` (agent + skill files) counts as TIER 1/2.** They are loaded into a
+    session's context and instruct behavior directly, so a wrong claim in one is at
+    least as consequential as a wrong claim in `docs/standards/`. Same split.
+  - **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward, verbose,
+    inconsistently formatted, or could be phrased better, where the *claim itself
+    is correct*. Tagged `tier: sonnet` / `work_class: docs-nit`. Blocking a
+    shippable PR on doc style is the failure this rule exists to prevent, and it
+    is just as real in tier 1/2 as in tier 3.
+  - **The discriminating question is about the SENTENCE, not the consequence:**
+    *"is this sentence WRONG about the code, or just ugly?"* Wrong -> fix now.
+    Ugly -> file. Do not reason forward about whether a future agent might act on
+    it; that test is vague, and agents resolve vague tests conservatively, which
+    turns every doc nit back into a blocker.
+  - **Note:** a CHRONOLOGICAL NARRATIVE in a tier-1/2 doc -- a `Previously:`/`Prior:`
+    stamp chain, an `## Update history` / `## Changelog` heading, or a "Sprint NN
+    did X" narrative threaded through prose -- is a current-state-only violation
+    (`doc-architecture.md` section 3); file it as a docs-nit. **Design RATIONALE
+    is NOT a violation**: section 3 bans those three chronological shapes only,
+    and `review-flow.md` preserves its rationale deliberately "so it is not
+    re-litigated". Do not file a doc for explaining why it is as it is.
+    (ACTIVE `docs/sprint_<N>_*.md` plans are tier 2 but are explicitly EXEMPT from
+    current-state-only -- `doc-architecture.md` says they are deliberately
+    chronological -- so never file one for sequencing a sprint.)
 - **Never swept under the rug.** Every non-blocking and pre-existing finding gets
   **filed**. "Not a blocker" is a routing decision, not a dismissal. A finding you
   neither fixed nor filed is the one failure mode this rule does not tolerate.

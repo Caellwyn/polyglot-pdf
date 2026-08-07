@@ -60,6 +60,46 @@ Once the trace is complete, also look for: broken assumptions that span files, i
 
 Do NOT flag style, formatting, or anything you'd need the project's CLAUDE.md/standards to know is a "rule" -- those are the main agent's job, not yours.
 
+**Doc findings: split by TIER, then by CURRENT-STATE vs. everything else**
+(maintainer directive 2026-08-06). Reporting a doc-wording problem as a gap
+re-opens the review loop, and iterating an expensive model over documentation
+wording is exactly the waste this split exists to prevent. So:
+
+- **TIER 3 -> FILE IT, never report as a gap.** `docs/journal/`, research notes,
+  and `docs/archive/` (completed plans). A dated chronological record, rarely
+  read, never blocks a deploy.
+- **TIER 1/2, a WRONG claim about the code -> REPORT AS A GAP.** Tier 1 is
+  `CLAUDE.md` + `docs/INDEX.md`; tier 2 is `docs/standards/*`,
+  `docs/components/*`, `docs/doctrine/*`, `docs/technical_guide.md`. **These files
+  are CURRENT-STATE ONLY by construction** (`doc-architecture.md` section 3 --
+  history and rationale belong in the tier-3 journal), so essentially every
+  substantive sentence asserts what the code does *now*: a default value, a
+  route's auth, a file's responsibility, a rule an agent must follow, a command to
+  run. They are auto-loaded or surface-authoritative, so a wrong one actively
+  misleads the next session. **Open the code and check** before calling it wrong.
+- **`.claude/` (agent + skill files) counts as TIER 1/2.** These are loaded into a
+  session's context and instruct behavior directly, so a wrong claim in one is at
+  least as consequential as a wrong claim in `docs/standards/`. Same split: wrong
+  about the code or the flow -> gap; merely ugly -> file.
+- **TIER 1/2, a STYLE finding -> FILE IT.** Wording that is awkward, verbose, or
+  could be phrased better, where the *claim itself is correct*. Not a gap.
+
+**The discriminating question is about the SENTENCE, not the consequence:** *"is
+this sentence WRONG about the code, or just ugly?"* Wrong -> gap. Ugly -> file. Do
+NOT reason forward about whether a future agent might act on it -- that test is
+vague, and resolving it conservatively turns every doc nit into a blocker.
+
+If a tier-1/2 doc carries a CHRONOLOGICAL NARRATIVE -- a `Previously:`/`Prior:`
+stamp chain, an `## Update history` / `## Changelog` heading, or a "Sprint NN
+did X" narrative threaded through the prose -- that is a current-state-only
+violation (`doc-architecture.md` section 3); file it as a docs-nit. **Design
+RATIONALE is NOT a violation** -- section 3 bans those three chronological
+shapes only, and `review-flow.md` preserves its rationale deliberately "so it
+is not re-litigated". Do not file a doc for explaining why it is as it is.
+(ACTIVE `docs/sprint_<N>_*.md` plans are tier 2 but are explicitly EXEMPT from
+current-state-only -- `doc-architecture.md` says they are deliberately
+chronological -- so never file one for sequencing a sprint.)
+
 ## Findings that are NOT this PR's to fix
 
 - **Pre-existing** -- if a finding reproduces **unchanged on `origin/dev`** (check: `git show origin/dev:<path>`), it is not this diff's doing. **File it as a bead**, do not report it as a blocker. If the diff *worsens* a pre-existing defect, that IS a finding.

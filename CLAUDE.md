@@ -130,6 +130,30 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    consistency rule: one ASCII style across all source. **Markdown/docs are
    exempt** -- Unicode is fine there. Match the surrounding code's existing ASCII
    style.
+7. **ENUMERATE THE SET BEFORE FIXING ANY OF IT.** When a finding is an *instance*
+   of something -- one write site, one restatement of a rule, one stale citation,
+   one unprotected call -- **do not fix it until you have mechanically enumerated
+   every member of its set** (grep / AST / a query, not recall), listed them in the
+   bead or commit, and fixed them together. Then pin the **set**, not the instance:
+   a test that asserts the complete list of legitimate sites, so the next omission
+   fails CI instead of a review round. **This is the single largest source of
+   review rounds in this repo** (measured over the last 40 PRs): PR #551 spent six
+   rounds each finding one more unprotected write site; bd `saxh` spent thirteen
+   each finding one more paraphrase of one rule; the #554 docs audit and PR #538
+   repeated the shape. In every case the first fix was *correct* -- it just was not
+   the whole set, and the reviewer found the remainder one per round. **The tell
+   you are in this trap:** a reviewer's new finding differs from the last one only
+   in *location* or *wording*. When that happens, stop fixing and go enumerate.
+8. **Test the tests -- prove a new test FAILS before trusting that it passes.**
+   Writing the assertion is not the job; demonstrating it can fail is. Revert the
+   production behavior it claims to pin (the *real* path, not a convenient
+   neighbour) and watch it go red, then restore. **This is the author's job, not
+   the reviewer's** -- a reviewer finding a vacuous test is a round you paid for
+   avoidably. PR #540's reviewer reverted a whole route and **6 of 7 tests still
+   passed**; the guard was defeated by a one-token mutation. Confirm the mutation
+   actually applied (a no-op edit that "passes" proves nothing) and re-verify per
+   parametrization, not once per file. Full rules + the recurring traps:
+   [`docs/standards/testing.md`](docs/standards/testing.md#test-the-tests).
 
 ---
 
