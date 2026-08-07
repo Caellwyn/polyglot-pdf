@@ -1,8 +1,31 @@
-# bd 0rpu -- spelled-read-back desync: audio evidence corpus
+# bd 0rpu -- spelled-read-back desync: evidence corpus
 
-41 curated output-audio clips (7.1 MB) from the 2026-08-05/06 investigation,
-selected from 274 captured generations: every generation the final scorer
-flagged, plus matched ALIGNED neighbours for contrast.
+From the 2026-08-05/06 investigation (12 MB, 98 files):
+
+- **41 curated output-audio clips** -- every generation the final scorer
+  flagged, plus matched ALIGNED neighbours for contrast (from 274 captured).
+- **`*__transcript.jsonl`** -- the LIVE MODEL's own record per run: what it
+  said it was saying (`transcript` / `spoken_by_model`), every `tool_call` and
+  `tool_response`, the `interrupted` events, `compression_config`, and the
+  `audio_dump` records that tie WAVs to sequence ranges. Filtered from the raw
+  dev logs (14.4 MB -> 3.2 MB) by dropping base64 audio frames and debug
+  chatter; every analytically meaningful record is kept.
+- **`*__stt_*.json`** -- the Cloud STT scoring passes: per generation, what the
+  AUDIO actually said vs what the TEXT track claimed, with duration, confidence
+  and the pairing window.
+- **`*__driver.json`** -- what the harness asserted (fields filled/confirmed,
+  playback backlog at each answer).
+- **`*__tokens.jsonl`** -- per-turn token/cost curve; the prompt-token drops in
+  here are how context-compression evictions were detected (they emit no event).
+
+**The pairing:** for any generation, the `transcript.jsonl` gives the model's
+intent, the matching `stt_*.json` row gives what the audio actually produced,
+and the WAV lets you hear it. That triple is what makes the defect provable
+rather than anecdotal.
+
+> The retracted first-pass scorer output (`stt_report.json`, Gemini-as-STT) is
+> deliberately NOT included -- it hallucinated sentences from sub-second clips
+> and produced two findings that were withdrawn. See the findings doc.
 
 **Content note:** synthetic form answers plus the maintainer's own name. No
 third-party PII. Committed deliberately (maintainer decision 2026-08-07) so the
