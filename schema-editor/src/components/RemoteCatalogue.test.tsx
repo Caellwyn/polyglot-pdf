@@ -799,4 +799,65 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     fireEvent.click(screen.getByText('Translate options'));
     await waitFor(() => expect(onAuthError).toHaveBeenCalled());
   });
+
+  // --- the unpublished status (bd polyglot-pdf-6dz0) ------------------------
+  // Round 2 of review found three defects in this status's UI, ALL of them in
+  // paths no test touched: the file had zero references to 'unpublished'.
+
+  it('offers Unpublish on a published kit and reports the retirement honestly', async () => {
+    vi.mocked(setRemoteStatus).mockResolvedValue({
+      ok: true, status: 'unpublished', retranslated: 0, translationModel: null,
+      supersededKitId: null });
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+      selectedKitId="done-kit" role="editor" />);
+    await waitFor(() => expect(screen.getByText('Done Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByText('Unpublish')[0]);
+
+    await waitFor(() =>
+      expect(setRemoteStatus).toHaveBeenCalledWith('done-kit', 'unpublished'));
+    // The notice must name the RETIREMENT. It previously said "reverted to
+    // draft" -- the wrong action, and it implies the kit is editable again.
+    await waitFor(() => {
+      const notice = screen.getByText(/is unpublished/);
+      expect(notice).toBeInTheDocument();
+      expect(notice.textContent).not.toMatch(/reverted to draft/);
+    });
+  });
+
+  it('offers Publish again -- never Mark complete -- on a retired kit', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([
+      { id: 'old-kit', label: 'Retired Form', status: 'unpublished',
+        hasSchema: true, hasPdf: true, schemaFile: 'schema.json',
+        pdfFile: 'form.pdf' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+      selectedKitId="old-kit" role="editor" />);
+    await waitFor(() => expect(screen.getByText('Retired Form')).toBeInTheDocument());
+
+    // A retired revision returns to service only through the publish gate.
+    expect(screen.getAllByText('Publish again').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+    // ...and it is never offered a revert-to-draft, which would unlock it.
+    expect(screen.queryByText('Revert to draft')).not.toBeInTheDocument();
+  });
+
+  it('counts a retired kit separately so the summary still adds up', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([
+      { id: 'live', label: 'Live Form', status: 'complete', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'old', label: 'Retired Form', status: 'unpublished', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    ]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-summary')).toBeInTheDocument());
+
+    const summary = screen.getByTestId('catalogue-summary').textContent ?? '';
+    expect(summary).toMatch(/2 forms/);
+    expect(summary).toMatch(/1 complete/);
+    // Without this the retired kit vanishes from the breakdown and the
+    // sub-counts silently stop summing to the total.
+    expect(summary).toMatch(/1 retired/);
+  });
 });

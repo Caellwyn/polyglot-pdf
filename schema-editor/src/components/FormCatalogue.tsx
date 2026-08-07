@@ -80,6 +80,11 @@ interface FormCatalogueProps {
 const STATUS_STYLE: Record<string, string> = {
   complete: 'bg-green-100 text-green-700',
   draft: 'bg-yellow-100 text-yellow-700',
+  // Kept in step with the hosted catalogue's map: a status this lookup does
+  // not know renders className="undefined" -- and once readKitEntry started
+  // recognizing 'unpublished' (bd polyglot-pdf-6dz0), that badge became
+  // reachable in normal local use rather than a dead path.
+  unpublished: 'bg-slate-200 text-slate-700',
   unknown: 'bg-gray-100 text-gray-600',
 };
 
@@ -833,6 +838,17 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         Revert to draft
                       </button>
                     </>
+                  ) : kit.status === 'unpublished' ? (
+                    // A retired revision is write-locked; local mode cannot run
+                    // the publish gate, and handleSetStatus refuses it anyway.
+                    // Say so instead of offering "Mark complete", which reads as
+                    // if this were an unfinished draft.
+                    <span
+                      className="text-xs text-slate-600"
+                      title="This version was retired. Its schema is what earlier confirmations were recorded against, so it cannot be edited here. Start the backend to publish it again."
+                    >
+                      Retired -- publish again from the backend
+                    </span>
                   ) : (
                     <button
                       className="btn-sm btn-primary text-xs"

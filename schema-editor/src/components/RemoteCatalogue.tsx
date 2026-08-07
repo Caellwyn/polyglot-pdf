@@ -278,6 +278,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           `"${kit.label}" marked complete -- it ships with the maintainer's ` +
           `next deploy.${drift}`,
         );
+      } else if (status === 'unpublished') {
+        // Name what actually happened: this is a retirement, not a revert.
+        // The stale two-branch notice called it "reverted to draft", which is
+        // the wrong action AND implies it is editable again -- it is not.
+        setNotice(
+          `"${kit.label}" is unpublished -- clients no longer see it, its `
+          + 'files are kept, and it cannot be edited. Publish it again to put '
+          + 'it back in service.',
+        );
       } else {
         setNotice(`"${kit.label}" reverted to draft.`);
       }
