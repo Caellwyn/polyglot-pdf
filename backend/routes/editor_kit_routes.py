@@ -876,20 +876,31 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
     one slot per kit -- so overwriting a published schema used to destroy the
     only copy of what an old record was confirmed against.
 
-    WHY THIS HOOK IS ON REVERT-TO-DRAFT, not on promotion: a published kit's
-    schema cannot be written at all (every editing route refuses while status is
-    complete -- the publish gate). The ONLY way to a new revision is
-    complete -> draft -> save -> complete, so the revert is the LAST moment the
-    published bytes still exist. By promotion time the new schema has already
+    WHY THIS FIRES WHEN A REVISION IS RETIRED, not on promotion: a published
+    kit's schema cannot be written at all (every editing route refuses while it
+    is write-locked -- the publish gate). So retirement is the LAST moment the
+    published bytes still exist; by promotion time the new schema has already
     replaced them.
+
+    THREE call sites retire a revision, and each archives first (bd
+    polyglot-pdf-6dz0 widened this from one):
+      1. complete -> draft   -- the classic edit cycle
+         (complete -> draft -> save -> complete).
+      2. complete -> unpublished -- retiring a revision outright.
+      3. the OUTGOING kit of a `replaces_kit_id` supersede, where a new edition
+         onboarded as its own kit takes over. Note this route produces a new
+         live revision WITHOUT any draft step, which is why the one-way
+         "complete -> draft -> ..." framing above is not the whole story.
+    Keep this list in step with docs/components/pdf-filling.md, which states the
+    same three triggers.
 
     The marker is resolved from the SUPERSEDED revision's OWN schema, so it
     matches what that revision's confirmation records carry (an edition_date if
     the form has one, else the shape fingerprint) -- that is what makes a
     fingerprint-era record still retrievable later.
 
-    Best-effort by design: an archive failure must not block the revert (which
-    would strand a kit published-and-uneditable). It is logged LOUDLY instead --
+    Best-effort by design: an archive failure must not block the retirement
+    (which would strand a kit published-and-uneditable). It is logged LOUDLY --
     the same posture as the confirmation sink, where losing the record is worse
     than a slow path but never worth failing the user's action over.
     """

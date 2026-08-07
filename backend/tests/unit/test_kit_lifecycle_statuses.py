@@ -176,17 +176,20 @@ def test_republishing_a_retired_kit_is_refused_by_the_lint_gate_too(client):
     the republish path shares the draft path's gates rather than a subset."""
     c, store, root = client
     broken = json.loads(json.dumps(_SCHEMA))
-    # Two options sharing one value is a lint ERROR (duplicate option values).
-    broken["fields"][0]["type"] = "radio"
-    broken["fields"][0]["options"] = [
-        {"value": "dup", "label": "One"},
-        {"value": "dup", "label": "Two"},
-    ]
+    # A field naming no PDF widget is a LINT error (field-unbacked) that still
+    # passes FormSchema validation -- which is the point. The first version of
+    # this test used duplicate option values, and those are rejected by the
+    # Pydantic v2 model validator BEFORE lint ever runs: it passed on the
+    # validate gate while claiming to pin the lint one, and survived deleting
+    # the lint gate outright (Opus fresh-eyes). Assert the exact gate, not
+    # "some 4xx".
+    broken["fields"][0].pop("pdf_field_name")
     _make_kit(root, "w7", status="unpublished", schema=broken)
 
     resp = _status(c, "w7", "complete")
 
-    assert resp.status_code in (409, 422), resp.text
+    assert resp.status_code == 409, resp.text
+    assert "lint error" in resp.json()["detail"]
     assert _run(store.load_metadata("w7"))["status"] == "unpublished"
 
 
