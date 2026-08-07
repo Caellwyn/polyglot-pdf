@@ -2,7 +2,10 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`callback_handler.py`/`form_filling_service.py`/`schemaFormState.ts` line-number citations, which had drifted from code growth since the last sweep -- no wire-type or handshake-key name changed. Also current: the backend->frontend `interrupted` type (bd polyglot-pdf-s7uf) and the manifest-first `kit_id`/`edition_date`/`form_number` handshake keys (bd polyglot-pdf-47r3 / n0em); this doc's message-type union is pinned by backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt).*
+*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the `spellback` /
+`spellback_response` round-trip pair -- the flag-gated deterministic
+spell-back tool's wire messages. This doc's message-type union is pinned by
+backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`

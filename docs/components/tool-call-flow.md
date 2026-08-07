@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the `switch_to_field` tool row to the table; validation-error responses carry an explicit DISCARD-the-rejected-value instruction so a rejected value is never re-used on the next field).*
+*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the flag-gated `name_spellback` row -- the no-argument deterministic spell-back tool whose response is held for the client's blocking clip playback).*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -28,6 +28,7 @@ was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
 | `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |
 | `switch_to_field` | Jump to one specific field so it becomes current (correction/revisit path, distinct from switch_section) (bd polyglot-pdf-jnjj.36) | `field` |
+| `name_spellback` (FLAG-GATED, `SPELLBACK_TOOL_ENABLED` default off) | Play a deterministic letter-by-letter Cloud TTS clip of the CURRENT field's stored value for verification -- the model never speaks a spelling itself (bd polyglot-pdf-22h1f). The one round-trip whose tool response is deliberately held open for the client's blocking playback (90s cap). | *(none -- the client resolves the current field; model-supplied args are ignored)* |
 
 ## Inbound: how a tool call reaches the backend
 

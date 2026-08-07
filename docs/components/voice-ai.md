@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the missing `switch_to_field` tool bullet to the tool-calling list -- a seventh currently-declared, shipped, non-deprecated tool, wire message `switch_field`/`switch_field_response`).*
+*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback`).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -209,6 +209,19 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   (bd polyglot-pdf-7yra), DISTINCT from not-applicable (which stays the
   `update_form_fields ""` path). Maps to the frontend `markFieldSkipped` (the
   `skipped` flag); the SI requires a verbal confirm first.
+- `name_spellback` -- FLAG-GATED (`SPELLBACK_TOOL_ENABLED`, default off; bd
+  polyglot-pdf-22h1f): deterministic spell-back for the current field. Takes NO
+  arguments; the client resolves the current field, reads the stored value,
+  fetches a letter-by-letter en-US Cloud TTS clip (`POST /api/tts/spellback`),
+  mutes the mic in every input mode, plays it BLOCKING, and acks
+  delivered/interrupted/error. The tool response is deliberately held open for
+  the playback (90s coordinator cap) so the model stays parked; while the flag
+  is on the DTI SI gets `DTI_SPELLBACK_SI_ADDENDUM` so the model never spells
+  aloud itself. Declared via `_build_tool_declarations` from
+  `SPELLBACK_TOOL_DECLARATION` (kept OUT of `TOOL_DECLARATIONS` until cutover).
+  Exists because the native-audio speech head re-emits the session's FIRST
+  spelled name on ~10% of spelled read-backs (the bd 0rpu sticky-first-spelling
+  attractor) while text + tool calls stay correct.
 - `switch_to_field` -- jump the form's focus to ONE specific field (correction/
   revisit path: "go back to my mailing city"), by field_id, spoken name, or a
   rough description; DISTINCT from `switch_section`, which moves whole
