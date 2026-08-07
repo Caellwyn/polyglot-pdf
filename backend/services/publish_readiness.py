@@ -312,10 +312,12 @@ class ReadinessVerdict:
     `ready` is NOT merely `to_review == 0`: a kit can have every field signed
     off and still be unpublishable because of a SCHEMA-LEVEL lint ERROR -- one
     that no field row can carry, so no field's review can ever clear it. The
-    two reachable classes are the holding-section leftover-ids ERROR
-    (`to-review-pending` at `sections[i] (id=sec_to_review_x)`, whose id token
-    matches no field) and the widget-claim ERROR (`dump-widget-multiclaim` at
-    `widget '<name>'`, with no id token at all). The /status gate refuses on ANY
+    two classes this bead was filed for are the holding-section leftover-ids
+    ERROR (`to-review-pending` at `sections[i] (id=sec_to_review_x)`, whose id
+    token matches no field) and the widget-claim ERROR
+    (`dump-widget-multiclaim` at `widget '<name>'`, with no id token at all);
+    see _schema_level_errors for the full set of shapes that qualify. The
+    /status gate refuses on ANY
     lint ERROR regardless of anchoring, so a verdict that ignored these would
     stamp ready=True for a kit the gate then 409s -- the confident-then-refused
     shape sprint-18 exists to end, relocated into the stamp (bd
@@ -381,8 +383,16 @@ def _schema_level_errors(
     field-anchored ones. Ignoring them let a fully-reviewed kit stamp
     ready=True and then 409 at publish (bd polyglot-pdf-dm3c8).
 
-    "No field row can carry it" means either no id token at all (`widget
-    '<name>'`) or an id token naming something that is not a field (a section).
+    "No field row can carry it" means the path's id token does not resolve to a
+    real entry in fields[]. Three shapes reach that:
+      - no id token at all (`widget '<name>'`);
+      - a token naming a SECTION (`sections[i] (id=sec_to_review_x)`);
+      - the literal token "None", which is what `fields[i] (id={f.get('id')})`
+        renders for a field carrying no id. Such a field genuinely has no
+        clickable row, so landing here is right -- but it is ALSO named
+        positionally in blocking_ids, so a caller rendering both lists shows
+        one defect twice (bd polyglot-pdf-7ehws; reporting quality, not a gate
+        error -- `ready` is False either way).
     """
     out: List[str] = []
     for f in findings or ():
