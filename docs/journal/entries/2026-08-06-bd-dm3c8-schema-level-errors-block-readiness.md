@@ -32,12 +32,11 @@ Two reachable ERROR classes now block, both pinned:
 
 - `to-review-pending` at `sections[i] (id=sec_to_review_x)` -- the holding-
   section leftover-ids ERROR. This is the SUBTLE one: its path *does* carry an
-  `(id=)` token, so a bucketing rule keyed on "has an id token" files it under
-  a field that does not exist and silently drops it. The token names a
-  SECTION. The client already drew this distinction for the same reason
-  (`lintFindings.formLevelFindings` keys on "resolves to no field in fields[]",
-  not on "has no id token"); the backend now does too -- `_bucket_by_field`
-  takes the set of ids that really exist in `fields[]`.
+  `(id=)` token, so a rule keyed on "has an id token" treats it as field-owned
+  and skips it. The token names a SECTION. `_schema_level_errors` therefore
+  tests `fid in field_ids` -- "resolves to a REAL field" -- mirroring the rule
+  the client already uses (`lintFindings.formLevelFindings` keys on "resolves
+  to no field in fields[]", not on "has no id token").
 - `dump-widget-multiclaim` at `widget '<name>'` -- no id token at all.
 
 They land on their OWN verdict field (`blocking_schema_errors`), not in the
@@ -60,8 +59,21 @@ ERRORs), so a generator would have arrived exhausted at the second pass.
 Materialized once, with its own test.
 
 Mutation-verified: dropping the schema-error clause from `ready` reddens 3
-tests; making the scan treat any id token as field-owned reddens exactly the
-section-ERROR parametrization -- the case the bead named as subtle.
+tests; making `_schema_level_errors` treat any id token as field-owned reddens
+exactly the section-ERROR parametrization -- the case the bead named as subtle;
+keeping only the last collected error reddens the both-classes test; refusing
+silently on an unmeasurable schema reddens its own test.
+
+**A correction worth recording.** The first draft ALSO filtered inside
+`_bucket_by_field`, and this entry originally credited that filter as what made
+the section-anchored ERROR block. It was dead code: `by_field` is only ever
+read by a real field's own id, so a bucket keyed on a section id is never
+consulted. The Opus fresh-eyes round proved it two ways -- deleting the filter,
+and reverting the call site -- each leaving all 58 tests green. It also caught
+that the mutation I had recorded as verifying that filter actually exercised
+`_schema_level_errors`, a different function. The filter is gone, and
+`_bucket_by_field` now carries a note saying why it is not there, so the next
+reader does not re-add it for the same plausible reason.
 
 Verified end-to-end against the real C2 scenario, not just the units: for a
 fully-reviewed kit with a holding-section ERROR, the gate's own refusal
@@ -83,6 +95,18 @@ backend 1697 passed (from 1692 -- 5 added, zero regressions).
   ERROR is the one that blocks publication. The client had already learned
   this and encoded it; the backend mirror silently used the weaker rule. When
   mirroring a predicate, mirror the REASON, not just the shape.
+- **A defensive change that no test can pin is a claim, not a fix.** The dead
+  `_bucket_by_field` filter looked exactly like the load-bearing change -- it
+  sat in the obvious place, its comment cited the real client rule, and the
+  suite was green around it. What exposed it was the reviewer asking for a
+  mutation that reddens, and finding none existed. If a change cannot be made
+  to fail, either write the test that fails or delete the change; keeping it
+  buys nothing and misdirects the next reader.
+- **Check WHICH function a mutation actually hit.** I recorded a mutation as
+  verifying the bucketing filter when it had exercised a different function
+  entirely. Both were in the diff and both plausibly related, so the record
+  read as complete. A verification claim naming the wrong target is worse than
+  no claim -- it converts an unpinned change into an apparently-pinned one.
 
 ## Doc freshness
 

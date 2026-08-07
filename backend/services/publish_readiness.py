@@ -301,9 +301,13 @@ class ReadinessCounts:
 class ReadinessVerdict:
     """Readiness for publication, plus the counts the stamp records.
 
-    `ready` is the publish verdict C2's /status gate refuses on; `blocking_ids`
-    names the fields to show the human (the gate refuses BY NAME, never with a
-    bare count).
+    `ready` is the publish verdict C2's /status gate refuses on. The gate
+    refuses BY NAME, never with a bare count -- but it must read BOTH name
+    lists: `blocking_ids` names the fields, and `blocking_schema_errors` names
+    the blockers no field can carry. A fully-reviewed kit held back only by a
+    schema-level ERROR has an EMPTY `blocking_ids`, so a caller rendering that
+    list alone would produce exactly the unactionable refusal this verdict
+    exists to prevent (Opus fresh-eyes).
 
     `ready` is NOT merely `to_review == 0`: a kit can have every field signed
     off and still be unpublishable because of a SCHEMA-LEVEL lint ERROR -- one
@@ -344,25 +348,23 @@ def _positional_name(index: int) -> str:
 
 def _bucket_by_field(
     findings: Optional[Iterable[LintFinding]],
-    field_ids: Optional[set] = None,
 ) -> Dict[str, List[LintFinding]]:
     """Group findings by the field they anchor to; field-less ones are skipped
     (no field's review can cover a schema-level finding).
 
-    `field_ids` is the set of ids that actually EXIST in fields[]. When given, a
-    finding whose parsed id matches no real field is treated as schema-level
-    rather than silently dropped -- the `to-review-pending` ERROR carries
-    `sections[i] (id=sec_to_review_x)`, which parses to an id token that is a
-    SECTION, not a field. The client makes the same distinction for the same
-    reason (lintFindings.formLevelFindings keys on "resolves to no field in
-    fields[]", not on "has no id token").
+    A bucket keyed on an id that names no REAL field (the `to-review-pending`
+    ERROR carries `sections[i] (id=sec_to_review_x)`, a section id) is harmless
+    here: the only reader looks buckets up by a real field's own id, so such a
+    bucket is never consulted. An earlier draft of this bead filtered them out
+    anyway, which read as the load-bearing fix but was unreachable -- deleting
+    the filter left every test green, and no test could be written to pin it
+    (Opus fresh-eyes). What actually makes a section-anchored ERROR block is
+    _schema_level_errors below, which does its own `fid in field_ids` test.
     """
     out: Dict[str, List[LintFinding]] = {}
     for f in findings or ():
         fid = field_id_of(f.path)
         if not fid:
-            continue
-        if field_ids is not None and fid not in field_ids:
             continue
         out.setdefault(fid, []).append(f)
     return out
@@ -408,8 +410,16 @@ def publish_readiness(
     if not isinstance(fields, list):
         # A schema whose fields are not a list is unmeasurable, not "0% ready":
         # callers distinguish this via total == 0 plus ready == False.
+        #
+        # It still SAYS SO rather than refusing silently: this path used to
+        # return both name lists empty, so a gate rendering the refusal had
+        # nothing at all to show -- the unactionable-409 shape the verdict
+        # exists to prevent, in the one case where the human most needs a
+        # pointer (Opus fresh-eyes). Reported as a schema-level blocker
+        # because that is exactly what it is: nothing a field's review can fix.
         return ReadinessVerdict(
             ready=False, counts=ReadinessCounts(0, 0, 0, 0), blocking_ids=[],
+            blocking_schema_errors=["unmeasurable-schema at $.fields"],
         )
 
     # Materialize the findings once: they are consumed twice below (bucketed
@@ -421,7 +431,7 @@ def publish_readiness(
         f.get("id") for f in fields
         if isinstance(f, dict) and isinstance(f.get("id"), str)
     }
-    by_field = _bucket_by_field(findings, real_field_ids)
+    by_field = _bucket_by_field(findings)
     schema_errors = _schema_level_errors(findings, real_field_ids)
     reviewed = 0
     errors = 0

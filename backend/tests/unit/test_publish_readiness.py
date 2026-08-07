@@ -276,6 +276,11 @@ def test_a_malformed_fields_value_is_unmeasurable_not_zero_percent():
         v = publish_readiness({"fields": bad}, [])
         assert v.counts.total == 0
         assert v.ready is False
+        # ...and it SAYS SO. This path returned both name lists empty, so a
+        # gate rendering the refusal had nothing to show -- the unactionable
+        # 409 the verdict exists to prevent, in the case where the human most
+        # needs a pointer (Opus fresh-eyes).
+        assert v.blocking_schema_errors == ["unmeasurable-schema at $.fields"]
 
 
 def test_a_refusal_always_names_something():
