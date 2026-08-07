@@ -350,6 +350,22 @@ class TestSpellbackSsml:
         ssml = build_spellback_ssml("A1")
         assert '<say-as interpret-as="characters">1</say-as>' in ssml
 
+    def test_char_cap_matches_frontend_mirror(self):
+        """MAX_SPELLBACK_CHARS is mirrored (not shared) as SPELLBACK_MAX_CHARS
+        in frontend/src/shared/spellbackPlayer.ts -- the client's fail-fast
+        pre-check. Drift would either reintroduce the wasted round-trip (FE cap
+        too low) or surface backend 400s the client didn't anticipate (BE cap
+        lowered alone). Pin them to each other (fresh-eyes round 3)."""
+        import re
+        from pathlib import Path
+
+        ts = Path(__file__).resolve().parents[3] / (
+            "frontend/src/shared/spellbackPlayer.ts")
+        match = re.search(
+            r"SPELLBACK_MAX_CHARS\s*=\s*(\d+)", ts.read_text(encoding="utf-8"))
+        assert match, "SPELLBACK_MAX_CHARS constant missing from spellbackPlayer.ts"
+        assert int(match.group(1)) == MAX_SPELLBACK_CHARS
+
     @pytest.mark.asyncio
     async def test_empty_and_oversized_values_are_rejected(self):
         with pytest.raises(ValueError):

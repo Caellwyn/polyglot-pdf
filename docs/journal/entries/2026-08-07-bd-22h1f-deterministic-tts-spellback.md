@@ -141,7 +141,17 @@ Round 2: GAPS-FOUND (2 + 2 notes) -> all adopted:
    fail-fast / error mapping).
 4. ADOPTED (doc nit): ws-protocol reason-token list completed
    (value_too_long, no_audio_manager, cancelled).
-Round 3 verdict: see the PR body scorecard. Scorer note: both runs reported
+Round 3: GAPS-FOUND (1 + 1 note) -> both adopted:
+1. ADOPTED (blocker-adjacent): a PTT press during the PRE-PLAYBACK window
+   (drain-wait/fetch, up to ~28s worst case) was silently swallowed --
+   interruptForPtt only handled the audible-clip phase, so the hold stayed
+   engaged through the press and the clip then played over the user. Fix:
+   the press now wins in that window too (hold released immediately, the
+   parked call resolves the interrupted variant); mutation-verified test.
+2. ADOPTED (note): the mirrored 60-char cap (backend MAX_SPELLBACK_CHARS /
+   frontend SPELLBACK_MAX_CHARS) is now pinned to each other by a backend
+   static test, so the constants cannot drift silently.
+Round 4 verdict: see the PR body scorecard. Scorer note: both runs reported
 `needs_hand_check: []` -- no rows required hand adjudication.
 
 ## Doc freshness

@@ -180,6 +180,31 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
     expect(secondResult.status).toBe('delivered')
   })
 
+  it('PTT press during the FETCH phase wins: hold released now, call resolves interrupted, no clip (fresh-eyes round 3)', async () => {
+    let releaseFetch: (r: Response) => void = () => {}
+    const { player, holdLog, audios } = makePlayer({
+      fetchImpl: () => new Promise<Response>(resolve => { releaseFetch = resolve }),
+    })
+
+    const done = player.play('NGUYEN')
+    await settleMicrotasks()
+    expect(holdLog).toEqual([true]) // hold engaged, nothing audible yet
+
+    // The press lands in the pre-playback window (drain-wait/fetch): it must
+    // NOT be swallowed -- the hold releases immediately so the press's audio
+    // flows, and the parked call resolves the interrupted variant.
+    expect(player.interruptForPtt()).toBe(true)
+    expect(holdLog).toEqual([true, false])
+
+    releaseFetch(okResponse())
+    const result = await done
+    expect(result.status).toBe('interrupted')
+    expect(audios).toHaveLength(0) // the clip never started over the user
+
+    // After everything settled, an idle press is a no-op again.
+    expect(player.interruptForPtt()).toBe(false)
+  })
+
   it('fails fast on over-length values without fetching', async () => {
     const { player, fetchImpl } = makePlayer()
     const result = await player.play('x'.repeat(SPELLBACK_MAX_CHARS + 1))

@@ -90,6 +90,15 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
   // Generations <= this value are cancelled: a call parked on an await checks
   // after resuming and bails instead of playing into a dead/preempted session.
   let cancelledUpTo = 0
+  // Generations <= this value were cancelled BY A PTT PRESS specifically, so
+  // the parked call resolves the 'interrupted' variant (model: listen to the
+  // user) rather than the error variant (fresh-eyes round 3: a press during
+  // the drain-wait/fetch phase -- up to ~28s -- must win exactly like a press
+  // mid-clip, not be silently swallowed).
+  let interruptedUpTo = 0
+  // Whether a play() call is anywhere in flight (pre-playback phases
+  // included; activeResolve alone only covers audible playback).
+  let callInFlight = false
   let activeAudio: HTMLAudioElement | null = null
   let activeResolve: ((o: 'delivered' | 'interrupted' | 'error') => void) | null = null
 
@@ -106,14 +115,27 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
   }
 
   function interruptForPtt(): boolean {
-    if (!activeResolve) return false
-    activeAudio?.pause()
-    // Release the hold BEFORE resolving so the press's own audio flows the
-    // instant the user starts speaking; the live call's finally re-clearing
-    // it is an idempotent no-op.
-    deps.getAudioManager()?.setSpellbackHold(false)
-    settleActive('interrupted')
-    return true
+    if (activeResolve) {
+      activeAudio?.pause()
+      // Release the hold BEFORE resolving so the press's own audio flows the
+      // instant the user starts speaking; the live call's finally re-clearing
+      // it is an idempotent no-op.
+      deps.getAudioManager()?.setSpellbackHold(false)
+      settleActive('interrupted')
+      return true
+    }
+    if (callInFlight) {
+      // Pre-playback window (drain-wait / token / fetch): nothing is audible
+      // yet, but the mic hold is engaged and the round-trip is pending. The
+      // press wins here too: release the hold NOW so the user's audio flows,
+      // and poison the in-flight call so it resolves 'interrupted' when it
+      // resumes instead of starting a clip over the user's speech.
+      interruptedUpTo = generation
+      cancelledUpTo = generation
+      deps.getAudioManager()?.setSpellbackHold(false)
+      return true
+    }
+    return false
   }
 
   function isPlaying(): boolean {
@@ -146,15 +168,23 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
     // A new call supersedes any in-flight one: settle the old round-trip as
     // an error (its tool response has almost certainly timed out server-side
     // already) and poison its pending awaits.
-    if (generation > cancelledUpTo || activeResolve) {
+    if (callInFlight || activeResolve) {
       cancel()
     }
     const gen = ++generation
+    callInFlight = true
+    // A parked call that was poisoned resolves 'interrupted' when the poison
+    // came from a PTT press (the user is speaking -- the model must listen),
+    // and the plain error variant otherwise (teardown / pre-emption).
+    const poisonResult = (): SpellbackPlaybackResult =>
+      gen <= interruptedUpTo
+        ? { status: 'interrupted' }
+        : { status: 'error', reason: 'cancelled' }
 
     am.setSpellbackHold(true)
     try {
       await waitForModelAudioDrain(am)
-      if (gen <= cancelledUpTo) return { status: 'error', reason: 'cancelled' }
+      if (gen <= cancelledUpTo) return poisonResult()
 
       let token: string | undefined
       try {
@@ -162,7 +192,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
       } catch {
         token = undefined
       }
-      if (gen <= cancelledUpTo) return { status: 'error', reason: 'cancelled' }
+      if (gen <= cancelledUpTo) return poisonResult()
 
       const fetchStart = now()
       let blob: Blob
@@ -184,7 +214,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
         return { status: 'error', reason: 'tts_fetch_failed' }
       }
       const fetchMs = Math.round(now() - fetchStart)
-      if (gen <= cancelledUpTo) return { status: 'error', reason: 'cancelled' }
+      if (gen <= cancelledUpTo) return poisonResult()
 
       const url = makeClipUrl(blob)
       const audio = createAudio(url)
@@ -210,6 +240,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
       // Generation guard (fresh-eyes round 2): a STALE call's cleanup must
       // not clear the live call's state or drop the mic hold mid-clip.
       if (gen === generation) {
+        callInFlight = false
         activeAudio = null
         activeResolve = null
         deps.getAudioManager()?.setSpellbackHold(false)
