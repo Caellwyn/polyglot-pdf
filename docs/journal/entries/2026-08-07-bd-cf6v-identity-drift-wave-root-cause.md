@@ -104,6 +104,10 @@ the reviewer.
 
 No tier-1/2 doc tracks the lint rule inventory in prose beyond
 schema_lint.py's own module docstring (updated in-file). No doc bumps owed.
+The freshness checker's STALE flags at closeout (section-reset-deprecation,
+si-reduction, stateless-architecture, validation-delegation, voice-and-vad,
+technical_guide) all track files this branch did NOT touch -- pre-existing
+staleness, left for their owning changes per the closeout rule.
 
 ## Files touched
 
