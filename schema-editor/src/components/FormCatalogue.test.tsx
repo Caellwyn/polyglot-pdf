@@ -1489,4 +1489,108 @@ describe('FormCatalogue -- run extraction', () => {
       confirmSpy.mockRestore();
     });
   });
+
+  // --- the retired (unpublished) status, LOCAL mode (bd polyglot-pdf-6dz0) ---
+  // The hosted catalogue got three tests for this; this file got none, which is
+  // why the local half of the same feature shipped three defects across review
+  // rounds. The guard below is the ONLY thing stopping an offline editor from
+  // republishing a retired revision's audit-referenced bytes, since local
+  // setKitStatus is an unvalidated read-merge-write with no server gate.
+
+  it('refuses an OFFLINE status change on a retired kit (reaches the guard)', async () => {
+    // Drives handleSetStatus itself, not just the render branch. The first
+    // version of this test only asserted which element rendered, so the guard
+    // it claimed to pin was deletable with the suite green (Opus fresh-eyes) --
+    // and that guard is the only thing stopping an offline editor from
+    // republishing a retired revision's audit-referenced bytes.
+    const root = mockRoot([
+      mockKit('old-form', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({ label: 'Old Form', status: 'unpublished' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    // serverActionsOk defaults false -> the backend is NOT reachable, so no
+    // publish-gate path exists and every change must be refused.
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Old Form')).toBeTruthy());
+
+    // No actionable control at all, and the card explains why.
+    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+    expect(screen.queryByText('Publish again')).not.toBeInTheDocument();
+    expect(screen.getByText(/Retired -- start the backend/)).toBeTruthy();
+    // The metadata on disk is untouched -- nothing wrote through.
+    const meta = await (await root.children.get('old-form')!
+      .getFileHandle('metadata.json')).getFile();
+    expect(JSON.parse(await meta.text()).status).toBe('unpublished');
+  });
+
+  it('offers a server-gated republish on a retired kit when the backend is up', async () => {
+    // The one transition a retired kit HAS: back to complete, through the full
+    // publish gate. Refusing this too made the status a one-way trip from the
+    // local editor even with the backend reachable.
+    const root = mockRoot([
+      mockKit('old-form', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({ label: 'Old Form', status: 'unpublished' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Old Form')).toBeTruthy());
+
+    expect(screen.getByText('Publish again')).toBeTruthy();
+    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+  });
+
+  it('shows a retired kit with its own badge, not an unstyled one', async () => {
+    // Widening KitStatus without widening STATUS_STYLE rendered
+    // className="undefined" once retired kits became visible locally.
+    const root = mockRoot([
+      mockKit('old-form', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({ label: 'Old Form', status: 'unpublished' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+
+    const badge = await screen.findByText('unpublished');
+    expect(badge.className).not.toContain('undefined');
+    expect(badge.className).toMatch(/bg-/);
+  });
+
+  it('counts a retired kit separately in the local summary', async () => {
+    const root = mockRoot([
+      mockKit('live-form', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({ label: 'Live Form', status: 'complete' }),
+      }),
+      mockKit('old-form', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({ label: 'Old Form', status: 'unpublished' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    const summary = await screen.findByTestId('catalogue-summary');
+    expect(summary.textContent).toMatch(/2 forms/);
+    expect(summary.textContent).toMatch(/1 complete/);
+    // Retired is not pending work: without its own bucket it inflates the
+    // backlog AND the sub-counts stop summing to the total.
+    expect(summary.textContent).toMatch(/1 retired/);
+    expect(summary.textContent).not.toMatch(/1 in progress/);
+  });
 });
