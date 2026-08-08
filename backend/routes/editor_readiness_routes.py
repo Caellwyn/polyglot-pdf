@@ -42,6 +42,7 @@ from backend.routes.form_kit_routes import _safe_kit_id
 from backend.routes.editor_kit_routes import (
     _load_meta_or_404,
     _stamp_readiness,
+    _status_of,
     require_editor_role,
 )
 from backend.services.form_kits import get_form_kit_store
@@ -72,6 +73,20 @@ async def stamp_kit_readiness(
         )
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
+    # A PUBLISHED kit's stamp may only describe its published schema. Every
+    # sibling write path guards this (PUT schema 409s on complete; /status
+    # stamps only the reloaded gate-validated schema), and this route is
+    # registered on the hosted app too -- without the check, an editor token
+    # could overwrite a live kit's stamp with counts for a body that was
+    # never saved (Opus cross-surface finding, bd na1zy). NOTE for bd 6dz0
+    # (kit lifecycle statuses): this is a WRITE-LOCK site -- when the
+    # is-write-locked predicate replaces == "complete", it applies here too.
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This kit is published; its readiness stamp only changes "
+                   "through the publish flow.",
+        )
     stamp = await _stamp_readiness(store, kit_id, schema, meta, files)
     _log.info("editor_readiness_restamped", kit_id=kit_id, role=role,
               readiness_percent=(stamp or {}).get("percent"),

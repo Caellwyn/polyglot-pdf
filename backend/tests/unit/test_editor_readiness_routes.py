@@ -153,3 +153,22 @@ def test_unparseable_metadata_is_never_destroyed(client):
     assert resp.status_code == 200
     assert resp.json()["readiness"] is None
     assert (root / "kit-a" / "metadata.json").read_bytes() == before
+
+
+def test_complete_kit_is_refused_409(client):
+    """A PUBLISHED kit's stamp may only describe its published schema (Opus
+    cross-surface finding): without this guard, an editor token could
+    overwrite a live kit's stamp with counts for a body never saved -- the
+    one write path whose siblings (PUT schema, /status) all refuse."""
+    c, root = client
+    stale = {"reviewed": 2, "to_review": 0, "total": 2, "errors": 0,
+             "percent": 100, "ready": True, "verified": True,
+             "schema_sha1": "f" * 40, "stamped_at": "2026-08-01T00:00:00+00:00"}
+    _make_kit(root, "kit-a", meta={"status": "complete", "readiness": stale})
+    before = (root / "kit-a" / "metadata.json").read_bytes()
+    resp = c.post(
+        "/api/editor/kits/kit-a/readiness", json=SCHEMA, headers=AUTH
+    )
+    assert resp.status_code == 409
+    assert "published" in resp.json()["detail"]
+    assert (root / "kit-a" / "metadata.json").read_bytes() == before
