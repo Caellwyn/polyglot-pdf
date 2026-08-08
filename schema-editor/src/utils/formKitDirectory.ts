@@ -17,7 +17,10 @@ import { readStampFromMetadata } from './readinessStamp';
 import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
 
-export type KitStatus = 'draft' | 'complete' | 'unknown';
+// 'unpublished' is a SUPERSEDED revision (bd polyglot-pdf-6dz0): hidden from
+// the voice app like a draft, but write-locked like complete, because its
+// schema is what earlier confirmation records were confirmed against.
+export type KitStatus = 'draft' | 'complete' | 'unpublished' | 'unknown';
 
 export interface KitMetadata {
   label?: string;
@@ -36,7 +39,7 @@ export interface KitMetadata {
 export interface CatalogueEntry {
   id: string;                 // the <id> folder name
   label: string;              // metadata.label or a friendly fallback
-  status: KitStatus;          // draft | complete | unknown (no/blank status)
+  status: KitStatus;          // draft | complete | unpublished | unknown
   hasSchema: boolean;         // a schema.json (or custom) is present
   hasPdf: boolean;            // a form.pdf (or custom) is present
   schemaFile: string;         // resolved schema filename
@@ -101,10 +104,16 @@ export async function readKitEntry(
   const hasSchema = (await tryGetFile(dir, schemaFile)) !== null;
   const hasPdf = (await tryGetFile(dir, pdfFile)) !== null;
 
+  // Every status the type admits must be RECOGNIZED here, not just declared:
+  // widening KitStatus without widening this producer degraded an unpublished
+  // kit to 'unknown', which the catalogue then treated as editable and offered
+  // to publish -- through the offline path, with no write-lock and none of the
+  // server-side gates (bd polyglot-pdf-6dz0 fresh-eyes).
   const status: KitStatus =
     meta?.status === 'complete' ? 'complete'
       : meta?.status === 'draft' ? 'draft'
-        : 'unknown';
+        : meta?.status === 'unpublished' ? 'unpublished'
+          : 'unknown';
 
   return {
     id,
@@ -148,19 +157,38 @@ export async function loadKitSchema(
 }
 
 /**
- * Set a kit's metadata.json `status` (draft|complete), preserving every other
- * metadata field (label, schema, pdf, ...). This is the editor-side promote/
- * demote the deploy gate keys on: only status:complete kits reach GCS / the voice
- * app (deploy-all.sh kit_is_complete). Returns the kit's refreshed CatalogueEntry.
- * bd polyglot-pdf-nr8u (D2).
+ * Set a kit's metadata.json `status` (draft|complete|unpublished), preserving
+ * every other metadata field (label, schema, pdf, ...). This is the editor-side
+ * promote/demote the deploy gate keys on: only status:complete kits reach GCS /
+ * the voice app (deploy-all.sh kit_is_complete). Returns the kit's refreshed
+ * CatalogueEntry. bd polyglot-pdf-nr8u (D2).
+ *
+ * THROWS on a kit already marked `unpublished` (bd polyglot-pdf-6dz0): a
+ * retired revision is write-locked, and this is an unvalidated local write --
+ * see the lock below.
  */
 export async function setKitStatus(
   entry: CatalogueEntry, status: KitStatus,
 ): Promise<CatalogueEntry> {
   const dir = entry.dirHandle;
   // Read-merge-write so we never clobber label/schema/pdf or unknown fields.
+  // The write-lock lives HERE, at the primitive that actually writes, not only
+  // in the one component that calls it today (bd polyglot-pdf-6dz0). A
+  // component-level guard protects a single path and cannot be tested through
+  // the UI once the render already hides the control -- so any future caller
+  // would silently reopen the hole. A RETIRED revision's metadata is what its
+  // confirmation records were confirmed against; returning it to service runs
+  // server-side through the publish gate, never through this unvalidated
+  // local write.
   const metaHandle = await tryGetFile(dir, METADATA_FILE);
   const existing = metaHandle ? await readJsonFile<KitMetadata>(metaHandle) : null;
+  if (existing?.status === 'unpublished') {
+    throw new Error(
+      `"${entry.id}" is unpublished (a superseded revision) and cannot be `
+      + 'changed by a local write -- publish it again through the backend, '
+      + 'which runs the full publish gate.',
+    );
+  }
   const next: KitMetadata = { ...(existing || {}), status };
   await writeFile(dir, METADATA_FILE, JSON.stringify(next, null, 2) + '\n');
   return readKitEntry(entry.id, dir);
@@ -316,7 +344,8 @@ export async function readKitProgress(
 export interface CatalogueSummary {
   total: number;          // every kit in the folder
   complete: number;       // has a schema AND metadata status === 'complete'
-  inProgress: number;     // has a schema but not marked complete (drafts/unknown)
+  inProgress: number;     // has a schema, still being worked (drafts/unknown)
+  unpublished: number;    // a RETIRED revision -- not live, and not pending work
   noSchema: number;       // no schema -- awaiting extraction (deploy would skip it)
 }
 
@@ -330,6 +359,7 @@ export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary 
   let complete = 0;
   let inProgress = 0;
   let noSchema = 0;
+  let unpublished = 0;
   for (const e of entries) {
     // hasSchema is checked FIRST: deploy-all.sh skips a kit with no resolved
     // schema file BEFORE it evaluates kit_is_complete, so a complete-marked kit
@@ -338,9 +368,14 @@ export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary 
     // kit belongs in "awaiting extraction".
     if (!e.hasSchema) noSchema++;
     else if (e.status === 'complete') complete++;
+    // A RETIRED revision is neither live nor pending work: counting it as
+    // in-progress inflates the review backlog with a form nobody is expected
+    // to finish. Kept in step with RemoteCatalogue's summary, its hosted twin
+    // (bd polyglot-pdf-6dz0).
+    else if (e.status === 'unpublished') unpublished++;
     else inProgress++;
   }
-  return { total: entries.length, complete, inProgress, noSchema };
+  return { total: entries.length, complete, inProgress, unpublished, noSchema };
 }
 
 async function writeFile(

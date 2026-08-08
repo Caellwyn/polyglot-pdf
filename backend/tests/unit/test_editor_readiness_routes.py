@@ -155,16 +155,22 @@ def test_unparseable_metadata_is_never_destroyed(client):
     assert (root / "kit-a" / "metadata.json").read_bytes() == before
 
 
-def test_complete_kit_is_refused_409(client):
-    """A PUBLISHED kit's stamp may only describe its published schema (Opus
-    cross-surface finding): without this guard, an editor token could
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("status", ["complete", "unpublished"])
+def test_write_locked_kit_is_refused_409(client, status):
+    """A WRITE-LOCKED kit's stamp may only describe its published schema
+    (Opus cross-surface finding): without this guard, an editor token could
     overwrite a live kit's stamp with counts for a body never saved -- the
-    one write path whose siblings (PUT schema, /status) all refuse."""
+    one write path whose siblings (PUT schema, /status) all refuse.
+    Parametrized over the FULL bd 6dz0 write-locked set, not a sample: an
+    unpublished kit is write-locked exactly like a complete one."""
     c, root = client
     stale = {"reviewed": 2, "to_review": 0, "total": 2, "errors": 0,
              "percent": 100, "ready": True, "verified": True,
              "schema_sha1": "f" * 40, "stamped_at": "2026-08-01T00:00:00+00:00"}
-    _make_kit(root, "kit-a", meta={"status": "complete", "readiness": stale})
+    _make_kit(root, "kit-a", meta={"status": status, "readiness": stale})
     before = (root / "kit-a" / "metadata.json").read_bytes()
     resp = c.post(
         "/api/editor/kits/kit-a/readiness", json=SCHEMA, headers=AUTH

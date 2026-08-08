@@ -80,6 +80,11 @@ interface FormCatalogueProps {
 const STATUS_STYLE: Record<string, string> = {
   complete: 'bg-green-100 text-green-700',
   draft: 'bg-yellow-100 text-yellow-700',
+  // Kept in step with the hosted catalogue's map: a status this lookup does
+  // not know renders className="undefined" -- and once readKitEntry started
+  // recognizing 'unpublished' (bd polyglot-pdf-6dz0), that badge became
+  // reachable in normal local use rather than a dead path.
+  unpublished: 'bg-slate-200 text-slate-700',
   unknown: 'bg-gray-100 text-gray-600',
 };
 
@@ -264,6 +269,28 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const handleSetStatus = React.useCallback(async (kit: CatalogueEntry, status: KitStatus) => {
     if (!root) return;
     setNotice(null);
+    // An UNPUBLISHED kit is a superseded revision: its schema is what earlier
+    // confirmation records were confirmed against (bd polyglot-pdf-w3zw), so it
+    // is write-locked server-side. The local fallback below writes metadata.json
+    // DIRECTLY, with none of those gates -- so without this refusal, an offline
+    // editor could republish a retired revision's stale bytes unvalidated. The
+    // backend refuses this too; this is the local half of the same lock.
+    // The ONE exception is a republish THROUGH THE BACKEND: a retired revision
+    // returns to service only via the full publish gate, which is exactly what
+    // the server route runs. Refusing that too would make the status a
+    // one-way trip from the local editor even with the backend reachable --
+    // and rubric "republish restores visibility" unreachable here.
+    const republishViaServer = status === 'complete' && serverActionsOk;
+    if (kit.status === 'unpublished' && !republishViaServer) {
+      setError(
+        `"${kit.label}" is unpublished (a superseded revision). It cannot be `
+        + 'edited or changed from this folder view -- its schema is what '
+        + 'earlier confirmations were recorded against. Start the backend '
+        + '(scripts/run-schema-editor.sh) to publish it again, which runs the '
+        + 'full publish gate.',
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     // The strip's refusal line describes the OPEN form only. Both catalogues
@@ -562,6 +589,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           {summary.noSchema > 0 && (
             <span className="text-gray-500">{summary.noSchema} awaiting extraction</span>
           )}
+          {/* Rendered for the same reason as the hosted catalogue's: without
+              it a retired kit vanishes from the breakdown and the sub-counts
+              stop summing to the total. */}
+          {summary.unpublished > 0 && (
+            <span className="text-slate-600">{summary.unpublished} retired</span>
+          )}
         </div>
       )}
 
@@ -818,6 +851,29 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         Revert to draft
                       </button>
                     </>
+                  ) : kit.status === 'unpublished' ? (
+                    // Retired: it returns to service ONLY through the publish
+                    // gate, which lives server-side. Offer that when the
+                    // backend is reachable; otherwise say why it is not
+                    // actionable rather than showing "Mark complete", which
+                    // reads as if this were an unfinished draft.
+                    serverActionsOk ? (
+                      <button
+                        className="btn-sm btn-primary text-xs"
+                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        disabled={busy || deployingId !== null}
+                        title="Publish this retired version again -- runs the full publish gate on the backend"
+                      >
+                        Publish again
+                      </button>
+                    ) : (
+                      <span
+                        className="text-xs text-slate-600"
+                        title="This version was retired. Its schema is what earlier confirmations were recorded against, so it cannot be edited here. Start the backend (scripts/run-schema-editor.sh) to publish it again."
+                      >
+                        Retired -- start the backend to publish again
+                      </span>
+                    )
                   ) : (
                     <button
                       className="btn-sm btn-primary text-xs"

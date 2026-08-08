@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-06 (bd polyglot-pdf-9feav: TEST THE TESTS promoted to standard author practice at the top of the TDD cadence -- prove a new test fails before trusting it passes, mutate the real path, confirm the mutation applied. Also bd polyglot-pdf-saxh: when the same defect class survives your fix TWICE, change the MECHANISM not the instance; generate expectations from the real artifact. Also docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
+*Last updated: 2026-08-07 (bd polyglot-pdf-6dz0: assert-the-mechanism rule -- the four shapes of a test that passes for the wrong reason, and the delete-the-line audit that catches them; it is the WHAT to the TEST THE TESTS rule's HOW. Also bd polyglot-pdf-9feav: TEST THE TESTS promoted to standard author practice at the top of the TDD cadence -- prove a new test fails before trusting it passes, mutate the real path, confirm the mutation applied. Also bd polyglot-pdf-saxh: when the same defect class survives your fix TWICE, change the MECHANISM not the instance; generate expectations from the real artifact. Also docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -297,6 +297,39 @@ opposite. All three escapes shared one root -- the test was **matching** prose
 instead of **enumerating** it. Replacing the mechanism (enumerate every candidate
 sentence with no denial test at all, then require exact whole-sentence equality
 against an allowlist) held against every earlier escape at once.
+
+<a name="assert-the-mechanism"></a>
+**Assert the MECHANISM you claim to pin, not a symptom it happens to produce.**
+The commonest way a test lies is passing for a reason unrelated to its name.
+`polyglot-pdf-6dz0` burned six review rounds on this one class, and every
+instance was the same shape -- an assertion satisfied by something OTHER than
+the behaviour under test:
+
+- **A render branch standing in for a handler.** A test named "refuses a status
+  change" only asserted which element rendered; deleting the guard it named left
+  all 56 tests green. The guard was unreachable from the UI by construction, so
+  no UI test could pin it -- the fix was to move the lock into the write
+  primitive, where it protects every caller AND is directly callable.
+- **One value standing in for a dimension.** A property test asserting "every
+  write route refuses a locked kit" hardcoded `status="complete"`, so when a
+  second locked status arrived, five of six gates could be reverted with the
+  full 1779-test suite green. Parametrize over the whole dimension; a property
+  test that fixes one value of it is pinning a sample.
+- **A status code standing in for the work.** "Republish goes through the
+  publish gate" asserted `200` plus a metadata flip -- both satisfied by a bare
+  write. A mutation skipping every gate left 245 tests green. Assert the gate's
+  observable consequence (a bad kit is REFUSED), not the success shape.
+- **An unrelated candidate satisfying an ambiguity check.** A retrieval test
+  expected "ambiguous", but the live schema supplied a second candidate on its
+  own, so the assertion held whether or not the code found what it was supposed
+  to (`polyglot-pdf-w3zw`). Isolate the thing under test, and assert the COUNT
+  or the identity, not merely that the branch fired.
+
+The cheap audit, before trusting any new test: **name the one line of production
+code this test exists to protect, delete it, and confirm the test fails.** If it
+stays green the test is decorative -- and per the rule above, if this keeps
+happening the mechanism (where the code lives, how the assertion is framed) is
+what needs changing, not the assertion.
 
 **Prefer a NATURAL scope over a tuned constant.** The same pin was then defeated
 twice more on *scope* rather than vocabulary: matching one sentence at a time lost

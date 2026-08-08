@@ -583,11 +583,21 @@ def test_repeating_the_same_colliding_revision_still_skips(tmp_path):
     assert len(_run(store.list_archived_markers("w7"))) == 2
 
 
-def test_every_schema_writing_editor_route_refuses_a_published_kit(route_client):
+@pytest.mark.parametrize("locked_status", ["complete", "unpublished"])
+def test_every_schema_writing_editor_route_refuses_a_published_kit(
+    route_client, locked_status,
+):
     """The PROPERTY the archive's placement depends on: no editor route may
-    change a published kit's ANSWERABLE SHAPE (field ids/types/option values --
-    what the revision marker is computed from), so revert-to-draft is genuinely
+    change a WRITE-LOCKED kit's ANSWERABLE SHAPE (field ids/types/option values
+    -- what the revision marker is computed from), so retirement is genuinely
     the last moment the superseded revision's bytes exist.
+
+    Parametrized over EVERY write-locked status, not one sample: this test
+    hardcoded "complete", so when bd polyglot-pdf-6dz0 added `unpublished`,
+    five of the six gates could be reverted to the old two-value check with the
+    entire 1779-test suite still green (Opus fresh-eyes). A property test that
+    fixes one value of the dimension it claims to cover is pinning a sample,
+    not a property.
 
     Stated precisely, because "cannot be written by ANY route" is FALSE: the
     /status drift sweep does write schema.json on a complete->complete re-press.
@@ -600,7 +610,7 @@ def test_every_schema_writing_editor_route_refuses_a_published_kit(route_client)
     new SHAPE-writing route added later must gate or fail this test.
     """
     client, _store, root = route_client
-    _make_kit(root, "w7", _schema("a", edition="12/2024"), {"status": "complete"})
+    _make_kit(root, "w7", _schema("a", edition="12/2024"), {"status": locked_status})
     (root / "w7" / "form.pdf").write_bytes(b"%PDF-1.7 test")
     hdr = {"X-Editor-Token": "edit-tok"}
     author = {"X-Editor-Token": "auth-tok"}

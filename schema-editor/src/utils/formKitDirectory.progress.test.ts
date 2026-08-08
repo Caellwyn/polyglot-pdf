@@ -64,12 +64,28 @@ describe('summarizeCatalogue', () => {
       entry({ id: 'd', status: 'draft', hasSchema: false }),   // no schema -> awaiting extraction
     ];
     expect(summarizeCatalogue(entries)).toEqual({
-      total: 4, complete: 1, inProgress: 2, noSchema: 1,
+      total: 4, complete: 1, inProgress: 2, unpublished: 0, noSchema: 1,
+    });
+  });
+
+  it('counts a RETIRED kit separately, not as pending work', () => {
+    // A superseded revision (bd polyglot-pdf-6dz0) is neither live nor
+    // something anyone is expected to finish. Bucketing it as in-progress
+    // inflates the local review backlog with retired forms -- the exact
+    // miscount the hosted catalogue's summary was fixed to avoid, missed here
+    // because this is its twin in a different file (fresh-eyes round 3).
+    const entries: CatalogueEntry[] = [
+      entry({ id: 'live', status: 'complete', hasSchema: true }),
+      entry({ id: 'wip', status: 'draft', hasSchema: true }),
+      entry({ id: 'retired', status: 'unpublished', hasSchema: true }),
+    ];
+    expect(summarizeCatalogue(entries)).toEqual({
+      total: 3, complete: 1, inProgress: 1, unpublished: 1, noSchema: 0,
     });
   });
 
   it('is all-zero-ish for an empty catalogue', () => {
-    expect(summarizeCatalogue([])).toEqual({ total: 0, complete: 0, inProgress: 0, noSchema: 0 });
+    expect(summarizeCatalogue([])).toEqual({ total: 0, complete: 0, inProgress: 0, unpublished: 0, noSchema: 0 });
   });
 
   it('counts a complete-status kit WITHOUT a schema as awaiting extraction', () => {
@@ -81,7 +97,7 @@ describe('summarizeCatalogue', () => {
       entry({ id: 'a', status: 'complete', hasSchema: false }),
     ];
     expect(summarizeCatalogue(entries)).toEqual({
-      total: 1, complete: 0, inProgress: 0, noSchema: 1,
+      total: 1, complete: 0, inProgress: 0, unpublished: 0, noSchema: 1,
     });
   });
 });
