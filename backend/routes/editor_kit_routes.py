@@ -453,6 +453,24 @@ _KIT_STATUSES = ("draft", "complete", "unpublished")
 _WRITE_LOCKED_STATUSES = ("complete", "unpublished")
 
 
+def _normalize_author_version(value: object) -> str:
+    """The author-version normalization rule, in ONE place (bd polyglot-pdf-xzw5).
+
+    Trim, then strip a leading v/V ONLY when a digit follows -- so "v2" becomes
+    "2" while "version-3" is left intact. Returns "" for anything unusable
+    (non-string, blank, or a bare "v").
+
+    Every comparison and every write goes through this. Normalizing inside one
+    branch and comparing raw values in another made a legitimate republish
+    ("v2026-01-01" against a stored "2026-01-01") 409 as if the revision had
+    changed. Mirrored in schema-editor/src/components/AuthorVersionDialog.tsx
+    (normalizeAuthorVersion), with the same cases pinned on both sides.
+    """
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"^[vV](?=[0-9])", "", value.strip()).strip()
+
+
 def _status_of(meta: Optional[dict]) -> str:
     status = (meta or {}).get("status")
     return status if status in _KIT_STATUSES else "unknown"
@@ -2123,10 +2141,12 @@ async def set_editor_kit_status(
             isinstance(existing_author_version, str)
             and existing_author_version.strip()
         )
-        supplied_version = (
-            body.author_version.strip()
-            if isinstance(body.author_version, str) else ""
-        )
+        # Normalize ONCE, before any comparison or branch. Comparing a RAW
+        # supplied value against a NORMALIZED stored one made a legitimate
+        # republish look like a change: stored "2026-01-01" vs supplied
+        # "v2026-01-01" are the same revision after this route's own rule, but
+        # 409'd as if they were different (Opus fresh-eyes, reproduced live).
+        supplied_version = _normalize_author_version(body.author_version)
         version_to_persist: Optional[str] = None
 
         if not has_edition:
@@ -2148,7 +2168,9 @@ async def set_editor_kit_status(
             was_published = current_status in _WRITE_LOCKED_STATUSES
             if has_existing_version and was_published:
                 # Locked: only a REPUBLISH of the same version is allowed.
-                if supplied_version and supplied_version != existing_author_version.strip():
+                if supplied_version and supplied_version != _normalize_author_version(
+                    existing_author_version
+                ):
                     raise HTTPException(
                         status_code=409,
                         detail=(
@@ -2159,6 +2181,24 @@ async def set_editor_kit_status(
                             f"Publish a new kit for a new revision instead."
                         ),
                     )
+            elif was_published and supplied_version:
+                # A kit that is ALREADY LIVE with no version: accepting one
+                # would rewrite the exact bytes its existing confirmation
+                # records were confirmed against, in place and with no archive
+                # -- which is what the write-lock on every other schema-writing
+                # route exists to prevent (Opus fresh-eyes found this write was
+                # the one exception in the file). A legacy kit gets its version
+                # by publishing a NEW revision, the same route any other
+                # schema change takes.
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f'"{kit_id}" is already published without a version. Adding '
+                        f"one now would rewrite the schema its existing confirmation "
+                        f"records were confirmed against. Revert it to draft and "
+                        f"publish again to give this revision a version."
+                    ),
+                )
             elif has_existing_version and not supplied_version:
                 # A DRAFT carrying a version from an earlier failed publish, being
                 # re-pressed with nothing new: keep what is already there rather
@@ -2177,20 +2217,14 @@ async def set_editor_kit_status(
                     ),
                 )
             else:
-                # Normalize (trim + strip a leading v/V) and persist into the
-                # schema, which is what the client is served and what the voice
-                # path reads the marker from.
-                normalized = re.sub(r"^[vV](?=[0-9])", "", supplied_version).strip()
-                if not normalized:
-                    raise HTTPException(
-                        status_code=422,
-                        detail="author_version must contain more than a leading 'v'.",
-                    )
+                # Already normalized above. Persist into the schema, which is
+                # what the client is served and what the voice path reads the
+                # marker from.
                 meta_block = dict(meta_block)
-                meta_block["author_version"] = normalized
+                meta_block["author_version"] = supplied_version
                 schema = dict(schema)
                 schema["form_metadata"] = meta_block
-                version_to_persist = normalized
+                version_to_persist = supplied_version
 
 
         # Persist a newly-supplied author version (bd polyglot-pdf-xzw5) AFTER

@@ -312,6 +312,94 @@ def test_the_ARCHIVE_is_keyed_on_the_same_marker_a_RECORD_names(client):
     assert archived["form_metadata"]["author_version"] == "2026-08-07"
 
 
+@pytest.mark.parametrize("stored,supplied", [
+    # Supplied side unnormalized -- fixed by hoisting normalization ahead of
+    # the comparison (Opus fresh-eyes reproduced the false 409 live).
+    ("2026-01-01", "v2026-01-01"),
+    ("2026-01-01", "  2026-01-01  "),
+    # STORED side unnormalized: reachable because a schema can arrive from
+    # outside this route (hand-edited, or onboarded via git), and this route
+    # is not the only thing that can put bytes in a kit. Normalizing only the
+    # supplied side would 409 these as changes.
+    ("v2026-01-01", "2026-01-01"),
+    ("  2026-01-01  ", "2026-01-01"),
+    # Both sides unnormalized, spelled differently.
+    ("v2026-01-01", "  2026-01-01  "),
+])
+def test_republishing_an_EQUIVALENT_version_is_not_a_change(client, stored, supplied):
+    """Equivalent-after-normalization is the SAME revision, so a republish must
+    not 409 as if the author changed it -- a refusal they could not have
+    satisfied, since no other spelling was available to them.
+
+    Both sides go through the rule: normalizing only one leaves the other free
+    to differ, and a stored value can arrive from outside this route.
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = stored
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": supplied},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_a_GENUINELY_different_version_is_still_refused(client):
+    """The other half: normalizing both sides must not blur a real change into
+    an accepted republish."""
+    c, _store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-12-31"},
+                  headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_a_PUBLISHED_kit_with_no_version_refuses_to_gain_one(client):
+    """The version write is the only schema write on this route, and a
+    published kit's bytes are what its confirmation records were confirmed
+    against. Accepting a version here rewrote them IN PLACE with no archive --
+    the exact case the write-lock on all six sibling routes prevents (Opus
+    fresh-eyes: "SCHEMA REWRITTEN IN PLACE WHILE WRITE-LOCKED: True").
+    """
+    c, store, root = client
+    # A legacy kit: live, no edition date, no version.
+    _make_kit(root, "legacy", status="complete", schema=_no_edition_schema())
+    before = _run(store.load_schema("legacy", "schema.json"))
+
+    resp = c.post("/api/editor/kits/legacy/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "already published without a version" in resp.json()["detail"]
+    # The published bytes are untouched.
+    assert _run(store.load_schema("legacy", "schema.json")) == before
+
+
+def test_that_legacy_kit_CAN_be_versioned_by_republishing_it(client):
+    """The refusal above must not be a dead end: the documented route (revert
+    to draft, publish again) has to actually work, or a legacy kit could never
+    gain a version at all."""
+    c, store, root = client
+    _make_kit(root, "legacy", status="complete", schema=_no_edition_schema())
+
+    assert _status(c, "legacy", "draft").status_code == 200
+    resp = c.post("/api/editor/kits/legacy/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("legacy", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
 def test_a_whitespace_only_author_version_is_refused(client):
     """Mirrors the blank-edition rule: whitespace names no revision."""
     c, _store, root = client
