@@ -176,5 +176,12 @@ def test_write_locked_kit_is_refused_409(client, status):
         "/api/editor/kits/kit-a/readiness", json=SCHEMA, headers=AUTH
     )
     assert resp.status_code == 409
-    assert "published" in resp.json()["detail"]
+    # The detail names the REAL state via _lock_reason -- not one blanket
+    # "published" message for both (Opus round 3): a retired revision must
+    # not be pointed at a publish flow that does not apply to it.
+    detail = resp.json()["detail"]
+    if status == "unpublished":
+        assert "superseded revision" in detail
+    else:
+        assert "status complete" in detail
     assert (root / "kit-a" / "metadata.json").read_bytes() == before

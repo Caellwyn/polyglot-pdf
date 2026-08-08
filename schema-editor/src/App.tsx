@@ -789,6 +789,16 @@ export const App: React.FC = () => {
       // succeeded and must stay succeeded.
       if (!pickedNow && savingToKit && selectedKitId && localEntryRef.current) {
         const entry = localEntryRef.current;
+        // A WRITE-LOCKED kit's metadata.json is protected: complete kits are
+        // live, unpublished ones are the bytes earlier confirmation records
+        // were confirmed against (bd 6dz0 put the local lock at the
+        // setKitStatus primitive for exactly the future-caller hole this
+        // block would otherwise be -- Opus round 3). The backend restamp
+        // route 409s on them anyway; the client must not touch the file
+        // either, not even to retract a stamp claim.
+        if (entry.status === 'complete' || entry.status === 'unpublished') {
+          return;
+        }
         const canStamp = hasBackend() && folderCheck?.ok === true;
         try {
           if (canStamp) {

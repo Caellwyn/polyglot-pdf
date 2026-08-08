@@ -163,6 +163,24 @@ describe('local-save readiness stamping (bd na1zy)', () => {
     expect(localStamp.stampKitReadinessRemote).not.toHaveBeenCalled();
   });
 
+  // The FULL bd 6dz0 write-locked set, not a sample: a complete kit is live,
+  // an unpublished one holds the bytes earlier confirmation records were
+  // confirmed against. Neither may have its metadata touched -- not even to
+  // retract a stamp claim (Opus cross-surface round 3).
+  it.each(['complete', 'unpublished'] as const)(
+    'a write-locked kit (%s) gets NO stamp activity on save', async (status) => {
+      hasBackendMock.mockReturnValue(true);
+      kitEntry.status = status;
+      await openKitA();
+      fireEvent.click(screen.getByText('pick-root'));
+      await waitFor(() => expect(verifySameFolderMock).toHaveBeenCalled());
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+      await waitFor(() => expect(schemaWritable.write).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(localStamp.stampKitReadinessRemote).not.toHaveBeenCalled();
+      expect(localStamp.invalidateLocalStamp).not.toHaveBeenCalled();
+    });
+
   it('reload-from-file (discard) never writes a stamp (criterion 3)', async () => {
     await openKitA();
     // Save once in place (establishes the handle + the Reload button)...

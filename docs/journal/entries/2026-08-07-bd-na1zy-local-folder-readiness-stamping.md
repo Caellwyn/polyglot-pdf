@@ -71,7 +71,15 @@ site for the sprint-19 lifecycle work (bd 6dz0) to fold into its
 is-write-locked predicate. (2) docs/technical_guide.md's route table was
 missing the new route; row added and the stamp bumped. The reviewer also
 filed bd g8ftl (narrow invalidate-after-successful-restamp race; degraded
-outcome is the honest hint, non-blocking).
+outcome is the honest hint, non-blocking). Opus rounds 2-3: PR #562 (bd
+6dz0 kit-lifecycle statuses) merged into dev mid-closeout; after the merge
+the reviewer found two interaction gaps, both adopted -- the 409 guard
+widened to 6dz0's _is_write_locked predicate with _lock_reason's
+state-naming detail (an unpublished kit must refuse too, with the right
+message), and the client post-save block now SKIPS write-locked kits
+entirely (complete or unpublished): their metadata.json is protected bytes,
+not even a stamp retraction may touch it. Both parametrized over the full
+write-locked set and mutation-verified per parametrization.
 
 ## Lessons
 

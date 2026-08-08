@@ -41,6 +41,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.routes.editor_kit_routes import (
     _is_write_locked,
+    _lock_reason,
     _load_meta_or_404,
     _stamp_readiness,
     require_editor_role,
@@ -81,11 +82,10 @@ async def stamp_kit_readiness(
     # that was never saved (Opus cross-surface finding, bd na1zy). Uses the
     # bd 6dz0 write-lock predicate, so complete AND unpublished both refuse.
     if _is_write_locked(meta):
-        raise HTTPException(
-            status_code=409,
-            detail="This kit is published; its readiness stamp only changes "
-                   "through the publish flow.",
-        )
+        # _lock_reason names the REAL state (complete vs unpublished), the
+        # same detail every sibling lock site raises -- a retired revision
+        # must not be told to use a publish flow that does not apply.
+        raise HTTPException(status_code=409, detail=_lock_reason(meta))
     stamp = await _stamp_readiness(store, kit_id, schema, meta, files)
     _log.info("editor_readiness_restamped", kit_id=kit_id, role=role,
               readiness_percent=(stamp or {}).get("percent"),
