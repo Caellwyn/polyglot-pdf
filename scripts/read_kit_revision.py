@@ -160,9 +160,18 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
         current = None
     if isinstance(current, dict):
         form_meta = current.get("form_metadata")
+        form_meta = form_meta if isinstance(form_meta, dict) else {}
+        # ALL THREE ranks, exactly as the confirmation record resolved them
+        # (bd polyglot-pdf-xzw5). Omitting author_version here computed a
+        # sha256: fingerprint for a kit whose records name "2026-08-07", so a
+        # LIVE author-versioned revision was unfindable -- the audit trail
+        # naming a revision this tool could not produce, which is the precise
+        # failure the archive exists to prevent. The archive WRITER was fixed
+        # in this bead; this reader was the other half.
         live_marker = resolve_edition_marker(
-            form_meta.get("edition_date") if isinstance(form_meta, dict) else None,
+            form_meta.get("edition_date"),
             current,
+            form_meta.get("author_version"),
         )
         # Compare ENCODED: the archive keys on the encoded segment, so an
         # edition_date and its archived directory name compare the same way.

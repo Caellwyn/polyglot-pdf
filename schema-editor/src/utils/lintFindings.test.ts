@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import type { FormSchema } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 import {
+  RULE_REMEDIES,
   findingFingerprint,
   formLevelFindings,
   isFindingDismissable,
@@ -310,5 +311,28 @@ describe('the Form row standalone dismiss (s18 C1, decision 1)', () => {
     const twice = withFormFindingDismissed(once, coverage);
     expect(twice).toBe(once);
     expect(once._form_review?.dismissed_fingerprints).toHaveLength(1);
+  });
+});
+
+describe('audit-identity-no-edition remedy tracks the publish gate (bd polyglot-pdf-xzw5)', () => {
+  const remedy = RULE_REMEDIES['audit-identity-no-edition'];
+
+  it('does not tell the author to IGNORE a missing edition date', () => {
+    // It was safe to ignore while the fingerprint fallback was automatic. It is
+    // now the one case the publish gate HARD REFUSES (422
+    // AUTHOR_VERSION_REQUIRED), so "ignore this" pointed the author away from
+    // the only action that clears it. The backend/frontend parity test compares
+    // rule IDs only, never text, so CI was silent on the drift (Opus outer
+    // cross-surface review).
+    expect(remedy).not.toMatch(/ignore this/i);
+    expect(remedy).not.toMatch(/fall(s)? back to a content fingerprint automatically/i);
+  });
+
+  it('names both real remedies: an edition date, or a version at publish', () => {
+    // Allowlist rather than blacklist -- banning one phrasing is a synonym away
+    // from being defeated, so assert what the text MUST offer.
+    expect(remedy).toMatch(/edition date/i);
+    expect(remedy).toMatch(/version/i);
+    expect(remedy).toMatch(/publish/i);
   });
 });

@@ -117,7 +117,12 @@ export const RULE_REMEDIES: Record<string, string> = {
   'required-top-level': 'Move the required setting into the field\'s validation rules.',
   'legacy-trigger-side-logic': 'Rebuild this as a show_if / require_if rule on the target field.',
   'to-review-pending': 'File the field into a real section; if the holding section lists leftover ids no field uses, delete those ids.',
-  'audit-identity-no-edition': 'If this is an official government form, set its edition date (e.g. "12/2024") in the form metadata so confirmation records name the exact edition a client filled. If it is a custom or in-house form with no published edition, ignore this -- records fall back to a content fingerprint automatically.',
+  // Kept in step with schema_lint.py's audit-identity-no-edition message
+  // (bd polyglot-pdf-xzw5). "Ignore this" was true when the fingerprint
+  // fallback was automatic; it is now the one case the publish gate HARD
+  // REFUSES, so the old text pointed the author away from the only action
+  // that clears it.
+  'audit-identity-no-edition': 'If this is an official government form, set its edition date (e.g. "12/2024") in the form metadata so confirmation records name the exact edition a client filled. If it is a custom or in-house form with no published edition, you will be asked for a version when you publish it -- that names the revision instead.',
   'translation-drift-rectified': 'Review the auto-corrected translation.',
   'translation-drift-unresolved': 'Review and correct this translation by hand.',
   'translation-ambiguous-source': 'Add context or a glossary entry for this source text.',
