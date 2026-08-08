@@ -209,6 +209,19 @@ Raised to the maintainer (design consequence, not a defect):
    clip voice, and the Iapetus-only endpoint verification of the Chirp3
    derivation.
 
+## Outer (Opus cross-surface) triage -- round 3: GAPS-FOUND (1), adopted
+
+bd tk62w: the round-2 budget clamp applied a 5s floor AFTER the
+remaining-budget min, so the client-settles-before-90s invariant silently
+stopped holding past elapsed 75s -- and two pre-playback phases were
+unbounded (the Firebase getIdToken call, and the fetch on browsers without
+AbortSignal.timeout). Fixed unconditionally: the floor is gone (an exhausted
+budget kills the clip at arm time -- correct: never hold the mic past the
+model's release), the token fetch races a 10s bound, and the fetch abort now
+uses plain AbortController via the watchdog seam (universal support). The
+budget test now sweeps degenerate elapsed values and asserts the invariant
+with no exceptions.
+
 ## Voice matching (maintainer ask, mid-review 2026-08-07)
 
 The clip now defaults to the SAME persona as the Live model: Cloud TTS's

@@ -49,7 +49,7 @@ interface Harness {
 function makePlayer(overrides: {
   fetchImpl?: (...a: any[]) => Promise<Response>
   am?: AudioManager | null
-  watchdogs?: Array<() => void>
+  watchdogs?: Array<{ ms: number; fn: () => void }>
 } = {}): Harness {
   const holdLog: boolean[] = []
   const audios: FakeAudio[] = []
@@ -59,8 +59,8 @@ function makePlayer(overrides: {
   const player = createSpellbackPlayer({
     ...(overrides.watchdogs
       ? {
-          watchdog: (_ms: number, fn: () => void) => {
-            overrides.watchdogs!.push(fn)
+          watchdog: (ms: number, fn: () => void) => {
+            overrides.watchdogs!.push({ ms, fn })
             return () => {}
           },
         }
@@ -215,18 +215,19 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
   })
 
   it('playback watchdog: a stalled audio element cannot gate the mic forever (bd fjb2k)', async () => {
-    const watchdogs: Array<() => void> = []
+    const watchdogs: Array<{ ms: number; fn: () => void }> = []
     const { player, holdLog, audios } = makePlayer({ watchdogs })
 
     const done = player.play('NGUYEN')
     await settleMicrotasks()
-    expect(watchdogs).toHaveLength(1) // armed alongside playback
+    // Two watchdogs armed: the fetch abort timer, then the playback cap.
+    expect(watchdogs).toHaveLength(2)
     expect(player.isPlaying()).toBe(true)
 
     // The element never fires onended/onerror (OS audio interruption). The
-    // watchdog must stop it and resolve the error variant -- releasing the
-    // mic hold even with no PTT press available (open-mic mode).
-    watchdogs[0]()
+    // playback watchdog must stop it and resolve the error variant --
+    // releasing the mic hold even with no PTT press available (open-mic mode).
+    watchdogs[1].fn()
     const result = await done
     expect(result.status).toBe('error')
     expect(audios[0].pause).toHaveBeenCalled()
@@ -234,18 +235,26 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
     expect(player.isPlaying()).toBe(false)
   })
 
-  it('client budget arithmetic: elapsed + watchdog cap stays under the backend 90s round-trip cap (bd 9pnd3)', () => {
-    // Worst legitimate pre-playback spend: drain-wait cap (8s) + fetch
-    // timeout (20s). For EVERY value length up to the cap, the client call
-    // must settle before the backend's 90s SPELLBACK_ROUNDTRIP_TIMEOUT --
-    // otherwise the model is released to speak while the mic is still held.
-    const BACKEND_CAP_MS = 90000
-    const WORST_PRE_PLAYBACK_MS = 8000 + 20000
-    for (let len = 1; len <= SPELLBACK_MAX_CHARS; len++) {
-      const cap = computePlaybackCapMs(len, WORST_PRE_PLAYBACK_MS)
-      expect(WORST_PRE_PLAYBACK_MS + cap, `len=${len}`).toBeLessThan(BACKEND_CAP_MS)
+  it('client budget arithmetic: elapsed + watchdog cap NEVER exceeds the 80s client budget (bd 9pnd3/tk62w)', () => {
+    // The invariant is unconditional (Opus round 3): whatever the call has
+    // already spent -- including degenerate elapsed values past the budget --
+    // the playback cap never lets the total pass the 80s client budget, which
+    // sits under the backend's 90s SPELLBACK_ROUNDTRIP_TIMEOUT. A floor
+    // applied after the clamp used to break this once elapsed passed
+    // budget-minus-floor.
+    const CLIENT_BUDGET_MS = 80000
+    for (const elapsed of [0, 1000, 28000, 38000, 75000, 79000, 80000, 120000]) {
+      for (let len = 1; len <= SPELLBACK_MAX_CHARS; len++) {
+        const cap = computePlaybackCapMs(len, elapsed)
+        expect(cap, `len=${len} elapsed=${elapsed}`).toBeLessThanOrEqual(
+          Math.max(0, CLIENT_BUDGET_MS - elapsed))
+        expect(cap).toBeGreaterThanOrEqual(0)
+      }
     }
-    // And a fast call still gets the full value-proportional window.
+    // Worst REACHABLE pre-playback spend with every phase now bounded
+    // (drain 8s + token 10s + fetch 20s = 38s) still leaves a real window.
+    expect(computePlaybackCapMs(SPELLBACK_MAX_CHARS, 38000)).toBeGreaterThanOrEqual(42000 - 1)
+    // And a fast call still gets a full value-proportional window.
     expect(computePlaybackCapMs(60, 1000)).toBeGreaterThanOrEqual(60000)
   })
 

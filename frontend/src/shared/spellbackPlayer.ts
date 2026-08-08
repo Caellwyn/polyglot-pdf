@@ -57,21 +57,26 @@ const PLAYBACK_TIMEOUT_FLOOR_MS = 15000
 // round 2, bd polyglot-pdf-9pnd3). So the playback watchdog is budgeted
 // against the time the call has ALREADY spent, capped at this total.
 const CLIENT_TOTAL_BUDGET_MS = 80000
-// Never squeeze the watchdog below this -- a degenerate remaining-budget must
-// still allow a short clip to finish rather than killing it at arm time.
-const PLAYBACK_TIMEOUT_MIN_MS = 5000
+// The auth-token fetch is a network call (Firebase getIdToken) with no
+// timeout of its own -- bound it so it cannot eat the client budget
+// (Opus round 3, bd polyglot-pdf-tk62w).
+const TOKEN_TIMEOUT_MS = 10000
 
 /**
  * The playback watchdog's cap for a call that has already spent `elapsedMs`:
- * value-proportional, floored, and never past the remaining client budget.
- * Exported for the budget-arithmetic test (the whole point is the SUM stays
- * under the backend's 90s cap).
+ * value-proportional and never past the remaining client budget. NO floor --
+ * the budget invariant (the client settles before the backend's 90s cap,
+ * else the model is released while the mic is still held) beats letting a
+ * degenerate late start play; an exhausted budget kills the clip at arm time
+ * (Opus round 3, bd polyglot-pdf-tk62w: a min-floor applied after the clamp
+ * silently broke the invariant once elapsed passed budget-minus-floor).
+ * Exported for the budget-arithmetic test.
  */
 export function computePlaybackCapMs(valueLength: number, elapsedMs: number): number {
   const proportional = Math.max(
     PLAYBACK_TIMEOUT_FLOOR_MS, valueLength * PLAYBACK_TIMEOUT_PER_CHAR_MS)
   const remaining = CLIENT_TOTAL_BUDGET_MS - elapsedMs
-  return Math.max(PLAYBACK_TIMEOUT_MIN_MS, Math.min(proportional, remaining))
+  return Math.max(0, Math.min(proportional, remaining))
 }
 
 export interface SpellbackPlayerDeps {
@@ -225,7 +230,16 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
 
       let token: string | undefined
       try {
-        token = deps.getToken ? await deps.getToken() : undefined
+        // Race against a bound: getIdToken is a network call with no timeout
+        // of its own, and every unbounded pre-playback phase is a hole in the
+        // client-budget invariant (bd tk62w). Timeout -> proceed tokenless
+        // (the request then 401s and maps to the error variant).
+        token = deps.getToken
+          ? await Promise.race([
+              deps.getToken(),
+              sleep(TOKEN_TIMEOUT_MS).then(() => undefined as string | undefined),
+            ])
+          : undefined
       } catch {
         token = undefined
       }
@@ -233,6 +247,12 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
 
       const fetchStart = now()
       let blob: Blob
+      // AbortController (not AbortSignal.timeout, which is missing on older
+      // mobile Safari -- bd tk62w: an unbounded fetch is a hole in the
+      // client-budget invariant on exactly those browsers). The abort timer
+      // rides the injectable watchdog seam.
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+      const stopFetchWatchdog = watchdog(FETCH_TIMEOUT_MS, () => controller?.abort())
       try {
         const resp = await fetchImpl(deps.getHttpBase() + '/api/tts/spellback', {
           method: 'POST',
@@ -241,13 +261,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
             ...(token ? { Authorization: 'Bearer ' + token } : {}),
           },
           body: JSON.stringify({ value }),
-          // Guarded: AbortSignal.timeout is missing on older mobile Safari;
-          // without it the fetch simply has no client-side timeout (the
-          // backend's 90s cap still bounds the round-trip).
-          signal:
-            typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-              ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
-              : undefined,
+          ...(controller ? { signal: controller.signal } : {}),
         })
         if (!resp.ok) {
           return { status: 'error', reason: 'tts_http_' + resp.status }
@@ -255,6 +269,8 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
         blob = await resp.blob()
       } catch {
         return { status: 'error', reason: 'tts_fetch_failed' }
+      } finally {
+        stopFetchWatchdog()
       }
       const fetchMs = Math.round(now() - fetchStart)
       if (gen <= cancelledUpTo) return poisonResult()
