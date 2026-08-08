@@ -479,13 +479,26 @@ class TestSpellbackText:
                           return_value=None):
             assert resolve_spellback_voice(s, "Tagalog") == ("", "fil-PH")
 
-        # Rung 4: only an UNKNOWN language lands on the English clip.
+        # An UNKNOWN language resolves to the en-US locale upstream, and its
+        # persona voice is used when it exists.
         with patch.object(spellback_tts, "_voice_exists",
                           side_effect=lambda n: n.startswith("en-US")), \
              patch.object(spellback_tts, "_any_chirp3_voice_for",
                           return_value=None):
             assert resolve_spellback_voice(s, "Klingon") == (
                 "en-US-Chirp3-HD-Iapetus", "en-US")
+
+        # TERMINAL rung: NOTHING matches, including in en-US (a misconfigured
+        # LIVE_VOICE_NAME). The ladder must return the locale's DEFAULT voice
+        # -- an empty name is always valid -- and must NEVER hand back the
+        # persona name rung 1 already proved nonexistent, which would 502
+        # every clip in the session (fresh-eyes round 2).
+        with patch.object(spellback_tts, "_voice_exists", return_value=False), \
+             patch.object(spellback_tts, "_any_chirp3_voice_for",
+                          return_value=None):
+            assert resolve_spellback_voice(s, None) == ("", "en-US")
+            assert resolve_spellback_voice(s, "English") == ("", "en-US")
+            assert resolve_spellback_voice(s, "Spanish") == ("", "es-US")
 
         # Explicit override wins outright; its locale rides its prefix.
         s.SPELLBACK_TTS_VOICE = "en-US-Chirp3-HD-Algieba"

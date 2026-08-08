@@ -104,7 +104,11 @@ isolation) took warm connections the rest of the way:
 | + cached text clients | **~3.2s warm** |
 
 `lru_cache` could not be used for the cache -- `Settings` is unhashable -- so
-it is an id-keyed bounded dict.
+it is a bounded dict keyed on the CONFIG VALUES the client is built from. It
+was id-keyed at first; fresh-eyes round 1 flagged that as an aliasing footgun
+(CPython reuses addresses, so a GC'd short-lived Settings could alias a new
+one and hand back a client built for different config), and value-keying makes
+a differing Settings miss by construction.
 
 ## Validation (W-7 harness, live Vertex 2.5 native audio, temp 0.4)
 

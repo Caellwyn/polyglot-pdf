@@ -175,11 +175,12 @@ def resolve_spellback_voice(settings, language_name=None):
     to the Live model's LIVE_VOICE_NAME -- the Chirp 3 HD family carries the
     Live API's prebuilt voice names, so the clip sounds like the same speaker.
     Fallback ladder, LANGUAGE-FIRST (the user's language matters more than
-    the model's persona):
+    the model's persona). Every rung keeps the SESSION locale -- an unknown
+    language already resolved to en-US upstream, so there is no separate
+    English rung to fall to:
       1. {session-locale}-Chirp3-HD-{persona}  -- ideal: their language, our voice
       2. any Chirp3 voice in the SESSION locale -- their language, other voice
-      3. the locale's default voice ("")       -- still their language
-      4. en-US-Chirp3-HD-{persona}             -- only when the locale is unknown
+      3. the locale's default voice ("")       -- their language, always valid
     Inputs are .strip()ed, matching the Live adapter's own LIVE_VOICE_NAME
     handling (bd polyglot-pdf-vx0q4).
     """
@@ -207,16 +208,14 @@ def resolve_spellback_voice(settings, language_name=None):
                   wanted=candidate, using=same_language)
         return same_language, locale
 
-    # Rung 3: no Chirp3 at all in this locale -- the locale's DEFAULT voice
-    # still speaks the user's language, which beats an English clip.
-    if locale != _FALLBACK_LOCALE:
-        _log.info("spellback_voice_locale_default", wanted=candidate,
-                  locale=locale)
-        return "", locale
-
-    fallback = "%s-Chirp3-HD-%s" % (_FALLBACK_LOCALE, persona)
-    _log.info("spellback_voice_fallback", wanted=candidate, using=fallback)
-    return fallback, _FALLBACK_LOCALE
+    # Rung 3: no Chirp3 voice in this locale at all -- fall back to the
+    # locale's DEFAULT voice. Unconditional (fresh-eyes round 2): an empty
+    # voice name is ALWAYS valid, whereas the old English-persona rung, when
+    # the locale already WAS en-US, rebuilt the exact name rung 1 had just
+    # proven nonexistent -- 502ing every clip instead of degrading. Keeping
+    # the locale also keeps the user's language on the non-English path.
+    _log.info("spellback_voice_locale_default", wanted=candidate, locale=locale)
+    return "", locale
 
 
 def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
