@@ -2144,11 +2144,11 @@ async def set_editor_kit_status(
                 raise HTTPException(
                     status_code=422,
                     detail=(
-                        "This form has no government edition date, so it needs an "
-                        "author version to identify which revision a client "
-                        "confirmed against -- otherwise its records fall back to an "
-                        "unreadable content fingerprint. Supply author_version "
-                        '(e.g. "2026-08-07").'
+                        "AUTHOR_VERSION_REQUIRED: this form has no government "
+                        "edition date, so it needs an author version to identify "
+                        "which revision a client confirmed against -- otherwise its "
+                        "records fall back to an unreadable content fingerprint. "
+                        'Supply author_version (e.g. "2026-08-07").'
                     ),
                 )
             else:

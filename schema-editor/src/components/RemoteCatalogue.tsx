@@ -6,6 +6,7 @@ import {
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
+import { AuthorVersionDialog } from './AuthorVersionDialog';
 
 interface RemoteCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -87,6 +88,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  // The kit whose publish is waiting on an author version (bd polyglot-pdf-xzw5);
+  // null when no dialog is open. Set from the publish gate's REFUSAL, not from
+  // listing data -- the catalogue deliberately does not read every kit's schema,
+  // so the server is what knows a version is needed.
+  const [versionPrompt, setVersionPrompt] = React.useState<RemoteKitEntry | null>(null);
   // Monotonic token: a slow progress load from a superseded refresh must not
   // clobber the current one (same stale-scan discipline as FormCatalogue).
   const refreshSeq = React.useRef(0);
@@ -248,7 +254,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // retry), so a complete flip shows the elapsed ticker via completingId, and a
   // 409 "N of M translations complete" refusal surfaces as the error to re-press.
   const handleSetStatus = React.useCallback(async (
-    kit: RemoteKitEntry, status: KitLifecycleStatus,
+    kit: RemoteKitEntry, status: KitLifecycleStatus, authorVersion?: string,
   ) => {
     setNotice(null);
     setBusy(true);
@@ -263,7 +269,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     if (mirrorsToStrip) onStatusRefusal?.(null);
     if (status === 'complete') setCompletingId(kit.id);
     try {
-      const result = await setRemoteStatus(kit.id, status);
+      const result = await setRemoteStatus(kit.id, status, { authorVersion });
       if (status === 'complete') {
         // result.retranslated counts translation ENTRIES baked (one per
         // location x language), not distinct drifted strings -- a label shared
@@ -297,6 +303,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         return;
       }
       const detail = err instanceof Error ? err.message : 'Failed to update status';
+      // The kit has no government edition date and no version yet, so the
+      // publish gate is asking for one (bd polyglot-pdf-xzw5). Open the dialog
+      // and let the author name the revision, rather than showing them a raw
+      // refusal they cannot act on. Keyed on the machine-readable token the
+      // route emits -- the catalogue listing deliberately does not read every
+      // kit's schema, so the SERVER is what knows a version is needed.
+      if (detail.startsWith('AUTHOR_VERSION_REQUIRED:')) {
+        setVersionPrompt(kit);
+        return;
+      }
       setError(detail);
       // A refused completion of the OPEN kit also lands on the strip's
       // refusal line (sprint-18 C1): the refusal renders next to the counts
@@ -1014,6 +1030,24 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         <div className="mt-3 text-sm text-gray-500">
           The shared workspace is empty -- no forms have been uploaded yet.
         </div>
+      )}
+
+      {/* Opened by the publish gate's AUTHOR_VERSION_REQUIRED refusal, never
+          from listing data (bd polyglot-pdf-xzw5). Confirming re-runs the same
+          publish with the version attached -- so the server decides, and this
+          client never has to duplicate the "does this kit need one?" rule. */}
+      {versionPrompt && (
+        <AuthorVersionDialog
+          kitLabel={versionPrompt.label}
+          previousVersion={progress[versionPrompt.id]?.version?.label ?? null}
+          busy={completingId === versionPrompt.id}
+          onCancel={() => setVersionPrompt(null)}
+          onConfirm={(version) => {
+            const kit = versionPrompt;
+            setVersionPrompt(null);
+            void handleSetStatus(kit, 'complete', version);
+          }}
+        />
       )}
     </div>
   );

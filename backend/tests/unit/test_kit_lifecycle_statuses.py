@@ -99,7 +99,13 @@ def test_publishing_a_kit_with_no_edition_date_requires_an_author_version(client
     resp = _status(c, "custom", "complete")
 
     assert resp.status_code == 422, resp.text
-    assert "author version" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    # The prefix is a CONTRACT, not decoration: the editor opens its version
+    # dialog on exactly this token rather than re-deriving whether a kit needs
+    # one (the catalogue listing deliberately does not read every schema).
+    # Substring-matching the prose instead would break on any reword.
+    assert detail.startswith("AUTHOR_VERSION_REQUIRED:"), detail
+    assert "author version" in detail
     assert _run(store.load_metadata("custom"))["status"] == "draft"
 
 

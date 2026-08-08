@@ -472,15 +472,31 @@ export interface KitStatusResult {
  * language, with retry), and a 409 whose detail is the "N of M translations
  * complete" message means some language is still missing -- re-press to retry
  * only the gaps. */
+/** Optional extras on a status change. An OPTIONS OBJECT rather than more
+ * positional parameters: two same-typed optionals in a row (replacesKitId,
+ * authorVersion) are trivially swappable at a call site, and swapping THESE two
+ * would retire the wrong kit and record a kit id as a revision marker. */
+export interface SetRemoteStatusOptions {
+  /** Retire this other live kit for the same form as part of this publish. */
+  replacesKitId?: string;
+  /** Author-supplied revision marker, required to publish a kit that has no
+   * government edition_date (bd polyglot-pdf-xzw5). The backend REFUSES to
+   * change one that is already published. */
+  authorVersion?: string;
+}
+
 export async function setRemoteStatus(
-  kitId: string, status: KitLifecycleStatus, replacesKitId?: string,
+  kitId: string, status: KitLifecycleStatus, options: SetRemoteStatusOptions = {},
 ): Promise<KitStatusResult> {
+  const { replacesKitId, authorVersion } = options;
   const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(
-      replacesKitId ? { status, replaces_kit_id: replacesKitId } : { status },
-    ),
+    body: JSON.stringify({
+      status,
+      ...(replacesKitId ? { replaces_kit_id: replacesKitId } : {}),
+      ...(authorVersion ? { author_version: authorVersion } : {}),
+    }),
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the status'));
   return (await res.json()) as KitStatusResult;
