@@ -1,5 +1,23 @@
 """Spec for the 2026-07-16 voice-misfire SI rules (bd polyglot-pdf-oqkj + h7wx).
 
+WHAT THIS SUITE CANNOT DO (bd polyglot-pdf-6a79, measured 2026-08-07): it is a
+SUBSTRING suite, so it cannot see a CONTRADICTION. All 163 assertions passed
+while the live model was dropping a binding obligation ("you must also check and
+complete box h") from a spoken option in 2 of 3 runs -- every rule was present,
+every check green, the behaviour broken. Two rules that individually pass here
+can still collide on the same text. An SI change therefore needs LIVE validation,
+not just a green suite; see docs/standards/si-reduction.md ("Editing the SI:
+REWRITE the block").
+
+Assert the RULE, not its wording or which block it sits in. A long exact phrase
+or a block-anchored slice breaks on any rewrite that does not change behaviour,
+which costs real time and teaches nothing. EXCEPTIONS, all deliberate:
+  - strings the RENDER emits ("read ALL N aloud when asking", "ask ONE natural
+    question that makes both choices clear", "standard list; ask directly") are
+    the SI/ai_context coupling and stay byte-exact;
+  - the WORKFLOW slice below, which pins a redundancy that IS a fix;
+  - absence assertions, which pin retired premises.
+
 Tester-driven gaps in the DTI system instruction and injection templates:
   - dates: the model forwarded the field's format requirement to the USER
     ("give it as year, month, day") instead of converting a naturally spoken
@@ -44,7 +62,7 @@ def _settings() -> Settings:
 def test_dti_si_has_dates_rule_convert_yourself():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "DATES:" in si
-    assert "never ask the user to restate a date in a format" in si
+    assert "restate a date in a format" in si
     assert "YOURSELF" in si
 
 
@@ -136,7 +154,7 @@ def test_per_injection_anchor_carries_unmistakably():
 def test_dti_si_workflow_reads_back_from_stored_value_echo():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "stored_values" in si
-    assert "never your own memory of what was said" in si
+    assert "never your own memory" in si
 
 
 def test_dti_si_forbids_filling_unspoken_values():
@@ -184,7 +202,7 @@ def test_both_sis_carry_articulation_rule():
     # v4 folded ARTICULATION into DELIVERY for the DTI SI; the legacy SI keeps
     # its own ARTICULATION heading. The RULE -- word endings are the casualty --
     # is what both must carry.
-    assert "Articulate each word fully through to its END" in _dti()
+    assert "through to its END" in _dti()
     legacy = _legacy()
     assert "ARTICULATION" in legacy
     assert "full value through to the END of the word" in legacy
@@ -284,6 +302,9 @@ def test_delivery_block_carries_pace_and_articulation_together():
     assert "letter by letter" in si and "Never spell a word out letter by letter" in si
 
 
+# LAYOUT-COUPLED ON PURPOSE: this pins the LEGACY SI, which is frozen (the
+# deprecated section-reset fallback). Layout coupling is safe on a file nobody
+# is editing; do NOT copy this shape for the DTI SI.
 def test_legacy_si_block_order_is_register_then_pace_then_articulation():
     # The legacy SI's rules live in REGISTER, not SPEECH STYLE. Pinned because
     # an earlier revision of this change put BOTH articulation blocks into
@@ -347,7 +368,7 @@ def test_dti_si_carries_presenting_options_rule():
 def test_dti_si_forbids_partial_or_summarized_option_lists():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     # v4 states these as one prohibition rather than three sentences.
-    assert "Never summarize, trim, merge, skip or stop partway" in si
+    assert "Never summarize, trim, merge" in si
 
 
 def test_dti_si_one_at_a_time_phrase_is_prohibition_only():
@@ -367,7 +388,7 @@ def test_dti_si_forbids_one_by_one_yes_no_option_walk():
     # hears the full set of choices. Banned by name, and the WORKFLOW ask step
     # carries the recital so the numbered steps agree with PRESENTING OPTIONS.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "Never walk options one at a time as yes/no questions" in si
+    assert "walk options one at a time" in si
     assert "Present the whole list" in si
     # The recital is wired into WORKFLOW step 1, not only the options block --
     # and step 1 must carry the SAME carve-outs as PRESENTING OPTIONS: an
@@ -384,7 +405,7 @@ def test_dti_si_licenses_the_long_recital():
     # A brevity-biased audio model shortens what feels too long unless told the
     # length is intended.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "however long or awkward the list is" in si
+    assert "however long or awkward" in si
 
 
 def test_initiating_templates_carry_option_recital():
@@ -1036,7 +1057,7 @@ def test_real_multi_option_lists_keep_the_unconditional_recital():
 
 def test_dti_si_two_option_rule():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "one natural question carrying both choices IS the complete ask" in si
+    assert "carrying both choices IS the complete ask" in si
     assert "Do not recite the two labels" in si
     # Both phrasings are named so the rule travels beyond yes/no pairs.
     assert "plain yes/no when the options amount to yes and no" in si
@@ -1071,7 +1092,7 @@ def test_dti_si_handles_options_that_are_pure_print_navigation():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "leave NOTHING to say" in si
     assert "'Line 3a'" in si
-    assert "that reference IS the option's identity" in si
+    assert "IS the option's identity" in si
 
 
 def test_dti_si_speaks_substance_not_print_navigation():
@@ -1088,7 +1109,7 @@ def test_dti_si_speaks_substance_not_print_navigation():
     # carries a REAL requirement (keep): W-7 reason option a's "you must also
     # check and complete box h" is a genuine multi-select obligation, not
     # cruft (fresh-eyes finding, this PR).
-    assert "REQUIREMENT, CONDITION or CONSEQUENCE of choosing that option" in si
+    assert "REQUIREMENT, CONDITION or CONSEQUENCE" in si
     assert "SPEAK every REQUIREMENT" in si
     # v4 replaced the "one exception" framing with a FUNCTIONAL test plus a
     # tie-breaker. Measured: the old framing let the model strip a binding
