@@ -917,10 +917,17 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
         _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error=str(exc))
         return None
 
+    # Resolve through the SAME three ranks the confirmation record used, or the
+    # archive is keyed on something no record names and the retrieval this whole
+    # mechanism exists for silently fails (bd polyglot-pdf-xzw5; caught by Opus
+    # fresh-eyes, which showed an author_version kit archiving under a sha256:
+    # fingerprint while its records named the version).
+    _meta_block = schema.get("form_metadata")
+    _meta_block = _meta_block if isinstance(_meta_block, dict) else {}
     marker = resolve_edition_marker(
-        (schema.get("form_metadata") or {}).get("edition_date")
-        if isinstance(schema.get("form_metadata"), dict) else None,
+        _meta_block.get("edition_date"),
         schema,
+        _meta_block.get("author_version"),
     )
     if not marker:
         # No edition date AND no fingerprintable shape (an empty/fieldless
@@ -2128,7 +2135,19 @@ async def set_editor_kit_status(
             # revision those clients never saw -- the same hazard the retired-
             # kit write-lock exists to prevent (maintainer decision, 2026-08-08).
             # A republish of an already-versioned kit keeps the original.
-            if has_existing_version:
+            #
+            # Gated on HAVING BEEN PUBLISHED, not on the value merely existing.
+            # The version is written before the translation sweep, and that
+            # sweep routinely refuses (a partially-translated kit 409s with
+            # "N of M translations complete") -- leaving the kit in DRAFT with a
+            # version on disk. Locking on presence alone made that failed
+            # attempt permanent: the author's retry with a corrected version was
+            # refused, citing confirmation records that do not exist, on a kit
+            # the route explicitly expects them to re-press. A draft has no
+            # records to protect, so its version stays editable.
+            was_published = current_status in _WRITE_LOCKED_STATUSES
+            if has_existing_version and was_published:
+                # Locked: only a REPUBLISH of the same version is allowed.
                 if supplied_version and supplied_version != existing_author_version.strip():
                     raise HTTPException(
                         status_code=409,
@@ -2140,6 +2159,12 @@ async def set_editor_kit_status(
                             f"Publish a new kit for a new revision instead."
                         ),
                     )
+            elif has_existing_version and not supplied_version:
+                # A DRAFT carrying a version from an earlier failed publish, being
+                # re-pressed with nothing new: keep what is already there rather
+                # than demanding the author retype it. (Refusing here would make
+                # the retry path the sweep invites impossible to walk.)
+                pass
             elif not supplied_version:
                 raise HTTPException(
                     status_code=422,

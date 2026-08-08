@@ -319,8 +319,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // it contradicts, with click-to-focus links for any "(id=x)" the gate
       // names. A refusal about a DIFFERENT kit stays on its card only.
       if (status === 'complete' && mirrorsToStrip) onStatusRefusal?.(detail);
-      setBusy(false);
     } finally {
+      // BOTH resets belong here. setBusy(false) used to live at the end of the
+      // catch, which every early `return` in that block skipped -- and `busy`
+      // gates every control in this catalogue (Mark complete, Unpublish,
+      // Revert, Refresh, Rename, Extract), so one skipped reset disabled the
+      // whole component until a reload. The version-prompt return made that
+      // reachable by simply cancelling the dialog (Opus fresh-eyes,
+      // reproduced); the AuthError return had the same shape and was only
+      // survivable because it tears down to the auth gate anyway.
+      setBusy(false);
       setCompletingId(null);
     }
   }, [refresh, onAuthError, onStatusRefusal, selectedKitId]);
@@ -1039,13 +1047,25 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       {versionPrompt && (
         <AuthorVersionDialog
           kitLabel={versionPrompt.label}
-          previousVersion={progress[versionPrompt.id]?.version?.label ?? null}
+          // versionInfoFromSchema's fallback chain ends in the literal
+          // 'unknown', and this dialog only ever opens for a kit with NO
+          // marker -- so passing the label straight through rendered
+          // "Previous version: unknown" 100% of the time. Map it to null so
+          // the line hides instead.
+          previousVersion={(() => {
+            const label = progress[versionPrompt.id]?.version?.label;
+            return label && label !== 'unknown' ? label : null;
+          })()}
+          // Stays mounted through the retry: the publish re-translates one
+          // language per LLM call, so it can run for tens of seconds. Closing
+          // the dialog first left the author staring at an unchanged catalogue
+          // with no progress and an inviting Mark complete button -- and made
+          // the dialog's own busy/double-submit guard unreachable.
           busy={completingId === versionPrompt.id}
           onCancel={() => setVersionPrompt(null)}
           onConfirm={(version) => {
-            const kit = versionPrompt;
-            setVersionPrompt(null);
-            void handleSetStatus(kit, 'complete', version);
+            void handleSetStatus(versionPrompt, 'complete', version)
+              .finally(() => setVersionPrompt(null));
           }}
         />
       )}

@@ -181,7 +181,9 @@ def test_a_published_author_version_CANNOT_be_changed(client):
     c, store, root = client
     schema = _no_edition_schema()
     schema["form_metadata"]["author_version"] = "2026-01-01"
-    _make_kit(root, "custom", status="draft", schema=schema)
+    # PUBLISHED is the precondition, not merely "has a version" -- a draft
+    # carrying a version from a failed publish has no records to protect.
+    _make_kit(root, "custom", status="complete", schema=schema)
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-12-31"},
@@ -235,6 +237,79 @@ def test_a_BROKEN_schema_reports_its_own_defect_not_the_version_prompt(client):
     assert "author version" not in detail, (
         "the version prompt masked the real schema error: " + detail
     )
+
+
+def test_a_FAILED_publish_does_not_lock_the_version_forever(client):
+    """The version is written before the translation sweep, and that sweep
+    routinely refuses ("N of M translations complete") -- leaving the kit in
+    DRAFT with a version on disk. Locking on the value's mere presence made
+    that failed attempt permanent: the author's corrected retry was refused,
+    citing confirmation records that do not exist, on a kit the route
+    explicitly expects them to re-press (Opus fresh-eyes, reproduced).
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    # Exactly the state a sweep-refused publish leaves behind.
+    schema["form_metadata"]["author_version"] = "typo-verison"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+def test_a_draft_carrying_a_version_republishes_without_retyping_it(client):
+    """The other half of the retry path: re-pressing Mark complete with nothing
+    new must keep the version already on disk, not demand it again."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-07"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = _status(c, "custom", "complete")
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+def test_the_ARCHIVE_is_keyed_on_the_same_marker_a_RECORD_names(client):
+    """The archive exists so a confirmation record's marker can retrieve the
+    exact bytes that client confirmed against. If the two disagree the whole
+    mechanism silently fails -- the bytes are on disk under a key nobody holds.
+
+    The archive resolver omitted author_version, so an edition-less kit archived
+    under sha256:... while its records named "2026-08-07" (Opus fresh-eyes ran
+    this end to end and got NOT FOUND). Pins the AGREEMENT, not either half.
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    # Publish with a version, then retire it -- retirement is what archives.
+    assert c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR).status_code == 200
+    assert _status(c, "custom", "unpublished").status_code == 200
+
+    published = _run(store.load_schema("custom", "schema.json"))
+    # The marker a confirmation record would carry for this revision...
+    from backend.utils.confirmation_logger import resolve_edition_marker
+    meta_block = published["form_metadata"]
+    record_marker = resolve_edition_marker(
+        meta_block.get("edition_date"), published, meta_block.get("author_version"),
+    )
+    assert record_marker == "2026-08-07"
+    # ...must be the key the archive is retrievable by.
+    archived = _run(store.load_archived_revision_or_none("custom", record_marker))
+    assert archived is not None, (
+        "archived bytes are unreachable by the marker its records name"
+    )
+    assert archived["form_metadata"]["author_version"] == "2026-08-07"
 
 
 def test_a_whitespace_only_author_version_is_refused(client):

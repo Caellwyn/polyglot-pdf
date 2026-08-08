@@ -697,6 +697,77 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     expect(setRemoteStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('cancelling does NOT strand the catalogue disabled', async () => {
+    // `busy` gates every control here (Mark complete, Unpublish, Revert,
+    // Refresh, Rename, Extract). The early return that opens the dialog used to
+    // skip setBusy(false) -- which sat at the END of the catch -- so cancelling
+    // disabled the whole component until a reload (Opus fresh-eyes,
+    // reproduced). Both resets now live in `finally`.
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(new Error(REFUSAL));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    await waitFor(() => {
+      const btn = screen.getAllByText('Mark complete')[0].closest('button');
+      expect(btn?.disabled).toBe(false);
+    });
+  });
+
+  it('hides the previous-version line rather than printing "unknown"', async () => {
+    // versionInfoFromSchema falls back to the literal 'unknown', and this
+    // dialog only opens for a kit with no marker -- so the rubric's "previous
+    // value shown" clause rendered "Previous version: unknown" every time.
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(new Error(REFUSAL));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    expect(screen.queryByText(/Previous version/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the dialog open while the retry runs', async () => {
+    // The retry re-translates one language per LLM call -- tens of seconds.
+    // Closing the dialog first showed an unchanged catalogue with no progress
+    // and an inviting Mark complete, and made the dialog's own busy guard
+    // unreachable.
+    let settle: (v: unknown) => void = () => {};
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockImplementationOnce(() => new Promise((res) => { settle = res; }));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
+    // Still mounted mid-flight.
+    expect(screen.getByText(/Name this version of/)).toBeInTheDocument();
+
+    settle({ ok: true, status: 'complete', retranslated: 0,
+             translationModel: null, supersededKitId: null });
+    await waitFor(() =>
+      expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument());
+  });
+
+  it('surfaces a SECOND refusal instead of leaving the dialog hanging', async () => {
+    // If the retry is refused for a different reason (lint, translations), the
+    // dialog closes and the real error must be visible -- not swallowed.
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockRejectedValueOnce(new Error('Schema has 2 lint error(s), so it cannot be marked complete'));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(screen.getByText(/lint error/)).toBeInTheDocument());
+    expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument();
+  });
+
   it('a DIFFERENT publish refusal still shows as an error, not the dialog', async () => {
     // The dialog must be scoped to its own token. A lint refusal that opened a
     // version prompt would hide the real problem and prompt for the wrong fix.
