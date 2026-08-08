@@ -563,6 +563,21 @@ class TestSpellbackTtsRoute:
                 "/api/tts/spellback",
                 json={"value": "Jose", "language": "Spanish"})
             assert resp.status_code == 200
+            # Wire-compat: a client one deploy behind omits `language`
+            # entirely; the route must still synthesize (en-US fallback),
+            # never 422 on the missing optional field.
+            seen = {}
+
+            async def fake_synth_no_lang(value, settings, language_name=None):
+                seen["language_name"] = language_name
+                return b"MP3BYTES"
+
+            monkeypatch.setattr(
+                "backend.routes.tts_routes.synthesize_spellback",
+                fake_synth_no_lang)
+            resp2 = client.post("/api/tts/spellback", json={"value": "Jose"})
+            assert resp2.status_code == 200
+            assert seen["language_name"] is None
             assert resp.headers["content-type"].startswith("audio/mpeg")
             assert resp.content == b"MP3BYTES"
         finally:

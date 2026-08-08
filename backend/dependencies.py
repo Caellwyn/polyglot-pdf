@@ -64,17 +64,36 @@ def get_text_ai_pro(settings: Settings = Depends(get_settings)) -> ITextAI | Non
 # Process-cached TEXT clients (bd polyglot-pdf-4hnyq). Safe to share:
 # TextAIGemini is a stateless request/response helper -- no callbacks, no
 # session, nothing per-connection -- unlike LiveAIGemini, which MUST stay
-# fresh per connection (callback isolation, see get_live_ai). Keyed by
-# id(settings) because Settings is not hashable (so lru_cache cannot be used);
-# get_settings is itself lru_cached, so in production this is one stable key,
-# and a test injecting its own Settings gets its own entry. Bounded so a
-# pathological caller cannot grow it without limit.
+# fresh per connection (callback isolation, see get_live_ai).
+#
+# Keyed on the CONFIG VALUES that determine the client, never on id(settings):
+# Settings is unhashable (so lru_cache is out), and an identity key is a live
+# footgun -- CPython aggressively reuses addresses, so a GC'd short-lived
+# Settings could alias a NEW one and hand back a client built for different
+# config (wrong model / vertexai / key). Tests build transient Settings
+# constantly, and this repo has already been bitten by an id/cache-aliasing
+# bug of this shape (fresh-eyes round 1). Value-keying makes a differing
+# Settings miss the cache by construction.
 _TEXT_AI_CACHE: dict = {}
 _TEXT_AI_CACHE_MAX = 8
 
 
+def _text_ai_cache_key(kind: str, settings: Settings) -> tuple:
+    """The config values a text client is built from (see get_text_ai /
+    get_text_ai_pro). Any difference here MUST miss the cache."""
+    return (
+        kind,
+        getattr(settings, "GEMINI_API_KEY", None),
+        getattr(settings, "MODEL_LABELING", None),
+        getattr(settings, "VERTEXAI", None),
+        getattr(settings, "FORM_COMPLETE_PRO_VALIDATOR", None),
+        getattr(settings, "VALIDATOR_PRO_MODEL", None),
+        getattr(settings, "VALIDATOR_PRO_THINKING_BUDGET", None),
+    )
+
+
 def _cache_get_or_build(kind: str, settings: Settings, build):
-    key = (kind, id(settings))
+    key = _text_ai_cache_key(kind, settings)
     if key not in _TEXT_AI_CACHE:
         if len(_TEXT_AI_CACHE) >= _TEXT_AI_CACHE_MAX:
             _TEXT_AI_CACHE.clear()
