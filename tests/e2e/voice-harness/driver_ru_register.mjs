@@ -46,16 +46,10 @@ const FRONTEND = process.env.VFF_FRONTEND_URL || 'http://localhost:5174';
 const BACKEND_WS = process.env.VFF_BACKEND_WS || 'ws://127.0.0.1:8001/ws/fill';
 const harnessSource = readFileSync(join(HERE, 'harness.js'), 'utf8');
 
-// RUSSIAN-SESSION variant. The point of this run is that ASR is ru-RU, so the
-// Cyrillic utterance reaches the model AS CYRILLIC -- in the en-US sessions the
-// recognizer force-romanized it ("Familie Nikolai") and the probe tested nothing
-// (see VALIDATION-PLAN.md, "MEASURED CONFOUND").
-//
-// NO ENGLISH LEAD-IN: every lead-in fixture is English speech, which a ru-RU
-// recognizer would mangle. Reaching the name field: SEED the six fields ahead of it (through the real
-// SchemaFormStateManager write path, the same one a genuine confirm uses) rather
-// than voice-filling them. Voice lead-in is not an option here -- every lead-in
-// fixture is English speech and this session's recognizer is ru-RU.
+// RUSSIAN session so ASR runs ru-RU and the model SPEAKS Russian -- that
+// spoken prose is the whole point (register review). Nothing is injected:
+// every fixture in this harness is English speech, which a ru-RU recognizer
+// would mangle, and the recital fires on the ASK anyway.
 const SEED = {
   // Seed ONLY field 1. The point of this driver is to make the model SPEAK the
   // remaining section-1 fields in Russian -- especially 'reason', whose 8
@@ -63,9 +57,7 @@ const SEED = {
   // register sample; seeding more would skip the very text under review.
   application_type: 'apply_new_itin',
 };
-const LEAD_IN = [];
-const TARGET_FIELD = 'name_1a_first';
-const FIXTURES = [];
+const FIXTURES = [];   // nothing is injected -- see above
 
 function log(msg) { process.stderr.write(`[ru-register] ${msg}\n`); }
 
@@ -135,9 +127,9 @@ async function clickButton(page, re, label) {
   await clickButton(page, new RegExp(RU_AGREE + '|I Agree'), 'disclaimer agree (ru)');
 
   const PACING = process.env.VFF_PACING || 'polite';
-  log(`lead-in + probe (pacing: ${PACING})`);
+  log(`seeding field 1, then LISTENING (pacing: ${PACING})`);
 
-  await page.evaluate(({ leadIn, target, pacing, seed }) => {
+  await page.evaluate(({ pacing, seed }) => {
     window.__vffLatinReport = null;
     const H = window.__VFF_HARNESS;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -162,11 +154,11 @@ async function clickButton(page, re, label) {
     // if the model had said nothing.
 
     (async () => {
-      const out = { leadIn: [], probe: {}, followUp: {}, seed: {} };
+      const out = { seed: {}, listen: null };
       try {
         // Seed the fields ahead of the name field so the model lands on it.
         // seedFields verifies each write read back confirmed via sessionStorage,
-        // so a silent seed failure surfaces here instead of corrupting the probe.
+        // so a silent seed failure surfaces here instead of corrupting the run.
         try {
           out.seed = window.__VFF_HARNESS.seedFields(seed);
         } catch (e) {
@@ -175,57 +167,13 @@ async function clickButton(page, re, label) {
         if (out.seed && out.seed.failed && out.seed.failed.length) {
           out.error = 'seed incomplete: ' + out.seed.failed.join(',');
         }
-        // Seeding all 7 fields of section 1 COMPLETES it, so the app
-        // auto-advances to section 2 (where the name fields live). That switch
-        // tears down and re-opens the Gemini session. The first attempt probed
-        // during that window and the audio went out over a still-CONNECTING
-        // socket: 699x "send() called but WebSocket not open! readyState:0",
-        // a "Section switch timed out", ZERO Cyrillic in the transcript -- and
-        // the run STILL reported a stored value, i.e. a fake result.
-        //
-        // The switch is REQUIRED (the target field is in section 2), so wait
-        // for it authoritatively -- waitForSection is the harness's own
-        // section-cross proof -- and record the outcome so a bad window is
-        // visible in the data instead of silently scoring.
-        const sec = await H.waitForSection(2, { timeoutMs: 60000 });
-        out.sectionCrossed = !!(sec && sec.met);
-        if (!out.sectionCrossed) {
-          out.error = 'section switch to 2 never completed after seeding';
-        }
-        await H.waitForSectionGreeting({ timeoutMs: 25000 });
-        await sleep(3000);   // let the re-opened session settle
-        // --- lead-in: answer three normal fields so we arrive mid-form -----
-        // RETRY like driver_w7_desync.mjs does: the very first injection of a
-        // session is routinely dropped (the model is still opening its turn),
-        // and every 15-step run needed a retry on exactly this first field. A
-        // no-retry lead-in aborts the run before the probe ever fires, which
-        // scores as `storedAfterCyrillic: null` -- indistinguishable from the
-        // model correctly storing nothing. That false NEGATIVE is worse than a
-        // crash, so the retry is load-bearing, not convenience.
-        for (const [fieldId, fixture] of leadIn) {
-          let rec = { fieldId, filled: false, confirmed: false, retries: 0 };
-          for (let attempt = 0; attempt < 3; attempt++) {
-            if (attempt) { rec.retries++; await sleep(2000); }
-            await pace();
-            await H.injectUtterance(window.__vffBufs[fixture]);
-            const f = await H.waitForFieldValue(fieldId, { timeoutMs: 35000 });
-            if (!f.met) continue;
-            rec.filled = true;
-            await pace();
-            await H.injectUtterance(window.__vffYes);
-            let c = await H.waitForConfirmed(fieldId, { timeoutMs: 30000 });
-            if (!c.met) {
-              // 95uy quirk: one extra "yes" on a confirm stall.
-              await H.injectUtterance(window.__vffYes);
-              c = await H.waitForConfirmed(fieldId, { timeoutMs: 20000 });
-            }
-            if (c.met) { rec.confirmed = true; break; }
-          }
-          out.leadIn.push(rec);
-          if (!rec.confirmed) { out.error = 'lead-in stalled at ' + fieldId; break; }
-          await sleep(2000);
-        }
-
+        // NO section wait here. This driver seeds ONE field, so section 1 is
+        // never completed and never auto-advances -- the model just asks the
+        // next field in place, which is exactly what we want to hear. (The
+        // sibling storage drivers DO seed all 7 and must wait for the
+        // section-2 switch; copying that wait here made waitForSection(2)
+        // time out and abort the listen loop before it ran.)
+        await sleep(3000);   // let the opening question land
         if (!out.error) {
           // LISTEN, do not answer. The model asks the remaining section-1
           // fields in Russian one after another; we only need it to SPEAK so
@@ -255,7 +203,7 @@ async function clickButton(page, re, label) {
             // audio the recognizer must guess at.
             await sleep(3000);
           }
-          out.probe.probeRan = true;   // listening completed
+          out.listened = true;
         }
       } catch (e) {
         out.error = String(e && e.message);
@@ -263,7 +211,7 @@ async function clickButton(page, re, label) {
       out.done = true;
       window.__vffLatinReport = out;
     })();
-  }, { leadIn: LEAD_IN, target: TARGET_FIELD, pacing: PACING, seed: SEED });
+  }, { pacing: PACING, seed: SEED });
 
   const deadline = Date.now() + 10 * 60 * 1000;
   let report = null;
