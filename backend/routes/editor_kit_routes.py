@@ -2181,8 +2181,8 @@ async def set_editor_kit_status(
                             f"Publish a new kit for a new revision instead."
                         ),
                     )
-            elif was_published and supplied_version:
-                # A kit that is ALREADY LIVE with no version: accepting one
+            elif current_status == "complete" and supplied_version:
+                # A kit that is CURRENTLY LIVE with no version: accepting one
                 # would rewrite the exact bytes its existing confirmation
                 # records were confirmed against, in place and with no archive
                 # -- which is what the write-lock on every other schema-writing
@@ -2190,6 +2190,15 @@ async def set_editor_kit_status(
                 # the one exception in the file). A legacy kit gets its version
                 # by publishing a NEW revision, the same route any other
                 # schema change takes.
+                #
+                # Scoped to `complete`, NOT to write-locked generally. An
+                # UNPUBLISHED kit is retired -- serving nobody -- and republish
+                # is its one documented route back into service, which archives
+                # the outgoing revision first. Refusing it here bricked exactly
+                # the kit class this bead exists to serve: revert-to-draft is a
+                # hard 409 for a retired kit (bd polyglot-pdf-6dz0), so every
+                # exit was closed AND this message named one the API forbids
+                # (Opus fresh-eyes round 3, reproduced).
                 raise HTTPException(
                     status_code=409,
                     detail=(

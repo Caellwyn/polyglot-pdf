@@ -400,6 +400,53 @@ def test_that_legacy_kit_CAN_be_versioned_by_republishing_it(client):
     assert saved["form_metadata"]["author_version"] == "2026-08-07"
 
 
+def test_a_RETIRED_edition_less_kit_can_still_return_to_service(client):
+    """A retired kit is serving nobody, and republish is its ONE documented
+    route back (bd polyglot-pdf-6dz0 makes unpublished -> draft a hard 409).
+
+    Scoping the "already published without a version" refusal to write-locked
+    kits GENERALLY closed every exit for an edition-less retired kit -- and the
+    409 it emitted told the author to revert to draft, which the API forbids.
+    Bricked exactly the kit class this bead exists to serve (Opus fresh-eyes
+    round 3, reproduced across all four exits).
+    """
+    c, store, root = client
+    _make_kit(root, "retired", status="unpublished", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/retired/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("retired"))["status"] == "complete"
+    saved = _run(store.load_schema("retired", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+@pytest.mark.parametrize("status,expected", [
+    # LIVE: accepting a version would rewrite bytes that records name.
+    ("complete", 409),
+    # RETIRED: serving nobody; republish is the documented way back.
+    ("unpublished", 200),
+    # DRAFT: not published at all, nothing to protect.
+    ("draft", 200),
+])
+def test_adding_a_version_is_refused_ONLY_for_a_currently_live_kit(
+    client, status, expected,
+):
+    """Enumerates the whole status dimension rather than sampling it. The
+    round-2 fix keyed on "write-locked", which lumps `unpublished` in with
+    `complete` -- a distinction that only shows up if every value is tried."""
+    c, _store, root = client
+    _make_kit(root, "k", status=status, schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/k/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == expected, resp.text
+
+
 def test_a_whitespace_only_author_version_is_refused(client):
     """Mirrors the blank-edition rule: whitespace names no revision."""
     c, _store, root = client

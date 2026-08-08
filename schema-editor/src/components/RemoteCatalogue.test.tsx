@@ -733,7 +733,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     // Closing the dialog first showed an unchanged catalogue with no progress
     // and an inviting Mark complete, and made the dialog's own busy guard
     // unreachable.
-    let settle: (v: unknown) => void = () => {};
+    let settle: (v: KitStatusResult) => void = () => {};
     vi.mocked(setRemoteStatus)
       .mockRejectedValueOnce(new Error(REFUSAL))
       .mockImplementationOnce(() => new Promise((res) => { settle = res; }));

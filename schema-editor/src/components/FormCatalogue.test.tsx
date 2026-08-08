@@ -8,6 +8,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 import { FormCatalogue } from './FormCatalogue';
 
+
 // --- in-memory mock directory ---------------------------------------------- //
 function mockFile(name: string, contents = '') {
   const state = { contents };
@@ -1197,6 +1198,92 @@ describe('FormCatalogue -- run extraction', () => {
       };
       return impl as unknown as typeof fetch;
     }
+
+    it('opens the version dialog instead of dumping the raw refusal token', async () => {
+      // run-schema-editor.sh starts the BACKEND too, so local mode hits the
+      // same publish gate as hosted. Without this branch the author saw
+      // "AUTHOR_VERSION_REQUIRED: ..." verbatim in the error area with no
+      // input, and an edition-less kit was un-publishable here at all (Opus
+      // fresh-eyes round 3). Drives the REAL setRemoteStatus via fetch.
+      const root = mockRoot([
+        mockKit('acme', { 'schema.json': SCHEMA,
+                          'metadata.json': JSON.stringify({ label: 'Acme Intake', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 422,
+        json: async () => ({ detail: 'AUTHOR_VERSION_REQUIRED: this form has no '
+          + 'government edition date, so it needs an author version.' }),
+      } as unknown as Response));
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await waitFor(() => expect(screen.getByText('Acme Intake')).toBeTruthy());
+      fireEvent.click(screen.getByText('Mark complete'));
+
+      await waitFor(() =>
+        expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+      expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
+    });
+
+    it('retries through the server with the normalized version attached', async () => {
+      const root = mockRoot([
+        mockKit('acme', { 'schema.json': SCHEMA,
+                          'metadata.json': JSON.stringify({ label: 'Acme Intake', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      const posted: unknown[] = [];
+      let call = 0;
+      global.fetch = completeFetchMock((body) => {
+        posted.push(body);
+        call += 1;
+        return call === 1
+          ? ({ ok: false, status: 422,
+               json: async () => ({ detail: 'AUTHOR_VERSION_REQUIRED: needs a version.' }),
+             } as unknown as Response)
+          : ({ ok: true, status: 200,
+               json: async () => ({ ok: true, status: 'complete', retranslated: 0,
+                                    translationModel: null, supersededKitId: null }),
+             } as unknown as Response);
+      });
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await waitFor(() => expect(screen.getByText('Acme Intake')).toBeTruthy());
+      fireEvent.click(screen.getByText('Mark complete'));
+      await waitFor(() =>
+        expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+      fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v2026-08-07' } });
+      fireEvent.click(screen.getByText('Publish'));
+
+      await waitFor(() => expect(posted.length).toBe(2));
+      // Leading v stripped, and sent under the wire key the route reads.
+      expect(posted[1]).toEqual({ status: 'complete', author_version: '2026-08-07' });
+    });
+
+    it('a NON-version refusal still shows as an error, not the dialog', async () => {
+      const root = mockRoot([
+        mockKit('acme', { 'schema.json': SCHEMA,
+                          'metadata.json': JSON.stringify({ label: 'Acme Intake', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 409,
+        json: async () => ({ detail: 'Schema has 2 lint error(s), so it cannot be marked complete' }),
+      } as unknown as Response));
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await waitFor(() => expect(screen.getByText('Acme Intake')).toBeTruthy());
+      fireEvent.click(screen.getByText('Mark complete'));
+
+      await waitFor(() => expect(screen.getByText(/lint error/)).toBeInTheDocument());
+      expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument();
+    });
 
     it('calls the backend instead of writing metadata.json when server actions are OK', async () => {
       const root = mockRoot([
