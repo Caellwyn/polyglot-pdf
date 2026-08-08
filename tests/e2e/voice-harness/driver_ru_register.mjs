@@ -23,8 +23,8 @@
  * storage probe) and driver_latin_storage_ru.mjs (the same probe in a ru-RU
  * session, where Cyrillic actually reaches the model).
  *
- * Env: as driver_w7_desync.mjs (VFF_FRONTEND_URL, VFF_BACKEND_WS,
- * VFF_PLAYWRIGHT_DIR, VFF_PACING).
+ * Env: VFF_FRONTEND_URL, VFF_BACKEND_WS, VFF_PLAYWRIGHT_DIR.
+ * (No VFF_PACING -- this driver injects nothing, so there is nothing to pace.)
  *
  * Usage: node tests/e2e/voice-harness/driver_ru_register.mjs
  * Exit 0 = observations captured (NOT a pass verdict); 1 = crash.
@@ -99,8 +99,8 @@ async function clickButton(page, re, label) {
   }, BACKEND_WS);
   await page.goto(FRONTEND, { waitUntil: 'domcontentloaded' });
 
-  // RUSSIAN session -> ASR runs ru-RU -> Cyrillic reaches the model intact.
-  // The button label is the native name; match on it rather than "Russian".
+  // Pick RUSSIAN so the model SPEAKS Russian -- its prose is the sample.
+  // The button shows the native name, so match that too, not just "Russian".
   await clickButton(page, /Russkiy|Russian/, 'Russian');
   await clickButton(page, /W-7/, 'W-7 form');
 
@@ -116,7 +116,6 @@ async function clickButton(page, re, label) {
     for (const n of names) {
       window.__vffBufs[n] = await H.loadFixture('/test-fixtures/' + n + '.wav');
     }
-    window.__vffYes = await H.loadFixture('/test-fixtures/confirm_yes.wav');
   }, FIXTURES);
 
   // The disclaimer's agree button is TRANSLATED per session language
@@ -126,24 +125,14 @@ async function clickButton(page, re, label) {
   const RU_AGREE = '\u041f\u0440\u0438\u043d\u0438\u043c\u0430\u044e';  // 'Prinimayu'
   await clickButton(page, new RegExp(RU_AGREE + '|I Agree'), 'disclaimer agree (ru)');
 
-  const PACING = process.env.VFF_PACING || 'polite';
-  log(`seeding field 1, then LISTENING (pacing: ${PACING})`);
+  // No VFF_PACING here: nothing is injected, so there is nothing to pace
+  // against. The listen loop does its own quiet-detection inline.
+  log('seeding field 1, then LISTENING');
 
-  await page.evaluate(({ pacing, seed }) => {
-    window.__vffLatinReport = null;
+  await page.evaluate(({ seed }) => {
+    window.__vffRegisterReport = null;
     const H = window.__VFF_HARNESS;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    async function pace() {
-      const hook = window.__VFF_TEST_INJECT;
-      if (!hook || !hook.getPlaybackBacklog || pacing !== 'polite') return;
-      const t0 = Date.now();
-      let calm = 0;
-      while (Date.now() - t0 < 25000 && calm < 3) {
-        calm = hook.getPlaybackBacklog().aheadSec < 0.15 ? calm + 1 : 0;
-        await sleep(300);
-      }
-    }
 
     // NOTE: the client does NOT surface model transcripts to the page (the only
     // vffOn* dev hooks are AgentProcessing / AudioPlayback* / SectionChanged /
@@ -156,7 +145,6 @@ async function clickButton(page, re, label) {
     (async () => {
       const out = { seed: {}, listen: null };
       try {
-        // Seed the fields ahead of the name field so the model lands on it.
         // seedFields verifies each write read back confirmed via sessionStorage,
         // so a silent seed failure surfaces here instead of corrupting the run.
         try {
@@ -180,10 +168,6 @@ async function clickButton(page, re, label) {
           // the dev transcript captures the prose for register review. The
           // richest sample is 'reason' -- 8 long baked-Russian legal labels
           // the SI must recite in full.
-          //
-          // Nudge it forward with a single injected utterance when it goes
-          // quiet, rather than answering properly: an answer would advance the
-          // field and cut the recital short.
           out.listen = { turns: [] };
           for (let i = 0; i < 4; i++) {
             const t0 = Date.now();
@@ -209,14 +193,14 @@ async function clickButton(page, re, label) {
         out.error = String(e && e.message);
       }
       out.done = true;
-      window.__vffLatinReport = out;
+      window.__vffRegisterReport = out;
     })();
-  }, { pacing: PACING, seed: SEED });
+  }, { seed: SEED });
 
   const deadline = Date.now() + 10 * 60 * 1000;
   let report = null;
   while (Date.now() < deadline) {
-    report = await page.evaluate(() => window.__vffLatinReport);
+    report = await page.evaluate(() => window.__vffRegisterReport);
     if (report && report.done) break;
     await new Promise((r) => setTimeout(r, 2000));
   }
