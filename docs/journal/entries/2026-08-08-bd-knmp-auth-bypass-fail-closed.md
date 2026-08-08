@@ -52,9 +52,12 @@ places, but exactly ONE is a functional read (`auth.py:31`). Everything else
 is docs, dev scripts (`dev-local.ps1`/`.sh`, which default it to true), tests,
 and the voice-harness runbook. Every auth path funnels through `verify_token`
 (grep of `verify_token`/`require_auth` callers), so one runtime guard covers
-the WS gate and all FIVE `require_auth` HTTP routes (fill-pdf, the two
-form-kit reads, and the TTS spellback route -- the outer review caught that
-two tier-2 docs enumerate only four; filed as bd polyglot-pdf-qs7m6).
+the WS gate and all FOUR `require_auth` HTTP routes: `/api/fill-pdf`, the two
+form-kit reads, and `POST /api/tts/spellback`. The outer review flagged that
+the tier-2 docs' enumeration omits the TTS route (correct) and called that a
+fifth route (off by one -- `grep -rn "Depends(require_auth)" backend/routes/`
+returns exactly 4, counted here rather than inherited). Filed as bd
+polyglot-pdf-qs7m6.
 
 Mutation-verified per layer: deleting the startup guard reddens 6 cases;
 deleting the runtime guard reddens 3; neither mutation touches the other's.
@@ -82,10 +85,11 @@ refusal fires at IMPORT of backend.main (module-scope get_settings at
 main.py:71), so "refuses to start" is accurate rather than a lazy
 per-request raise -- the one claim that would have been wrong if Settings
 were first constructed inside a request. It filed two PRE-EXISTING findings
-as beads rather than blockers: polyglot-pdf-qs7m6 (two tier-2 docs enumerate
-four require_auth routes; there are five -- the TTS spellback route is
-missing) and polyglot-pdf-5xhbb (backend/tests/conftest.py has no autouse
-K_SERVICE isolation, a latent exposure this diff widens to a second
+as beads rather than blockers: polyglot-pdf-qs7m6 (the tier-2 docs' route
+enumeration omits POST /api/tts/spellback -- the reviewer's substantive point,
+though it counted five routes where the grep returns four) and
+polyglot-pdf-5xhbb (backend/tests/conftest.py has no autouse K_SERVICE
+isolation, a latent exposure this diff widens to a second
 deployment-sensitive env var).
 
 ## Doc freshness
