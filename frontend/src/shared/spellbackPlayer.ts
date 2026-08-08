@@ -95,8 +95,12 @@ export interface SpellbackPlayerDeps {
 }
 
 export interface SpellbackPlayer {
-  /** Fetch + play the clip for `value`. Resolves, never rejects. */
-  play: (value: string) => Promise<SpellbackPlaybackResult>
+  /**
+   * Fetch + play the clip for `value`, spoken in `language` (the session's
+   * spoken-language name; undefined -> en-US server-side). Resolves, never
+   * rejects.
+   */
+  play: (value: string, language?: string) => Promise<SpellbackPlaybackResult>
   /**
    * Teardown-path stop (disconnect/pause): stops any in-flight clip AND
    * poisons a call still parked on its fetch, resolving the round-trip as
@@ -199,7 +203,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
     }
   }
 
-  async function play(value: string): Promise<SpellbackPlaybackResult> {
+  async function play(value: string, language?: string): Promise<SpellbackPlaybackResult> {
     const am = deps.getAudioManager()
     if (!am) return { status: 'error', reason: 'no_audio_manager' }
     if (value.length > SPELLBACK_MAX_CHARS) {
@@ -260,7 +264,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
             'Content-Type': 'application/json',
             ...(token ? { Authorization: 'Bearer ' + token } : {}),
           },
-          body: JSON.stringify({ value }),
+          body: JSON.stringify({ value, ...(language ? { language } : {}) }),
           ...(controller ? { signal: controller.signal } : {}),
         })
         if (!resp.ok) {

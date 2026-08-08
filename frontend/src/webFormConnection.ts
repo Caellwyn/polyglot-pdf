@@ -164,7 +164,10 @@ export interface ConnectionCallbacks {
   // the resolution is what completes the backend tool round-trip, so the model
   // stays parked until playback truly ends. Unwired (undefined) means this
   // client has no playback path and the handler acks an error variant.
-  onSpellbackRequest?: (value: string, fieldId: string) => Promise<SpellbackPlaybackResult>;
+  // `language` is the session's spoken-language name ("Spanish") so the clip
+  // speaks the user's language with the regional voice (bd 44ywm); undefined
+  // falls back to en-US server-side.
+  onSpellbackRequest?: (value: string, fieldId: string, language?: string) => Promise<SpellbackPlaybackResult>;
 }
 
 // Max-duration safety for the "thinking" indicator (bd polyglot-pdf-wpw.5): if no
@@ -3274,7 +3277,8 @@ export class WebFormConnection {
     }
 
     try {
-      const result = await playback(String(value), currentField.id);
+      const result = await playback(
+        String(value), currentField.id, this.state.selectedLanguage || undefined);
       this.sendSpellbackResponse(request_id, result);
     } catch {
       // The callback contract is resolve-never-reject; this is belt and

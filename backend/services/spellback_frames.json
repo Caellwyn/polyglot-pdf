@@ -1,0 +1,75 @@
+{
+  "_comment": "Spell-back clip frames per BCP-47 locale (bd polyglot-pdf-44ywm). DATA, not code: non-ASCII is fine here (loaded with encoding='utf-8', never printed to a cp1252 console). 'frame' embeds {letters} -- the comma-joined character sequence; 'punctuation' maps non-alphanumeric characters to the word the regional voice should say. Locales mirror backend/utils/language_codes.py SPOKEN_LANGUAGE_BCP47 values; en-US is the universal fallback. Frames are initial translations authored at bead time -- refine via the translation infra if a native review flags one.",
+  "en-US": {
+    "frame": "You said {letters}. Is that correct?",
+    "punctuation": {"-": "dash", "'": "apostrophe", " ": "space", ".": "dot", ",": "comma", "/": "slash", "&": "and"}
+  },
+  "es-US": {
+    "frame": "Usted dijo {letters}. ¿Es correcto?",
+    "punctuation": {"-": "guión", "'": "apóstrofo", " ": "espacio", ".": "punto", ",": "coma", "/": "barra", "&": "y"}
+  },
+  "cmn-CN": {
+    "frame": "您说的是 {letters}。对吗？",
+    "punctuation": {"-": "连字符", "'": "撤号", " ": "空格", ".": "点", ",": "逗号", "/": "斜杠", "&": "和"}
+  },
+  "fil-PH": {
+    "frame": "Sinabi ninyo {letters}. Tama po ba?",
+    "punctuation": {"-": "gitling", "'": "kudlit", " ": "espasyo", ".": "tuldok", ",": "kuwit", "/": "slash", "&": "at"}
+  },
+  "ar-XA": {
+    "frame": "لقد قلت {letters}. هل هذا صحيح؟",
+    "punctuation": {"-": "شرطة", "'": "فاصلة عليا", " ": "مسافة", ".": "نقطة", ",": "فاصلة", "/": "شرطة مائلة", "&": "و"}
+  },
+  "fr-FR": {
+    "frame": "Vous avez dit {letters}. C'est bien cela ?",
+    "punctuation": {"-": "trait d'union", "'": "apostrophe", " ": "espace", ".": "point", ",": "virgule", "/": "barre oblique", "&": "et"}
+  },
+  "ko-KR": {
+    "frame": "{letters} 라고 말씀하셨습니다. 맞습니까?",
+    "punctuation": {"-": "하이플", "'": "아포스트로피", " ": "공백", ".": "점", ",": "쉼표", "/": "슬래시", "&": "그리고"}
+  },
+  "de-DE": {
+    "frame": "Sie sagten {letters}. Ist das richtig?",
+    "punctuation": {"-": "Bindestrich", "'": "Apostroph", " ": "Leerzeichen", ".": "Punkt", ",": "Komma", "/": "Schrägstrich", "&": "und"}
+  },
+  "pt-BR": {
+    "frame": "Você disse {letters}. Está correto?",
+    "punctuation": {"-": "hífen", "'": "apóstrofo", " ": "espaço", ".": "ponto", ",": "vírgula", "/": "barra", "&": "e"}
+  },
+  "hi-IN": {
+    "frame": "आपने कहा {letters}। क्या यह सही है?",
+    "punctuation": {"-": "हाइफन", "'": "एपोस्ट्रोफी", " ": "स्पेस", ".": "बिंदु", ",": "कॉमा", "/": "स्लैश", "&": "और"}
+  },
+  "it-IT": {
+    "frame": "Ha detto {letters}. È corretto?",
+    "punctuation": {"-": "trattino", "'": "apostrofo", " ": "spazio", ".": "punto", ",": "virgola", "/": "barra", "&": "e"}
+  },
+  "ur-PK": {
+    "frame": "آپ نے کہا {letters}۔ کیا یہ درست ہے؟",
+    "punctuation": {"-": "ہائفن", "'": "ایپاسٹروفی", " ": "اسپیس", ".": "نقطہ", ",": "کوما", "/": "سلیش", "&": "اور"}
+  },
+  "fa-IR": {
+    "frame": "شما گفتید {letters}. آیا درست است؟",
+    "punctuation": {"-": "خط تیره", "'": "آپوستروف", " ": "فاصله", ".": "نقطه", ",": "ویرگول", "/": "اسلش", "&": "و"}
+  },
+  "nl-NL": {
+    "frame": "U zei {letters}. Klopt dat?",
+    "punctuation": {"-": "koppelteken", "'": "apostrof", " ": "spatie", ".": "punt", ",": "komma", "/": "schuine streep", "&": "en"}
+  },
+  "uk-UA": {
+    "frame": "Ви сказали {letters}. Це правильно?",
+    "punctuation": {"-": "дефіс", "'": "апостроф", " ": "пробіл", ".": "крапка", ",": "кома", "/": "скісна риска", "&": "і"}
+  },
+  "ru-RU": {
+    "frame": "Вы сказали {letters}. Это верно?",
+    "punctuation": {"-": "дефис", "'": "апостроф", " ": "пробел", ".": "точка", ",": "запятая", "/": "косая черта", "&": "и"}
+  },
+  "sv-SE": {
+    "frame": "Du sa {letters}. Stämmer det?",
+    "punctuation": {"-": "bindestreck", "'": "apostrof", " ": "mellanslag", ".": "punkt", ",": "komma", "/": "snedstreck", "&": "och"}
+  },
+  "af-ZA": {
+    "frame": "U het gesê {letters}. Is dit korrek?",
+    "punctuation": {"-": "koppelteken", "'": "apostroof", " ": "spasie", ".": "punt", ",": "komma", "/": "skuinsstreep", "&": "en"}
+  }
+}

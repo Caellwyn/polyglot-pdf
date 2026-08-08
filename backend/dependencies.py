@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import Depends
 from typing import Any
 from backend.config import Settings, get_settings
@@ -59,14 +61,75 @@ def get_text_ai_pro(settings: Settings = Depends(get_settings)) -> ITextAI | Non
     )
 
 
-def get_form_filling_service(
-    live_ai: ILiveAI = Depends(get_live_ai),
+# Process-cached TEXT clients (bd polyglot-pdf-4hnyq). Safe to share:
+# TextAIGemini is a stateless request/response helper -- no callbacks, no
+# session, nothing per-connection -- unlike LiveAIGemini, which MUST stay
+# fresh per connection (callback isolation, see get_live_ai). Keyed by
+# id(settings) because Settings is not hashable (so lru_cache cannot be used);
+# get_settings is itself lru_cached, so in production this is one stable key,
+# and a test injecting its own Settings gets its own entry. Bounded so a
+# pathological caller cannot grow it without limit.
+_TEXT_AI_CACHE: dict = {}
+_TEXT_AI_CACHE_MAX = 8
+
+
+def _cache_get_or_build(kind: str, settings: Settings, build):
+    key = (kind, id(settings))
+    if key not in _TEXT_AI_CACHE:
+        if len(_TEXT_AI_CACHE) >= _TEXT_AI_CACHE_MAX:
+            _TEXT_AI_CACHE.clear()
+        _TEXT_AI_CACHE[key] = build(settings)
+    return _TEXT_AI_CACHE[key]
+
+
+def _cached_text_ai(settings: Settings) -> ITextAI:
+    return _cache_get_or_build("text_ai", settings, get_text_ai)
+
+
+def _cached_text_ai_pro(settings: Settings) -> ITextAI | None:
+    return _cache_get_or_build("text_ai_pro", settings, get_text_ai_pro)
+
+
+async def get_form_filling_service(
     settings: Settings = Depends(get_settings),
-    text_ai: ITextAI = Depends(get_text_ai),
-    text_ai_pro: ITextAI | None = Depends(get_text_ai_pro),
 ) -> Any:
+    """Build the per-connection service OFF the event loop (bd polyglot-pdf-4hnyq).
+
+    The three AI adapters each construct a `genai.Client`, and on the Vertex
+    path that resolves ADC + endpoint discovery SYNCHRONOUSLY -- measured ~9.4s
+    per connection locally. As plain `def` sub-dependencies of the /ws/fill
+    route they ran on the event loop BEFORE `websocket.accept()`, so the
+    handshake itself was charged that time and the frontend's 10s connect
+    timeout lost a coin-flip (the E2E voice harness failed 0/15 fields with the
+    client spraying 'WebSocket not open, readyState:0').
+
+    FastAPI runs a plain `def` dependency in a threadpool, but only when it is
+    the DECLARED dependency -- these were nested behind this one, which was
+    itself `def`, so the whole chain collapsed onto one blocking call. Making
+    THIS one `async` and pushing the construction into `asyncio.to_thread`
+    keeps the loop free: `accept()` now happens immediately and the client
+    construction overlaps the handshake instead of preceding it.
+
+    Deliberately builds the adapters here rather than via `Depends`: a fresh
+    LiveAIGemini per connection is load-bearing (callback isolation -- a shared
+    instance routes tool calls to the wrong tab, see get_live_ai), and routing
+    them through Depends is exactly what put them back on the loop.
+    """
     # Lazy import to avoid circular import at module import time
     from backend.services.form_filling_service import FormFillingService
+
+    # The TEXT adapters are stateless request/response helpers (secretary,
+    # validators) with no per-connection callback state, so their clients are
+    # PROCESS-CACHED: only the first connection pays their construction. The
+    # LIVE adapter must stay fresh per connection (callback isolation -- a
+    # shared instance routes tool calls to the wrong tab, see get_live_ai), so
+    # it is built per call, off the loop, concurrently with the (usually
+    # cached) text ones.
+    live_ai, text_ai, text_ai_pro = await asyncio.gather(
+        asyncio.to_thread(get_live_ai, settings),
+        asyncio.to_thread(_cached_text_ai, settings),
+        asyncio.to_thread(_cached_text_ai_pro, settings),
+    )
 
     return FormFillingService(
         live_ai=live_ai,

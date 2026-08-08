@@ -258,6 +258,26 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
     expect(computePlaybackCapMs(60, 1000)).toBeGreaterThanOrEqual(60000)
   })
 
+  it('sends the session language in the TTS request body (bd 44ywm)', async () => {
+    const { player, fetchImpl, audios } = makePlayer()
+
+    const done = player.play('NGUYEN', 'Spanish')
+    await settleMicrotasks()
+    audios[0].onended?.()
+    await done
+
+    const [, init] = fetchImpl.mock.calls[0]
+    expect(JSON.parse(init.body)).toEqual({ value: 'NGUYEN', language: 'Spanish' })
+
+    // And omits the key entirely when no language is known.
+    const p2 = makePlayer()
+    const d2 = p2.player.play('NGUYEN')
+    await settleMicrotasks()
+    p2.audios[0].onended?.()
+    await d2
+    expect(JSON.parse(p2.fetchImpl.mock.calls[0][1].body)).toEqual({ value: 'NGUYEN' })
+  })
+
   it('fails fast on over-length values without fetching', async () => {
     const { player, fetchImpl } = makePlayer()
     const result = await player.play('x'.repeat(SPELLBACK_MAX_CHARS + 1))

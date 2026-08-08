@@ -14,9 +14,12 @@ the model is parked on the pending tool response. These tests pin:
 - the flag-gated declaration (dark by default; declared only when
   SPELLBACK_TOOL_ENABLED) and the flag-gated SI addendum;
 - the coordinator round-trip (payload pass-through + timeout sentinel);
-- the SSML builder (every character spoken, order preserved, XML-safe);
-- the /api/tts/spellback route gates (flag 503, empty/oversized 400, PII-free
-  error logging is by construction -- the value never reaches a log call).
+- the plain-text clip builder (bd 44ywm: every character spoken, order
+  preserved, session-language frame + punctuation words, whole verification
+  question in the clip) and the session-language voice resolution;
+- the /api/tts/spellback route gates (flag 503, empty/oversized 400, language
+  passthrough; PII-free error logging is by construction -- the value never
+  reaches a log call).
 
 ASCII only.
 """
@@ -33,7 +36,8 @@ from backend.services.request_coordinator import (
 )
 from backend.services.spellback_tts import (
     MAX_SPELLBACK_CHARS,
-    build_spellback_ssml,
+    build_spellback_text,
+    resolve_spellback_locale,
     synthesize_spellback,
 )
 
@@ -85,10 +89,12 @@ class TestNameSpellbackTool:
 
         assert response["success"] is True
         assert response["status"] == "delivered"
-        # Sanctioned remedy: ask the user whether the spelling is correct.
-        assert "whether the spelling is correct" in response["message"]
+        # bd 44ywm: the clip carries the whole verification question, so the
+        # sanctioned behavior is SILENCE -- wait for the user's answer.
+        assert "stay silent and listen" in response["message"]
+        assert "Do NOT ask again" in response["message"]
         # The one invariant: the model must not repeat/spell the value itself.
-        assert "Do NOT repeat or spell the value yourself" in response["message"]
+        assert "repeat or spell the value" in response["message"]
         mock_coordinator.request_spellback.assert_awaited_once_with()
 
     @pytest.mark.asyncio
@@ -279,7 +285,9 @@ class TestSpellbackSiAddendum:
     def test_flag_on_appends_addendum(self):
         si = self._si(enabled=True)
         assert "name_spellback" in si
-        assert "NEVER speak a LETTER spelling letter by letter" in si
+        assert "call the name_spellback tool instead" in si
+        # bd 44ywm: the clip asks the question; the model's job is silence.
+        assert "stay SILENT and listen" in si
         # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
         # SPEECH STYLE block in the same assembled SI requires digit-by-digit
         # number read-back, and the addendum must not suppress it.
@@ -302,7 +310,9 @@ class TestSpellbackSiAddendum:
                 current_values={},
             )
         assert "name_spellback" in si
-        assert "NEVER speak a LETTER spelling letter by letter" in si
+        assert "call the name_spellback tool instead" in si
+        # bd 44ywm: the clip asks the question; the model's job is silence.
+        assert "stay SILENT and listen" in si
         # The letters-only scope is load-bearing (Opus review, bd j6fxt): the
         # SPEECH STYLE block in the same assembled SI requires digit-by-digit
         # number read-back, and the addendum must not suppress it.
@@ -353,66 +363,139 @@ class TestRequestSpellbackRoundTrip:
         assert result is CONFIRM_REQUEST_TIMEOUT
 
 
-class TestSpellbackSsml:
-    def test_letters_spoken_individually_in_order(self):
-        ssml = build_spellback_ssml("Jose")
-        blocks = [
-            '<say-as interpret-as="characters">J</say-as>',
-            '<say-as interpret-as="characters">o</say-as>',
-            '<say-as interpret-as="characters">s</say-as>',
-            '<say-as interpret-as="characters">e</say-as>',
-        ]
-        pos = -1
-        for block in blocks:
-            nxt = ssml.find(block, pos + 1)
-            assert nxt > pos, f"missing/misordered block: {block}"
-            pos = nxt
+class TestSpellbackText:
+    """The plain-text clip builder (bd 44ywm): natural sentence, session
+    language, whole verification question -- never SSML (Chirp 3 HD renders
+    markup mechanically; the maintainer's notebook A/B drove this design)."""
+
+    def test_letters_uppercased_comma_joined_inside_the_frame(self):
+        text = build_spellback_text("Jose", "en-US")
+        assert text == "You said J, O, S, E. Is that correct?"
+
+    def test_no_ssml_markup_ever(self):
+        assert "<" not in build_spellback_text("Jose", "en-US")
+
+    def test_session_language_frame_and_punctuation(self):
+        text = build_spellback_text("O'Neil-A", "es-US")
+        # Spanish frame carries the question...
+        assert text.startswith("Usted dijo ")
+        assert "Es correcto?" in text
+        # ...and the Spanish punctuation words from the frames DATA file, so
+        # the regional voice never code-switches mid-clip. Asserted via the
+        # data (not literals) to keep this SOURCE file ASCII per scar #6.
+        import json
+        from pathlib import Path
+
+        frames = json.loads(
+            (Path(__file__).resolve().parents[2] /
+             "services/spellback_frames.json").read_text(encoding="utf-8"))
+        es_punct = frames["es-US"]["punctuation"]
+        assert es_punct["'"] != "apostrophe"  # genuinely localized, not English
+        assert es_punct["'"] in text
+        assert es_punct["-"] in text
 
     def test_every_character_is_voiced_never_dropped(self):
         """A dropped character would make the clip verify a DIFFERENT string
         than the stored value -- the defect class this tool eliminates."""
-        ssml = build_spellback_ssml("O'Neil-Smith Jr.")
-        assert "apostrophe" in ssml
-        assert "hyphen" in ssml
-        assert "space" in ssml
-        assert "period" in ssml
-        # Unknown characters are voiced as a placeholder, not dropped.
-        assert "symbol" in build_spellback_ssml("A<B")
+        text = build_spellback_text("O'Neil-Smith Jr.", "en-US")
+        assert "apostrophe" in text
+        assert "dash" in text
+        assert "space" in text
+        assert "dot" in text
+        # A character with no punctuation word rides as ITSELF, not dropped.
+        assert "<" in build_spellback_text("A<B", "en-US")
 
-    def test_xml_is_escaped_not_injected(self):
-        ssml = build_spellback_ssml("A<B")
-        assert "<B" not in ssml.replace(
-            '<say-as interpret-as="characters">B</say-as>', "")
-        assert "A&B" not in build_spellback_ssml("A&B")
+    def test_digits_ride_as_characters(self):
+        assert "A, 1" in build_spellback_text("A1", "en-US")
 
-    def test_digits_are_spoken_as_characters(self):
-        ssml = build_spellback_ssml("A1")
-        assert '<say-as interpret-as="characters">1</say-as>' in ssml
+    def test_unknown_locale_falls_back_to_english_frame(self):
+        assert build_spellback_text("AB", "xx-XX").startswith("You said ")
 
-    def test_voice_resolution_matches_live_model_by_default(self):
-        """Default (no explicit SPELLBACK_TTS_VOICE): the clip uses the SAME
-        persona as the Live model via the Chirp 3 HD family (maintainer ask,
-        2026-08-07). An explicit voice wins; no voices at all -> API default."""
+    def test_every_supported_language_has_a_complete_frame(self):
+        """Enumerate the SET (repo rule): every spoken language the app
+        offers must have a frame entry with the {letters} slot and a
+        punctuation map -- a missing one silently degrades that language to
+        English at runtime."""
+        import json
+        from pathlib import Path
+
+        from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
+
+        frames = json.loads(
+            (Path(__file__).resolve().parents[2] /
+             "services/spellback_frames.json").read_text(encoding="utf-8"))
+        for lang, code in SPOKEN_LANGUAGE_BCP47.items():
+            entry = frames.get(code)
+            assert entry, f"no spellback frame for {lang} ({code})"
+            assert "{letters}" in entry["frame"], f"frame for {code} lacks slot"
+            assert entry.get("punctuation"), f"no punctuation map for {code}"
+
+    def test_locale_resolution(self):
+        assert resolve_spellback_locale("Spanish") == "es-US"
+        assert resolve_spellback_locale("spanish") == "es-US"
+        assert resolve_spellback_locale("Klingon") == "en-US"
+        assert resolve_spellback_locale(None) == "en-US"
+
+    def test_voice_resolution_follows_session_language_and_persona(self):
+        """Default: {session-locale}-Chirp3-HD-{LIVE_VOICE_NAME} (maintainer
+        ruling 2026-08-08 -- the clip speaks the user's language in the
+        model's persona). Explicit SPELLBACK_TTS_VOICE wins; a locale whose
+        derived voice does not exist falls back to en-US, availability from
+        the runtime voice list (never a hand-pinned language list)."""
+        from backend.services import spellback_tts
         from backend.services.spellback_tts import resolve_spellback_voice
 
         s = Settings()
         s.SPELLBACK_TTS_VOICE = ""
         s.LIVE_VOICE_NAME = "Iapetus"
-        assert resolve_spellback_voice(s) == "en-US-Chirp3-HD-Iapetus"
+        with patch.object(spellback_tts, "_voice_exists", return_value=True):
+            assert resolve_spellback_voice(s, "Spanish") == (
+                "es-US-Chirp3-HD-Iapetus", "es-US")
+            assert resolve_spellback_voice(s, None) == (
+                "en-US-Chirp3-HD-Iapetus", "en-US")
+            # Whitespace-padded env values strip (bd vx0q4).
+            s.LIVE_VOICE_NAME = " Iapetus "
+            assert resolve_spellback_voice(s, "Spanish") == (
+                "es-US-Chirp3-HD-Iapetus", "es-US")
 
-        s.SPELLBACK_TTS_VOICE = "en-US-Neural2-F"
-        assert resolve_spellback_voice(s) == "en-US-Neural2-F"
+        # LANGUAGE-FIRST ladder (live probe 2026-08-08: ru-RU has 8 of the 30
+        # Chirp3 personas and no Iapetus). Rung 2: keep the language, take
+        # another persona -- never drop to English just to keep ours.
+        s.LIVE_VOICE_NAME = "Iapetus"
+        with patch.object(spellback_tts, "_voice_exists",
+                          side_effect=lambda n: n.startswith("en-US")), \
+             patch.object(spellback_tts, "_any_chirp3_voice_for",
+                          side_effect=lambda loc: (
+                              "ru-RU-Chirp3-HD-Zephyr" if loc == "ru-RU" else None)):
+            assert resolve_spellback_voice(s, "Russian") == (
+                "ru-RU-Chirp3-HD-Zephyr", "ru-RU")
 
-        # Whitespace-padded env values must strip, matching the Live adapter's
-        # own handling -- else the Live session works while every clip 502s on
-        # an invalid padded Chirp3 name (bd polyglot-pdf-vx0q4).
-        s.SPELLBACK_TTS_VOICE = ""
-        s.LIVE_VOICE_NAME = " Iapetus "
-        assert resolve_spellback_voice(s) == "en-US-Chirp3-HD-Iapetus"
+        # Rung 3: no Chirp3 at all in that locale -> the locale's DEFAULT
+        # voice, still the user's language (Tagalog/Urdu/Persian/Afrikaans
+        # carry zero Chirp3 voices today).
+        with patch.object(spellback_tts, "_voice_exists",
+                          side_effect=lambda n: n.startswith("en-US")), \
+             patch.object(spellback_tts, "_any_chirp3_voice_for",
+                          return_value=None):
+            assert resolve_spellback_voice(s, "Tagalog") == ("", "fil-PH")
 
+        # Rung 4: only an UNKNOWN language lands on the English clip.
+        with patch.object(spellback_tts, "_voice_exists",
+                          side_effect=lambda n: n.startswith("en-US")), \
+             patch.object(spellback_tts, "_any_chirp3_voice_for",
+                          return_value=None):
+            assert resolve_spellback_voice(s, "Klingon") == (
+                "en-US-Chirp3-HD-Iapetus", "en-US")
+
+        # Explicit override wins outright; its locale rides its prefix.
+        s.SPELLBACK_TTS_VOICE = "en-US-Chirp3-HD-Algieba"
+        assert resolve_spellback_voice(s, "Spanish") == (
+            "en-US-Chirp3-HD-Algieba", "en-US")
+
+        # No persona at all -> locale default voice.
         s.SPELLBACK_TTS_VOICE = ""
         s.LIVE_VOICE_NAME = ""
-        assert resolve_spellback_voice(s) == ""
+        assert resolve_spellback_voice(s, "Spanish") == ("", "es-US")
 
     def test_char_cap_matches_frontend_mirror(self):
         """MAX_SPELLBACK_CHARS is mirrored (not shared) as SPELLBACK_MAX_CHARS
@@ -432,12 +515,13 @@ class TestSpellbackSsml:
 
     @pytest.mark.asyncio
     async def test_empty_and_oversized_values_are_rejected(self):
+        s = Settings()
         with pytest.raises(ValueError):
-            await synthesize_spellback("")
+            await synthesize_spellback("", s)
         with pytest.raises(ValueError):
-            await synthesize_spellback("   ")
+            await synthesize_spellback("   ", s)
         with pytest.raises(ValueError):
-            await synthesize_spellback("x" * (MAX_SPELLBACK_CHARS + 1))
+            await synthesize_spellback("x" * (MAX_SPELLBACK_CHARS + 1), s)
 
 
 class TestSpellbackTtsRoute:
@@ -465,14 +549,19 @@ class TestSpellbackTtsRoute:
     def test_flag_on_returns_audio(self, monkeypatch):
         client, app, require_auth = self._client(monkeypatch, enabled=True)
 
-        async def fake_synth(value, voice_name=""):
+        async def fake_synth(value, settings, language_name=None):
             assert value == "Jose"
+            # The session language must ride the request into synthesis
+            # (bd 44ywm: the clip speaks the user's language).
+            assert language_name == "Spanish"
             return b"MP3BYTES"
 
         monkeypatch.setattr(
             "backend.routes.tts_routes.synthesize_spellback", fake_synth)
         try:
-            resp = client.post("/api/tts/spellback", json={"value": "Jose"})
+            resp = client.post(
+                "/api/tts/spellback",
+                json={"value": "Jose", "language": "Spanish"})
             assert resp.status_code == 200
             assert resp.headers["content-type"].startswith("audio/mpeg")
             assert resp.content == b"MP3BYTES"

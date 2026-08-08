@@ -1332,14 +1332,17 @@ class CallbackHandler:
         else:
             status = ack.get("status")
             if status == "delivered":
+                # bd 44ywm: the clip carries the WHOLE verification question
+                # ("You said J, O, S, E. Is that correct?" in the session
+                # language), so the model's job now is to WAIT, not to ask.
                 response = {
                     "success": True,
                     "status": "delivered",
                     "message": (
-                        "The stored spelling was played to the user. Do NOT "
-                        "repeat or spell the value yourself. Ask the user, in "
-                        "the session language, whether the spelling is correct, "
-                        "and wait for their answer."
+                        "The user has ALREADY heard the stored spelling and "
+                        "been asked whether it is correct. Do NOT ask again, "
+                        "do NOT repeat or spell the value, and do NOT speak "
+                        "now -- stay silent and listen for their yes or no."
                     ),
                 }
             elif status == "interrupted":

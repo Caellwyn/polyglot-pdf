@@ -1,86 +1,99 @@
 """
-Deterministic spell-back audio synthesis (bd polyglot-pdf-22h1f).
+Deterministic spell-back audio synthesis (bd polyglot-pdf-22h1f / 44ywm).
 
-Renders a stored field value as letter-by-letter audio via Cloud Text-to-Speech,
-OUTSIDE the Live model's speech path. Background: the native-audio Live model's
-speech head has a measured sticky-first-spelling defect -- on spelled name
-read-backs it can emit a STALE name's letters while its own text track and tool
-calls are correct (bd polyglot-pdf-0rpu, 9.7% of scoreable spelled read-backs on
-the control arm). The fix is to never let the model speak a spelling: the client
-plays this deterministic clip instead, sourced ONLY from the stored value (bd
-polyglot-pdf-h7wx: a read-back must never come from the model's memory).
+Renders a stored field value as a NATURAL-LANGUAGE verification clip via Cloud
+Text-to-Speech, OUTSIDE the Live model's speech path: "You said J, O, S, E.
+Is that correct?" -- in the SESSION language, with the regional voice. The
+native-audio Live model's speech head has a measured sticky-first-spelling
+defect (bd polyglot-pdf-0rpu), so the model never speaks a spelling; the clip
+is a deterministic function of the STORED value only (bd polyglot-pdf-h7wx).
 
-Design decisions (bd polyglot-pdf-22h1f, maintainer-approved sketch):
-- The clip is LETTERS ONLY (no framing prose). The model provides the framing
-  ("I will play the spelling back" / "is that correct?") in the session
-  language with its own voice -- prose was never observed corrupted, only
-  spelled letter sequences. This also avoids needing the framing phrase
-  translated into 17+ session languages.
-- The voice is ALWAYS en-US, matching the SI invariant that Latin letters are
-  read by their ENGLISH letter names in every session language (the letters are
-  exactly what is written on the English form). A session-language voice would
-  read letter NAMES in that language -- or, for non-Latin-alphabet languages,
-  unpredictably transliterate.
+Design (bd 44ywm, maintainer-directed 2026-08-07/08, superseding the original
+SSML approach):
+- PLAIN TEXT input, never SSML. Chirp 3 HD voices are LLM-based: they generate
+  prosody from natural text, and SSML say-as/break markup renders mechanically
+  (robotic, unevenly spaced -- the maintainer's notebook A/B proved it).
+  Letters ride as a comma-separated sequence inside the frame sentence;
+  measured: JOHNSON letters-only SSML 10.2s vs plain text WITH the question
+  4.9s, synthesis 2.3s -> 0.9s.
+- The clip carries the WHOLE verification question, so the model's post-tool
+  job is to WAIT, not to ask.
+- SESSION LANGUAGE (maintainer ruling): frame + voice follow the session's
+  spoken language ({locale}-Chirp3-HD-{persona}); letter names come out the
+  way that language's speakers say them (a Spanish speaker hears 'jota';
+  languages with no native Latin-letter names -- e.g. Chinese -- naturally get
+  English-style letter names from their regional voice). Locales with no
+  Chirp3 voice fall back to en-US -- availability is derived from the API's
+  list_voices at runtime, NEVER a hand-pinned language list (repo rule).
+- Frames + per-language punctuation words are DATA (spellback_frames.json,
+  UTF-8; code files stay ASCII-only).
 - PII: the value is never logged here (lengths only), matching the server-side
   no-field-values policy (docs/standards/hipaa-pii-policy.md).
 """
 
 import asyncio
+import json
 import threading
-from xml.sax.saxutils import escape
+from pathlib import Path
 
 import structlog
+
+from backend.utils.language_codes import bcp47_codes_for_spoken_language
 
 _log = structlog.get_logger()
 
 # Hard cap on the value length accepted for synthesis. Names on the supported
 # forms run well under this; a longer value is almost certainly a mis-targeted
-# field (an address, a narrative) whose spelled clip would run past the
-# coordinator's round-trip budget.
+# field (an address, a narrative). MIRRORED as SPELLBACK_MAX_CHARS in
+# frontend/src/shared/spellbackPlayer.ts (client fail-fast pre-check); the two
+# are pinned to each other by a static test.
 MAX_SPELLBACK_CHARS = 60
 
-# Pause between spelled characters. Mirrors the SI's per-character read-back
-# rule (distinct, deliberate pause so the user can follow one character at a
-# time) -- docs/components/voice-ai.md "Spoken delivery".
-_CHAR_BREAK = '<break time="400ms"/>'
-
-# Characters that must be spoken as words, not fed to say-as (which skips or
-# mangles punctuation). Keys are the literal characters; values are what the
-# en-US voice says.
-_SPOKEN_PUNCTUATION = {
-    " ": "space",
-    "-": "hyphen",
-    "'": "apostrophe",
-    ".": "period",
-    ",": "comma",
-    "/": "slash",
-    "&": "ampersand",
-}
+_FRAMES_PATH = Path(__file__).resolve().parent / "spellback_frames.json"
+_FALLBACK_LOCALE = "en-US"
 
 
-def build_spellback_ssml(value: str) -> str:
-    """Build the SSML for a letter-by-letter rendering of `value`.
+def _load_frames() -> dict:
+    with open(_FRAMES_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    data.pop("_comment", None)
+    return data
 
-    Every character is spoken individually: letters/digits via
-    <say-as interpret-as="characters">, known punctuation as its English word,
-    anything else as the word "symbol" (never silently dropped -- a dropped
-    character would make the clip verify a DIFFERENT string than the stored
-    value, the exact defect class this tool exists to eliminate).
+
+_FRAMES = _load_frames()
+
+
+def resolve_spellback_locale(language_name) -> str:
+    """The clip's BCP-47 locale for a spoken-language NAME ('Spanish').
+
+    Uses the same name->code map as the ASR bias (language_codes.py). Unknown,
+    empty, or unmapped names fall back to en-US.
     """
+    codes = bcp47_codes_for_spoken_language(language_name)
+    return codes[0] if codes else _FALLBACK_LOCALE
+
+
+def build_spellback_text(value: str, locale: str) -> str:
+    """The plain-text clip sentence for `value` in `locale`.
+
+    Every character is voiced: letters/digits as themselves (the regional
+    voice reads them as that language's speakers do), known punctuation as the
+    locale's word for it, anything else as the en-US fallback word or -- last
+    resort -- the character itself. Nothing is silently dropped: a dropped
+    character would make the clip verify a DIFFERENT string than the stored
+    value, the exact defect class this tool exists to eliminate.
+    """
+    entry = _FRAMES.get(locale) or _FRAMES[_FALLBACK_LOCALE]
+    fallback_punct = _FRAMES[_FALLBACK_LOCALE]["punctuation"]
+    punct = entry.get("punctuation") or {}
     parts = []
     for ch in value:
         if ch.isalnum():
-            parts.append(
-                '<say-as interpret-as="characters">%s</say-as>' % escape(ch)
-            )
-        elif ch in _SPOKEN_PUNCTUATION:
-            parts.append(escape(_SPOKEN_PUNCTUATION[ch]))
+            parts.append(ch.upper() if ch.isalpha() else ch)
         else:
-            parts.append("symbol")
-    body = _CHAR_BREAK.join(parts)
-    # rate="85%": the spelled read-back goes distinctly slower than prose, per
-    # the SI's per-character pacing rule.
-    return '<speak><prosody rate="85%%">%s</prosody></speak>' % body
+            parts.append(punct.get(ch) or fallback_punct.get(ch) or ch)
+    letters = ", ".join(parts)
+    return entry["frame"].replace("{letters}", letters)
 
 
 # The Cloud TTS client is created lazily and cached: construction builds a gRPC
@@ -88,28 +101,12 @@ def build_spellback_ssml(value: str) -> str:
 _client = None
 _client_lock = threading.Lock()
 
-
-def resolve_spellback_voice(settings) -> str:
-    """The Cloud TTS voice for the spell-back clip.
-
-    An explicit SPELLBACK_TTS_VOICE wins. Otherwise MATCH THE LIVE MODEL'S
-    VOICE: the Chirp 3 HD family carries the same persona names as the Live
-    API's prebuilt voices (Iapetus, Puck, ...), so the clip sounds like the
-    same speaker as the session (maintainer ask, 2026-08-07;
-    en-US-Chirp3-HD-Iapetus endpoint-verified accepting this module's SSML).
-    Falls back to the API's default en-US voice when neither is set.
-    """
-    # .strip() both, matching the Live adapter's own handling of
-    # LIVE_VOICE_NAME (live_ai_gemini): a padded env value must not produce a
-    # working Live voice but an invalid Chirp3 name that 502s every clip
-    # (Opus round 2, bd polyglot-pdf-vx0q4).
-    explicit = (getattr(settings, "SPELLBACK_TTS_VOICE", "") or "").strip()
-    if explicit:
-        return explicit
-    live_voice = (getattr(settings, "LIVE_VOICE_NAME", "") or "").strip()
-    if live_voice:
-        return "en-US-Chirp3-HD-%s" % live_voice
-    return ""
+# Voice-availability cache (populated from list_voices on first use; process
+# lifetime). None = not yet fetched; empty set = fetch failed (fail open: use
+# the derived name and let a bad one surface as a synth error -> the tool's
+# error variant).
+_available_voices = None
+_voices_lock = threading.Lock()
 
 
 def _get_client():
@@ -117,24 +114,119 @@ def _get_client():
     if _client is None:
         with _client_lock:
             if _client is None:
-                # Imported here, not at module top: google-cloud-texttospeech is
-                # only needed when the spell-back flag is on, and unit tests
-                # patch this factory without the package installed.
+                # Imported here, not at module top: google-cloud-texttospeech
+                # is only needed when the spell-back flag is on, and unit
+                # tests patch this factory without the package installed.
                 from google.cloud import texttospeech
 
                 _client = texttospeech.TextToSpeechClient()
     return _client
 
 
-def _synthesize_sync(value: str, voice_name: str) -> bytes:
+def _known_voices() -> set:
+    """Cached list_voices names. Derived at runtime, never hand-pinned per
+    language (repo rule: languages grow 17 -> ~90). An empty set means the
+    fetch failed -- callers then fail OPEN and use the derived name.
+    """
+    global _available_voices
+    if _available_voices is None:
+        with _voices_lock:
+            if _available_voices is None:
+                try:
+                    resp = _get_client().list_voices()
+                    _available_voices = {v.name for v in resp.voices}
+                except Exception as exc:
+                    _log.warning("spellback_list_voices_failed",
+                                 error_type=type(exc).__name__)
+                    _available_voices = set()
+    return _available_voices
+
+
+def _voice_exists(name: str) -> bool:
+    known = _known_voices()
+    if not known:
+        return True  # fail open: a listing blip must not force the fallback
+    return name in known
+
+
+def _any_chirp3_voice_for(locale: str):
+    """Any Chirp 3 HD voice in `locale`, or None.
+
+    The fallback ladder's middle rung (live probe 2026-08-08): several
+    supported languages carry Chirp3 voices but NOT every persona (ru-RU has
+    8 of 30, no Iapetus). Keeping the user's LANGUAGE matters far more than
+    keeping the model's persona, so a persona miss drops to a different
+    persona in the SAME language before it ever drops to English.
+    """
+    known = _known_voices()
+    if not known:
+        return None
+    prefix = "%s-Chirp3-HD-" % locale
+    candidates = sorted(n for n in known if n.startswith(prefix))
+    return candidates[0] if candidates else None
+
+
+def resolve_spellback_voice(settings, language_name=None):
+    """The (voice_name, locale) pair for the clip.
+
+    An explicit SPELLBACK_TTS_VOICE wins outright (full voice name; its locale
+    prefix is used as the language_code). Otherwise the voice follows the
+    SESSION language ({locale}-Chirp3-HD-{persona}) with the persona matched
+    to the Live model's LIVE_VOICE_NAME -- the Chirp 3 HD family carries the
+    Live API's prebuilt voice names, so the clip sounds like the same speaker.
+    Fallback ladder, LANGUAGE-FIRST (the user's language matters more than
+    the model's persona):
+      1. {session-locale}-Chirp3-HD-{persona}  -- ideal: their language, our voice
+      2. any Chirp3 voice in the SESSION locale -- their language, other voice
+      3. the locale's default voice ("")       -- still their language
+      4. en-US-Chirp3-HD-{persona}             -- only when the locale is unknown
+    Inputs are .strip()ed, matching the Live adapter's own LIVE_VOICE_NAME
+    handling (bd polyglot-pdf-vx0q4).
+    """
+    explicit = (getattr(settings, "SPELLBACK_TTS_VOICE", "") or "").strip()
+    if explicit:
+        # 'en-US-Chirp3-HD-Algieba' -> locale 'en-US'.
+        bits = explicit.split("-")
+        locale = "-".join(bits[:2]) if len(bits) >= 2 else _FALLBACK_LOCALE
+        return explicit, locale
+
+    locale = resolve_spellback_locale(language_name)
+    persona = (getattr(settings, "LIVE_VOICE_NAME", "") or "").strip()
+    if not persona:
+        return "", locale
+    candidate = "%s-Chirp3-HD-%s" % (locale, persona)
+    if _voice_exists(candidate):
+        return candidate, locale
+
+    # Rung 2: keep the LANGUAGE, take another Chirp3 persona (ru-RU carries 8
+    # of the 30 personas, no Iapetus -- dropping to English there would speak
+    # the wrong language just to keep our voice).
+    same_language = _any_chirp3_voice_for(locale)
+    if same_language:
+        _log.info("spellback_voice_persona_fallback",
+                  wanted=candidate, using=same_language)
+        return same_language, locale
+
+    # Rung 3: no Chirp3 at all in this locale -- the locale's DEFAULT voice
+    # still speaks the user's language, which beats an English clip.
+    if locale != _FALLBACK_LOCALE:
+        _log.info("spellback_voice_locale_default", wanted=candidate,
+                  locale=locale)
+        return "", locale
+
+    fallback = "%s-Chirp3-HD-%s" % (_FALLBACK_LOCALE, persona)
+    _log.info("spellback_voice_fallback", wanted=candidate, using=fallback)
+    return fallback, _FALLBACK_LOCALE
+
+
+def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
     from google.cloud import texttospeech
 
-    ssml = build_spellback_ssml(value)
-    voice_params = {"language_code": "en-US"}
+    voice_params = {"language_code": locale}
     if voice_name:
         voice_params["name"] = voice_name
     response = _get_client().synthesize_speech(
-        input=texttospeech.SynthesisInput(ssml=ssml),
+        input=texttospeech.SynthesisInput(text=text),
         voice=texttospeech.VoiceSelectionParams(**voice_params),
         audio_config=texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
@@ -143,8 +235,8 @@ def _synthesize_sync(value: str, voice_name: str) -> bytes:
     return response.audio_content
 
 
-async def synthesize_spellback(value: str, voice_name: str = "") -> bytes:
-    """Synthesize the letter-by-letter MP3 for `value`.
+async def synthesize_spellback(value: str, settings, language_name=None) -> bytes:
+    """Synthesize the verification-clip MP3 for `value` in the session language.
 
     Runs the blocking Cloud TTS call in a worker thread so the event loop (and
     with it the WS control channel) never blocks. Raises ValueError on an
@@ -155,10 +247,13 @@ async def synthesize_spellback(value: str, voice_name: str = "") -> bytes:
         raise ValueError("empty value")
     if len(value) > MAX_SPELLBACK_CHARS:
         raise ValueError("value too long")
-    audio = await asyncio.to_thread(_synthesize_sync, value, voice_name)
+    voice_name, locale = resolve_spellback_voice(settings, language_name)
+    text = build_spellback_text(value, locale)
+    audio = await asyncio.to_thread(_synthesize_sync, text, voice_name, locale)
     _log.info(
         "spellback_tts_synthesized",
         value_chars=len(value),
         audio_bytes=len(audio),
+        locale=locale,
     )
     return audio

@@ -395,16 +395,17 @@ class Settings(BaseModel):
 	SPELLBACK_TOOL_ENABLED: bool = (
 		os.getenv("SPELLBACK_TOOL_ENABLED", "false").lower() == "true"
 	)
-	# Cloud TTS voice for the spell-back clip. Empty (the default) = MATCH THE
-	# LIVE MODEL'S VOICE: the Chirp 3 HD family carries the same persona set as
-	# the Live API's prebuilt voices, so LIVE_VOICE_NAME derives
-	# en-US-Chirp3-HD-<name> (endpoint-verified accepting our SSML with
-	# Iapetus, 2026-08-07) and the clip sounds like the same speaker
-	# (maintainer ask, 2026-08-07). Set explicitly to pin a different voice;
-	# resolution lives in spellback_tts.resolve_spellback_voice. The clip is
-	# ALWAYS en-US regardless of session language -- English letter names in
-	# every session language is the SI's NAMES invariant (the letters are what
-	# is written on the English form).
+	# Cloud TTS voice for the spell-back clip. Empty (the default) = follow the
+	# SESSION LANGUAGE with the Live model's persona:
+	# {session-locale}-Chirp3-HD-<LIVE_VOICE_NAME> (the Chirp 3 HD family
+	# carries the Live API's prebuilt voice names, so the clip sounds like the
+	# same speaker in the user's language -- maintainer ruling 2026-08-08:
+	# letter names come out the way that language's speakers say them; a
+	# Spanish speaker hears 'jota'). Locales with no Chirp3 voice fall back to
+	# en-US, availability derived from list_voices at runtime (never a
+	# hand-pinned language list). Set explicitly (full voice name) to pin one
+	# voice for every session; resolution lives in
+	# spellback_tts.resolve_spellback_voice.
 	SPELLBACK_TTS_VOICE: str = os.getenv("SPELLBACK_TTS_VOICE", "")
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
@@ -786,20 +787,19 @@ class Settings(BaseModel):
 	SPELLBACK_TOOL_DECLARATION: dict = {
 		"name": "name_spellback",
 		"description": (
-			"Play the CURRENT field's stored value to the user as deterministic "
-			"letter-by-letter audio, so they can verify the exact spelling. This "
+			"Play the CURRENT field's stored value to the user as a "
+			"deterministic audio clip that says the spelling letter by letter, "
+			"in the session language, AND asks them whether it is correct. This "
 			"is the ONLY way a LETTER spelling is ever read back -- never speak "
 			"a letter spelling yourself. (Digit-by-digit read-back of numbers is "
 			"unaffected: keep reading numbers back digit by digit yourself.) "
-			"After update_form_fields "
-			"succeeds on a name (or other letter-spelled) field: briefly tell "
-			"the user, "
-			"in the session language, that you will play the spelling back, call "
-			"this tool, and stop speaking. The audio is generated from the "
-			"STORED value, never from conversation memory. When the tool "
-			"returns, follow its instructions: normally ask the user, in the "
-			"session language, whether the spelling is correct -- without "
-			"repeating any letters yourself."
+			"After update_form_fields succeeds on a name (or other "
+			"letter-spelled) field, call this tool INSTEAD of doing the spoken "
+			"read-back yourself, and stop speaking. The audio is generated from "
+			"the STORED value, never from conversation memory, and it already "
+			"asks the verification question -- so when the tool returns "
+			"delivered, say NOTHING and wait silently for the user's answer, "
+			"then confirm as usual once they agree."
 		),
 		"parameters": {
 			"type": "object",
@@ -807,30 +807,27 @@ class Settings(BaseModel):
 		}
 	}
 
-	# Appended to the DTI SI while SPELLBACK_TOOL_ENABLED (ai_context.py).
-	# INTERIM wording for the flag-on validation window: it overrides the base
-	# SI's NAMES verify-by-spelling delivery without editing that wording (the
-	# SI-slimming session owns it and is leaving a cutover marker -- bd 22h1f
-	# NOTES). The cutover PR replaces the base wording at the marker and
-	# retires this addendum.
+	# Appended to the SI (BOTH modes) while SPELLBACK_TOOL_ENABLED
+	# (ai_context.py). The v4 DTI SI (bd 6a79) already forbids spelling aloud
+	# and says voicing a spelling "is handled outside this conversation" --
+	# this addendum names the mechanism and replaces the WORKFLOW read-back
+	# step for letter-spelled values (bd 44ywm: the clip carries the whole
+	# verification question, so the model waits instead of asking). The
+	# LEGACY SI still carries its old verify-by-spelling wording, which this
+	# addendum also overrides (fresh-eyes round 1 on bd 22h1f).
 	DTI_SPELLBACK_SI_ADDENDUM: str = (
-		"\n\nSPELL-BACK AUDIO TOOL (overrides any earlier instruction to read "
-		"LETTER spellings aloud yourself):\n"
-		"You must NEVER speak a LETTER spelling letter by letter -- spelled "
-		"letter sequences in your speech are unreliable. This applies to "
-		"LETTERS only: digit-by-digit read-back of numbers (dates, phone "
-		"numbers, ZIP codes, id numbers) is unchanged -- keep reading those "
-		"back digit by digit yourself, slowly, as your speech-style "
-		"instructions describe. Everything else about NAMES "
-		"handling stays the same (ask for the spelling first, fill exactly what "
-		"the user spells), but verification changes: after filling a name (or "
-		"any letter-spelled value), briefly tell the user, in the session "
-		"language, "
-		"that you will play the spelling back, then call the name_spellback "
-		"tool and stop speaking. It plays the stored value to the user as "
-		"clear letter-by-letter audio. When it returns, ask the user, in the "
-		"session language, whether the spelling is correct -- do not repeat "
-		"the letters. Then confirm_field once they agree, as usual."
+		"\n\nSPELL-BACK AUDIO TOOL (this is the mechanism that voices "
+		"spellings outside this conversation, and it overrides any earlier "
+		"instruction to read a LETTER spelling aloud or to verify by spelling "
+		"yourself):\n"
+		"For a NAME or any letter-spelled value: after the fill succeeds, do "
+		"NOT read the value back and do NOT ask whether it is correct -- call "
+		"the name_spellback tool instead, and stop speaking. A deterministic "
+		"clip says the stored spelling to the user, letter by letter in the "
+		"session language, and asks them whether it is correct. When the tool "
+		"returns delivered, stay SILENT and listen for their answer; once they "
+		"agree, confirm as usual. Numbers are unaffected: keep reading "
+		"identifier numbers back digit by digit yourself."
 	)
 
 	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret

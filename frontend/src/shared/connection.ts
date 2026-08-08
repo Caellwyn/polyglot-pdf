@@ -472,7 +472,7 @@ export function createConnectionManager(
 	const callbacks: ConnectionCallbacks = {
 		// Deterministic spell-back playback (bd polyglot-pdf-22h1f): implemented
 		// here because this layer owns the audio manager and the auth token.
-		onSpellbackRequest: (value: string): Promise<SpellbackPlaybackResult> => spellback.play(value),
+		onSpellbackRequest: (value: string, _fieldId: string, language?: string): Promise<SpellbackPlaybackResult> => spellback.play(value, language),
 		onStatusChange: (status) => {
 			// BUG FIX (Nov 10, 2025): Reset paused flag when connection is lost
 			// This ensures reconnect works properly after timeout/error/disconnect
