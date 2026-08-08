@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-06. See [docs/journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md](../journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md) for closeout details.*
+*Last updated: 2026-08-07 (bd polyglot-pdf-xzw5: the revision marker resolves through three ranks now, and the archive keys on the same one a confirmation record names). See [docs/journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md](../journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md) for the archive's original closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -168,9 +168,16 @@ readable at `<kit_id>/_archive/<marker>/`. Kit storage is one slot per kit_id, s
 a republish overwrites in place -- and the confirmation audit trail records
 `kit_id` + a revision marker that is *not* a storage address, so without this a
 republish destroyed the schema an old record was confirmed against. The marker is
-resolved from the superseded revision's OWN schema (`resolve_edition_marker`) and
-encoded into one safe path segment by `encode_marker` (it encodes rather than
-rejects: real markers contain `/` and `:`, which `safe_filename` bars). The
+resolved from the superseded revision's OWN schema (`resolve_edition_marker`,
+through ALL THREE ranks -- `edition_date`, then `author_version`, then the shape
+fingerprint) and encoded into one safe path segment by `encode_marker` (it
+encodes rather than rejects: real markers contain `/` and `:`, which
+`safe_filename` bars). The archive MUST resolve through the same ranks the
+confirmation record did: keyed on anything else, the bytes are on disk under a
+key no record names and the retrieval this whole mechanism exists for silently
+fails (bd `polyglot-pdf-xzw5` -- an `author_version` kit archived under a
+`sha256:` fingerprint until this was fixed; the agreement is pinned by a test
+that resolves both sides). The
 archive is written whenever a PUBLISHED revision is retired -- on
 revert-to-draft, on unpublish, and on the outgoing kit of a `replaces_kit_id`
 supersede (bd `polyglot-pdf-6dz0`): every editor route
