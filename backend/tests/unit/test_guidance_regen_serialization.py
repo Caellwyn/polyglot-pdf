@@ -59,7 +59,9 @@ def _load_llm_providers():
     return mod
 
 
-def test_two_concurrent_cli_calls_in_one_pid_do_not_share_a_scratch_file():
+def test_two_concurrent_cli_calls_in_one_pid_do_not_share_a_scratch_file(
+    monkeypatch,
+):
     """THE PID BUG, driven directly (criterion 2).
 
     Two run_json_claude_cli calls on one interpreter, overlapping. The fake
@@ -72,7 +74,7 @@ def test_two_concurrent_cli_calls_in_one_pid_do_not_share_a_scratch_file():
     # _parse_helpers lazily imports arm_llm_native (a sibling bakeoff script
     # not on sys.path here). The transport under test only needs "parse the
     # JSON the model wrote", so stub it rather than dragging in the extractor.
-    llm._parse_helpers = lambda: (json.loads, lambda x: x)
+    monkeypatch.setattr(llm, "_parse_helpers", lambda: (json.loads, lambda x: x))
     seen_paths = []
     barrier = threading.Barrier(2, timeout=10)
 
@@ -95,7 +97,12 @@ def test_two_concurrent_cli_calls_in_one_pid_do_not_share_a_scratch_file():
             stderr = ""
         return _P()
 
-    llm.subprocess.run = fake_run  # module-local monkeypatch (loaded by path)
+    # Via monkeypatch, NOT a bare assignment: `llm.subprocess` is the ONE
+    # stdlib subprocess module (importlib gives a fresh PROVIDER module, not a
+    # fresh stdlib), so `llm.subprocess.run = fake_run` leaked process-wide and
+    # broke 5 tests in two untouched files later in the full run (Opus
+    # cross-surface finding). monkeypatch restores it at teardown.
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
 
     results = {}
 

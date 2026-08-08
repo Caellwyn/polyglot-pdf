@@ -58,6 +58,18 @@ There are **two collected suites** under `testpaths`:
   `next_bead`, doc-freshness, `pr_review_watcher`, pricing). It runs from the repo
   root on defaults and is now part of the same `pytest` run.
 
+> **Pre-PR, run BOTH roots — a bare `pytest`, not `pytest backend/tests`.** The
+> closeout recipe names `backend/tests` for speed, which silently skips the root
+> `tests/` suite; a **cross-suite leak is invisible to every scoped run**. Measured
+> (`polyglot-pdf-gnb0`): a new test under `backend/tests/unit/` assigned
+> `subprocess.run` directly instead of via `monkeypatch`, and because collection is
+> alphabetical that leak reddened **5 tests in two untouched files under `tests/`** —
+> green in isolation, green under `backend/tests`, red only on the full run the
+> reviewer did. Related rule: patch a module attribute with `monkeypatch.setattr`,
+> never a bare assignment. `importlib`-loading a module by path gives you a fresh
+> copy of THAT module but the **same stdlib modules it imported**, so
+> `mymod.subprocess.run = fake` is a process-wide patch wearing a local disguise.
+
 The backend suite is organized **by directory**, not by marker:
 
 | Dir | What | Notes |

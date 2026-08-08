@@ -36,8 +36,12 @@ PROPERTY rather than the naming shape.
 
 **2. The lost update.** The route did `load_schema` -> mutate across a
 minutes-long model call -> `put_schema` with no version check, so two
-overlapping regenerates (or a regenerate racing a `PUT /schema`) silently
-discarded one side's write. Now the whole read/enrich/apply/write window runs
+overlapping regenerates silently discarded one side's write. SCOPE, stated
+because the bead's own text implied more: this closes regenerate-vs-regenerate
+only. `put_schema` still has no version check, so a regenerate racing a
+`PUT /schema` remains open -- filed by the outer review as bd
+polyglot-pdf-gpghk, and the lock's comment says so rather than letting the
+next reader assume the write path is safe. Now the whole read/enrich/apply/write window runs
 under a per-instance lock, the same guard and the same rationale as the
 extract semaphore. The lock is taken BEFORE the load -- taken any later, a
 queued request would still mutate its pre-lock snapshot and lose a write. The
@@ -75,6 +79,21 @@ sync described in Lessons).
   call (unfixed). Both worlds reach the same observed state, which is what
   keeps the lock-removal mutation reddening it -- re-verified 3/3 after the
   change, with 3/3 clean runs restored.
+
+Opus cross-surface round 1: GAPS-FOUND (2), both adopted. (1) The new test
+assigned `subprocess.run` directly rather than through `monkeypatch` --
+`importlib`-loading llm_providers by path gives a fresh PROVIDER module but
+the SAME stdlib subprocess, so the fake leaked process-wide and reddened 5
+tests in two untouched files under the root `tests/` suite. Invisible to my
+own pre-PR run, which scoped to `backend/tests`. Fixed via monkeypatch and
+mutation-verified (restoring the bare assignment reproduces exactly those 5
+failures); the trap is now recorded in docs/standards/testing.md, together
+with the run-BOTH-roots rule that would have caught it. (2) The lock's
+comment credited it with closing a regenerate-vs-`PUT /schema` race it does
+not close -- scoped to the truth, pointing at the reviewer's bead
+polyglot-pdf-gpghk for the broader unguarded write path. The reviewer also
+filed polyglot-pdf-xlvba (uuid4 scratch orphans are never reclaimed on a hard
+kill, since the per-call path removed the old pre-existence sweep).
 
 ## Doc freshness
 

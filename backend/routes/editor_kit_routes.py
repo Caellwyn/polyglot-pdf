@@ -2341,8 +2341,12 @@ def _get_onboard_lock() -> asyncio.Lock:
 # extract semaphore above: an LLM call plus a stored-schema rewrite.
 #   - LOST UPDATE: the route reads the schema, mutates it in memory across a
 #     minutes-long model call, and writes it back with no version check, so two
-#     overlapping regenerates (or a regenerate racing a PUT /schema) silently
-#     discarded one side's write.
+#     overlapping regenerates silently discarded one side's write. SCOPE: this
+#     lock closes regenerate-vs-regenerate ONLY. A regenerate racing a
+#     PUT /schema (or any other put_schema caller -- 7 write sites, this is the
+#     one inside a lock) is still unguarded, because put_schema has no version
+#     check; that broader race is bd polyglot-pdf-gpghk. Do not read this lock
+#     as making the schema-write path safe against the editor's own save.
 #   - The CLI transport's scratch file used to be keyed on the PID, so two
 #     concurrent calls in this ONE process fought over one path. That is fixed
 #     at the source (llm_providers._cli_scratch_path is per-call now), and this
