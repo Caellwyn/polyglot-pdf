@@ -103,26 +103,46 @@ after section 1 and the fingerprint was recomputed from a single-section schema
 
 A **custom form** -- a firm's own intake sheet, which the firm-tier epic
 (`polyglot-pdf-02ye`) exists to support -- has no government edition date, so
-requiring one would make the product unusable for those customers. Schema-lint
-therefore emits `audit-identity-no-edition` as a **WARNING, never an ERROR**: it
-advises an author who forgot to set one on an official form, and is correctly
-ignorable for an in-house form.
+requiring one would make the product unusable for those customers.
 
-The record still pins a revision. `resolve_edition_marker`
-(`backend/utils/confirmation_logger.py`) falls back to a short fingerprint of
-the kit's **answerable shape** -- field ids + types + option values --
-formatted `sha256:<12 hex>`. It deliberately excludes labels and guidance prose,
-so a copy edit does not read as a new revision while adding/removing/retyping a
-field or changing an option value does. Not human-readable, but it answers the
-question a disputed filing actually asks: *was this the same version of the form
-the client saw?*
+`resolve_edition_marker` (`backend/utils/confirmation_logger.py`) resolves the
+marker in **three** ranks, best source first:
 
-A better fallback is coming. The editor stamps `metadata.published_at` when a
-kit is marked complete (shipped with this change), and epic
-`polyglot-pdf-7jmy` will surface that publish date plus an author-supplied
-version into the record -- both more meaningful to a human than a digest. They
-live in kit metadata, which the audit path does not currently receive, so
-reaching them needs a manifest/wire change.
+1. **`form_metadata.edition_date`** -- the government's own marker
+   (`"12/2024"`). The only one an agency recognizes, so it always wins.
+2. **`form_metadata.author_version`** -- what the kit author typed when
+   publishing a form that has no government edition (bd `polyglot-pdf-xzw5`),
+   e.g. `"2026-08-07"`. Human-readable, which is the whole reason it outranks
+   the fingerprint below. Never invented: it is recorded only when an author
+   actually supplied one.
+3. **A short fingerprint of the kit's answerable shape** -- field ids + types +
+   option values, formatted `sha256:<12 hex>`. It deliberately excludes labels
+   and guidance prose, so a copy edit does not read as a new revision while
+   adding/removing/retyping a field or changing an option value does. Not
+   human-readable, but it answers the question a disputed filing actually asks:
+   *was this the same version of the form the client saw?*
+
+Two properties of `author_version` matter for the audit trail:
+
+- **It is required to publish a kit that has no `edition_date`.** The publish
+  gate refuses with an `AUTHOR_VERSION_REQUIRED:`-prefixed 422, which the editor
+  keys on to open its version dialog (the catalogue listing does not read kit
+  schemas, so the server is what knows a version is needed).
+- **It is immutable once published.** It is what existing confirmation records
+  name, so changing it would silently re-point them at a revision those clients
+  never saw -- the same hazard the retired-kit write-lock exists to prevent
+  (bd `polyglot-pdf-6dz0`). A republish keeps the original; a changed value is a
+  409. A new revision gets a new version.
+
+`author_version` is NOT `form_metadata.version`, which is auto-extracted display
+text and frequently meaningless for this purpose (real shipped values include
+`"draft"` and `"v9_conformant"`).
+
+Schema-lint emits `audit-identity-no-edition` as a **WARNING, never an ERROR**,
+and it is resolved by EITHER an `edition_date` or an `author_version` -- the
+finding is about falling back to an unreadable fingerprint, not about the
+government field specifically. The publish gate, not the lint rule, is what
+actually requires the version.
 
 Note what is **absent**: the field's value. The module docstring is explicit —
 "Only log metadata, NEVER log actual field values or user data." `field_name` is
@@ -196,8 +216,13 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-06 (post-merge freshness check against
-backend/services/callback_handler.py: `_handle_confirm_field_tool` (default
+*Last updated: 2026-08-07 (bd polyglot-pdf-xzw5: the revision marker gained a
+THIRD rank -- an author-supplied `form_metadata.author_version` between the
+government `edition_date` and the shape fingerprint, required to publish a kit
+that has neither and immutable once published. The "a better fallback is
+coming" paragraph described exactly this and is now the shipped behavior above.
+Earlier, 2026-08-06: post-merge freshness check against
+backend/services/callback_handler.py -- `_handle_confirm_field_tool` (default
 `confirmation_method="verbal"`), the `recorded`-guard, and the
 `log_field_confirmation(...)` call site (gated on `self._form_id and
 self._form_session_id`, carrying `kit_id`/`edition_date`) all re-verified
