@@ -57,7 +57,6 @@ const SEED = {
   // register sample; seeding more would skip the very text under review.
   application_type: 'apply_new_itin',
 };
-const FIXTURES = [];   // nothing is injected -- see above
 
 function log(msg) { process.stderr.write(`[ru-register] ${msg}\n`); }
 
@@ -109,14 +108,10 @@ async function clickButton(page, re, label) {
     undefined, { timeout: 40000 });
   await page.evaluate(harnessSource);
   await page.waitForFunction(() => typeof window.__VFF_HARNESS === 'object');
-  log('harness installed; preloading fixtures');
-  await page.evaluate(async (names) => {
-    const H = window.__VFF_HARNESS;
-    window.__vffBufs = {};
-    for (const n of names) {
-      window.__vffBufs[n] = await H.loadFixture('/test-fixtures/' + n + '.wav');
-    }
-  }, FIXTURES);
+  // No fixture preload: this driver injects nothing (see docblock). The sibling
+  // storage drivers preload here; that block was dead weight once the lead-in
+  // loop went, so it is gone rather than left as an inert no-op.
+  log('harness installed');
 
   // The disclaimer's agree button is TRANSLATED per session language
   // (DisclaimerModal.BUTTON_TRANSLATIONS): a Russian session shows
