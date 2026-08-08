@@ -1560,6 +1560,28 @@ async def regenerate_editor_kit_guidance(
     to ground the guidance in, so it 409s rather than inventing prose.
     """
     kit_id = _safe_kit_id(kit_id)
+    # SERIALIZED per instance (bd polyglot-pdf-gnb0). The lock is taken BEFORE
+    # the schema is loaded, so a queued request re-reads the store and sees the
+    # previous run's written schema -- taking it any later would let both
+    # requests mutate the same pre-lock snapshot and still lose one write. It
+    # spans the whole read -> enrich -> apply -> put_schema window; the model
+    # call inside is minutes long, so a second author's request waits (Cloud
+    # Run's --timeout=3600 covers it), exactly like the extract route.
+    async with _get_guidance_lock():
+        return await _regenerate_guidance_locked(kit_id, role, body)
+
+
+async def _regenerate_guidance_locked(
+    kit_id: str,
+    role: str,
+    body: RegenerateGuidanceBody | None,
+) -> RegenerateGuidanceResponse:
+    """The regenerate-guidance critical section (see the caller's lock note).
+
+    Split out ONLY so the lock wraps one call rather than re-indenting the
+    whole body; every behavior here is unchanged from when it lived inline.
+    `kit_id` arrives already normalized by _safe_kit_id.
+    """
     settings = get_settings()
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
@@ -2311,6 +2333,33 @@ def _get_onboard_lock() -> asyncio.Lock:
     if lock is None:
         lock = asyncio.Lock()
         _onboard_locks[loop] = lock
+    return lock
+
+
+# Serialize the guidance-regeneration load -> enrich -> apply -> put_schema
+# window (bd polyglot-pdf-gnb0). Same shape and same two reasons as the
+# extract semaphore above: an LLM call plus a stored-schema rewrite.
+#   - LOST UPDATE: the route reads the schema, mutates it in memory across a
+#     minutes-long model call, and writes it back with no version check, so two
+#     overlapping regenerates (or a regenerate racing a PUT /schema) silently
+#     discarded one side's write.
+#   - The CLI transport's scratch file used to be keyed on the PID, so two
+#     concurrent calls in this ONE process fought over one path. That is fixed
+#     at the source (llm_providers._cli_scratch_path is per-call now), and this
+#     lock is the independent second guard: the store write needs serializing
+#     whichever provider ran.
+# Per event loop for the same reason the onboard lock is -- see its comment.
+_guidance_locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _get_guidance_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _guidance_locks.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _guidance_locks[loop] = lock
     return lock
 
 
