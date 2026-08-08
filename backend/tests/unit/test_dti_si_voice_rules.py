@@ -44,7 +44,7 @@ def _settings() -> Settings:
 def test_dti_si_has_dates_rule_convert_yourself():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "DATES:" in si
-    assert "NEVER ask the user to restate a date" in si
+    assert "never ask the user to restate a date in a format" in si
     assert "YOURSELF" in si
 
 
@@ -52,9 +52,10 @@ def test_dti_si_has_dates_rule_convert_yourself():
 
 def test_dti_si_forbids_verbatim_english_option_labels():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "NEVER read an English label aloud verbatim" in si
-    # The English value stays reserved for the tool call.
-    assert "only for the tool call" in si
+    # v4 states this as the positive rule (translate it yourself) plus the
+    # tool-call reservation.
+    assert "you translate yourself as you say it" in si
+    assert "for tool calls only" in si
 
 
 # --- UNMISTAKABLY language lock (bd oqkj) -------------------------------------
@@ -82,9 +83,9 @@ def test_dti_si_does_not_offer_a_mid_session_language_switch():
     # the old sentence survives elsewhere in the SI.
     assert "explicit request to switch changes the session language" not in si
     # The model is told the language is fixed...
-    assert "the session language is fixed for the whole form" in si
+    assert "fixed for the whole form" in si
     # ...and given something useful to SAY when asked, rather than a refusal.
-    assert "the button that clears the form and starts a new session" in si
+    assert "clears the form and starts a new session" in si
 
 
 def test_dti_si_does_not_name_the_clear_form_button_in_english():
@@ -106,9 +107,9 @@ def test_dti_si_does_not_name_the_clear_form_button_in_english():
     # defeat -- 'Reset Form' / 'ClearForm' / a translated label would all slip a
     # bare blacklist). The load-bearing assertions are that the SI carries the
     # describe-don't-name RULE, which holds whatever label someone might add:
-    assert "Describe that button by what it DOES" in si
-    assert "never invent a label for it" in si
-    assert "the on-screen label is translated" in si
+    assert "describe that button by what it DOES" in si
+    assert "never by a label" in si
+    assert "on-screen labels are translated" in si
     # ...THEN no residue: the specific literal this test was written for must be
     # gone, so a regression to the exact prior wording is still caught.
     assert "'clear form' button" not in si
@@ -135,12 +136,12 @@ def test_per_injection_anchor_carries_unmistakably():
 def test_dti_si_workflow_reads_back_from_stored_value_echo():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "stored_values" in si
-    assert "NEVER read a value back from your own memory" in si
+    assert "never your own memory of what was said" in si
 
 
 def test_dti_si_forbids_filling_unspoken_values():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "NEVER fill a field with a value the user has not explicitly given" in si
+    assert "never supply a value the user has not said" in si
 
 
 # --- Recovery prompt level 1 (bd yo5t) ----------------------------------------
@@ -157,6 +158,13 @@ def test_recovery_level_1_forbids_filling_before_answer():
 # production default, but the legacy path must not silently regress.
 
 def _both_sis():
+    """DTI + legacy.
+
+    NOTE (v4 SI, 2026-08-07): the DTI SI was rewritten -- SPEECH STYLE and
+    ARTICULATION are now ONE `DELIVERY` block, and spell-back is gone (a TTS
+    tool will own it). The LEGACY SI is unchanged, so a rule whose wording
+    differs between them is asserted per-SI below rather than over both.
+    """
     s = _settings()
     return (
         ("DTI_SYSTEM_INSTRUCTION", s.DTI_SYSTEM_INSTRUCTION),
@@ -164,88 +172,116 @@ def _both_sis():
     )
 
 
+def _dti():
+    return _settings().DTI_SYSTEM_INSTRUCTION
+
+
+def _legacy():
+    return _settings().SYSTEM_INSTRUCTION
+
+
 def test_both_sis_carry_articulation_rule():
-    for name, si in _both_sis():
-        assert "ARTICULATION" in si, f"{name} lost the articulation block"
-        # The end of a word is the specific casualty of slurred speech.
-        assert "full value through to the END of the word" in si, name
+    # v4 folded ARTICULATION into DELIVERY for the DTI SI; the legacy SI keeps
+    # its own ARTICULATION heading. The RULE -- word endings are the casualty --
+    # is what both must carry.
+    assert "Articulate each word fully through to its END" in _dti()
+    legacy = _legacy()
+    assert "ARTICULATION" in legacy
+    assert "full value through to the END of the word" in legacy
 
 
 def test_articulation_generalizes_beyond_inflected_languages():
     # 17+ session languages, not all Indo-European: "word endings" is
     # meaningless in tonal/syllable-timed languages (Chinese, Vietnamese,
     # Thai, Japanese), so the rule names their equivalent failure mode too.
-    for name, si in _both_sis():
-        assert "tones or on evenly-timed syllables" in si, name
-        assert "keep every tone and syllable distinct" in si, name
+    assert "tonal or syllable-timed language" in _dti()
+    assert "keep every tone and syllable distinct" in _dti()
+    legacy = _legacy()
+    assert "tones or on evenly-timed syllables" in legacy
+    assert "keep every tone and syllable distinct" in legacy
 
 
 def test_articulation_is_scoped_to_delivery_not_word_choice():
     # Guards against the model reading "no casual contractions" as a licence
     # to drop the warm, conversational REGISTER.
-    for name, si in _both_sis():
-        assert "govern DELIVERY only, not" in si, name
-        assert "never the same as being formal or stiff" in si, name
+    assert "governs delivery only, not word choice" in _dti()
+    legacy = _legacy()
+    assert "govern DELIVERY only, not" in legacy
+    assert "never the same as being formal or stiff" in legacy
 
 
 def test_both_sis_forbid_slurring_and_rushing():
-    for name, si in _both_sis():
-        for phrase in ("slur", "swallow syllables", "rush through a sentence"):
-            assert phrase in si, f"{name} missing: {phrase}"
+    for phrase in ("slur", "swallow syllables", "rush an ending"):
+        assert phrase in _dti(), f"DTI missing: {phrase}"
+    for phrase in ("slur", "swallow syllables", "rush through a sentence"):
+        assert phrase in _legacy(), f"legacy missing: {phrase}"
 
 
 def test_both_sis_require_clause_pauses():
     for name, si in _both_sis():
-        assert "pause between clauses" in si, name
+        assert ("Pause briefly between clauses" in si
+                or "pause between clauses" in si), name
 
 
 def test_both_sis_forbid_fillers_and_casual_contractions():
     # Simulating casual/disfluent speech is a known audio-degradation trigger.
-    for name, si in _both_sis():
-        assert "no filler or hesitation sounds" in si, name
-        assert "gonna" in si, name
+    assert "fillers ('uh', 'um')" in _dti()
+    assert "contractions" in _dti()
+    legacy = _legacy()
+    assert "no filler or hesitation sounds" in legacy
+    assert "gonna" in legacy
 
 
 def test_articulation_applies_in_every_language():
     # 17+ session languages: a rule pinned to English only would not travel.
-    for name, si in _both_sis():
-        assert "This applies in EVERY session language." in si, name
+    assert "every language" in _dti()
+    assert "This applies in EVERY session language." in _legacy()
 
 
-def test_both_sis_carry_the_slower_pace_target():
-    # Tester feedback 2026-07-30: still rushing. A concrete relative target
-    # beats piling on intensifiers, which saturate.
-    for name, si in _both_sis():
-        assert "ten percent slower" in si, name
-        assert "err on the side of too slow" in si, name
+def test_pace_target_is_directional_not_a_bogus_number():
+    # The "ten percent slower than the pace you would otherwise choose" target
+    # was RETIRED from the DTI SI (maintainer, 2026-08-07: "that phrase never
+    # worked") -- it asks the model to measure against a pace it cannot
+    # introspect. The DIRECTION is what survives and is load-bearing.
+    dti = _dti()
+    assert "err on the side of too slow" in dti
+    assert "ten percent slower" not in dti
+    # The legacy SI is untouched and still carries the old target.
+    assert "ten percent slower" in _legacy()
 
 
 def test_both_sis_forbid_accelerating_mid_sentence():
     # "Rushing" is typically starting well and speeding up, so the sustain
     # rule is pinned separately from the target pace itself.
-    for name, si in _both_sis():
-        assert "from the FIRST word to the LAST" in si, name
-        assert "do not start slowly and then speed up" in si, name
+    dti = _dti()
+    assert "Hold that pace to the last word" in dti
+    assert "never speed up mid-sentence" in dti
+    legacy = _legacy()
+    assert "from the FIRST word to the LAST" in legacy
+    assert "do not start slowly and then speed up" in legacy
 
 
-def test_articulation_does_not_contradict_the_slow_pace_rule():
-    # The articulation rules EXTEND the existing SPEECH STYLE block; they must
-    # not have displaced the pace rule that shares it. Ordering alone is a weak
-    # assertion (SPEECH STYLE sits at the top, so it passes trivially), so pin
-    # that the pace prose actually lives BETWEEN the two anchors -- otherwise
-    # deleting the pace sentences would leave this test green.
+def test_delivery_block_carries_pace_and_articulation_together():
+    # v4: SPEECH STYLE + ARTICULATION are ONE `DELIVERY` block in the DTI SI.
+    # The original point of this test stands -- the articulation rules must not
+    # have displaced the pace rules sharing the block -- so pin that the pace
+    # prose lives INSIDE the delivery block, not merely somewhere in the SI.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    start, end = si.index("SPEECH STYLE"), si.index("ARTICULATION")
-    assert start < end
-    between = si[start:end]
+    start = si.index("DELIVERY (how you sound")
+    end = si.index("REGISTER (what you say")
+    block = si[start:end]
     for phrase in (
-        "Speak SLOWLY and calmly in every language",
-        "ten percent slower",
-        "from the FIRST word to the LAST",
-        # the per-character read-back rule shares this block and must survive
-        "N ... G ... U ... Y ... E ... N",
+        "Speak SLOWLY and calmly",
+        "err on the side of too slow",
+        "Hold that pace to the last word",
+        "Articulate each word fully through to its END",
+        # identifier read-back shares this block (spell-back does NOT -- it was
+        # removed with the letter-by-letter rules, maintainer 2026-08-07)
+        "digit by digit",
     ):
-        assert phrase in between, f"SPEECH STYLE lost: {phrase}"
+        assert phrase in block, f"DELIVERY lost: {phrase}"
+    # And spell-back really is gone from the DTI SI.
+    assert "letter by letter" in si and "Never spell a word out letter by letter" in si
 
 
 def test_legacy_si_block_order_is_register_then_pace_then_articulation():
@@ -257,20 +293,23 @@ def test_legacy_si_block_order_is_register_then_pace_then_articulation():
 
 
 def test_each_si_has_exactly_one_articulation_block():
-    for name, si in _both_sis():
-        assert si.count("ARTICULATION (say every word clearly)") == 1, name
+    # Legacy keeps its named block; the DTI SI states the rule once inside
+    # DELIVERY. Either way the rule must not appear twice (v4 exists because
+    # duplicated rules are paid every turn -- docs/standards/si-reduction.md).
+    assert _legacy().count("ARTICULATION (say every word clearly)") == 1
+    assert _dti().count("Articulate each word fully") == 1
 
 
-def test_articulation_text_is_identical_across_both_sis():
-    # The two constants wrap differently in source but must concatenate to the
-    # SAME rule. Without this, the copies could drift in any prose no other
-    # assertion happens to name, with the whole suite still green.
-    def _block(si):
-        start = si.index("ARTICULATION (say every word clearly)")
-        return si[start:si.index("\n\n", start)]
-
-    s = _settings()
-    assert _block(s.DTI_SYSTEM_INSTRUCTION) == _block(s.SYSTEM_INSTRUCTION)
+def test_legacy_articulation_block_is_self_consistent():
+    # The two SIs NO LONGER share articulation text: v4 rewrote the DTI copy
+    # into DELIVERY while the legacy SI kept its own block, so an
+    # identical-text assertion is now wrong by construction. What still matters
+    # is that the legacy block exists intact and names its failure mode.
+    legacy = _legacy()
+    start = legacy.index("ARTICULATION (say every word clearly)")
+    block = legacy[start:legacy.index("\n\n", start)]
+    assert "full value through to the END of the word" in block
+    assert "tones or on evenly-timed syllables" in block
 
 
 # --- Option recital rules (bd polyglot-pdf-6bq8) ------------------------------
@@ -299,17 +338,16 @@ def test_dti_si_carries_presenting_options_rule():
     assert "PRESENTING OPTIONS:" in si
     assert "read EVERY option aloud" in si
     # The user cannot see the form -- the model's voice is the only access.
-    assert "your voice is their ONLY access to the choices" in si
+    assert "they cannot see them" in si
     # The observed failure phrasing is banned by naming the sanctioned behavior
     # AND the specific deflection.
-    assert "NEVER refer to 'the options shown'" in si
+    assert "never refer to 'the options shown'" in si
 
 
 def test_dti_si_forbids_partial_or_summarized_option_lists():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "Never summarize the list" in si
-    assert "never skip or merge options" in si
-    assert "never stop partway" in si
+    # v4 states these as one prohibition rather than three sentences.
+    assert "Never summarize, trim, merge, skip or stop partway" in si
 
 
 def test_dti_si_one_at_a_time_phrase_is_prohibition_only():
@@ -320,7 +358,7 @@ def test_dti_si_one_at_a_time_phrase_is_prohibition_only():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert si.count("one at a time") == 1
     i = si.index("one at a time")
-    assert "Do NOT walk the" in si[max(0, i - 60):i]
+    assert "Never walk options" in si[max(0, i - 60):i]
 
 
 def test_dti_si_forbids_one_by_one_yes_no_option_walk():
@@ -329,13 +367,13 @@ def test_dti_si_forbids_one_by_one_yes_no_option_walk():
     # hears the full set of choices. Banned by name, and the WORKFLOW ask step
     # carries the recital so the numbered steps agree with PRESENTING OPTIONS.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "Do NOT walk the options one at a time as separate yes/no questions" in si
-    assert "present the WHOLE list first" in si
+    assert "Never walk options one at a time as yes/no questions" in si
+    assert "Present the whole list" in si
     # The recital is wired into WORKFLOW step 1, not only the options block --
     # and step 1 must carry the SAME carve-outs as PRESENTING OPTIONS: an
     # unqualified step-1 imperative contradicted the two-option rule on every
     # confirm-path turn (Opus fresh-eyes, prompt-tuning PR).
-    workflow = si[si.index("WORKFLOW:"):si.index("TOOL PROTOCOL:")]
+    workflow = si[si.index("WORKFLOW (one field at a time):"):si.index("TOOL PROTOCOL:")]
     assert "read EVERY option aloud" in workflow
     assert "never one-by-one as yes/no questions" in workflow
     assert "ONE natural question for a TWO-option field" in workflow
@@ -346,7 +384,7 @@ def test_dti_si_licenses_the_long_recital():
     # A brevity-biased audio model shortens what feels too long unless told the
     # length is intended.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "Reading a long list takes a while -- that is expected and correct" in si
+    assert "however long or awkward the list is" in si
 
 
 def test_initiating_templates_carry_option_recital():
@@ -370,8 +408,8 @@ def test_dti_si_standard_list_carve_out():
     # both markers the render emits ("standard list" for selects, "long
     # standard list" for oversized radio/checkbox groups).
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "marks as a standard list" in si
-    assert "read ALL of it the moment they ask" in si
+    assert "STANDARD LIST" in si
+    assert "read all of it the moment they ask" in si
 
 
 def test_render_field_guidance_options_carry_count_and_recital_imperative():
@@ -998,10 +1036,10 @@ def test_real_multi_option_lists_keep_the_unconditional_recital():
 
 def test_dti_si_two_option_rule():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "ONE natural question that makes both choices clear IS the complete ask" in si
-    assert "Do not recite the two labels as a list" in si
+    assert "one natural question carrying both choices IS the complete ask" in si
+    assert "Do not recite the two labels" in si
     # Both phrasings are named so the rule travels beyond yes/no pairs.
-    assert "plain yes/no question when the options amount to yes and no" in si
+    assert "plain yes/no when the options amount to yes and no" in si
 
 
 def test_dti_si_two_option_rule_is_scoped_to_the_guidance_marker():
@@ -1012,11 +1050,12 @@ def test_dti_si_two_option_rule_is_scoped_to_the_guidance_marker():
     # render emits, not on the count, or the two channels contradict each other
     # on exactly those fields.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "TWO-option fields, WHEN THE GUIDANCE MARKS THEM SO" in si
-    assert "This applies ONLY when the guidance carries that two-option marker" in si
+    # v4 states the marker gate once, covering BOTH carve-outs.
+    assert "ONLY when the guidance marks them" in si
+    assert "TWO-OPTION field" in si
     # The recital branch's own marker text is named, so the model can tell the
     # two n==2 cases apart from the guidance alone.
-    assert "the guidance marks 'read ALL 2 aloud'" in si
+    assert "read ALL 2 aloud" in si
     # And the bare-count phrasing is GONE -- an allowlist pin is worthless if
     # the superseded wording survives elsewhere in the SI (memory: pin message
     # text with allowlists, then assert no residue).
@@ -1030,9 +1069,9 @@ def test_dti_si_handles_options_that_are_pure_print_navigation():
     # apart. The carve-out's carve-out: when navigation is ALL there is, it IS
     # the option's identity and is spoken.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "would leave an option with NOTHING to say" in si
-    assert "'1 Line 3a'" in si
-    assert "the reference IS that option's only identity: say it as written" in si
+    assert "leave NOTHING to say" in si
+    assert "'Line 3a'" in si
+    assert "that reference IS the option's identity" in si
 
 
 def test_dti_si_speaks_substance_not_print_navigation():
@@ -1040,22 +1079,23 @@ def test_dti_si_speaks_substance_not_print_navigation():
     # option's substance and omits printed-form navigation/cross-references
     # and screen wording.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "SPEAK THE SUBSTANCE of each option" in si
-    assert "NEVER read aloud a label's printed-form NAVIGATION" in si
+    assert "Speak each option's SUBSTANCE" in si
+    assert "OMIT pure NAVIGATION" in si
     assert "'(Proceed to Item 5.a)'" in si
     assert "'Skip line 6f'" in si
-    assert "screen wording like 'Select Yes'" in si
+    assert "'Select Yes'" in si
     # The boundary runs between NAVIGATION (omit) and a cross-reference that
     # carries a REAL requirement (keep): W-7 reason option a's "you must also
     # check and complete box h" is a genuine multi-select obligation, not
     # cruft (fresh-eyes finding, this PR).
-    assert "a REAL requirement or consequence of choosing that option" in si
-    assert "is SUBSTANCE -- keep its meaning" in si
-    # It is framed as the exception to the as-written rule, and MATCHING's
-    # as-written line carries the coupling so the two rules cannot read as
-    # contradicting each other.
-    assert "the ONE exception to saying a label as written" in si
-    assert "minus any printed-form navigation" in si
+    assert "REQUIREMENT, CONDITION or CONSEQUENCE of choosing that option" in si
+    assert "SPEAK every REQUIREMENT" in si
+    # v4 replaced the "one exception" framing with a FUNCTIONAL test plus a
+    # tie-breaker. Measured: the old framing let the model strip a binding
+    # "(you must also check and complete box h)" in 2 of 3 runs because it is a
+    # parenthetical naming a box; the functional test scored 3/3.
+    assert "The test is WHAT A CLAUSE DOES" in si
+    assert "Cannot tell which it is? SPEAK IT" in si
 
 
 def test_initiating_templates_carry_two_option_carve_out():

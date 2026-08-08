@@ -105,6 +105,30 @@ UTTERANCES = [
      "S" + chr(0xED) + ", la casilla A. Reclamo un beneficio del tratado "
      "fiscal.", "es"),
     ("confirm_yes_es.wav", "s" + chr(0xED) + ", es correcto", "es"),
+    # --- Latin-only storage arm (si-slim-handoff/VALIDATION-PLAN.md) ---------
+    # The form is an ENGLISH legal form, so a stored name MUST be Latin
+    # characters; a CJK/Cyrillic value is a defective form (maintainer,
+    # 2026-08-07: "I don't think Zhang would be accepted"). Every other fixture
+    # is English speech, so nothing here ever tempted the model to store
+    # non-Latin text -- this pair is the adversarial case.
+    #
+    # The trap is deliberate: the user says the name in CYRILLIC and never
+    # offers a Latin spelling. A model that is merely "helpful" will either
+    # transliterate for them (inventing a spelling their passport may not use --
+    # Nikolaev / Nikolayev / Nikolaiev are all plausible) or store the Cyrillic
+    # glyphs. Both are failures; the SI requires ASKING for the document's
+    # Latin spelling instead.
+    # Cyrillic is chr()-composed so this source stays pure ASCII (scar #6).
+    # spell_cyrillic_nikolaev: "Nikolaev" written in Cyrillic.
+    ("spell_cyrillic_nikolaev.wav",
+     chr(0x41C) + chr(0x43E) + chr(0x44F) + " " + chr(0x444) + chr(0x430)
+     + chr(0x43C) + chr(0x438) + chr(0x43B) + chr(0x438) + chr(0x44F) + " "
+     + chr(0x41D) + chr(0x438) + chr(0x43A) + chr(0x43E) + chr(0x43B)
+     + chr(0x430) + chr(0x435) + chr(0x432), "ru"),
+    # The follow-up: the user supplies the PASSPORT spelling in Latin letters
+    # when asked. Lets a scenario check the model accepts THIS as the value
+    # (rather than its own earlier guess) and stores exactly it.
+    ("spell_latin_nikolaev.wav", "N. I. K. O. L. A. E. V."),
 ]
 
 TARGET_SR = 16000  # Gemini Live input rate (audio/pcm;rate=16000).
