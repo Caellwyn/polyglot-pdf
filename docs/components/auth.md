@@ -143,7 +143,10 @@ The WS auth gate is covered indirectly: the integration tests patch
 without a live token. The HTTP gate is covered directly:
 `backend/tests/unit/test_http_route_auth.py` pins the 401s on
 fill-pdf/form-kits/schema, the deliberate NON-gate on the kit-PDF GET, and the
-`VFF_DISABLE_AUTH` bypass. `frontend/src/contexts/AuthContext.test.tsx` covers
+`VFF_DISABLE_AUTH` bypass, and `backend/tests/unit/test_auth_bypass_guard.py`
+pins the deployed fail-closed guard on that bypass (both layers separately: the
+`Settings` startup refusal and `verify_token`'s inert-on-`K_SERVICE` branch).
+`frontend/src/contexts/AuthContext.test.tsx` covers
 `AuthContext` (the authorized_emails allowlist gate, sign-in/out/reset delegation,
 the loading lifecycle, and the test-harness bypass) and `ProtectedRoute` (both gate
 states). There are no tests yet for `Login` (the form/UI component itself).

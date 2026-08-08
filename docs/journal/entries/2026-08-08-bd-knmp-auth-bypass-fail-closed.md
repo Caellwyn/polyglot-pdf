@@ -67,6 +67,14 @@ deleting the runtime guard reddens 3; neither mutation touches the other's.
   guard both lowercase; a guard that did not would pass every outcome test
   while leaving `TRUE` live.
 
+Fresh-eyes (sonnet): NO-GAPS round 1, both criteria PASS; it reproduced both
+per-layer mutation counts independently. Two doc nits adopted -- the Testing
+section of auth.md now names this test file (a reader asking "where is the
+K_SERVICE guard tested" would not have found it), and the test count here is
+stated as 9 tests / 12 parametrized invocations rather than "12 cases". It
+could not finish the full both-roots suite in its session; that run completed
+here at 2940 passed, 3 skipped.
+
 ## Doc freshness
 
 `docs/components/auth.md` and `docs/components/config-deployment.md` both
@@ -79,6 +87,7 @@ carried multi-clause chains, replaced with the per-entry pointer shape).
 
 - backend/config.py -- the startup guard beside the VERTEXAI one
 - backend/services/auth.py -- the runtime guard in verify_token
-- backend/tests/unit/test_auth_bypass_guard.py (new, 12 cases)
+- backend/tests/unit/test_auth_bypass_guard.py (new; 9 tests, 12
+  parametrized invocations)
 - docs/components/auth.md, docs/components/config-deployment.md
 - docs/journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md
