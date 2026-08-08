@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { createSpellbackPlayer, SPELLBACK_MAX_CHARS } from './spellbackPlayer'
+import { computePlaybackCapMs, createSpellbackPlayer, SPELLBACK_MAX_CHARS } from './spellbackPlayer'
 import type { AudioManager } from './audioManager'
 
 class FakeAudio {
@@ -232,6 +232,21 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
     expect(audios[0].pause).toHaveBeenCalled()
     expect(holdLog[holdLog.length - 1]).toBe(false)
     expect(player.isPlaying()).toBe(false)
+  })
+
+  it('client budget arithmetic: elapsed + watchdog cap stays under the backend 90s round-trip cap (bd 9pnd3)', () => {
+    // Worst legitimate pre-playback spend: drain-wait cap (8s) + fetch
+    // timeout (20s). For EVERY value length up to the cap, the client call
+    // must settle before the backend's 90s SPELLBACK_ROUNDTRIP_TIMEOUT --
+    // otherwise the model is released to speak while the mic is still held.
+    const BACKEND_CAP_MS = 90000
+    const WORST_PRE_PLAYBACK_MS = 8000 + 20000
+    for (let len = 1; len <= SPELLBACK_MAX_CHARS; len++) {
+      const cap = computePlaybackCapMs(len, WORST_PRE_PLAYBACK_MS)
+      expect(WORST_PRE_PLAYBACK_MS + cap, `len=${len}`).toBeLessThan(BACKEND_CAP_MS)
+    }
+    // And a fast call still gets the full value-proportional window.
+    expect(computePlaybackCapMs(60, 1000)).toBeGreaterThanOrEqual(60000)
   })
 
   it('fails fast on over-length values without fetching', async () => {

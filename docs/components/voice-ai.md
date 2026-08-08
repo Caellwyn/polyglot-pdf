@@ -174,6 +174,17 @@ assigns that key, so a bare assignment on either side would silently drop the
 other (tests pin both orderings plus the empty-name fallback). Set
 `LIVE_VOICE_NAME=""` to fall back to the API default.
 
+**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f):
+`spellback_tts.resolve_spellback_voice` derives the spell-back clip's Cloud
+TTS voice as `en-US-Chirp3-HD-<LIVE_VOICE_NAME>` so the clip matches the Live
+model's persona (the Chirp 3 HD family carries the Live API's prebuilt voice
+names; the derivation is endpoint-verified for Iapetus ONLY -- an alternate
+Live voice keeps the session healthy but the clip 502s if that persona has no
+Chirp3-HD twin, so re-verify at any voice change). Consequently
+`LIVE_VOICE_NAME=""` ALSO drops the clip to the TTS default voice
+(un-matching the persona); pin the clip voice explicitly via
+`SPELLBACK_TTS_VOICE` when tuning the Live voice.
+
 Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
 connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`
 rejected as `1007 Invalid voice name`. **That probe did not record which 11**, so

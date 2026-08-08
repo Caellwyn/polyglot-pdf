@@ -99,10 +99,14 @@ def resolve_spellback_voice(settings) -> str:
     en-US-Chirp3-HD-Iapetus endpoint-verified accepting this module's SSML).
     Falls back to the API's default en-US voice when neither is set.
     """
-    explicit = getattr(settings, "SPELLBACK_TTS_VOICE", "") or ""
+    # .strip() both, matching the Live adapter's own handling of
+    # LIVE_VOICE_NAME (live_ai_gemini): a padded env value must not produce a
+    # working Live voice but an invalid Chirp3 name that 502s every clip
+    # (Opus round 2, bd polyglot-pdf-vx0q4).
+    explicit = (getattr(settings, "SPELLBACK_TTS_VOICE", "") or "").strip()
     if explicit:
         return explicit
-    live_voice = getattr(settings, "LIVE_VOICE_NAME", "") or ""
+    live_voice = (getattr(settings, "LIVE_VOICE_NAME", "") or "").strip()
     if live_voice:
         return "en-US-Chirp3-HD-%s" % live_voice
     return ""

@@ -189,6 +189,26 @@ Raised to the maintainer (design consequence, not a defect):
    duration; typical clips 5-7s, watchdog-capped). Bounding this would
    revisit the maintainer-approved blocking design -- reported in the PR.
 
+## Outer (Opus cross-surface) triage -- round 2: GAPS-FOUND (4), all adopted
+
+1. bd 9pnd3: the round-1 watchdog bounded PLAYBACK but the client's cumulative
+   budget (drain 8s + fetch 20s + value-proportional playback) could exceed
+   the backend's 90s cap for long values -- releasing the model to speak while
+   the mic was still held. The watchdog is now budgeted against elapsed call
+   time under an 80s client total (computePlaybackCapMs, exported and pinned
+   by a budget-arithmetic test over every legal value length).
+2. bd vx0q4: resolve_spellback_voice read LIVE_VOICE_NAME raw where the Live
+   adapter strips it -- a padded env value would keep the session healthy
+   while every clip 502s on an invalid Chirp3 name. Now strips both inputs;
+   pinned by test.
+3. bd j6fxt follow-through: the TOOL DECLARATION description still carried the
+   un-scoped never-spell wording after the addendum was scoped to letters --
+   re-scoped, with the digit carve-out stated in both channels.
+4. bd 3ebgv: voice-ai.md's LIVE_VOICE_NAME section now names the second
+   consumer (resolve_spellback_voice), the ""-fallback consequence for the
+   clip voice, and the Iapetus-only endpoint verification of the Chirp3
+   derivation.
+
 ## Voice matching (maintainer ask, mid-review 2026-08-07)
 
 The clip now defaults to the SAME persona as the Live model: Cloud TTS's

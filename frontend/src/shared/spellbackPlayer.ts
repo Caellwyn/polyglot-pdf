@@ -47,11 +47,32 @@ const FETCH_TIMEOUT_MS = 20000
 // <audio> element that stalls without firing onended/onerror (an OS audio
 // interruption on mobile is the real case) would otherwise gate the mic
 // FOREVER -- and in open-mic mode there is no PTT press to release it. The
-// cap scales with the value (a 60-char clip runs ~55s at the SSML pacing)
-// plus buffer, bounded well under the backend's 90s round-trip cap.
+// cap scales with the value (a 60-char clip runs ~55s at the SSML pacing).
 const PLAYBACK_TIMEOUT_PER_CHAR_MS = 1500
 const PLAYBACK_TIMEOUT_FLOOR_MS = 15000
-const PLAYBACK_TIMEOUT_CAP_MS = 80000
+// The CLIENT's whole call -- drain wait + fetch + playback -- must settle
+// BEFORE the backend's 90s round-trip cap (request_coordinator.py
+// SPELLBACK_ROUNDTRIP_TIMEOUT): once that fires, the model is released to
+// speak while a still-held mic would gate the user's reply to silence (Opus
+// round 2, bd polyglot-pdf-9pnd3). So the playback watchdog is budgeted
+// against the time the call has ALREADY spent, capped at this total.
+const CLIENT_TOTAL_BUDGET_MS = 80000
+// Never squeeze the watchdog below this -- a degenerate remaining-budget must
+// still allow a short clip to finish rather than killing it at arm time.
+const PLAYBACK_TIMEOUT_MIN_MS = 5000
+
+/**
+ * The playback watchdog's cap for a call that has already spent `elapsedMs`:
+ * value-proportional, floored, and never past the remaining client budget.
+ * Exported for the budget-arithmetic test (the whole point is the SUM stays
+ * under the backend's 90s cap).
+ */
+export function computePlaybackCapMs(valueLength: number, elapsedMs: number): number {
+  const proportional = Math.max(
+    PLAYBACK_TIMEOUT_FLOOR_MS, valueLength * PLAYBACK_TIMEOUT_PER_CHAR_MS)
+  const remaining = CLIENT_TOTAL_BUDGET_MS - elapsedMs
+  return Math.max(PLAYBACK_TIMEOUT_MIN_MS, Math.min(proportional, remaining))
+}
 
 export interface SpellbackPlayerDeps {
   getAudioManager: () => AudioManager | null
@@ -188,6 +209,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
     }
     const gen = ++generation
     callInFlight = true
+    const callStart = now()
     // A parked call that was poisoned resolves 'interrupted' when the poison
     // came from a PTT press (the user is speaking -- the model must listen),
     // and the plain error variant otherwise (teardown / pre-emption).
@@ -240,10 +262,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
       const url = makeClipUrl(blob)
       const audio = createAudio(url)
       const playStart = now()
-      const playbackCapMs = Math.min(
-        PLAYBACK_TIMEOUT_CAP_MS,
-        Math.max(PLAYBACK_TIMEOUT_FLOOR_MS, value.length * PLAYBACK_TIMEOUT_PER_CHAR_MS),
-      )
+      const playbackCapMs = computePlaybackCapMs(value.length, now() - callStart)
       let stopWatchdog: () => void = () => {}
       const outcome = await new Promise<'delivered' | 'interrupted' | 'error'>((resolve) => {
         let settled = false

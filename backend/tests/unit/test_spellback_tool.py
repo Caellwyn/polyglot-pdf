@@ -403,6 +403,13 @@ class TestSpellbackSsml:
         s.SPELLBACK_TTS_VOICE = "en-US-Neural2-F"
         assert resolve_spellback_voice(s) == "en-US-Neural2-F"
 
+        # Whitespace-padded env values must strip, matching the Live adapter's
+        # own handling -- else the Live session works while every clip 502s on
+        # an invalid padded Chirp3 name (bd polyglot-pdf-vx0q4).
+        s.SPELLBACK_TTS_VOICE = ""
+        s.LIVE_VOICE_NAME = " Iapetus "
+        assert resolve_spellback_voice(s) == "en-US-Chirp3-HD-Iapetus"
+
         s.SPELLBACK_TTS_VOICE = ""
         s.LIVE_VOICE_NAME = ""
         assert resolve_spellback_voice(s) == ""
