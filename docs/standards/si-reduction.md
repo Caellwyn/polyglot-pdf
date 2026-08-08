@@ -2,7 +2,10 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: the ADDRESS CONSISTENCY
+*Last updated: 2026-08-08 (shipped cut corrected to 31.7%; the 32.4% figure predated a later review round that added back a write-vs-read carve-out. Earlier: 2026-08-07 added the "Editing the SI: REWRITE the block" scar
+tissue -- contradictions break as hard as omissions, redundancy is paid every
+turn, and a substring harness cannot see either; measured during the v4 slimming
+work. Earlier: 2026-08-05 docs audit bd polyglot-pdf-2zk3: the ADDRESS CONSISTENCY
 section is corrected -- bead B1 (polyglot-pdf-jnjj.13) is CLOSED WON'T-DO after the G1
 gate came back NO-GO, so the in-SI prose stays permanently in both templates as the
 primary check, not pending removal). Continuous-DTI is the production default
@@ -181,6 +184,60 @@ cross-check address fields (zip-vs-state, etc.) itself.
   defense-in-depth, not a replacement, and nothing gates the prose's removal.
 - The verdict/payload/steering shapes the validator uses are owned by the
   validation-delegation standard (F3, bd polyglot-pdf-jnjj.4), not here.
+
+## Editing the SI: REWRITE the block, never bolt a rule on
+
+**The SI is one document the model reads whole. Edit it that way.** The failure
+mode below is not hypothetical -- it is how the shipped SI reached 4,388 tokens,
+and it recurred during the v4 slimming work until it was measured and stopped.
+
+**1. A CONTRADICTION BREAKS AS HARD AS AN OMISSION, and is far harder to see.**
+Two individually-correct rules that collide on the same text make the model pick
+one -- differently on different turns. Measured on the W-7 `reason` field: the SI
+said "read each option VERBATIM AND IN ITS ENTIRETY... every qualifier,
+parenthetical, and condition" AND "never read a label's printed-form NAVIGATION
+aloud -- item/line/BOX NUMBERS". Option (a)'s
+"(you must also check and complete box h)" is a **parenthetical naming a box**
+that is also a **binding obligation**. Result: the clause was spoken in 1 of 3
+runs. The shipped SI spoke it 2 of 2 -- it carries the SAME two rules but spends
+more words holding them apart, and the compression had cut exactly that
+connective tissue.
+  - **A substring harness cannot catch this.** Every rule was present and every
+    check passed while the behaviour was broken. Only a live listen found it.
+  - **The fix is to make the test FUNCTIONAL, not lexical:** ask what a clause
+    DOES (obligation/condition -> speak; pointer with no obligation -> omit;
+    cannot tell -> speak), never what it looks like. That scored 3/3.
+
+**2. REDUNDANCY IS PAID EVERY TURN.** The SI is re-sent per turn on the dominant
+cost line, so a duplicated rule is a permanent tax. Bolting each fix on top of
+the last -- add a sentence, leave the sentence it supersedes -- accumulates
+silently: by the end of one slimming pass the options block said "do not
+shorten" in FOUR phrasings and the names block warned against guessing a
+spelling THREE times. Rewriting those two blocks from scratch, losing no rule,
+moved the cut from 19.3% to 32.4% (31.7% as shipped, after a later review round
+added back a write-vs-read carve-out). **When a fix supersedes existing prose,
+DELETE the prose it supersedes in the same edit.**
+
+**3. So: read the WHOLE SI before and after any edit.** Not the block you are
+changing -- the whole thing, in one pass, looking for rules that now collide or
+now say the same thing twice. Per-section review structurally cannot find either
+class of defect.
+
+**4. But NOT all duplication is waste -- check the tests before deleting any.**
+WORKFLOW step 1 deliberately restates the PRESENTING OPTIONS carve-outs, and
+`test_dti_si_forbids_one_by_one_yes_no_option_walk` slices
+`SI[WORKFLOW:..TOOL PROTOCOL:]` to pin exactly that: an unqualified step-1
+imperative contradicted the two-option rule on every confirm-path turn. That
+repetition IS a fix. The repo's pinning tests are the record of which
+duplications are load-bearing; consult them before "cleaning up" one.
+
+**5. Verify behaviourally, and never on a single run.** The live model is
+stochastic (see the baseline audio/text divergence in
+`scripts/spikes/0rpu_desync_attribution_findings.md`). A prompt fix that scores
+1-of-2 is not a fix -- one of the fixes above looked confirmed on its first run
+and failed the repeat. Run the same probe on the SHIPPED SI too: several
+"regressions" found during this work reproduced identically on the baseline and
+were pre-existing model behaviour, not candidate defects.
 
 ## What changes this contract
 

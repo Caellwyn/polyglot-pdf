@@ -144,8 +144,8 @@ def test_dti_and_legacy_si_pin_field_names_aloud_rule():
     forbid reading English names/labels aloud in a non-English session (bd
     polyglot-pdf-tupu.2)."""
     dti = Settings().DTI_SYSTEM_INSTRUCTION.lower()
-    assert "field names aloud" in dti
+    assert "never read a raw id aloud" in dti  # v4 drops the heading, keeps the rule
     assert "already in the session language" in dti
-    assert "never call a tool to translate or fetch a field name" in dti
+    assert "never call a tool to translate" in dti
     legacy = Settings().SYSTEM_INSTRUCTION.lower()
     assert "never read an english field name or label aloud" in legacy
