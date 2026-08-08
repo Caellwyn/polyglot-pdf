@@ -44,7 +44,9 @@ declare global {
 	}
 }
 
-import { WebFormConnection, type ConnectionCallbacks, type ConnectionStatus } from '../webFormConnection'
+import { WebFormConnection, type ConnectionCallbacks, type ConnectionStatus, type SpellbackPlaybackResult } from '../webFormConnection'
+import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
+import { createSpellbackPlayer } from './spellbackPlayer'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { SchemaFormStateManager, type SchemaFormState } from '../schema-forms/state/schemaFormState'
 import { BUTTON_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
@@ -315,6 +317,16 @@ export function createConnectionManager(
 	// continuous audio. Set from the backend session_ready handshake.
 	let nativeVad: boolean = false
 
+	// --- Deterministic spell-back playback (bd polyglot-pdf-22h1f) ---
+	// The whole state machine (drain wait, TTS fetch, blocking playback,
+	// pre-emption/generation guard, cancellation) lives in spellbackPlayer.ts
+	// so it is unit-testable; this layer only supplies the live deps.
+	const spellback = createSpellbackPlayer({
+		getAudioManager: () => audioManager,
+		getHttpBase: getBackendHttpUrl,
+		getToken,
+	})
+
 	// TEST-ONLY (bd polyglot-pdf-g8w): tracks the most recent field id Gemini
 	// advanced to, so the dev-gated E2E voice harness can assert "moved to the
 	// next field" without scraping transcripts. Only meaningful when the harness
@@ -458,6 +470,9 @@ export function createConnectionManager(
 	}
 
 	const callbacks: ConnectionCallbacks = {
+		// Deterministic spell-back playback (bd polyglot-pdf-22h1f): implemented
+		// here because this layer owns the audio manager and the auth token.
+		onSpellbackRequest: (value: string): Promise<SpellbackPlaybackResult> => spellback.play(value),
 		onStatusChange: (status) => {
 			// BUG FIX (Nov 10, 2025): Reset paused flag when connection is lost
 			// This ensures reconnect works properly after timeout/error/disconnect
@@ -737,6 +752,10 @@ export function createConnectionManager(
 		pause() {
 			console.log('[VFF Connection] Pausing (keeping connection warm)...')
 			paused = true
+			// A user-initiated pause mid-clip stops the spell-back too -- the
+			// user has stopped listening; the model gets the error variant and
+			// re-offers when they resume (bd 22h1f).
+			spellback.cancel()
 			// Flutter guard (bd polyglot-pdf-yo5t): a re-pause inside the re-prompt
 			// window cancels the pending re-prompt; the next resume re-arms it.
 			clearResumeReprompt()
@@ -829,6 +848,10 @@ export function createConnectionManager(
 		disconnect() {
 			// End metrics session and print summary
 			metrics.endSession()
+
+			// Stop an in-flight spell-back clip so audio does not keep playing
+			// past the teardown (bd 22h1f).
+			spellback.cancel()
 
 			// A tear-down must not leave a pending post-resume re-prompt behind
 			// (bd polyglot-pdf-yo5t).
@@ -959,6 +982,12 @@ export function createConnectionManager(
 			// talking over their turn (bd polyglot-pdf-yo5t).
 			if (held) {
 				clearResumeReprompt()
+				// Intentional interrupt of a spell-back clip (bd polyglot-pdf-22h1f):
+				// stop the clip, release the mic hold FIRST so this press's audio
+				// flows, then resolve the pending round-trip as 'interrupted' -- the
+				// tool response (telling the model to listen) is sent before the
+				// user's buffered speech reaches the model's turn handling.
+				spellback.interruptForPtt()
 			}
 		},
 

@@ -735,6 +735,21 @@ def build_form_context(
             next_field_hint=next_field_hint or "the first unfilled field"
         )
 
+    # Deterministic spell-back (bd polyglot-pdf-22h1f): while the tool is
+    # declared, the model must stop spelling aloud itself -- double delivery
+    # (its corrupted spelling plus the correct clip) is worse than either
+    # alone. Appended in BOTH SI modes, because the tool declaration
+    # (form_filling_service._build_tool_declarations) gates only on this flag,
+    # not on USE_DTI -- a legacy-SI session with the flag on would otherwise
+    # keep its spell-it-yourself NAMES wording while the tool is live
+    # (fresh-eyes round 1). Interim addendum until the SI-slimming session's
+    # cutover marker replaces the base NAMES wording; default-off flag keeps
+    # the shipped SI byte-identical.
+    if getattr(settings, "SPELLBACK_TOOL_ENABLED", False):
+        system_instruction = (
+            system_instruction + settings.DTI_SPELLBACK_SI_ADDENDUM
+        )
+
     # On mid-section reconnects, override any greet directive so Gemini resumes
     # silently rather than re-introducing the form/section (bd polyglot-pdf-vmxx).
     if is_reconnect:

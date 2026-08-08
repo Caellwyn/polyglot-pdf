@@ -223,6 +223,7 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         artifactregistry.googleapis.com \
         aiplatform.googleapis.com \
         storage.googleapis.com \
+        texttospeech.googleapis.com \
         --project "$POLYGLOT_PROJECT_NAME"
 
     # Build the image using Cloud Build

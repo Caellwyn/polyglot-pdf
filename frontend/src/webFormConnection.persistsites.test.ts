@@ -195,7 +195,10 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
   it('reconcileFieldValues is actually imported and used at multiple sites', () => {
     expect(SRC).toContain('reconcileFieldValues')
     const uses = LINES.filter(l => isCode(l) && l.includes('reconcileFieldValues(')).length
-    // session_ready, confirm, skip, section_switched, drain_findings_result,
+    // session_ready, confirm, skip, spellback (bd 22h1f: reads the CURRENT
+    // field's stored value for the deterministic spell-back clip -- a stale
+    // read there would spell an outdated value, the exact defect class the
+    // tool exists to eliminate), section_switched, drain_findings_result,
     // validation_result, form_updated, field_update, and updateField -- the
     // CHOKEPOINT every AI fill and manual edit funnels through (its persisting
     // call sits two frames below the handler, so a handler-level audit does not
@@ -212,7 +215,7 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
     // cannot be stale. A reconcile there was added and then removed as dead code
     // -- mutation showed the test only failed when the ENTRY REFRESH was removed,
     // never when the reconcile was.
-    expect(uses).toBe(9)
+    expect(uses).toBe(10)
   })
 
   it('every reconcileFieldValues call passes (persisted, in-memory, schemaIds)', () => {
@@ -223,7 +226,7 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
     // that keeps a bracketed schema id from being re-keyed away. So pin the
     // ARGUMENT SHAPE, not just the number of calls.
     const calls = SRC.split('reconcileFieldValues(').slice(1)
-    expect(calls).toHaveLength(9)
+    expect(calls).toHaveLength(10)
     for (const [i, tail] of calls.entries()) {
       // Take up to the CLOSING paren of the call, not the first `)` -- the third
       // argument is itself a call (`this.schemaFieldIds()`), so a naive

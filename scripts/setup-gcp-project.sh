@@ -27,7 +27,11 @@ gcloud services enable \
     artifactregistry.googleapis.com \
     aiplatform.googleapis.com \
     storage.googleapis.com \
+    texttospeech.googleapis.com \
     --project "$PROJECT_ID"
+# texttospeech: the deterministic spell-back clip (bd polyglot-pdf-22h1f).
+# Synthesis needs only an authenticated principal + the API enabled -- no
+# extra IAM role on the service account.
 
 # 2. Create Service Account for Cloud Run
 SA_NAME="polyglot-backend-sa"

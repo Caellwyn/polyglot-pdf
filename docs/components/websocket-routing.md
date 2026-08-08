@@ -2,14 +2,9 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-08-06 (post-merge freshness check against
-frontend/src/shared/connection.ts + frontend/src/webFormConnection.ts: added
-the new "Server-initiated messages" table documenting the `interrupted`
-backend->frontend barge-in message (bd polyglot-pdf-s7uf, `CallbackHandler.
-on_interrupted` -> `webFormConnection.ts` `onInterrupted` ->
-`audioManager.resetPlaybackClock`), which the freshness checker flagged as
-undocumented; re-verified the existing control-channel table + section-switch
-flow against current code, no other drift found.)*
+*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the `spellback_response`
+row to the control-channel table -- the flag-gated deterministic spell-back
+round-trip.)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -102,6 +97,7 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `form_state_response` / `next_field_hint_response` / `section_info_response` / `confirm_field_response` | resolve a pending backend→frontend async request (`confirm_field_response` carries `{recorded, reason}` for the synchronous confirm round-trip, bd polyglot-pdf-wpw.2, plus an optional `section_complete` flag the WS route reads and threads to the confirm handler so it skips the racing next-field-hint at a section boundary, bd njvh -- see ws-protocol.md for the field) |
 | `skip_field_response` | resolves a pending `skip_field` request the same way `confirm_field_response` resolves `confirm_field` (`markFieldSkipped`, bd polyglot-pdf-7yra) -- same `{recorded, reason, section_complete}` shape, so a section-completing skip advances too |
 | `switch_field_response` | resolves a pending field-level navigation request (`switch_field`, bd polyglot-pdf-jnjj.36) -- the whole payload minus `type`/`request_id` (found + outcome keys: field_id/hint/schema on success, a fixed reason token on failure) rides to the coordinator; values are never logged |
+| `spellback_response` | resolves a pending `spellback` request (the flag-gated `name_spellback` tool, bd polyglot-pdf-22h1f) -- the payload minus `type`/`request_id` (`status` delivered/interrupted/error + optional fixed `reason` token and `playback_ms`/`fetch_ms` timings) rides to the coordinator; never carries a field value. The request side is the ONE round-trip that deliberately holds the tool response for the client's blocking clip playback (90s cap) -- see ws-protocol.md |
 | `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync); in DTI mode an optional `next_field_schema` rider re-establishes the current-field pointer + validation entry via `merge_field_schema` (bd polyglot-pdf-ezg2) |
 | `read_disclaimer` | send disclaimer initiating message in a language → `disclaimer_read_initiated` |
 | `completion_message` | send a prompt that should make Gemini speak → `completion_ack` |

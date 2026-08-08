@@ -226,6 +226,12 @@ class FormFillingService:
         declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
         if getattr(self._settings, "CONTINUOUS_SESSION", False):
             declarations = [d for d in declarations if d.get("name") != "switch_section"]
+        # Deterministic spell-back tool (bd polyglot-pdf-22h1f): declared only
+        # while the flag is on -- the tool lands dark and the cutover PR moves
+        # it into TOOL_DECLARATIONS proper. Kept as a separate constant so the
+        # default declared contract stays byte-identical with the flag off.
+        if getattr(self._settings, "SPELLBACK_TOOL_ENABLED", False):
+            declarations.append(deepcopy(self._settings.SPELLBACK_TOOL_DECLARATION))
         return declarations
 
     async def start_session(
@@ -407,6 +413,11 @@ class FormFillingService:
             # singleton) so it is symmetric with the update-side coercion even when the
             # service is built with a non-global Settings (Codex PR #264).
             get_use_dti=lambda: getattr(self._settings, "USE_DTI", False),
+            # Gates the name_spellback dispatch (bd 22h1f): same injected-
+            # settings source as the declaration builder, so a session whose
+            # declarations omitted the tool also refuses a hallucinated call.
+            get_spellback_enabled=lambda: getattr(
+                self._settings, "SPELLBACK_TOOL_ENABLED", False),
             # Invalidate the current-field pointer on a successful confirm so a later
             # update can't be coerced onto the just-confirmed field if next-field
             # delivery times out (Codex PR #264).
@@ -2390,6 +2401,22 @@ class FormFillingService:
             return
 
         self._request_coordinator.handle_switch_field_response(request_id, payload)
+
+    def handle_spellback_response(
+        self, request_id: str, payload: Dict[str, Any]
+    ) -> None:
+        """
+        Handle spellback_response from the frontend (bd polyglot-pdf-22h1f).
+
+        Delegates to RequestCoordinator -- completes the deterministic
+        spell-back round-trip with the frontend's ack payload (status +
+        reason/timing; never a field value).
+        """
+        if not self._request_coordinator:
+            _log.warning("handle_spellback_response_no_coordinator", session_id=self._session_id)
+            return
+
+        self._request_coordinator.handle_spellback_response(request_id, payload)
 
     def _clear_current_field_id(self) -> None:
         """Invalidate the current-field coercion pointer (bd polyglot-pdf-h1bn).

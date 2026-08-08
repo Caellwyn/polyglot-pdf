@@ -583,6 +583,23 @@ async def _handle_fill_session(
 							_log.error("switch_field_response_handling_failed", error_type=type(e).__name__, request_id=request_id)
 						# No acknowledgment needed - this completes the async request cycle
 					continue
+				elif mtype == "spellback_response":
+					# Frontend responds to a spellback request (bd polyglot-pdf-22h1f):
+					# the deterministic spell-back clip's outcome (delivered /
+					# interrupted / error + timing). Carries no field value in
+					# either direction.
+					request_id = obj.get("request_id")
+					if not request_id:
+						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
+					else:
+						payload = {k: v for k, v in obj.items()
+						           if k not in ("type", "request_id")}
+						try:
+							service.handle_spellback_response(request_id, payload)
+						except Exception as e:
+							_log.error("spellback_response_handling_failed", error_type=type(e).__name__, request_id=request_id)
+						# No acknowledgment needed - this completes the async request cycle
+					continue
 				elif mtype == "manual_field_update":
 					# Frontend notifies backend when user manually edits a field
 					# Backend forwards this to Gemini to keep context synchronized

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-08 (the spoken-delivery map is corrected for the v4 SI diet (bd polyglot-pdf-6a79): the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed. Earlier: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the missing `switch_to_field` tool bullet to the tool-calling list -- a seventh currently-declared, shipped, non-deprecated tool, wire message `switch_field`/`switch_field_response`).*
+*Last updated: 2026-08-08 (merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -182,6 +182,17 @@ assigns that key, so a bare assignment on either side would silently drop the
 other (tests pin both orderings plus the empty-name fallback). Set
 `LIVE_VOICE_NAME=""` to fall back to the API default.
 
+**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f):
+`spellback_tts.resolve_spellback_voice` derives the spell-back clip's Cloud
+TTS voice as `en-US-Chirp3-HD-<LIVE_VOICE_NAME>` so the clip matches the Live
+model's persona (the Chirp 3 HD family carries the Live API's prebuilt voice
+names; the derivation is endpoint-verified for Iapetus ONLY -- an alternate
+Live voice keeps the session healthy but the clip 502s if that persona has no
+Chirp3-HD twin, so re-verify at any voice change). Consequently
+`LIVE_VOICE_NAME=""` ALSO drops the clip to the TTS default voice
+(un-matching the persona); pin the clip voice explicitly via
+`SPELLBACK_TTS_VOICE` when tuning the Live voice.
+
 Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
 connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`
 rejected as `1007 Invalid voice name`. **That probe did not record which 11**, so
@@ -217,6 +228,19 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   (bd polyglot-pdf-7yra), DISTINCT from not-applicable (which stays the
   `update_form_fields ""` path). Maps to the frontend `markFieldSkipped` (the
   `skipped` flag); the SI requires a verbal confirm first.
+- `name_spellback` -- FLAG-GATED (`SPELLBACK_TOOL_ENABLED`, default off; bd
+  polyglot-pdf-22h1f): deterministic spell-back for the current field. Takes NO
+  arguments; the client resolves the current field, reads the stored value,
+  fetches a letter-by-letter en-US Cloud TTS clip (`POST /api/tts/spellback`),
+  mutes the mic in every input mode, plays it BLOCKING, and acks
+  delivered/interrupted/error. The tool response is deliberately held open for
+  the playback (90s coordinator cap) so the model stays parked; while the flag
+  is on the DTI SI gets `DTI_SPELLBACK_SI_ADDENDUM` so the model never spells
+  aloud itself. Declared via `_build_tool_declarations` from
+  `SPELLBACK_TOOL_DECLARATION` (kept OUT of `TOOL_DECLARATIONS` until cutover).
+  Exists because the native-audio speech head re-emits the session's FIRST
+  spelled name on ~10% of spelled read-backs (the bd 0rpu sticky-first-spelling
+  attractor) while text + tool calls stay correct.
 - `switch_to_field` -- jump the form's focus to ONE specific field (correction/
   revisit path: "go back to my mailing city"), by field_id, spoken name, or a
   rough description; DISTINCT from `switch_section`, which moves whole
