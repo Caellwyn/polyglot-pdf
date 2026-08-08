@@ -162,6 +162,7 @@ def test_overlapping_regenerates_serialize_and_keep_both_writes(
 
     entered = asyncio.Event()
     release = asyncio.Event()
+    b_started = asyncio.Event()
     real_enrich = guidance_enrich.enrich_schema
     loop_holder = {}
 
@@ -169,6 +170,11 @@ def test_overlapping_regenerates_serialize_and_keep_both_writes(
         # Keyed on the FIELD, not arrival order: a first-caller-wins flag is
         # itself racy and could hold B instead, making the test nondeterministic.
         am_first = [f.get("id") for f in schema.get("fields", [])] == ["a"]
+        if not am_first:
+            # Only reachable in the UNFIXED world (B gets here while A holds
+            # the release); with the lock B is still parked and this never
+            # runs before the poll above sees `locked()`.
+            loop_holder["loop"].call_soon_threadsafe(b_started.set)
         out = real_enrich(schema, booklet, form_name, model, chunk_size)
         if am_first:
             # This runs in anyio's worker THREAD; signal/wait on the loop.
@@ -198,9 +204,25 @@ def test_overlapping_regenerates_serialize_and_keep_both_writes(
             ta = asyncio.create_task(post("a"))
             await asyncio.wait_for(entered.wait(), timeout=10)
             tb = asyncio.create_task(post("b"))
-            # Let B run until it BLOCKS: unfixed it sails past load_schema with
-            # the pre-write snapshot; fixed it parks on the lock.
-            await asyncio.sleep(0.2)
+            # Wait until B is DEMONSTRABLY past its own load_schema -- polled
+            # on real progress, never a wall-clock sleep (a fixed sleep is a
+            # guess that goes false on a loaded runner, and the whole point of
+            # this test is that B got far enough to read the schema).
+            #   fixed   -> B parks on the lock, which reports itself locked;
+            #   unfixed -> B sails through and reaches enrich, which the
+            #              b_started event records.
+            # Either way the wait ends on an OBSERVED state, so the race is
+            # set up identically in both worlds -- which is what makes the
+            # mutation (lock removed) genuinely redden this test.
+            async def b_is_in_flight() -> bool:
+                return b_started.is_set() or ekr._get_guidance_lock().locked()
+
+            for _ in range(200):                    # <= 2s, exits on the event
+                if await b_is_in_flight():
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError("request B never entered the route")
             release.set()
             return await asyncio.gather(ta, tb)
 

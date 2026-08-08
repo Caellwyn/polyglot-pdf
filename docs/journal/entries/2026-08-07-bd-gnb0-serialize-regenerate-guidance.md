@@ -49,7 +49,8 @@ lock next to it already documents.
 
 **Tests** (`backend/tests/unit/test_guidance_regen_serialization.py`), both
 mutation-verified: restoring the pid-keyed path reddens the scratch tests;
-removing the lock reddens the race test.
+removing the lock reddens the race test (3/3 runs, after the sleep-free
+sync described in Lessons).
 
 ## Lessons
 
@@ -66,6 +67,14 @@ removing the lock reddens the race test.
 - A latch keyed on arrival order ("first caller waits") is itself racy and
   made the test nondeterministic; keying the hold on the request's own data
   (which field it rewrites) made it deterministic.
+- **Synchronize a race test on an OBSERVED state, never a wall-clock sleep.**
+  The first working version used `await asyncio.sleep(0.2)` to let the second
+  request reach the route -- a guess that goes false on a loaded runner
+  (fresh-eyes flagged it). It now polls until the second request is
+  demonstrably in flight: parked on the lock (fixed) or arrived at the model
+  call (unfixed). Both worlds reach the same observed state, which is what
+  keeps the lock-removal mutation reddening it -- re-verified 3/3 after the
+  change, with 3/3 clean runs restored.
 
 ## Doc freshness
 
