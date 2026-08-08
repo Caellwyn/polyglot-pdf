@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-6dz0: assert-the-mechanism rule -- the four shapes of a test that passes for the wrong reason, and the delete-the-line audit that catches them; it is the WHAT to the TEST THE TESTS rule's HOW. Also bd polyglot-pdf-9feav: TEST THE TESTS promoted to standard author practice at the top of the TDD cadence -- prove a new test fails before trusting it passes, mutate the real path, confirm the mutation applied. Also bd polyglot-pdf-saxh: when the same defect class survives your fix TWICE, change the MECHANISM not the instance; generate expectations from the real artifact. Also docs audit bd polyglot-pdf-2zk3: E2E section rewritten around the shipped voice-harness suite; external-marker count fixed to include test_tool_contracts.py).*
+*Last updated: 2026-08-07. See [the gnb0 journal entry](../journal/entries/2026-08-07-bd-gnb0-serialize-regenerate-guidance.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -57,6 +57,18 @@ There are **two collected suites** under `testpaths`:
 - `tests` (repo root) — the **harness-tooling** suite (closeout, `bd_safe`,
   `next_bead`, doc-freshness, `pr_review_watcher`, pricing). It runs from the repo
   root on defaults and is now part of the same `pytest` run.
+
+> **Pre-PR, run BOTH roots — a bare `pytest`, not `pytest backend/tests`.** The
+> closeout recipe names `backend/tests` for speed, which silently skips the root
+> `tests/` suite; a **cross-suite leak is invisible to every scoped run**. Measured
+> (`polyglot-pdf-gnb0`): a new test under `backend/tests/unit/` assigned
+> `subprocess.run` directly instead of via `monkeypatch`, and because collection is
+> alphabetical that leak reddened **5 tests in two untouched files under `tests/`** —
+> green in isolation, green under `backend/tests`, red only on the full run the
+> reviewer did. Related rule: patch a module attribute with `monkeypatch.setattr`,
+> never a bare assignment. `importlib`-loading a module by path gives you a fresh
+> copy of THAT module but the **same stdlib modules it imported**, so
+> `mymod.subprocess.run = fake` is a process-wide patch wearing a local disguise.
 
 The backend suite is organized **by directory**, not by marker:
 
@@ -257,6 +269,20 @@ the remaining guard with a one-token mutation. Standard practice, every time:
 The trap this most often prevents is the **self-fulfilling mock** (below): a test
 that constructs the expected payload, feeds it to a mock, and asserts the mock got
 it -- deleting the production code leaves it green.
+
+**A CONCURRENCY test must reproduce production's concurrency, or it is vacuous.**
+Check what the harness actually does before believing a passing race test. FastAPI's
+`TestClient` runs **each request on its own fresh event loop**, so any per-loop
+primitive (the `weakref`-keyed `asyncio.Lock` maps in `editor_kit_routes.py`) hands
+two concurrent requests two *different* locks and they can never contend -- a
+lost-update test written on `TestClient` passed with the lock **removed**
+(`polyglot-pdf-gnb0`). Production is the opposite shape: uvicorn serves the whole
+process on ONE loop. Drive both requests as concurrent tasks on a single loop
+(`httpx.ASGITransport` + `asyncio.gather`) so the contention is real. Two related
+rules: hold the first request open with a latch keyed on its **own data** (which
+record it touches), never on arrival order -- a first-caller-wins flag is itself
+racy and makes the test nondeterministic; and mutation-verify by **removing the
+guard**, which is the only proof the race is what the test is measuring.
 
 **A green vitest run does not prove a canvas/PDF UI works.** jsdom has no canvas
 backend, so `getContext` returns null and the real `pdfjs-dist` render path — and

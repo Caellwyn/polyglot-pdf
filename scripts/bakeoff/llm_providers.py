@@ -30,7 +30,36 @@ import os
 import pathlib
 import shutil
 import subprocess
+import uuid
 from typing import Any, Callable, Dict, Optional, Protocol
+
+
+def _cli_scratch_path(outputs_dir: str, kind: str) -> str:
+    """A scratch path unique to THIS CALL, not to the process.
+
+    The CLI transport asks the model to Write its JSON to a file and reads it
+    back (the output-ceiling workaround), then deletes it in a `finally`. The
+    path used to be keyed on os.getpid() -- fine for the one-shot CLI scripts
+    this module was written for, WRONG inside the backend, which is a single
+    long-lived process that can run two of these concurrently (the
+    regenerate-guidance route in a worker thread). Two calls then shared one
+    path: A's cleanup deleted the file B was about to read, or B's CLI
+    overwrote A's JSON, yielding a silently wrong or empty result rather than
+    an error (bd polyglot-pdf-gnb0).
+
+    uuid4 per call makes collision impossible within a process AND across
+    processes, so it also subsumes the pid the name used to carry.
+
+    THE SET: both CLI transports in this module route through here (the
+    schema-shaped ClaudeCliProvider.run and the passthrough
+    run_json_claude_cli) -- they are the only two scratch paths a LONG-LIVED
+    process can reach, because the backend imports this module directly. The
+    other pid-keyed scratch files in scripts/bakeoff (arm_llm_native_chunked,
+    order_probe) are imported by NO backend module (verified by grep) and run
+    as one-shot CLI processes, where pid-keying is correct and collision-free.
+    A test pins the uniqueness property rather than the naming shape.
+    """
+    return os.path.join(outputs_dir, f"_cli_{kind}_{uuid.uuid4().hex}.json")
 
 # token_info shape: {"input": int|None, "output": int|None, optionally
 # "cost_usd_equiv": float|None}. schema is the parsed FormSchema dict.
@@ -116,9 +145,7 @@ class ClaudeCliProvider:
         # truncated/pointer results (observed on I-90, bd 7a9.10; certain on
         # I-589). So the model WRITES the JSON to a scratch file and we read it
         # back.
-        scratch = os.path.join(outputs_dir, f"_cli_schema_{os.getpid()}.json")
-        if os.path.exists(scratch):
-            os.remove(scratch)
+        scratch = _cli_scratch_path(outputs_dir, "schema")
         wrapped = (
             prompt
             + "\n\nIMPORTANT -- how to deliver your output: the FormSchema JSON "
@@ -287,9 +314,7 @@ def run_json_claude_cli(prompt: str, model: str) -> tuple[dict, dict]:
     outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "outputs")
     os.makedirs(outputs_dir, exist_ok=True)
-    scratch = os.path.join(outputs_dir, f"_cli_json_{os.getpid()}.json")
-    if os.path.exists(scratch):
-        os.remove(scratch)
+    scratch = _cli_scratch_path(outputs_dir, "json")
     cmd = [exe, "-p", "--model", model, "--output-format", "json",
            "--permission-mode", "acceptEdits", "--add-dir", outputs_dir]
     wrapped = (
