@@ -52,7 +52,9 @@ places, but exactly ONE is a functional read (`auth.py:31`). Everything else
 is docs, dev scripts (`dev-local.ps1`/`.sh`, which default it to true), tests,
 and the voice-harness runbook. Every auth path funnels through `verify_token`
 (grep of `verify_token`/`require_auth` callers), so one runtime guard covers
-the WS gate and all four HTTP gates.
+the WS gate and all FIVE `require_auth` HTTP routes (fill-pdf, the two
+form-kit reads, and the TTS spellback route -- the outer review caught that
+two tier-2 docs enumerate only four; filed as bd polyglot-pdf-qs7m6).
 
 Mutation-verified per layer: deleting the startup guard reddens 6 cases;
 deleting the runtime guard reddens 3; neither mutation touches the other's.
@@ -74,6 +76,17 @@ K_SERVICE guard tested" would not have found it), and the test count here is
 stated as 9 tests / 12 parametrized invocations rather than "12 cases". It
 could not finish the full both-roots suite in its session; that run completed
 here at 2940 passed, 3 skipped.
+
+Opus cross-surface round 1: NO-GAPS. It empirically confirmed the startup
+refusal fires at IMPORT of backend.main (module-scope get_settings at
+main.py:71), so "refuses to start" is accurate rather than a lazy
+per-request raise -- the one claim that would have been wrong if Settings
+were first constructed inside a request. It filed two PRE-EXISTING findings
+as beads rather than blockers: polyglot-pdf-qs7m6 (two tier-2 docs enumerate
+four require_auth routes; there are five -- the TTS spellback route is
+missing) and polyglot-pdf-5xhbb (backend/tests/conftest.py has no autouse
+K_SERVICE isolation, a latent exposure this diff widens to a second
+deployment-sensitive env var).
 
 ## Doc freshness
 
