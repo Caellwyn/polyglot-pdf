@@ -27,10 +27,27 @@ def verify_token(token: str) -> dict:
     Returns the decoded token dict (claims) if valid.
     Raises HTTPException(401) if invalid.
     """
-    # Development Bypass
+    # Development Bypass -- LOCAL ONLY, inert on a deployed service.
+    #
+    # K_SERVICE is set by Cloud Run and by nothing else, so its presence means
+    # "this is a real deployment" (the same signal the VERTEXAI guard uses,
+    # bd polyglot-pdf-5e6a). Without this check the bypass returned a stub user
+    # for EVERY caller of every auth-gated surface -- /ws/fill plus each
+    # require_auth route, including /api/fill-pdf, which renders the client's
+    # entered PII into a PDF -- on a service deployed
+    # --allow-unauthenticated (bd polyglot-pdf-knmp).
+    #
+    # Settings carries the matching STARTUP guard, which is the primary
+    # defense: a deployed service with this flag set refuses to boot. This
+    # runtime check is the second layer, and it is not redundant -- it holds
+    # even where Settings is never constructed or is bypassed, and it fails
+    # the request CLOSED rather than trusting that startup validation ran.
     if os.getenv("VFF_DISABLE_AUTH", "false").lower() == "true":
-         logger.warning("auth_bypassed_via_env")
-         return {"uid": "dev_user", "email": "dev@example.com"}
+        if os.getenv("K_SERVICE"):
+            logger.error("auth_bypass_refused_on_deployed_service")
+        else:
+            logger.warning("auth_bypassed_via_env")
+            return {"uid": "dev_user", "email": "dev@example.com"}
 
     try:
         decoded_token = auth.verify_id_token(token)

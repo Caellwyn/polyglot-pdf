@@ -486,6 +486,30 @@ class Settings(BaseModel):
 				"consumer terms do not. Use AI Studio locally (no K_SERVICE) for "
 				"pre-GA model testing; deploy 3.1 only once it is GA on Vertex."
 			)
+		# The SAME fail-closed shape for the AUTH bypass (bd polyglot-pdf-knmp).
+		# VFF_DISABLE_AUTH=true makes verify_token return a stub user for EVERY
+		# caller, and since bd polyglot-pdf-z2is that one bypass gates /ws/fill
+		# AND every require_auth route -- including /api/fill-pdf, which renders
+		# the client's entered PII into a PDF. The service deploys
+		# --allow-unauthenticated, so a stray `--set-env-vars
+		# VFF_DISABLE_AUTH=true` would make the whole backend world-open with no
+		# startup failure and only a per-request warning log.
+		#
+		# Deliberately NO override flag, for the same reason the AI Studio guard
+		# has none: no legitimate deployed use of a blanket auth bypass exists.
+		# Read from the ENV rather than a Settings field because auth.py reads
+		# the env directly -- adding a field here would create a second source
+		# of truth that could drift from the thing actually enforcing.
+		# auth.verify_token carries the matching runtime guard, so the bypass is
+		# inert even if a caller constructs Settings differently or not at all.
+		if os.getenv("VFF_DISABLE_AUTH", "false").lower() == "true" and os.getenv("K_SERVICE"):
+			raise ValueError(
+				"VFF_DISABLE_AUTH=true is not permitted on a deployed service. It "
+				"disables Firebase token verification for EVERY caller -- the voice "
+				"session and every auth-gated HTTP route, including the PDF fill "
+				"endpoint that renders client PII. It exists for local development "
+				"only (no K_SERVICE); there is no deployed override."
+			)
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
 		# explicit MODEL_NATIVE was pinned via env (non-empty wins). The standard
 		# (2.5) tier is BACKEND-AWARE: the native-audio Live model has a different id
