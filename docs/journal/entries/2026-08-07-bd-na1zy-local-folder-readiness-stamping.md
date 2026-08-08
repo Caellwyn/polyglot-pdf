@@ -62,7 +62,16 @@ Option (b) from the bead -- ONE writer preserved -- plus an honest fallback:
 Full suites green: backend pytest and the schema-editor vitest run
 (323 files / 1225 tests), plus tsc.
 
-(Fresh-eyes and outer-review triage recorded at closeout.)
+Fresh-eyes (sonnet): NO-GAPS round 1, all three criteria PASS. Opus
+cross-surface round 1: GAPS-FOUND (2), both adopted -- (1) the route was
+registered on the hosted app with no status check, so an editor token could
+overwrite a PUBLISHED kit's stamp with counts for a body never saved; fixed
+with a 409 on complete kits (mutation-verified test) and a marked write-lock
+site for the sprint-19 lifecycle work (bd 6dz0) to fold into its
+is-write-locked predicate. (2) docs/technical_guide.md's route table was
+missing the new route; row added and the stamp bumped. The reviewer also
+filed bd g8ftl (narrow invalidate-after-successful-restamp race; degraded
+outcome is the honest hint, non-blocking).
 
 ## Lessons
 
