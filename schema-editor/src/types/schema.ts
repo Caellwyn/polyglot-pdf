@@ -38,6 +38,11 @@ export interface FormMetadata {
   title: string;
   form_number: string;
   edition_date?: string;
+  // Author-supplied revision marker for a kit with NO government edition_date
+  // (bd polyglot-pdf-xzw5). Recorded in confirmation records when edition_date
+  // is absent, so a dispute names a readable revision, not a bare fingerprint.
+  // Distinct from `version`, which is auto-extracted display text.
+  author_version?: string;
   total_widgets: number;
   total_fields: number;
   version: string;

@@ -152,6 +152,15 @@ class FormMetadata(BaseModel):
     # PDF-specific
     form_number: Optional[str] = Field(None, description='e.g., "I-589"')
     edition_date: Optional[str] = Field(None, description='e.g., "01/20/25"')
+    author_version: Optional[str] = Field(
+        None,
+        description='Author-supplied revision marker for a kit with NO government '
+                    'edition_date (bd polyglot-pdf-xzw5), e.g. "2026-08-07". Recorded '
+                    'in confirmation records when edition_date is absent, so a dispute '
+                    'can name a human-readable revision instead of a bare content '
+                    'fingerprint. Distinct from `version` above, which is auto-extracted '
+                    'display text and not audit-grade.',
+    )
     omb_number: Optional[str] = Field(None, description='e.g., "1615-0067"')
     expiration_date: Optional[str] = Field(None, description='e.g., "2027-09-30"')
     version_confidence: Optional[float] = Field(

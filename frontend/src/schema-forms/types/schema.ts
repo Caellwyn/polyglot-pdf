@@ -72,6 +72,10 @@ export interface FormMetadata {
   // PDF-specific
   form_number?: string; // e.g., "I-589"
   edition_date?: string; // e.g., "01/20/25"
+  // Author-supplied revision marker used when edition_date is absent
+  // (bd polyglot-pdf-xzw5). Travels in form_metadata, which this client
+  // already sends whole, so the backend reads it with no wire change.
+  author_version?: string; // e.g., "2026-08-07"
   omb_number?: string; // e.g., "1615-0067"
   expiration_date?: string; // e.g., "2027-09-30"
   page_count?: number;

@@ -365,13 +365,26 @@ class FormFillingService:
             # form_metadata is a string/list would otherwise raise AttributeError
             # inside .get() and kill the WS session. websocket_routes only
             # validates that full_schema itself is a dict, never the nested key.
-            def _declared_edition(source: dict | None) -> str | None:
+            def _declared_meta(source: dict | None, key: str) -> str | None:
                 metadata = source.get("form_metadata") if isinstance(source, dict) else None
-                value = metadata.get("edition_date") if isinstance(metadata, dict) else None
+                value = metadata.get(key) if isinstance(metadata, dict) else None
                 return value if isinstance(value, str) and value.strip() else None
 
-            declared_edition = _declared_edition(schema) or _declared_edition(full_schema)
-            self._edition_date = _resolve_edition_marker(declared_edition, full_schema)
+            declared_edition = (
+                _declared_meta(schema, "edition_date")
+                or _declared_meta(full_schema, "edition_date")
+            )
+            # The author-supplied version travels in the SAME form_metadata the
+            # client already sends (bd polyglot-pdf-xzw5), so recording it needs
+            # no wire change -- read it exactly like the edition, from whichever
+            # payload carries it.
+            declared_author_version = (
+                _declared_meta(schema, "author_version")
+                or _declared_meta(full_schema, "author_version")
+            )
+            self._edition_date = _resolve_edition_marker(
+                declared_edition, full_schema, declared_author_version
+            )
         # Store the resolved form_session_id so _switch_to_section_locked can thread
         # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
         self._form_session_id = form_session_id or session_id

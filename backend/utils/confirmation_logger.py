@@ -147,22 +147,39 @@ ConfirmationMethod = Literal["verbal", "manual"]
 
 
 def resolve_edition_marker(
-    edition_date: Optional[str], schema: Optional[dict]
+    edition_date: Optional[str],
+    schema: Optional[dict],
+    author_version: Optional[str] = None,
 ) -> Optional[str]:
     """Return the revision marker to record, best source first.
 
-    bd polyglot-pdf-47r3. A disputed filing needs to pin WHICH revision of the
-    form the client confirmed against.
+    bd polyglot-pdf-47r3, extended by bd polyglot-pdf-xzw5. A disputed filing
+    needs to pin WHICH revision of the form the client confirmed against.
 
     1. `edition_date` -- the GOVERNMENT's own revision marker ("12/2024"). The
        right answer for an official form, and the only one an agency recognizes.
-    2. A short fingerprint of the kit's field structure (`sha256:<12 hex>`).
+    2. `author_version` -- what the KIT AUTHOR typed at publish time, for a form
+       that has no government edition (a firm's own intake sheet). Human-
+       readable and meaningful in a dispute ("2026-08-07"), which the
+       fingerprint below is not. Never invented here: it is recorded only if an
+       author actually supplied one.
+    3. A short fingerprint of the kit's field structure (`sha256:<12 hex>`).
        A CUSTOM form -- a firm's proprietary intake sheet, which the firm-tier
        epic exists to support -- has no government edition, and refusing to
        record anything would leave those confirmations unable to pin any
        revision at all. Not human-readable, but stable for a given revision and
        CHANGING when the form changes, which is the property that matters:
        "was this the same version of the form the client saw?".
+
+    WHY author_version RANKS BELOW edition_date: the government marker is the
+    only one an agency recognizes, so a kit carrying both records the official
+    one. WHY IT RANKS ABOVE the fingerprint: both identify a revision, but only
+    one of them a human can read back in a dispute.
+
+    NOT the same as `form_metadata.version`, which is auto-extracted, free-form
+    and frequently meaningless for this purpose (real shipped values include
+    "draft" and "v9_conformant"). That field stays a display string; this one is
+    author-asserted and audit-facing.
 
     The fingerprint covers field ids + types + option values (the answerable
     shape of the form), not labels or guidance prose: a typo fix in help text
@@ -181,6 +198,8 @@ def resolve_edition_marker(
     """
     if isinstance(edition_date, str) and edition_date.strip():
         return edition_date.strip()
+    if isinstance(author_version, str) and author_version.strip():
+        return author_version.strip()
     if not isinstance(schema, dict):
         return None
 

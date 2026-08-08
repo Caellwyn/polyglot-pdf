@@ -78,6 +78,171 @@ def _status(client, kit_id, status, replaces=None):
     return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=HDR)
 
 
+# --- author version at the publish gate (bd polyglot-pdf-xzw5) --------------
+
+
+def _no_edition_schema():
+    """The publish-gate fixture MINUS its government edition date."""
+    schema = json.loads(json.dumps(_SCHEMA))
+    meta = dict(schema.get("form_metadata") or {})
+    meta.pop("edition_date", None)
+    schema["form_metadata"] = meta
+    return schema
+
+
+def test_publishing_a_kit_with_no_edition_date_requires_an_author_version(client):
+    """Without this, every confirmation on a custom form names a bare sha256
+    fingerprint no one can read back in a dispute."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = _status(c, "custom", "complete")
+
+    assert resp.status_code == 422, resp.text
+    assert "author version" in resp.json()["detail"]
+    assert _run(store.load_metadata("custom"))["status"] == "draft"
+
+
+def test_a_supplied_author_version_is_PERSISTED_into_the_served_schema(client):
+    """The marker must land in the SCHEMA, not just pass validation: the voice
+    path reads form_metadata off the schema it was served. This route otherwise
+    never writes the schema, so a validated-then-discarded value would leave the
+    published kit still fingerprint-only."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("  2026-08-07  ", "2026-08-07"),   # trimmed
+    ("v2026-08-07", "2026-08-07"),      # leading v stripped
+    ("V2026-08-07", "2026-08-07"),      # ...case-insensitively
+    ("v2", "2"),                        # short form still normalized
+    ("version-3", "version-3"),         # a WORD starting with v is untouched
+])
+def test_author_version_is_normalized(client, raw, expected):
+    """Strip a leading v/V only when a digit follows -- otherwise "version-3"
+    would silently become "ersion-3"."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": raw}, headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == expected
+
+
+def test_a_government_edition_date_needs_no_author_version(client):
+    """The box never appears for an official form, so publishing one must not
+    start demanding a field the client does not send."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")   # _SCHEMA carries edition_date
+
+    resp = _status(c, "w7", "complete")
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_an_author_version_is_IGNORED_when_a_government_edition_exists(client):
+    """The government marker wins the precedence, so a stray author_version
+    must not be written into an official form's schema and mislead a reader."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = c.post("/api/editor/kits/w7/status",
+                  json={"status": "complete", "author_version": "mine"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("w7", "schema.json"))
+    assert "author_version" not in (saved.get("form_metadata") or {})
+
+
+def test_a_published_author_version_CANNOT_be_changed(client):
+    """It is what existing confirmation records name (maintainer decision
+    2026-08-08). Changing it would silently re-point them at a revision those
+    clients never saw -- the hazard the retired-kit write-lock exists for."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-12-31"},
+                  headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "2026-01-01" in resp.json()["detail"]
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-01-01"
+
+
+def test_republishing_keeps_the_original_author_version(client):
+    """A re-press of Mark complete (or a republish after retirement) must not
+    require re-typing the version, nor change it."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = _status(c, "custom", "complete")   # no author_version supplied
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-01-01"
+
+
+def test_a_BROKEN_schema_reports_its_own_defect_not_the_version_prompt(client):
+    """ORDERING: the version gate runs AFTER validate/lint, never before.
+
+    Both refusals are 422s on the same request, so whichever runs first is the
+    one the author sees. My first version ran the version gate first, and an
+    author with a structurally broken schema was told to supply a version --
+    hiding the actual defect behind an unrelated prompt. The schema-quality
+    gates report what is WRONG; this one asks for something EXTRA, so it must
+    come last.
+
+    Pins the ordering directly rather than relying on the neighbouring suite,
+    where the two tests that caught this only fail incidentally.
+    """
+    c, _store, root = client
+    broken = json.loads(json.dumps(_no_edition_schema()))
+    broken["fields"] = "not-a-list"   # fails FormSchema validation outright
+    _make_kit(root, "custom", status="draft", schema=broken)
+
+    # No author_version supplied: BOTH gates would refuse. The schema one wins.
+    resp = _status(c, "custom", "complete")
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "cannot be marked complete" in detail, detail
+    assert "author version" not in detail, (
+        "the version prompt masked the real schema error: " + detail
+    )
+
+
+def test_a_whitespace_only_author_version_is_refused(client):
+    """Mirrors the blank-edition rule: whitespace names no revision."""
+    c, _store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "   "},
+                  headers=HDR)
+
+    assert resp.status_code == 422, resp.text
+
+
 # --- the status model itself ------------------------------------------------
 
 

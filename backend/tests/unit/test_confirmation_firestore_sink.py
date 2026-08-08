@@ -385,6 +385,54 @@ def test_government_edition_wins_over_the_fingerprint():
     assert cl.resolve_edition_marker("12/2024", _SCHEMA) == "12/2024"
 
 
+# --- author_version: the middle rank (bd polyglot-pdf-xzw5) -----------------
+# Three sources, so the precedence has THREE edges to pin, not one. Testing
+# only "author beats fingerprint" would leave the government-wins edge free to
+# regress (docs/standards/testing.md: pin the dimension, not a sample).
+
+
+@pytest.mark.parametrize("edition", ["12/2024", " 12/2024 "])
+def test_government_edition_outranks_the_author_version(edition):
+    """The agency marker is the only one an agency recognizes, so a kit
+    carrying BOTH records the official one -- never the author's."""
+    assert cl.resolve_edition_marker(edition, _SCHEMA, "2026-08-07") == "12/2024"
+
+
+def test_author_version_outranks_the_fingerprint():
+    """The whole point: a custom form records something a human can read back
+    in a dispute instead of sha256:abc123..."""
+    assert cl.resolve_edition_marker(None, _SCHEMA, "2026-08-07") == "2026-08-07"
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t\n"])
+def test_a_blank_author_version_falls_through_to_the_fingerprint(blank):
+    """Mirrors the blank-edition rule: whitespace is not a revision marker.
+    Without this, an empty version box would record "" as the marker -- worse
+    than the fingerprint it displaced, because it identifies nothing."""
+    marker = cl.resolve_edition_marker(None, _SCHEMA, blank)
+    assert marker.startswith("sha256:")
+
+
+def test_author_version_is_trimmed_like_the_edition():
+    assert cl.resolve_edition_marker(None, _SCHEMA, "  2026-08-07  ") == "2026-08-07"
+
+
+def test_a_non_string_author_version_never_reaches_the_record():
+    """The client controls form_metadata, so a malformed payload must fall
+    through rather than record a dict/list/number as the revision marker."""
+    for bogus in ({"v": 1}, ["2026"], 20260807, True):
+        marker = cl.resolve_edition_marker(None, _SCHEMA, bogus)
+        assert marker.startswith("sha256:"), bogus
+
+
+def test_author_version_records_even_when_the_schema_is_unusable():
+    """The fingerprint needs a schema; the author version does not. A kit with
+    an author version but no readable fields must still name its revision
+    rather than returning None (the "no marker at all" case)."""
+    assert cl.resolve_edition_marker(None, None, "2026-08-07") == "2026-08-07"
+    assert cl.resolve_edition_marker(None, {"fields": []}, "2026-08-07") == "2026-08-07"
+
+
 def test_blank_edition_falls_back_to_the_fingerprint():
     """A whitespace-only edition must not be recorded AS an edition."""
     marker = cl.resolve_edition_marker("   ", _SCHEMA)

@@ -1789,6 +1789,15 @@ def test_a_kit_with_no_edition_date_can_still_be_published(client):
     ERROR and never sees that assertion -- an Opus review proved a severity flip
     to ERROR left all 132 tests in this file green while making every
     edition-less kit un-publishable.
+
+    UPDATED by bd polyglot-pdf-xzw5 (maintainer decision 2026-08-08): such a kit
+    now supplies an AUTHOR VERSION as it publishes, so its confirmation records
+    name a readable revision instead of a bare fingerprint. The property this
+    test exists to protect is unchanged and still the point -- a custom form
+    MUST remain publishable -- so it still drives the real route and still
+    asserts a 200; only the request now carries the version the gate asks for.
+    The refusal side (no version supplied) is pinned separately in
+    test_kit_lifecycle_statuses.py.
     """
     c, _store, root = client
     schema = {
@@ -1801,7 +1810,7 @@ def test_a_kit_with_no_edition_date_can_still_be_published(client):
     r = c.post(
         "/api/editor/kits/acme-intake/status",
         headers={"X-Editor-Token": "edit-tok"},
-        json={"status": "complete"},
+        json={"status": "complete", "author_version": "2026-08-07"},
     )
 
     assert r.status_code == 200, r.text

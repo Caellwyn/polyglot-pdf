@@ -249,6 +249,12 @@ class KitStatusBody(BaseModel):
     # the catalogue never shows two entries for one form. Same-kit republish
     # needs no flag -- one kit_id is one catalogue slot, so it replaces itself.
     replaces_kit_id: Optional[str] = None
+    # The author's own revision marker, for a kit with NO government
+    # edition_date (bd polyglot-pdf-xzw5). Required to publish such a kit --
+    # otherwise its confirmation records fall back to an unreadable content
+    # fingerprint. Ignored for a kit that HAS an edition_date (the government
+    # marker wins and the client never shows the box).
+    author_version: Optional[str] = None
 
 
 class KitStatusResponse(BaseModel):
@@ -2093,6 +2099,90 @@ async def set_editor_kit_status(
         # not affect any earlier gate: translations are additive metadata that
         # leave schema validity, extraction_info, the v2 stamp, and every lint
         # rule (option values / conditions / widgets) untouched.
+
+        # --- author version gate (bd polyglot-pdf-xzw5) ---------------------
+        # Runs AFTER validate/extraction_info/v2-stamp/lint deliberately. Those
+        # gates report what is WRONG with the schema; this one asks the author
+        # for something extra. Running it first masked them -- an author with a
+        # structurally broken schema was told to supply a version instead of
+        # being shown the actual defect (caught by the neighbouring suite's
+        # test_mark_complete_validates_against_form_contract).
+        meta_block = schema.get("form_metadata")
+        meta_block = meta_block if isinstance(meta_block, dict) else {}
+        existing_edition = meta_block.get("edition_date")
+        has_edition = isinstance(existing_edition, str) and existing_edition.strip()
+        existing_author_version = meta_block.get("author_version")
+        has_existing_version = (
+            isinstance(existing_author_version, str)
+            and existing_author_version.strip()
+        )
+        supplied_version = (
+            body.author_version.strip()
+            if isinstance(body.author_version, str) else ""
+        )
+        version_to_persist: Optional[str] = None
+
+        if not has_edition:
+            # LOCKED once set: author_version is what earlier confirmation
+            # records name, so changing it would silently re-point them at a
+            # revision those clients never saw -- the same hazard the retired-
+            # kit write-lock exists to prevent (maintainer decision, 2026-08-08).
+            # A republish of an already-versioned kit keeps the original.
+            if has_existing_version:
+                if supplied_version and supplied_version != existing_author_version.strip():
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f'This kit was already published as version '
+                            f'"{existing_author_version.strip()}", and that version is '
+                            f"what its existing confirmation records name. Changing it "
+                            f"would re-point them at a revision those clients never saw. "
+                            f"Publish a new kit for a new revision instead."
+                        ),
+                    )
+            elif not supplied_version:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "This form has no government edition date, so it needs an "
+                        "author version to identify which revision a client "
+                        "confirmed against -- otherwise its records fall back to an "
+                        "unreadable content fingerprint. Supply author_version "
+                        '(e.g. "2026-08-07").'
+                    ),
+                )
+            else:
+                # Normalize (trim + strip a leading v/V) and persist into the
+                # schema, which is what the client is served and what the voice
+                # path reads the marker from.
+                normalized = re.sub(r"^[vV](?=[0-9])", "", supplied_version).strip()
+                if not normalized:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="author_version must contain more than a leading 'v'.",
+                    )
+                meta_block = dict(meta_block)
+                meta_block["author_version"] = normalized
+                schema = dict(schema)
+                schema["form_metadata"] = meta_block
+                version_to_persist = normalized
+
+
+        # Persist a newly-supplied author version (bd polyglot-pdf-xzw5) AFTER
+        # the free gates and BEFORE the sweep. This route otherwise never writes
+        # the schema, so without this the normalized value would be validated
+        # and then thrown away -- the marker has to be IN the served schema,
+        # because that is where the voice path reads it from. Only runs when the
+        # gate above actually set it (no edition_date, no prior version).
+        if version_to_persist is not None:
+            try:
+                await store.put_schema(kit_id, schema, schema_file)
+            except FormKitStoreError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Unable to save the author version",
+                ) from exc
+
         retranslated, translation_model = await _sweep_drifted_translations(
             store, kit_id, schema, schema_file,
         )
