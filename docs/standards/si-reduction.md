@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-08-07 (added the "Editing the SI: REWRITE the block" scar
+*Last updated: 2026-08-08 (shipped cut corrected to 31.7%; the 32.4% figure predated a later review round that added back a write-vs-read carve-out. Earlier: 2026-08-07 added the "Editing the SI: REWRITE the block" scar
 tissue -- contradictions break as hard as omissions, redundancy is paid every
 turn, and a substring harness cannot see either; measured during the v4 slimming
 work. Earlier: 2026-08-05 docs audit bd polyglot-pdf-2zk3: the ADDRESS CONSISTENCY
@@ -214,7 +214,8 @@ the last -- add a sentence, leave the sentence it supersedes -- accumulates
 silently: by the end of one slimming pass the options block said "do not
 shorten" in FOUR phrasings and the names block warned against guessing a
 spelling THREE times. Rewriting those two blocks from scratch, losing no rule,
-moved the cut from 19.3% to 32.4%. **When a fix supersedes existing prose,
+moved the cut from 19.3% to 32.4% (31.7% as shipped, after a later review round
+added back a write-vs-read carve-out). **When a fix supersedes existing prose,
 DELETE the prose it supersedes in the same edit.**
 
 **3. So: read the WHOLE SI before and after any edit.** Not the block you are

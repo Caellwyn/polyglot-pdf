@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the missing `switch_to_field` tool bullet to the tool-calling list -- a seventh currently-declared, shipped, non-deprecated tool, wire message `switch_field`/`switch_field_response`).*
+*Last updated: 2026-08-08 (the spoken-delivery map is corrected for the v4 SI diet (bd polyglot-pdf-6a79): the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed. Earlier: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added the missing `switch_to_field` tool bullet to the tool-calling list -- a seventh currently-declared, shipped, non-deprecated tool, wire message `switch_field`/`switch_field_response`).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -125,26 +125,34 @@ instant the local VAD fires, for sub-perceptual latency (see
 Both SIs govern HOW the model speaks, not just what it says -- but they LABEL it
 differently, which matters when you go to tune it:
 
-- **DTI** (`DTI_SYSTEM_INSTRUCTION`, the production path): one `SPEECH STYLE`
-  block holds the pace prose (UNLABELLED -- there is no `PACE:` token in this
-  constant, so grepping `PACE:` will miss it), followed by `ARTICULATION`.
-- **Legacy** (`SYSTEM_INSTRUCTION`): labelled `PACE:` + `ARTICULATION` inside
-  `REGISTER`.
+- **DTI** (`DTI_SYSTEM_INSTRUCTION`, the production path): ONE `DELIVERY` block
+  holds pace, sustain, articulation and the digit read-back together. There is no
+  `SPEECH STYLE`, `ARTICULATION` or `PACE:` token in this constant -- grepping any
+  of them finds nothing. Tune the DTI copy inside `DELIVERY`.
+- **Legacy** (`SYSTEM_INSTRUCTION`, the deprecated fallback): still labelled
+  `PACE:` + `ARTICULATION` inside `REGISTER`.
 
-Grepping for `PACE:` alone therefore finds ONLY the legacy, non-production
-constant. Tune the DTI copy via `SPEECH STYLE` or `ARTICULATION`; the two SIs'
-ARTICULATION text is byte-identical and must be edited together.
+The two SIs' delivery prose is NO LONGER byte-identical and must NOT be edited
+together: the DTI copy was rewritten in the v4 diet (bd polyglot-pdf-6a79) while
+the legacy constant was left untouched. `test_articulation_text_is_identical_across_both_sis`
+was retired for that reason; `test_legacy_articulation_block_is_self_consistent`
+now pins the legacy block alone.
 
 Three concerns, kept deliberately separate (bd polyglot-pdf-e1x9):
 
-- **Pace** -- distinctly slower than natural conversational speed, targeted as
-  "about ten percent slower again than the measured pace you would otherwise
-  choose", plus a **sustain** rule (hold it from the first word to the last;
-  never speed up mid-sentence or rush a sentence ending). Observed rushing was
-  mid-sentence DRIFT, so the sustain rule is pinned separately from the target
-  pace -- tuning one must not silently drop the other.
-- **Per-character read-back** (DTI only) -- digits and spelled names go MUCH
-  slower still, one character at a time with deliberate pauses.
+- **Pace** -- distinctly slower than natural conversational speed, erring on the
+  side of too slow, plus a **sustain** rule (hold it from the first word to the
+  last; never speed up mid-sentence or rush a sentence ending). Observed rushing
+  was mid-sentence DRIFT, so the sustain rule is pinned separately from the pace
+  itself -- tuning one must not silently drop the other. The old "about ten
+  percent slower than the measured pace you would otherwise choose" target was
+  RETIRED (maintainer, 2026-08-07: it asks the model to measure against a pace it
+  cannot introspect).
+- **Identifier read-back** (DTI) -- a number that is an IDENTIFIER (id/case
+  numbers, dates, phone, ZIP, accounts) is read DIGIT BY DIGIT, never as a
+  quantity; a real quantity is spoken normally. Letter-by-letter SPELL-BACK was
+  removed from the DTI SI: spelling aloud desyncs the native-audio model's audio
+  and text layers, and a dedicated TTS tool will own it.
 - **Articulation** -- full sound through the END of each word, no
   slurring/swallowed syllables/mumbling, deliberate pauses between clauses, and
   no casual contractions or filler sounds. Written to generalize across the
