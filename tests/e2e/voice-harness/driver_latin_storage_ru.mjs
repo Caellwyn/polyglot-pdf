@@ -24,7 +24,7 @@
  * Env: as driver_w7_desync.mjs (VFF_FRONTEND_URL, VFF_BACKEND_WS,
  * VFF_PLAYWRIGHT_DIR, VFF_PACING).
  *
- * Usage: node tests/e2e/voice-harness/driver_latin_storage.mjs
+ * Usage: node tests/e2e/voice-harness/driver_latin_storage_ru.mjs
  * Exit 0 = observations captured (NOT a pass verdict); 1 = crash.
  */
 

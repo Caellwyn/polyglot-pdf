@@ -379,8 +379,11 @@ def test_dti_and_legacy_si_pin_declines_to_empty_never_literal_na():
         lowered = si.lower()
         assert ("never the literal text \"n/a\"" in lowered
                 or "never 'n/a'" in lowered)
+        # NOT `assert "every language"` -- that substring also matches the
+        # DELIVERY/REGISTER section headers ("...(how you sound, every
+        # language)"), so it passes even with the N/A rule's language qualifier
+        # deleted. The line below is the one that pins it.
         assert "any equivalent in any language" in lowered
-        assert "every language" in lowered
 
 
 def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():

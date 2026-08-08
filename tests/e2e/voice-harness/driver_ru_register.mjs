@@ -1,30 +1,32 @@
 /*
- * Latin-only name storage driver (si-slim-handoff/VALIDATION-PLAN.md).
+ * Russian-session REGISTER listener (si-slim-handoff/RU-REGISTER-REVIEW.md).
  *
- * The app exists to produce ENGLISH legal forms, so a stored name MUST be Latin
- * characters; storing CJK/Cyrillic glyphs -- or a model-invented romanization --
- * is a defective form. Every other fixture in this harness is English speech, so
- * nothing else ever tempts the model to store non-Latin text. This driver is the
- * adversarial case.
+ * Question it answers: would a middle/high-school-educated speaker who reads
+ * ONLY Russian clearly understand what the assistant says? That needs the
+ * model's actual PROSE, so this driver makes it SPEAK and captures the result.
  *
- * THE TRAP: the user says their surname in CYRILLIC ("moya familiya Nikolaev")
- * and offers NO Latin spelling. A merely-helpful model will either transliterate
- * for them (Nikolayev / Nikolaiev / Nikolaev are all plausible; the passport uses
- * exactly one) or store the Cyrillic. The SI requires ASKING for the document's
- * Latin spelling instead.
+ * How: select Russian (so ASR runs ru-RU), seed ONLY field 1 of the W-7, then
+ * LISTEN -- no answers injected. The model asks the remaining section-1 fields
+ * itself, and the payload is `reason`: an 8-option checkbox_group whose baked
+ * Russian labels are long legal prose the SI must recite in full. That single
+ * turn is the densest register sample the form produces.
  *
- * Unlike driver_w7_desync.mjs this deliberately does NOT auto-confirm: the whole
- * measurement is what the model does BEFORE any further input.
+ * Deliberately does NOT inject the English 'read_all_options' fixture as a
+ * nudge -- English audio in a ru-RU session would pollute the very sample being
+ * measured, and the recital already fires on the ask.
  *
- * Scoring reads the STORED value (sessionStorage), never the transcript -- what
- * the model says and what it saves can differ, and only the saved value reaches
- * the PDF. Verdicts are decided in the SCORER, not here; this driver reports raw
- * observations so the pre-registered rule is applied to data it did not shape.
+ * Scoring happens OUTSIDE this driver, from the BACKEND dev transcripts
+ * (LIVE_DEV_TRANSCRIPTS): the client never surfaces model transcripts to the
+ * page. This driver only drives and records timings.
+ *
+ * Sibling drivers, different jobs: driver_latin_storage.mjs (en-US Cyrillic
+ * storage probe) and driver_latin_storage_ru.mjs (the same probe in a ru-RU
+ * session, where Cyrillic actually reaches the model).
  *
  * Env: as driver_w7_desync.mjs (VFF_FRONTEND_URL, VFF_BACKEND_WS,
  * VFF_PLAYWRIGHT_DIR, VFF_PACING).
  *
- * Usage: node tests/e2e/voice-harness/driver_latin_storage.mjs
+ * Usage: node tests/e2e/voice-harness/driver_ru_register.mjs
  * Exit 0 = observations captured (NOT a pass verdict); 1 = crash.
  */
 
@@ -65,7 +67,7 @@ const LEAD_IN = [];
 const TARGET_FIELD = 'name_1a_first';
 const FIXTURES = [];
 
-function log(msg) { process.stderr.write(`[latin-driver] ${msg}\n`); }
+function log(msg) { process.stderr.write(`[ru-register] ${msg}\n`); }
 
 async function clickButton(page, re, label) {
   await page.waitForFunction(
