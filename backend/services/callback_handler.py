@@ -1286,7 +1286,9 @@ class CallbackHandler:
 
         Three response variants, each an explicit behavioral instruction so the
         model's post-tool generation stays letter-free:
-        - delivered: ask for confirmation, do not repeat the letters;
+        - delivered: say NOTHING and wait -- the clip already asked the
+          verification question in the session language (bd 44ywm), so the
+          model neither re-asks nor repeats the letters;
         - interrupted (user pressed PTT mid-clip): listen to what the user is
           saying now -- their audio follows this response;
         - error/timeout: apologize and re-ask for the spelling; NEVER fall back
