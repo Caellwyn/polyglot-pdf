@@ -293,11 +293,11 @@ def test_dti_si_forbids_current_field_metadata_and_steers_nav_to_switch_tool():
     assert "ask_secretary" in si
     lowered = si.lower()
     # Forbids the CURRENT field's own metadata specifically (not a blanket ban).
-    assert "current field's own spoken name or id" in lowered
+    assert "current field's name or id" in lowered
     # Navigation goes through switch_to_field with the user's words, not a
     # pre-resolution round-trip through ask_secretary.
     assert "switch_to_field" in lowered
-    assert "resolves the field for you" in lowered
+    assert "with their own words" in lowered  # switch_to_field resolves it
     # ask_secretary is scoped to the user's past answers.
     assert "past answers" in lowered
 
@@ -323,12 +323,17 @@ def test_dti_and_legacy_si_ask_names_by_spelling_and_verify_by_spelling():
     your <name>?') and verified by reading the spelling back, so an unspelled
     non-Anglo name is not misheard into an Anglo default (bd polyglot-pdf-5roy;
     maintainer directive: spelling is the primary ask, verify by spelling)."""
-    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
-        lowered = si.lower()
-        assert "how do you spell" in lowered
-        # It must key on a person's name and verify by reading the spelling back.
-        assert "name" in lowered
-        assert "spelling back" in lowered
+    # SPELL-BACK IS GONE FROM THE DTI SI (maintainer 2026-08-07): spelling a word
+    # aloud desyncs the native-audio model's audio/text layers, so a dedicated TTS
+    # tool will own the spoken read-back. The CAPTURE half -- ask for the spelling
+    # FIRST -- is what protects an unspelled non-Anglo name, and it stays.
+    dti = Settings().DTI_SYSTEM_INSTRUCTION.lower()
+    assert "how do they spell their name" in dti
+    assert "never build one from the sound" in dti
+    # Legacy is unchanged and still verifies by spelling back.
+    legacy = Settings().SYSTEM_INSTRUCTION.lower()
+    assert "how do you spell" in legacy
+    assert "spelling back" in legacy
 
 
 def test_dti_and_legacy_si_spell_back_uses_english_letter_names():
@@ -337,7 +342,8 @@ def test_dti_and_legacy_si_spell_back_uses_english_letter_names():
     that verifies nothing about the Latin spelling the form receives, and the
     run's one mis-fill (LIN vs LINH) sailed through exactly that readback
     (bd polyglot-pdf-s39z)."""
-    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
+    # Legacy only -- see the spell-back note above.
+    for si in (Settings().SYSTEM_INSTRUCTION,):
         lowered = si.lower()
         assert "english letter names" in lowered
         assert "every session language" in lowered
@@ -352,10 +358,16 @@ def test_dti_and_legacy_si_carry_register_and_title_translation_guidance():
     register rule + title translation (bd polyglot-pdf-zmlo / h1me)."""
     for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
         lowered = si.lower()
-        assert "register (how you speak" in lowered
+        assert ("register (how you speak" in lowered
+                or "register (what you say" in lowered)
         assert "never a bare two-word demand" in lowered
         assert "do not become terse or formal" in lowered
-        assert "never read an english title aloud" in lowered
+        # The title rule lives in different blocks now: v4 states it in
+        # LANGUAGE ("field name, option label, form or section title -- you
+        # translate yourself"); the legacy SI states it in REGISTER. Assert the
+        # RULE, not the block it happens to sit in.
+        assert ("form or section title" in lowered
+                or "never read an english title aloud" in lowered)
 
 
 def test_dti_and_legacy_si_pin_declines_to_empty_never_literal_na():
@@ -365,9 +377,13 @@ def test_dti_and_legacy_si_pin_declines_to_empty_never_literal_na():
     PDF must not depend on the session language (bd polyglot-pdf-nb2c)."""
     for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
         lowered = si.lower()
-        assert 'never the literal text "n/a"' in lowered
+        assert ("never the literal text \"n/a\"" in lowered
+                or "never 'n/a'" in lowered)
+        # NOT `assert "every language"` -- that substring also matches the
+        # DELIVERY/REGISTER section headers ("...(how you sound, every
+        # language)"), so it passes even with the N/A rule's language qualifier
+        # deleted. The line below is the one that pins it.
         assert "any equivalent in any language" in lowered
-        assert "same in every session language" in lowered
 
 
 def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():
@@ -378,9 +394,11 @@ def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():
     for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
         lowered = si.lower()
         assert "declined checkbox" in lowered
-        assert "unchecked" in lowered
+        assert ("unchecked" in lowered
+                or "wrongly checks the box" in lowered)
         # It must explicitly forbid the wrong write.
-        assert 'never write "true"' in lowered
+        assert ("never write \"true\"" in lowered
+                or "never write 'true'" in lowered)
 
 
 def test_switch_to_field_desc_steers_back_nav_to_spoken_name_not_guessed_id():

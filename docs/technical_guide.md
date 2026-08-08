@@ -1,10 +1,12 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: Surface contracts gained the
-flag-gated `name_spellback` tool row, the `spellback`/`spellback_response`
-round-trip, and the `/api/tts/spellback` route. Section framing from bd
-polyglot-pdf-n18q: the Surface contracts section --
-the code-derived cross-surface data-contract map for blast-radius review).
+*Last updated: 2026-08-08 (merge: bd polyglot-pdf-22h1f -- Surface contracts
+gained the flag-gated `name_spellback` tool row, the
+`spellback`/`spellback_response` round-trip, and the `/api/tts/spellback`
+route -- and bd polyglot-pdf-na1zy, see
+[the na1zy journal entry](journal/entries/2026-08-07-bd-na1zy-local-folder-readiness-stamping.md).
+The Surface contracts section is the code-derived cross-surface data-contract
+map for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -86,6 +88,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | PUT | `/api/editor/kits/{kit_id}/schema` | Save an edited schema back to the store (lenient draft save). Token-gated. |
 | POST | `/api/editor/lint`, `/api/editor/kits/{kit_id}/lint` | Lint the POSTED (possibly-unsaved) schema over the single Python ruleset (`backend/services/schema_lint.py`). The kit-scoped form additionally loads the kit's persisted `acroform.json` dump -- the SAME inputs as the `/status` promotion gate -- so the editor strip sees the dump-gated widget-claim rules live (sprint-18 C1, bd o7y9); the dumpless form remains for schemas with no kit identity. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/status` | Set `draft` \| `complete` \| `unpublished`; promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). `unpublished` retires a superseded revision: hidden like a draft but WRITE-LOCKED like complete, and never revertible to draft (bd polyglot-pdf-6dz0). Optional `replaces_kit_id` retires another live kit for the same form as part of this publish, archiving it first. Token-gated. |
+| POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
 | POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on complete kits -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |

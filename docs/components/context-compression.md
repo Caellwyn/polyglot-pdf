@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
+*Last updated: 2026-08-08 (the derived compression figures are RE-EXECUTED against the v4 SI (bd polyglot-pdf-6a79): floor 4289 -> window 4888 -> trigger 6388, still above the 5000 API bound so the clamp does not fire. Earlier: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -152,7 +152,7 @@ per-form** (below); the static token values are the override:
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
 | `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (calibrated against the I-90's measured eviction floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6278/7778 with the clamp NOT firing -- see below) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~4888/6388 with the clamp NOT firing -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -205,13 +205,14 @@ would chop all the way down to just above the SI floor, stripping the
 current-field guidance DTI depends on (measured 2026-07-05: the 5000/2200 run
 drifted post-eviction; wider windows stayed coherent).
 
-**On the CURRENT default DTI form the clamp does NOT fire.** The SI has grown
-substantially since the jnjj.35-era example, so the derivation now lands well
-above the API minimum on its own. Executed against the shipped config
+**On the CURRENT default DTI form the clamp does NOT fire.** Even after the v4
+SI diet the derivation lands well above the API minimum on its own (trigger 6388
+vs the 5000 bound). Executed against the shipped config
 (`derive_compression_window`, today's `DTI_SYSTEM_INSTRUCTION`, the SESSION's 6
-tool declarations, headroom 599 / margin 1500): **floor 5679 -> window 6278 ->
-trigger 7778** with no injection budget (i-90, f1040), and **window 7930 ->
-trigger 9430** on the W-7 (injection budget 1652). Since every one of those
+tool declarations, headroom 599 / margin 1500): **floor 4289 -> window 4888 ->
+trigger 6388** with no injection budget (i-90, f1040), and **window 6540 ->
+trigger 8040** on the W-7 (injection budget 1652). These dropped ~1,390 tokens
+when the v4 SI diet cut the SI 17,555 -> 11,994 chars (bd polyglot-pdf-6a79). Since every one of those
 triggers is > 5000, neither the clamp nor the retune runs and neither log line
 appears -- don't go looking for them on a normal session. The clamp-and-retune
 path is reached only by a form with a much smaller SI floor. These numbers are

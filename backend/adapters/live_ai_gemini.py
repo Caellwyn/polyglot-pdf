@@ -235,12 +235,12 @@ def derive_compression_window(
     Returns a dict ready to drop into the adapter's compression config. With
     the config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872)
     and the session's tool list (6 declarations -- continuous mode drops
-    switch_section), the CURRENT default DTI form derives a ~5.7k floor ->
-    ~6.3k window -> ~7.8k trigger, above the API minimum 5000 (the SI has
-    grown since the jnjj.35-era ~1601-floor example; the clamp-up + retune
-    path in _build_live_config now fires only for forms with a much smaller
-    SI floor). Re-execute this function rather than trusting these figures --
-    they move with the SI text and the kit's injection budget.
+    switch_section), the CURRENT default DTI form derives a ~4.3k floor ->
+    ~4.9k window -> ~6.4k trigger, above the API minimum 5000 (these dropped
+    ~1.4k when the v4 SI diet cut the SI to 11,994 chars, bd polyglot-pdf-6a79;
+    the clamp-up + retune path in _build_live_config still fires only for forms
+    with a much smaller SI floor). Re-execute this function rather than trusting
+    these figures -- they move with the SI text and the kit's injection budget.
     injection_budget_tokens (bd wsao.8) adds headroom for the largest
     per-field inline guidance injection on top. bd jnjj.35 / A6.
     """
