@@ -489,11 +489,13 @@ class RequestCoordinator:
             return CONFIRM_REQUEST_TIMEOUT
 
     # Wall-clock cap for the whole spell-back round-trip: model-audio drain
-    # wait + TTS fetch + BLOCKING letter-by-letter playback on the client. The
-    # value cap (spellback_tts.MAX_SPELLBACK_CHARS = 60) bounds the clip at
-    # roughly 60 chars * ~1s/char, so 90s covers the worst legitimate clip;
-    # anything longer means the client died mid-playback and the tool must
-    # return the error variant rather than wedge the session.
+    # wait + TTS fetch + BLOCKING clip playback on the client. Generous
+    # headroom rather than a tight fit: the plain-text Chirp3 clip (bd
+    # polyglot-pdf-44ywm) runs ~5s for a typical name, and the CLIENT holds
+    # itself to an 80s total budget (spellbackPlayer CLIENT_TOTAL_BUDGET_MS)
+    # so it always settles first. Anything reaching 90s means the client died
+    # mid-playback and the tool must return the error variant rather than
+    # wedge the session.
     SPELLBACK_ROUNDTRIP_TIMEOUT = 90.0
 
     async def request_spellback(self) -> Any:
@@ -505,10 +507,11 @@ class RequestCoordinator:
         client-side (computeNextField with the pin honored -- the NEXT-FIELD
         computation; NOTE this is a client-only resolution, distinct from
         confirm_field's backend-supplied-and-coerced field_id), reads the stored
-        value, fetches the Cloud TTS letter-by-letter clip from
-        /api/tts/spellback, mutes the mic, plays the clip BLOCKING, and acks
-        with the outcome. No field value ever crosses this WS message in
-        either direction.
+        value, fetches the Cloud TTS clip from /api/tts/spellback (which
+        speaks the letters one by one IN THE SESSION LANGUAGE and asks the
+        verification question itself -- bd polyglot-pdf-44ywm), mutes the mic,
+        plays the clip BLOCKING, and acks with the outcome. No field value
+        ever crosses this WS message in either direction.
 
         Unlike every other coordinator round-trip, this one deliberately holds
         the Gemini receive loop for the playback duration -- that is the whole

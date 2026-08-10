@@ -334,7 +334,7 @@ Every `WebFormConnection.status` transition is logged `old->new (reason)` so a
 stranded status is visible in the console.
 
 **Spell-back hold** (bd polyglot-pdf-22h1f, flag-gated `SPELLBACK_TOOL_ENABLED`):
-while the deterministic letter-by-letter TTS clip plays, `audioManager.
+while the deterministic spell-back TTS clip plays, `audioManager.
 setSpellbackHold(true)` hard-gates the mic in EVERY input mode -- under native
 VAD it substitutes zeroed frames (the same silence pattern as PTT mute, so the
 continuous stream native VAD needs stays alive), and in the manual/client-VAD

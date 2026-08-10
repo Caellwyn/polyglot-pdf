@@ -182,16 +182,19 @@ assigns that key, so a bare assignment on either side would silently drop the
 other (tests pin both orderings plus the empty-name fallback). Set
 `LIVE_VOICE_NAME=""` to fall back to the API default.
 
-**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f):
-`spellback_tts.resolve_spellback_voice` derives the spell-back clip's Cloud
-TTS voice as `en-US-Chirp3-HD-<LIVE_VOICE_NAME>` so the clip matches the Live
-model's persona (the Chirp 3 HD family carries the Live API's prebuilt voice
-names; the derivation is endpoint-verified for Iapetus ONLY -- an alternate
-Live voice keeps the session healthy but the clip 502s if that persona has no
-Chirp3-HD twin, so re-verify at any voice change). Consequently
-`LIVE_VOICE_NAME=""` ALSO drops the clip to the TTS default voice
-(un-matching the persona); pin the clip voice explicitly via
-`SPELLBACK_TTS_VOICE` when tuning the Live voice.
+**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f, reshaped
+by bd polyglot-pdf-44ywm): `spellback_tts.resolve_spellback_voice` uses it as
+the PERSONA half of the spell-back clip's Cloud TTS voice, so the clip sounds
+like the same speaker -- the Chirp 3 HD family carries the Live API's prebuilt
+voice names. The LOCALE half comes from the SESSION language, not from
+`en-US`: a Spanish session derives `es-US-Chirp3-HD-<LIVE_VOICE_NAME>`. A
+persona that has no twin in that locale can NOT break the clip -- the ladder
+degrades (another Chirp3 persona in the same locale, then the locale's default
+voice), so changing the Live voice never 502s the spell-back. See the
+`name_spellback` bullet under Tool calling for the full ladder.
+`LIVE_VOICE_NAME=""` drops the clip to the locale's default voice (still the
+user's language, no longer the model's persona); pin the clip voice explicitly
+via `SPELLBACK_TTS_VOICE` to decouple it from the Live voice entirely.
 
 Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
 connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`

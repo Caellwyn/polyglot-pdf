@@ -1276,8 +1276,9 @@ class CallbackHandler:
         """Handle name_spellback tool call from Gemini (bd polyglot-pdf-22h1f).
 
         Deterministic spell-back: the CLIENT resolves the current field, reads
-        the stored value, fetches a Cloud TTS letter-by-letter clip, and plays
-        it BLOCKING (mic muted, model parked on this pending tool response) --
+        the stored value, fetches a Cloud TTS clip that spells it out in the
+        SESSION language and asks the verification question (bd 44ywm), and
+        plays it BLOCKING (mic muted, model parked on this pending response) --
         the model's speech path never carries the spelling, which is the fix
         for the sticky-first-spelling audio defect (bd 0rpu). The tool takes NO
         arguments on purpose (any model-supplied argument is ignored): the

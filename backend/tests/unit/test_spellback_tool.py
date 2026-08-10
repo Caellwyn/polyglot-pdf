@@ -510,6 +510,53 @@ class TestSpellbackText:
         s.LIVE_VOICE_NAME = ""
         assert resolve_spellback_voice(s, "Spanish") == ("", "es-US")
 
+    def test_no_doc_or_comment_claims_the_pre_44ywm_clip_design(self):
+        """Pin the SET, not the instance (CLAUDE.md scar #7).
+
+        The bd 44ywm redesign invalidated two claims that were restated in
+        several places: that the clip's voice is hardcoded `en-US-Chirp3-HD-*`
+        (it follows the SESSION language now) and that a missing persona 502s
+        the clip (the ladder degrades). The Opus cross-surface review found a
+        surviving restatement in voice-ai.md AFTER the sibling block in the
+        same file had been corrected -- exactly the one-per-round pattern this
+        rule exists to stop. Assert the whole set is clean so the next
+        omission fails here instead of in review.
+        """
+        import re
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        targets = [
+            root / "docs/components/voice-ai.md",
+            root / "docs/components/tool-call-flow.md",
+            root / "docs/standards/ws-protocol.md",
+            root / "docs/standards/voice-and-vad.md",
+            root / "backend/services/request_coordinator.py",
+            root / "backend/services/callback_handler.py",
+            root / "backend/services/spellback_tts.py",
+            root / "frontend/src/shared/spellbackPlayer.ts",
+        ]
+        # The clip's locale is session-derived: no prose may assert the voice
+        # is built as en-US-Chirp3-HD-<persona>.
+        hardcoded_en_us = re.compile(
+            r"as\s+`?en-US-Chirp3-HD-<", re.IGNORECASE)
+        # The ladder degrades; no prose may say a persona miss 502s the clip.
+        persona_502 = re.compile(
+            r"clip 502s if that persona", re.IGNORECASE)
+
+        offenders = []
+        for path in targets:
+            if not path.exists():
+                continue
+            text = path.read_text(encoding="utf-8")
+            for label, pattern in (("hardcoded en-US voice", hardcoded_en_us),
+                                   ("persona-miss 502 claim", persona_502)):
+                if pattern.search(text):
+                    offenders.append("%s: %s" % (path.name, label))
+
+        assert not offenders, (
+            "pre-44ywm clip design still asserted in: %s" % offenders)
+
     def test_char_cap_matches_frontend_mirror(self):
         """MAX_SPELLBACK_CHARS is mirrored (not shared) as SPELLBACK_MAX_CHARS
         in frontend/src/shared/spellbackPlayer.ts -- the client's fail-fast
