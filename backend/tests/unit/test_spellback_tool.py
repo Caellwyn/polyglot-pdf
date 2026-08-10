@@ -527,6 +527,41 @@ class TestSpellbackText:
         assert int(match.group(1)) == MAX_SPELLBACK_CHARS
 
     @pytest.mark.asyncio
+    async def test_all_blocking_work_runs_off_the_event_loop(self):
+        """Voice RESOLUTION as well as synthesis must run in a worker thread.
+
+        The ladder's first call per process fetches list_voices -- a network
+        RPC. /ws/fill and /api/tts/spellback share one event loop, so
+        resolving on the loop would freeze EVERY concurrent session's control
+        channel, the same defect class bd 4hnyq fixes on the handshake path
+        (Opus cross-surface review). Pinned by thread identity: neither call
+        may happen on the loop's thread.
+        """
+        import threading
+
+        from backend.services import spellback_tts
+
+        loop_thread = threading.get_ident()
+        seen = {}
+
+        def fake_resolve(settings, language_name=None):
+            seen["resolve_thread"] = threading.get_ident()
+            return "", "en-US"
+
+        def fake_synth(text, voice_name, locale):
+            seen["synth_thread"] = threading.get_ident()
+            return b"MP3"
+
+        with patch.object(spellback_tts, "resolve_spellback_voice", fake_resolve), \
+             patch.object(spellback_tts, "_synthesize_sync", fake_synth):
+            await spellback_tts.synthesize_spellback("Jose", Settings(), "English")
+
+        assert seen["resolve_thread"] != loop_thread, (
+            "voice resolution ran on the event loop -- its list_voices RPC "
+            "would stall every concurrent session")
+        assert seen["synth_thread"] != loop_thread
+
+    @pytest.mark.asyncio
     async def test_empty_and_oversized_values_are_rejected(self):
         s = Settings()
         with pytest.raises(ValueError):

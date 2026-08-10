@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the B-pillar "replaces the SI prose" framing to defense-in-depth per the 2026-06-17 RESCOPE; fixed the stale `ITextAI.ask()` signature to its real `tuple[str, list[dict], bool]` return; fixed stale line pointers (confirm handler, ADDRESS CONSISTENCY block); corrected the bd polyglot-pdf-89mt citation; and added a note on `CONTINUOUS_SESSION=true` as the production default and which validation path it selects).*
+*Last updated: 2026-08-08 (bd polyglot-pdf-4hnyq: the `/ws/fill` text clients are process-cached and shared across sessions -- stateless, so sharing is safe -- while `get_live_ai` stays per-connection; corrected both "fresh per connection" wiring notes. Earlier: 2026-08-06 docs audit bd polyglot-pdf-2zk3: corrected the B-pillar "replaces the SI prose" framing to defense-in-depth per the 2026-06-17 RESCOPE; fixed the stale `ITextAI.ask()` signature to its real `tuple[str, list[dict], bool]` return; fixed stale line pointers (confirm handler, ADDRESS CONSISTENCY block); corrected the bd polyglot-pdf-89mt citation; and added a note on `CONTINUOUS_SESSION=true` as the production default and which validation path it selects).*
 
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
@@ -86,9 +86,13 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   never the query / values / answer). The renderers live in
   `backend/services/secretary_context.py` (jnjj.45a). The blocking call is
   timeout-guarded by `FormFillingService.handle_ask_secretary` (jnjj.45c).
-- Wiring: `backend/dependencies.py::get_text_ai()` constructs a fresh `TextAIGemini`
+- Wiring: `backend/dependencies.py::get_text_ai()` constructs a `TextAIGemini`
   reading `settings.MODEL_LABELING` (default `gemini-2.5-flash`; set
   `MODEL_LABELING=gemini-2.5-flash-lite` in deploy env for the lite validator tier).
+  On the `/ws/fill` path that client is **process-cached and shared across
+  sessions** (bd polyglot-pdf-4hnyq -- it is stateless, so sharing is safe and
+  removes ~3s from every handshake); only `get_live_ai` stays per-connection,
+  where callback isolation is load-bearing.
 
 `MODEL_LABELING` is no longer orphaned -- `get_text_ai()` is its live consumer. The
 original field-labeling normalizer it was named for is still deprecated (`config.py`,
@@ -528,10 +532,14 @@ class ITextAI(ABC):
   `genai.Client(...)` the same way the Live adapter does, but calling the
   text-generation API (not `connect()`/Live).
 - Wiring: `get_text_ai(settings) -> ITextAI` goes in
-  `backend/dependencies.py`, next to `get_live_ai()`, returning a fresh
-  `TextAIGemini(...)` (the per-connection freshness rationale that applies to
+  `backend/dependencies.py`, next to `get_live_ai()`, returning a
+  `TextAIGemini(...)`. The per-connection freshness rationale that applies to
   `get_live_ai` -- avoiding cross-connection callback bleed -- does not bind a
-  stateless `validate()`, but keep the same provider shape for consistency).
+  stateless `validate()`, and bd polyglot-pdf-4hnyq acts on that: the
+  `/ws/fill` path serves these text clients from a process cache keyed on the
+  config values they are built from, so concurrent sessions SHARE one
+  instance. Safe because every `TextAIGemini` attribute is set in `__init__`
+  and never mutated (verified in the bd 4hnyq cross-surface review).
 
 ### DECISION: reuse `MODEL_LABELING`, do not rename
 

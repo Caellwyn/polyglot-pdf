@@ -47,7 +47,9 @@ const FETCH_TIMEOUT_MS = 20000
 // <audio> element that stalls without firing onended/onerror (an OS audio
 // interruption on mobile is the real case) would otherwise gate the mic
 // FOREVER -- and in open-mic mode there is no PTT press to release it. The
-// cap scales with the value (a 60-char clip runs ~55s at the SSML pacing).
+// cap scales with the value. Generous on purpose: the plain-text Chirp3 clip
+// (bd 44ywm) is far shorter than the SSML one this bound was sized against,
+// so the headroom now covers a slow voice rather than a slow format.
 const PLAYBACK_TIMEOUT_PER_CHAR_MS = 1500
 const PLAYBACK_TIMEOUT_FLOOR_MS = 15000
 // The CLIENT's whole call -- drain wait + fetch + playback -- must settle

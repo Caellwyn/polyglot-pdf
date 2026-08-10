@@ -126,8 +126,13 @@ async def get_form_filling_service(
     the DECLARED dependency -- these were nested behind this one, which was
     itself `def`, so the whole chain collapsed onto one blocking call. Making
     THIS one `async` and pushing the construction into `asyncio.to_thread`
-    keeps the loop free: `accept()` now happens immediately and the client
-    construction overlaps the handshake instead of preceding it.
+    keeps the EVENT LOOP free while it runs, so other sessions are not stalled
+    by one connection's setup. Note the win is parallelism + caching, NOT
+    overlap with the handshake: FastAPI resolves dependencies BEFORE entering
+    the handler, so construction still precedes `websocket.accept()` --
+    9.4s -> 3.2s comes from building the three concurrently and reusing the
+    cached text clients (Opus cross-surface review corrected an earlier
+    claim of overlap here).
 
     Deliberately builds the adapters here rather than via `Depends`: a fresh
     LiveAIGemini per connection is load-bearing (callback isolation -- a shared

@@ -237,8 +237,12 @@ def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
 async def synthesize_spellback(value: str, settings, language_name=None) -> bytes:
     """Synthesize the verification-clip MP3 for `value` in the session language.
 
-    Runs the blocking Cloud TTS call in a worker thread so the event loop (and
-    with it the WS control channel) never blocks. Raises ValueError on an
+    Runs ALL blocking work in a worker thread so the event loop (and with it
+    every concurrent WS session's control channel) never blocks. That includes
+    voice RESOLUTION, not just synthesis: the ladder's first call per process
+    fetches list_voices, a network RPC -- resolving it on the loop would stall
+    every session for its duration, the exact defect class bd 4hnyq fixes on
+    the handshake path (Opus cross-surface review). Raises ValueError on an
     empty/oversized value; propagates TTS client errors to the caller (the
     route maps them to a 502 without logging the value).
     """
@@ -246,9 +250,13 @@ async def synthesize_spellback(value: str, settings, language_name=None) -> byte
         raise ValueError("empty value")
     if len(value) > MAX_SPELLBACK_CHARS:
         raise ValueError("value too long")
-    voice_name, locale = resolve_spellback_voice(settings, language_name)
-    text = build_spellback_text(value, locale)
-    audio = await asyncio.to_thread(_synthesize_sync, text, voice_name, locale)
+
+    def _resolve_and_synthesize():
+        voice_name, locale = resolve_spellback_voice(settings, language_name)
+        text = build_spellback_text(value, locale)
+        return _synthesize_sync(text, voice_name, locale), locale
+
+    audio, locale = await asyncio.to_thread(_resolve_and_synthesize)
     _log.info(
         "spellback_tts_synthesized",
         value_chars=len(value),
