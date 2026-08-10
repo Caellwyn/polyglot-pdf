@@ -2,12 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-06 (post-merge freshness check against
-backend/services/callback_handler.py: the `.env.DEV`/`DEV_LOGGING_ENABLED`/
-`VFF_DEV_LOGGING` claims and the `callback_handler.py:466` comment citation
-re-verified line-for-line, no drift). Vertex is the only production path (bd
-polyglot-pdf-5e6a): the ALLOW_AI_STUDIO override was removed; a deployed AI
-Studio path now fails startup outright.*
+*Last updated: 2026-08-08. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -97,8 +92,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the
   `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
-  `/api/fill-pdf` + form-kit list/schema reads). Auth canon:
-  [auth.md](auth.md).
+  `/api/fill-pdf` + form-kit list/schema reads). **LOCAL ONLY, fail-closed on
+  deploy** (bd `polyglot-pdf-knmp`): with `K_SERVICE` set, `Settings` refuses
+  to start and `verify_token` ignores the flag — no override exists. Auth
+  canon: [auth.md](auth.md).
 - **Vertex is the ONLY production path** (maintainer directive 2026-08-04, bd
   `polyglot-pdf-5e6a`). `VERTEXAI=false` on a DEPLOYED service (`K_SERVICE`
   present ⇒ Cloud Run) makes `Settings` fail startup, and there is **no

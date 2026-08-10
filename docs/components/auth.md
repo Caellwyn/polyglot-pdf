@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: corrected testing section to reflect AuthContext.test.tsx coverage of AuthContext and ProtectedRoute; only Login remains untested).*
+*Last updated: 2026-08-08. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for closeout details.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -113,7 +113,11 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 
 > **Dev bypass.** `VFF_DISABLE_AUTH=true` makes `verify_token` skip verification and
 > return a stub `{uid: "dev_user", ...}` (logged `auth_bypassed_via_env`). Local dev
-> only — never set in prod. See [config-deployment.md](config-deployment.md).
+> only, and that is now ENFORCED rather than a convention (bd `polyglot-pdf-knmp`):
+> on a deployed service (`K_SERVICE` set by Cloud Run) `Settings` refuses to start,
+> and `verify_token` ignores the bypass and falls through to real verification if
+> reached anyway. There is no override flag. See
+> [config-deployment.md](config-deployment.md).
 
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
@@ -139,7 +143,10 @@ The WS auth gate is covered indirectly: the integration tests patch
 without a live token. The HTTP gate is covered directly:
 `backend/tests/unit/test_http_route_auth.py` pins the 401s on
 fill-pdf/form-kits/schema, the deliberate NON-gate on the kit-PDF GET, and the
-`VFF_DISABLE_AUTH` bypass. `frontend/src/contexts/AuthContext.test.tsx` covers
+`VFF_DISABLE_AUTH` bypass, and `backend/tests/unit/test_auth_bypass_guard.py`
+pins the deployed fail-closed guard on that bypass (both layers separately: the
+`Settings` startup refusal and `verify_token`'s inert-on-`K_SERVICE` branch).
+`frontend/src/contexts/AuthContext.test.tsx` covers
 `AuthContext` (the authorized_emails allowlist gate, sign-in/out/reset delegation,
 the loading lifecycle, and the test-harness bypass) and `ProtectedRoute` (both gate
 states). There are no tests yet for `Login` (the form/UI component itself).
