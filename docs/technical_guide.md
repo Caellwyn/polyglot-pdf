@@ -1,9 +1,12 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-08 (merge: bd polyglot-pdf-22h1f -- Surface contracts
-gained the flag-gated `name_spellback` tool row, the
-`spellback`/`spellback_response` round-trip, and the `/api/tts/spellback`
-route -- and bd polyglot-pdf-na1zy, see
+*Last updated: 2026-08-08 (merge: bd polyglot-pdf-xzw5 -- the /status route
+gained `author_version`, required to publish a kit with no government
+edition_date and immutable once published, and the audit record's
+`edition_date` column now carries a three-rank marker. Also bd
+polyglot-pdf-22h1f -- Surface contracts gained the flag-gated `name_spellback`
+tool row, the `spellback`/`spellback_response` round-trip, and the
+`/api/tts/spellback` route -- and bd polyglot-pdf-na1zy, see
 [the na1zy journal entry](journal/entries/2026-08-07-bd-na1zy-local-folder-readiness-stamping.md).
 The Surface contracts section is the code-derived cross-surface data-contract
 map for blast-radius review (bd polyglot-pdf-n18q).
@@ -87,7 +90,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |
 | PUT | `/api/editor/kits/{kit_id}/schema` | Save an edited schema back to the store (lenient draft save). Token-gated. |
 | POST | `/api/editor/lint`, `/api/editor/kits/{kit_id}/lint` | Lint the POSTED (possibly-unsaved) schema over the single Python ruleset (`backend/services/schema_lint.py`). The kit-scoped form additionally loads the kit's persisted `acroform.json` dump -- the SAME inputs as the `/status` promotion gate -- so the editor strip sees the dump-gated widget-claim rules live (sprint-18 C1, bd o7y9); the dumpless form remains for schemas with no kit identity. Token-gated. |
-| POST | `/api/editor/kits/{kit_id}/status` | Set `draft` \| `complete` \| `unpublished`; promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). `unpublished` retires a superseded revision: hidden like a draft but WRITE-LOCKED like complete, and never revertible to draft (bd polyglot-pdf-6dz0). Optional `replaces_kit_id` retires another live kit for the same form as part of this publish, archiving it first. Token-gated. |
+| POST | `/api/editor/kits/{kit_id}/status` | Set `draft` \| `complete` \| `unpublished`; promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). `unpublished` retires a superseded revision: hidden like a draft but WRITE-LOCKED like complete, and never revertible to draft (bd polyglot-pdf-6dz0). Optional `replaces_kit_id` retires another live kit for the same form as part of this publish, archiving it first. A kit whose schema has no `form_metadata.edition_date` must supply `author_version` to publish -- the refusal is a 422 prefixed `AUTHOR_VERSION_REQUIRED:`, which the editor keys on to open its version dialog; the value is normalized server-side and IMMUTABLE once published (bd polyglot-pdf-xzw5). Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
@@ -377,6 +380,11 @@ field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL
 (:301-317, dies with the instance), Firestore `confirmation_events` (:88-119,
 gated by `CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
-handshake (`schemaFormState.ts:1049-1063`) -- see contract 2. *Known gap:* a
+handshake (`schemaFormState.ts:1049-1063`) -- see contract 2. The
+`edition_date` COLUMN carries whichever revision marker won
+`resolve_edition_marker`'s three-rank precedence: the government
+`edition_date`, else the author's `author_version`, else a `sha256:` shape
+fingerprint (bd polyglot-pdf-xzw5) -- so the name is narrower than the values
+it holds. *Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).

@@ -249,6 +249,12 @@ class KitStatusBody(BaseModel):
     # the catalogue never shows two entries for one form. Same-kit republish
     # needs no flag -- one kit_id is one catalogue slot, so it replaces itself.
     replaces_kit_id: Optional[str] = None
+    # The author's own revision marker, for a kit with NO government
+    # edition_date (bd polyglot-pdf-xzw5). Required to publish such a kit --
+    # otherwise its confirmation records fall back to an unreadable content
+    # fingerprint. Ignored for a kit that HAS an edition_date (the government
+    # marker wins and the client never shows the box).
+    author_version: Optional[str] = None
 
 
 class KitStatusResponse(BaseModel):
@@ -445,6 +451,24 @@ _KIT_STATUSES = ("draft", "complete", "unpublished")
 # cannot silently reopen a lock (the two-value checks were the trap: an
 # unpublished kit coerced to "unknown" and fell through every one of them).
 _WRITE_LOCKED_STATUSES = ("complete", "unpublished")
+
+
+def _normalize_author_version(value: object) -> str:
+    """The author-version normalization rule, in ONE place (bd polyglot-pdf-xzw5).
+
+    Trim, then strip a leading v/V ONLY when a digit follows -- so "v2" becomes
+    "2" while "version-3" is left intact. Returns "" for anything unusable
+    (non-string, blank, or a bare "v").
+
+    Every comparison and every write goes through this. Normalizing inside one
+    branch and comparing raw values in another made a legitimate republish
+    ("v2026-01-01" against a stored "2026-01-01") 409 as if the revision had
+    changed. Mirrored in schema-editor/src/components/AuthorVersionDialog.tsx
+    (normalizeAuthorVersion), with the same cases pinned on both sides.
+    """
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"^[vV](?=[0-9])", "", value.strip()).strip()
 
 
 def _status_of(meta: Optional[dict]) -> str:
@@ -911,10 +935,17 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
         _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error=str(exc))
         return None
 
+    # Resolve through the SAME three ranks the confirmation record used, or the
+    # archive is keyed on something no record names and the retrieval this whole
+    # mechanism exists for silently fails (bd polyglot-pdf-xzw5; caught by Opus
+    # fresh-eyes, which showed an author_version kit archiving under a sha256:
+    # fingerprint while its records named the version).
+    _meta_block = schema.get("form_metadata")
+    _meta_block = _meta_block if isinstance(_meta_block, dict) else {}
     marker = resolve_edition_marker(
-        (schema.get("form_metadata") or {}).get("edition_date")
-        if isinstance(schema.get("form_metadata"), dict) else None,
+        _meta_block.get("edition_date"),
         schema,
+        _meta_block.get("author_version"),
     )
     if not marker:
         # No edition date AND no fingerprintable shape (an empty/fieldless
@@ -2093,6 +2124,133 @@ async def set_editor_kit_status(
         # not affect any earlier gate: translations are additive metadata that
         # leave schema validity, extraction_info, the v2 stamp, and every lint
         # rule (option values / conditions / widgets) untouched.
+
+        # --- author version gate (bd polyglot-pdf-xzw5) ---------------------
+        # Runs AFTER validate/extraction_info/v2-stamp/lint deliberately. Those
+        # gates report what is WRONG with the schema; this one asks the author
+        # for something extra. Running it first masked them -- an author with a
+        # structurally broken schema was told to supply a version instead of
+        # being shown the actual defect (caught by the neighbouring suite's
+        # test_mark_complete_validates_against_form_contract).
+        meta_block = schema.get("form_metadata")
+        meta_block = meta_block if isinstance(meta_block, dict) else {}
+        existing_edition = meta_block.get("edition_date")
+        has_edition = isinstance(existing_edition, str) and existing_edition.strip()
+        existing_author_version = meta_block.get("author_version")
+        has_existing_version = (
+            isinstance(existing_author_version, str)
+            and existing_author_version.strip()
+        )
+        # Normalize ONCE, before any comparison or branch. Comparing a RAW
+        # supplied value against a NORMALIZED stored one made a legitimate
+        # republish look like a change: stored "2026-01-01" vs supplied
+        # "v2026-01-01" are the same revision after this route's own rule, but
+        # 409'd as if they were different (Opus fresh-eyes, reproduced live).
+        supplied_version = _normalize_author_version(body.author_version)
+        version_to_persist: Optional[str] = None
+
+        if not has_edition:
+            # LOCKED once set: author_version is what earlier confirmation
+            # records name, so changing it would silently re-point them at a
+            # revision those clients never saw -- the same hazard the retired-
+            # kit write-lock exists to prevent (maintainer decision, 2026-08-08).
+            # A republish of an already-versioned kit keeps the original.
+            #
+            # Gated on HAVING BEEN PUBLISHED, not on the value merely existing.
+            # The version is written before the translation sweep, and that
+            # sweep routinely refuses (a partially-translated kit 409s with
+            # "N of M translations complete") -- leaving the kit in DRAFT with a
+            # version on disk. Locking on presence alone made that failed
+            # attempt permanent: the author's retry with a corrected version was
+            # refused, citing confirmation records that do not exist, on a kit
+            # the route explicitly expects them to re-press. A draft has no
+            # records to protect, so its version stays editable.
+            was_published = current_status in _WRITE_LOCKED_STATUSES
+            if has_existing_version and was_published:
+                # Locked: only a REPUBLISH of the same version is allowed.
+                if supplied_version and supplied_version != _normalize_author_version(
+                    existing_author_version
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f'This kit was already published as version '
+                            f'"{existing_author_version.strip()}", and that version is '
+                            f"what its existing confirmation records name. Changing it "
+                            f"would re-point them at a revision those clients never saw. "
+                            f"Publish a new kit for a new revision instead."
+                        ),
+                    )
+            elif current_status == "complete" and supplied_version:
+                # A kit that is CURRENTLY LIVE with no version: accepting one
+                # would rewrite the exact bytes its existing confirmation
+                # records were confirmed against, in place and with no archive
+                # -- which is what the write-lock on every other schema-writing
+                # route exists to prevent (Opus fresh-eyes found this write was
+                # the one exception in the file). A legacy kit gets its version
+                # by publishing a NEW revision, the same route any other
+                # schema change takes.
+                #
+                # Scoped to `complete`, NOT to write-locked generally. An
+                # UNPUBLISHED kit is retired -- serving nobody -- and republish
+                # is its one documented route back into service, which archives
+                # the outgoing revision first. Refusing it here bricked exactly
+                # the kit class this bead exists to serve: revert-to-draft is a
+                # hard 409 for a retired kit (bd polyglot-pdf-6dz0), so every
+                # exit was closed AND this message named one the API forbids
+                # (Opus fresh-eyes round 3, reproduced).
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f'"{kit_id}" is already published without a version. Adding '
+                        f"one now would rewrite the schema its existing confirmation "
+                        f"records were confirmed against. Revert it to draft and "
+                        f"publish again to give this revision a version."
+                    ),
+                )
+            elif has_existing_version and not supplied_version:
+                # A DRAFT carrying a version from an earlier failed publish, being
+                # re-pressed with nothing new: keep what is already there rather
+                # than demanding the author retype it. (Refusing here would make
+                # the retry path the sweep invites impossible to walk.)
+                pass
+            elif not supplied_version:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "AUTHOR_VERSION_REQUIRED: this form has no government "
+                        "edition date, so it needs an author version to identify "
+                        "which revision a client confirmed against -- otherwise its "
+                        "records fall back to an unreadable content fingerprint. "
+                        'Supply author_version (e.g. "2026-08-07").'
+                    ),
+                )
+            else:
+                # Already normalized above. Persist into the schema, which is
+                # what the client is served and what the voice path reads the
+                # marker from.
+                meta_block = dict(meta_block)
+                meta_block["author_version"] = supplied_version
+                schema = dict(schema)
+                schema["form_metadata"] = meta_block
+                version_to_persist = supplied_version
+
+
+        # Persist a newly-supplied author version (bd polyglot-pdf-xzw5) AFTER
+        # the free gates and BEFORE the sweep. This route otherwise never writes
+        # the schema, so without this the normalized value would be validated
+        # and then thrown away -- the marker has to be IN the served schema,
+        # because that is where the voice path reads it from. Only runs when the
+        # gate above actually set it (no edition_date, no prior version).
+        if version_to_persist is not None:
+            try:
+                await store.put_schema(kit_id, schema, schema_file)
+            except FormKitStoreError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Unable to save the author version",
+                ) from exc
+
         retranslated, translation_model = await _sweep_drifted_translations(
             store, kit_id, schema, schema_file,
         )

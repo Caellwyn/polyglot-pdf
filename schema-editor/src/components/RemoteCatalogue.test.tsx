@@ -187,7 +187,7 @@ describe('RemoteCatalogue', () => {
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Mark complete'));
-    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledWith('draft-kit', 'complete'));
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledWith('draft-kit', 'complete', {}));
     // Refresh happened (list re-requested).
     await waitFor(() => expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
     await waitFor(() => expect(screen.getByText(/marked complete/)).toBeInTheDocument());
@@ -273,7 +273,7 @@ describe('RemoteCatalogue', () => {
     fireEvent.click(screen.getByText('Mark complete'));
     // The refused call ran for the NON-open kit...
     await waitFor(() => expect(setRemoteStatus)
-      .toHaveBeenCalledWith('draft-kit', 'complete'));
+      .toHaveBeenCalledWith('draft-kit', 'complete', {}));
     // ...but the strip mirror was never touched (no clear, no detail).
     expect(onStatusRefusal).not.toHaveBeenCalled();
   });
@@ -636,6 +636,152 @@ describe('compact selector strip (bd tynm)', () => {
   });
 });
 
+describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
+  const REFUSAL = 'AUTHOR_VERSION_REQUIRED: this form has no government edition '
+    + 'date, so it needs an author version to identify which revision a client '
+    + 'confirmed against.';
+
+  async function publishDraftKit() {
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+  }
+
+  it('opens the version dialog when the publish gate asks for one', async () => {
+    // The catalogue listing does not read schemas, so it CANNOT know a kit
+    // needs a version -- the server's refusal is the trigger. Keying on the
+    // machine-readable token keeps the rule in one place.
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(new Error(REFUSAL));
+    await publishDraftKit();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+    // The raw refusal is NOT dumped on the card -- the dialog replaces it.
+    expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
+  });
+
+  it('retries the SAME publish with the version attached', async () => {
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockResolvedValueOnce({
+        ok: true, status: 'complete', retranslated: 0,
+        translationModel: null, supersededKitId: null,
+      });
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v2026-08-07' } });
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
+    // Normalized (leading v stripped), and carried in the options object -- a
+    // positional third argument here would silently be read as replaces_kit_id
+    // and retire an unrelated kit.
+    expect(vi.mocked(setRemoteStatus).mock.calls[1]).toEqual(
+      ['draft-kit', 'complete', { authorVersion: '2026-08-07' }],
+    );
+  });
+
+  it('cancelling leaves the kit unpublished and calls nothing further', async () => {
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(new Error(REFUSAL));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument();
+    expect(setRemoteStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancelling does NOT strand the catalogue disabled', async () => {
+    // `busy` gates every control here (Mark complete, Unpublish, Revert,
+    // Refresh, Rename, Extract). The early return that opens the dialog used to
+    // skip setBusy(false) -- which sat at the END of the catch -- so cancelling
+    // disabled the whole component until a reload (Opus fresh-eyes,
+    // reproduced). Both resets now live in `finally`.
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(new Error(REFUSAL));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    await waitFor(() => {
+      const btn = screen.getAllByText('Mark complete')[0].closest('button');
+      expect(btn?.disabled).toBe(false);
+    });
+  });
+
+  it('hides the previous-version line rather than printing "unknown"', async () => {
+    // versionInfoFromSchema falls back to the literal 'unknown', and this
+    // dialog only opens for a kit with no marker -- so the rubric's "previous
+    // value shown" clause rendered "Previous version: unknown" every time.
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(new Error(REFUSAL));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    expect(screen.queryByText(/Previous version/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the dialog open while the retry runs', async () => {
+    // The retry re-translates one language per LLM call -- tens of seconds.
+    // Closing the dialog first showed an unchanged catalogue with no progress
+    // and an inviting Mark complete, and made the dialog's own busy guard
+    // unreachable.
+    let settle: (v: KitStatusResult) => void = () => {};
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockImplementationOnce(() => new Promise((res) => { settle = res; }));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
+    // Still mounted mid-flight.
+    expect(screen.getByText(/Name this version of/)).toBeInTheDocument();
+
+    settle({ ok: true, status: 'complete', retranslated: 0,
+             translationModel: null, supersededKitId: null });
+    await waitFor(() =>
+      expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument());
+  });
+
+  it('surfaces a SECOND refusal instead of leaving the dialog hanging', async () => {
+    // If the retry is refused for a different reason (lint, translations), the
+    // dialog closes and the real error must be visible -- not swallowed.
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockRejectedValueOnce(new Error('Schema has 2 lint error(s), so it cannot be marked complete'));
+    await publishDraftKit();
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(screen.getByText(/lint error/)).toBeInTheDocument());
+    expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument();
+  });
+
+  it('a DIFFERENT publish refusal still shows as an error, not the dialog', async () => {
+    // The dialog must be scoped to its own token. A lint refusal that opened a
+    // version prompt would hide the real problem and prompt for the wrong fix.
+    vi.mocked(setRemoteStatus).mockRejectedValueOnce(
+      new Error('Schema has 3 lint error(s), so it cannot be marked complete'),
+    );
+    await publishDraftKit();
+
+    await waitFor(() =>
+      expect(screen.getByText(/lint error/)).toBeInTheDocument());
+    expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument();
+  });
+});
+
 describe('rename from the selector strip (bd 15ic)', () => {
   it('renames the selected kit via the inline input (works without an open)', async () => {
     vi.mocked(setRemoteLabel).mockResolvedValue(undefined);
@@ -815,7 +961,7 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     fireEvent.click(screen.getAllByText('Unpublish')[0]);
 
     await waitFor(() =>
-      expect(setRemoteStatus).toHaveBeenCalledWith('done-kit', 'unpublished'));
+      expect(setRemoteStatus).toHaveBeenCalledWith('done-kit', 'unpublished', {}));
     // The notice must name the RETIREMENT. It previously said "reverted to
     // draft" -- the wrong action, and it implies the kit is editable again.
     await waitFor(() => {

@@ -1029,14 +1029,22 @@ def _check_audit_identity(schema: Dict[str, Any], out: List[LintFinding]) -> Non
         return
 
     edition = meta.get("edition_date")
-    if not isinstance(edition, str) or not edition.strip():
+    author_version = meta.get("author_version")
+    has_edition = isinstance(edition, str) and edition.strip()
+    # An author-supplied version also names the revision in plain language
+    # (bd polyglot-pdf-xzw5), so it resolves this warning just as an edition
+    # does -- the finding is about falling back to an unreadable fingerprint,
+    # not about the government field specifically.
+    has_author_version = isinstance(author_version, str) and author_version.strip()
+    if not has_edition and not has_author_version:
         out.append(LintFinding(
             SEVERITY_WARNING, "audit-identity-no-edition",
             "$.form_metadata.edition_date",
-            "this kit declares no government edition date, so its confirmation "
-            "records fall back to a content fingerprint instead of naming the "
-            "edition -- set form_metadata.edition_date (e.g. \"12/2024\") if "
-            "this is an official form; ignore it for a custom/in-house form",
+            "this kit declares no government edition date and no author version, "
+            "so its confirmation records fall back to a content fingerprint "
+            "instead of naming the revision -- set form_metadata.edition_date "
+            "(e.g. \"12/2024\") if this is an official form, or supply an author "
+            "version when publishing a custom/in-house form",
         ))
 
 

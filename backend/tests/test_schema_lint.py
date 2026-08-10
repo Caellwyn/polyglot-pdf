@@ -1368,6 +1368,39 @@ def test_edition_date_present_is_silent():
     assert _audit_rules(schema) == []
 
 
+def test_author_version_resolves_the_no_edition_warning():
+    """The warning is about falling back to an UNREADABLE fingerprint, not
+    about the government field specifically (bd polyglot-pdf-xzw5). An author
+    version names the revision in plain language, so it clears the finding --
+    otherwise every custom form would carry a permanent warning it has no way
+    to resolve."""
+    schema = _schema([{"id": "a", "type": "text"}])
+    schema["form_metadata"] = {"title": "T", "author_version": "2026-08-07"}
+
+    assert _audit_rules(schema) == []
+
+
+def test_a_blank_author_version_does_not_resolve_the_warning():
+    """Mirrors the blank-edition rule: whitespace names no revision, so the
+    fingerprint fallback still applies and the author still needs telling."""
+    schema = _schema([{"id": "a", "type": "text"}])
+    schema["form_metadata"] = {"title": "T", "author_version": "   "}
+
+    assert _audit_rules(schema) == ["audit-identity-no-edition"]
+
+
+def test_the_no_edition_warning_names_BOTH_remedies():
+    """The message must offer the author version, not just the edition date --
+    a custom form's author following the old text had no actionable fix."""
+    schema = _schema([{"id": "a", "type": "text"}])
+    schema["form_metadata"] = {"title": "T"}
+
+    finding = [f for f in lint_schema(schema)
+               if f.rule == "audit-identity-no-edition"][0]
+    assert "edition_date" in finding.message
+    assert "author version" in finding.message
+
+
 def test_blank_edition_date_is_treated_as_missing():
     """A whitespace-only edition is not an edition -- it must not read as one."""
     schema = _schema([{"id": "a", "type": "text"}])

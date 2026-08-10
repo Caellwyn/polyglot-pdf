@@ -19,6 +19,7 @@ import { setRemoteStatus } from '../utils/remoteKitStore';
 // Dev-only single-kit deploy (bd polyglot-pdf-ipzh): absent in a static/hosted
 // build, so the probe returns null there and the button never renders.
 import { deployKit, getDeployTarget } from '../utils/deployKitClient';
+import { AuthorVersionDialog } from './AuthorVersionDialog';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -122,6 +123,10 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // Per-kit review progress, keyed by kit id (filled in after the list renders).
   const [progress, setProgress] = React.useState<Record<string, KitProgress>>({});
   const [error, setError] = React.useState<string | null>(null);
+  // The kit whose publish is waiting on an author version (bd polyglot-pdf-xzw5).
+  // Local mode runs the real backend, so it hits the same publish gate and
+  // needs the same dialog -- see the AUTHOR_VERSION_REQUIRED branch below.
+  const [versionPrompt, setVersionPrompt] = React.useState<CatalogueEntry | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
@@ -266,7 +271,9 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
 
   // Promote/demote a kit's metadata.json status (bd nr8u, D2). Only complete kits
   // reach GCS via the deploy gate, so this is the human's publish/unpublish toggle.
-  const handleSetStatus = React.useCallback(async (kit: CatalogueEntry, status: KitStatus) => {
+  const handleSetStatus = React.useCallback(async (
+    kit: CatalogueEntry, status: KitStatus, authorVersion?: string,
+  ) => {
     if (!root) return;
     setNotice(null);
     // An UNPUBLISHED kit is a superseded revision: its schema is what earlier
@@ -317,7 +324,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         // The sweep makes one LLM call PER LANGUAGE with retry, so this is a
         // tens-of-seconds action -- say so rather than leaving a dead button.
         setNotice(`Checking "${kit.label}" and re-translating anything missing...`);
-        const result = await setRemoteStatus(kit.id, status);
+        const result = await setRemoteStatus(kit.id, status, { authorVersion });
         setNotice(
           result.retranslated > 0
             ? `"${kit.label}" is complete. Re-translated ${result.retranslated} `
@@ -347,6 +354,15 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       // it, so the card must not either.
       setNotice(null);
       const detail = err instanceof Error ? err.message : 'Failed to update status';
+      // Same publish gate, so the same re-prompt (bd polyglot-pdf-xzw5). Local
+      // mode runs the REAL backend (scripts/run-schema-editor.sh starts it),
+      // so this path is as live as the hosted one -- without this the author
+      // saw the raw AUTHOR_VERSION_REQUIRED token in red with no way to act on
+      // it, and an edition-less kit was un-publishable here entirely.
+      if (detail.startsWith('AUTHOR_VERSION_REQUIRED:')) {
+        setVersionPrompt(kit);
+        return;
+      }
       setError(detail);
       // A refused completion of the OPEN kit also lands on the strip's
       // refusal line (sprint-18 C1): the refusal renders next to the counts
@@ -966,6 +982,27 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             );
           })}
         </ul>
+      )}
+
+      {/* Local mode runs the REAL backend, so Mark complete hits the same
+          publish gate as the hosted catalogue and needs the same dialog
+          (bd polyglot-pdf-xzw5). Opened by the gate's refusal token, never
+          from local metadata -- edition_date lives in the schema, and this
+          view does not read every kit's schema either. */}
+      {versionPrompt && (
+        <AuthorVersionDialog
+          kitLabel={versionPrompt.label}
+          previousVersion={(() => {
+            const label = progress[versionPrompt.id]?.version?.label;
+            return label && label !== 'unknown' ? label : null;
+          })()}
+          busy={busy}
+          onCancel={() => setVersionPrompt(null)}
+          onConfirm={(version) => {
+            void handleSetStatus(versionPrompt, 'complete', version)
+              .finally(() => setVersionPrompt(null));
+          }}
+        />
       )}
     </div>
   );

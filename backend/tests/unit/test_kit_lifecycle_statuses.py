@@ -78,6 +78,387 @@ def _status(client, kit_id, status, replaces=None):
     return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=HDR)
 
 
+# --- author version at the publish gate (bd polyglot-pdf-xzw5) --------------
+
+
+def _no_edition_schema():
+    """The publish-gate fixture MINUS its government edition date."""
+    schema = json.loads(json.dumps(_SCHEMA))
+    meta = dict(schema.get("form_metadata") or {})
+    meta.pop("edition_date", None)
+    schema["form_metadata"] = meta
+    return schema
+
+
+def test_publishing_a_kit_with_no_edition_date_requires_an_author_version(client):
+    """Without this, every confirmation on a custom form names a bare sha256
+    fingerprint no one can read back in a dispute."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = _status(c, "custom", "complete")
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    # The prefix is a CONTRACT, not decoration: the editor opens its version
+    # dialog on exactly this token rather than re-deriving whether a kit needs
+    # one (the catalogue listing deliberately does not read every schema).
+    # Substring-matching the prose instead would break on any reword.
+    assert detail.startswith("AUTHOR_VERSION_REQUIRED:"), detail
+    assert "author version" in detail
+    assert _run(store.load_metadata("custom"))["status"] == "draft"
+
+
+def test_a_supplied_author_version_is_PERSISTED_into_the_served_schema(client):
+    """The marker must land in the SCHEMA, not just pass validation: the voice
+    path reads form_metadata off the schema it was served. This route otherwise
+    never writes the schema, so a validated-then-discarded value would leave the
+    published kit still fingerprint-only."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("  2026-08-07  ", "2026-08-07"),   # trimmed
+    ("v2026-08-07", "2026-08-07"),      # leading v stripped
+    ("V2026-08-07", "2026-08-07"),      # ...case-insensitively
+    ("v2", "2"),                        # short form still normalized
+    ("version-3", "version-3"),         # a WORD starting with v is untouched
+])
+def test_author_version_is_normalized(client, raw, expected):
+    """Strip a leading v/V only when a digit follows -- otherwise "version-3"
+    would silently become "ersion-3"."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": raw}, headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == expected
+
+
+def test_a_government_edition_date_needs_no_author_version(client):
+    """The box never appears for an official form, so publishing one must not
+    start demanding a field the client does not send."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")   # _SCHEMA carries edition_date
+
+    resp = _status(c, "w7", "complete")
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_an_author_version_is_IGNORED_when_a_government_edition_exists(client):
+    """The government marker wins the precedence, so a stray author_version
+    must not be written into an official form's schema and mislead a reader."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = c.post("/api/editor/kits/w7/status",
+                  json={"status": "complete", "author_version": "mine"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("w7", "schema.json"))
+    assert "author_version" not in (saved.get("form_metadata") or {})
+
+
+def test_a_published_author_version_CANNOT_be_changed(client):
+    """It is what existing confirmation records name (maintainer decision
+    2026-08-08). Changing it would silently re-point them at a revision those
+    clients never saw -- the hazard the retired-kit write-lock exists for."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    # PUBLISHED is the precondition, not merely "has a version" -- a draft
+    # carrying a version from a failed publish has no records to protect.
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-12-31"},
+                  headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "2026-01-01" in resp.json()["detail"]
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-01-01"
+
+
+def test_republishing_keeps_the_original_author_version(client):
+    """A re-press of Mark complete (or a republish after retirement) must not
+    require re-typing the version, nor change it."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = _status(c, "custom", "complete")   # no author_version supplied
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-01-01"
+
+
+def test_a_BROKEN_schema_reports_its_own_defect_not_the_version_prompt(client):
+    """ORDERING: the version gate runs AFTER validate/lint, never before.
+
+    Both refusals are 422s on the same request, so whichever runs first is the
+    one the author sees. My first version ran the version gate first, and an
+    author with a structurally broken schema was told to supply a version --
+    hiding the actual defect behind an unrelated prompt. The schema-quality
+    gates report what is WRONG; this one asks for something EXTRA, so it must
+    come last.
+
+    Pins the ordering directly rather than relying on the neighbouring suite,
+    where the two tests that caught this only fail incidentally.
+    """
+    c, _store, root = client
+    broken = json.loads(json.dumps(_no_edition_schema()))
+    broken["fields"] = "not-a-list"   # fails FormSchema validation outright
+    _make_kit(root, "custom", status="draft", schema=broken)
+
+    # No author_version supplied: BOTH gates would refuse. The schema one wins.
+    resp = _status(c, "custom", "complete")
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "cannot be marked complete" in detail, detail
+    assert "author version" not in detail, (
+        "the version prompt masked the real schema error: " + detail
+    )
+
+
+def test_a_FAILED_publish_does_not_lock_the_version_forever(client):
+    """The version is written before the translation sweep, and that sweep
+    routinely refuses ("N of M translations complete") -- leaving the kit in
+    DRAFT with a version on disk. Locking on the value's mere presence made
+    that failed attempt permanent: the author's corrected retry was refused,
+    citing confirmation records that do not exist, on a kit the route
+    explicitly expects them to re-press (Opus fresh-eyes, reproduced).
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    # Exactly the state a sweep-refused publish leaves behind.
+    schema["form_metadata"]["author_version"] = "typo-verison"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+def test_a_draft_carrying_a_version_republishes_without_retyping_it(client):
+    """The other half of the retry path: re-pressing Mark complete with nothing
+    new must keep the version already on disk, not demand it again."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-07"
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    resp = _status(c, "custom", "complete")
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+def test_the_ARCHIVE_is_keyed_on_the_same_marker_a_RECORD_names(client):
+    """The archive exists so a confirmation record's marker can retrieve the
+    exact bytes that client confirmed against. If the two disagree the whole
+    mechanism silently fails -- the bytes are on disk under a key nobody holds.
+
+    The archive resolver omitted author_version, so an edition-less kit archived
+    under sha256:... while its records named "2026-08-07" (Opus fresh-eyes ran
+    this end to end and got NOT FOUND). Pins the AGREEMENT, not either half.
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    _make_kit(root, "custom", status="draft", schema=schema)
+
+    # Publish with a version, then retire it -- retirement is what archives.
+    assert c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR).status_code == 200
+    assert _status(c, "custom", "unpublished").status_code == 200
+
+    published = _run(store.load_schema("custom", "schema.json"))
+    # The marker a confirmation record would carry for this revision...
+    from backend.utils.confirmation_logger import resolve_edition_marker
+    meta_block = published["form_metadata"]
+    record_marker = resolve_edition_marker(
+        meta_block.get("edition_date"), published, meta_block.get("author_version"),
+    )
+    assert record_marker == "2026-08-07"
+    # ...must be the key the archive is retrievable by.
+    archived = _run(store.load_archived_revision_or_none("custom", record_marker))
+    assert archived is not None, (
+        "archived bytes are unreachable by the marker its records name"
+    )
+    assert archived["form_metadata"]["author_version"] == "2026-08-07"
+
+
+@pytest.mark.parametrize("stored,supplied", [
+    # Supplied side unnormalized -- fixed by hoisting normalization ahead of
+    # the comparison (Opus fresh-eyes reproduced the false 409 live).
+    ("2026-01-01", "v2026-01-01"),
+    ("2026-01-01", "  2026-01-01  "),
+    # STORED side unnormalized: reachable because a schema can arrive from
+    # outside this route (hand-edited, or onboarded via git), and this route
+    # is not the only thing that can put bytes in a kit. Normalizing only the
+    # supplied side would 409 these as changes.
+    ("v2026-01-01", "2026-01-01"),
+    ("  2026-01-01  ", "2026-01-01"),
+    # Both sides unnormalized, spelled differently.
+    ("v2026-01-01", "  2026-01-01  "),
+])
+def test_republishing_an_EQUIVALENT_version_is_not_a_change(client, stored, supplied):
+    """Equivalent-after-normalization is the SAME revision, so a republish must
+    not 409 as if the author changed it -- a refusal they could not have
+    satisfied, since no other spelling was available to them.
+
+    Both sides go through the rule: normalizing only one leaves the other free
+    to differ, and a stored value can arrive from outside this route.
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = stored
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": supplied},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_a_GENUINELY_different_version_is_still_refused(client):
+    """The other half: normalizing both sides must not blur a real change into
+    an accepted republish."""
+    c, _store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-12-31"},
+                  headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_a_PUBLISHED_kit_with_no_version_refuses_to_gain_one(client):
+    """The version write is the only schema write on this route, and a
+    published kit's bytes are what its confirmation records were confirmed
+    against. Accepting a version here rewrote them IN PLACE with no archive --
+    the exact case the write-lock on all six sibling routes prevents (Opus
+    fresh-eyes: "SCHEMA REWRITTEN IN PLACE WHILE WRITE-LOCKED: True").
+    """
+    c, store, root = client
+    # A legacy kit: live, no edition date, no version.
+    _make_kit(root, "legacy", status="complete", schema=_no_edition_schema())
+    before = _run(store.load_schema("legacy", "schema.json"))
+
+    resp = c.post("/api/editor/kits/legacy/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "already published without a version" in resp.json()["detail"]
+    # The published bytes are untouched.
+    assert _run(store.load_schema("legacy", "schema.json")) == before
+
+
+def test_that_legacy_kit_CAN_be_versioned_by_republishing_it(client):
+    """The refusal above must not be a dead end: the documented route (revert
+    to draft, publish again) has to actually work, or a legacy kit could never
+    gain a version at all."""
+    c, store, root = client
+    _make_kit(root, "legacy", status="complete", schema=_no_edition_schema())
+
+    assert _status(c, "legacy", "draft").status_code == 200
+    resp = c.post("/api/editor/kits/legacy/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("legacy", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+def test_a_RETIRED_edition_less_kit_can_still_return_to_service(client):
+    """A retired kit is serving nobody, and republish is its ONE documented
+    route back (bd polyglot-pdf-6dz0 makes unpublished -> draft a hard 409).
+
+    Scoping the "already published without a version" refusal to write-locked
+    kits GENERALLY closed every exit for an edition-less retired kit -- and the
+    409 it emitted told the author to revert to draft, which the API forbids.
+    Bricked exactly the kit class this bead exists to serve (Opus fresh-eyes
+    round 3, reproduced across all four exits).
+    """
+    c, store, root = client
+    _make_kit(root, "retired", status="unpublished", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/retired/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("retired"))["status"] == "complete"
+    saved = _run(store.load_schema("retired", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-07"
+
+
+@pytest.mark.parametrize("status,expected", [
+    # LIVE: accepting a version would rewrite bytes that records name.
+    ("complete", 409),
+    # RETIRED: serving nobody; republish is the documented way back.
+    ("unpublished", 200),
+    # DRAFT: not published at all, nothing to protect.
+    ("draft", 200),
+])
+def test_adding_a_version_is_refused_ONLY_for_a_currently_live_kit(
+    client, status, expected,
+):
+    """Enumerates the whole status dimension rather than sampling it. The
+    round-2 fix keyed on "write-locked", which lumps `unpublished` in with
+    `complete` -- a distinction that only shows up if every value is tried."""
+    c, _store, root = client
+    _make_kit(root, "k", status=status, schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/k/status",
+                  json={"status": "complete", "author_version": "2026-08-07"},
+                  headers=HDR)
+
+    assert resp.status_code == expected, resp.text
+
+
+def test_a_whitespace_only_author_version_is_refused(client):
+    """Mirrors the blank-edition rule: whitespace names no revision."""
+    c, _store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "   "},
+                  headers=HDR)
+
+    assert resp.status_code == 422, resp.text
+
+
 # --- the status model itself ------------------------------------------------
 
 

@@ -83,6 +83,18 @@ The top-level container for the entire form definition.
 }
 ```
 
+**Identifying the revision.** `form_metadata.edition_date` is the government's
+own marker and is what confirmation records name. A form that has none -- a
+firm's own intake sheet -- instead carries `form_metadata.author_version`, a
+plain string the author supplies when publishing (e.g. `"2026-08-07"`); the
+publish gate REQUIRES one, and it cannot be changed afterwards because existing
+confirmation records name it. A kit with neither falls back to a content
+fingerprint. Full precedence and rationale:
+[`docs/standards/confirmation-and-audit.md`](standards/confirmation-and-audit.md).
+
+Note that `version` is a DIFFERENT field: auto-extracted display text (real
+shipped values include `"draft"`), not a revision marker.
+
 ---
 
 ### 2. FormPart (Hierarchical Grouping)

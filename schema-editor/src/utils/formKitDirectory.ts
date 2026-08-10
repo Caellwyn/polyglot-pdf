@@ -275,7 +275,12 @@ const LOW_CONFIDENCE_MAX = 0.5;
 /** Build a card version summary from a schema's form_metadata (bd s4dp.2). */
 export function versionInfoFromSchema(schema: FormSchema): KitVersionInfo {
   const meta = (schema.form_metadata ?? {}) as FormSchema['form_metadata'];
-  const label = meta?.edition_date || meta?.version || 'unknown';
+  // author_version sits between the government edition and the auto-extracted
+  // `version` string, mirroring the marker precedence the audit trail records
+  // (confirmation_logger.resolve_edition_marker, bd polyglot-pdf-xzw5). Without
+  // this slot a kit the author just versioned still renders as 'unknown' with a
+  // verify hint -- telling them to fix what they had already fixed.
+  const label = meta?.edition_date || meta?.author_version || meta?.version || 'unknown';
   const conf = meta?.version_confidence;
   // Low-confidence when the score is explicitly low, OR the version is unknown.
   const lowConfidence =

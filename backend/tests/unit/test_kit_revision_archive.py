@@ -31,15 +31,20 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _schema(*field_ids, edition=None):
+def _schema(*field_ids, edition=None, author_version=None):
     """A minimal schema whose ANSWERABLE SHAPE is driven by field_ids -- which
     is what the fingerprint marker keys on."""
     out = {
         "schema_version": "2",
         "fields": [{"id": fid, "type": "text"} for fid in field_ids],
     }
+    meta = {}
     if edition is not None:
-        out["form_metadata"] = {"edition_date": edition}
+        meta["edition_date"] = edition
+    if author_version is not None:
+        meta["author_version"] = author_version
+    if meta:
+        out["form_metadata"] = meta
     return out
 
 
@@ -267,6 +272,64 @@ def test_retrieval_refuses_to_guess_between_colliding_revisions(tmp_path):
     with pytest.raises(AmbiguousRevision) as exc:
         _resolve_revision(store, "w7", "12/2024")
     assert len(exc.value.candidates) == 2
+
+
+def test_retrieval_finds_a_LIVE_author_versioned_revision(tmp_path):
+    """The reader must resolve through the SAME three ranks the record did.
+
+    This tool closes the audit loop: a record names a marker, this produces the
+    bytes. Its live-schema branch still called resolve_edition_marker with two
+    arguments, so a currently-published edition-less kit recorded
+    "2026-08-07" while the tool computed sha256:<hex> and exited 1 "No revision
+    found" -- the audit trail naming a revision the retrieval could not
+    produce, which is the exact failure the archive exists to prevent.
+
+    Easy to miss because the ARCHIVE half was fixed and pinned in this same
+    bead; only the live half lagged (Opus outer cross-surface review,
+    reproduced end to end).
+    """
+    store = LocalFormKitStore(tmp_path)
+    live = _schema("a", "b", author_version="2026-08-07")
+    _make_kit(tmp_path, "acme", live)
+
+    kind, found = _resolve_revision(store, "acme", "2026-08-07")
+
+    assert kind == "current"
+    assert found == live
+
+
+def test_retrieval_of_a_live_author_versioned_kit_agrees_with_the_RECORD(tmp_path):
+    """Pins the AGREEMENT rather than either side: whatever marker a
+    confirmation record would carry for this schema must be the marker that
+    retrieves it."""
+    from backend.utils.confirmation_logger import resolve_edition_marker
+
+    store = LocalFormKitStore(tmp_path)
+    live = _schema("a", "b", author_version="2026-08-07")
+    _make_kit(tmp_path, "acme", live)
+
+    meta = live["form_metadata"]
+    record_marker = resolve_edition_marker(
+        meta.get("edition_date"), live, meta.get("author_version"),
+    )
+    assert record_marker == "2026-08-07"      # not a sha256: fingerprint
+
+    kind, found = _resolve_revision(store, "acme", record_marker)
+    assert (kind, found) == ("current", live)
+
+
+def test_a_government_edition_still_outranks_a_stray_author_version(tmp_path):
+    """The reader's precedence must match the record's, not merely include the
+    new rank -- otherwise a kit carrying both retrieves under the wrong one."""
+    store = LocalFormKitStore(tmp_path)
+    live = _schema("a", edition="12/2024", author_version="2026-08-07")
+    _make_kit(tmp_path, "w7", live)
+
+    kind, found = _resolve_revision(store, "w7", "12/2024")
+    assert (kind, found) == ("current", live)
+
+    with pytest.raises(FormKitNotFound):
+        _resolve_revision(store, "w7", "2026-08-07")
 
 
 def test_retrieval_finds_the_only_revision_for_a_marker(tmp_path):
