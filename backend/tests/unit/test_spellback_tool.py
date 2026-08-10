@@ -526,33 +526,57 @@ class TestSpellbackText:
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[3]
-        targets = [
-            root / "docs/components/voice-ai.md",
-            root / "docs/components/tool-call-flow.md",
-            root / "docs/standards/ws-protocol.md",
-            root / "docs/standards/voice-and-vad.md",
-            root / "backend/services/request_coordinator.py",
-            root / "backend/services/callback_handler.py",
-            root / "backend/services/spellback_tts.py",
-            root / "frontend/src/shared/spellbackPlayer.ts",
-        ]
-        # The clip's locale is session-derived: no prose may assert the voice
-        # is built as en-US-Chirp3-HD-<persona>.
+        # The surface is DERIVED, not hand-listed (a hand-list is the same
+        # omission bug one level up): every non-journal doc/source file that
+        # mentions the feature by name is in scope.
+        candidates = []
+        for pattern in ("docs/**/*.md", "backend/**/*.py",
+                        "frontend/src/**/*.ts"):
+            candidates.extend(root.glob(pattern))
+        targets = []
+        for path in candidates:
+            parts = path.as_posix()
+            if "/journal/" in parts or "/node_modules/" in parts:
+                continue  # journal is the chronological record; exempt
+            if path.name == Path(__file__).name:
+                continue  # this test names the stale claims on purpose
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if "spellback" in text.lower() or "spell-back" in text.lower():
+                targets.append((path, text))
+        assert len(targets) >= 8, (
+            "surface enumeration found only %d files -- the glob is wrong"
+            % len(targets))
+
+        # Claim A: the clip's voice locale is hardcoded to en-US. Matches any
+        # phrasing that puts en-US next to the Chirp3 voice pattern, or that
+        # says the clip is always/regardless-of-session English.
         hardcoded_en_us = re.compile(
-            r"as\s+`?en-US-Chirp3-HD-<", re.IGNORECASE)
-        # The ladder degrades; no prose may say a persona miss 502s the clip.
+            r"en-US-Chirp3-HD-[<{`]?(?:persona|name|LIVE_VOICE_NAME)"
+            r"|(?:ALWAYS|always)\s+en-US\b"
+            r"|en-US\s+regardless of (?:the )?session",
+            re.IGNORECASE)
+        # Claim B: a persona with no twin in the locale 502s the clip. Matches
+        # any sentence tying 502/fail to a missing persona/voice/twin --
+        # EXCEPT a negation ("never 502s", "can NOT 502"), which is the
+        # corrected prose asserting the opposite.
         persona_502 = re.compile(
-            r"clip 502s if that persona", re.IGNORECASE)
+            r"(?<!never )(?<!cannot )(?<!can not )(?<!no longer )502s?"
+            r"[^.\n]{0,80}(?:persona|voice|twin)"
+            r"|(?:persona|voice|twin)[^.\n]{0,80}"
+            r"(?<!never )(?<!cannot )(?<!can not )(?<!no longer )502s?\b",
+            re.IGNORECASE)
 
         offenders = []
-        for path in targets:
-            if not path.exists():
-                continue
-            text = path.read_text(encoding="utf-8")
+        for path, text in targets:
             for label, pattern in (("hardcoded en-US voice", hardcoded_en_us),
                                    ("persona-miss 502 claim", persona_502)):
-                if pattern.search(text):
-                    offenders.append("%s: %s" % (path.name, label))
+                hit = pattern.search(text)
+                if hit:
+                    offenders.append("%s: %s (%r)"
+                                     % (path.name, label, hit.group(0)[:60]))
 
         assert not offenders, (
             "pre-44ywm clip design still asserted in: %s" % offenders)
