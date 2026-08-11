@@ -49,6 +49,22 @@ _log = structlog.get_logger()
 # are pinned to each other by a static test.
 MAX_SPELLBACK_CHARS = 60
 
+# Loudness leveling against the Live model's voice (bd polyglot-pdf-9oejl).
+# The two audio paths are different systems -- the model's PCM plays through
+# the Web Audio context, the clip is an MP3 in an HTMLAudioElement -- and
+# nothing normalized one against the other, so the clip landed ~5 dB quieter
+# and sounded odd mid-conversation. The client-side lever cannot fix it
+# (HTMLAudioElement.volume only ATTENUATES, and it is already at 1.0), so the
+# leveling happens in the ENCODE.
+#
+# MEASURED, not derived (2026-08-10): speech-gated RMS over 63 real Gemini
+# output dumps = 0.1487; the clip at +0 dB = 0.0777 (52%). volume_gain_db is
+# NOT a clean linear boost -- +5 dB reached only 77% of the model's level,
+# while +6.0 dB lands at 96% with peaks at 0.714 (no clipping; full scale is
+# 1.0). Re-measure with scripts against fresh dumps if the Live voice or the
+# TTS voice changes; do not re-derive this number from the dB ratio alone.
+SPELLBACK_VOLUME_GAIN_DB = 6.0
+
 _FRAMES_PATH = Path(__file__).resolve().parent / "spellback_frames.json"
 _FALLBACK_LOCALE = "en-US"
 
@@ -228,6 +244,7 @@ def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
         input=texttospeech.SynthesisInput(text=text),
         voice=texttospeech.VoiceSelectionParams(**voice_params),
         audio_config=texttospeech.AudioConfig(
+            volume_gain_db=SPELLBACK_VOLUME_GAIN_DB,
             audio_encoding=texttospeech.AudioEncoding.MP3
         ),
     )

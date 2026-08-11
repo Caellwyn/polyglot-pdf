@@ -581,6 +581,52 @@ class TestSpellbackText:
         assert not offenders, (
             "pre-44ywm clip design still asserted in: %s" % offenders)
 
+    def test_clip_is_loudness_leveled_against_the_model_voice(self):
+        """The encode must carry the measured gain (bd polyglot-pdf-9oejl).
+
+        Without it the clip plays ~5 dB under the model's voice and sounds odd
+        mid-conversation, and the client cannot compensate -- an
+        HTMLAudioElement's volume only ATTENUATES and is already at 1.0. So
+        the gain lives in the encode, and a drop back to the API default is a
+        silent audio regression no other test would catch.
+        """
+        from unittest.mock import MagicMock
+
+        from backend.services import spellback_tts
+
+        assert spellback_tts.SPELLBACK_VOLUME_GAIN_DB > 0, (
+            "the clip must be boosted, not attenuated")
+
+        captured = {}
+
+        class _FakeTTS:
+            AudioEncoding = MagicMock(MP3="MP3")
+
+            @staticmethod
+            def SynthesisInput(**kw):
+                return kw
+
+            @staticmethod
+            def VoiceSelectionParams(**kw):
+                return kw
+
+            @staticmethod
+            def AudioConfig(**kw):
+                captured.update(kw)
+                return kw
+
+        fake_client = MagicMock()
+        fake_client.synthesize_speech.return_value = MagicMock(
+            audio_content=b"MP3")
+        with patch.dict("sys.modules",
+                        {"google.cloud": MagicMock(texttospeech=_FakeTTS)}), \
+             patch.object(spellback_tts, "_get_client", lambda: fake_client):
+            spellback_tts._synthesize_sync("You said J, O.", "", "en-US")
+
+        assert captured.get("volume_gain_db") == (
+            spellback_tts.SPELLBACK_VOLUME_GAIN_DB), (
+            "the synthesis request dropped the loudness gain")
+
     def test_char_cap_matches_frontend_mirror(self):
         """MAX_SPELLBACK_CHARS is mirrored (not shared) as SPELLBACK_MAX_CHARS
         in frontend/src/shared/spellbackPlayer.ts -- the client's fail-fast

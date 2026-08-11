@@ -1872,15 +1872,23 @@ class LiveAIGemini(ILiveAI):
             self._log.info("[voice] speech_config.voice_config applied",
                           voice_name=voice_name)
 
-        # LOCAL-DEV-ONLY sampling override (bd polyglot-pdf-0rpu, maintainer
-        # 2026-08-05: "add it only for local development... there's not much
-        # point in having a slider for deployment anyway").
+        # Sampling temperature (bd polyglot-pdf-0rpu; PROMOTED to a deployable
+        # setting by the maintainer 2026-08-10).
         #
-        # DOUBLE-GATED and it must stay that way: DEV_LOGGING_ENABLED (the
-        # gitignored backend/.env.DEV marker file, which cannot exist on Cloud
-        # Run) AND a non-empty LIVE_TEMPERATURE. A deployed service therefore
-        # sends NO temperature and keeps Google's default, byte-identically to
-        # before this block existed.
+        # HISTORY, because this reverses an explicit earlier ruling: it landed
+        # LOCAL-DEV-ONLY, double-gated on DEV_LOGGING_ENABLED, on the maintainer's
+        # 2026-08-05 call that "there's not much point in having a slider for
+        # deployment anyway". That changed once 0.4 was judged BY EAR to make the
+        # model's speech measurably clearer, and once every spell-back validation
+        # run (bd 22h1f / 44ywm) was conducted at 0.4 -- deploying at Google's
+        # default 1.0 would have shipped a configuration we never tested. So the
+        # dev-marker gate is gone and LIVE_TEMPERATURE is honored wherever it is
+        # set; the local "slider" is simply the same env var, unchanged.
+        #
+        # STILL UNSET BY DEFAULT: the setting defaults to "" (config.py), and an
+        # empty value sends NO temperature, so a deploy that does not set it
+        # keeps Google's default byte-identically to before. Only an explicit
+        # value changes behavior.
         #
         # WHY it exists: a logged local session (gemini_2026-08-05.jsonl) shows
         # the model handed "Stored value: name_1b_last = 'Smith'" and then
@@ -1892,27 +1900,25 @@ class LiveAIGemini(ILiveAI):
         # DO NOT set 0 on native audio: googleapis/js-genai#1578 reports
         # runaway/no-audio output and a 1011 session close at temperature 0, and
         # Google warns that below-1.0 values can loop or degrade. Sweep 0.3-0.6.
-        if DEV_LOGGING_ENABLED:
-            raw_temp = (getattr(settings, "LIVE_TEMPERATURE", "") or "").strip()
-            if raw_temp:
-                try:
-                    temp = float(raw_temp)
-                except ValueError:
-                    self._log.warn("[dev] LIVE_TEMPERATURE is not a number -- ignoring",
-                                   value=raw_temp)
+        raw_temp = (getattr(settings, "LIVE_TEMPERATURE", "") or "").strip()
+        if raw_temp:
+            try:
+                temp = float(raw_temp)
+            except ValueError:
+                self._log.warn("LIVE_TEMPERATURE is not a number -- ignoring",
+                               value=raw_temp)
+            else:
+                # Clamp away from the known-bad 0 while leaving the useful
+                # range free; a typo must not silently break every session.
+                if temp <= 0.0 or temp > 2.0:
+                    self._log.warn(
+                        "LIVE_TEMPERATURE out of the safe range "
+                        "(0 < t <= 2; 0 is known to 1011 native audio) -- ignoring",
+                        value=temp)
                 else:
-                    # Clamp away from the known-bad 0 while leaving the useful
-                    # range free; a typo must not silently break every session.
-                    if temp <= 0.0 or temp > 2.0:
-                        self._log.warn(
-                            "[dev] LIVE_TEMPERATURE out of the safe range "
-                            "(0 < t <= 2; 0 is known to 1011 native audio) -- ignoring",
-                            value=temp)
-                    else:
-                        config['temperature'] = temp
-                        self._log.info("[dev] LIVE_TEMPERATURE applied "
-                                       "(LOCAL DEV ONLY -- never set in deploy)",
-                                       temperature=temp)
+                    config['temperature'] = temp
+                    self._log.info("LIVE_TEMPERATURE applied",
+                                   temperature=temp)
 
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
         # sliding window bounds the live context so per-turn re-billing stops compounding
