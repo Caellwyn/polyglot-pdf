@@ -134,6 +134,16 @@ Two properties of `author_version` matter for the audit trail:
   (bd `polyglot-pdf-6dz0`). A republish keeps the original; a changed value is a
   409. A new revision gets a new version.
 
+**Deleting a kit is guarded by these records** (bd `polyglot-pdf-6x1j`).
+`DELETE /api/editor/kits/{kit_id}` is author-only and removes the kit *and its
+revision archive*, so it asks first: any confirmation event naming the kit ->
+409 offering unpublish instead. Crucially, a check that CANNOT RUN is also a
+refusal -- `kit_has_confirmation_records` raises rather than returning False
+when the Firestore sink is disabled or its query fails, because the local JSONL
+fallback dies with the instance and its silence is not evidence of absence. An
+author working locally against the shared bucket would otherwise read "no
+records" and destroy the evidence behind real ones.
+
 `author_version` is NOT `form_metadata.version`, which is auto-extracted display
 text and frequently meaningless for this purpose (real shipped values include
 `"draft"` and `"v9_conformant"`).
