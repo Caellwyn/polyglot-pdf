@@ -45,8 +45,11 @@
   (redacted) logging locally. Full message bodies will NOT be captured.
 
 .PARAMETER Temperature
-  LOCAL-DEV-ONLY sampling temperature for the Live session (bd
-  polyglot-pdf-0rpu). Omit to send nothing and keep Google's default (1.0).
+  Sampling temperature for the Live session (bd polyglot-pdf-0rpu). Omit to
+  send nothing and keep Google's default (1.0). NOT local-dev-only any more:
+  LIVE_TEMPERATURE is honored in deployed services too as of 2026-08-10 (the
+  demo deploys at 0.4), so this switch is the local equivalent of that env
+  var, not a dev-only escape hatch.
 
   Why you would set it: at the default 1.0 the model sometimes prefers a
   conversationally-plausible continuation over the literal tool response. A
@@ -259,16 +262,13 @@ $BackendEnvVars = @{
     'VFF_DISABLE_AUTH'     = $DisableAuth
     'PYTHONPATH'           = $RepoRoot
     'PYTHONUNBUFFERED'     = '1'
-    # LOCAL-DEV-ONLY knobs (bd polyglot-pdf-0rpu). Both are additionally gated
-    # backend-side on backend/.env.DEV, so setting them here can never affect a
-    # deployed service. Empty string = "do not send" (Google's default stands).
+    # Empty string = "do not send" (Google's default stands).
+    # TEMPERATURE is a normal setting: honored here AND in deployed services
+    # since 2026-08-10 (the demo runs 0.4). TRANSCRIPTS is the PHI knob and is
+    # still additionally gated backend-side on backend/.env.DEV, so setting it
+    # here can never affect a deployed service.
     'LIVE_TEMPERATURE'     = $(if ($Temperature -gt 0) { "$Temperature" } else { '' })
     'LIVE_DEV_TRANSCRIPTS' = $(if ($Transcripts) { 'true' } else { 'false' })
-}
-if ($Temperature -gt 0 -and $NoDevLog) {
-    # The backend gate is the .env.DEV marker, not this flag -- say so plainly
-    # rather than letting the run look configured when it is not.
-    Write-Host "WARNING: -Temperature is ignored with -NoDevLog (the backend gates it on backend/.env.DEV)." -ForegroundColor Yellow
 }
 if ($Transcripts -and $NoDevLog) {
     Write-Host "WARNING: -Transcripts is ignored with -NoDevLog (the backend gates it on backend/.env.DEV)." -ForegroundColor Yellow
@@ -283,7 +283,7 @@ Write-Host ""
 $TempLabel = if ($Temperature -gt 0) { "$Temperature" } else { 'default(1.0)' }
 $TxLabel = if ($Transcripts) { 'ON' } else { 'off' }
 Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth)..." -ForegroundColor Cyan
-Write-Host "  temperature=$TempLabel   transcripts=$TxLabel   (both LOCAL-DEV ONLY)" -ForegroundColor DarkGray
+Write-Host "  temperature=$TempLabel   transcripts=$TxLabel (LOCAL-DEV ONLY)" -ForegroundColor DarkGray
 
 try {
     $BackendProc = Start-Process -FilePath $VenvPython -ArgumentList $BackendArgs `
