@@ -14,6 +14,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     listRemoteKits: vi.fn(),
     loadRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
+    deleteRemoteKit: vi.fn(),
     setRemoteLabel: vi.fn(),
     onboardRemoteKit: vi.fn(),
     extractRemoteKit: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  deleteRemoteKit,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type RemoteKitEntry, type KitStatusResult,
 } from '../utils/remoteKitStore';
@@ -1005,5 +1007,75 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     // Without this the retired kit vanishes from the breakdown and the
     // sub-counts silently stop summing to the total.
     expect(summary).toMatch(/1 retired/);
+  });
+});
+
+
+describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
+  async function openCards(role: 'author' | 'editor') {
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role={role} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+  }
+
+  it('offers Delete to an AUTHOR', async () => {
+    await openCards('author');
+    expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
+  });
+
+  it('does NOT offer Delete to an EDITOR', async () => {
+    // Maintainer rule: editors never take destructive actions. The server
+    // enforces it too (an editor holds a token and can call the API), but the
+    // button must not be there to click.
+    await openCards('editor');
+    expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+  });
+
+  it('requires the kit id to be typed before deleting', async () => {
+    await openCards('author');
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Delete .* permanently\?/)).toBeInTheDocument());
+    expect((screen.getByText('Delete permanently') as HTMLButtonElement).disabled).toBe(true);
+    expect(deleteRemoteKit).not.toHaveBeenCalled();
+  });
+
+  it('deletes and refreshes once the id matches', async () => {
+    vi.mocked(deleteRemoteKit).mockResolvedValueOnce(3);
+    await openCards('author');
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() =>
+      expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('keeps the dialog OPEN and shows the guard refusal verbatim', async () => {
+    // A 409 here is the guard working, not a transient error: it names why the
+    // form cannot be deleted and offers unpublish. Dismissing the dialog would
+    // strand that explanation away from the form it is about.
+    vi.mocked(deleteRemoteKit).mockRejectedValueOnce(
+      new Error('"done-kit" has confirmation records: clients have agreed to this '
+        + 'form. Unpublish it instead.'),
+    );
+    await openCards('author');
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/has confirmation records/)).toBeInTheDocument());
+    // Still open, so the refusal sits next to the form it names.
+    expect(screen.getByText('Delete permanently')).toBeTruthy();
   });
 });

@@ -502,6 +502,23 @@ export async function setRemoteStatus(
   return (await res.json()) as KitStatusResult;
 }
 
+/** Permanently delete a kit and everything under it, archives included.
+ *
+ * AUTHOR ONLY, and the only destructive call in this module (bd
+ * polyglot-pdf-6x1j). The server refuses with 409 both when confirmation
+ * records name the kit AND when it cannot verify whether they do -- callers
+ * should surface that detail verbatim rather than retrying, because a refusal
+ * here is the guard working, not a transient failure.
+ */
+export async function deleteRemoteKit(kitId: string): Promise<number> {
+  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not delete the form'));
+  const body = (await res.json()) as { objectsRemoved?: number };
+  return body.objectsRemoved ?? 0;
+}
+
 /** Rename a kit's DISPLAY label (bd 15ic) -- metadata-only; the kit's identity
  * (id / storage path) never changes, so nothing downstream breaks. */
 export async function setRemoteLabel(kitId: string, label: string): Promise<void> {
