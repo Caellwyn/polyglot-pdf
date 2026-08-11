@@ -1,19 +1,28 @@
-"""LOCAL-DEV-ONLY knobs must be unreachable in a deployed service.
+"""The PHI knobs must be unreachable in a deployed service.
 
 bd polyglot-pdf-0rpu, maintainer directive 2026-08-05:
-  - temperature: "add it only for local development... there's not much point in
-    having a slider for deployment anyway."
   - transcripts: "turn on transcripts for local dev ONLY. It's important for
     privacy that they are turned off for deploy."
 
-Both are DOUBLE-GATED on DEV_LOGGING_ENABLED -- the gitignored
-backend/.env.DEV marker file, which cannot exist on Cloud Run -- AND their own
-opt-in setting. The load-bearing assertion in this file is the PROD one: with
-BOTH env vars set, a service without the marker must send NEITHER.
+Transcript capture and the output-audio dump are DOUBLE-GATED on
+DEV_LOGGING_ENABLED -- the gitignored backend/.env.DEV marker file, which
+cannot exist on Cloud Run -- AND their own opt-in setting. The load-bearing
+assertion in this file is the PROD one: with the env var set, a service
+without the marker must still capture NOTHING.
 
-Transcripts are PHI (docs/standards/hipaa-pii-policy.md). A regression here is a
+Both are PHI (docs/standards/hipaa-pii-policy.md). A regression here is a
 privacy incident, not a bug, so the prod-negative cases are asserted first and
 for each knob independently.
+
+TEMPERATURE IS NO LONGER ONE OF THESE (maintainer 2026-08-10). It was
+dev-marker-gated under the same 2026-08-05 directive ("not much point in
+having a slider for deployment"), but that was reversed: 0.4 was judged by ear
+to make the model's speech clearer, and every spell-back validation run (bd
+22h1f / 44ywm) used it, so the demo deploys at 0.4 rather than shipping an
+untested 1.0. It is now honored wherever it is set. Temperature is NOT PHI --
+it carries no user data -- so promoting it does not touch the privacy
+guarantee this file exists to protect, and the tests below still assert that
+guarantee for the two knobs that DO carry PHI.
 """
 import logging
 
@@ -47,36 +56,55 @@ def _build(*, dev_marker: bool, temperature: str = "", transcripts: bool = False
 
 # --- the privacy/production guarantees (most important) ----------------------
 
-def test_production_ignores_both_knobs_even_when_both_env_vars_are_set():
-    """THE load-bearing test. No .env.DEV marker -> neither knob applies."""
+def test_production_ignores_the_PHI_knobs_even_when_the_env_var_is_set():
+    """THE load-bearing test. No .env.DEV marker -> no transcript capture,
+    whatever the env says. (Temperature is deliberately NOT asserted here --
+    it is not PHI and is now deployable; see test_temperature_applies_in_
+    production_too below.)"""
     adapter, config = _build(dev_marker=False, temperature="0.4", transcripts=True)
-    assert "temperature" not in config
     assert "output_audio_transcription" not in config
+    assert "input_audio_transcription" not in config
     assert adapter._dev_transcripts is False
 
 
-def test_production_config_is_unchanged_by_the_knobs_existing():
-    """Byte-comparable: the deployed config with the env vars set must equal the
-    one without them, so shipping this feature changed nothing in production."""
+def test_production_config_is_unchanged_by_the_PHI_knobs_existing():
+    """Byte-comparable: with the transcript env var set but no marker, the
+    deployed config must equal the one without it -- the capture feature
+    changed nothing in production. Temperature is held constant across both
+    sides because it IS meant to apply in production now."""
     _, with_vars = _build(dev_marker=False, temperature="0.6", transcripts=True)
-    _, without_vars = _build(dev_marker=False, temperature="", transcripts=False)
+    _, without_vars = _build(dev_marker=False, temperature="0.6", transcripts=False)
     assert with_vars == without_vars
 
 
-def test_dev_marker_alone_does_not_enable_either_knob():
-    """The marker is necessary but NOT sufficient -- each knob needs its own
+def test_dev_marker_alone_does_not_enable_capture():
+    """The marker is necessary but NOT sufficient -- capture needs its own
     opt-in, so simply developing locally does not start writing PHI."""
     adapter, config = _build(dev_marker=True)
-    assert "temperature" not in config
     assert "output_audio_transcription" not in config
     assert adapter._dev_transcripts is False
 
 
-# --- the local-dev behaviour the maintainer asked for ------------------------
+# --- temperature: deployable since 2026-08-10 --------------------------------
 
 def test_dev_applies_temperature():
     _, config = _build(dev_marker=True, temperature="0.4")
     assert config["temperature"] == 0.4
+
+
+def test_temperature_applies_in_production_too():
+    """The 2026-08-10 promotion: a deployed service (no .env.DEV marker) MUST
+    honor LIVE_TEMPERATURE, or the demo silently runs at Google's default 1.0
+    -- a configuration no spell-back validation run ever used."""
+    _, config = _build(dev_marker=False, temperature="0.4")
+    assert config["temperature"] == 0.4
+
+
+def test_unset_temperature_still_sends_nothing_in_production():
+    """Promotion must not mean 'always send a temperature': unset stays unset,
+    so a deploy that does not opt in keeps Google's default exactly as before."""
+    _, config = _build(dev_marker=False, temperature="")
+    assert "temperature" not in config
 
 
 def test_dev_enables_transcript_capture():

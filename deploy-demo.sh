@@ -97,7 +97,19 @@ if [ "$DEPLOY_GCP" = true ]; then
     # on/1500 in backend/config.py now, so this deploy no longer sets them.
     # Emergency fallback to the legacy section-reset flow: add USE_DTI=false,
     # CONTINUOUS_SESSION=false,CONTEXT_COMPRESSION_ENABLED=false here.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    # SPELL-BACK CUTOVER (bd polyglot-pdf-22h1f + 44ywm; maintainer go-ahead
+    # 2026-08-10). SPELLBACK_TOOL_ENABLED turns on the deterministic
+    # name_spellback tool: the model stops speaking spellings and the client
+    # plays a Cloud TTS clip built from the STORED value instead -- the fix for
+    # the bd 0rpu sticky-first-spelling defect, where the model's speech read
+    # back a WRONG name. Roll back by dropping this var and redeploying (the
+    # tool goes dark; the SI addendum and declaration go with it).
+    #
+    # LIVE_TEMPERATURE=0.4 is the maintainer's by-ear clarity setting, and the
+    # temperature EVERY spell-back validation run used -- deploying at Google's
+    # default 1.0 would ship a configuration we never tested. This var only
+    # became deployable in this same change (it was dev-marker-gated before).
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

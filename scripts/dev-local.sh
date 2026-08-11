@@ -26,7 +26,10 @@
 #   ./scripts/dev-local.sh backend      # backend only
 #   ./scripts/dev-local.sh frontend     # frontend only (talks to whatever WS URL)
 #
-# LOCAL-DEV-ONLY voice knobs (bd polyglot-pdf-0rpu), passed as env vars:
+# Voice knobs (bd polyglot-pdf-0rpu), passed as env vars. Only the TRANSCRIPT
+# and AUDIO-DUMP knobs are local-dev-only (they capture PHI and are gated
+# backend-side on backend/.env.DEV); LIVE_TEMPERATURE is a normal setting,
+# honored in deployed services too since 2026-08-10 (the demo runs 0.4):
 #
 #   LIVE_TEMPERATURE=0.4 ./scripts/dev-local.sh
 #     Sampling temperature for the Live session. Unset = send nothing, keeping
@@ -212,7 +215,7 @@ start_backend() {
   echo "Starting backend (uvicorn :8000, VERTEXAI=$vertexai, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed, DISABLE_GEMINI_VAD=$vad_mode)..."
   # Echo the local-dev voice knobs so a sweep run is never ambiguous about which
   # value produced which recording (bd polyglot-pdf-0rpu).
-  echo "  temperature=${LIVE_TEMPERATURE:-default(1.0)}   transcripts=${LIVE_DEV_TRANSCRIPTS:-false}   (both LOCAL-DEV ONLY)"
+  echo "  temperature=${LIVE_TEMPERATURE:-default(1.0)}   transcripts=${LIVE_DEV_TRANSCRIPTS:-false} (LOCAL-DEV ONLY)"
   # Run from the SOURCE repo root so backend.main imports THIS checkout's code.
   # VFF_DISABLE_AUTH=true bypasses Firebase token verification on /ws/fill: locally,
   # firebase_admin uses ADC and verify_id_token() validates the token against the

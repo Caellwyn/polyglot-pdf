@@ -49,6 +49,29 @@ _log = structlog.get_logger()
 # are pinned to each other by a static test.
 MAX_SPELLBACK_CHARS = 60
 
+# Loudness leveling against the Live model's voice (bd polyglot-pdf-9oejl).
+# The two audio paths are different systems -- the model's PCM plays through
+# the Web Audio context, the clip is an MP3 in an HTMLAudioElement -- and
+# nothing normalized one against the other, so the clip landed ~5 dB quieter
+# and sounded odd mid-conversation. The client-side lever cannot fix it
+# (HTMLAudioElement.volume only ATTENUATES, and it is already at 1.0), so the
+# leveling happens in the ENCODE.
+#
+# MEASURED, not derived. Reproduce with:
+#   backend/.venv/Scripts/python.exe scripts/spikes/measure_spellback_loudness.py
+# 2026-08-10 run (63 real Gemini output dumps, median speech-gated RMS 0.1487):
+#   +0 dB -> 0.0840 (57% of the model)   peak 0.720
+#   +5 dB -> 0.1286 (86%)                peak 0.705
+#   +6 dB -> 0.1327 (89%)                peak 0.631
+#   +7 dB -> 0.1473 (99%)                peak 0.696   <- parity, no clipping
+# volume_gain_db is NOT a clean linear boost (a 5 dB deficit is not closed by
+# +5 dB), and Chirp3 is a GENERATIVE voice whose clip loudness varies a few
+# percent run to run -- so this number must be re-measured, never re-derived
+# from the dB arithmetic, and never quoted from a single earlier reading.
+# Re-run the script if either voice changes; confirm BY EAR (perceived
+# loudness is not RMS).
+SPELLBACK_VOLUME_GAIN_DB = 7.0
+
 _FRAMES_PATH = Path(__file__).resolve().parent / "spellback_frames.json"
 _FALLBACK_LOCALE = "en-US"
 
@@ -228,6 +251,7 @@ def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
         input=texttospeech.SynthesisInput(text=text),
         voice=texttospeech.VoiceSelectionParams(**voice_params),
         audio_config=texttospeech.AudioConfig(
+            volume_gain_db=SPELLBACK_VOLUME_GAIN_DB,
             audio_encoding=texttospeech.AudioEncoding.MP3
         ),
     )

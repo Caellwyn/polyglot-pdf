@@ -336,14 +336,17 @@ class Settings(BaseModel):
 	# must confirm the session connects; set LIVE_VOICE_NAME="" to fall back to
 	# the API default if it 1007s.
 	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Iapetus")
-	# LOCAL-DEV-ONLY sampling temperature for the Live session (bd
-	# polyglot-pdf-0rpu). EMPTY by default = do not send it at all, so the
-	# deployed service keeps Google's default (1.0) unchanged.
+	# Sampling temperature for the Live session (bd polyglot-pdf-0rpu; DEPLOYABLE
+	# since 2026-08-10). EMPTY by default = do not send it at all, so a service
+	# that does not set it keeps Google's default (1.0) unchanged.
 	#
-	# The adapter DOUBLE-GATES this on DEV_LOGGING_ENABLED (the gitignored
-	# backend/.env.DEV marker, which cannot exist on Cloud Run), so setting this
-	# env var in a deploy has NO effect -- deliberately. The maintainer's call:
-	# a temperature slider is a prototyping tool, not a production knob.
+	# Honored WHEREVER it is set -- local dev and deploys alike. It was
+	# originally local-dev-only (double-gated on the .env.DEV marker) on the
+	# ruling that "a temperature slider is a prototyping tool, not a production
+	# knob"; the maintainer reversed that once 0.4 was judged by ear to make the
+	# model's speech measurably clearer AND every spell-back validation run
+	# (bd 22h1f / 44ywm) was conducted at 0.4 -- shipping the demo at 1.0 would
+	# have been an untested configuration. The demo sets 0.4 (deploy-demo.sh).
 	#
 	# Range: sweep 0.3-0.6. NEVER 0 on native audio -- googleapis/js-genai#1578
 	# reports runaway/no-audio output and a 1011 session close at temperature 0.
