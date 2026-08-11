@@ -1,16 +1,18 @@
 """
-Spell-back TTS route (bd polyglot-pdf-22h1f).
+Spell-back TTS route (bd polyglot-pdf-22h1f / 44ywm).
 
-POST /api/tts/spellback -- synthesize a deterministic letter-by-letter clip of
-a client-supplied stored field value (Cloud Text-to-Speech), for the client to
-play at the verification moment INSTEAD of the Live model speaking the spelling
+POST /api/tts/spellback -- synthesize the deterministic verification clip
+("You said J, O, S, E. Is that correct?" in the SESSION language, regional
+voice) for a client-supplied stored field value, for the client to play at
+the verification moment INSTEAD of the Live model speaking the spelling
 (whose audio head has the measured sticky-first-spelling defect, bd 0rpu).
 
 The client is the only caller: it resolves the current field's stored value
 from its own sessionStorage (the backend is stateless and never holds field
-values) and posts it here for synthesis. The value is PII -- it is never
-logged (lengths only) and never persisted; the audio bytes are returned
-directly and discarded.
+values) and posts it here with the session's spoken-language name. The value
+is PII -- it is never logged (lengths only) and never persisted; the audio
+bytes are returned directly and discarded. The language name is not PII and
+maps through the same table as the ASR bias (language_codes.py).
 
 Gated on SPELLBACK_TOOL_ENABLED (503 when off) so the deployment surface does
 not expose a general-purpose TTS synthesizer while the feature is dark.
@@ -25,7 +27,6 @@ from backend.config import get_settings
 from backend.services.auth import require_auth
 from backend.services.spellback_tts import (
     MAX_SPELLBACK_CHARS,
-    resolve_spellback_voice,
     synthesize_spellback,
 )
 
@@ -36,6 +37,10 @@ router = APIRouter()
 
 class SpellbackRequest(BaseModel):
     value: str
+    # The session's spoken-language NAME as the frontend holds it ("Spanish").
+    # Optional for wire-compat with a client one deploy behind; absent means
+    # the en-US fallback frame/voice.
+    language: str | None = None
 
 
 @router.post("/api/tts/spellback")
@@ -54,7 +59,7 @@ async def spellback_tts(
 
     try:
         audio = await synthesize_spellback(
-            value, resolve_spellback_voice(settings)
+            value, settings, language_name=request.language
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid value")

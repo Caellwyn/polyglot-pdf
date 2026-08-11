@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the flag-gated `name_spellback` row -- the no-argument deterministic spell-back tool whose response is held for the client's blocking clip playback).*
+*Last updated: 2026-08-08 (bd polyglot-pdf-44ywm: the `name_spellback` clip is plain-text, session-language, and carries the whole verification question, so its delivered response tells the model to stay SILENT rather than ask. Row added by bd polyglot-pdf-22h1f.)*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -28,7 +28,7 @@ was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
 | `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |
 | `switch_to_field` | Jump to one specific field so it becomes current (correction/revisit path, distinct from switch_section) (bd polyglot-pdf-jnjj.36) | `field` |
-| `name_spellback` (FLAG-GATED, `SPELLBACK_TOOL_ENABLED` default off) | Play a deterministic letter-by-letter Cloud TTS clip of the CURRENT field's stored value for verification -- the model never speaks a spelling itself (bd polyglot-pdf-22h1f). The one round-trip whose tool response is deliberately held open for the client's blocking playback (90s cap). | *(none -- the client resolves the current field; model-supplied args are ignored)* |
+| `name_spellback` (FLAG-GATED, `SPELLBACK_TOOL_ENABLED` default off) | Play a deterministic Cloud TTS clip of the CURRENT field's stored value -- letters spoken one by one IN THE SESSION LANGUAGE, and the clip asks the verification question itself, so the model never speaks a spelling and does not re-ask afterwards (bd polyglot-pdf-22h1f + 44ywm). The one round-trip whose tool response is deliberately held open for the client's blocking playback (90s cap). | *(none -- the client resolves the current field; model-supplied args are ignored)* |
 
 ## Inbound: how a tool call reaches the backend
 

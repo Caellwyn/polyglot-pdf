@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-08 (merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
+*Last updated: 2026-08-08 (bd polyglot-pdf-44ywm: the spell-back clip is plain-text, session-language, and carries the verification question; plus bd polyglot-pdf-4hnyq -- the /ws/fill handshake no longer blocks ~9.4s on serial adapter construction. Earlier this day: the merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -182,16 +182,19 @@ assigns that key, so a bare assignment on either side would silently drop the
 other (tests pin both orderings plus the empty-name fallback). Set
 `LIVE_VOICE_NAME=""` to fall back to the API default.
 
-**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f):
-`spellback_tts.resolve_spellback_voice` derives the spell-back clip's Cloud
-TTS voice as `en-US-Chirp3-HD-<LIVE_VOICE_NAME>` so the clip matches the Live
-model's persona (the Chirp 3 HD family carries the Live API's prebuilt voice
-names; the derivation is endpoint-verified for Iapetus ONLY -- an alternate
-Live voice keeps the session healthy but the clip 502s if that persona has no
-Chirp3-HD twin, so re-verify at any voice change). Consequently
-`LIVE_VOICE_NAME=""` ALSO drops the clip to the TTS default voice
-(un-matching the persona); pin the clip voice explicitly via
-`SPELLBACK_TTS_VOICE` when tuning the Live voice.
+**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f, reshaped
+by bd polyglot-pdf-44ywm): `spellback_tts.resolve_spellback_voice` uses it as
+the PERSONA half of the spell-back clip's Cloud TTS voice, so the clip sounds
+like the same speaker -- the Chirp 3 HD family carries the Live API's prebuilt
+voice names. The LOCALE half comes from the SESSION language, not from
+`en-US`: a Spanish session derives `es-US-Chirp3-HD-<LIVE_VOICE_NAME>`. A
+persona that has no twin in that locale can NOT break the clip -- the ladder
+degrades (another Chirp3 persona in the same locale, then the locale's default
+voice), so changing the Live voice never 502s the spell-back. See the
+`name_spellback` bullet under Tool calling for the full ladder.
+`LIVE_VOICE_NAME=""` drops the clip to the locale's default voice (still the
+user's language, no longer the model's persona); pin the clip voice explicitly
+via `SPELLBACK_TTS_VOICE` to decouple it from the Live voice entirely.
 
 Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
 connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`
@@ -229,18 +232,39 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   `update_form_fields ""` path). Maps to the frontend `markFieldSkipped` (the
   `skipped` flag); the SI requires a verbal confirm first.
 - `name_spellback` -- FLAG-GATED (`SPELLBACK_TOOL_ENABLED`, default off; bd
-  polyglot-pdf-22h1f): deterministic spell-back for the current field. Takes NO
-  arguments; the client resolves the current field, reads the stored value,
-  fetches a letter-by-letter en-US Cloud TTS clip (`POST /api/tts/spellback`),
-  mutes the mic in every input mode, plays it BLOCKING, and acks
-  delivered/interrupted/error. The tool response is deliberately held open for
-  the playback (90s coordinator cap) so the model stays parked; while the flag
-  is on the DTI SI gets `DTI_SPELLBACK_SI_ADDENDUM` so the model never spells
-  aloud itself. Declared via `_build_tool_declarations` from
-  `SPELLBACK_TOOL_DECLARATION` (kept OUT of `TOOL_DECLARATIONS` until cutover).
-  Exists because the native-audio speech head re-emits the session's FIRST
-  spelled name on ~10% of spelled read-backs (the bd 0rpu sticky-first-spelling
-  attractor) while text + tool calls stay correct.
+  polyglot-pdf-22h1f + 44ywm): deterministic spell-back for the current field.
+  Takes NO arguments; the client resolves the current field, reads the stored
+  value, fetches a Cloud TTS clip (`POST /api/tts/spellback`, carrying the
+  value + the session language), mutes the mic in every input mode, plays it
+  BLOCKING, and acks delivered/interrupted/error. The tool response is
+  deliberately held open for the playback (90s coordinator cap) so the model
+  stays parked; while the flag is on the SI gets
+  `DTI_SPELLBACK_SI_ADDENDUM` (BOTH SI modes) so the model never spells aloud
+  itself. Declared via `_build_tool_declarations` from
+  `SPELLBACK_TOOL_DECLARATION` (kept OUT of `TOOL_DECLARATIONS` until cutover),
+  and the dispatch arm is flag-gated too so a hallucinated call while dark
+  refuses in-band. Exists because the native-audio speech head re-emits the
+  session's FIRST spelled name on ~10% of spelled read-backs (the bd 0rpu
+  sticky-first-spelling attractor) while text + tool calls stay correct.
+  - **The clip is PLAIN TEXT, never SSML, and carries the WHOLE verification
+    question** ("You said J, O, S, E. Is that correct?"). Chirp 3 HD voices are
+    LLM-based: they generate prosody from natural text, and SSML
+    `say-as`/`break` markup renders mechanically (robotic, unevenly spaced).
+    Measured: JOHNSON letters-only SSML 10.2s vs plain text WITH the question
+    4.9s, synthesis 2.3s -> 0.9s. So the `delivered` tool response tells the
+    model to STAY SILENT and listen -- the user has already been asked.
+  - **Session language, language-first voice ladder**
+    (`spellback_tts.resolve_spellback_voice`): frame + voice follow the
+    session's spoken language through the same name->BCP-47 map as the ASR
+    bias (`utils/language_codes.py`), so letters come out the way that
+    language's speakers say them. The ladder keeps the LANGUAGE ahead of the
+    persona: `{locale}-Chirp3-HD-{LIVE_VOICE_NAME}` -> any Chirp3 voice in
+    that locale -> the locale's default voice -> en-US only when the language
+    itself is unknown. (Live probe 2026-08-08: ru-RU carries 8 of the 30
+    personas and no Iapetus; fil-PH/ur-PK/fa-IR/af-ZA carry none.) Availability
+    is derived from `list_voices` at runtime, never a hand-pinned language
+    list. Frames + per-language punctuation words are DATA
+    (`backend/services/spellback_frames.json`, UTF-8).
 - `switch_to_field` -- jump the form's focus to ONE specific field (correction/
   revisit path: "go back to my mailing city"), by field_id, spoken name, or a
   rough description; DISTINCT from `switch_section`, which moves whole

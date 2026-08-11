@@ -1276,8 +1276,9 @@ class CallbackHandler:
         """Handle name_spellback tool call from Gemini (bd polyglot-pdf-22h1f).
 
         Deterministic spell-back: the CLIENT resolves the current field, reads
-        the stored value, fetches a Cloud TTS letter-by-letter clip, and plays
-        it BLOCKING (mic muted, model parked on this pending tool response) --
+        the stored value, fetches a Cloud TTS clip that spells it out in the
+        SESSION language and asks the verification question (bd 44ywm), and
+        plays it BLOCKING (mic muted, model parked on this pending response) --
         the model's speech path never carries the spelling, which is the fix
         for the sticky-first-spelling audio defect (bd 0rpu). The tool takes NO
         arguments on purpose (any model-supplied argument is ignored): the
@@ -1286,7 +1287,9 @@ class CallbackHandler:
 
         Three response variants, each an explicit behavioral instruction so the
         model's post-tool generation stays letter-free:
-        - delivered: ask for confirmation, do not repeat the letters;
+        - delivered: say NOTHING and wait -- the clip already asked the
+          verification question in the session language (bd 44ywm), so the
+          model neither re-asks nor repeats the letters;
         - interrupted (user pressed PTT mid-clip): listen to what the user is
           saying now -- their audio follows this response;
         - error/timeout: apologize and re-ask for the spelling; NEVER fall back
@@ -1332,14 +1335,17 @@ class CallbackHandler:
         else:
             status = ack.get("status")
             if status == "delivered":
+                # bd 44ywm: the clip carries the WHOLE verification question
+                # ("You said J, O, S, E. Is that correct?" in the session
+                # language), so the model's job now is to WAIT, not to ask.
                 response = {
                     "success": True,
                     "status": "delivered",
                     "message": (
-                        "The stored spelling was played to the user. Do NOT "
-                        "repeat or spell the value yourself. Ask the user, in "
-                        "the session language, whether the spelling is correct, "
-                        "and wait for their answer."
+                        "The user has ALREADY heard the stored spelling and "
+                        "been asked whether it is correct. Do NOT ask again, "
+                        "do NOT repeat or spell the value, and do NOT speak "
+                        "now -- stay silent and listen for their yes or no."
                     ),
                 }
             elif status == "interrupted":

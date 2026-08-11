@@ -129,9 +129,10 @@ describe('WebFormConnection spellback handler (bd polyglot-pdf-22h1f)', () => {
     fireSpellback(ws)
     await settle()
 
-    // Playback got the STORED value + the resolved current field id.
+    // Playback got the STORED value + the resolved current field id (+ the
+    // session language, undefined here since the test never selected one).
     expect(playback).toHaveBeenCalledTimes(1)
-    expect(playback).toHaveBeenCalledWith('Nguyen', 'p1_family_name')
+    expect(playback).toHaveBeenCalledWith('Nguyen', 'p1_family_name', undefined)
 
     const acks = spellbackAcks(ws)
     expect(acks).toHaveLength(1)
@@ -141,6 +142,39 @@ describe('WebFormConnection spellback handler (bd polyglot-pdf-22h1f)', () => {
     expect(acks[0].fetch_ms).toBe(240)
     // PII guard: the ack must never carry the field value.
     expect(JSON.stringify(acks[0])).not.toContain('Nguyen')
+  })
+
+  it('passes the session language to playback so the clip speaks it (bd 44ywm)', async () => {
+    const playback = vi.fn(async (): Promise<SpellbackPlaybackResult> => ({
+      status: 'delivered',
+    }))
+    const { conn, ws } = await connected(playback)
+
+    fillField(ws, 'Nguyen')
+    await settle()
+    // The handler refreshes from PERSISTED state before reading, so the
+    // language must live there (in-memory alone gets clobbered by the
+    // refresh -- the same state model the app uses).
+    ;(conn as any).state.selectedLanguage = 'Spanish'
+    const persisted = JSON.parse(
+      global.sessionStorage.getItem('schema_form_state') as string)
+    persisted.selectedLanguage = 'Spanish'
+    global.sessionStorage.setItem('schema_form_state', JSON.stringify(persisted))
+    ws.send.mockClear()
+
+    try {
+      fireSpellback(ws)
+      await settle()
+
+      expect(playback).toHaveBeenCalledWith('Nguyen', 'p1_family_name', 'Spanish')
+    } finally {
+      // This spec is the only one that PERSISTS a language, and the storage
+      // mock is rebuilt per test but the underlying module state is not --
+      // leaving it set leaked a Spanish session into a later suite file and
+      // failed an unrelated PDF-preview test. Clear it here rather than
+      // relying on the next file's beforeEach.
+      global.sessionStorage.removeItem('schema_form_state')
+    }
   })
 
   it('acks interrupted verbatim (the PTT barge-in outcome)', async () => {
@@ -232,7 +266,7 @@ describe('WebFormConnection spellback handler (bd polyglot-pdf-22h1f)', () => {
     fireSpellback(ws)
     await settle()
 
-    expect(playback).toHaveBeenCalledWith('Okafor', 'p1_family_name')
+    expect(playback).toHaveBeenCalledWith('Okafor', 'p1_family_name', undefined)
     expect(spellbackAcks(ws)[0].status).toBe('delivered')
   })
 })

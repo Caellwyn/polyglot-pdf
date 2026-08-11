@@ -47,7 +47,9 @@ const FETCH_TIMEOUT_MS = 20000
 // <audio> element that stalls without firing onended/onerror (an OS audio
 // interruption on mobile is the real case) would otherwise gate the mic
 // FOREVER -- and in open-mic mode there is no PTT press to release it. The
-// cap scales with the value (a 60-char clip runs ~55s at the SSML pacing).
+// cap scales with the value. Generous on purpose: the plain-text Chirp3 clip
+// (bd 44ywm) is far shorter than the SSML one this bound was sized against,
+// so the headroom now covers a slow voice rather than a slow format.
 const PLAYBACK_TIMEOUT_PER_CHAR_MS = 1500
 const PLAYBACK_TIMEOUT_FLOOR_MS = 15000
 // The CLIENT's whole call -- drain wait + fetch + playback -- must settle
@@ -95,8 +97,12 @@ export interface SpellbackPlayerDeps {
 }
 
 export interface SpellbackPlayer {
-  /** Fetch + play the clip for `value`. Resolves, never rejects. */
-  play: (value: string) => Promise<SpellbackPlaybackResult>
+  /**
+   * Fetch + play the clip for `value`, spoken in `language` (the session's
+   * spoken-language name; undefined -> en-US server-side). Resolves, never
+   * rejects.
+   */
+  play: (value: string, language?: string) => Promise<SpellbackPlaybackResult>
   /**
    * Teardown-path stop (disconnect/pause): stops any in-flight clip AND
    * poisons a call still parked on its fetch, resolving the round-trip as
@@ -199,7 +205,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
     }
   }
 
-  async function play(value: string): Promise<SpellbackPlaybackResult> {
+  async function play(value: string, language?: string): Promise<SpellbackPlaybackResult> {
     const am = deps.getAudioManager()
     if (!am) return { status: 'error', reason: 'no_audio_manager' }
     if (value.length > SPELLBACK_MAX_CHARS) {
@@ -260,7 +266,7 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
             'Content-Type': 'application/json',
             ...(token ? { Authorization: 'Bearer ' + token } : {}),
           },
-          body: JSON.stringify({ value }),
+          body: JSON.stringify({ value, ...(language ? { language } : {}) }),
           ...(controller ? { signal: controller.signal } : {}),
         })
         if (!resp.ok) {
