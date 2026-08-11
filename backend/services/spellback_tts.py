@@ -57,13 +57,20 @@ MAX_SPELLBACK_CHARS = 60
 # (HTMLAudioElement.volume only ATTENUATES, and it is already at 1.0), so the
 # leveling happens in the ENCODE.
 #
-# MEASURED, not derived (2026-08-10): speech-gated RMS over 63 real Gemini
-# output dumps = 0.1487; the clip at +0 dB = 0.0777 (52%). volume_gain_db is
-# NOT a clean linear boost -- +5 dB reached only 77% of the model's level,
-# while +6.0 dB lands at 96% with peaks at 0.714 (no clipping; full scale is
-# 1.0). Re-measure with scripts against fresh dumps if the Live voice or the
-# TTS voice changes; do not re-derive this number from the dB ratio alone.
-SPELLBACK_VOLUME_GAIN_DB = 6.0
+# MEASURED, not derived. Reproduce with:
+#   backend/.venv/Scripts/python.exe scripts/spikes/measure_spellback_loudness.py
+# 2026-08-10 run (63 real Gemini output dumps, median speech-gated RMS 0.1487):
+#   +0 dB -> 0.0840 (57% of the model)   peak 0.720
+#   +5 dB -> 0.1286 (86%)                peak 0.705
+#   +6 dB -> 0.1327 (89%)                peak 0.631
+#   +7 dB -> 0.1473 (99%)                peak 0.696   <- parity, no clipping
+# volume_gain_db is NOT a clean linear boost (a 5 dB deficit is not closed by
+# +5 dB), and Chirp3 is a GENERATIVE voice whose clip loudness varies a few
+# percent run to run -- so this number must be re-measured, never re-derived
+# from the dB arithmetic, and never quoted from a single earlier reading.
+# Re-run the script if either voice changes; confirm BY EAR (perceived
+# loudness is not RMS).
+SPELLBACK_VOLUME_GAIN_DB = 7.0
 
 _FRAMES_PATH = Path(__file__).resolve().parent / "spellback_frames.json"
 _FALLBACK_LOCALE = "en-US"
