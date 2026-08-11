@@ -499,6 +499,59 @@ def read_confirmation_log(form_session_id: str, strict: bool = False) -> list[di
     return events
 
 
+class ConfirmationCheckUnavailable(Exception):
+    """The durable confirmation record could not be consulted at all.
+
+    DISTINCT from "no records exist" (bd polyglot-pdf-6x1j), and the difference
+    is load-bearing: a caller about to do something irreversible must be able
+    to tell "I verified this is safe" from "I could not verify". Raised when
+    the Firestore sink is disabled or its query fails -- the local JSONL file
+    is a dev convenience that dies with the Cloud Run instance, so its silence
+    is not evidence of absence.
+    """
+
+
+def kit_has_confirmation_records(kit_id: str) -> bool:
+    """True when ANY confirmation event names this kit.
+
+    The guard behind irreversible kit deletion. Queries the Firestore sink on
+    kit_id equality -- an equality-only query needs no composite index, same
+    shape as the form_session_id read above.
+
+    Raises ConfirmationCheckUnavailable rather than returning False when the
+    durable record cannot be consulted (sink disabled, or the query failed).
+    Returning False there would let a caller delete a kit whose records exist
+    but are simply out of reach -- destroying the evidence the whole revision
+    archive exists to preserve, on the strength of a question never actually
+    asked (maintainer decision 2026-08-08: refuse when the check is
+    unavailable).
+    """
+    if not _firestore_enabled():
+        raise ConfirmationCheckUnavailable(
+            "the confirmation record sink is not enabled, so records cannot be checked"
+        )
+    try:
+        from backend.services.auth import get_db
+
+        collection = get_db().collection(_FIRESTORE_COLLECTION)
+        try:
+            from google.cloud.firestore_v1.base_query import FieldFilter
+
+            query = collection.where(filter=FieldFilter("kit_id", "==", kit_id))
+        except ImportError:
+            query = collection.where("kit_id", "==", kit_id)
+        # limit(1): existence only -- never stream a kit's whole history to
+        # answer a yes/no question.
+        return any(True for _ in query.limit(1).stream())
+    except Exception as e:
+        _log.error(
+            "confirmation_kit_existence_check_failed",
+            error=str(e),
+            kit_id=kit_id,
+        )
+        raise ConfirmationCheckUnavailable(str(e)) from e
+
+
 def _read_confirmation_log_firestore(form_session_id: str) -> list[dict]:
     """Fetch a form-session's events from the Firestore sink.
 
