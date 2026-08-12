@@ -329,14 +329,15 @@ class Settings(BaseModel):
 	# bad value breaks EVERY session. A 2026-07-30 probe (bd polyglot-pdf-e1x9)
 	# endpoint-verified 11 prebuilt voices ACCEPTED on
 	# gemini-live-2.5-flash-native-audio with `NotARealVoiceXYZ` correctly
-	# rejected -- but the probe did not record its 11 names, so a newly-chosen
-	# name is documented-valid (it is one of Google's 30 TTS voices, and
-	# native-audio accepts the TTS set) yet NOT endpoint-verified on this tier
-	# until it runs. Iapetus DID connect cleanly in the demo, so the tier
-	# accepts it -- it was replaced for DICTION, not availability; Algieba has
-	# not yet been connect-verified here. First deploy must confirm the session
-	# connects; set LIVE_VOICE_NAME="" to fall back to the API default if it
-	# 1007s.
+	# rejected -- but the probe did not record its 11 names and was never
+	# committed. VERIFY ANY NEW VOICE LOCALLY FIRST, it takes 30 seconds:
+	#   VERTEXAI=true backend/.venv/Scripts/python.exe \
+	#       backend/scripts/probe_voice_name.py <VoiceName>
+	# Local and demo hit the SAME Vertex Live endpoint, so a name that connects
+	# locally connects on the demo -- this is NOT a deploy-time-only risk.
+	# Both Algieba (2026-08-11) and Iapetus are connect-verified ACCEPTED on
+	# gemini-live-2.5-flash-native-audio by that probe. If a voice ever does
+	# 1007, set LIVE_VOICE_NAME="" to fall back to the API default.
 	# DEFAULT CHANGED 2026-08-11 (Iapetus -> Algieba): Iapetus was chosen for
 	# clarity but shipped with a MISPRONUNCIATION defect the maintainer heard
 	# in the live demo -- "not applicable" spoken as "not a pickle" (bd

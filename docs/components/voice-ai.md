@@ -203,15 +203,26 @@ voice), so changing the Live voice never 502s the spell-back. See the
 user's language, no longer the model's persona); pin the clip voice explicitly
 via `SPELLBACK_TTS_VOICE` to decouple it from the Live voice entirely.
 
-Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
-connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`
-rejected as `1007 Invalid voice name`. **That probe did not record which 11**, so
-the configured voice is documented-valid (native audio accepts the 30-voice TTS
-set) but not yet endpoint-verified here -- and an unaccepted name is a hard
-`1007` at connect, not a silent degrade. The first deploy must confirm the
-session connects, and whether the voice actually fixes the diction is only
-answerable **by listening**. (`Iapetus` DID connect fine in the demo, so the
-tier accepts it -- it was replaced for mispronunciation, not availability.)
+An unaccepted voice name is a hard `1007 Invalid voice name` at connect, not a
+silent degrade -- it breaks EVERY session. **Connect-verify any new voice
+locally before deploying**; it takes 30 seconds and local hits the SAME Vertex
+Live endpoint as the demo, so this is not a deploy-time-only risk:
+
+```
+VERTEXAI=true backend/.venv/Scripts/python.exe backend/scripts/probe_voice_name.py Algieba
+```
+
+With no arguments it probes the configured `LIVE_VOICE_NAME`. It exits non-zero
+if any voice is rejected (so it can gate a deploy) and always probes a bogus
+name as a CONTROL -- a probe that accepts everything proves nothing. `Algieba`
+and `Iapetus` are both verified ACCEPTED on
+`gemini-live-2.5-flash-native-audio` (2026-08-11); `NotARealVoiceXYZ` is
+correctly rejected. Rollback if one ever 1007s: `LIVE_VOICE_NAME=""` falls back
+to the API default.
+
+Connect-acceptance is all the probe can tell you. Whether a voice actually
+fixes the diction is only answerable **by listening** -- `Iapetus` connected
+fine and was still replaced, for mispronunciation.
 
 **Changing `LIVE_VOICE_NAME` also changes the SPELL-BACK CLIP's voice** (bd
 polyglot-pdf-44ywm: `resolve_spellback_voice` derives
