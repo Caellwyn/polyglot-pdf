@@ -261,14 +261,15 @@ def test_delete_kit_does_not_touch_a_SIBLING_with_a_shared_prefix(tmp_path):
 
 
 class _FilteringQuery:
-    def __init__(self, docs, field=None, value=None, limit=None):
+    def __init__(self, docs, field=None, value=None, limit=None, sink=None):
         self._docs = docs
         self._field = field
         self._value = value
         self._limit = limit
+        self._sink = sink
 
     def limit(self, n):
-        return _FilteringQuery(self._docs, self._field, self._value, n)
+        return _FilteringQuery(self._docs, self._field, self._value, n, self._sink)
 
     def stream(self):
         matched = [
@@ -277,6 +278,11 @@ class _FilteringQuery:
         ]
         if self._limit is not None:
             matched = matched[:self._limit]
+        # Record what this query actually streamed, so a test can assert the
+        # SHAPE of the request (see the limit(1) test) rather than only its
+        # boolean answer.
+        if self._sink is not None:
+            self._sink.append({"limit": self._limit, "streamed": len(matched)})
         for d in matched:
             m = MagicMock()
             m.to_dict.return_value = d
@@ -287,6 +293,7 @@ class _FilteringCollection:
     def __init__(self, docs):
         self.docs = docs
         self.where_calls = []
+        self.streams = []
 
     def where(self, *args, **kwargs):
         flt = kwargs.get("filter")
@@ -295,7 +302,7 @@ class _FilteringCollection:
         else:
             field, _op, value = args
         self.where_calls.append((field, value))
-        return _FilteringQuery(self.docs, field, value)
+        return _FilteringQuery(self.docs, field, value, sink=self.streams)
 
 
 class _FilteringDB:
@@ -354,15 +361,170 @@ def test_firestore_query_failure_is_UNAVAILABLE_not_absent(monkeypatch):
 
 def test_a_DISABLED_sink_is_UNAVAILABLE_not_absent(monkeypatch):
     """The production-shaped hazard: the sink defaults to off, and the local
-    JSONL fallback dies with the instance. Silence there is not evidence."""
+    JSONL fallback dies with the instance. Silence there is not evidence.
+
+    This test used to pass for the WRONG REASON (Opus fresh-eyes): its stub
+    raised AssertionError, which the function's broad `except Exception`
+    caught and re-raised as ConfirmationCheckUnavailable -- so deleting the
+    enabled-check entirely left it green. It now asserts get_db was never
+    reached AND that the message names the DISABLED sink rather than a query
+    failure, so the two paths into this exception cannot be confused.
+    """
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
     monkeypatch.setenv("CONFIRMATION_FIRESTORE_ENABLED", "false")
+    db = MagicMock(side_effect=AssertionError("get_db must not be called"))
+    monkeypatch.setattr("backend.services.auth.get_db", db)
 
-    def _explode():
-        raise AssertionError("get_db must not be called when the sink is off")
-
-    monkeypatch.setattr("backend.services.auth.get_db", _explode)
-
-    with pytest.raises(ConfirmationCheckUnavailable):
+    with pytest.raises(ConfirmationCheckUnavailable) as exc:
         kit_has_confirmation_records("w7")
+
+    # The short-circuit fired: the sink was never consulted at all.
+    assert db.call_count == 0
+    # ...and it says WHY, distinguishing "never asked" from "asked and failed".
+    assert "not enabled" in str(exc.value)
+
+
+# --- the GCS impl (the one that actually ships) ------------------------------
+#
+# LocalFormKitStore is the dev fallback; GCS is production. The sibling-prefix
+# test above exercises the LOCAL store, where a directory delete makes prefix
+# collision structurally impossible -- so it passed for a reason unrelated to
+# what its docstring claimed to protect (Opus fresh-eyes). These drive the GCS
+# implementation, where the trailing slash is the only thing preventing
+# collateral destruction.
+
+
+def _gcs(registry, prefix="form-kits"):
+    from backend.tests.unit.test_editor_kit_routes import _gcs_store
+    return _gcs_store(registry, prefix)
+
+
+def _seed(registry, *names):
+    for n in names:
+        registry[n] = {"data": b"x", "content_type": "application/json"}
+
+
+def test_gcs_delete_removes_the_kit_and_its_archive(tmp_path):
+    registry = {}
+    _seed(registry,
+          "form-kits/w7/schema.json",
+          "form-kits/w7/metadata.json",
+          "form-kits/w7/form.pdf",
+          "form-kits/w7/_archive/12-2024/schema.json")
+    store = _gcs(registry)
+
+    removed = _run(store.delete_kit("w7"))
+
+    assert removed == 4
+    assert registry == {}
+
+
+def test_gcs_delete_does_NOT_touch_a_SIBLING_WITH_A_SHARED_PREFIX(tmp_path):
+    """The trailing slash is the whole defense. list_blobs matches a RAW string
+    prefix, so deleting "w7" without it also sweeps away "w7-2024" and every
+    archived revision under it -- a silent multi-kit destruction of exactly the
+    bytes the revision archive exists to preserve. Removing the slash left the
+    full 1903-test backend suite green (Opus fresh-eyes)."""
+    registry = {}
+    _seed(registry,
+          "form-kits/w7/schema.json",
+          "form-kits/w7-2024/schema.json",
+          "form-kits/w7-2024/_archive/12-2024/schema.json",
+          "form-kits/w7-old/metadata.json")
+    store = _gcs(registry)
+
+    removed = _run(store.delete_kit("w7"))
+
+    assert removed == 1
+    assert sorted(registry) == [
+        "form-kits/w7-2024/_archive/12-2024/schema.json",
+        "form-kits/w7-2024/schema.json",
+        "form-kits/w7-old/metadata.json",
+    ]
+
+
+def test_gcs_delete_raises_not_found_for_an_absent_kit():
+    from backend.services.form_kits import FormKitNotFound as NF
+
+    registry = {}
+    _seed(registry, "form-kits/other/schema.json")
+    store = _gcs(registry)
+
+    with pytest.raises(NF):
+        _run(store.delete_kit("never-existed"))
+    assert "form-kits/other/schema.json" in registry
+
+
+@pytest.mark.parametrize("unsafe", ["", ".", "..", "a/b", "../other", "/abs"])
+def test_gcs_delete_refuses_an_unsafe_kit_id(unsafe):
+    """A kit id containing a separator would widen the prefix past this kit."""
+    from backend.services.form_kits import FormKitStoreError
+
+    registry = {}
+    _seed(registry, "form-kits/w7/schema.json")
+    store = _gcs(registry)
+
+    with pytest.raises(FormKitStoreError):
+        _run(store.delete_kit(unsafe))
+    assert "form-kits/w7/schema.json" in registry
+
+
+def test_gcs_delete_honours_an_empty_prefix_deployment():
+    """FORM_KITS_REMOTE_PREFIX may be blank, making the kit id the FIRST path
+    segment -- the case where a missing trailing slash would be worst, since
+    every kit sits at the bucket root."""
+    registry = {}
+    _seed(registry, "w7/schema.json", "w7-2024/schema.json")
+    store = _gcs(registry, prefix="")
+
+    removed = _run(store.delete_kit("w7"))
+
+    assert removed == 1
+    assert sorted(registry) == ["w7-2024/schema.json"]
+
+
+def test_gcs_delete_refuses_wholesale_if_the_listing_returns_a_STRAY(tmp_path):
+    """A blob outside the prefix means the client or the prefix maths is
+    broken. Skipping it would return a count that quietly disagrees with the
+    listing and leave a half-deleted kit -- so refuse before removing
+    anything (Opus fresh-eyes: the old guard skipped, and was unreachable)."""
+    from backend.services.form_kits import FormKitStoreError
+    from types import SimpleNamespace
+
+    registry = {}
+    _seed(registry, "form-kits/w7/schema.json")
+    store = _gcs(registry)
+    # A listing that violates its own contract.
+    store._client = SimpleNamespace(
+        list_blobs=lambda bucket_name, prefix: [
+            SimpleNamespace(name="form-kits/w7/schema.json", delete=lambda: None),
+            SimpleNamespace(name="form-kits/OTHER/schema.json", delete=lambda: None),
+        ]
+    )
+
+    with pytest.raises(FormKitStoreError) as exc:
+        _run(store.delete_kit("w7"))
+    assert "outside" in str(exc.value)
+    # Nothing was removed -- the refusal came BEFORE any delete.
+    assert "form-kits/w7/schema.json" in registry
+
+
+def test_the_existence_query_asks_for_at_most_ONE_document(monkeypatch):
+    """Existence is a yes/no, so limit(1) is what stops a popular kit's whole
+    confirmation history streaming on a metered read path.
+
+    Asserts the SHAPE the query asked for, recorded by the fake. My first
+    version tried to wrap stream() after the fact and silently measured
+    nothing -- dropping limit(1) left it green (caught by re-running the
+    mutation rather than trusting the pass)."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    docs = [{"kit_id": "w7", "field_id": f"f{i}"} for i in range(50)]
+    db = _firestore_with(monkeypatch, docs)
+
+    assert kit_has_confirmation_records("w7") is True
+
+    assert db._collection.streams == [{"limit": 1, "streamed": 1}], (
+        "the existence check must ask for at most one document"
+    )

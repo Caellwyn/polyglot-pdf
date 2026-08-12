@@ -1044,12 +1044,21 @@ class GCSFormKitStore(FormKitStore):
 			blobs = list(self._client.list_blobs(self.bucket_name, prefix=base))
 			if not blobs:
 				raise FormKitNotFound(f"Kit not found: {kit_id}")
+			# Re-assert the prefix rather than trusting the listing. `continue`
+			# would be the WRONG failure mode here: it would skip the stray
+			# blob, return a count quietly disagreeing with what was listed,
+			# and leave a half-deleted kit. A blob outside the prefix means the
+			# client or the prefix maths is broken, so refuse the whole
+			# operation before removing anything (Opus fresh-eyes: the old
+			# guard was unreachable AND chose the quiet failure).
+			stray = [b.name for b in blobs if not b.name.startswith(base)]
+			if stray:
+				raise FormKitStoreError(
+					f"Refusing to delete: {len(stray)} listed object(s) are outside "
+					f"{base!r} (first: {stray[0]!r})"
+				)
 			removed = 0
 			for blob in blobs:
-				# Belt and braces: assert each blob really is under the prefix
-				# before deleting it, rather than trusting the listing.
-				if not blob.name.startswith(base):
-					continue
 				blob.delete()
 				removed += 1
 			return removed
