@@ -511,6 +511,13 @@ class ConfirmationCheckUnavailable(Exception):
     """
 
 
+# How many field_confirmed docs to inspect for the pre-47r3 (no kit_id key)
+# shape. Firestore cannot query for a MISSING key, so this is a bounded client
+# -side scan rather than a filter: enough to find legacy records if the
+# collection has any, small enough that a delete never streams a big collection.
+_LEGACY_SCAN_LIMIT = 50
+
+
 def kit_has_confirmation_records(kit_id: str) -> bool:
     """True when ANY confirmation event names this kit.
 
@@ -574,6 +581,30 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
                 "confirmation records exist that name no kit, so this kit cannot "
                 "be cleared for deletion"
             )
+
+        # ...and the same blindness one shape over. IS_NULL matches a STORED
+        # null, not a MISSING key -- and records written between the Firestore
+        # sink shipping (2026-08-03) and kit_id being added to the event dict
+        # (2026-08-05, bd polyglot-pdf-47r3) omit the key entirely. Both
+        # queries above skip them, so a kit whose only records are that vintage
+        # reported "verified: no records" and was hard-deleted WITH its archive
+        # (Opus outer cross-surface review).
+        #
+        # Scoped to event == "field_confirmed" deliberately: session-lifecycle
+        # records share the missing-key shape, and sweeping on the shape alone
+        # would make every kit permanently undeletable the moment one session
+        # is logged. The event value is the discriminator, and it keeps this a
+        # single-field equality query -- no composite index.
+        legacy = collection.where(
+            filter=FieldFilter("event", "==", "field_confirmed")
+        ).limit(_LEGACY_SCAN_LIMIT)
+        for doc in legacy.stream():
+            if "kit_id" not in (doc.to_dict() or {}):
+                _log.info("confirmation_legacy_records_block_delete", kit_id=kit_id)
+                raise ConfirmationCheckUnavailable(
+                    "confirmation records predating kit identity exist, so this "
+                    "kit cannot be cleared for deletion"
+                )
         return False
     except ConfirmationCheckUnavailable:
         # The "records name no kit" refusal is raised INSIDE the try above, so

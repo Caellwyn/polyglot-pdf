@@ -683,3 +683,74 @@ def test_the_refusal_is_NOT_reported_as_a_query_failure(monkeypatch):
         f"a legitimate refusal was logged as a query failure: {names}"
     )
     assert "confirmation_unattributed_records_block_delete" in names, names
+
+
+def test_a_LEGACY_record_with_no_kit_id_KEY_blocks_deletion(monkeypatch):
+    """The same blindness one shape over. IS_NULL matches a STORED null, not a
+    MISSING key -- and field_confirmed records written between the Firestore
+    sink shipping (2026-08-03) and kit_id joining the event dict (2026-08-05,
+    bd polyglot-pdf-47r3) omit the key entirely. Both earlier queries skip
+    them, so a kit whose only records are that vintage reported "verified: no
+    records" and was hard-deleted WITH its archive (Opus outer cross-surface
+    review, confirmed against the pre-47r3 event literal in git)."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        # Exactly the pre-47r3 shape: no kit_id key at all.
+        {"event": "field_confirmed", "form_id": "W-7", "field_id": "f1"},
+    ])
+
+    with pytest.raises(ConfirmationCheckUnavailable) as exc:
+        kit_has_confirmation_records("w7")
+    assert "predating kit identity" in str(exc.value)
+
+
+def test_SESSION_records_with_no_kit_id_key_still_do_NOT_block(monkeypatch):
+    """The reason the legacy sweep is scoped to event == field_confirmed.
+    Session-lifecycle records share the missing-key shape, so sweeping on the
+    SHAPE alone would make every kit permanently undeletable the moment one
+    session is logged -- the failure mode the IS_NOT_NULL assertion exists to
+    prevent, arrived at from the other direction."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"event": "form_session_started", "form_session_id": "s1"},
+        {"event": "form_session_ended", "form_session_id": "s1"},
+    ])
+
+    assert kit_has_confirmation_records("w7") is False
+
+
+def test_a_MODERN_record_for_another_kit_does_not_block(monkeypatch):
+    """A field_confirmed record that HAS a kit_id naming a different kit is
+    fully attributed -- it must not trip the legacy sweep, or one confirmation
+    anywhere would make every other kit undeletable."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"event": "field_confirmed", "kit_id": "i-90", "field_id": "f1"},
+    ])
+
+    assert kit_has_confirmation_records("w7") is False
+
+
+def test_the_legacy_scan_is_BOUNDED(monkeypatch):
+    """Firestore cannot filter for a MISSING key, so this is a client-side
+    scan. It must stay bounded, or a delete streams a large collection on a
+    metered read path."""
+    from backend.utils.confirmation_logger import (
+        _LEGACY_SCAN_LIMIT, kit_has_confirmation_records,
+    )
+
+    # 500 fully-attributed records for other kits: none block, and the scan
+    # must stop at the limit rather than reading them all.
+    docs = [
+        {"event": "field_confirmed", "kit_id": f"other-{i}", "field_id": "f"}
+        for i in range(500)
+    ]
+    db = _firestore_with(monkeypatch, docs)
+
+    assert kit_has_confirmation_records("w7") is False
+    assert db._collection.streams[-1] == {
+        "limit": _LEGACY_SCAN_LIMIT, "streamed": _LEGACY_SCAN_LIMIT,
+    }
