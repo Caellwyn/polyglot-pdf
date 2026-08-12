@@ -187,6 +187,15 @@ def test_the_rubric_classifies_EVERY_official_block_the_renderer_can_emit():
     So render with EVERY official-text key populated and require the rubric to
     classify every heading that comes back. A fourth block added to the
     renderer fails here instead of silently landing outside the allowlist.
+
+    WHY THE ALLOWLIST IS BY NAME, NOT BY SYNTAX (Opus cross-surface round 3 --
+    a constraint to preserve, not a defect): `render_static_catalog` emits PART
+    headings in the SAME `=== X ===` shape (e.g. "=== Part 1. Information About
+    You ===" on the i-90, "=== Page 1 ===" on the W-7). Those are structure,
+    not government prose. Because the rubric allowlists the two official
+    headings BY LITERAL NAME, a part label is correctly not-official by
+    omission. Anyone "simplifying" this to "any === heading === is official"
+    would silently reclassify every part label as quotable government text.
     """
     from backend.services.secretary_context import _render_form_reference
 
