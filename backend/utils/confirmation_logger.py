@@ -512,9 +512,19 @@ class ConfirmationCheckUnavailable(Exception):
 
 
 # How many field_confirmed docs to inspect for the pre-47r3 (no kit_id key)
-# shape. Firestore cannot query for a MISSING key, so this is a bounded client
-# -side scan rather than a filter: enough to find legacy records if the
-# collection has any, small enough that a delete never streams a big collection.
+# shape. Firestore cannot query for a MISSING key at all, so this is a bounded
+# client-side SAMPLE rather than a filter -- and stream() without order_by
+# returns __name__ order, which for .add()-generated ids is arbitrary, so these
+# are an arbitrary 50 and NOT the oldest 50.
+#
+# That sampling is acceptable because of what the legacy population looks like:
+# every field_confirmed doc written in the two days between the Firestore sink
+# shipping and kit_id joining the event dict. If any exist they exist as a
+# contiguous cohort, so a 50-doc sample effectively cannot miss them. Making it
+# deterministic (order_by timestamp) would need a composite index, and the repo
+# ships no firestore.indexes.json -- the query would 400 at runtime instead
+# (Opus outer cross-surface review, which enumerated every event value ever
+# written and confirmed this bound is the right call).
 _LEGACY_SCAN_LIMIT = 50
 
 
