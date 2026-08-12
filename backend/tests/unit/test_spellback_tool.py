@@ -367,6 +367,30 @@ class TestSpellbackSiAddendum:
         names_block = Settings().DTI_SYSTEM_INSTRUCTION
         assert "ask for the spelling before you fill anything" in names_block
 
+    def test_verify_by_word_yields_to_the_spellback_addendum(self):
+        """The two verification rules must not flatly contradict each other.
+
+        The names block says to verify a name by saying it back as a word; the
+        addendum (appended whenever SPELLBACK_TOOL_ENABLED, which is the
+        demo's shipped state) says do NOT read the value back at all and call
+        the tool instead. Opus cross-surface review, bd polyglot-pdf-5s3pp:
+        with the flag ON the assembled SI carried both, unqualified.
+
+        The names-block sentence must therefore be CONDITIONAL -- it still
+        governs flag-off sessions, where no addendum ever arrives, so deleting
+        it would leave those with no name verification at all.
+        """
+        names_block = Settings().DTI_SYSTEM_INSTRUCTION
+        idx = names_block.find("verify by saying the name back as a word")
+        assert idx != -1, "the flag-off verification rule is gone"
+        # It must be qualified by a yields-to clause, not stated absolutely.
+        preceding = names_block[max(0, idx - 120):idx]
+        assert "Unless a later instruction" in preceding, (
+            "the verify-by-word rule is stated unconditionally, so it "
+            "contradicts the spell-back addendum whenever the tool is on "
+            "(bd polyglot-pdf-5s3pp)"
+        )
+
     def test_flag_off_leaves_si_untouched(self):
         si = self._si(enabled=False)
         assert "name_spellback" not in si

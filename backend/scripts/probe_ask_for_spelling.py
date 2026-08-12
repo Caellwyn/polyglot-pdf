@@ -48,20 +48,21 @@ Usage (Vertex is the default -- all live-model work runs on Vertex):
     PROBE_SCENARIO=bare_field ... (the control; expect NO delta)
 
 MEASURED RESULT (2026-08-12, 2.5-native-audio on Vertex, temperature 0.4),
-POOLED over THREE runs of n=8, n=8 and n=3. A single run does not pin the rate:
-the per-run baselines were 1/8, 3/8 and 0/3, and the per-run fixed arms were
-8/8, 7/8 and 2/3. Quote the pooled figure, never a single run's:
-    spoken_name  prohibition_only  asked  4/19 (21%)
-                 fixed             asked 17/19 (89%)
+POOLED over four runs. A single run does not pin the rate: the per-run
+baselines were 1/8, 3/8, 0/3 and the per-run fixed arms were 8/8, 7/8, 2/3,
+5/6. Quote the pooled figure, never a single run's:
+    spoken_name  prohibition_only  asked  4/19 (21%)  n=19
+                 fixed             asked 22/25 (88%)  n=25
     bare_field   both arms         asked  6/6        <- control, n=6/arm, one
                                                         run only (2026-08-12)
 
-Two caveats on the fixed arm's 89%. Its misses included at least one TRUNCATED
-transcript that was in fact asking but lost the word "spell", so the true rate
-is somewhat higher than 89%. And filling a guessed spelling -- the HARMFUL
-outcome -- appeared in only ONE sample across all runs: rare per-turn, which is
-exactly how it survived into production, and why no clean run is evidence of
-absence.
+Two caveats on the fixed arm's 88%. Its "misses" include at least one TRUNCATED
+transcript that was asking but lost the word "spell", and one run that asked
+correctly IN SPANISH ("deletree su apellido") and scored as did-not-ask because
+the markers are English (see LIMITATIONS). So 88% is a floor, not a ceiling.
+And filling a guessed spelling -- the HARMFUL outcome -- appeared in only ONE
+sample across every run: rare per-turn, which is exactly how it survived into
+production, and why no clean run is evidence of absence.
 
 COST: PROBE_RUNS x 2 arms LIVE AUDIO Live-API sessions (response_modalities
 AUDIO), not text turns -- budget accordingly before raising PROBE_RUNS. The turn
