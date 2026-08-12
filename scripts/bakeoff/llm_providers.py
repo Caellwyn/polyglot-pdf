@@ -30,8 +30,50 @@ import os
 import pathlib
 import shutil
 import subprocess
+import time
 import uuid
 from typing import Any, Callable, Dict, Optional, Protocol
+
+# bd polyglot-pdf-xlvba: how old an orphaned _cli_*.json scratch file must be
+# before a sweep reclaims it. The normal lifetime of one of these files is
+# the length of one CLI call (seconds to a couple minutes); an hour gives
+# wide margin for a slow model call while still reclaiming same-day orphans
+# on a long-lived dev process.
+_CLI_SCRATCH_STALE_AGE_S = 3600.0
+
+
+def _sweep_stale_cli_scratch(outputs_dir: str) -> None:
+    """Best-effort reclamation of orphaned CLI scratch files (bd polyglot-pdf-xlvba).
+
+    The uuid4-per-call scratch path (below) makes collision impossible, but
+    it also means an orphan left by a hard kill (SIGKILL / OOM / container
+    eviction) mid-run is never reclaimed by anything -- the old pid-keyed
+    path was accidentally self-healing (the next call reusing that pid wiped
+    it), uuid4 is not. This sweep restores that property without
+    reintroducing the collision: it only ever removes a file OLDER than
+    _CLI_SCRATCH_STALE_AGE_S, so a concurrently-live scratch path from
+    another in-flight call (necessarily younger) is never touched. Errors
+    (permissions, a vanished directory, a raced-away file) are swallowed --
+    this is best-effort cleanup, never allowed to fail the actual call it
+    runs alongside.
+    """
+    try:
+        now = time.time()
+        for name in os.listdir(outputs_dir):
+            if not (name.startswith("_cli_") and name.endswith(".json")):
+                continue
+            path = os.path.join(outputs_dir, name)
+            try:
+                age = now - os.path.getmtime(path)
+            except OSError:
+                continue
+            if age > _CLI_SCRATCH_STALE_AGE_S:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
 
 
 def _cli_scratch_path(outputs_dir: str, kind: str) -> str:
@@ -58,7 +100,13 @@ def _cli_scratch_path(outputs_dir: str, kind: str) -> str:
     order_probe) are imported by NO backend module (verified by grep) and run
     as one-shot CLI processes, where pid-keying is correct and collision-free.
     A test pins the uniqueness property rather than the naming shape.
+
+    Also sweeps stale orphans (bd polyglot-pdf-xlvba): uuid4 naming makes a
+    fresh collision impossible, but it also means a hard-killed call's
+    scratch file is never reclaimed by anything else -- unlike the old
+    pid-keyed path, which the next call reusing that pid wiped incidentally.
     """
+    _sweep_stale_cli_scratch(outputs_dir)
     return os.path.join(outputs_dir, f"_cli_{kind}_{uuid.uuid4().hex}.json")
 
 # token_info shape: {"input": int|None, "output": int|None, optionally

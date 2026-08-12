@@ -72,9 +72,11 @@ def _fresh_sink():
     """Each test starts and ends with no live background writer or probe cache."""
     cl.flush_confirmation_sink()
     cl._probe_cache = None
+    cl._probe_in_flight = None
     yield
     cl.flush_confirmation_sink()
     cl._probe_cache = None
+    cl._probe_in_flight = None
 
 
 @pytest.fixture
@@ -270,6 +272,32 @@ def test_strict_read_distinguishes_failure_from_empty(monkeypatch):
     assert cl.read_confirmation_log("fss_strict_1") == []
 
 
+def test_strict_read_without_firestore_enabled_raises_instead_of_no_events(
+    monkeypatch,
+):
+    """bd polyglot-pdf-k3v7: an operator who forgets --firestore (or has
+    CONFIRMATION_FIRESTORE_ENABLED unset, the normal laptop case) must NOT
+    see the same 'no events found' result a genuinely empty durable trail
+    would produce -- the durable sink was never even consulted. strict=True
+    must raise here exactly as it does for a FAILED query, since both are
+    'I did not check', not 'the record does not exist'."""
+    monkeypatch.delenv("CONFIRMATION_FIRESTORE_ENABLED", raising=False)
+
+    def _explode():
+        raise AssertionError(
+            "get_db must not be called when the sink is not enabled"
+        )
+
+    monkeypatch.setattr("backend.services.auth.get_db", _explode)
+
+    with pytest.raises(cl.ConfirmationReadError):
+        cl.read_confirmation_log("fss_no_sink_1", strict=True)
+
+    # Non-strict keeps the never-raise contract (degrades to the local file,
+    # which is empty/absent here) -- this bug is specifically about strict.
+    assert cl.read_confirmation_log("fss_no_sink_1") == []
+
+
 def test_flush_drains_sibling_executor_created_mid_drain(fake_db):
     """bd polyglot-pdf-wv3j: shutdown(wait=True) runs outside the lock, so a
     concurrent submit can lazily create a SIBLING executor while the swapped
@@ -345,6 +373,111 @@ def test_sink_status_is_cached(fake_db, monkeypatch):
     monkeypatch.setattr("backend.services.auth.get_db", _explode)
     # Within max_age the cached "ok" is returned; no second Firestore hit.
     assert cl.confirmation_sink_status(max_age_s=300.0) == "ok"
+
+
+def test_concurrent_probes_on_a_cold_cache_coalesce_to_one_round_trip(
+    fake_db, monkeypatch
+):
+    """bd polyglot-pdf-fzwp: /health has no auth, so an unauthenticated caller
+    can drive confirmation_sink_status() at their own request rate. Without
+    coalescing, N concurrent callers racing in on a cold/stale cache each fall
+    through to their OWN Firestore write+delete round trip -- write churn
+    against the collection that holds the legal audit trail. This pins that
+    only ONE round trip happens no matter how many callers race in."""
+    import threading as _threading
+    import time as _time
+
+    call_count = {"n": 0}
+    # Wrap the fake collection's document() to count calls AND to slow the
+    # probe down, widening the race window so concurrent callers actually
+    # overlap rather than running sequentially.
+    coll = fake_db.collection(cl._FIRESTORE_COLLECTION)
+    real_document_method = coll.document
+
+    def slow_document(doc_id):
+        if doc_id == "_health_probe":
+            call_count["n"] += 1
+            _time.sleep(0.05)
+        return real_document_method(doc_id)
+
+    monkeypatch.setattr(coll, "document", slow_document)
+
+    results = []
+    errors = []
+
+    def worker():
+        try:
+            results.append(cl.confirmation_sink_status())
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [_threading.Thread(target=worker) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert not errors, "concurrent probes raised: %r" % (errors,)
+    assert call_count["n"] == 1, (
+        "confirmation_sink_status made %d Firestore round trips for 10 "
+        "concurrent callers on a cold cache; expected exactly 1 (coalescing "
+        "must serialize concurrent probes onto a single round trip)"
+        % call_count["n"]
+    )
+    assert results == ["ok"] * 10, "every caller must see the SAME result"
+
+
+def test_a_waiter_times_out_honestly_when_the_prober_stalls(fake_db, monkeypatch):
+    """bd polyglot-pdf-fzwp round 2 (Opus cross-surface review): a genuinely
+    STALLED prober (the exact IAM-drift/outage scenario this probe exists to
+    detect) must not hang a coalesced waiter forever. The waiter's internal
+    timeout is bounded well under /health's own 3.0s asyncio.wait_for budget
+    (backend/main.py) -- a wait longer than the only real caller's own
+    deadline can never usefully return to that caller anyway. This path is
+    REACHABLE, not dead defensive code: pin it directly rather than trusting
+    only the "should be unreachable" comment that used to describe it."""
+    import threading as _threading
+
+    prober_may_finish = _threading.Event()
+    prober_started = _threading.Event()
+
+    coll = fake_db.collection(cl._FIRESTORE_COLLECTION)
+    real_document_method = coll.document
+
+    def blocking_document(doc_id):
+        if doc_id == "_health_probe":
+            prober_started.set()
+            prober_may_finish.wait(timeout=5)
+        return real_document_method(doc_id)
+
+    monkeypatch.setattr(coll, "document", blocking_document)
+
+    results = []
+
+    def prober():
+        results.append(("prober", cl.confirmation_sink_status()))
+
+    def waiter():
+        results.append(("waiter", cl.confirmation_sink_status()))
+
+    t_prober = _threading.Thread(target=prober)
+    t_prober.start()
+    assert prober_started.wait(timeout=5), "prober never started its probe"
+
+    t_waiter = _threading.Thread(target=waiter)
+    t_waiter.start()
+    t_waiter.join(timeout=5)  # the waiter's own internal wait is ~2s
+
+    assert not t_waiter.is_alive(), "the waiter must not hang past its own timeout"
+    waiter_result = dict(results)["waiter"]
+    assert waiter_result == (
+        "error: probe coalescing timed out waiting for another in-flight probe"
+    )
+
+    # Let the still-running prober finish so the test leaves no live thread.
+    prober_may_finish.set()
+    t_prober.join(timeout=5)
+    assert not t_prober.is_alive()
 
 
 def test_read_falls_back_to_file_when_firestore_empty(fake_db, tmp_path, monkeypatch):
