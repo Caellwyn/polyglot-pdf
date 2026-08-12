@@ -16,6 +16,7 @@ import fitz  # PyMuPDF
 import structlog
 
 from backend.services.auth import require_auth
+from backend.services.certification_denylist import is_certification_field
 from backend.services.form_kits import (
 	FormKitNotFound,
 	FormKitStoreError,
@@ -239,6 +240,21 @@ async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth))
 				_log.warning("fresh_widget_not_found", widget_name=widget.field_name)
 				return
 
+			# LEGAL INVARIANT, second layer (bd polyglot-pdf-oagt). The dispatch
+			# loop already refuses certification fields by schema id; this checks
+			# the name carried by the REAL WIDGET IN THE PDF, which no
+			# client-supplied schema can misrepresent. It is deliberately
+			# redundant: the loop check is the one that fires today, and this one
+			# survives a refactor of the loop that the loop's own test would not
+			# catch. A perjury attestation is worth two independent guards.
+			if is_certification_field("", fresh_widget.field_name, request.kit_id):
+				_log.warning(
+					"certification_widget_refused",
+					widget_name=fresh_widget.field_name,
+					reason="interpreter/preparer certification blocks are never filled (bd polyglot-pdf-oagt)",
+				)
+				return
+
 			if fresh_widget.field_type == 2 or fresh_widget.field_type_string in {"CheckBox", "RadioButton"}:
 				if value in {True, "true", "True", "1", 1}:
 					target_value = get_button_on_state(fresh_widget)
@@ -352,8 +368,25 @@ async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth))
 			only conditional_behavior was read, where the gold carries just
 			unlock_method, so the unlock never fired and read-only fields silently
 			stayed locked.
+
+			LEGAL INVARIANT (bd polyglot-pdf-oagt): never UNLOCK a certification
+			widget either. Clearing the read-only bit is itself a write that
+			persists into the emitted PDF -- a certification widget left
+			permanently editable is a different failure from a filled one, but
+			still one we caused. Several call sites run this BEFORE the
+			value-write guard, so the check belongs here rather than at each of
+			them (fresh-eyes round 1).
 			"""
 			if not field_obj:
+				return
+
+			widget_name = getattr(widget, "field_name", None)
+			if is_certification_field(str(field_obj.get("id") or ""), widget_name, request.kit_id):
+				_log.warning(
+					"certification_widget_unlock_refused",
+					widget_name=widget_name,
+					reason="certification widgets are never unlocked (bd polyglot-pdf-oagt)",
+				)
 				return
 
 			# Check both relationship keys for the flag-change descriptor.
@@ -412,6 +445,28 @@ async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth))
 				skipped_count += 1
 				continue
 
+			# LEGAL INVARIANT (bd polyglot-pdf-oagt): never write an
+			# interpreter/preparer certification block. Checked HERE -- before the
+			# schema lookup, and regardless of what the schema says -- because the
+			# schema is CLIENT-SUPPLIED (request.form_schema), so a field the
+			# editor "ignored" is only absent if the client cooperates. Every
+			# write path below is downstream of this loop, so this one check
+			# covers text, radio, checkbox, checkbox_group, and the shared-field
+			# radio's direct xref surgery.
+			#
+			# Both identifiers are tested: field_id here, and the resolved
+			# pdf_field_name once the schema lookup below supplies it. A client
+			# controls both, so neither alone is sufficient.
+			if is_certification_field(field_id, (field_lookup.get(field_id) or {}).get("pdf_field_name"), request.kit_id):
+				_log.warning(
+					"certification_field_refused",
+					kit=request.kit_id,
+					field_id=field_id,  # never the value -- bd hjo
+					reason="interpreter/preparer certification blocks are never filled (bd polyglot-pdf-oagt)",
+				)
+				skipped_count += 1
+				continue
+
 			field_obj = field_lookup.get(field_id)
 			if not field_obj:
 				_log.warning("field_not_in_schema", kit=request.kit_id, field_id=field_id)
@@ -463,6 +518,18 @@ async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth))
 								kit=request.kit_id,
 								field_id=field_id,
 								pdf_field=shared_pdf_field,
+							)
+							continue
+						# LEGAL INVARIANT (bd polyglot-pdf-oagt). This branch writes
+						# the xref DIRECTLY and never reaches fill_widget, so it needs
+						# its own widget-name guard -- the loop check above is the
+						# only other one covering it.
+						if is_certification_field("", widget.field_name, request.kit_id):
+							_log.warning(
+								"certification_widget_refused",
+								kit=request.kit_id,
+								widget_name=widget.field_name,
+								reason="interpreter/preparer certification blocks are never filled (bd polyglot-pdf-oagt)",
 							)
 							continue
 						try:
