@@ -1,9 +1,15 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-12. See
-[the oagt journal entry](journal/entries/2026-08-05-bd-oagt-certification-denylist.md)
-for closeout details. The Surface contracts section is the code-derived
-cross-surface data-contract map for blast-radius review (bd polyglot-pdf-n18q).
+*Last updated: 2026-08-08 (bd polyglot-pdf-6x1j: a guarded DELETE route -- author-only, and refused when the confirmation-record check cannot run. Also bd polyglot-pdf-xzw5 -- the /status route
+gained `author_version`, required to publish a kit with no government
+edition_date and immutable once published, and the audit record's
+`edition_date` column now carries a three-rank marker. Also bd
+polyglot-pdf-22h1f -- Surface contracts gained the flag-gated `name_spellback`
+tool row, the `spellback`/`spellback_response` round-trip, and the
+`/api/tts/spellback` route -- and bd polyglot-pdf-na1zy, see
+[the na1zy journal entry](journal/entries/2026-08-07-bd-na1zy-local-folder-readiness-stamping.md).
+The Surface contracts section is the code-derived cross-surface data-contract
+map for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -179,7 +185,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
     `schema.fields.find` by id). Duplicate ids silently drop a field (dict
     overwrite); an unknown id returns `undefined`.
   - `pdf_field_name` (field- and option-level): consumed only by the fill route
-    (`backend/routes/pdf_fill_routes.py:116-118`, options :489-497). Missing =
+    (`backend/routes/pdf_fill_routes.py:115-117`, options :434-442). Missing =
     field silently absent from the filled PDF.
   - `name` vs `spoken_name`: guidance builds speak
     `spoken_name || name || id` (`backend/services/manifest_service.py:125`).
@@ -335,7 +341,7 @@ plus the in-browser preview
 `{kit_id, pdf_filename, field_values, form_schema}`
 (`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`). A payload-shape change
 made against only one call site silently misses the other two.
-Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:36-46`).
+Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-45`).
 
 - **The backend fills from the CLIENT-SUBMITTED `form_schema`**, typed
   `Dict[str, Any]` -- no `FormSchema` validation runs at fill time, the kit
@@ -348,24 +354,16 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:36-46`).
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (`pdf_fill_routes.py:93-135`); widget dispatch by
-  `field_type` (`pdf_fill_routes.py:442-748`):
-  text via `fill_widget` (:218-293) with cosmetic-only Comb overflow handling
-  (:158-216), checkboxes via `get_button_on_state` (:137-153, defaults to
+  exact id always winning (`pdf_fill_routes.py:92-134`); widget dispatch by
+  `field_type` (`pdf_fill_routes.py:409-681`):
+  text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
+  (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
-  direct `xref_set_key` writes (:514-562).
+  direct `xref_set_key` writes (:459-495).
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (`pdf_fill_routes.py:443-446`).
-- Third-party CERTIFICATION fields (interpreter / preparer attestations, the
-  W-7 acceptance-agent and 1040 paid-preparer blocks) are REFUSED at every
-  write and unlock site, before any value reaches the PDF
-  (`backend/services/certification_denylist.py`, four guards in the fill
-  route; bd polyglot-pdf-oagt). The refusal is server-side because the route
-  builds its field map from the CLIENT-supplied schema, so an authoring-time
-  "ignored" flag would not bind. See
-  [components/pdf-filling.md](components/pdf-filling.md).
-- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:758-764`); appearance regeneration
+  (`pdf_fill_routes.py:410-413`).
+- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
 
