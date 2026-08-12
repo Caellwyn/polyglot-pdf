@@ -307,6 +307,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     kit: RemoteKitEntry, take: boolean,
   ) => {
     setError(null);
+    // Clear the stale notice too, as all six sibling handlers do. This is the
+    // one handler that WRITES a success notice, so it is precisely the one
+    // that can leave "You have X for editing" sitting above a later failure
+    // about the same kit (Opus fresh-eyes round 5).
+    setNotice(null);
     setLockingId(kit.id);
     try {
       const res = take ? await takeKitLock(kit.id) : await releaseKitLock(kit.id);

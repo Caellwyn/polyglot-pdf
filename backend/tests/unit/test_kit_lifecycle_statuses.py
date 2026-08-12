@@ -1435,3 +1435,91 @@ def test_a_SUBMIT_refusal_names_the_offending_fields_like_a_publish_one(client):
     # The field id is in the detail, which is what the strip's click-to-focus
     # links parse out of it.
     assert "f1" in detail, detail
+
+
+def test_SUBMITTING_costs_no_LLM_calls(client, monkeypatch):
+    """The structural gates were widened to cover submit (round 4); the metered
+    translation sweep must NOT have come with them.
+
+    An editor submits repeatedly during normal work, so a sweep on that path
+    would bill one pro-tier call per language per submission. Pinned rather
+    than reasoned about: the widening was the riskiest change on this branch.
+    """
+    c, store, root = client
+    calls = []
+
+    async def _counting(_store, _kit_id, _schema, _schema_file):
+        calls.append(_kit_id)
+        return 0, None
+
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _counting)
+    _make_kit(root, "w7", status="draft")
+
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+    assert calls == [], f"the metered sweep fired on a SUBMIT: {calls}"
+
+    # ...and it DOES still run on the publish that follows.
+    assert _status(c, "w7", "complete", headers=AUTH_HDR).status_code == 200
+    assert calls == ["w7"], calls
+
+
+def test_SUBMITTING_does_not_stamp_published_at(client):
+    """published_at means "when this was last served to clients". A submit has
+    served nobody, so stamping it would make the field lie -- and it is a
+    revision marker input for kits with no edition date."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+
+    assert "published_at" not in _run(store.load_metadata("w7"))
+
+
+def test_taking_a_lock_never_DESTROYS_unreadable_metadata(client):
+    """load_metadata degrades a parse failure to None, so `meta is None` means
+    EITHER "no metadata yet" OR "metadata exists and is corrupt". Merging into
+    {} and writing is right for the first and catastrophic for the second: it
+    REPLACED the file, taking `status` with it -- and deploy-all.sh greps for
+    "status": "complete", so a live form silently dropped out of the manifest
+    and stopped being served. The route returned 200 while doing it (Opus
+    fresh-eyes round 5, reproduced end to end)."""
+    c, _store, root = client
+    kit = _make_kit(root, "w7", status="complete")
+    (kit / "metadata.json").write_text("{ not json", encoding="utf-8")
+
+    resp = c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "cannot be read" in resp.json()["detail"]
+    # The bytes are untouched -- nothing was overwritten.
+    assert (kit / "metadata.json").read_text(encoding="utf-8") == "{ not json"
+
+
+def test_releasing_a_lock_never_destroys_unreadable_metadata(client):
+    """The DELETE twin was safe only by ACCIDENT -- it early-returns when the
+    holder is None, which is what corrupt metadata yields. Pinned so a later
+    refactor of that early return cannot reintroduce the destruction."""
+    c, _store, root = client
+    kit = _make_kit(root, "w7", status="complete")
+    (kit / "metadata.json").write_text("{ not json", encoding="utf-8")
+
+    resp = c.delete("/api/editor/kits/w7/lock", headers=AUTH_HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert (kit / "metadata.json").read_text(encoding="utf-8") == "{ not json"
+
+
+def test_taking_a_lock_on_a_kit_with_NO_metadata_still_works(client):
+    """The other half of the ambiguity: absent metadata is the normal
+    fresh-kit case and must NOT be refused, or a new kit could never be
+    locked."""
+    c, store, root = client
+    kit = root / "fresh"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7 test")
+
+    resp = c.post("/api/editor/kits/fresh/lock", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("fresh"))["editing_lock"] == {"role": "author"}

@@ -522,6 +522,37 @@ _PUBLISHED_STATUSES = ("complete", "unpublished")
 _LOCK_KEY = "editing_lock"
 
 
+def _refuse_if_metadata_unreadable(
+    meta: Optional[dict], files: set[str], kit_id: str, action: str
+) -> None:
+    """Refuse a read-merge-write when metadata.json is present but UNPARSEABLE.
+
+    load_metadata degrades a parse failure to None (documented on the store
+    ABC), so `meta is None` means EITHER "no metadata yet" OR "metadata exists
+    and is corrupt". Merging into `{}` and writing is correct for the first and
+    catastrophic for the second: it REPLACES the file, taking `status` with it
+    -- and deploy-all.sh greps for `"status": "complete"`, so a live form
+    silently drops out of the manifest and stops being served (Opus fresh-eyes
+    round 5, reproduced: a take-lock returned 200 while leaving metadata.json
+    as exactly {"editing_lock": {...}}).
+
+    The filename set disambiguates, which is why _load_meta_or_404 returns it.
+    _stamp_readiness already does this; this is the same rule, shared rather
+    than copied a third time.
+    """
+    if meta is not None or _METADATA_FILE not in files:
+        return
+    _log.warning("editor_metadata_unreadable_write_refused",
+                 kit_id=kit_id, action=action)
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"This form's metadata.json cannot be read, so {action} would "
+            f"overwrite it and lose the form's status. Fix the file first."
+        ),
+    )
+
+
 def _lock_holder(meta: Optional[dict]) -> Optional[str]:
     """The role currently holding this kit for editing, or None."""
     lock = (meta or {}).get(_LOCK_KEY)
@@ -2734,7 +2765,8 @@ async def take_editor_kit_lock(
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
-    meta, _files = await _load_meta_or_404(store, kit_id)
+    meta, files = await _load_meta_or_404(store, kit_id)
+    _refuse_if_metadata_unreadable(meta, files, kit_id, "taking the lock")
 
     holder = _lock_holder(meta)
     refusal = _lock_refusal(holder, role) if holder else None
@@ -2762,7 +2794,8 @@ async def release_editor_kit_lock(
     releases a lock an editor holds (they cannot evict an author)."""
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
-    meta, _files = await _load_meta_or_404(store, kit_id)
+    meta, files = await _load_meta_or_404(store, kit_id)
+    _refuse_if_metadata_unreadable(meta, files, kit_id, "releasing the lock")
 
     holder = _lock_holder(meta)
     if holder is None:
