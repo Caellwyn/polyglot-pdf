@@ -409,6 +409,16 @@ def get_confirmation_log_path(form_session_id: str) -> Path:
 # Probe cache for confirmation_sink_status (monotonic timestamp, status).
 _probe_cache: Optional[tuple] = None
 _probe_lock = threading.Lock()
+# bd polyglot-pdf-fzwp: /health has no auth (backend/main.py), so any
+# unauthenticated caller can drive concurrent confirmation_sink_status()
+# calls at their own request rate. On a cold/stale cache each one used to
+# fall through to its OWN Firestore write+delete round trip -- the lock only
+# guarded the cache READ/WRITE, not the probe itself, so N concurrent callers
+# produced N round trips against the collection that holds the legal audit
+# trail. _probe_in_flight coalesces concurrent callers onto ONE round trip:
+# the first caller through does the real probe and publishes the result via
+# this Event; everyone else waits on it instead of starting their own.
+_probe_in_flight: Optional[threading.Event] = None
 
 
 def confirmation_sink_status(max_age_s: float = 300.0) -> str:
@@ -423,14 +433,51 @@ def confirmation_sink_status(max_age_s: float = 300.0) -> str:
     Returns "disabled" (sink off), "ok" (probe write+delete succeeded), or
     "error: <msg>". The probe writes then deletes a `_health_probe` doc in the
     events collection (a READ would not verify write perms). Result is cached
-    for max_age_s so /health polling does not hammer Firestore.
+    for max_age_s so /health polling does not hammer Firestore -- including
+    CONCURRENT polling (bd polyglot-pdf-fzwp): only the first caller past a
+    cold/stale cache does the real probe, everyone racing in behind them
+    waits for and reuses that one result instead of each doing their own.
     """
-    global _probe_cache
+    global _probe_cache, _probe_in_flight
     if not _firestore_enabled():
         return "disabled"
+
     with _probe_lock:
         if _probe_cache and (time.monotonic() - _probe_cache[0]) < max_age_s:
             return _probe_cache[1]
+        if _probe_in_flight is not None:
+            # Someone else is already probing -- wait for them OUTSIDE the
+            # lock (below), then reuse whatever they publish.
+            in_flight = _probe_in_flight
+            we_are_prober = False
+        else:
+            # We are the one doing the real probe. Claim it BEFORE releasing
+            # the lock so no other thread starts a duplicate round trip.
+            in_flight = _probe_in_flight = threading.Event()
+            we_are_prober = True
+
+    if not we_are_prober:
+        # bd polyglot-pdf-fzwp round 2 (Opus cross-surface review): the sole
+        # real caller (/health, backend/main.py) wraps this whole call in
+        # asyncio.wait_for(timeout=3.0). asyncio.wait_for does NOT cancel the
+        # underlying asyncio.to_thread worker on timeout -- it just stops
+        # awaiting it -- so a waiter blocked here for the OLD 30s timeout
+        # kept running on its executor thread well past /health's own
+        # deadline, tying up thread-pool capacity for every subsequent
+        # concurrent poll during exactly the kind of stalled-Firestore
+        # outage this probe exists to detect. A wait longer than the only
+        # caller's own budget can never usefully return to that caller
+        # anyway, so bound it well under 3.0s instead.
+        in_flight.wait(timeout=2.0)
+        with _probe_lock:
+            if _probe_cache:
+                return _probe_cache[1]
+        # A genuinely slow/stalled prober (the outage this probe exists to
+        # detect) can still be running past our wait -- this is a REACHABLE
+        # path, not dead code, and the message says so honestly rather than
+        # claiming "should be unreachable".
+        return "error: probe coalescing timed out waiting for another in-flight probe"
+
     try:
         from backend.services.auth import get_db
 
@@ -443,6 +490,8 @@ def confirmation_sink_status(max_age_s: float = 300.0) -> str:
         status = f"error: {e}"
     with _probe_lock:
         _probe_cache = (time.monotonic(), status)
+        _probe_in_flight = None
+    in_flight.set()
     return status
 
 
@@ -470,7 +519,24 @@ def read_confirmation_log(form_session_id: str, strict: bool = False) -> list[di
     instead of degrading to the (usually absent) local file -- so an operator
     tool can distinguish 'no events' from 'could not check'. Default False
     preserves the never-raise contract for in-app callers.
+
+    strict=True ALSO raises when the Firestore sink is not ENABLED at all
+    (bd polyglot-pdf-k3v7): without this, an operator who forgets
+    --firestore (or runs with CONFIRMATION_FIRESTORE_ENABLED unset, the
+    normal laptop case) silently falls through to a local JSONL file that
+    does not exist off the deployed instance, and gets 'no events found' --
+    indistinguishable from a genuinely empty durable trail. For a
+    legal-retrieval surface that conflation is exactly what strict exists to
+    prevent, and it is reachable by a single forgotten flag.
     """
+    if strict and not _firestore_enabled():
+        raise ConfirmationReadError(
+            "the durable Firestore confirmation sink is not enabled for this "
+            "read, so the durable trail was NOT consulted -- only the local "
+            "JSONL file (a dev convenience that does not survive a deployed "
+            "instance) would be checked. Enable CONFIRMATION_FIRESTORE_ENABLED "
+            "or pass --firestore before treating an empty result as authoritative."
+        )
     if _firestore_enabled():
         try:
             events = _read_confirmation_log_firestore(form_session_id)

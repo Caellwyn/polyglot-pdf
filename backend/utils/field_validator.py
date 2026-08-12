@@ -64,6 +64,11 @@ def _resolve_constraint(field: Dict[str, Any], top_key: str, nested_key: str) ->
     for nested callers (bd polyglot-pdf-0mv2; parallel to the format_preset miss
     fixed in bd polyglot-pdf-cn0e). `validation` may be a dict or a Pydantic
     model, so read it tolerantly. Returns None when the constraint is absent.
+
+    The TOP-LEVEL fallback also tries BOTH forms (bd polyglot-pdf-1dz2): a real
+    on-disk kit (form-kits/w7/schema.json's date_of_entry_us) carries the
+    constraint as a top-level SNAKE_CASE key with no `validation` block at all
+    -- trying only `top_key` (camelCase) there silently dropped the constraint.
     """
     validation = field.get("validation")
     if isinstance(validation, dict):
@@ -75,7 +80,11 @@ def _resolve_constraint(field: Dict[str, Any], top_key: str, nested_key: str) ->
         value = getattr(validation, nested_key, None)
         if value is not None:
             return value
-    return field.get(top_key)
+    for key in (top_key, nested_key):
+        value = field.get(key)
+        if value is not None:
+            return value
+    return None
 
 
 def _resolve_format_preset(field: Dict[str, Any]) -> Optional[str]:

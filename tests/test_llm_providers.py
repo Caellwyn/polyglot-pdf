@@ -15,8 +15,10 @@ under scripts/bakeoff/, not an installed package.
 """
 
 import importlib.util
+import os
 import pathlib
 import sys
+import time
 
 import pytest
 
@@ -249,3 +251,70 @@ def test_vertex_client_honors_vertex_location_first(monkeypatch, env, expected):
 
     lp._vertex_gemini_client(None)
     assert captured.get("location") == expected, captured
+
+
+# --- CLI scratch-path orphan sweep (bd polyglot-pdf-xlvba) -------------------- #
+#
+# The uuid4-per-call scratch path (bd polyglot-pdf-gnb0) makes a fresh
+# collision impossible, but it also means a hard-killed call's orphaned
+# scratch file is never reclaimed by anything -- unlike the old pid-keyed
+# path, which the next call reusing that pid wiped incidentally. A sweep at
+# scratch-path construction time restores that self-healing property without
+# reintroducing the collision: it only reclaims files OLDER than the stale
+# threshold, so a concurrently-live scratch path (necessarily younger) is
+# never touched.
+
+def test_stale_orphan_is_reclaimed(tmp_path):
+    stale = tmp_path / "_cli_schema_deadbeef.json"
+    stale.write_text("{}", encoding="utf-8")
+    old_time = time.time() - (lp._CLI_SCRATCH_STALE_AGE_S + 60)
+    os.utime(stale, (old_time, old_time))
+
+    lp._sweep_stale_cli_scratch(str(tmp_path))
+
+    assert not stale.exists()
+
+
+def test_a_concurrently_live_scratch_path_is_untouched(tmp_path):
+    """A file younger than the stale threshold -- i.e. an ACTUAL in-flight
+    call from another thread -- must survive the sweep."""
+    live = tmp_path / "_cli_schema_alive1234.json"
+    live.write_text("{}", encoding="utf-8")
+    # Freshly written -- mtime is "now", well under the stale threshold.
+
+    lp._sweep_stale_cli_scratch(str(tmp_path))
+
+    assert live.exists()
+
+
+def test_sweep_ignores_non_scratch_files(tmp_path):
+    """The sweep must only ever touch its own naming convention -- never a
+    neighbor file that merely happens to sit in the same outputs dir."""
+    unrelated = tmp_path / "some_other_output.json"
+    unrelated.write_text("{}", encoding="utf-8")
+    old_time = time.time() - (lp._CLI_SCRATCH_STALE_AGE_S + 60)
+    os.utime(unrelated, (old_time, old_time))
+
+    lp._sweep_stale_cli_scratch(str(tmp_path))
+
+    assert unrelated.exists()
+
+
+def test_sweep_never_raises_on_a_missing_directory(tmp_path):
+    """Best-effort cleanup must never fail the actual call it runs alongside."""
+    missing = tmp_path / "does_not_exist"
+    lp._sweep_stale_cli_scratch(str(missing))  # must not raise
+
+
+def test_cli_scratch_path_invokes_the_sweep(tmp_path, monkeypatch):
+    """_cli_scratch_path is the ONLY call site the module reaches from a
+    long-lived process (per its own docstring) -- confirm it actually
+    triggers the sweep rather than the sweep being dead code."""
+    calls = []
+    monkeypatch.setattr(
+        lp, "_sweep_stale_cli_scratch", lambda outputs_dir: calls.append(outputs_dir)
+    )
+
+    lp._cli_scratch_path(str(tmp_path), "schema")
+
+    assert calls == [str(tmp_path)]
