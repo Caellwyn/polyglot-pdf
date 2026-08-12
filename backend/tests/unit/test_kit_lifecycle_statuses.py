@@ -1326,3 +1326,112 @@ def test_a_supersede_honours_the_OUTGOING_kit_s_lock(client):
     assert "_require_edit_lock(superseded_meta, role)" in src, (
         "the supersede path must check the OUTGOING kit's lock"
     )
+
+
+# --- submitting runs the structural gates too (Opus fresh-eyes round 4) ------
+
+
+def test_SUBMITTING_a_garbage_schema_is_REFUSED(client):
+    """Submitting used to run ZERO gates, so an editor could freeze a kit
+    around a schema that could never publish -- and `submitted` is write-locked,
+    so an author had to manually reject each one. My own UI comment claimed
+    submit ran the same gate; it did not (reproduced live)."""
+    c, store, root = client
+    kit = root / "junk"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps({"nonsense": True}), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "junk"}), encoding="utf-8")
+    # no form.pdf either
+
+    resp = _status(c, "junk", "submitted", headers=HDR)
+
+    assert resp.status_code in (409, 422), resp.text
+    assert _run(store.load_metadata("junk"))["status"] == "draft"
+
+
+def test_SUBMITTING_a_PDF_less_kit_is_refused(client):
+    """The same structural gate publish runs -- a kit with no PDF can never
+    ship, so refusing at submit saves the author a rejection."""
+    c, store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "no-pdf"}), encoding="utf-8")
+
+    resp = _status(c, "no-pdf", "submitted", headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "PDF" in resp.json()["detail"]
+
+
+def test_submitting_a_GOOD_kit_still_works(client):
+    """The gates must not make submission impossible -- a kit that would
+    publish must submit."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "submitted"
+
+
+def test_submitting_does_NOT_require_an_author_version(client):
+    """Version handling is PUBLISH-only. Demanding one at submit would push an
+    accountability statement onto the subcontractor, which is the opposite of
+    this bead's point."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = _status(c, "custom", "submitted", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("custom"))["status"] == "submitted"
+
+
+def test_a_SUBMITTED_kit_is_not_treated_as_PUBLISHED_for_versioning(client):
+    """_WRITE_LOCKED_STATUSES answers "may its bytes change?"; publishedness
+    answers "do confirmation records name it?". Sharing one tuple made a
+    submitted kit -- never live -- look published, so an author fixing a typo
+    in its version was refused citing records that do not exist. That is the
+    bd xzw5 bug reintroduced one status over (Opus fresh-eyes round 4)."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11-TYPO"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-11"},
+                  headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-11"
+
+
+def test_a_SUBMIT_refusal_names_the_offending_fields_like_a_publish_one(client):
+    """The claim the editor UI makes about submit, pinned SERVER-side.
+
+    RemoteCatalogue mirrors a submit refusal onto the strip because "its
+    refusal names the same fields" -- but the frontend test that appeared to
+    prove that passed only because setRemoteStatus was MOCKED to reject, so it
+    never touched a server that (until round 4) could not refuse a submit at
+    all. A comment and a test defending behaviour that did not exist.
+    """
+    c, _store, root = client
+    # A schema that fails LINT rather than structure: a field naming no PDF
+    # widget (field-unbacked), which is exactly the kind the strip links to.
+    broken = json.loads(json.dumps(_SCHEMA))
+    broken["fields"][0].pop("pdf_field_name")
+    _make_kit(root, "w7", status="draft", schema=broken)
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "lint error" in detail
+    # The field id is in the detail, which is what the strip's click-to-focus
+    # links parse out of it.
+    assert "f1" in detail, detail

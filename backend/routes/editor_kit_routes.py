@@ -494,6 +494,17 @@ _KIT_STATUSES = ("draft", "submitted", "complete", "unpublished")
 # unpublished kit coerced to "unknown" and fell through every one of them).
 _WRITE_LOCKED_STATUSES = ("submitted", "complete", "unpublished")
 
+# Statuses meaning THIS KIT HAS BEEN SERVED TO CLIENTS. Deliberately NOT the
+# same tuple as the write-lock, though they overlap: write-locked answers "may
+# its bytes change?", while this answers "do confirmation records name it?".
+# `submitted` is write-locked but was NEVER live -- reusing the write-lock
+# tuple as a proxy made a submitted kit look published, so an author fixing a
+# typo in its version was refused with a message about confirmation records
+# that do not exist (Opus fresh-eyes round 4, reproduced). That is the exact
+# bug bd polyglot-pdf-xzw5 fixed for drafts, reintroduced one status over by
+# sharing a constant between two different questions.
+_PUBLISHED_STATUSES = ("complete", "unpublished")
+
 
 # --- the editing lock (bd polyglot-pdf-hqztg) --------------------------------
 #
@@ -2242,7 +2253,15 @@ async def set_editor_kit_status(
     if version_cleared:
         _log.info("editor_rejected_version_cleared", kit_id=kit_id, role=role)
 
-    if body.status == "complete":
+    # STRUCTURAL GATES apply to BOTH promotions. Submitting used to run
+    # NOTHING: an editor could freeze a kit around a garbage, PDF-less,
+    # non-v2 schema, filling an author's review queue with kits that could
+    # never publish -- and `submitted` is write-locked, so the author had to
+    # manually reject each one. My own UI comment claimed "an editor's
+    # SUBMIT runs the same readiness/lint gate"; it did not (Opus fresh-eyes
+    # round 4, reproduced live). Cheap refusals belong at the point the work
+    # leaves the editor's hands.
+    if body.status in ("submitted", "complete"):
         # The voice app serves BOTH the schema and the PDF of a complete kit;
         # the deploy manifest falls back to a conventional pdf name when none
         # exists, so promoting a PDF-less kit would ship a form whose PDF read
@@ -2355,6 +2374,9 @@ async def set_editor_kit_status(
         # structurally broken schema was told to supply a version instead of
         # being shown the actual defect (caught by the neighbouring suite's
         # test_mark_complete_validates_against_form_contract).
+        # Version handling and the sweep are PUBLISH-only from here.
+
+    if body.status == "complete":
         meta_block = schema.get("form_metadata")
         meta_block = meta_block if isinstance(meta_block, dict) else {}
         existing_edition = meta_block.get("edition_date")
@@ -2388,7 +2410,7 @@ async def set_editor_kit_status(
             # refused, citing confirmation records that do not exist, on a kit
             # the route explicitly expects them to re-press. A draft has no
             # records to protect, so its version stays editable.
-            was_published = current_status in _WRITE_LOCKED_STATUSES
+            was_published = current_status in _PUBLISHED_STATUSES
             if has_existing_version and was_published:
                 # Locked: only a REPUBLISH of the same version is allowed.
                 if supplied_version and supplied_version != _normalize_author_version(
