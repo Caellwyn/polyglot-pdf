@@ -98,8 +98,14 @@ another layer's cases). Full both-roots suite green at 3074 passed.
 
 No tier-1/2 doc describes ask_secretary's answer scope; the boundary lives in
 the rubric, the declaration, and the SI, all in code and now test-pinned.
-`docs/standards/validation-delegation.md` covers the secretary's INPUT contract
-(what context it receives), which this change does not touch.
+`docs/standards/validation-delegation.md` is flagged STALE by the freshness
+checker because it Tracks: `text_ai_gemini.py`, which this diff edits -- but
+that is a timestamp artifact, not drift. Every claim it makes about the
+secretary is about the PORT: the `ask(query, context) -> (answer, sources,
+resolved)` signature, the `sources` shape, `resolved` as the semantic-pushback
+signal, and the fail-open `("", [], True)`. This change altered the prompt's
+CONTENT, not the contract, so all of those remain true and the doc was
+reviewed-and-left rather than bumped (checked line by line, not assumed).
 
 ## Files touched
 
