@@ -1094,3 +1094,70 @@ def test_the_enumeration_is_anchored_to_a_REAL_refusal(client):
 
     assert resp.status_code == 409, resp.text
     assert "author is working on this form" in resp.json()["detail"]
+
+
+# --- rejection clears the version (bd polyglot-pdf-hqztg) --------------------
+
+
+def test_REJECTING_a_submitted_kit_clears_its_author_version(client):
+    """A submitted kit was never live, so no confirmation record names its
+    version -- nothing to protect, and the next publish asks again."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+
+    resp = _status(c, "custom", "draft", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert "author_version" not in saved["form_metadata"]
+
+
+def test_reopening_a_PUBLISHED_kit_KEEPS_its_author_version(client):
+    """The other side of the scoping, and the one that matters. Records DO
+    name a published kit's version, so clearing it would let the next publish
+    invent a different marker for a revision clients already confirmed against
+    -- exactly the re-pointing the xzw5 immutability lock exists to prevent."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = _status(c, "custom", "draft", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-01-01"
+
+
+def test_a_rejected_kit_can_be_versioned_AGAIN_on_resubmission(client):
+    """The cleared version must not leave the kit unpublishable: the author is
+    asked for one again, and a NEW value is accepted (the immutability lock
+    must not fire on a version that was never published)."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+
+    assert _status(c, "custom", "draft", headers=AUTH_HDR).status_code == 200
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-12-25"},
+                  headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-12-25"
+
+
+def test_rejecting_a_kit_with_NO_version_is_a_clean_noop(client):
+    """A government-edition kit has no author version to clear; the reject must
+    not touch its schema or fail."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+    before = _run(store.load_schema("w7", "schema.json"))
+
+    resp = _status(c, "w7", "draft", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_schema("w7", "schema.json")) == before

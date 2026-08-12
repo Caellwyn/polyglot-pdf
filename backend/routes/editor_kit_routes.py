@@ -2186,6 +2186,37 @@ async def set_editor_kit_status(
     if body.status in ("draft", "unpublished") and current_status == "complete":
         await _archive_published_revision(store, kit_id, meta)
 
+    # REJECTION clears the author version (maintainer decision 2026-08-11). A
+    # submitted kit was never live, so no confirmation record names its version
+    # -- there is nothing to protect, and the next publish asks for one again.
+    #
+    # Scoped to submitted -> draft, NOT to every revert: reopening a PUBLISHED
+    # kit must KEEP its version, because records DO name that one. Clearing it
+    # there would let the next publish invent a different marker for a revision
+    # clients already confirmed against, which is precisely the re-pointing the
+    # xzw5 immutability lock exists to prevent. This keeps the lock's meaning
+    # exact -- it protects PUBLISHED versions only.
+    version_cleared = False
+    if body.status == "draft" and current_status == "submitted":
+        try:
+            schema = await store.load_schema(kit_id, schema_file)
+        except (FormKitNotFound, FormKitStoreError):
+            schema = None
+        meta_block = (schema or {}).get("form_metadata")
+        if isinstance(meta_block, dict) and meta_block.get("author_version"):
+            meta_block = {k: v for k, v in meta_block.items() if k != "author_version"}
+            schema = {**schema, "form_metadata": meta_block}
+            try:
+                await store.put_schema(kit_id, schema, schema_file)
+                version_cleared = True
+            except FormKitStoreError as exc:
+                # Best-effort, like the archive hook above: failing to clear a
+                # version must not strand a kit in submitted, which would leave
+                # the editor unable to reopen their own work.
+                _log.warning("editor_version_clear_failed", kit_id=kit_id, error=str(exc))
+    if version_cleared:
+        _log.info("editor_rejected_version_cleared", kit_id=kit_id, role=role)
+
     if body.status == "complete":
         # The voice app serves BOTH the schema and the PDF of a complete kit;
         # the deploy manifest falls back to a conventional pdf name when none
