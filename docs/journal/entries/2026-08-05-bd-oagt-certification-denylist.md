@@ -258,8 +258,14 @@ reference for reviews". They were accurate on dev and wrong here, which is a
 wrong claim about the code in a current-state doc. Re-anchored all 22 cited
 line numbers by DERIVING each from the current file (match dev's line CONTENT,
 find where it now lives) rather than adding an offset by hand, then verified
-every one lands on the expected code. Section 5 also gained the denylist
-bullet it was missing. The general lesson, now twice-demonstrated: recovering
+every one lands on the expected code. The outer review's round 2 then caught
+that content-matching is not enough for a RANGE END: `fill_widget`'s cited end
+landed on the checkbox branch's `raise` instead of the function's last line,
+excluding the very text-write path the sentence names -- the same two-`raise`
+ambiguity I had hand-resolved for `fit_comb_value` one line above. Corrected
+to :218-293 and re-verified with an indentation-based end-finder (all three
+def-anchored ranges), not another content match. Section 5 also gained the
+denylist bullet it was missing. The general lesson, now twice-demonstrated: recovering
 an abandoned branch endangers DOCS in two distinct ways -- a stale prose edit
 reverts what landed meanwhile, and new code silently invalidates line anchors
 elsewhere. Neither shows up as a merge conflict.

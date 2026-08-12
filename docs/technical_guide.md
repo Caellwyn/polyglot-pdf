@@ -350,7 +350,7 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:36-46`).
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
   exact id always winning (`pdf_fill_routes.py:93-135`); widget dispatch by
   `field_type` (`pdf_fill_routes.py:442-748`):
-  text via `fill_widget` (:218-278) with cosmetic-only Comb overflow handling
+  text via `fill_widget` (:218-293) with cosmetic-only Comb overflow handling
   (:158-216), checkboxes via `get_button_on_state` (:137-153, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
   direct `xref_set_key` writes (:514-562).
