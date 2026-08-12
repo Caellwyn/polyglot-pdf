@@ -48,17 +48,20 @@ Usage (Vertex is the default -- all live-model work runs on Vertex):
     PROBE_SCENARIO=bare_field ... (the control; expect NO delta)
 
 MEASURED RESULT (2026-08-12, 2.5-native-audio on Vertex, temperature 0.4),
-POOLED over two runs of n=8 -- a single run of 8 is NOT enough to pin the rate
-(the two runs gave 1/8 and 3/8 on the baseline arm):
+POOLED over THREE runs of n=8, n=8 and n=3. A single run does not pin the rate:
+the per-run baselines were 1/8, 3/8 and 0/3, and the per-run fixed arms were
+8/8, 7/8 and 2/3. Quote the pooled figure, never a single run's:
     spoken_name  prohibition_only  asked  4/19 (21%)
                  fixed             asked 17/19 (89%)
     bare_field   both arms         asked  6/6        <- control, n=6/arm, one
                                                         run only (2026-08-12)
 
-The fixed arm's one miss was a TRUNCATED transcript that was in fact asking, so
-94% is a floor. Filling a guessed spelling -- the harmful outcome -- appeared in
-only ONE sample across all runs, which is precisely why it reached production:
-a clean run is not evidence of absence.
+Two caveats on the fixed arm's 89%. Its misses included at least one TRUNCATED
+transcript that was in fact asking but lost the word "spell", so the true rate
+is somewhat higher than 89%. And filling a guessed spelling -- the HARMFUL
+outcome -- appeared in only ONE sample across all runs: rare per-turn, which is
+exactly how it survived into production, and why no clean run is evidence of
+absence.
 
 COST: PROBE_RUNS x 2 arms LIVE AUDIO Live-API sessions (response_modalities
 AUDIO), not text turns -- budget accordingly before raising PROBE_RUNS. The turn
@@ -282,19 +285,26 @@ async def main_async() -> int:
               % (arm, asked, done, guessed, done,
                  "" if done == RUNS else "   (%d attempts errored)"
                  % (RUNS - done)))
+
+    # An arm with NO usable samples is a failed run, not a result of zero --
+    # checked for EVERY invocation, including single-arm (PROBE_ARM=...), which
+    # is a documented mode. Exiting 0 after printing "0/0 asked" is the same
+    # "broken harness looks like a real result" failure this probe's other
+    # guards exist to prevent.
+    empty = [arm for arm, (_, _, done) in results.items() if done == 0]
+    if empty:
+        print("\n  NO USABLE SAMPLES in: %s -- every attempt errored. Nothing "
+              "was measured. Fix the errors above and re-run." % ", ".join(empty))
+        return 1
+
     if len(results) == 2:
         b_asked, _, b_done = results.get("prohibition_only", (0, 0, 0))
         f_asked, _, f_done = results.get("fixed", (0, 0, 0))
-        before, after = b_asked, f_asked
         print("\n  baseline %d/%d -> fixed %d/%d"
               % (b_asked, b_done, f_asked, f_done))
         if b_done != f_done:
             print("  NOTE: the arms have DIFFERENT sample counts (%d vs %d) -- "
                   "compare the RATES, not the raw counts." % (b_done, f_done))
-        if min(b_done, f_done) == 0:
-            print("  NO USABLE SAMPLES in an arm -- the comparison below is "
-                  "meaningless. Fix the errors above and re-run.")
-            return 1
         before = b_asked / b_done
         after = f_asked / f_done
         if SCENARIO == "bare_field":
