@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-xzw5: the revision marker resolves through three ranks now, and the archive keys on the same one a confirmation record names). See [docs/journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md](../journal/entries/2026-08-06-bd-w3zw-kit-revision-archive.md) for the archive's original closeout details.*
+*Last updated: 2026-08-08 (bd polyglot-pdf-6x1j: guarded hard delete -- the only thing that removes an archive, author-only, and refused when the confirmation check cannot run. Earlier, bd polyglot-pdf-xzw5: the revision marker resolves through three ranks, and the archive keys on the same one a confirmation record names).*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -193,7 +193,23 @@ siblings: `scripts/read_kit_revision.py` returns the revision when exactly one
 answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
 several do -- for a confirmation record, a confident wrong schema is worse than
 an honest "cannot tell". `--segment` reads one exact archived segment after the
-operator disambiguates from `--list`. Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
+operator disambiguates from `--list`.
+
+**The one thing that removes an archive** is `DELETE /api/editor/kits/{kit_id}`
+(bd `polyglot-pdf-6x1j`) -- author-only, and guarded by a THREE-state check
+rather than a warning: records exist -> 409 offering unpublish; no records and
+the check *succeeded* -> deleted; the check could not run -> 409 refusing.
+`confirmation_logger.kit_has_confirmation_records` RAISES
+`ConfirmationCheckUnavailable` rather than returning False when the Firestore
+sink is off or its query fails, because the local JSONL fallback dies with the
+instance -- reading that silence as "no records" would let an author working
+locally destroy the evidence this archive exists to preserve. Taking the
+archive with the kit is deliberate: a kit with no confirmation records has
+nothing naming its superseded revisions, so leaving them strands bytes no
+record can retrieve. `FormKitStore.delete_kit` is the store's ONLY destructive
+primitive; both impls confine the delete to the kit's own prefix (the local one
+resolves and re-checks containment, since `_kit_dir` is a bare join; the GCS one
+appends a trailing slash, without which `w7` would also sweep away `w7-2024`). Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
 ignores anything deeper than `<kit>/<file>` in both backends, and `_archive` is
 outside `_KIT_ID_RE`. The static-bundle copy is a separate matter and needed an
 explicit fix -- `copyKitsToPublic` in `frontend/scripts/generate-form-manifest.ts`

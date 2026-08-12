@@ -88,7 +88,11 @@ from backend.services.form_kits import (
     safe_filename,
     sibling_marker,
 )
-from backend.utils.confirmation_logger import resolve_edition_marker
+from backend.utils.confirmation_logger import (
+    ConfirmationCheckUnavailable,
+    kit_has_confirmation_records,
+    resolve_edition_marker,
+)
 
 _log = structlog.get_logger().bind(module="editor_kit_routes")
 
@@ -277,6 +281,16 @@ class KitStatusResponse(BaseModel):
     # The kit retired by a cross-kit supersede, so the editor can confirm what
     # it actually took out of service rather than the author inferring it.
     supersededKitId: Optional[str] = None
+
+
+class KitDeleteResponse(BaseModel):
+    """The result of a guarded kit delete (bd polyglot-pdf-6x1j)."""
+
+    ok: bool
+    kitId: str
+    # What was actually removed, counted from the store rather than assumed --
+    # a delete that reports 0 is worth noticing.
+    objectsRemoved: int
 
 
 class KitLabelBody(BaseModel):
@@ -2373,6 +2387,85 @@ async def set_editor_kit_status(
         retranslated=retranslated, translationModel=translation_model,
         supersededKitId=superseded_kit,
     )
+
+
+@router.delete("/kits/{kit_id}", response_model=KitDeleteResponse)
+async def delete_editor_kit(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+) -> KitDeleteResponse:
+    """Permanently remove a kit and everything under it, archives included.
+
+    AUTHOR ONLY, and deliberately the only destructive route in this file
+    (maintainer decision 2026-08-08: "editors should not ever be able to make
+    destructive actions -- their work should always be recoverable"). Editors
+    are subcontractors; deletion is the accountable party's call.
+
+    THE GUARD IS THE FEATURE. A kit named by any confirmation record must not be
+    deletable at all: those records pin what a client agreed to, and the whole
+    revision-archive mechanism (bd polyglot-pdf-w3zw / xzw5) exists so those
+    bytes stay retrievable. Rather than warning and proceeding, this refuses --
+    the unsafe path is made impossible, and unpublish is offered instead, which
+    hides the kit from clients while keeping every byte.
+
+    THREE outcomes, and the third is the one that matters:
+      - records exist        -> 409, suggesting unpublish
+      - no records, verified -> deleted
+      - COULD NOT CHECK      -> 409, refusing
+
+    The third is not paranoia. The confirmation sink is Firestore, enabled by
+    the deploy env; with it off the check falls back to a local JSONL file that
+    dies with the instance. An editor running locally against the real bucket
+    would see an empty file, conclude "no records", and destroy evidence that
+    exists. "I could not verify this is safe" must read as NO, never as yes
+    (maintainer decision, same date).
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    # 404 before anything else, so deleting a typo'd id says so plainly rather
+    # than reporting a guard result about a kit that was never there.
+    await _load_meta_or_404(store, kit_id)
+
+    try:
+        has_records = kit_has_confirmation_records(kit_id)
+    except ConfirmationCheckUnavailable as exc:
+        _log.warning(
+            "editor_kit_delete_unverifiable", kit_id=kit_id, role=role, error=str(exc)
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f'Cannot verify whether "{kit_id}" has confirmation records, so it '
+                f"will not be deleted. Deletion is permanent and takes the revision "
+                f"archive with it, so an unverified delete could destroy the record "
+                f"of what a client agreed to. Unpublish it instead -- that hides it "
+                f"from clients and keeps every file."
+            ),
+        ) from exc
+
+    if has_records:
+        _log.info("editor_kit_delete_refused", kit_id=kit_id, role=role)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f'"{kit_id}" has confirmation records: clients have agreed to this '
+                f"form, and those records name the exact revision they saw. Deleting "
+                f"it would destroy the evidence behind them. Unpublish it instead -- "
+                f"that hides it from clients and keeps every file."
+            ),
+        )
+
+    try:
+        removed = await store.delete_kit(kit_id)
+    except FormKitNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
+    except FormKitStoreError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Unable to delete the kit: {exc}"
+        ) from exc
+
+    _log.info("editor_kit_deleted", kit_id=kit_id, role=role, objects_removed=removed)
+    return KitDeleteResponse(ok=True, kitId=kit_id, objectsRemoved=removed)
 
 
 @router.post("/kits/{kit_id}/label")

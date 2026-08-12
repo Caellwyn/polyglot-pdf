@@ -134,6 +134,40 @@ Two properties of `author_version` matter for the audit trail:
   (bd `polyglot-pdf-6dz0`). A republish keeps the original; a changed value is a
   409. A new revision gets a new version.
 
+**Deleting a kit is guarded by these records** (bd `polyglot-pdf-6x1j`).
+`DELETE /api/editor/kits/{kit_id}` is author-only and removes the kit *and its
+revision archive*, so it asks first: any confirmation event naming the kit ->
+409 offering unpublish instead. Crucially, a check that CANNOT RUN is also a
+refusal -- `kit_has_confirmation_records` raises rather than returning False in
+THREE cases:
+
+1. **The sink is disabled** (`CONFIRMATION_FIRESTORE_ENABLED` defaults false).
+   The local JSONL fallback dies with the instance, so its silence is not
+   evidence of absence -- an author working locally against the shared bucket
+   would otherwise read "no records" and destroy the evidence behind real ones.
+2. **The query failed.** "Asked and errored" is not "asked and got none".
+3. **A record exists that names NO kit** (`kit_id` stored as null). `kit_id` is
+   optional end to end, and a Firestore equality filter cannot match a stored
+   null -- so a kit-scoped query is BLIND to those records. Reporting "none"
+   there would be a silent false safe on a form clients really did confirm
+   against. They cannot be attributed to a specific kit, so guessing is
+   unavailable and refusing is the honest answer.
+4. **A LEGACY record exists that omits `kit_id` entirely.** `IS_NULL` matches a
+   stored null, not a MISSING key -- and `field_confirmed` records written
+   between the Firestore sink shipping (2026-08-03, bd `polyglot-pdf-z2is`) and
+   `kit_id` joining the event dict (2026-08-05, bd `polyglot-pdf-47r3`) have no
+   such key. Cases 1-3 all skip them, so a kit whose only records are that
+   vintage would report "verified: no records" and be hard-deleted WITH its
+   archive.
+
+   This sweep is scoped to `event == "field_confirmed"` deliberately, and that
+   scoping is load-bearing: `log_form_session_start`/`_end` produce the SAME
+   missing-key shape, so sweeping on the shape alone would make every kit
+   permanently undeletable the moment one session is logged. Firestore cannot
+   query for a missing key, so this is a bounded client-side scan
+   (`_LEGACY_SCAN_LIMIT`) rather than a filter -- enough to find legacy records
+   if any exist, small enough that a delete never streams a large collection.
+
 `author_version` is NOT `form_metadata.version`, which is auto-extracted display
 text and frequently meaningless for this purpose (real shipped values include
 `"draft"` and `"v9_conformant"`).

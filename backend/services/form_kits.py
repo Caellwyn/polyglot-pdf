@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -371,6 +372,27 @@ class FormKitStore:
 		"""
 		raise NotImplementedError
 
+	async def delete_kit(self, kit_id: str) -> int:
+		"""Remove a kit and EVERYTHING under it, archives included. Returns the
+		number of objects removed.
+
+		The store's only destructive operation (bd polyglot-pdf-6x1j) -- every
+		other method here creates or reads. The caller is responsible for the
+		guard: deletion is refused unless the confirmation record has been
+		consulted AND is empty (see confirmation_logger.kit_has_confirmation_
+		records, which raises rather than returning False when it cannot check).
+
+		Deleting the archives is the point, not an oversight: a kit with no
+		confirmation records has nothing pointing at its superseded revisions,
+		so leaving them would strand bytes no record can ever name. A kit WITH
+		records must never reach this method.
+
+		Implementations MUST confine the delete to the kit's own prefix -- an
+		unvalidated kit_id is a path-traversal vector here in a way it is not
+		for a read (bd polyglot-pdf-6x1j).
+		"""
+		raise NotImplementedError
+
 
 class LocalFormKitStore(FormKitStore):
 	def __init__(self, root: Path):
@@ -670,6 +692,43 @@ class LocalFormKitStore(FormKitStore):
 				f"Unable to list archived revisions for {kit_id}: {exc}"
 			) from exc
 
+	async def delete_kit(self, kit_id: str) -> int:
+		kit_dir = self._kit_dir(kit_id)
+		root = self.root
+
+		def _remove() -> int:
+			# CONTAINMENT FIRST. _kit_dir is a bare join, so a kit_id of "..",
+			# "../other", or an absolute path resolves outside the root -- which
+			# is harmless for the reads it was written for and catastrophic for
+			# a recursive delete. Resolve both sides and require the target to
+			# be a strict descendant of the root before removing anything.
+			try:
+				resolved = kit_dir.resolve()
+				resolved_root = root.resolve()
+			except OSError as exc:
+				raise FormKitStoreError(
+					f"Unable to resolve the kit path for {kit_id}: {exc}"
+				) from exc
+			if resolved == resolved_root or resolved_root not in resolved.parents:
+				raise FormKitStoreError(
+					f"Refusing to delete outside the form-kits root: {kit_id!r}"
+				)
+			if not resolved.is_dir():
+				raise FormKitNotFound(f"Kit not found: {kit_id}")
+
+			# Count before removing, so the return value describes what was
+			# actually there rather than what the caller assumed.
+			removed = sum(1 for path in resolved.rglob("*") if path.is_file())
+			shutil.rmtree(resolved)
+			return removed
+
+		try:
+			return await anyio.to_thread.run_sync(_remove)
+		except (FormKitNotFound, FormKitStoreError):
+			raise
+		except OSError as exc:
+			raise FormKitStoreError(f"Unable to delete {kit_id}: {exc}") from exc
+
 
 class GCSFormKitStore(FormKitStore):
 	"""Form kit store using authenticated Google Cloud Storage client."""
@@ -968,6 +1027,49 @@ class GCSFormKitStore(FormKitStore):
 		except Exception as exc:
 			raise FormKitStoreError(
 				f"Unable to list gs://{self.bucket_name}/{base}: {exc}"
+			) from exc
+
+	async def delete_kit(self, kit_id: str) -> int:
+		if not kit_id or "/" in kit_id or kit_id in (".", ".."):
+			raise FormKitStoreError(
+				f"Refusing to delete an unsafe kit id: {kit_id!r}"
+			)
+		# TRAILING SLASH IS LOAD-BEARING. list_blobs matches on a raw string
+		# prefix, so deleting "w7" without it would also sweep away "w7-2024"
+		# and "w7-old" -- sibling kits whose ids merely start the same way. The
+		# slash confines the match to this kit's own directory.
+		base = self._build_blob_path(kit_id) + "/"
+
+		def _purge() -> int:
+			blobs = list(self._client.list_blobs(self.bucket_name, prefix=base))
+			if not blobs:
+				raise FormKitNotFound(f"Kit not found: {kit_id}")
+			# Re-assert the prefix rather than trusting the listing. `continue`
+			# would be the WRONG failure mode here: it would skip the stray
+			# blob, return a count quietly disagreeing with what was listed,
+			# and leave a half-deleted kit. A blob outside the prefix means the
+			# client or the prefix maths is broken, so refuse the whole
+			# operation before removing anything (Opus fresh-eyes: the old
+			# guard was unreachable AND chose the quiet failure).
+			stray = [b.name for b in blobs if not b.name.startswith(base)]
+			if stray:
+				raise FormKitStoreError(
+					f"Refusing to delete: {len(stray)} listed object(s) are outside "
+					f"{base!r} (first: {stray[0]!r})"
+				)
+			removed = 0
+			for blob in blobs:
+				blob.delete()
+				removed += 1
+			return removed
+
+		try:
+			return await anyio.to_thread.run_sync(_purge)
+		except FormKitNotFound:
+			raise
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to delete gs://{self.bucket_name}/{base}: {exc}"
 			) from exc
 
 

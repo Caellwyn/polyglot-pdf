@@ -499,6 +499,142 @@ def read_confirmation_log(form_session_id: str, strict: bool = False) -> list[di
     return events
 
 
+class ConfirmationCheckUnavailable(Exception):
+    """The durable confirmation record could not be consulted at all.
+
+    DISTINCT from "no records exist" (bd polyglot-pdf-6x1j), and the difference
+    is load-bearing: a caller about to do something irreversible must be able
+    to tell "I verified this is safe" from "I could not verify". Raised when
+    the Firestore sink is disabled or its query fails -- the local JSONL file
+    is a dev convenience that dies with the Cloud Run instance, so its silence
+    is not evidence of absence.
+    """
+
+
+# How many field_confirmed docs to inspect for the pre-47r3 (no kit_id key)
+# shape. Firestore cannot query for a MISSING key at all, so this is a bounded
+# client-side SAMPLE rather than a filter -- and stream() without order_by
+# returns __name__ order, which for .add()-generated ids is arbitrary, so these
+# are an arbitrary 50 and NOT the oldest 50.
+#
+# That sampling is acceptable because of what the legacy population looks like:
+# every field_confirmed doc written in the two days between the Firestore sink
+# shipping and kit_id joining the event dict. If any exist they exist as a
+# contiguous cohort, so a 50-doc sample effectively cannot miss them. Making it
+# deterministic (order_by timestamp) would need a composite index, and the repo
+# ships no firestore.indexes.json -- the query would 400 at runtime instead
+# (Opus outer cross-surface review, which enumerated every event value ever
+# written and confirmed this bound is the right call).
+_LEGACY_SCAN_LIMIT = 50
+
+
+def kit_has_confirmation_records(kit_id: str) -> bool:
+    """True when ANY confirmation event names this kit.
+
+    The guard behind irreversible kit deletion. Queries the Firestore sink on
+    kit_id equality -- an equality-only query needs no composite index, same
+    shape as the form_session_id read above.
+
+    Raises ConfirmationCheckUnavailable rather than returning False when the
+    durable record cannot be consulted (sink disabled, or the query failed).
+    Returning False there would let a caller delete a kit whose records exist
+    but are simply out of reach -- destroying the evidence the whole revision
+    archive exists to preserve, on the strength of a question never actually
+    asked (maintainer decision 2026-08-08: refuse when the check is
+    unavailable).
+    """
+    if not _firestore_enabled():
+        raise ConfirmationCheckUnavailable(
+            "the confirmation record sink is not enabled, so records cannot be checked"
+        )
+    try:
+        from backend.services.auth import get_db
+
+        collection = get_db().collection(_FIRESTORE_COLLECTION)
+        try:
+            from google.cloud.firestore_v1.base_query import FieldFilter
+
+            query = collection.where(filter=FieldFilter("kit_id", "==", kit_id))
+        except ImportError:
+            query = collection.where("kit_id", "==", kit_id)
+        # limit(1): existence only -- never stream a kit's whole history to
+        # answer a yes/no question.
+        if any(True for _ in query.limit(1).stream()):
+            return True
+
+        # An equality filter cannot match a record whose kit_id is NULL, and
+        # those exist: kit_id is optional end to end (log_field_confirmation's
+        # default, websocket_routes' handshake.get, and today's frontend sends
+        # `?? null`), and session start/end events omit the key entirely. A
+        # kit-scoped query is therefore blind to them, so "no rows" would be a
+        # silent false SAFE on a form clients really did confirm against -- the
+        # evidence-destroying direction (Opus fresh-eyes round 2).
+        #
+        # Such a record cannot be attributed to a specific kit, so guessing is
+        # not available. Refuse instead: report the check as UNAVAILABLE and let
+        # the caller offer unpublish. Bounded with limit(1) like the query above.
+        # No positional fallback here, deliberately. firebase-admin is a pinned
+        # hard dependency and vendors google-cloud-firestore, so FieldFilter
+        # always imports; the old `except NameError` guard was unreachable, and
+        # on the SDK it claimed to serve the positional form is the deprecated
+        # one the branch above exists to avoid -- untested code guarding an
+        # impossible case (Opus fresh-eyes round 4). If the import ever DID
+        # fail, NameError falls into the broad handler below and the check
+        # reports UNAVAILABLE -- a refusal, which is the fail-safe direction
+        # this whole guard is built around.
+        unattributed = collection.where(
+            filter=FieldFilter("kit_id", "==", None)
+        ).limit(1)
+        if any(True for _ in unattributed.stream()):
+            _log.info("confirmation_unattributed_records_block_delete", kit_id=kit_id)
+            raise ConfirmationCheckUnavailable(
+                "confirmation records exist that name no kit, so this kit cannot "
+                "be cleared for deletion"
+            )
+
+        # ...and the same blindness one shape over. IS_NULL matches a STORED
+        # null, not a MISSING key -- and records written between the Firestore
+        # sink shipping (2026-08-03) and kit_id being added to the event dict
+        # (2026-08-05, bd polyglot-pdf-47r3) omit the key entirely. Both
+        # queries above skip them, so a kit whose only records are that vintage
+        # reported "verified: no records" and was hard-deleted WITH its archive
+        # (Opus outer cross-surface review).
+        #
+        # Scoped to event == "field_confirmed" deliberately: session-lifecycle
+        # records share the missing-key shape, and sweeping on the shape alone
+        # would make every kit permanently undeletable the moment one session
+        # is logged. The event value is the discriminator, and it keeps this a
+        # single-field equality query -- no composite index.
+        legacy = collection.where(
+            filter=FieldFilter("event", "==", "field_confirmed")
+        ).limit(_LEGACY_SCAN_LIMIT)
+        for doc in legacy.stream():
+            if "kit_id" not in (doc.to_dict() or {}):
+                _log.info("confirmation_legacy_records_block_delete", kit_id=kit_id)
+                raise ConfirmationCheckUnavailable(
+                    "confirmation records predating kit identity exist, so this "
+                    "kit cannot be cleared for deletion"
+                )
+        return False
+    except ConfirmationCheckUnavailable:
+        # The "records name no kit" refusal is raised INSIDE the try above, so
+        # without this it fell into the handler below and was logged as
+        # `confirmation_kit_existence_check_failed` -- an ERROR naming a broken
+        # client. That is the one path where the guard's answer is a deliberate
+        # product decision rather than an infrastructure fault, and the whole
+        # ConfirmationCheckUnavailable-vs-False design exists to keep those
+        # apart; re-merging them in the telemetry sends an operator hunting a
+        # Firestore outage that never happened (Opus fresh-eyes round 3).
+        raise
+    except Exception as e:
+        _log.error(
+            "confirmation_kit_existence_check_failed",
+            error=str(e),
+            kit_id=kit_id,
+        )
+        raise ConfirmationCheckUnavailable(str(e)) from e
+
+
 def _read_confirmation_log_firestore(form_session_id: str) -> list[dict]:
     """Fetch a form-session's events from the Firestore sink.
 

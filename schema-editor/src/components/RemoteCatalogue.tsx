@@ -1,12 +1,14 @@
 import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  deleteRemoteKit,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
 import { AuthorVersionDialog } from './AuthorVersionDialog';
+import { DeleteKitDialog } from './DeleteKitDialog';
 
 interface RemoteCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -93,6 +95,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // listing data -- the catalogue deliberately does not read every kit's schema,
   // so the server is what knows a version is needed.
   const [versionPrompt, setVersionPrompt] = React.useState<RemoteKitEntry | null>(null);
+  // The kit queued for permanent deletion (bd polyglot-pdf-6x1j), plus the
+  // server's refusal when the guard says no. The refusal lives HERE rather
+  // than in the page-level error line: a 409 explaining why this form cannot
+  // be deleted has to be read next to the form it names.
+  const [deletePrompt, setDeletePrompt] = React.useState<RemoteKitEntry | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
   // Monotonic token: a slow progress load from a superseded refresh must not
   // clobber the current one (same stale-scan discipline as FormCatalogue).
   const refreshSeq = React.useRef(0);
@@ -244,6 +253,35 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   }, [onAuthError]);
 
   React.useEffect(() => { void refresh(); }, [refresh]);
+
+  // Permanently remove a kit. The ONLY destructive handler in this module: the
+  // server's guard decides (records exist / verified clean / could not check),
+  // and a 409 is the guard WORKING, so it renders inside the dialog rather
+  // than dismissing it.
+  const handleDelete = React.useCallback(async (kit: RemoteKitEntry) => {
+    setDeleteError(null);
+    // Clear any stale success banner, as every sibling handler does. Without
+    // it, deleting kit A and then being REFUSED on kit B showed a green
+    // '"A" was deleted permanently' beside B's red refusal -- on the one
+    // workflow where "did that just delete something?" must never be
+    // ambiguous (Opus fresh-eyes round 4).
+    setNotice(null);
+    setDeletingId(kit.id);
+    try {
+      await deleteRemoteKit(kit.id);
+      setDeletePrompt(null);
+      setNotice(`"${kit.label}" was deleted permanently.`);
+      await refresh();
+    } catch (err) {
+      if (err instanceof AuthError) { onAuthError?.(); return; }
+      // The guard refusing (409) is the NORMAL outcome for a form anyone has
+      // filled, and for one whose records cannot be checked. Keep the dialog
+      // open and show the server's own words -- it names the safe alternative.
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete the form');
+    } finally {
+      setDeletingId(null);
+    }
+  }, [refresh, onAuthError]);
 
   // Promote/demote a kit in the SHARED store. Promotion can be refused by the
   // server's publish gate (schema must validate) -- surface that detail. A
@@ -767,6 +805,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       : 'Run extraction'}
                   </button>
                 )}
+
               </>
             );
           })()}
@@ -1028,6 +1067,24 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     </button>
                   </div>
                 )}
+                {/* AUTHOR ONLY, deliberately (bd polyglot-pdf-6x1j): editors
+                    never take destructive actions -- their work must always be
+                    recoverable. The server enforces the same rule, since an
+                    editor holds a token and can call the API directly. Kept
+                    visually apart from the publish controls and last in the
+                    card, so it is never the button next to the one you meant. */}
+                {isAuthor && (
+                  <div className="mt-2 flex items-center justify-end border-t border-slate-100 px-1 pt-1">
+                    <button
+                      className="text-xs text-slate-400 hover:text-red-700"
+                      onClick={() => { setDeleteError(null); setDeletePrompt(kit); }}
+                      disabled={busy || deletingId !== null}
+                      title="Delete this form permanently -- refused if anyone has already filled it"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -1044,6 +1101,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           from listing data (bd polyglot-pdf-xzw5). Confirming re-runs the same
           publish with the version attached -- so the server decides, and this
           client never has to duplicate the "does this kit need one?" rule. */}
+      {/* Author-only, and the server enforces that too -- an editor holds a
+          token and can call the API directly, so hiding the button is not the
+          gate (bd polyglot-pdf-6x1j). */}
+      {deletePrompt && (
+        <DeleteKitDialog
+          kitId={deletePrompt.id}
+          kitLabel={deletePrompt.label}
+          busy={deletingId === deletePrompt.id}
+          error={deleteError}
+          onCancel={() => { setDeletePrompt(null); setDeleteError(null); }}
+          onConfirm={() => { void handleDelete(deletePrompt); }}
+        />
+      )}
+
       {versionPrompt && (
         <AuthorVersionDialog
           kitLabel={versionPrompt.label}

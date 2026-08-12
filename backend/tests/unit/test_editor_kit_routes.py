@@ -354,11 +354,18 @@ def _gcs_store(registry, prefix="form-kits"):
     store.prefix = prefix
     store._bucket = _FakeBucket(registry)
     store._not_found_exc = _FakeNotFound
-    store._client = SimpleNamespace(
-        list_blobs=lambda bucket_name, prefix: [
-            SimpleNamespace(name=n) for n in sorted(registry) if n.startswith(prefix)
-        ]
-    )
+    def _listed(bucket_name, prefix):
+        # Listed blobs carry a working .delete() so destructive paths can be
+        # driven here (bd polyglot-pdf-6x1j -- delete_kit was the only impl
+        # with no coverage, and it is the one that ships). Materialized into a
+        # list, matching the real client's page-buffered iteration.
+        def _make(name):
+            def _delete():
+                registry.pop(name, None)
+            return SimpleNamespace(name=name, delete=_delete)
+        return [_make(n) for n in sorted(registry) if n.startswith(prefix)]
+
+    store._client = SimpleNamespace(list_blobs=_listed)
     return store
 
 
