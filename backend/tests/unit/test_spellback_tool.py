@@ -367,6 +367,51 @@ class TestSpellbackSiAddendum:
         names_block = Settings().DTI_SYSTEM_INSTRUCTION
         assert "ask for the spelling before you fill anything" in names_block
 
+    def test_every_name_read_back_instruction_yields_to_the_addendum(self):
+        """ENUMERATE THE SET, do not fix one instance (CLAUDE.md scar #7).
+
+        bd polyglot-pdf-5s3pp was filed against ONE unconditional
+        verify-a-name-by-word sentence in the DTI names block. Fixing only
+        that left a sibling 3,377 chars away in WORKFLOW step 3 -- in the
+        MORE authoritative numbered-procedure block -- which the Opus
+        cross-surface review then found (bd polyglot-pdf-wvjpo).
+
+        So this derives the set MECHANICALLY from the shipped SI rather than
+        trusting a hand-list: every instruction telling the model to speak a
+        NAME back must carry the yields-to clause, or the assembled SI
+        contradicts the spell-back addendum whenever the tool is on.
+
+        Deliberately NOT in scope (the addendum's own preamble already
+        overrides these in so many words):
+          - verify-by-SPELLING wording ("read the SPELLING back") -- the
+            preamble names it explicitly.
+          - digit-by-digit NUMBER read-back -- the addendum preserves it.
+        """
+        import re
+
+        si = Settings().DTI_SYSTEM_INSTRUCTION
+        # Instructions to speak a NAME back as a word. Derived by pattern, so
+        # a newly-added sibling is caught instead of silently joining the set.
+        name_readback = re.compile(
+            r"(say|saying) (a |the )?name (back )?as a word", re.I)
+        hits = list(name_readback.finditer(si))
+        assert hits, (
+            "no name-read-back instruction found at all -- if the wording "
+            "changed, update this pattern; do not delete the guard")
+
+        unqualified = []
+        for m in hits:
+            preceding = si[max(0, m.start() - 130):m.start()]
+            if "Unless a later instruction" not in preceding:
+                unqualified.append(si[max(0, m.start() - 90):m.end() + 40])
+        assert not unqualified, (
+            "%d name-read-back instruction(s) are stated UNCONDITIONALLY, so "
+            "they contradict the spell-back addendum when the tool is on "
+            "(bd polyglot-pdf-5s3pp / wvjpo). Each needs the 'Unless a later "
+            "instruction' clause:\n  %s"
+            % (len(unqualified), "\n  ".join(repr(u) for u in unqualified))
+        )
+
     def test_verify_by_word_yields_to_the_spellback_addendum(self):
         """The two verification rules must not flatly contradict each other.
 

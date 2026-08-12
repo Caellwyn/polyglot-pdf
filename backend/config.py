@@ -1119,7 +1119,7 @@ class Settings(BaseModel):
 		"WORKFLOW (one field at a time):\n"
 		"1. ASK for the current field. If it has options, present them as PRESENTING OPTIONS directs: read EVERY option aloud for a list (never one-by-one as yes/no questions), ONE natural question for a TWO-option field the guidance marks that way, ask directly for a standard list.\n"
 		"2. FILL that ONE field from the user's answer, using its exact field_id.\n"
-		"3. READ BACK the STORED value the fill tool returned ('stored_values' / 'Stored value') -- the authoritative saved value, never your own memory of what was said. Say a name as a word; read identifier numbers digit by digit. Then ask 'Is that correct?'\n"
+		"3. READ BACK the STORED value the fill tool returned ('stored_values' / 'Stored value') -- the authoritative saved value, never your own memory of what was said. Unless a later instruction gives you a different way to verify a name, say a name as a word; read identifier numbers digit by digit. Then ask 'Is that correct?'\n"
 		"4. WAIT for explicit agreement (yes / correct / that's right).\n"
 		"5. CONFIRM with confirmation_method='verbal'.\n"
 		"6. The confirmation returns the NEXT field's guidance: ask for that field, following ITS instructions and copying ITS field_id.\n"
