@@ -2102,6 +2102,18 @@ async def set_editor_kit_status(
 
     current_status = _status_of(meta)
 
+    # THE EDITING LOCK GUARDS THIS WHOLE ROUTE, hoisted here so it DOMINATES
+    # every write below rather than sitting between them (bd polyglot-pdf-hqztg,
+    # Opus fresh-eyes). This route has TWO put_schema calls -- the rejection
+    # clear and the author-version persistence -- and the guard used to sit
+    # after the first. An editor reopening their own submission therefore
+    # rewrote the schema while an AUTHOR held the lock, which is exactly the
+    # "they approve something they never saw" case the lock exists to prevent,
+    # and worse: it also flipped the kit out of write-locked `submitted`, so
+    # every later editor write was permitted too. Reproduced end to end before
+    # this fix. It also now covers the archive hook below.
+    _require_edit_lock(meta, role)
+
     # An UNPUBLISHED kit may never walk back to draft (bd polyglot-pdf-6dz0).
     # Draft is editable, and this kit's schema is what earlier confirmation
     # records were confirmed against -- letting it become editable would make
@@ -2445,7 +2457,6 @@ async def set_editor_kit_status(
         # Reachable only author-to-author: publishing is already author-only,
         # so an editor cannot get here -- but a second author publishing a kit
         # the first is reviewing is exactly the collision the lock exists for.
-        _require_edit_lock(meta, role)
         if version_to_persist is not None:
             try:
                 await store.put_schema(kit_id, schema, schema_file)

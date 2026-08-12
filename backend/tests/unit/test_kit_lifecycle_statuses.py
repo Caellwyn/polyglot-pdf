@@ -1062,16 +1062,62 @@ def _schema_writing_routes():
     return out
 
 
-def test_EVERY_schema_writing_route_honours_the_editing_lock():
-    """The property, not a sample: a route that rewrites a schema must refuse
-    when someone else holds the kit. Six routes today."""
-    routes = _schema_writing_routes()
-    assert len(routes) >= 6, f"expected >=6 schema writers, found {len(routes)}"
+def test_EVERY_schema_write_is_DOMINATED_by_the_editing_lock():
+    """The property, and it is about ORDER, not mention.
 
-    unguarded = [name for name, body in routes if "_require_edit_lock" not in body]
-    assert unguarded == [], (
-        f"these routes rewrite a schema without checking the editing lock: "
-        f"{unguarded}"
+    The first version asserted `"_require_edit_lock" not in body` -- a
+    substring test over the whole function. That proves the helper is named
+    SOMEWHERE, not that it runs before every write. set_editor_kit_status has
+    TWO put_schema calls and one guard, and the guard sat between them: it
+    passed this test while an editor could rewrite a schema out from under an
+    author holding the lock (Opus fresh-eyes reproduced it end to end).
+
+    Now every put_schema must be PRECEDED by a guard in the same function.
+    """
+    import inspect
+    src = inspect.getsource(ekr).splitlines()
+    starts = [i for i, l in enumerate(src)
+              if l.startswith("async def ") or l.startswith("def ")]
+
+    # Helpers that write a schema are included too, not only @router. functions
+    # -- the route-only filter meant a new helper-level writer would be
+    # invisible to this test. Anything genuinely exempt is allowlisted WITH a
+    # reason, so the exemption is a decision on the record rather than a gap.
+    ALLOWED = {
+        # Runs INSIDE the publish path, after that route's own guard, on the
+        # schema object that route already holds.
+        "_sweep_drifted_translations",
+    }
+
+    offenders = []
+    for idx, i in enumerate(starts):
+        end_i = starts[idx + 1] if idx + 1 < len(starts) else len(src)
+        body = src[i:end_i]
+        name = src[i].split("(")[0].replace("async def ", "").replace("def ", "").strip()
+        writes = [j for j, l in enumerate(body) if "await store.put_schema(" in l]
+        if not writes or name in ALLOWED:
+            continue
+        guards = [j for j, l in enumerate(body) if "_require_edit_lock(" in l]
+        first_guard = min(guards) if guards else None
+        for w in writes:
+            if first_guard is None or first_guard > w:
+                offenders.append(f"{name} (write at +{w}, guard at "
+                                 f"{'none' if first_guard is None else f'+{first_guard}'})")
+
+    assert offenders == [], (
+        "these schema writes are not dominated by an editing-lock check: "
+        + "; ".join(offenders)
+    )
+
+
+def test_the_lock_property_test_covers_the_routes_it_claims_to():
+    """A guard against the enumeration silently matching nothing -- a detection
+    that finds zero writers would pass the test above vacuously."""
+    import inspect
+    src = inspect.getsource(ekr)
+    assert src.count("await store.put_schema(") >= 7, (
+        "expected at least 7 schema writes in this module; the detection above "
+        "may have stopped matching"
     )
 
 
@@ -1161,3 +1207,43 @@ def test_rejecting_a_kit_with_NO_version_is_a_clean_noop(client):
 
     assert resp.status_code == 200, resp.text
     assert _run(store.load_schema("w7", "schema.json")) == before
+
+
+def test_an_editor_cannot_REJECT_out_from_under_an_author(client):
+    """The lock must dominate EVERY write in the status route, not just the
+    last one.
+
+    This route has two put_schema calls -- the rejection clear and the
+    author-version persistence -- and the guard originally sat between them.
+    submitted -> draft is editor-allowed, so an editor reached the first write
+    while an AUTHOR held the lock: it rewrote the schema under the reviewer AND
+    flipped the kit out of write-locked `submitted`, permitting every later
+    editor write too (Opus fresh-eyes, reproduced end to end).
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+    assert _lock(c, "custom", AUTH_HDR).status_code == 200   # author reviewing
+
+    resp = _status(c, "custom", "draft", headers=HDR)        # editor reopens
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+    # Nothing moved: still submitted, version intact.
+    assert _run(store.load_metadata("custom"))["status"] == "submitted"
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-11"
+
+
+def test_the_lock_still_permits_the_HOLDER_to_reject(client):
+    """The guard must not block the person holding the kit -- an editor who
+    holds their own submission can still reopen it."""
+    c, store, root = client
+    _make_kit(root, "custom", status="submitted", schema=_no_edition_schema())
+    assert _lock(c, "custom", HDR).status_code == 200
+
+    resp = _status(c, "custom", "draft", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("custom"))["status"] == "draft"

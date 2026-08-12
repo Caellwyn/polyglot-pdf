@@ -1532,7 +1532,11 @@ export const App: React.FC = () => {
                     <li>- Click fields in the list or PDF viewer; edit in the right panel</li>
                     <li>- Yellow/red fields need attention; green fields are done</li>
                     <li>- Undo/redo with Cmd+Z / Cmd+Shift+Z; Cmd+S saves back to the workspace</li>
-                    <li>- When every field looks right, click Mark complete on its card</li>
+                    <li>
+                      - When every field looks right, click{' '}
+                      {role === 'author' ? 'Publish' : 'Submit for review'} on its card
+                      {role === 'author' ? '' : ' -- an author checks it and publishes it'}
+                    </li>
                   </>
                 ) : (
                   <>
