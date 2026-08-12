@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-12. See [the oagt journal entry](../journal/entries/2026-08-05-bd-oagt-certification-denylist.md) for closeout details.*
+*Last updated: 2026-08-08 (bd polyglot-pdf-6x1j: guarded hard delete -- the only thing that removes an archive, author-only, and refused when the confirmation check cannot run. Earlier, bd polyglot-pdf-xzw5: the revision marker resolves through three ranks, and the archive keys on the same one a confirmation record names).*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -65,85 +65,6 @@ gap, but never shadows a distinct real field that happens to lack its own
   now canonicalizes the same string to `string[]` at the AI-value ingress
   (`webFormConnection.canonicalizeAiCheckboxGroupValue`); the backend split is
   the defensive layer for sessions whose stored values predate that fix.
-
-### Certification blocks are NEVER filled (legal invariant)
-
-`backend/services/certification_denylist.py` refuses to write any third-party
-certification field -- USCIS I-90 Part 6 (Interpreter's Certification) and Part 7
-(Preparer's Declaration), F1040's "Paid Preparer Use Only" block, the W-7's
-"Acceptance Agent's Use ONLY" block, and anything matching the same patterns on a
-future kit. Our position is that we are not the preparer; the STRUCTURAL version
-of that claim (the tool *cannot* fill the block) is far stronger than a
-disclaimer (bd `polyglot-pdf-oagt`).
-
-**Two tiers, because one flat list cannot express this.** Tier 1 is global:
-professional ROLES (`interpreter`, `preparer`, `attorney`, `notary`,
-`civil_surgeon`, `accredited_rep`, `acceptance_agent`, `translator`, `witness`,
-`affiant`, `panel_physician`, `joint_sponsor`, a `ptin`) that are never the
-applicant on any form. Tier 2 is keyed on `kit_id`, for form-specific facts:
-`p6_`/`p7_` is the interpreter/preparer block **on the I-90 only** -- on the
-N-400 those parts are the applicant's employment and travel history, so a global
-prefix would silently blank answers the client spoke and confirmed.
-
-**An unrecognized `kit_id` applies EVERY kit's rules, not none.** `kit_id`
-arrives in the untrusted request body, and matching it exactly once made this
-invariant depend on a string's spelling: `"I-90"` instead of `"i-90"` silently
-dropped 27 of the I-90's 37 protections. Kit onboarding really does produce such
-variants (`_derive_kit_id` turns the standard `Form I-90.pdf` download into
-`form-i-90`), so the id is normalized (case, separators, a leading `form`) AND
-an unknown id falls back to the union of all kits. The failure mode is now an
-over-refusal -- a blank a human completes -- rather than a filled attestation.
-Registering the kit in `_KIT_SCOPED_PATTERNS`, which means someone read that
-form, buys the precision back.
-
-**This is enforced server-side and NOT by the schema.** `/api/fill-pdf` builds
-its field map from `request.form_schema` -- the CLIENT'S copy -- and never loads
-the kit's stored `schema.json`. The editor's `_ignored_fields` quarantine only
-removes a field from that client copy, so a stale bundle or hostile caller that
-sends the field anyway would get it written. The denylist therefore applies
-regardless of what any schema says.
-
-**FOUR guards, all required.** Each is pinned by its own test -- with all of them
-live, deleting any one leaves the others covering, so an outcome-only test cannot
-see a layer die:
-
-1. The per-field dispatch loop, keyed on the schema field id, placed BEFORE the
-   schema lookup so an unlisted field is still refused. Every write branch
-   (text / radio / checkbox / checkbox_group) is downstream of it.
-   (`test_each_guard_layer_refuses_on_its_own`)
-2. `fill_widget`, keyed on the name of the REAL widget in the PDF, which no
-   client-supplied schema can misrepresent.
-   (`test_each_guard_layer_refuses_on_its_own`)
-3. The shared-field radio's direct xref path, which bypasses `fill_widget`
-   entirely. No shipped kit uses that shape for a certification field, so it is
-   exercised by a synthetic v2 kit.
-   (`test_the_shared_radio_xref_path_refuses_certification_widgets`)
-4. `apply_field_flag_changes`, so a certification widget is never UNLOCKED.
-   Clearing the read-only bit is itself a write that persists into the emitted
-   PDF, and several call sites run it before the value-write guard.
-   (`test_a_certification_widget_is_never_UNLOCKED`)
-
-Matching is asymmetric by design in the ROLE tier: a false positive leaves a
-preparer field empty (correct anyway -- a human completes that block by hand); a
-false negative fills a perjury attestation. But kit-scoped rules must be scoped,
-because there the false-positive cost is a client's own spoken answer silently
-vanishing from their form.
-
-The applicant-field allowlist is empty, measured with each kit's `kit_id`:
-37 I-90 + 7 F1040 + 9 W-7 fields matched, zero applicant fields. Those counts are
-pinned by `test_the_documented_match_counts_are_accurate`.
-
-**Every pattern in BOTH tiers is individually pinned** -- each has a test input
-only it satisfies, so deleting it names itself. This is not optional bookkeeping:
-an unpinned pattern is either dead or redundant, and a dead one (`ptin`, which a
-leading `\b` prevented from ever matching after an underscore) is how the W-7
-acceptance-agent block went unprotected through a whole review round. When adding
-a pattern, add its pin -- and verify by deleting the pattern and watching exactly
-one named case fail.
-
-Authoring-time flagging in the editor is bd `polyglot-pdf-zerz`; the voice path
-still soliciting these fields, and the audit trail recording them as confirmed,
-is bd `polyglot-pdf-sxyp`.
 
 ### The widget gotchas (scar tissue)
 
