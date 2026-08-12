@@ -142,6 +142,80 @@ def test_the_rubrics_kind_COUNT_matches_the_kinds_it_enumerates():
         f"'one of {expected} kinds' -- the count and the enumeration drifted")
 
 
+def test_only_MARKED_official_text_may_be_quoted_as_official():
+    """PROVENANCE (Opus cross-surface round 1). Kind (C) originally said "you
+    hold the form's official instructions verbatim -- QUOTE" without saying
+    which part of the catalog is official.
+
+    Measured against the SHIPPED kits, that premise is false on two of three:
+    the i-90 carries 0 chars of booklet_text and 0/132 help.details -- the only
+    text the secretary holds is 132 authored `help.instructions` paraphrases --
+    and the f1040 carries no text at all. Only the W-7 has a booklet. So a
+    secretary told to quote the official instructions would quote OUR wording
+    with government framing, to an immigration applicant: the exact
+    misattribution this bead exists to prevent, reintroduced by the fix for it.
+
+    The catalog renderer already distinguishes them (secretary_context:
+    verbatim text renders under 'OFFICIAL FORM INSTRUCTIONS (verbatim
+    reference)' or a field's 'details:' block; a paraphrase renders under a
+    bare 'help:'), so the rubric must key on those markings.
+    """
+    si = SECRETARY_SI
+    assert "OFFICIAL FORM INSTRUCTIONS (verbatim reference)" in si, (
+        "the rubric must name the catalog marking that makes text official")
+    assert "details:" in si, "the per-field verbatim block must be named too"
+    low = si.lower()
+    assert "'help:' line is not official" in low or "help: line is not official" in low, (
+        "the rubric must say the help line is NOT official text")
+    # ...and say what to do when NO official text is held -- the i-90 case.
+    assert "not available to you" in low
+
+
+def test_the_official_marking_matches_what_the_renderer_actually_emits():
+    """The rubric's marking must be the renderer's marking, byte-for-byte.
+
+    Derived from the renderer rather than restated, so a change to either side
+    fails here instead of silently teaching the secretary to look for a header
+    that no longer exists.
+    """
+    from backend.services.secretary_context import _render_form_reference
+
+    rendered = _render_form_reference(
+        {"form_metadata": {"booklet_text": "OFFICIAL BODY TEXT"}})
+    marker = "OFFICIAL FORM INSTRUCTIONS (verbatim reference)"
+    assert marker in rendered, (
+        f"the renderer no longer emits {marker!r} -- re-anchor the rubric")
+    assert marker in SECRETARY_SI
+
+
+def test_a_booklet_less_shipped_kit_yields_no_official_text_to_quote():
+    """The i-90 is the case the provenance rule exists for -- pinned against
+    the SHIPPED kit so a future re-extraction that adds or drops a booklet is
+    a visible change here, not a silent shift in what the secretary claims."""
+    import json
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[3] / "form-kits"
+    kit = root / "i-90" / "schema.json"
+    if not kit.exists():
+        pytest.skip("i-90 kit not present")
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    meta = schema.get("form_metadata") or {}
+    fields = schema.get("fields") or []
+    booklet = (meta.get("booklet_text") or "").strip()
+    details = [f for f in fields
+               if ((f.get("help") or {}).get("details") or "").strip()]
+    paraphrases = [f for f in fields
+                   if ((f.get("help") or {}).get("instructions") or "").strip()]
+
+    assert not booklet and not details, (
+        "the i-90 gained official text -- good, but re-check the rubric's "
+        "no-official-text branch is still exercised by SOME shipped kit")
+    assert paraphrases, (
+        "the i-90 lost its help paraphrases; this test pins the case where the "
+        "secretary holds ONLY unofficial text")
+
+
 def test_the_official_text_lookup_use_is_actually_defined_for_the_secretary():
     """THE ORIGINAL DEFECT. The tool advertised a guidance-lookup use that the
     secretary's rubric never defined -- it listed only value recall and field

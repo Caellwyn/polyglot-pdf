@@ -77,6 +77,37 @@ said 1, which was the count for the single half-line mutation I ran rather
 than for reverting the layer, and the reviewer reproduced the real number
 twice. Full both-roots suite green at 3074 passed.
 
+Opus cross-surface round 1 found the one place the fix only half-reached its
+own goal, and it was fixed inline rather than deferred. Kind (C) said "you
+hold the form's official instructions verbatim -- QUOTE" without saying WHICH
+part of the catalog is official. Measured against the SHIPPED kits that
+premise is false on two of three: the i-90 has 0 chars of booklet_text and
+0/132 help.details -- the only text the secretary holds is 132 authored
+`help.instructions` PARAPHRASES -- and the f1040 has no text at all; only the
+W-7 (81,200 chars) satisfies it. So the secretary would have quoted OUR
+wording with government framing to an immigration applicant: the exact
+misattribution this bead exists to prevent, reintroduced by its own fix. The
+catalog renderer already distinguishes the two (verbatim text renders under
+"OFFICIAL FORM INSTRUCTIONS (verbatim reference)" or a field's `details:`
+block; a paraphrase renders under a bare `help:`), so kind (C) now keys on
+those markings, says the help line is NOT official and may only be spoken in
+the secretary's own voice, and says to state the official instructions are
+unavailable rather than dress a paraphrase as one. Three tests pin it,
+including one that DERIVES the marker from the renderer so the rubric and the
+catalog cannot drift apart, and one asserting the i-90 really is the
+no-official-text case. The reviewer filed it as bd polyglot-pdf-5nhxl
+(provenance labelling in the catalog itself, a surface this diff does not
+touch); that bead stays open for the broader labelling work.
+
+The same review confirmed the escalated `resolved` question is a NON-issue,
+and worth recording so it is not re-litigated: a kind-(C) decline correctly
+returns `resolved: true`. The user path voices the decline prose (which the
+new SI relay rule is built to consume), and the internal navigation path
+hard-codes a kind-(B) query so a (C) decline cannot reach it. Setting
+`resolved: false` would be the bug -- it routes into the pushback branch that
+appends "ask the user to describe the field more specifically", nonsense for
+an eligibility refusal.
+
 ## Lessons
 
 - **Mutation-testing the test found a real weakness, not just a checkbox.** The
@@ -104,6 +135,12 @@ twice. Full both-roots suite green at 3074 passed.
   count at "three" reddens 2 (the count pin plus the official-text-lookup
   content test). Both figures are the reviewer's independent re-measurement --
   I had said 3 for the second, which was wrong.
+- **Check that an instruction's PREMISE holds on the real data.** Kind (C)
+  told the model it holds official text; on two of three shipped kits it does
+  not, and the catalog gave it no way to tell ours from the government's. An
+  instruction can be perfectly worded and still false in production. Measure
+  the premise against shipped content, not against the one kit you had in
+  mind (the W-7).
 - **A tool declaration advertising a capability the answering model was never
   scoped for is the dangerous shape.** The fix was not only narrowing what may
   be asked, but DEFINING the third use on the answering side so it is not left
