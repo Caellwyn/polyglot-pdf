@@ -138,11 +138,23 @@ Two properties of `author_version` matter for the audit trail:
 `DELETE /api/editor/kits/{kit_id}` is author-only and removes the kit *and its
 revision archive*, so it asks first: any confirmation event naming the kit ->
 409 offering unpublish instead. Crucially, a check that CANNOT RUN is also a
-refusal -- `kit_has_confirmation_records` raises rather than returning False
-when the Firestore sink is disabled or its query fails, because the local JSONL
-fallback dies with the instance and its silence is not evidence of absence. An
-author working locally against the shared bucket would otherwise read "no
-records" and destroy the evidence behind real ones.
+refusal -- `kit_has_confirmation_records` raises rather than returning False in
+THREE cases:
+
+1. **The sink is disabled** (`CONFIRMATION_FIRESTORE_ENABLED` defaults false).
+   The local JSONL fallback dies with the instance, so its silence is not
+   evidence of absence -- an author working locally against the shared bucket
+   would otherwise read "no records" and destroy the evidence behind real ones.
+2. **The query failed.** "Asked and errored" is not "asked and got none".
+3. **A record exists that names NO kit.** `kit_id` is optional end to end (the
+   logger's default, the handshake's `.get`, and the client's `?? null`), and a
+   Firestore equality filter cannot match a stored null -- so a kit-scoped query
+   is BLIND to those records. Reporting "none" there would be a silent false
+   safe on a form clients really did confirm against. They cannot be attributed
+   to a specific kit, so guessing is unavailable and refusing is the honest
+   answer. (Session start/end events omit the key entirely rather than storing
+   null, and equality-on-null does not match a missing key, so they do not trip
+   this -- otherwise one logged session would make every kit undeletable.)
 
 `author_version` is NOT `form_metadata.version`, which is auto-extracted display
 text and frequently meaningless for this purpose (real shipped values include

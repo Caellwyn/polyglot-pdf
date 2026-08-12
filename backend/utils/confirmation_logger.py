@@ -542,7 +542,32 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
             query = collection.where("kit_id", "==", kit_id)
         # limit(1): existence only -- never stream a kit's whole history to
         # answer a yes/no question.
-        return any(True for _ in query.limit(1).stream())
+        if any(True for _ in query.limit(1).stream()):
+            return True
+
+        # An equality filter cannot match a record whose kit_id is NULL, and
+        # those exist: kit_id is optional end to end (log_field_confirmation's
+        # default, websocket_routes' handshake.get, and today's frontend sends
+        # `?? null`), and session start/end events omit the key entirely. A
+        # kit-scoped query is therefore blind to them, so "no rows" would be a
+        # silent false SAFE on a form clients really did confirm against -- the
+        # evidence-destroying direction (Opus fresh-eyes round 2).
+        #
+        # Such a record cannot be attributed to a specific kit, so guessing is
+        # not available. Refuse instead: report the check as UNAVAILABLE and let
+        # the caller offer unpublish. Bounded with limit(1) like the query above.
+        try:
+            unattributed = collection.where(
+                filter=FieldFilter("kit_id", "==", None)
+            ).limit(1)
+        except NameError:  # pragma: no cover -- the ImportError path above
+            unattributed = collection.where("kit_id", "==", None).limit(1)
+        if any(True for _ in unattributed.stream()):
+            raise ConfirmationCheckUnavailable(
+                "confirmation records exist that name no kit, so this kit cannot "
+                "be cleared for deletion"
+            )
+        return False
     except Exception as e:
         _log.error(
             "confirmation_kit_existence_check_failed",

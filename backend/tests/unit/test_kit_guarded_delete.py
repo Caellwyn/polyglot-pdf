@@ -274,7 +274,11 @@ class _FilteringQuery:
     def stream(self):
         matched = [
             d for d in self._docs
-            if self._field is None or d.get(self._field) == self._value
+            if self._field is None
+            # Firestore's equality-on-null matches a stored null, NOT a missing
+            # key -- session start/end events omit kit_id entirely, so the two
+            # cases must not be conflated here.
+            or (self._field in d and d[self._field] == self._value)
         ]
         if self._limit is not None:
             matched = matched[:self._limit]
@@ -528,3 +532,66 @@ def test_the_existence_query_asks_for_at_most_ONE_document(monkeypatch):
     assert db._collection.streams == [{"limit": 1, "streamed": 1}], (
         "the existence check must ask for at most one document"
     )
+
+
+def test_a_record_naming_NO_kit_blocks_deletion_rather_than_clearing_it(monkeypatch):
+    """An equality filter cannot match a record whose kit_id is NULL -- and
+    those are real: kit_id is optional end to end, and today's frontend sends
+    `?? null`. A kit-scoped query is blind to them, so "no rows" would be a
+    silent false SAFE on a form clients really did confirm against (Opus
+    fresh-eyes round 2; the sink suite's own docstring warned that "a query
+    cannot silently skip pre-47r3 sessions" -- this was such a query).
+
+    Those records cannot be attributed to a specific kit, so guessing is not
+    available. Refusing is the honest answer.
+    """
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [{"kit_id": None, "form_id": "W-7"}])
+
+    with pytest.raises(ConfirmationCheckUnavailable) as exc:
+        kit_has_confirmation_records("w7")
+    assert "name no kit" in str(exc.value)
+
+
+def test_an_unattributed_record_does_not_mask_a_DIRECT_hit(monkeypatch):
+    """A kit that IS named still reports True -- the null sweep must not
+    downgrade a definite yes into "cannot verify", or the 409 would name the
+    wrong reason."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"kit_id": None, "form_id": "W-7"},
+        {"kit_id": "w7", "field_id": "f1"},
+    ])
+
+    assert kit_has_confirmation_records("w7") is True
+
+
+def test_a_clean_collection_still_clears_a_kit_for_deletion(monkeypatch):
+    """The refusal must not become universal: with records that all name OTHER
+    kits and none naming nothing, deletion is still permitted -- otherwise the
+    feature is unusable the moment any confirmation exists."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"kit_id": "i-90", "field_id": "f1"},
+        {"kit_id": "w7-2024", "field_id": "f2"},
+    ])
+
+    assert kit_has_confirmation_records("w7") is False
+
+
+def test_a_session_event_with_NO_kit_id_KEY_does_not_block_deletion(monkeypatch):
+    """log_form_session_start/_end omit the key entirely rather than storing
+    null. Firestore equality-on-null does not match a missing key, so these
+    must not trip the refusal -- otherwise every kit becomes undeletable as
+    soon as one session has ever been logged."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"event": "form_session_started", "form_session_id": "s1"},
+        {"event": "form_session_ended", "form_session_id": "s1"},
+    ])
+
+    assert kit_has_confirmation_records("w7") is False
