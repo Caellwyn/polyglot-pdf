@@ -2,13 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-05 (bd polyglot-pdf-oagt: the fill route now REFUSES
-interpreter/preparer certification fields -- a legal invariant enforced
-server-side by `backend/services/certification_denylist.py`, not by the schema,
-because the route trusts the client-supplied `form_schema` and never reads the
-kit's stored schema.json; see "Certification blocks are NEVER filled"). Prior:
-2026-08-03 (bd polyglot-pdf-z2is: /api/fill-pdf is auth-gated;
-fillPDF gained the optional getToken param). Prior: 2026-08-01. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers; [the eb4z entry](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the field_mappings []-alias exact-wins fix. Prior: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found).*
+*Last updated: 2026-08-12. See [the oagt journal entry](../journal/entries/2026-08-05-bd-oagt-certification-denylist.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -246,6 +240,64 @@ artifacts such as the persisted AcroForm dump `acroform.json`, bd
 `polyglot-pdf-92qe.1`). PDF filling and the public `/api/form-kits*` routes never
 call the write surface; drafts stay invisible to the voice app (the complete-only
 manifest gate is unchanged).
+
+**Revision archive** (bd `polyglot-pdf-w3zw`): `put_archived_revision`,
+`load_archived_revision`, and `list_archived_markers` keep SUPERSEDED schemas
+readable at `<kit_id>/_archive/<marker>/`. Kit storage is one slot per kit_id, so
+a republish overwrites in place -- and the confirmation audit trail records
+`kit_id` + a revision marker that is *not* a storage address, so without this a
+republish destroyed the schema an old record was confirmed against. The marker is
+resolved from the superseded revision's OWN schema (`resolve_edition_marker`,
+through ALL THREE ranks -- `edition_date`, then `author_version`, then the shape
+fingerprint) and encoded into one safe path segment by `encode_marker` (it
+encodes rather than rejects: real markers contain `/` and `:`, which
+`safe_filename` bars). The archive MUST resolve through the same ranks the
+confirmation record did: keyed on anything else, the bytes are on disk under a
+key no record names and the retrieval this whole mechanism exists for silently
+fails (bd `polyglot-pdf-xzw5` -- an `author_version` kit archived under a
+`sha256:` fingerprint until this was fixed; the agreement is pinned by a test
+that resolves both sides). The
+archive is written whenever a PUBLISHED revision is retired -- on
+revert-to-draft, on unpublish, and on the outgoing kit of a `replaces_kit_id`
+supersede (bd `polyglot-pdf-6dz0`): every editor route
+that writes `schema.json` refuses while the kit is write-locked (save, repair,
+translate-options, derive-divisions, regenerate-guidance, and extract -- the
+last of these was ungated until bd `polyglot-pdf-w3zw` and is now pinned by a
+property test), so retirement is the last moment the published bytes exist. A
+marker is not a unique key -- two revisions can share one `edition_date` -- so
+the archive skips only when the stored copy IS the same schema, and a distinct
+revision under a taken marker lands on a fingerprint-disambiguated sibling
+(`<marker>--<fingerprint>`). Retrieval therefore searches the marker AND its
+siblings: `scripts/read_kit_revision.py` returns the revision when exactly one
+answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
+several do -- for a confirmation record, a confident wrong schema is worse than
+an honest "cannot tell". `--segment` reads one exact archived segment after the
+operator disambiguates from `--list`.
+
+**The one thing that removes an archive** is `DELETE /api/editor/kits/{kit_id}`
+(bd `polyglot-pdf-6x1j`) -- author-only, and guarded by a THREE-state check
+rather than a warning: records exist -> 409 offering unpublish; no records and
+the check *succeeded* -> deleted; the check could not run -> 409 refusing.
+`confirmation_logger.kit_has_confirmation_records` RAISES
+`ConfirmationCheckUnavailable` rather than returning False when the Firestore
+sink is off or its query fails, because the local JSONL fallback dies with the
+instance -- reading that silence as "no records" would let an author working
+locally destroy the evidence this archive exists to preserve. Taking the
+archive with the kit is deliberate: a kit with no confirmation records has
+nothing naming its superseded revisions, so leaving them strands bytes no
+record can retrieve. `FormKitStore.delete_kit` is the store's ONLY destructive
+primitive; both impls confine the delete to the kit's own prefix (the local one
+resolves and re-checks containment, since `_kit_dir` is a bare join; the GCS one
+appends a trailing slash, without which `w7` would also sweep away `w7-2024`). Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
+ignores anything deeper than `<kit>/<file>` in both backends, and `_archive` is
+outside `_KIT_ID_RE`. The static-bundle copy is a separate matter and needed an
+explicit fix -- `copyKitsToPublic` in `frontend/scripts/generate-form-manifest.ts`
+is recursive, so it now filters underscore-prefixed dirs at EVERY level (the
+deploy scripts' own `_*` guards skip only top-level entries like
+`form-kits/_translation`, which is why a nested `_archive` slipped past them).
+Archives DO belong in the GCS bucket: that is the authenticated backend store
+the operator read goes through. `scripts/read_kit_revision.py` is the operator read
+(current-or-archived, by `kit_id` + marker).
 
 ## Debugging
 

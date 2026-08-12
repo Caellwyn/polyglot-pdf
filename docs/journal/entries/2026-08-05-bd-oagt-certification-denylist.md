@@ -224,6 +224,40 @@ overruled exactly that in bd `47r3` because it would have blocked firms with
 proprietary forms), and the runtime guard does not depend on it. Neither exit
 criterion requires it.
 
+## Recovery + closeout (2026-08-12)
+
+This work was written earlier and then ABANDONED on a never-pushed local
+branch (`claude/certification-denylist`) with three beads tangled on it: bd
+47r3 (already merged separately via PR #545), bd 89mt (a cost-measurement
+spike whose bead is CLOSED and whose artifacts the maintainer declined to
+ship), and this one. Only the five oagt files were cherry-picked onto a clean
+branch off current dev; the 89mt artifacts are stranded on that local branch
+and their inventory is recorded on bd 89mt in case they are ever wanted.
+
+Re-verified against TODAY's dev rather than trusted from the branch (it was
+27 commits behind): 85 denylist tests pass, the full both-roots suite is
+green at 3122, and all FOUR is_certification_field enforcement sites in
+pdf_fill_routes.py are INDEPENDENTLY mutation-verified -- disabling any one
+alone reddens a distinct test. That per-site check matters here: one test
+covering several guards would have let a deleted guard ship green, which is
+exactly the failure this file's own round-2 note records.
+
+BASE-DRIFT BUG CAUGHT AT REVIEW: the branch's `pdf-filling.md` edit was
+written against the stale base, so cherry-picking it DELETED a still-accurate
+~65-line revision-archive / guarded-delete section added by three PRs (w3zw,
+xzw5, 6x1j) that merged after that base, and reverted the file's date stamp
+backwards. Fixed by rebuilding the doc from dev's current copy and splicing
+only the new certification section in. The general lesson: when recovering an
+abandoned branch, a DOC edit is the dangerous part -- code conflicts announce
+themselves, prose silently reverts whatever landed meanwhile.
+
+Two follow-up beads were re-measured against the shipped cut and corrected
+rather than inherited: bd dhds (unpinned unlock guard) is ALREADY RESOLVED
+here -- the test now records the route's real calls, and the mutation proves
+it; bd 6u6h is PARTIALLY STALE -- its `firm_name_line1` gap is real, but its
+ptin examples now refuse and its `g28` leading- claim does not match the
+shipped pattern. Both beads carry the measured correction.
+
 ## Lessons
 
 - **A convention cannot carry a legal invariant.** `_ignored_fields` looked like
