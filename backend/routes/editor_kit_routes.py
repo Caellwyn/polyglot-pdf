@@ -2152,18 +2152,25 @@ async def set_editor_kit_status(
             ),
         )
 
-    # An editor may not reach back into a LIVE form at all; that is the
-    # author's unlock. (Reverting one's own submitted work stays allowed.)
+    # An editor may not reach back into a LIVE form AT ALL -- neither to reopen
+    # it nor to retire it. Both destinations, not just draft: unpublishing takes
+    # a form away from every client, and it is a ONE-WAY door for an editor
+    # (revert-to-draft then 409s under the 6dz0 immutability rule, and
+    # republishing 403s under the rule above), so a subcontractor could pull a
+    # live form and be unable to restore it. My first version checked only
+    # `draft` while the comment claimed "complete -> anything" was covered --
+    # a false claim a later reader would trust (Opus fresh-eyes round 2,
+    # reproduced end to end). Reverting one's own SUBMITTED work stays allowed.
     if (
-        body.status == "draft"
+        body.status in ("draft", "unpublished")
         and current_status in ("complete", "unpublished")
         and role != "author"
     ):
         raise HTTPException(
             status_code=403,
             detail=(
-                "This form is published, so only an author can reopen it. Ask "
-                "an author to unlock it."
+                "This form is published, so only an author can reopen or retire "
+                "it. Ask an author."
             ),
         )
 
@@ -2500,6 +2507,16 @@ async def set_editor_kit_status(
                        f"(status {_status_of(superseded_meta)}), so there is "
                        "nothing to retire.",
             )
+        # The lock applies to the OUTGOING kit too. The guard at the top of this
+        # route only ever saw the INCOMING kit's metadata, so a supersede
+        # archived and retired a second kit that no guard had checked (Opus
+        # fresh-eyes round 2). Inert today -- the lock is role-scoped, so a
+        # same-role holder would not be refused anyway -- but the omission
+        # becomes a live hole the moment bd polyglot-pdf-ijntk makes locks
+        # per-user, and it contradicts the helper's own "every schema write"
+        # contract.
+        _require_edit_lock(superseded_meta, role)
+
         # Archive its bytes now -- the archive is additive and harmless even if
         # the publish below fails, whereas the STATUS flip is not, so that is
         # deferred until the incoming kit is actually live (see below).

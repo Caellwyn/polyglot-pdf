@@ -88,6 +88,13 @@ def _status(client, kit_id, status, replaces=None, headers=None):
         # action, but this helper cannot see the current status -- those tests
         # pass `headers=AUTH_HDR` explicitly, which is clearer at the call site
         # than a lookup here would be.
+        #
+        # CAUTION, learned the hard way (Opus fresh-eyes round 2): this default
+        # is a CONVENIENCE, not a statement of the rule. It once sent every
+        # unpublish with the author token while the route accepted an editor's
+        # -- so the suite read as though editor-unpublish were refused when it
+        # was not, and the gap was invisible. Any test that means to pin WHO may
+        # perform a transition must pass `headers` explicitly.
         headers = AUTH_HDR if status in ("complete", "unpublished") else HDR
     return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=headers)
 
@@ -1247,3 +1254,75 @@ def test_the_lock_still_permits_the_HOLDER_to_reject(client):
 
     assert resp.status_code == 200, resp.text
     assert _run(store.load_metadata("custom"))["status"] == "draft"
+
+
+def test_an_editor_CANNOT_UNPUBLISH_a_LIVE_kit(client):
+    """The twin of test_an_editor_CANNOT_reopen_a_LIVE_kit, and its absence is
+    why the hole shipped.
+
+    Unpublishing takes a form away from every client, and for an editor it is a
+    ONE-WAY door: revert-to-draft then 409s (the 6dz0 immutability rule) and
+    republishing 403s, so a subcontractor could pull a live form and be unable
+    to restore it. The role gate originally checked only `draft` while its
+    comment claimed "complete -> anything" was covered (Opus fresh-eyes round 2,
+    reproduced end to end).
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", "unpublished", headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert "author" in resp.json()["detail"].lower()
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_an_AUTHOR_can_still_unpublish(client):
+    """The gate must not block the role that is supposed to do this."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", "unpublished", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "unpublished"
+
+
+@pytest.mark.parametrize("target", ["draft", "unpublished"])
+def test_NEITHER_live_kit_transition_is_open_to_an_editor(client, target):
+    """Enumerated over both destinations rather than sampled: checking one of
+    the two is exactly how the unpublish half was missed."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", target, headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_a_supersede_honours_the_OUTGOING_kit_s_lock(client):
+    """The guard at the top of the route only sees the INCOMING kit, so a
+    supersede archived and retired a SECOND kit no guard had checked (Opus
+    fresh-eyes round 2). Role-scoped locks make it inert today; it becomes a
+    live hole the moment bd polyglot-pdf-ijntk lands."""
+    c, store, root = client
+    _make_kit(root, "w7-2024", status="complete")
+    _make_kit(root, "w7-2026", status="draft")
+    # An AUTHOR is working on the outgoing kit...
+    assert _lock(c, "w7-2024", AUTH_HDR).status_code == 200
+
+    # ...and an EDITOR-held supersede must not retire it under them. (Publishing
+    # is author-only, so this drives the guard directly rather than the route.)
+    holder = ekr._lock_holder(_run(store.load_metadata("w7-2024")))
+    assert holder == "author"
+    assert ekr._lock_refusal(holder, "editor") is not None, (
+        "an editor must be refused the outgoing kit while an author holds it"
+    )
+    # And the route calls that check -- pinned by the property test above plus
+    # this explicit assertion that the call exists on the supersede path.
+    import inspect
+    src = inspect.getsource(ekr.set_editor_kit_status)
+    assert "_require_edit_lock(superseded_meta, role)" in src, (
+        "the supersede path must check the OUTGOING kit's lock"
+    )

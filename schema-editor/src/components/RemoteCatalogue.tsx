@@ -739,6 +739,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   {kit.status}
                 </span>
                 {kit.hasSchema && (kit.status === 'complete' ? (
+                  // BOTH live-kit actions are author-only (bd
+                  // polyglot-pdf-hqztg): reopening AND retiring reach back into
+                  // a form clients are using. Rendering them to an editor left
+                  // two controls that 403 -- one of which (Unpublish) actually
+                  // SUCCEEDED before the server gate was widened. An editor
+                  // gets the reason instead of a dead button.
+                  isAuthor ? (
                   <>
                     <button
                       className="btn-sm btn-secondary text-xs"
@@ -757,6 +764,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       Unpublish
                     </button>
                   </>
+                  ) : (
+                    <span
+                      className="text-xs text-slate-600"
+                      title="This form is live. Only an author can reopen or retire it."
+                    >
+                      Published -- ask an author to reopen it
+                    </span>
+                  )
                 ) : kit.status === 'unpublished' ? (
                   // A retired revision returns to service ONLY through the full
                   // publish gate -- never via draft, which would make its
@@ -986,6 +1001,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                 {kit.hasSchema && (
                   <div className="mt-1 flex items-center justify-end gap-2 px-1">
                     {kit.status === 'complete' ? (
+                      // The card-grid TWIN of the strip block above. Both
+                      // live-kit actions are author-only (bd
+                      // polyglot-pdf-hqztg); an editor sees the reason.
+                      isAuthor ? (
                       <>
                         <button
                           className="btn-sm btn-secondary text-xs"
@@ -1004,6 +1023,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           Unpublish
                         </button>
                       </>
+                      ) : (
+                        <span
+                          className="text-xs text-slate-600"
+                          title="This form is live. Only an author can reopen or retire it."
+                        >
+                          Published -- ask an author to reopen it
+                        </span>
+                      )
                     ) : kit.status === 'unpublished' ? (
                       // Retired: back into service ONLY through the publish
                       // gate, never via draft (which would make its
