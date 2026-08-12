@@ -392,12 +392,32 @@ class TestSpellbackSiAddendum:
         si = Settings().DTI_SYSTEM_INSTRUCTION
         # Instructions to speak a NAME back as a word. Derived by pattern, so
         # a newly-added sibling is caught instead of silently joining the set.
+        # Broad on purpose: any speak/say/read verb, any determiner, reaching
+        # "as a word" / "as one word". A guard matching only the CURRENT
+        # phrasing silently shrinks when a site is reworded -- which reads as
+        # coverage while covering nothing (Opus cross-surface, bd
+        # polyglot-pdf-9rauk: "say THEIR name back as a word" escaped the
+        # first version and left the guard green with a live unqualified site).
         name_readback = re.compile(
-            r"(say|saying) (a |the )?name (back )?as a word", re.I)
+            r"(say|saying|speak|speaking|read|reading|repeat)\b[^.;]{0,40}"
+            r"\bname\b[^.;]{0,40}\bas (a|one) word", re.I)
         hits = list(name_readback.finditer(si))
-        assert hits, (
-            "no name-read-back instruction found at all -- if the wording "
-            "changed, update this pattern; do not delete the guard")
+
+        # CARDINALITY IS PART OF THE PIN. Without it, a reword that escapes the
+        # pattern drops the set from 2 to 1 and the guard still reports "0
+        # unqualified" -- green while an unqualified instruction ships. If this
+        # number needs changing, re-derive the set FIRST and confirm every site
+        # is qualified; do not just bump it to make the suite pass.
+        EXPECTED_SITES = 2  # WORKFLOW step 3, and the NAMES block.
+        assert len(hits) == EXPECTED_SITES, (
+            "expected %d name-read-back instruction(s) in the DTI SI, found "
+            "%d -- a site was added, removed, or REWORDED past this pattern. "
+            "Re-derive the set (search the SI for read-back verbs near "
+            "'name') and confirm each carries the yields-to clause before "
+            "changing this number.\n  found: %s"
+            % (EXPECTED_SITES, len(hits),
+               [si[max(0, m.start() - 40):m.end() + 10] for m in hits])
+        )
 
         unqualified = []
         for m in hits:
