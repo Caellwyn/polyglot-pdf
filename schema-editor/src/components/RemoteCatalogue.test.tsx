@@ -185,10 +185,12 @@ describe('RemoteCatalogue', () => {
   });
 
   it('marks a draft complete via the server and refreshes', async () => {
-    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Mark complete'));
+    fireEvent.click(within(
+      screen.getByText('Draft Form').closest('li') as HTMLElement,
+    ).getByText('Publish'));
     await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledWith('draft-kit', 'complete', {}));
     // Refresh happened (list re-requested).
     await waitFor(() => expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
@@ -198,10 +200,12 @@ describe('RemoteCatalogue', () => {
   it('notes the drift sweep in the complete notice when it re-translated (bd 783r)', async () => {
     vi.mocked(setRemoteStatus).mockResolvedValue({
       ok: true, status: 'complete', retranslated: 3, translationModel: 'gemini-2.5-pro', supersededKitId: null });
-    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Mark complete'));
+    fireEvent.click(within(
+      screen.getByText('Draft Form').closest('li') as HTMLElement,
+    ).getByText('Publish'));
     await waitFor(() =>
       expect(screen.getByText(/Refreshed 3 translation entries/)).toBeInTheDocument());
   });
@@ -210,10 +214,12 @@ describe('RemoteCatalogue', () => {
     vi.mocked(setRemoteStatus).mockRejectedValue(
       new Error('10 of 17 language translations complete. Please try again later to finish (retrying only the missing ones).'),
     );
-    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Mark complete'));
+    fireEvent.click(within(
+      screen.getByText('Draft Form').closest('li') as HTMLElement,
+    ).getByText('Publish'));
     await waitFor(() =>
       expect(screen.getByText(/10 of 17 language translations complete/)).toBeInTheDocument());
   });
@@ -222,10 +228,12 @@ describe('RemoteCatalogue', () => {
     vi.mocked(setRemoteStatus).mockRejectedValue(
       new Error('Schema does not validate against the form contract'),
     );
-    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Mark complete'));
+    fireEvent.click(within(
+      screen.getByText('Draft Form').closest('li') as HTMLElement,
+    ).getByText('Publish'));
     await waitFor(() =>
       expect(screen.getByText(/does not validate/)).toBeInTheDocument());
   });
@@ -239,12 +247,12 @@ describe('RemoteCatalogue', () => {
       new Error('Schema has 1 lint error(s), so it cannot be marked complete'),
     );
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
-      selectedKitId="draft-kit" role="editor" onStatusRefusal={onStatusRefusal} />);
+      selectedKitId="draft-kit" role="author" onStatusRefusal={onStatusRefusal} />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
     // The OPEN kit's Mark complete renders twice (compact selector + its own
     // card); both drive the same kit, so either button exercises the mirror.
-    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+    fireEvent.click(screen.getAllByText('Publish')[0]);
     await waitFor(() => expect(onStatusRefusal).toHaveBeenCalledWith(
       expect.stringContaining('cannot be marked complete')));
     // Called with null FIRST on entry (stale refusal cleared before the call).
@@ -252,7 +260,7 @@ describe('RemoteCatalogue', () => {
 
     // The retry succeeds (the once-rejection is spent): only the clear fires.
     onStatusRefusal.mockClear();
-    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+    fireEvent.click(screen.getAllByText('Publish')[0]);
     await waitFor(() => expect(screen.getByText(/marked complete/)).toBeInTheDocument());
     expect(onStatusRefusal).toHaveBeenCalledWith(null);
     expect(onStatusRefusal).not.toHaveBeenCalledWith(expect.stringContaining('cannot'));
@@ -269,10 +277,12 @@ describe('RemoteCatalogue', () => {
     );
     // done-kit is the OPEN kit; draft-kit's card is the one clicked.
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
-      selectedKitId="done-kit" role="editor" onStatusRefusal={onStatusRefusal} />);
+      selectedKitId="done-kit" role="author" onStatusRefusal={onStatusRefusal} />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Mark complete'));
+    fireEvent.click(within(
+      screen.getByText('Draft Form').closest('li') as HTMLElement,
+    ).getByText('Publish'));
     // The refused call ran for the NON-open kit...
     await waitFor(() => expect(setRemoteStatus)
       .toHaveBeenCalledWith('draft-kit', 'complete', {}));
@@ -372,14 +382,14 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
     render(
       <RemoteCatalogue
         defaultExpanded
-        onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
+        onOpenKit={() => {}} selectedKitId="draft-kit" role="author"
         liveProgress={{ kitId: 'draft-kit', saved: false, percent: 50, complete: 1, total: 2 }}
       />,
     );
     // The selected kit's Mark-complete renders in BOTH the compact strip and
     // its card (bd tynm) -- the unsaved-edits guard must hold on every copy.
-    await waitFor(() => expect(screen.getAllByText('Mark complete').length).toBeGreaterThan(0));
-    for (const btn of screen.getAllByText('Mark complete')) {
+    await waitFor(() => expect(screen.getAllByText('Publish').length).toBeGreaterThan(0));
+    for (const btn of screen.getAllByText('Publish')) {
       expect(btn).toBeDisabled();
       expect(btn).toHaveAttribute('title', expect.stringContaining('Save your changes first'));
       fireEvent.click(btn);
@@ -391,12 +401,12 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
     render(
       <RemoteCatalogue
         defaultExpanded
-        onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
+        onOpenKit={() => {}} selectedKitId="draft-kit" role="author"
         liveProgress={{ kitId: 'draft-kit', saved: true, percent: 100, complete: 2, total: 2 }}
       />,
     );
-    await waitFor(() => expect(screen.getAllByText('Mark complete').length).toBeGreaterThan(0));
-    for (const btn of screen.getAllByText('Mark complete')) {
+    await waitFor(() => expect(screen.getAllByText('Publish').length).toBeGreaterThan(0));
+    for (const btn of screen.getAllByText('Publish')) {
       expect(btn).not.toBeDisabled();
     }
   });
@@ -559,10 +569,14 @@ describe('RemoteCatalogue mark-complete drift-sweep ticker (bd 783r)', () => {
       () => new Promise((res) => { resolveStatus = res; }),
     );
     try {
-      render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
-      await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
+      render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
+      await waitFor(() => expect(within(
+        screen.getByText('Draft Form').closest('li') as HTMLElement,
+      ).getByText('Publish')).toBeInTheDocument());
 
-      fireEvent.click(screen.getByText('Mark complete'));
+      fireEvent.click(within(
+        screen.getByText('Draft Form').closest('li') as HTMLElement,
+      ).getByText('Publish'));
       // Mid-flight: the button shows the elapsed re-translating ticker (the
       // sweep can take tens of seconds -- a dead button would read as a hang).
       await waitFor(() =>
@@ -617,18 +631,19 @@ describe('compact selector strip (bd tynm)', () => {
     // opens it (onOpenKit no-ops), so no Mark complete may appear (fresh-eyes,
     // bd tynm: a failed open must not leave the strip offering to complete an
     // unreviewed kit).
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() =>
       expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText('Select a form'), {
       target: { value: 'draft-kit' },
     });
-    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+    expect(screen.queryByText('Publish')).not.toBeInTheDocument();
+    expect(screen.queryByText('Submit for review')).not.toBeInTheDocument();
     expect(screen.queryByText('Revert to draft')).not.toBeInTheDocument();
   });
 
   it('the toggle expands the full card grid and collapses it again', async () => {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() =>
       expect(screen.getByText('Show form cards')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Show form cards'));
@@ -644,11 +659,14 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     + 'confirmed against.';
 
   async function publishDraftKit() {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() =>
       expect(screen.getByText('Show form cards')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Show form cards'));
-    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+    // Scope to the CARD: 'Publish' renders in the strip too now, so an index
+    // would pick whichever happens to come first in the DOM.
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Publish'));
   }
 
   it('opens the version dialog when the publish gate asks for one', async () => {
@@ -676,7 +694,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v2026-08-07' } });
-    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(screen.getByText('Save version & publish'));
 
     await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
     // Normalized (leading v stripped), and carried in the options object -- a
@@ -713,7 +731,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     fireEvent.click(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      const btn = screen.getAllByText('Mark complete')[0].closest('button');
+      const btn = screen.getAllByText('Publish')[0].closest('button');
       expect(btn?.disabled).toBe(false);
     });
   });
@@ -743,7 +761,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     await waitFor(() =>
       expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(screen.getByText('Save version & publish'));
     await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
     // Still mounted mid-flight.
     expect(screen.getByText(/Name this version of/)).toBeInTheDocument();
@@ -764,7 +782,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     await waitFor(() =>
       expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(screen.getByText('Save version & publish'));
 
     await waitFor(() => expect(screen.getByText(/lint error/)).toBeInTheDocument());
     expect(screen.queryByText(/Name this version of/)).not.toBeInTheDocument();
@@ -956,8 +974,11 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     vi.mocked(setRemoteStatus).mockResolvedValue({
       ok: true, status: 'unpublished', retranslated: 0, translationModel: null,
       supersededKitId: null });
+    // AUTHOR tier: retiring a live form is an author action (bd
+    // polyglot-pdf-hqztg). What this pins -- the honest retirement notice --
+    // is unchanged by who performs it.
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
-      selectedKitId="done-kit" role="editor" />);
+      selectedKitId="done-kit" role="author" />);
     await waitFor(() => expect(screen.getByText('Done Form')).toBeInTheDocument());
 
     fireEvent.click(screen.getAllByText('Unpublish')[0]);
@@ -980,12 +1001,12 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
         pdfFile: 'form.pdf' },
     ]);
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
-      selectedKitId="old-kit" role="editor" />);
+      selectedKitId="old-kit" role="author" />);
     await waitFor(() => expect(screen.getByText('Retired Form')).toBeInTheDocument());
 
     // A retired revision returns to service only through the publish gate.
     expect(screen.getAllByText('Publish again').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+    expect(screen.queryByText('Publish')).not.toBeInTheDocument();
     // ...and it is never offered a revert-to-draft, which would unlock it.
     expect(screen.queryByText('Revert to draft')).not.toBeInTheDocument();
   });

@@ -1257,7 +1257,7 @@ describe('FormCatalogue -- run extraction', () => {
         expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
 
       fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v2026-08-07' } });
-      fireEvent.click(screen.getByText('Publish'));
+      fireEvent.click(screen.getByText('Save version & publish'));
 
       await waitFor(() => expect(posted.length).toBe(2));
       // Leading v stripped, and sent under the wire key the route reads.

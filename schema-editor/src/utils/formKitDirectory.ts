@@ -20,7 +20,7 @@ import { migrateLegacyRequired } from './schemaMigrate';
 // 'unpublished' is a SUPERSEDED revision (bd polyglot-pdf-6dz0): hidden from
 // the voice app like a draft, but write-locked like complete, because its
 // schema is what earlier confirmation records were confirmed against.
-export type KitStatus = 'draft' | 'complete' | 'unpublished' | 'unknown';
+export type KitStatus = 'draft' | 'submitted' | 'complete' | 'unpublished' | 'unknown';
 
 export interface KitMetadata {
   label?: string;
@@ -112,6 +112,7 @@ export async function readKitEntry(
   const status: KitStatus =
     meta?.status === 'complete' ? 'complete'
       : meta?.status === 'draft' ? 'draft'
+        : meta?.status === 'submitted' ? 'submitted'
         : meta?.status === 'unpublished' ? 'unpublished'
           : 'unknown';
 

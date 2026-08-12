@@ -55,6 +55,10 @@ interface RemoteKitProgress {
 const STATUS_STYLE: Record<string, string> = {
   complete: 'bg-green-100 text-green-700',
   draft: 'bg-yellow-100 text-yellow-700',
+  // Awaiting an author's review: visibly NOT done, but not a draft either
+  // -- the editor's work is finished and out of their hands (bd
+  // polyglot-pdf-hqztg).
+  submitted: 'bg-blue-100 text-blue-700',
   // A retired revision reads as neutral-but-deliberate: it is not a draft
   // awaiting work, and not an error (bd polyglot-pdf-6dz0).
   unpublished: 'bg-slate-200 text-slate-700',
@@ -356,7 +360,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // refusal line (sprint-18 C1): the refusal renders next to the counts
       // it contradicts, with click-to-focus links for any "(id=x)" the gate
       // names. A refusal about a DIFFERENT kit stays on its card only.
-      if (status === 'complete' && mirrorsToStrip) onStatusRefusal?.(detail);
+      // BOTH gated transitions, not just publish: an editor's SUBMIT runs
+      // the same readiness/lint gate, and its refusal names the same
+      // fields -- so it belongs on the strip beside the counts it
+      // contradicts. Keying on 'complete' alone meant the tier that
+      // actually does the work never saw the field links (bd
+      // polyglot-pdf-hqztg; caught by an App-level test, not by this file).
+      if ((status === 'complete' || status === 'submitted') && mirrorsToStrip) {
+        onStatusRefusal?.(detail);
+      }
     } finally {
       // BOTH resets belong here. setBusy(false) used to live at the end of the
       // catch, which every early `return` in that block skipped -- and `busy`
@@ -759,20 +771,60 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       ? `Re-translating & validating... ${completeElapsed}s`
                       : 'Publish again'}
                   </button>
+                ) : kit.status === 'submitted' ? (
+                  // The strip's twin of the card-grid block below. Both must
+                  // move together -- editing one of a pair and missing the
+                  // other is this repo's most repeated defect.
+                  isAuthor ? (
+                    <>
+                      <button
+                        className="btn-sm btn-primary text-xs"
+                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        disabled={busy || completingId !== null}
+                        title="Publish this form -- runs the full publish gate"
+                      >
+                        {completingId === kit.id
+                          ? `Re-translating & validating... ${completeElapsed}s`
+                          : 'Publish'}
+                      </button>
+                      <button
+                        className="btn-sm text-xs"
+                        onClick={() => void handleSetStatus(kit, 'draft')}
+                        disabled={busy || completingId !== null}
+                        title="Send this back to the editor for more work. Any version they entered is cleared, since it was never published."
+                      >
+                        Send back
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="btn-sm text-xs"
+                      onClick={() => void handleSetStatus(kit, 'draft')}
+                      disabled={busy || completingId !== null}
+                      title="Reopen your own submission to keep working on it"
+                    >
+                      Reopen
+                    </button>
+                  )
                 ) : (
                   <button
                     className="btn-sm btn-primary text-xs"
-                    onClick={() => void handleSetStatus(kit, 'complete')}
+                    onClick={() => void handleSetStatus(
+                      kit, isAuthor ? 'complete' : 'submitted',
+                    )}
                     disabled={busy || stripDirty || completingId !== null}
                     title={stripDirty
-                      ? 'Save your changes first (Cmd+S) -- completing now '
-                        + 'would publish the last saved version, not your edits'
-                      : "Mark complete (re-translates any drifted names/options, "
-                        + "then ships with the maintainer's next deploy)"}
+                      ? 'Save your changes first (Cmd+S) -- submitting now '
+                        + 'would send the last saved version, not your edits'
+                      : isAuthor
+                        ? "Publish (re-translates any drifted names/options, "
+                          + "then ships with the maintainer's next deploy)"
+                        : 'Submit for review -- an author checks it and '
+                          + 'publishes it'}
                   >
                     {completingId === kit.id
                       ? `Re-translating & validating... ${completeElapsed}s`
-                      : 'Mark complete'}
+                      : isAuthor ? 'Publish' : 'Submit for review'}
                   </button>
                 ))}
                 {isAuthor && kit.hasSchema && kit.status !== 'complete'
@@ -966,20 +1018,60 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           ? `Re-translating & validating... ${completeElapsed}s`
                           : 'Publish again'}
                       </button>
+                    ) : kit.status === 'submitted' ? (
+                      // Awaiting review. An AUTHOR publishes or sends it back;
+                      // the EDITOR who submitted it can only reopen their own
+                      // work (bd polyglot-pdf-hqztg).
+                      isAuthor ? (
+                        <>
+                          <button
+                            className="btn-sm btn-primary text-xs"
+                            onClick={() => void handleSetStatus(kit, 'complete')}
+                            disabled={busy || completingId !== null}
+                            title="Publish this form -- runs the full publish gate"
+                          >
+                            {completingId === kit.id
+                              ? `Re-translating & validating... ${completeElapsed}s`
+                              : 'Publish'}
+                          </button>
+                          <button
+                            className="btn-sm text-xs"
+                            onClick={() => void handleSetStatus(kit, 'draft')}
+                            disabled={busy || completingId !== null}
+                            title="Send this back to the editor for more work. Any version they entered is cleared, since it was never published."
+                          >
+                            Send back
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="btn-sm text-xs"
+                          onClick={() => void handleSetStatus(kit, 'draft')}
+                          disabled={busy || completingId !== null}
+                          title="Reopen your own submission to keep working on it"
+                        >
+                          Reopen
+                        </button>
+                      )
                     ) : (
                       <button
                         className="btn-sm btn-primary text-xs"
-                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        onClick={() => void handleSetStatus(
+                          kit, isAuthor ? 'complete' : 'submitted',
+                        )}
                         disabled={busy || openDirty || completingId !== null}
                         title={openDirty
-                          ? 'Save your changes first (Cmd+S) -- completing now '
-                            + 'would publish the last saved version, not your edits'
-                          : "Mark complete (re-translates any drifted names/options, "
-                            + "then ships with the maintainer's next deploy)"}
+                          ? 'Save your changes first (Cmd+S) -- submitting now '
+                            + 'would send the last saved version, not your edits'
+                          : isAuthor
+                            ? "Publish (re-translates any drifted names/options, "
+                              + "then ships with the maintainer's next deploy)"
+                            : 'Submit for review -- an author checks it and '
+                              + 'publishes it'}
                       >
                         {completingId === kit.id
                           ? `Re-translating & validating... ${completeElapsed}s`
-                          : 'Mark complete'}
+                          : isAuthor ? 'Publish' : 'Submit for review'}
                       </button>
                     )}
                   </div>

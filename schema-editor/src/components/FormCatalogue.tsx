@@ -81,6 +81,10 @@ interface FormCatalogueProps {
 const STATUS_STYLE: Record<string, string> = {
   complete: 'bg-green-100 text-green-700',
   draft: 'bg-yellow-100 text-yellow-700',
+  // Awaiting an author's review: visibly NOT done, but not a draft either
+  // -- the editor's work is finished and out of their hands (bd
+  // polyglot-pdf-hqztg).
+  submitted: 'bg-blue-100 text-blue-700',
   // Kept in step with the hosted catalogue's map: a status this lookup does
   // not know renders className="undefined" -- and once readKitEntry started
   // recognizing 'unpublished' (bd polyglot-pdf-6dz0), that badge became
