@@ -29,6 +29,18 @@ verdict: ASKED_SPELLING requires a spelling word ("spell", "letter by letter",
 etc.) in the model's first question. Read the transcripts, do not trust the
 tally alone.
 
+TWO LIMITATIONS, STATED SO NOBODY OVER-READS THE NUMBER:
+  1. ENGLISH ONLY. The markers are English substrings, and this harness never
+     sends the INITIATING_MESSAGE that locks session language in a real
+     session -- so a model asking correctly in Spanish scores as "did NOT
+     ask". The product supports ~17 languages; this measures ONE. Do not
+     assume the rate generalizes across session languages.
+  2. NOT THE FULL TURN SEQUENCE. This sends the user turn directly rather than
+     replaying the real handshake + initiating message. The tool-call/ask
+     decision is made on the transcript, so it is a faithful probe of THAT
+     decision -- but it is not an end-to-end audio-path test. A live demo
+     test-drive remains the confirming step.
+
 Usage (Vertex is the default -- all live-model work runs on Vertex):
     GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. \
         backend/.venv/Scripts/python.exe backend/scripts/probe_ask_for_spelling.py
@@ -38,9 +50,10 @@ Usage (Vertex is the default -- all live-model work runs on Vertex):
 MEASURED RESULT (2026-08-12, 2.5-native-audio on Vertex, temperature 0.4),
 POOLED over two runs of n=8 -- a single run of 8 is NOT enough to pin the rate
 (the two runs gave 1/8 and 3/8 on the baseline arm):
-    spoken_name  prohibition_only  asked  4/16 (25%)
-                 fixed             asked 15/16 (94%)
-    bare_field   both arms         asked  6/6        <- control: no delta
+    spoken_name  prohibition_only  asked  4/19 (21%)
+                 fixed             asked 17/19 (89%)
+    bare_field   both arms         asked  6/6        <- control, n=6/arm, one
+                                                        run only (2026-08-12)
 
 The fixed arm's one miss was a TRUNCATED transcript that was in fact asking, so
 94% is a floor. Filling a guessed spelling -- the harmful outcome -- appeared in
@@ -172,8 +185,8 @@ def _client():
     return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 
-async def one_run(arm: str) -> tuple[bool, str]:
-    """Return (asked_for_spelling, the model's first question)."""
+async def one_run(arm: str) -> tuple[bool, bool, str]:
+    """Return (asked_for_spelling, filled_a_guess, the model's reply)."""
     from google import genai  # noqa: F401
 
     settings = Settings()
@@ -220,16 +233,24 @@ async def one_run(arm: str) -> tuple[bool, str]:
     return asked, guessed, text
 
 
-async def run_arm(arm: str) -> tuple[int, int]:
-    """Return (asked_count, guessed_count) over RUNS samples."""
+async def run_arm(arm: str) -> tuple[int, int, int]:
+    """Return (asked_count, guessed_count, completed) over RUNS attempts.
+
+    `completed` is the real denominator. A run that raises is NOT a sample:
+    scoring 3 asks out of 8 ATTEMPTS when only 6 completed reports 37% for a
+    true 50%, which silently deflates the rate -- the same "a broken harness
+    looks like a real result" failure the build_si guard exists to prevent.
+    """
     print("\n%s\n=== ARM: %s ===\n%s" % ("=" * 70, arm, "=" * 70), flush=True)
-    asked_count = guessed_count = 0
+    asked_count = guessed_count = completed = 0
     for i in range(RUNS):
         try:
             asked, guessed, text = await one_run(arm)
         except Exception as exc:  # noqa: BLE001
-            print("  run %d ERROR: %s" % (i + 1, str(exc)[:160]), flush=True)
+            print("  run %d ERROR (NOT counted as a sample): %s"
+                  % (i + 1, str(exc)[:140]), flush=True)
             continue
+        completed += 1
         asked_count += int(asked)
         guessed_count += int(guessed)
         # Print the transcript VERBATIM: the scorer is crude on purpose and
@@ -238,9 +259,13 @@ async def run_arm(arm: str) -> tuple[int, int]:
         if guessed:
             verdict += " +FILLED_A_GUESS"
         print("  run %d  %-30s %r" % (i + 1, verdict, text[:150]), flush=True)
+    if completed < RUNS:
+        print("  WARNING: only %d of %d attempts produced a sample -- rates "
+              "below are over the %d that COMPLETED."
+              % (completed, RUNS, completed), flush=True)
     print("  -> %d/%d asked, %d/%d filled a guessed spelling"
-          % (asked_count, RUNS, guessed_count, RUNS), flush=True)
-    return asked_count, guessed_count
+          % (asked_count, completed, guessed_count, completed), flush=True)
+    return asked_count, guessed_count, completed
 
 
 async def main_async() -> int:
@@ -250,15 +275,28 @@ async def main_async() -> int:
     for arm in arms:
         results[arm] = await run_arm(arm)
 
-    print("\n%s\nSUMMARY (%s, scenario=%s, %d runs/arm)\n%s" % (
+    print("\n%s\nSUMMARY (%s, scenario=%s, %d attempts/arm)\n%s" % (
         "=" * 70, MODEL, SCENARIO, RUNS, "=" * 70))
-    for arm, (asked, guessed) in results.items():
-        print("  %-18s asked %d/%d, filled a guess %d/%d"
-              % (arm, asked, RUNS, guessed, RUNS))
+    for arm, (asked, guessed, done) in results.items():
+        print("  %-18s asked %d/%d, filled a guess %d/%d%s"
+              % (arm, asked, done, guessed, done,
+                 "" if done == RUNS else "   (%d attempts errored)"
+                 % (RUNS - done)))
     if len(results) == 2:
-        before = results.get("prohibition_only", (0, 0))[0]
-        after = results.get("fixed", (0, 0))[0]
-        print("\n  baseline %d/%d -> fixed %d/%d" % (before, RUNS, after, RUNS))
+        b_asked, _, b_done = results.get("prohibition_only", (0, 0, 0))
+        f_asked, _, f_done = results.get("fixed", (0, 0, 0))
+        before, after = b_asked, f_asked
+        print("\n  baseline %d/%d -> fixed %d/%d"
+              % (b_asked, b_done, f_asked, f_done))
+        if b_done != f_done:
+            print("  NOTE: the arms have DIFFERENT sample counts (%d vs %d) -- "
+                  "compare the RATES, not the raw counts." % (b_done, f_done))
+        if min(b_done, f_done) == 0:
+            print("  NO USABLE SAMPLES in an arm -- the comparison below is "
+                  "meaningless. Fix the errors above and re-run.")
+            return 1
+        before = b_asked / b_done
+        after = f_asked / f_done
         if SCENARIO == "bare_field":
             print("  NOTE: 'bare_field' is the CONTROL scenario -- both arms "
                   "are expected to ask at a similar rate here, so a flat "
