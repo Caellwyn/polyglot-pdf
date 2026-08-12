@@ -99,6 +99,27 @@ no-official-text case. The reviewer filed it as bd polyglot-pdf-5nhxl
 (provenance labelling in the catalog itself, a surface this diff does not
 touch); that bead stays open for the broader labelling work.
 
+Opus round 2 then caught that the provenance fix ITSELF enumerated the wrong
+set: it named two official markers, but `_render_form_reference` emits THREE
+labelled blocks, and the omitted one (`=== FORM-LEVEL GUIDANCE ===`, from
+`form_metadata.details`) is 9,487 chars of VERBATIM IRS prose on the W-7 --
+the Supporting Documentation / When To Apply / Who Can Sign sections, i.e. the
+deepest questions users actually ask. A closed two-item allowlist told the
+secretary that real IRS text in its own context was not the government's
+wording, and its fallback would then have claimed the instructions were
+unavailable. Only 3 of 12 of those paragraphs appear byte-identically in
+booklet_text, so it is not recoverable from the marked block either.
+
+The mechanism mattered more than the instance, and it is scar #7 again: my
+derived-marker test rendered a BOOKLET-ONLY schema, so the form-level branch
+never executed and its heading was never compared -- the guard was shaped so a
+third block could not fail it. Deriving one member of a set is not deriving
+the set. The test now renders with EVERY official-text key populated, regexes
+out every `=== HEADING ===` the renderer returns, and requires the rubric to
+classify each one, so a FOURTH block fails here instead of landing silently
+outside the allowlist. Mutation-verified: removing any single marker from the
+rubric reddens it.
+
 The same review confirmed the escalated `resolved` question is a NON-issue,
 and worth recording so it is not re-litigated: a kind-(C) decline correctly
 returns `resolved: true`. The user path voices the decline prose (which the
@@ -141,6 +162,12 @@ an eligibility refusal.
   instruction can be perfectly worded and still false in production. Measure
   the premise against shipped content, not against the one kit you had in
   mind (the W-7).
+- **Deriving ONE member of a set is not deriving the set.** The derived-marker
+  test looked rigorous -- it called the real renderer instead of restating a
+  string -- but it fed that renderer a single-key fixture, so only one branch
+  ran. A guard that derives from production code can still be shaped so the
+  regression it exists for cannot reach it. Populate every input that makes
+  the producer emit a distinct case, then assert over what comes back.
 - **A tool declaration advertising a capability the answering model was never
   scoped for is the dangerous shape.** The fix was not only narrowing what may
   be asked, but DEFINING the third use on the answering side so it is not left

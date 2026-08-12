@@ -171,21 +171,51 @@ def test_only_MARKED_official_text_may_be_quoted_as_official():
     assert "not available to you" in low
 
 
-def test_the_official_marking_matches_what_the_renderer_actually_emits():
-    """The rubric's marking must be the renderer's marking, byte-for-byte.
+def test_the_rubric_classifies_EVERY_official_block_the_renderer_can_emit():
+    """The SET, not one member (CLAUDE.md scar #7; Opus cross-surface round 2).
 
-    Derived from the renderer rather than restated, so a change to either side
-    fails here instead of silently teaching the secretary to look for a header
-    that no longer exists.
+    The first cut of this test derived ONE marker by rendering a booklet-only
+    schema, so the `FORM-LEVEL GUIDANCE` branch never executed and its heading
+    was never compared -- the guard was shaped so a third block could not fail
+    it. That omission was live: on the W-7, `form_metadata.details` is 9,487
+    chars of VERBATIM IRS prose (the Supporting Documentation / When To Apply /
+    Who Can Sign sections -- exactly the deep questions users ask), and a
+    closed two-item allowlist told the secretary that real IRS text in its own
+    context was not the government's wording, then offered to say the
+    instructions were "not available".
+
+    So render with EVERY official-text key populated and require the rubric to
+    classify every heading that comes back. A fourth block added to the
+    renderer fails here instead of silently landing outside the allowlist.
     """
     from backend.services.secretary_context import _render_form_reference
 
-    rendered = _render_form_reference(
-        {"form_metadata": {"booklet_text": "OFFICIAL BODY TEXT"}})
-    marker = "OFFICIAL FORM INSTRUCTIONS (verbatim reference)"
-    assert marker in rendered, (
-        f"the renderer no longer emits {marker!r} -- re-anchor the rubric")
-    assert marker in SECRETARY_SI
+    rendered = _render_form_reference({
+        "form_metadata": {
+            "details": "FORM LEVEL BODY",
+            "booklet_text": "BOOKLET BODY",
+        }
+    })
+    headings = re.findall(r"^=== (.+?) ===$", rendered, flags=re.MULTILINE)
+    assert headings, "the renderer emitted no === headings === to classify"
+    for heading in headings:
+        assert heading in SECRETARY_SI, (
+            f"the renderer emits an official-text block headed {heading!r} "
+            f"that the rubric never classifies -- the secretary cannot tell it "
+            f"is the government's wording, and the no-official-text branch "
+            f"would falsely claim the instructions are unavailable")
+
+    # The per-field verbatim block is emitted by the OTHER renderer; include it
+    # so the allowlist's third member is derived too, not hand-asserted.
+    from backend.services.secretary_context import _render_field
+
+    field_rendered = _render_field(
+        {"id": "f1", "spoken_name": "f", "type": "text",
+         "help": {"details": "VERBATIM EXCERPT"}},
+        "f1", {}, {},
+    )
+    assert "details:" in field_rendered
+    assert "details:" in SECRETARY_SI
 
 
 def test_a_booklet_less_shipped_kit_yields_no_official_text_to_quote():
