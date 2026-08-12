@@ -68,14 +68,28 @@ def client(tmp_path, monkeypatch):
     return TestClient(app), store, tmp_path
 
 
-HDR = {"X-Editor-Token": "edit-tok"}
+HDR = {"X-Editor-Token": "edit-tok"}          # editor tier
+AUTH_HDR = {"X-Editor-Token": "auth-tok"}    # author tier
 
 
-def _status(client, kit_id, status, replaces=None):
+def _status(client, kit_id, status, replaces=None, headers=None):
+    """POST a status change, defaulting to the token the transition REQUIRES.
+
+    Publishing and unpublishing are author actions (bd polyglot-pdf-hqztg);
+    everything else an editor may do. Defaulting by transition keeps these
+    tests about the GATE rather than about authentication -- a test that wants
+    to prove the role rule itself passes `headers` explicitly.
+    """
     body = {"status": status}
     if replaces:
         body["replaces_kit_id"] = replaces
-    return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=HDR)
+    if headers is None:
+        # Keyed on the target status. A revert of a LIVE kit is also an author
+        # action, but this helper cannot see the current status -- those tests
+        # pass `headers=AUTH_HDR` explicitly, which is clearer at the call site
+        # than a lookup here would be.
+        headers = AUTH_HDR if status in ("complete", "unpublished") else HDR
+    return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=headers)
 
 
 # --- author version at the publish gate (bd polyglot-pdf-xzw5) --------------
@@ -119,7 +133,7 @@ def test_a_supplied_author_version_is_PERSISTED_into_the_served_schema(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -140,7 +154,7 @@ def test_author_version_is_normalized(client, raw, expected):
     _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
 
     resp = c.post("/api/editor/kits/custom/status",
-                  json={"status": "complete", "author_version": raw}, headers=HDR)
+                  json={"status": "complete", "author_version": raw}, headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -167,7 +181,7 @@ def test_an_author_version_is_IGNORED_when_a_government_edition_exists(client):
 
     resp = c.post("/api/editor/kits/w7/status",
                   json={"status": "complete", "author_version": "mine"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("w7", "schema.json"))
@@ -187,7 +201,7 @@ def test_a_published_author_version_CANNOT_be_changed(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-12-31"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
     assert "2026-01-01" in resp.json()["detail"]
@@ -255,7 +269,7 @@ def test_a_FAILED_publish_does_not_lock_the_version_forever(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -293,7 +307,7 @@ def test_the_ARCHIVE_is_keyed_on_the_same_marker_a_RECORD_names(client):
     # Publish with a version, then retire it -- retirement is what archives.
     assert c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR).status_code == 200
+                  headers=AUTH_HDR).status_code == 200
     assert _status(c, "custom", "unpublished").status_code == 200
 
     published = _run(store.load_schema("custom", "schema.json"))
@@ -341,7 +355,7 @@ def test_republishing_an_EQUIVALENT_version_is_not_a_change(client, stored, supp
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": supplied},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
 
@@ -356,7 +370,7 @@ def test_a_GENUINELY_different_version_is_still_refused(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-12-31"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
 
@@ -375,7 +389,7 @@ def test_a_PUBLISHED_kit_with_no_version_refuses_to_gain_one(client):
 
     resp = c.post("/api/editor/kits/legacy/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
     assert "already published without a version" in resp.json()["detail"]
@@ -390,10 +404,11 @@ def test_that_legacy_kit_CAN_be_versioned_by_republishing_it(client):
     c, store, root = client
     _make_kit(root, "legacy", status="complete", schema=_no_edition_schema())
 
-    assert _status(c, "legacy", "draft").status_code == 200
+    # Reverting a LIVE kit is the author's unlock (bd polyglot-pdf-hqztg).
+    assert _status(c, "legacy", "draft", headers=AUTH_HDR).status_code == 200
     resp = c.post("/api/editor/kits/legacy/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("legacy", "schema.json"))
@@ -415,7 +430,7 @@ def test_a_RETIRED_edition_less_kit_can_still_return_to_service(client):
 
     resp = c.post("/api/editor/kits/retired/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     assert _run(store.load_metadata("retired"))["status"] == "complete"
@@ -442,7 +457,7 @@ def test_adding_a_version_is_refused_ONLY_for_a_currently_live_kit(
 
     resp = c.post("/api/editor/kits/k/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == expected, resp.text
 
@@ -454,7 +469,7 @@ def test_a_whitespace_only_author_version_is_refused(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "   "},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 422, resp.text
 
@@ -737,7 +752,8 @@ def test_same_kit_republish_needs_no_replace_flag(client):
     _make_kit(root, "w7")
 
     # revert -> edit -> republish, the only route to a new revision
-    assert _status(c, "w7", "draft").status_code == 200
+    # Reverting a LIVE kit is the author's unlock (bd polyglot-pdf-hqztg).
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
     changed = json.loads(json.dumps(_SCHEMA))
     changed["fields"].append({
         "id": "f2", "name": "Field 2", "spoken_name": "field two",
@@ -753,3 +769,110 @@ def test_same_kit_republish_needs_no_replace_flag(client):
     assert len(_run(store.load_schema("w7"))["fields"]) == 2
     # ...and the superseded revision is retrievable, not gone.
     assert _run(store.list_archived_markers("w7"))
+
+
+# --- the author approval round (bd polyglot-pdf-hqztg) -----------------------
+#
+# Editors are SUBCONTRACTORS. Marking a form ready must not release it: an
+# editor submits, an author reviews and publishes. The rule is enforced PER
+# TRANSITION inside one route -- the s18 plan's insight (epic polyglot-pdf-4qul
+# C9), with the mapping reversed by maintainer decision 2026-08-11.
+
+
+def test_an_editor_can_SUBMIT_a_draft_for_review(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "submitted"
+
+
+def test_an_editor_CANNOT_publish(client):
+    """Exit criterion 1 + 3: the editor cannot make a kit deployable on their
+    own, and it is refused SERVER-side rather than merely hidden in the UI."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = _status(c, "w7", "complete", headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert "author" in resp.json()["detail"].lower()
+    # Still awaiting review -- nothing was released.
+    assert _run(store.load_metadata("w7"))["status"] == "submitted"
+
+
+def test_an_AUTHOR_publishes_a_submitted_kit(client):
+    """Exit criterion 2."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = _status(c, "w7", "complete", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_a_SUBMITTED_kit_is_write_locked(client):
+    """If an editor could keep editing after submitting, the author would
+    review one thing and approve another. Submitting freezes it; the editor
+    reopens it deliberately via Revert to draft."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 409
+    assert "submitted" in resp.json()["detail"].lower()
+
+
+def test_an_editor_reopens_their_OWN_submitted_work(client):
+    """The deliberate-unlock gate: an editor is not stuck after submitting --
+    Revert to draft is theirs, because a submitted kit was never live."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = _status(c, "w7", "draft", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "draft"
+
+
+def test_an_editor_CANNOT_reopen_a_LIVE_kit(client):
+    """The other half: reaching back into a published form is the author's
+    unlock. A submitted kit was never served; a complete one was."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", "draft", headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert "author" in resp.json()["detail"].lower()
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+@pytest.mark.parametrize("current", ["submitted", "complete", "unpublished"])
+def test_only_a_DRAFT_can_be_submitted(client, current):
+    """Submitting anything else is a confused request: it is already awaiting
+    review, or live, or retired. Enumerated rather than sampled -- the status
+    dimension is exactly where this bead's siblings kept losing a value."""
+    c, _store, root = client
+    _make_kit(root, "w7", status=current)
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_a_SUBMITTED_kit_is_not_deployable(client):
+    """Exit criterion 1's other half: deploy gates on complete, so a submitted
+    kit must not read as complete to ANY downstream consumer."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    meta = _run(store.load_metadata("w7"))
+    # The deploy scripts grep for exactly this; a submitted kit must not match.
+    assert meta["status"] != "complete"
+    assert ekr._is_write_locked(meta), "submitted must be write-locked"

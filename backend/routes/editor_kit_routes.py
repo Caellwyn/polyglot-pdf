@@ -228,7 +228,7 @@ class EditorKitInfo(BaseModel):
     id: str
     label: str
     description: Optional[str] = None
-    status: str  # draft | complete | unpublished | unknown
+    status: str  # draft | submitted | complete | unpublished | unknown
     hasSchema: bool
     hasPdf: bool
     schemaFile: str
@@ -247,7 +247,10 @@ class KitStatusBody(BaseModel):
     # write-locked so its bytes stay exactly what its confirmation records were
     # confirmed against (bd polyglot-pdf-6dz0). Omitting it here would 422 the
     # unpublish request before the route ever ran.
-    status: Literal["draft", "complete", "unpublished"]
+    # "submitted" omitted here would 422 the request before the route's own
+    # transition rules ever ran -- the exact trap bd polyglot-pdf-6dz0 hit when
+    # "unpublished" was added to the status set but not to this Literal.
+    status: Literal["draft", "submitted", "complete", "unpublished"]
     # Cross-kit supersede: when publishing a kit while ANOTHER live kit serves
     # the same form, name it here and it is unpublished in the same request, so
     # the catalogue never shows two entries for one form. Same-kit republish
@@ -457,14 +460,21 @@ def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
 #                  confirmation records were confirmed against (bd
 #                  polyglot-pdf-w3zw), so it must never become editable again;
 #                  it returns to complete only through the full publish gate.
-_KIT_STATUSES = ("draft", "complete", "unpublished")
+#   submitted   -- FINISHED BY AN EDITOR, awaiting an author's review. Not
+#                  deployable (deploy gates on "complete"), and WRITE-LOCKED:
+#                  if an editor could keep editing after submitting, the author
+#                  would review one thing and approve another. An editor
+#                  reopens it deliberately via Revert to draft; an author
+#                  publishes it (bd polyglot-pdf-hqztg -- editors are
+#                  subcontractors, so releasing is the accountable party's act).
+_KIT_STATUSES = ("draft", "submitted", "complete", "unpublished")
 
 # Statuses whose schema may NOT be rewritten. The distinction that matters is
 # write-locked vs editable, NOT "is it complete" -- every write gate asks this
 # rather than comparing to "complete" directly, so adding a fourth status
 # cannot silently reopen a lock (the two-value checks were the trap: an
 # unpublished kit coerced to "unknown" and fell through every one of them).
-_WRITE_LOCKED_STATUSES = ("complete", "unpublished")
+_WRITE_LOCKED_STATUSES = ("submitted", "complete", "unpublished")
 
 
 def _normalize_author_version(value: object) -> str:
@@ -497,6 +507,13 @@ def _is_write_locked(meta: Optional[dict]) -> bool:
 
 def _lock_reason(meta: Optional[dict]) -> str:
     """The 409 detail for a write refused by the lock, naming the real state."""
+    if _status_of(meta) == "submitted":
+        return (
+            "This form is submitted for review, so it is frozen while an "
+            "author checks it -- otherwise they would review one version and "
+            "publish another. Revert it to draft if you need to keep working "
+            "on it."
+        )
     if _status_of(meta) == "unpublished":
         return (
             "This form is unpublished (a superseded revision). Its schema is "
@@ -1958,8 +1975,13 @@ async def set_editor_kit_status(
     body: KitStatusBody,
     role: Annotated[str, Depends(require_editor_role)],
 ) -> KitStatusResponse:
-    """Set a kit's status (draft | complete | unpublished), preserving other
-    metadata keys.
+    """Set a kit's status (draft | submitted | complete | unpublished),
+    preserving other metadata keys.
+
+    THE ROLE DEPENDS ON THE TRANSITION, not the route (bd polyglot-pdf-hqztg).
+    An editor submits for review; an author publishes. Editors are
+    subcontractors, so marking a form ready must not release it -- and an
+    editor cannot reach back into a live form at all.
 
     `complete` is the PUBLISH gate: the deploy ships only complete kits to the
     voice app, so that transition requires a schema that exists AND validates
@@ -2016,6 +2038,58 @@ async def set_editor_kit_status(
                    "again to put it back in service; that archives the retired "
                    "copy first.",
         )
+
+    # --- the role split, PER TRANSITION (bd polyglot-pdf-hqztg) -------------
+    #
+    # One route carries several transitions, so the role check belongs HERE
+    # rather than on the route -- the s18 plan's insight, kept; only the
+    # mapping changed (maintainer decision 2026-08-11, which amended epic
+    # polyglot-pdf-4qul's rubric criterion 3):
+    #
+    #   draft -> submitted     editor-allowed  ("I believe this is ready")
+    #   submitted -> complete  AUTHOR-ONLY     (releasing is accountable)
+    #   * -> draft             editor-allowed  (reopening one's own work)
+    #   complete -> anything   author-only     (already covered below)
+    #
+    # Editors are subcontractors. Marking a form ready must not release it.
+    if body.status == "complete" and role != "author":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Publishing is an author action. Submit this form for review "
+                "instead -- an author checks it and publishes it."
+            ),
+        )
+
+    # An editor may not reach back into a LIVE form at all; that is the
+    # author's unlock. (Reverting one's own submitted work stays allowed.)
+    if (
+        body.status == "draft"
+        and current_status in ("complete", "unpublished")
+        and role != "author"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This form is published, so only an author can reopen it. Ask "
+                "an author to unlock it."
+            ),
+        )
+
+    # Submitting is only meaningful from draft: a submitted kit is already
+    # awaiting review, and a published one would be a downgrade nobody asked
+    # for (reopen it deliberately instead).
+    if body.status == "submitted" and current_status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only a draft can be submitted for review (this one is "
+                   f"{current_status}).",
+        )
+
+    # Publishing goes through review: an author publishes what an editor
+    # submitted, or their own draft. There is no path from a RETIRED kit
+    # straight to complete that skips the gate -- that stays the republish
+    # route, which runs every check (bd polyglot-pdf-6dz0/xzw5).
 
     # Unpublishing is only meaningful for a kit that is actually live.
     if body.status == "unpublished" and current_status != "complete":
