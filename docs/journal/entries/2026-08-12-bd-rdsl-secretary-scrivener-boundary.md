@@ -99,8 +99,11 @@ twice. Full both-roots suite green at 3074 passed.
   is the identical under-constrained state this bead exists to remove, just
   relocated. The pin derives the expected count FROM the enumeration, so
   adding a kind (D) without updating the intro fails instead of shipping;
-  mutation-verified in both directions (wrong count, and a dropped kind with
-  a stale count).
+  mutation-verified in both directions: reverting the count alone reddens
+  exactly that one test, and dropping kind (C)'s header while leaving the
+  count at "three" reddens 2 (the count pin plus the official-text-lookup
+  content test). Both figures are the reviewer's independent re-measurement --
+  I had said 3 for the second, which was wrong.
 - **A tool declaration advertising a capability the answering model was never
   scoped for is the dangerous shape.** The fix was not only narrowing what may
   be asked, but DEFINING the third use on the answering side so it is not left
