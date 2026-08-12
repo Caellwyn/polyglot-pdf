@@ -251,6 +251,19 @@ only the new certification section in. The general lesson: when recovering an
 abandoned branch, a DOC edit is the dangerous part -- code conflicts announce
 themselves, prose silently reverts whatever landed meanwhile.
 
+SECOND BASE-DRIFT CASUALTY, caught by the outer review and fixed inline: this
+diff adds 67 lines to pdf_fill_routes.py, which SHIFTED ten line citations in
+`docs/technical_guide.md` -- the tier-2 map CLAUDE.md calls "the blast-radius
+reference for reviews". They were accurate on dev and wrong here, which is a
+wrong claim about the code in a current-state doc. Re-anchored all 22 cited
+line numbers by DERIVING each from the current file (match dev's line CONTENT,
+find where it now lives) rather than adding an offset by hand, then verified
+every one lands on the expected code. Section 5 also gained the denylist
+bullet it was missing. The general lesson, now twice-demonstrated: recovering
+an abandoned branch endangers DOCS in two distinct ways -- a stale prose edit
+reverts what landed meanwhile, and new code silently invalidates line anchors
+elsewhere. Neither shows up as a merge conflict.
+
 Two follow-up beads were re-measured against the shipped cut and corrected
 rather than inherited: bd dhds (unpinned unlock guard) is ALREADY RESOLVED
 here -- the test now records the route's real calls, and the mutation proves
