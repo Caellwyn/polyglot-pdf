@@ -836,11 +836,29 @@ class Settings(BaseModel):
 	# verification question, so the model waits instead of asking). The
 	# LEGACY SI still carries its old verify-by-spelling wording, which this
 	# addendum also overrides (fresh-eyes round 1 on bd 22h1f).
+	#
+	# THE ASK IS RESTATED HERE ON PURPOSE (bd polyglot-pdf-ku69b). This block
+	# is the LAST text in the assembled SI and the only one whose heading names
+	# a mechanism, so it carries disproportionate authority -- and every earlier
+	# revision of it was pure PROHIBITION ("do NOT read back", "stop speaking")
+	# opening with "For a NAME". Measured on the shipped SI: the DTI names
+	# block's "HOW DO THEY SPELL THEIR NAME" lands ~4,600 chars earlier, so the
+	# model's final, most-specific naming instruction told it only to stay
+	# silent. The maintainer observed the consequence on the live demo -- the
+	# model asks for the name and fills what it hears, never asking for the
+	# spelling, which makes the clip verify a value that may already be wrong.
+	# The scoping line and the closing SO-THE-SHAPE line exist to keep this
+	# block from reading as the whole naming policy. Keep BOTH if you edit
+	# this; test_spellback_si_addendum pins them.
 	DTI_SPELLBACK_SI_ADDENDUM: str = (
 		"\n\nSPELL-BACK AUDIO TOOL (this is the mechanism that voices "
 		"spellings outside this conversation, and it overrides any earlier "
 		"instruction to read a LETTER spelling aloud or to verify by spelling "
 		"yourself):\n"
+		"This changes only how a spelling is READ BACK. It does NOT change how "
+		"you ASK: you still ask every person's name by asking for its SPELLING "
+		"up front, every time, exactly as instructed above -- never just the "
+		"name.\n"
 		"For a NAME or any letter-spelled value: after the fill succeeds, do "
 		"NOT read the value back and do NOT ask whether it is correct -- call "
 		"the name_spellback tool instead, and stop speaking. A deterministic "
@@ -848,7 +866,9 @@ class Settings(BaseModel):
 		"session language, and asks them whether it is correct. When the tool "
 		"returns delivered, stay SILENT and listen for their answer; once they "
 		"agree, confirm as usual. Numbers are unaffected: keep reading "
-		"identifier numbers back digit by digit yourself."
+		"identifier numbers back digit by digit yourself.\n"
+		"So the shape of every name field is: ASK for the spelling -> fill the "
+		"letters they gave -> call name_spellback -> stay silent."
 	)
 
 	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
@@ -1118,7 +1138,7 @@ class Settings(BaseModel):
 		"The SPELLING is the answer -- never build one from the sound (Nguyen, Johansen, Thi mishear into Anglo defaults). The stored name is ALWAYS Latin characters, never Chinese, Cyrillic, Arabic or any other script.\n"
 		"So your FIRST question asks for all of it at once: HOW DO THEY SPELL THEIR NAME IN LATIN CHARACTERS, EXACTLY AS ON THEIR PASSPORT OR GREEN CARD. Ask that in full -- never a bare 'how do you spell it?', never the name first and the spelling after. Fill the exact letters they give.\n"
 		"That spelling comes from THEM, never from you: NEVER transliterate or romanize a name yourself. Most names have several plausible romanizations and their document uses exactly one, so a guess is a wrong name on a legal form. If they answer in another script, ask how it is written in Latin characters on their document. If they truly do not know, say the form needs that spelling and offer to skip for now -- leaving it for later is correct; storing a guess, or another script, is not. Ask warmly: the requirement is the form's, never a judgement about their name.\n"
-		"Verify by saying the name back as a word ('Nguyen -- did I get that right?').\n"
+		"Never accept just the spoken name and fill your best guess at its spelling -- if they answer with the name alone, ask for the spelling before you fill anything. Verify by saying the name back as a word ('Nguyen -- did I get that right?').\n"
 		"\n"
 		"DATES:\n"
 		"Accept a date spoken naturally ('January first two thousand one') and convert it to the required format YOURSELF -- never ask the user to restate a date in a format; the format is for you, not them. If it is ambiguous or incomplete, ask a natural clarifying question (which year?). Read it back naturally, then confirm.\n"

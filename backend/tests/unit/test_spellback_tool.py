@@ -318,6 +318,55 @@ class TestSpellbackSiAddendum:
         # number read-back, and the addendum must not suppress it.
         assert "digit by digit yourself" in si
 
+    def test_addendum_reasserts_the_ask_after_its_prohibitions(self):
+        """The model's LAST naming instruction must tell it to ASK.
+
+        bd polyglot-pdf-ku69b: this addendum is the final text in the assembled
+        SI, and every earlier revision was pure prohibition ("do NOT read the
+        value back", "stop speaking") opening with "For a NAME". The DTI names
+        block's ask-for-the-spelling instruction lands thousands of characters
+        EARLIER, so the model's last and most specific naming instruction said
+        only "be silent" -- and on the live demo it stopped asking for
+        spellings altogether, filling whatever name it heard. That makes the
+        spell-back clip verify a value that may already be wrong.
+
+        So this pins ORDER, not mere presence: an ask-instruction must survive
+        AFTER the last prohibition. Asserting "the ask appears somewhere"
+        would pass on exactly the broken SI this bead fixed -- the ask was
+        always present, just buried.
+        """
+        si = self._si(enabled=True)
+
+        last_prohibition = max(
+            si.rfind("do NOT read the value back"),
+            si.rfind("stay SILENT and listen"),
+        )
+        assert last_prohibition != -1, "the addendum's prohibitions are gone"
+
+        tail = si[last_prohibition:]
+        assert "ASK for the spelling" in tail, (
+            "nothing tells the model to ASK for the spelling after the "
+            "addendum's do-NOT-speak block -- the last naming instruction it "
+            "reads is a prohibition, which is exactly the state that stopped "
+            "it asking on the live demo (bd polyglot-pdf-ku69b)"
+        )
+
+        # The addendum must also SCOPE itself: without this it reads as the
+        # whole naming policy rather than a read-back rule.
+        assert "changes only how a spelling is READ BACK" in si
+        assert "does NOT change how you ASK" in si
+
+    def test_dti_names_block_forbids_filling_a_guessed_spelling(self):
+        """The names block must refuse a spoken-name-only answer.
+
+        The failure mode is not just "did not ask" -- it is filling a GUESS
+        when the user answers with the name alone. Pinned separately from the
+        addendum because it is the base SI's job, and the two texts drifted
+        apart once the addendum took over the read-back (bd ku69b).
+        """
+        names_block = Settings().DTI_SYSTEM_INSTRUCTION
+        assert "ask for the spelling before you fill anything" in names_block
+
     def test_flag_off_leaves_si_untouched(self):
         si = self._si(enabled=False)
         assert "name_spellback" not in si
