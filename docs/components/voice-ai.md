@@ -216,10 +216,16 @@ tier accepts it -- it was replaced for mispronunciation, not availability.)
 **Changing `LIVE_VOICE_NAME` also changes the SPELL-BACK CLIP's voice** (bd
 polyglot-pdf-44ywm: `resolve_spellback_voice` derives
 `{locale}-Chirp3-HD-{persona}`), which is intended -- one speaker across both
-surfaces. But the clip's loudness gain is TIED to the persona: voices differ in
-base loudness, and Iapetus's measured +7.0 dB CLIPS on Algieba (peak 1.025).
-Re-measure with `scripts/spikes/measure_spellback_loudness.py` and move
-`SPELLBACK_VOLUME_GAIN_DB` with the voice; a unit test pins the pair.
+surfaces. The clip's loudness gain is DERIVED FROM the persona rather than
+configured beside it (`spellback_tts.spellback_gain_db`), because voices differ
+in base loudness -- Iapetus's measured +7.0 dB CLIPS on Algieba (peak 1.025),
+which is audibly worse than the quiet clip the leveling fixed. Deriving it
+means an operator overriding `LIVE_VOICE_NAME` on Cloud Run cannot ship a
+stale gain, and a FALLBACK persona (a locale without the configured voice) gets
+its own value rather than the configured voice's. A persona with no recorded
+measurement takes the conservative (quietest) end -- too quiet degrades, too
+loud clips -- and a test fails until it is measured with
+`scripts/spikes/measure_spellback_loudness.py`.
 
 ## Tool calling
 

@@ -594,7 +594,7 @@ class TestSpellbackText:
 
         from backend.services import spellback_tts
 
-        assert spellback_tts.SPELLBACK_VOLUME_GAIN_DB > 0, (
+        assert spellback_tts.spellback_gain_db("en-US-Chirp3-HD-Algieba") > 0, (
             "the clip must be boosted, not attenuated")
 
         captured = {}
@@ -621,43 +621,62 @@ class TestSpellbackText:
         with patch.dict("sys.modules",
                         {"google.cloud": MagicMock(texttospeech=_FakeTTS)}), \
              patch.object(spellback_tts, "_get_client", lambda: fake_client):
-            spellback_tts._synthesize_sync("You said J, O.", "", "en-US")
+            spellback_tts._synthesize_sync(
+                "You said J, O.", "en-US-Chirp3-HD-Algieba", "en-US")
 
         assert captured.get("volume_gain_db") == (
-            spellback_tts.SPELLBACK_VOLUME_GAIN_DB), (
+            spellback_tts.spellback_gain_db("en-US-Chirp3-HD-Algieba")), (
             "the synthesis request dropped the loudness gain")
 
-    def test_gain_default_is_the_one_measured_for_the_default_voice(self):
-        """The gain is PER-VOICE and the two defaults must move together.
+    def test_gain_follows_the_voice_that_actually_speaks(self):
+        """The gain must track the RESOLVED voice, at runtime.
 
         Voices differ in base loudness: measured 2026-08-11, Algieba starts at
         72% of the model's level where Iapetus starts at 57%, so Iapetus's
         +7.0 dB drives Algieba past full scale and CLIPS (peak 1.025) --
-        audibly worse than the quiet clip the leveling was added to fix. A
-        voice-default change that forgets the gain is therefore a silent audio
-        regression, which is exactly what this pins (bd polyglot-pdf-0rpu voice
-        swap). Re-measure with scripts/spikes/measure_spellback_loudness.py and
-        update BOTH when either moves.
+        audibly worse than the quiet clip the leveling was added to fix.
+
+        This pins the RUNTIME property, not a pair of compile-time defaults
+        (fresh-eyes round 1): the gain is looked up FROM the voice, so an
+        operator overriding LIVE_VOICE_NAME on Cloud Run cannot ship a
+        mismatch, and a fallback persona (rung 2/3 of the ladder, a locale
+        without the configured persona) gets ITS own gain rather than the
+        configured voice's.
         """
         from backend.services import spellback_tts
 
-        measured_for = {
-            # persona -> the gain measured to reach ~parity without clipping
-            "Algieba": 4.0,
-            "Iapetus": 7.0,
-        }
+        assert spellback_tts.spellback_gain_db("en-US-Chirp3-HD-Algieba") == 4.0
+        assert spellback_tts.spellback_gain_db("en-US-Chirp3-HD-Iapetus") == 7.0
+        # A DIFFERENT locale, same persona -> same measured gain (the ladder's
+        # rung 1 for a non-English session).
+        assert spellback_tts.spellback_gain_db("es-US-Chirp3-HD-Algieba") == 4.0
+
+        # An UNMEASURED persona (a fallback rung, or a voice nobody has
+        # measured yet) must take the CONSERVATIVE end of the table: too quiet
+        # is the defect we started from, but too loud CLIPS, which is worse
+        # and cannot be undone downstream.
+        quiet_end = min(spellback_tts._MEASURED_GAIN_DB.values())
+        assert spellback_tts.spellback_gain_db("ru-RU-Chirp3-HD-Charon") == quiet_end
+        assert spellback_tts.spellback_gain_db("") == quiet_end
+
+    def test_the_default_voice_has_a_measured_gain(self):
+        """A voice-default change must not outrun its measurement.
+
+        Swapping LIVE_VOICE_NAME to a persona nobody has measured would
+        silently fall back to the conservative gain -- safe, but quiet, which
+        is the very defect bd polyglot-pdf-9oejl fixed. Fail loudly instead,
+        naming the command that produces the missing number.
+        """
+        from backend.services import spellback_tts
+
         persona = Settings().LIVE_VOICE_NAME
-        assert persona in measured_for, (
+        assert persona in spellback_tts._MEASURED_GAIN_DB, (
             "LIVE_VOICE_NAME default is %r but no loudness measurement is "
-            "recorded for it -- run scripts/spikes/measure_spellback_loudness.py "
-            "with SPELLBACK_TTS_VOICE=en-US-Chirp3-HD-%s and add the result "
-            "here and in spellback_tts" % (persona, persona)
-        )
-        assert spellback_tts.SPELLBACK_VOLUME_GAIN_DB == measured_for[persona], (
-            "the spell-back gain (%.1f dB) is not the value measured for the "
-            "default voice %r (%.1f dB) -- one default moved without the other"
-            % (spellback_tts.SPELLBACK_VOLUME_GAIN_DB, persona,
-               measured_for[persona])
+            "recorded for it. Run:\n"
+            "  SPELLBACK_TTS_VOICE=en-US-Chirp3-HD-%s backend/.venv/Scripts/"
+            "python.exe scripts/spikes/measure_spellback_loudness.py\n"
+            "and add the result to _MEASURED_GAIN_DB in spellback_tts.py"
+            % (persona, persona)
         )
 
     def test_char_cap_matches_frontend_mirror(self):
