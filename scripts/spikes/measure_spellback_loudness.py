@@ -128,7 +128,13 @@ def main() -> int:
     ap.add_argument("--dumps", default=os.path.join(
         "backend", "logs", "audio_out", "gemini_*", "*.wav"),
         help="glob for Live-model output dumps")
-    ap.add_argument("--gains", default="0,5,6,7",
+    # Spans every value in _MEASURED_GAIN_DB (Algieba +4, Iapetus +7) plus 0
+    # as the un-boosted baseline, so the printed sweep BRACKETS whatever is
+    # shipped. A sweep that skips the shipped value would send an operator
+    # following the on-screen rule to a different number than the live one
+    # (Opus cross-surface review: the old 0,5,6,7 default missed Algieba's +4
+    # entirely, and both 6 and 7 CLIP on that voice).
+    ap.add_argument("--gains", default="0,3,4,5,6,7",
                     help="comma-separated volume_gain_db values to try")
     ap.add_argument("--out-dir", default=os.path.join("backend", "logs"),
                     help="where to write the synthesized comparison clips")
