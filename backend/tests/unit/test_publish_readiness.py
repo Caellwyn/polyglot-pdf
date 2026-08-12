@@ -533,7 +533,8 @@ def test_predicate_parity_with_the_client(name, case):
         # else branch, so any literal (non-"@identity") hash raised KeyError
         # instead of asserting -- a trap laid directly in the path the
         # fixture's own header invites future authors down (Opus fresh-eyes
-        # round 7).
+        # round 7). Pinned by the "LITERAL ackSha1" case in
+        # reviewPredicateParity.json (bd polyglot-pdf-eh2i).
         raw_ack = review.pop("ackSha1")
         review["guidance_ack_sha1"] = identity if raw_ack == "@identity" else raw_ack
     findings = [

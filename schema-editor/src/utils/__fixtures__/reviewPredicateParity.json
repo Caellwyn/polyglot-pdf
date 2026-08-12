@@ -178,6 +178,17 @@
       "field": { "id": "a", "name": "A", "_review": { "status": "reviewed_correct" } },
       "findings": [],
       "expected": false
+    },
+    {
+      "name": "a LITERAL (non-@identity) ackSha1 for a superseded identity stays gated (bd polyglot-pdf-eh2i)",
+      "field": {
+        "id": "a", "type": "text", "name": "A", "spoken_name": "a", "pdf_field_name": "A[0]",
+        "_review": { "status": "reviewed_correct", "seen_fingerprints": [], "ackSha1": "0000000000000000000000000000000000000000" }
+      },
+      "findings": [
+        { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
+      ],
+      "expected": false
     }
   ]
 }
