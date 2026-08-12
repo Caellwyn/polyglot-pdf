@@ -296,6 +296,19 @@ class KitDeleteResponse(BaseModel):
     objectsRemoved: int
 
 
+class KitLockResponse(BaseModel):
+    """Who holds a kit for editing (bd polyglot-pdf-hqztg)."""
+
+    ok: bool
+    kitId: str
+    # "editor" | "author" | null. A ROLE, not a person -- the editor API has
+    # only two shared tokens (bd polyglot-pdf-ijntk lifts that).
+    heldBy: Optional[str] = None
+    # True when this call took the lock from someone else, so the UI can say so
+    # rather than silently succeeding.
+    preempted: bool = False
+
+
 class KitLabelBody(BaseModel):
     """The new display label for a kit (bd 15ic). Whitespace-stripped server-side;
     an empty/blank label is a 422."""
@@ -475,6 +488,62 @@ _KIT_STATUSES = ("draft", "submitted", "complete", "unpublished")
 # cannot silently reopen a lock (the two-value checks were the trap: an
 # unpublished kit coerced to "unknown" and fell through every one of them).
 _WRITE_LOCKED_STATUSES = ("submitted", "complete", "unpublished")
+
+
+# --- the editing lock (bd polyglot-pdf-hqztg) --------------------------------
+#
+# ROLE-SCOPED, not user-scoped, and that is a known limitation rather than a
+# design preference: the editor API authenticates with two SHARED tokens, so
+# the server can record "an editor holds this" but never WHICH editor. Two
+# subcontractors sharing one token still collide with each other exactly as
+# they do today -- no better, no worse. bd polyglot-pdf-ijntk adds per-user
+# identity and re-scopes this lock to a person.
+#
+# The rule the maintainer asked for: an AUTHOR can always take a lock back
+# from an editor, and never the reverse. Preemption also IS the stale-lock
+# release -- there is no timer, because a clock that steals a lock from
+# someone actively working is worse than a human deciding to take it.
+_LOCK_KEY = "editing_lock"
+
+
+def _lock_holder(meta: Optional[dict]) -> Optional[str]:
+    """The role currently holding this kit for editing, or None."""
+    lock = (meta or {}).get(_LOCK_KEY)
+    holder = lock.get("role") if isinstance(lock, dict) else None
+    return holder if holder in ("editor", "author") else None
+
+
+def _lock_refusal(holder: str, role: str) -> Optional[str]:
+    """Why `role` may not take a kit held by `holder` -- None when it may.
+
+    An author outranks an editor, so only one pairing is refused. Same-role
+    contention cannot be resolved at all with shared tokens (both callers look
+    identical to the server), so it is allowed rather than pretended about:
+    refusing would block a second author on a lock the first may have
+    abandoned, with no way to tell them apart.
+    """
+    if holder == "author" and role != "author":
+        return (
+            "An author is working on this form right now, so it is locked. "
+            "They will release it when they are done."
+        )
+    return None
+
+
+def _require_edit_lock(meta: Optional[dict], role: str) -> None:
+    """Refuse a schema write when someone else holds this kit for editing.
+
+    One helper rather than five copies: bd polyglot-pdf-6dz0 and 6x1j both shipped
+    a guard applied to ONE of N sibling routes, and both times the other N-1 were
+    found by a reviewer rather than by me. The enumeration that found this gap is
+    reproducible -- every route containing put_schema must call this.
+    """
+    holder = _lock_holder(meta)
+    if not holder:
+        return
+    refusal = _lock_refusal(holder, role)
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
 
 
 def _normalize_author_version(value: object) -> str:
@@ -1107,6 +1176,12 @@ async def save_editor_kit_schema(
     # store), so work-in-progress never reaches users.
     if _is_write_locked(meta):
         raise HTTPException(status_code=409, detail=_lock_reason(meta))
+    # The EDITING lock, one layer over the status write-lock: an author who
+    # took this kit back is mid-review, and a save from under them would mean
+    # they approve something they never saw (bd polyglot-pdf-hqztg). This is
+    # also where an editor DISCOVERS they were preempted -- there is no channel
+    # from server to editor, so the next save is the notification.
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         await store.put_schema(kit_id, schema, schema_file)
@@ -1263,6 +1338,7 @@ async def repair_editor_kit(
             status_code=409,
             detail=f"{_lock_reason(meta)} (Repair rewrites the schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1344,6 +1420,7 @@ async def translate_editor_kit_options(
             detail=f"{_lock_reason(meta)} (The translation bake rewrites the "
                    "schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1445,6 +1522,7 @@ async def derive_editor_kit_divisions(
             detail=f"{_lock_reason(meta)} (Regenerating divisions rewrites the "
                    "schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, pdf_file = _resolve_meta_names(meta)
     if pdf_file not in files:
         raise HTTPException(
@@ -1653,6 +1731,7 @@ async def _regenerate_guidance_locked(
             detail=f"{_lock_reason(meta)} (Regenerating guidance rewrites the "
                    "schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -2330,6 +2409,12 @@ async def set_editor_kit_status(
         # and then thrown away -- the marker has to be IN the served schema,
         # because that is where the voice path reads it from. Only runs when the
         # gate above actually set it (no edition_date, no prior version).
+        # This route DOES write the schema (the author-version persistence
+        # below), so it honours the editing lock like every other writer.
+        # Reachable only author-to-author: publishing is already author-only,
+        # so an editor cannot get here -- but a second author publishing a kit
+        # the first is reviewing is exactly the collision the lock exists for.
+        _require_edit_lock(meta, role)
         if version_to_persist is not None:
             try:
                 await store.put_schema(kit_id, schema, schema_file)
@@ -2540,6 +2625,71 @@ async def delete_editor_kit(
 
     _log.info("editor_kit_deleted", kit_id=kit_id, role=role, objects_removed=removed)
     return KitDeleteResponse(ok=True, kitId=kit_id, objectsRemoved=removed)
+
+
+@router.post("/kits/{kit_id}/lock", response_model=KitLockResponse)
+async def take_editor_kit_lock(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> KitLockResponse:
+    """Take this kit for editing, or report who already has it.
+
+    An AUTHOR can always take a lock back from an editor (maintainer decision
+    2026-08-11) -- that preemption doubles as the stale-lock release, so there
+    is no timer. A clock that steals a lock from someone actively working is
+    worse than a human choosing to take it.
+
+    Same-role contention is ALLOWED rather than pretended about: two callers
+    holding the same shared token are indistinguishable to the server, so
+    refusing would block a second author on a lock the first may have
+    abandoned, with no way to tell them apart. bd polyglot-pdf-ijntk is what
+    makes editor-vs-editor resolvable.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+
+    holder = _lock_holder(meta)
+    refusal = _lock_refusal(holder, role) if holder else None
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
+
+    preempted = holder is not None and holder != role
+    next_meta = {**(meta or {}), _LOCK_KEY: {"role": role}}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to take the lock") from exc
+
+    if preempted:
+        _log.info("editor_kit_lock_preempted", kit_id=kit_id, role=role, took_from=holder)
+    return KitLockResponse(ok=True, kitId=kit_id, heldBy=role, preempted=preempted)
+
+
+@router.delete("/kits/{kit_id}/lock", response_model=KitLockResponse)
+async def release_editor_kit_lock(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> KitLockResponse:
+    """Release this kit. An author may release anyone's lock; an editor only
+    releases a lock an editor holds (they cannot evict an author)."""
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+
+    holder = _lock_holder(meta)
+    if holder is None:
+        return KitLockResponse(ok=True, kitId=kit_id, heldBy=None)
+    refusal = _lock_refusal(holder, role)
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
+
+    next_meta = {k: v for k, v in (meta or {}).items() if k != _LOCK_KEY}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to release the lock") from exc
+    return KitLockResponse(ok=True, kitId=kit_id, heldBy=None)
 
 
 @router.post("/kits/{kit_id}/label")
@@ -2879,6 +3029,7 @@ async def extract_editor_kit(
                    "in place, losing the revision its confirmation records "
                    "name.)",
         )
+    _require_edit_lock(meta, role)
     if pdf_file not in files:
         raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
     if schema_file in files and not force:

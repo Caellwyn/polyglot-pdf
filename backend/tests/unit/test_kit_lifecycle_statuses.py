@@ -876,3 +876,221 @@ def test_a_SUBMITTED_kit_is_not_deployable(client):
     # The deploy scripts grep for exactly this; a submitted kit must not match.
     assert meta["status"] != "complete"
     assert ekr._is_write_locked(meta), "submitted must be write-locked"
+
+
+# --- the editing lock (bd polyglot-pdf-hqztg) --------------------------------
+#
+# ROLE-scoped: two shared tokens mean the server can say "an editor holds this"
+# but never WHICH editor (bd polyglot-pdf-ijntk lifts that). An author can
+# always take a lock back from an editor and never the reverse -- which is also
+# the stale-lock release, since a timer that steals from someone actively
+# working is worse than a human deciding to take it.
+
+
+def _lock(c, kit_id, headers):
+    return c.post(f"/api/editor/kits/{kit_id}/lock", headers=headers)
+
+
+def _unlock(c, kit_id, headers):
+    return c.delete(f"/api/editor/kits/{kit_id}/lock", headers=headers)
+
+
+def test_taking_a_free_lock_succeeds(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = _lock(c, "w7", HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["heldBy"] == "editor"
+    assert resp.json()["preempted"] is False
+    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "editor"}
+
+
+def test_an_AUTHOR_can_take_a_lock_back_from_an_editor(client):
+    """The rule the maintainer asked for: authors can steal it back."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _lock(c, "w7", AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["heldBy"] == "author"
+    # Reported, so the UI can SAY it took the kit rather than silently winning.
+    assert resp.json()["preempted"] is True
+    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+
+
+def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
+    """Preemption is one-way. An author mid-review must not have the form
+    pulled out from under them."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _lock(c, "w7", HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+
+
+def test_a_preempted_editor_DISCOVERS_it_on_their_next_save(client):
+    """There is no channel from server to editor, so the next save IS the
+    notification -- a 409 explaining what happened, not a silent overwrite of
+    the version the author is reviewing."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200   # author takes it back
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+
+
+def test_the_lock_holder_can_still_save(client):
+    """The lock must not block the person holding it."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_an_UNLOCKED_kit_saves_freely(client):
+    """No lock means no new obstacle -- the lock is opt-in, and a kit nobody
+    has taken behaves exactly as it did before this bead."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_releasing_a_lock_frees_the_kit(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _unlock(c, "w7", HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["heldBy"] is None
+    assert "editing_lock" not in _run(store.load_metadata("w7"))
+
+
+def test_an_AUTHOR_can_release_an_editors_abandoned_lock(client):
+    """The stale-lock escape. Someone closes their laptop and goes on holiday;
+    an author clears it rather than waiting for a timer."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _unlock(c, "w7", AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert "editing_lock" not in _run(store.load_metadata("w7"))
+
+
+def test_an_EDITOR_cannot_release_an_authors_lock(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _unlock(c, "w7", HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert _lock_holder_of(store, "w7") == "author"
+
+
+def _lock_holder_of(store, kit_id):
+    return (_run(store.load_metadata(kit_id)).get("editing_lock") or {}).get("role")
+
+
+def test_the_lock_does_not_disturb_other_metadata(client):
+    """Read-merge-write, like every other metadata writer here: taking a lock
+    must not drop the label, the status, or an author version."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    meta = _run(store.load_metadata("w7"))
+    assert meta["status"] == "submitted"
+    assert meta["label"] == "w7"
+
+
+# --- the lock covers EVERY schema-writing route ------------------------------
+
+
+def _schema_writing_routes():
+    """Derive the route list from the SHIPPED module, never a hand-typed one.
+
+    bd polyglot-pdf-6dz0 shipped a guard on one of six sibling routes and 6x1j
+    did the same; both times a reviewer found the other five. Enumerating from
+    the source means a NEW schema-writing route added later without the lock
+    fails this test instead of shipping unguarded.
+    """
+    import inspect
+    src = inspect.getsource(ekr).splitlines()
+    # Split on TOP-LEVEL function definitions, not on @router. decorators: a
+    # decorator-delimited span runs past its own function into the next one's
+    # helpers, which credited three routes with put_schema calls belonging to
+    # their neighbours (caught by this very test failing on its first run).
+    starts = [i for i, l in enumerate(src)
+              if l.startswith("async def ") or l.startswith("def ")]
+    out = []
+    for idx, i in enumerate(starts):
+        end = starts[idx + 1] if idx + 1 < len(starts) else len(src)
+        body = "\n".join(src[i:end])
+        if "await store.put_schema(" not in body:
+            continue
+        # Routes only -- a @router. decorator on one of the lines just above.
+        if "@router." not in "\n".join(src[max(0, i - 6):i]):
+            continue
+        name = src[i].split("(")[0].replace("async def ", "").replace("def ", "").strip()
+        out.append((name, body))
+    return out
+
+
+def test_EVERY_schema_writing_route_honours_the_editing_lock():
+    """The property, not a sample: a route that rewrites a schema must refuse
+    when someone else holds the kit. Six routes today."""
+    routes = _schema_writing_routes()
+    assert len(routes) >= 6, f"expected >=6 schema writers, found {len(routes)}"
+
+    unguarded = [name for name, body in routes if "_require_edit_lock" not in body]
+    assert unguarded == [], (
+        f"these routes rewrite a schema without checking the editing lock: "
+        f"{unguarded}"
+    )
+
+
+def test_the_enumeration_is_anchored_to_a_REAL_refusal(client):
+    """The property test above proves every schema writer CALLS the guard.
+    This drives one end to end, so "calls it" cannot drift from "refuses".
+
+    Uses PUT /schema rather than repair: repair is author-only, so an editor
+    can never reach its lock check at all -- my first version of this test
+    asserted a 409 against a route that 403s first, which would have proved
+    nothing about the lock.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200   # author takes it back
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
