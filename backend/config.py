@@ -685,11 +685,16 @@ class Settings(BaseModel):
 				"uses: (1) recall a past ANSWER/value -- 'what previous name did "
 				"they give?', 'have we got their date of birth yet?'; (2) IDENTIFY "
 				"which field the user means when you need to jump to a field you do "
-				"NOT currently hold -- 'which field is the mailing city?'; (3) look "
-				"up OFFICIAL GUIDANCE the secretary holds (the form's full official "
-				"instructions text) when the current field's reference text does "
-				"not clearly answer a requirements question -- 'what documents does "
-				"exception 3 require?'. The "
+				"NOT currently hold -- 'which field is the mailing city?'; (3) get "
+				"the OFFICIAL INSTRUCTION TEXT quoted back when the current field's "
+				"reference text does not cover something -- 'what do the "
+				"instructions say about exception 3?'. Use (3) to obtain the form's "
+				"OWN WORDS, which you may then read to the user. It does NOT answer "
+				"whether something applies to this applicant: the secretary quotes "
+				"the instructions and declines anything shaped like 'do I qualify' "
+				"or 'what should I put', because that decision is the applicant's "
+				"and their reviewer's, never ours. Ask it what the instructions SAY, "
+				"never what the user SHOULD DO. The "
 				"secretary holds the whole form catalog + the applicant's answers "
 				"and replies in prose; when it identifies fields, the response also "
 				"carries a `fields` list of exact {field_id, spoken_name} you can "
@@ -704,9 +709,12 @@ class Settings(BaseModel):
 						"type": "string",
 						"description": (
 							"The plain-language question: a past answer/value "
-							"('what is their mailing zip code?'), or which field the "
+							"('what is their mailing zip code?'), which field the "
 							"user means for navigation ('which field is the apartment "
-							"number?')."
+							"number?'), or what the official instructions SAY about "
+							"something ('what do the instructions say about exception "
+							"3?'). Phrase a guidance question as what the text says, "
+							"never as what this applicant should do or qualifies for."
 						)
 					}
 				},
@@ -1139,7 +1147,7 @@ class Settings(BaseModel):
 		"When you fill the field, the value must match the guidance EXACTLY, punctuation included; translate the user's spoken answer to the matching option. Multiple checkboxes: comma-separated exact values.\n"
 		"\n"
 		"ANSWERING QUESTIONS:\n"
-		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary also holds the user's past answers and can identify a field you do not hold.\n"
+		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary quotes the form's official instructions back to you, and also holds the user's past answers and can identify a field you do not hold. Ask it what the instructions SAY, never what the user should do -- and if it declines a question as advice, relay that: quote whatever it quoted and say the choice is theirs to make with the person reviewing their form. Do not answer it yourself instead.\n"
 		"INFORMATION, NEVER ADVICE: you explain what a field expects and what the official instructions say. You never tell the user what to enter, which option to choose, or what applies to their situation -- those decisions are theirs alone. 'The instructions say category a covers X' is information; 'you should check box a' is advice. Never give advice."
 	)
 
