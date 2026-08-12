@@ -1220,4 +1220,32 @@ describe('the editing lock is reachable from the UI (bd polyglot-pdf-hqztg)', ()
     expect(within(c).queryByText('Take back')).not.toBeInTheDocument();
     expect(within(c).queryByText('Release')).not.toBeInTheDocument();
   });
+  it('lets an author FREE an abandoned editor lock without taking it', async () => {
+    // The stale-lock escape you actually want when someone closed their laptop
+    // and went on holiday. "Take back" transfers the lock to the author, so
+    // using it to clear an abandoned kit leaves the kit locked to THEM unless
+    // they remember a second step (found by enumerating the six
+    // holder x viewer cells rather than spot-checking).
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, heldBy: 'editor' } : k)));
+    vi.mocked(releaseKitLock).mockResolvedValueOnce({
+      ok: true, kitId: 'draft-kit', heldBy: null, preempted: false });
+    await cards('author');
+
+    fireEvent.click(within(card('Draft Form')).getByText('Free it'));
+
+    await waitFor(() => expect(releaseKitLock).toHaveBeenCalledWith('draft-kit'));
+    expect(takeKitLock).not.toHaveBeenCalled();
+  });
+
+  it('does not offer Free it to an EDITOR', async () => {
+    // Releasing someone else's lock is an author capability; the server 409s
+    // an editor who tries, so the button must not be there.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, heldBy: 'author' } : k)));
+    await cards('editor');
+
+    expect(within(card('Draft Form')).queryByText('Free it')).not.toBeInTheDocument();
+  });
 });
+

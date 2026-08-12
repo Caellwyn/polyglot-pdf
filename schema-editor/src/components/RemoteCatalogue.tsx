@@ -1057,18 +1057,36 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         {lockingId === kit.id ? 'Releasing...' : 'Release'}
                       </button>
                     ) : (isAuthor || kit.heldBy !== 'author') && (
-                      <button
-                        className="btn-sm text-xs"
-                        onClick={() => void handleLock(kit, true)}
-                        disabled={busy || lockingId !== null}
-                        title={kit.heldBy === 'editor' && isAuthor
-                          ? 'Take this form back from the editor who has it'
-                          : 'Take this form for editing'}
-                      >
-                        {lockingId === kit.id
-                          ? 'Taking...'
-                          : kit.heldBy === 'editor' && isAuthor ? 'Take back' : 'Take for editing'}
-                      </button>
+                      <>
+                        <button
+                          className="btn-sm text-xs"
+                          onClick={() => void handleLock(kit, true)}
+                          disabled={busy || lockingId !== null}
+                          title={kit.heldBy === 'editor' && isAuthor
+                            ? 'Take this form back from the editor who has it'
+                            : 'Take this form for editing'}
+                        >
+                          {lockingId === kit.id
+                            ? 'Taking...'
+                            : kit.heldBy === 'editor' && isAuthor ? 'Take back' : 'Take for editing'}
+                        </button>
+                        {kit.heldBy === 'editor' && isAuthor && (
+                          // The stale-lock escape, and it must be its own
+                          // action: "Take back" TRANSFERS the lock to the
+                          // author, so freeing an abandoned kit would take two
+                          // steps and leave it locked to an absent author if
+                          // they forgot the second (found by enumerating the
+                          // six holder x viewer cells).
+                          <button
+                            className="btn-sm text-xs"
+                            onClick={() => void handleLock(kit, false)}
+                            disabled={busy || lockingId !== null}
+                            title="Free this form without taking it -- for a lock someone left behind"
+                          >
+                            {lockingId === kit.id ? 'Releasing...' : 'Free it'}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
