@@ -649,6 +649,50 @@ def test_replacing_a_kit_that_is_not_live_is_refused(client):
     assert "not published" in resp.json()["detail"]
 
 
+def test_a_bad_replaces_kit_id_is_refused_before_the_translation_sweep(client):
+    """bd polyglot-pdf-asr2a: the four cheap, purely-local replaces_kit_id
+    checks (malformed id, self-reference, unknown kit, not-complete kit) must
+    all be refused BEFORE the metered per-language translation drift sweep
+    runs -- a bad supersede target should never burn real model calls before
+    being refused. Patches _sweep_drifted_translations with a stub that
+    raises if invoked, so any of these four cases reaching it fails loudly
+    rather than silently paying for the sweep first."""
+    c, _store, root = client
+
+    async def _explode(_store, _kit_id, _schema, _schema_file):
+        raise AssertionError(
+            "_sweep_drifted_translations must not run before replaces_kit_id "
+            "validation for a request that will be refused anyway"
+        )
+
+    ekr._sweep_drifted_translations = _explode  # type: ignore[assignment]
+    try:
+        _make_kit(root, "w7", status="draft")             # the incoming kit
+        _make_kit(root, "w7-2024", status="draft")         # NOT complete -- bad target
+
+        cases = [
+            # (replaces value, expected status, needle in the error detail)
+            ("../../etc/passwd", 400, None),      # malformed -- _safe_kit_id rejects it
+            ("w7", 409, "cannot replace itself"),  # self-reference
+            ("does-not-exist", 404, None),         # unknown kit
+            ("w7-2024", 409, "not published"),     # exists but not complete
+        ]
+        for replaces, expected_status, needle in cases:
+            resp = _status(c, "w7", "complete", replaces=replaces)
+            assert resp.status_code == expected_status, (
+                f"replaces={replaces!r}: expected {expected_status}, got "
+                f"{resp.status_code} ({resp.text})"
+            )
+            if needle:
+                assert needle in resp.json()["detail"]
+    finally:
+        # Restore the real function so the module state doesn't leak into
+        # other tests in this file.
+        import importlib
+
+        importlib.reload(ekr)
+
+
 def test_replaces_is_ignored_when_the_request_is_not_a_publish(client):
     """A supersede retires a live kit, so it may fire ONLY as part of putting a
     replacement into service. Left ungated it also fires on an unpublish or a

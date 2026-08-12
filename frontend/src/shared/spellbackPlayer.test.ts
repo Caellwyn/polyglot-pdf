@@ -49,7 +49,8 @@ interface Harness {
 function makePlayer(overrides: {
   fetchImpl?: (...a: any[]) => Promise<Response>
   am?: AudioManager | null
-  watchdogs?: Array<{ ms: number; fn: () => void }>
+  watchdogs?: Array<{ ms: number; fn: () => void; cancel: ReturnType<typeof vi.fn> }>
+  getToken?: () => Promise<string | undefined>
 } = {}): Harness {
   const holdLog: boolean[] = []
   const audios: FakeAudio[] = []
@@ -60,11 +61,13 @@ function makePlayer(overrides: {
     ...(overrides.watchdogs
       ? {
           watchdog: (ms: number, fn: () => void) => {
-            overrides.watchdogs!.push({ ms, fn })
-            return () => {}
+            const cancel = vi.fn()
+            overrides.watchdogs!.push({ ms, fn, cancel })
+            return cancel
           },
         }
       : {}),
+    ...(overrides.getToken ? { getToken: overrides.getToken } : {}),
     getAudioManager: () => am,
     getHttpBase: () => 'http://test',
     fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -215,7 +218,7 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
   })
 
   it('playback watchdog: a stalled audio element cannot gate the mic forever (bd fjb2k)', async () => {
-    const watchdogs: Array<{ ms: number; fn: () => void }> = []
+    const watchdogs: Array<{ ms: number; fn: () => void; cancel: ReturnType<typeof vi.fn> }> = []
     const { player, holdLog, audios } = makePlayer({ watchdogs })
 
     const done = player.play('NGUYEN')
@@ -233,6 +236,58 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
     expect(audios[0].pause).toHaveBeenCalled()
     expect(holdLog[holdLog.length - 1]).toBe(false)
     expect(player.isPlaying()).toBe(false)
+  })
+
+  it('token bound: a resolved getToken() clears its watchdog timer (bd polyglot-pdf-3o2uz)', async () => {
+    // The regression: getToken() raced a bare, uncancellable sleep(). On the
+    // normal (fast) path where getToken() wins, the losing timer survived
+    // uncancelled for the full 10s -- one dangling timer per call, unlike the
+    // fetch-abort and playback bounds, which ARE disposed in a finally/settle.
+    const watchdogs: Array<{ ms: number; fn: () => void; cancel: ReturnType<typeof vi.fn> }> = []
+    const getToken = vi.fn(async () => 'tok-123')
+    const { player, audios } = makePlayer({ watchdogs, getToken })
+
+    const done = player.play('NGUYEN')
+    await settleMicrotasks()
+    audios[0]?.onended?.()
+    await done
+
+    // Three watchdogs total: the token bound (armed first), then the fetch
+    // abort timer, then the playback cap.
+    expect(watchdogs).toHaveLength(3)
+    const tokenWatchdog = watchdogs[0]
+    expect(tokenWatchdog.ms).toBe(10000) // TOKEN_TIMEOUT_MS
+    // The whole point: the winning getToken() must have cleared ITS OWN
+    // timer, not left it to fire 10s later into a completed call.
+    expect(tokenWatchdog.cancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('token bound: a timed-out getToken() proceeds tokenless without hanging (bd 3o2uz)', async () => {
+    // The watchdog firing (not getToken() itself) must be what unblocks the
+    // call -- confirms the bound is load-bearing, not just present.
+    const watchdogs: Array<{ ms: number; fn: () => void; cancel: ReturnType<typeof vi.fn> }> = []
+    let neverResolves: () => void = () => {}
+    const getToken = vi.fn(() => new Promise<string | undefined>((_resolve) => {
+      neverResolves = () => {} // deliberately never called
+    }))
+    const { player, audios, fetchImpl } = makePlayer({ watchdogs, getToken })
+    void neverResolves
+
+    const done = player.play('NGUYEN')
+    await settleMicrotasks()
+    expect(watchdogs).toHaveLength(1) // only the token watchdog so far -- fetch has not started
+    expect(watchdogs[0].ms).toBe(10000)
+
+    // Fire the token watchdog: the call must proceed (tokenless) into the
+    // fetch phase rather than hanging forever on the unresolved getToken().
+    watchdogs[0].fn()
+    await settleMicrotasks()
+    audios[0]?.onended?.()
+    await done
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const [, init] = fetchImpl.mock.calls[0]
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
   })
 
   it('client budget arithmetic: elapsed + watchdog cap NEVER exceeds the 80s client budget (bd 9pnd3/tk62w)', () => {

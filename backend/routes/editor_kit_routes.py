@@ -2033,6 +2033,36 @@ async def set_editor_kit_status(
     if body.status in ("draft", "unpublished") and current_status == "complete":
         await _archive_published_revision(store, kit_id, meta)
 
+    # CROSS-KIT SUPERSEDE validation (bd polyglot-pdf-asr2a): these four
+    # checks are all cheap and purely LOCAL -- they depend on nothing the
+    # publish gate below computes -- so they run BEFORE the metered
+    # per-language translation drift sweep. Validating a bad supersede
+    # target only AFTER paying for that sweep burned real model calls on a
+    # request that was always going to be refused; reject for free first,
+    # same "cheap gates before the pro-tier sweep" principle
+    # _sweep_drifted_translations' own call site already follows. The
+    # ARCHIVE WRITE for the outgoing kit stays deferred to its original spot
+    # (after every gate for the incoming kit has passed) -- only the
+    # read-only validation moved earlier.
+    superseded_kit: Optional[str] = None
+    superseded_meta: Optional[dict] = None
+    if body.status == "complete" and body.replaces_kit_id:
+        superseded_kit = _safe_kit_id(body.replaces_kit_id)
+        if superseded_kit == kit_id:
+            raise HTTPException(
+                status_code=409,
+                detail="A form cannot replace itself -- republishing the same "
+                       "kit already replaces its own catalogue entry.",
+            )
+        superseded_meta, _old_files = await _load_meta_or_404(store, superseded_kit)
+        if _status_of(superseded_meta) != "complete":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot replace {superseded_kit}: it is not published "
+                       f"(status {_status_of(superseded_meta)}), so there is "
+                       "nothing to retire.",
+            )
+
     if body.status == "complete":
         # The voice app serves BOTH the schema and the PDF of a complete kit;
         # the deploy manifest falls back to a conventional pdf name when none
@@ -2277,28 +2307,15 @@ async def set_editor_kit_status(
     # Ordering is deliberate: the outgoing kit is retired only AFTER every gate
     # above has passed for the incoming one. Retiring first and then failing a
     # gate would leave the form with NO live kit at all -- strictly worse than
-    # the two-entry state we are fixing.
+    # the two-entry state we are fixing. The VALIDATION for replaces_kit_id
+    # (malformed / self-reference / unknown / not-complete) already ran, ahead
+    # of the translation sweep, above (bd polyglot-pdf-asr2a) -- this is only
+    # the archive WRITE, which stays here, deferred until every gate for the
+    # incoming kit has passed.
     #
     # Same-kit republish needs no flag: one kit_id is one catalogue slot, so a
     # kit always replaces itself.
-    superseded_kit: Optional[str] = None
-    superseded_meta: Optional[dict] = None
-    if body.status == "complete" and body.replaces_kit_id:
-        superseded_kit = _safe_kit_id(body.replaces_kit_id)
-        if superseded_kit == kit_id:
-            raise HTTPException(
-                status_code=409,
-                detail="A form cannot replace itself -- republishing the same "
-                       "kit already replaces its own catalogue entry.",
-            )
-        superseded_meta, _old_files = await _load_meta_or_404(store, superseded_kit)
-        if _status_of(superseded_meta) != "complete":
-            raise HTTPException(
-                status_code=409,
-                detail=f"Cannot replace {superseded_kit}: it is not published "
-                       f"(status {_status_of(superseded_meta)}), so there is "
-                       "nothing to retire.",
-            )
+    if superseded_kit is not None:
         # Archive its bytes now -- the archive is additive and harmless even if
         # the publish below fails, whereas the STATUS flip is not, so that is
         # deferred until the incoming kit is actually live (see below).

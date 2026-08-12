@@ -546,7 +546,16 @@ def _complete_grouped_families(schema: dict, dump_path: str) -> dict:
     not also minted as a loose duplicate field.
 
     Claim matching reuses schema_lint._match_dump_names / is_fillable_widget (the
-    single source of truth). Returns {"fields_completed", "options_added"}."""
+    single source of truth). Returns {"fields_completed", "options_added"}.
+
+    ONE OPTION PER NAME, not per widget kid (bd polyglot-pdf-pixq): if an AcroForm
+    field name has MULTIPLE widget kids sharing one on_value (e.g. two checkboxes
+    at different y-positions that print as one repeated printed box), this
+    completion mints exactly ONE option carrying that name -- it does not detect
+    or place the extra kid's own rect. That kid stays claimed (by name) but
+    unplaced. This is a deliberate, documented limitation rather than a silent
+    drop: the alternative (one option per kid) would need per-kid rects this
+    function does not compute, and re-opening that is out of scope here."""
     sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
     from group_candidates import find_group_candidates  # noqa: E402
     sys.path.insert(0, _REPO)
@@ -596,8 +605,20 @@ def _complete_grouped_families(schema: dict, dump_path: str) -> dict:
     options_added = 0
 
     for fam in families:
-        members = [m for m in fam.get("widgets", []) if isinstance(m, str)
-                   and is_fillable_widget(dump, m)]
+        raw_members = [m for m in fam.get("widgets", []) if isinstance(m, str)
+                        and is_fillable_widget(dump, m)]
+        # De-duplicate, preserving order (bd polyglot-pdf-pixq): group_candidates
+        # ._button_widgets flattens ONE ENTRY PER WIDGET KID, so an AcroForm field
+        # name with several widget kids contributes its NAME once per kid -- a
+        # mixed family (some names appearing once, one appearing twice) passes the
+        # `len(member_set) < 2` guard below (member_set collapses duplicates, so it
+        # only rejects a family that is ENTIRELY duplicates). Without this,
+        # `missing` -- computed from raw_members below -- would carry the repeated
+        # name twice, and the append loop would mint TWO options for the SAME
+        # pdf_field_name (differing only by the "_x" collision suffix), both
+        # resolving to the same widget rect -- while that widget's second kid
+        # (the one that made the name repeat) is left placed by nothing.
+        members = list(dict.fromkeys(raw_members))
         member_set = set(members)
         if len(member_set) < 2:
             continue
