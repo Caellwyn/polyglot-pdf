@@ -121,6 +121,27 @@ def test_secretary_may_not_substitute_its_own_legal_knowledge():
         "when it holds no official text")
 
 
+def test_the_rubrics_kind_COUNT_matches_the_kinds_it_enumerates():
+    """The bead's own failure shape, one sentence up (fresh-eyes round 1).
+
+    The rubric opens by telling the model how many question kinds exist, then
+    enumerates them. Adding kind (C) without updating that count left it saying
+    "one of two kinds" above three -- a model told its own framing does not
+    cover what follows is in the same under-constrained state the original
+    defect created. Derived from the enumeration rather than hardcoded, so
+    adding a kind (D) without updating the intro fails here instead of
+    shipping.
+    """
+    kinds = re.findall(r'"?([A-Z])\) [A-Z][A-Z -]+', SECRETARY_SI)
+    assert kinds == ["A", "B", "C"], (
+        f"expected kinds A/B/C in order, found {kinds}")
+    words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
+    expected = words[len(kinds)]
+    assert f"one of {expected} kinds" in SECRETARY_SI, (
+        f"the rubric enumerates {len(kinds)} kinds but its intro does not say "
+        f"'one of {expected} kinds' -- the count and the enumeration drifted")
+
+
 def test_the_official_text_lookup_use_is_actually_defined_for_the_secretary():
     """THE ORIGINAL DEFECT. The tool advertised a guidance-lookup use that the
     secretary's rubric never defined -- it listed only value recall and field

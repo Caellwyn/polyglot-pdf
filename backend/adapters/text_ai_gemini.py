@@ -28,7 +28,7 @@ SECRETARY_SI = (
     "whether it is shown (applicable) to this applicant. A field can be shown but "
     "<empty> (applicable, not answered yet) OR not shown (not applicable to this "
     "applicant) -- treat these as DIFFERENT.\n\n"
-    "Colleague questions are one of two kinds:\n"
+    "Colleague questions are one of three kinds:\n"
     "A) VALUE RECALL -- 'what did they say for X?', 'have we got their DOB yet?'. "
     "Find ALL fields relevant to the question (there may be several), and answer "
     "in natural, brief prose using ONLY their current values. If a relevant field "

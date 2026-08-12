@@ -69,9 +69,13 @@ test is one synonym from defeat and would also fail on prose that names the
 prohibition in order to forbid it. The one negative assertion is narrow and
 justified in-file: the specific advice-shaped example that shipped.
 
-Each of the three layers is mutation-verified SEPARATELY (reverting the rubric
-reddens 6, the declaration 1, the SI relay sentence 1 -- no mutation touches
-another layer's cases). Full both-roots suite green at 3074 passed.
+Each of the three layers is mutation-verified SEPARATELY: reverting the rubric
+reddens 6 cases, the full declaration (description + query param together) 4,
+the SI relay sentence 1 -- no mutation touches another layer's cases. The
+declaration figure is the fresh-eyes reviewer's measurement; my own note had
+said 1, which was the count for the single half-line mutation I ran rather
+than for reverting the layer, and the reviewer reproduced the real number
+twice. Full both-roots suite green at 3074 passed.
 
 ## Lessons
 
@@ -89,6 +93,14 @@ another layer's cases). Full both-roots suite green at 3074 passed.
   test does not catch this". Assert the file actually changed before trusting
   the result -- the repo rule exists because this is easy to miss twice in one
   sitting.
+- **The same defect can hide one sentence above the fix.** Fresh-eyes found
+  that adding kind (C) left the rubric's own intro saying "one of two kinds"
+  above three -- a model told its framing does not cover what follows, which
+  is the identical under-constrained state this bead exists to remove, just
+  relocated. The pin derives the expected count FROM the enumeration, so
+  adding a kind (D) without updating the intro fails instead of shipping;
+  mutation-verified in both directions (wrong count, and a dropped kind with
+  a stale count).
 - **A tool declaration advertising a capability the answering model was never
   scoped for is the dangerous shape.** The fix was not only narrowing what may
   be asked, but DEFINING the third use on the answering side so it is not left
