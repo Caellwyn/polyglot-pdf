@@ -1,7 +1,7 @@
 """Measure the spell-back clip's loudness against the Live model's voice.
 
 WHY THIS SHIPS (fresh-eyes round 1 on bd polyglot-pdf-9oejl): the gain constant
-SPELLBACK_VOLUME_GAIN_DB in backend/services/spellback_tts.py is a magic number
+the per-persona gain table in backend/services/spellback_tts.py holds numbers
 in a production audio path, and no unit test can tell whether its VALUE is
 right -- only that it is passed through. So the evidence for it must be
 reproducible rather than quoted from a scratchpad. Run this to re-derive it.
@@ -155,7 +155,8 @@ def main() -> int:
                  "CLIPPING" if peak >= 0.999 else "headroom ok"))
     print()
     print("Pick the gain closest to 100%% of model WITHOUT clipping, and set")
-    print("SPELLBACK_VOLUME_GAIN_DB in backend/services/spellback_tts.py.")
+    print("_MEASURED_GAIN_DB['<persona>'] in backend/services/spellback_tts.py")
+    print("(the gain is looked up BY PERSONA -- there is no single constant).")
     print("Perceived loudness is not RMS -- confirm the pick BY EAR.")
     return 0
 

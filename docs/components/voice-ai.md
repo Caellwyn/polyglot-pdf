@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-11 (bd polyglot-pdf-0rpu: LIVE_VOICE_NAME default Iapetus -> Algieba after Iapetus was heard mispronouncing words in the live demo; the spell-back clip's voice AND its loudness gain follow the persona. Earlier 2026-08-08, bd polyglot-pdf-44ywm: the spell-back clip is plain-text, session-language, and carries the verification question; plus bd polyglot-pdf-4hnyq -- the /ws/fill handshake no longer blocks ~9.4s on serial adapter construction. Earlier this day: the merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
+*Last updated: 2026-08-11 (bd polyglot-pdf-0rpu: LIVE_VOICE_NAME default Iapetus -> Algieba after Iapetus was heard mispronouncing words in the live demo -- "not applicable" as "not a pickle"; the spell-back clip follows that persona and DERIVES its loudness gain from it. The flag-gated name_spellback tool, its spellback/spellback_response wire pair and the POST /api/tts/spellback route are current as described below.)*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool

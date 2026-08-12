@@ -659,6 +659,38 @@ class TestSpellbackText:
         assert spellback_tts.spellback_gain_db("ru-RU-Chirp3-HD-Charon") == quiet_end
         assert spellback_tts.spellback_gain_db("") == quiet_end
 
+    def test_env_override_wins_over_the_measured_table(self, monkeypatch):
+        """The escape hatch must actually work.
+
+        SPELLBACK_VOLUME_GAIN_DB exists so a new voice can be tuned BY EAR
+        before its measurement lands in the table. Fresh-eyes round 2 deleted
+        the whole override block and every test still passed -- an untested
+        claim in a docstring is not a proven one (scar #8), so pin it: the
+        override beats the table, a malformed value falls back to the table
+        rather than crashing a session, and it is read per call (an operator
+        setting it on Cloud Run must not need a code change).
+        """
+        from backend.services import spellback_tts
+
+        algieba = "en-US-Chirp3-HD-Algieba"
+        assert spellback_tts.spellback_gain_db(algieba) == 4.0
+
+        monkeypatch.setenv("SPELLBACK_VOLUME_GAIN_DB", "2.5")
+        assert spellback_tts.spellback_gain_db(algieba) == 2.5, (
+            "the env override did not win over the measured table")
+        # It overrides for EVERY persona, including an unmeasured one.
+        assert spellback_tts.spellback_gain_db("ru-RU-Chirp3-HD-Charon") == 2.5
+
+        # A typo must not break the session: fall back to the measured value.
+        monkeypatch.setenv("SPELLBACK_VOLUME_GAIN_DB", "loud")
+        assert spellback_tts.spellback_gain_db(algieba) == 4.0, (
+            "a malformed override should fall back to the table, not crash")
+
+        # Cleared -> back to the table (proves it is read per call, not cached
+        # at import).
+        monkeypatch.delenv("SPELLBACK_VOLUME_GAIN_DB")
+        assert spellback_tts.spellback_gain_db(algieba) == 4.0
+
     def test_the_default_voice_has_a_measured_gain(self):
         """A voice-default change must not outrun its measurement.
 
