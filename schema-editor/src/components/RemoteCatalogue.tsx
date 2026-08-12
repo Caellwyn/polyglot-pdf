@@ -254,16 +254,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
 
   React.useEffect(() => { void refresh(); }, [refresh]);
 
-  // Promote/demote a kit in the SHARED store. Promotion can be refused by the
-  // server's publish gate (schema must validate) -- surface that detail. A
-  // complete flip ALSO runs the server-side translation drift sweep (bd
-  // polyglot-pdf-783r): re-translating spoken names / option labels whose
-  // English drifted during review, then refusing completion until every
-  // language is covered. The sweep is slow (a pro-tier call per language with
-  // retry), so a complete flip shows the elapsed ticker via completingId, and a
-  // 409 "N of M translations complete" refusal surfaces as the error to re-press.
+  // Permanently remove a kit. The ONLY destructive handler in this module: the
+  // server's guard decides (records exist / verified clean / could not check),
+  // and a 409 is the guard WORKING, so it renders inside the dialog rather
+  // than dismissing it.
   const handleDelete = React.useCallback(async (kit: RemoteKitEntry) => {
     setDeleteError(null);
+    // Clear any stale success banner, as every sibling handler does. Without
+    // it, deleting kit A and then being REFUSED on kit B showed a green
+    // '"A" was deleted permanently' beside B's red refusal -- on the one
+    // workflow where "did that just delete something?" must never be
+    // ambiguous (Opus fresh-eyes round 4).
+    setNotice(null);
     setDeletingId(kit.id);
     try {
       await deleteRemoteKit(kit.id);
@@ -281,6 +283,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     }
   }, [refresh, onAuthError]);
 
+  // Promote/demote a kit in the SHARED store. Promotion can be refused by the
+  // server's publish gate (schema must validate) -- surface that detail. A
+  // complete flip ALSO runs the server-side translation drift sweep (bd
+  // polyglot-pdf-783r): re-translating spoken names / option labels whose
+  // English drifted during review, then refusing completion until every
+  // language is covered. The sweep is slow (a pro-tier call per language with
+  // retry), so a complete flip shows the elapsed ticker via completingId, and a
+  // 409 "N of M translations complete" refusal surfaces as the error to re-press.
   const handleSetStatus = React.useCallback(async (
     kit: RemoteKitEntry, status: KitLifecycleStatus, authorVersion?: string,
   ) => {
@@ -795,6 +805,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       : 'Run extraction'}
                   </button>
                 )}
+
               </>
             );
           })()}
@@ -974,25 +985,6 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   </div>
                 )}
 
-                {/* AUTHOR ONLY, deliberately (bd polyglot-pdf-6x1j): editors
-                    never take destructive actions -- their work must always be
-                    recoverable. The server enforces the same rule, since an
-                    editor holds a token and can call the API directly. Kept
-                    visually apart from the publish controls and last in the
-                    card, so it is never the button next to the one you meant. */}
-                {isAuthor && (
-                  <div className="mt-2 flex items-center justify-end border-t border-slate-100 px-1 pt-1">
-                    <button
-                      className="text-xs text-slate-400 hover:text-red-700"
-                      onClick={() => { setDeleteError(null); setDeletePrompt(kit); }}
-                      disabled={busy || deletingId !== null}
-                      title="Delete this form permanently -- refused if anyone has already filled it"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-
                 {/* Author tier (bd 92qe.3): a schemaless kit WITH a PDF can be
                     extracted server-side. Editor-tier users see neither this
                     nor the upload control -- the server also refuses them. */}
@@ -1072,6 +1064,24 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       {extractingId === kit.id
                         ? `Extracting... ${extractElapsed}s`
                         : 'Run extraction'}
+                    </button>
+                  </div>
+                )}
+                {/* AUTHOR ONLY, deliberately (bd polyglot-pdf-6x1j): editors
+                    never take destructive actions -- their work must always be
+                    recoverable. The server enforces the same rule, since an
+                    editor holds a token and can call the API directly. Kept
+                    visually apart from the publish controls and last in the
+                    card, so it is never the button next to the one you meant. */}
+                {isAuthor && (
+                  <div className="mt-2 flex items-center justify-end border-t border-slate-100 px-1 pt-1">
+                    <button
+                      className="text-xs text-slate-400 hover:text-red-700"
+                      onClick={() => { setDeleteError(null); setDeletePrompt(kit); }}
+                      disabled={busy || deletingId !== null}
+                      title="Delete this form permanently -- refused if anyone has already filled it"
+                    >
+                      Delete
                     </button>
                   </div>
                 )}

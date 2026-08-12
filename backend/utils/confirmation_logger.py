@@ -556,12 +556,18 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
         # Such a record cannot be attributed to a specific kit, so guessing is
         # not available. Refuse instead: report the check as UNAVAILABLE and let
         # the caller offer unpublish. Bounded with limit(1) like the query above.
-        try:
-            unattributed = collection.where(
-                filter=FieldFilter("kit_id", "==", None)
-            ).limit(1)
-        except NameError:  # pragma: no cover -- the ImportError path above
-            unattributed = collection.where("kit_id", "==", None).limit(1)
+        # No positional fallback here, deliberately. firebase-admin is a pinned
+        # hard dependency and vendors google-cloud-firestore, so FieldFilter
+        # always imports; the old `except NameError` guard was unreachable, and
+        # on the SDK it claimed to serve the positional form is the deprecated
+        # one the branch above exists to avoid -- untested code guarding an
+        # impossible case (Opus fresh-eyes round 4). If the import ever DID
+        # fail, NameError falls into the broad handler below and the check
+        # reports UNAVAILABLE -- a refusal, which is the fail-safe direction
+        # this whole guard is built around.
+        unattributed = collection.where(
+            filter=FieldFilter("kit_id", "==", None)
+        ).limit(1)
         if any(True for _ in unattributed.stream()):
             _log.info("confirmation_unattributed_records_block_delete", kit_id=kit_id)
             raise ConfirmationCheckUnavailable(

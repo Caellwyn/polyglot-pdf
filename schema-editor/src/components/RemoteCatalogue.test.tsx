@@ -5,7 +5,7 @@
  * routes a 401 to the auth handler instead of a dead error banner.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 vi.mock('../utils/remoteKitStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/remoteKitStore')>();
@@ -1055,6 +1055,50 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
     await waitFor(() =>
       expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('renders Delete LAST, after the extraction row on a schemaless kit', async () => {
+    // The mis-click mitigation is "never the button next to the one you meant".
+    // That held for schema-bearing kits but not for schemaless ones, where the
+    // extraction row rendered BELOW Delete -- and those are exactly the kits an
+    // author triages as junk (Opus fresh-eyes round 4).
+    await openCards('author');
+
+    const html = document.body.innerHTML;
+    const deleteAt = html.lastIndexOf('>Delete<');
+    const extractAt = html.indexOf('Run extraction');
+    expect(extractAt).toBeGreaterThan(-1);   // the fixture has a schemaless kit
+    expect(deleteAt).toBeGreaterThan(extractAt);
+  });
+
+  it('clears a stale success notice when a later delete is REFUSED', async () => {
+    // Deleting A then being refused on B showed a green '"A" was deleted
+    // permanently' beside B's red refusal -- on the one workflow where "did
+    // that just delete something?" must never be ambiguous.
+    vi.mocked(deleteRemoteKit).mockResolvedValueOnce(3);
+    await openCards('author');
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+    await waitFor(() =>
+      expect(screen.getByText(/was deleted permanently/)).toBeInTheDocument());
+
+    // Now a refusal on a different kit. The list refreshed after the first
+    // delete, so target the card by its LABEL rather than by index -- an index
+    // here silently re-opens whichever card happens to be first.
+    vi.mocked(deleteRemoteKit).mockRejectedValueOnce(
+      new Error('"draft-kit" has confirmation records. Unpublish it instead.'),
+    );
+    const draftCard = screen.getByText('Draft Form').closest('li');
+    fireEvent.click(within(draftCard as HTMLElement).getByText('Delete'));
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'draft-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/has confirmation records/)).toBeInTheDocument());
+    expect(screen.queryByText(/was deleted permanently/)).not.toBeInTheDocument();
   });
 
   it('keeps the dialog OPEN and shows the guard refusal verbatim', async () => {
