@@ -240,11 +240,28 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
         // of its own, and every unbounded pre-playback phase is a hole in the
         // client-budget invariant (bd tk62w). Timeout -> proceed tokenless
         // (the request then 401s and maps to the error variant).
+        //
+        // The bound rides the same injectable `watchdog` seam the fetch abort
+        // and playback timeout already use (bd polyglot-pdf-3o2uz), not a
+        // bare sleep(): unlike those two, a bare setTimeout has no canceller,
+        // so on the normal (fast) path where getToken() wins, the losing
+        // timer used to survive uncancelled for the full 10s -- one dangling
+        // timer per name_spellback call, worse under the tool's own retry
+        // guidance. stopTokenWatchdog() clears it the instant getToken()
+        // settles, matching the disposal the other two bounds already get.
         token = deps.getToken
-          ? await Promise.race([
-              deps.getToken(),
-              sleep(TOKEN_TIMEOUT_MS).then(() => undefined as string | undefined),
-            ])
+          ? await new Promise<string | undefined>((resolve) => {
+              let settled = false
+              const settle = (v: string | undefined) => {
+                if (!settled) {
+                  settled = true
+                  stopTokenWatchdog()
+                  resolve(v)
+                }
+              }
+              const stopTokenWatchdog = watchdog(TOKEN_TIMEOUT_MS, () => settle(undefined))
+              deps.getToken!().then(settle, () => settle(undefined))
+            })
           : undefined
       } catch {
         token = undefined

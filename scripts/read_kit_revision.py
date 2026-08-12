@@ -74,44 +74,58 @@ _SIBLING_SUFFIX_RE = re.compile(r"^sha256-[0-9a-f]{12}$")
 _BASE_TAG_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
-def _might_be_sibling_of(segment: str, base: str) -> bool:
-    """True when `segment` MIGHT be a disambiguated sibling of `base`.
+def _sibling_match(segment: str, base: str) -> str:
+    """Whether `segment` MIGHT be, or PROVABLY IS, a disambiguated sibling of
+    `base`. Returns "no", "loose", or "exact" (bd polyglot-pdf-amojb).
 
-    Deliberately a loose "might", not a verified "is" -- and that asymmetry is
-    the whole design:
+    Deliberately a loose "might" for the non-exact case, not a verified "is"
+    -- and that asymmetry is the whole design:
 
     A sibling segment is only ever WRITTEN when the plain-base segment already
     exists holding different bytes (see `_archive_published_revision`). So
     whenever a sibling exists at all, the plain base exists too, retrieval
     collects >= 2 distinct candidates, and `_resolve` raises AmbiguousRevision.
-    This predicate can therefore NEVER cause a schema to be returned -- a match
-    only ever ADDS a candidate, pushing toward the honest "cannot tell" answer
-    and the operator's --segment read.
+    A "loose" match can therefore NEVER cause a schema to be returned on its
+    own -- it only ever ADDS a candidate, pushing toward the honest "cannot
+    tell" answer and the operator's --segment read.
 
-    That means over-matching is SAFE and under-matching is not: a missed
-    sibling silently drops the candidate count to 1 and hands back a single
-    revision as if it were unambiguous, which on a legal surface is the one
-    outcome that must never happen (verified in review by stubbing this to
-    False -- retrieval then resolved to the first revision alone).
+    That means over-matching "loose" is SAFE and under-matching is not: a
+    missed sibling silently drops the candidate count to 1 and hands back a
+    single revision as if it were unambiguous, which on a legal surface is the
+    one outcome that must never happen (verified in review by stubbing this to
+    "no" -- retrieval then resolved to the first revision alone).
 
     Earlier versions tried to VERIFY the relationship exactly -- exact base,
     then prefix, then prefix-at-trim-budget, then a digest of the raw marker.
     Every one admitted a wrong-schema case or hid a real sibling, because the
-    writer's trim is lossy and the reader cannot invert it. All of that
-    machinery was paying for an auto-resolution that cannot occur. A loose
-    match is both simpler and strictly safer.
+    writer's trim is lossy and the reader cannot invert it in the general
+    case. ONE case CAN be verified, but not from shape alone: when
+    `seg_base == base` exactly, no lossy trim was involved in the SEGMENT'S
+    TEXT -- but that alone does not prove this segment was actually WRITTEN
+    by `sibling_marker` for THIS marker (an unrelated kit's raw edition_date
+    could coincidentally contain the same "<base>--sha256-<12hex>" shape).
+    This function returns "exact" for that shape match, but `_resolve` does
+    NOT trust it on shape alone -- it re-derives the archived schema's own
+    content fingerprint and recomputes `sibling_marker(marker, fingerprint)`,
+    demoting to "loose" (bd polyglot-pdf-amojb round 2, Opus cross-surface
+    review) unless the recomputed segment matches byte-for-byte. That closes
+    the provenance gap the SHAPE-only "exact" left open. Every other
+    relationship (trimmed-base prefix match either direction) stays "loose"
+    unconditionally: those genuinely cannot be verified even with the
+    archived content in hand, since the trim is lossy in both directions.
 
-    The one hard requirement is the fingerprint suffix, which keeps an ordinary
-    marker that merely encodes with a "--" run from matching every base.
+    The one hard requirement for either match is the fingerprint suffix,
+    which keeps an ordinary marker that merely encodes with a "--" run from
+    matching every base.
     """
     marker_pos = segment.rfind("--")
     if marker_pos <= 0:
-        return False
+        return "no"
     seg_base, suffix = segment[:marker_pos], segment[marker_pos + 2:]
     if not _SIBLING_SUFFIX_RE.fullmatch(suffix):
-        return False
+        return "no"
     if seg_base == base:
-        return True
+        return "exact"
     # Strip the writer's optional "-<8hex>" trim tag before comparing: a
     # trimmed base is NOT a prefix of the plain base while that tag is on it.
     head, sep, tag = seg_base.rpartition("-")
@@ -119,7 +133,9 @@ def _might_be_sibling_of(segment: str, base: str) -> bool:
         seg_base = head
     # Compare BOTH ways: encode_marker truncates both sides at the cap, so
     # either can be the shorter one.
-    return base.startswith(seg_base) or seg_base.startswith(base)
+    if base.startswith(seg_base) or seg_base.startswith(base):
+        return "loose"
+    return "no"
 
 
 class AmbiguousRevision(Exception):
@@ -184,24 +200,58 @@ async def _resolve(store, kit_id: str, marker: str) -> tuple[str, dict]:
     # the same plain marker as the first, so the siblings MUST be searched --
     # looking up only the plain segment silently returns the first revision's
     # schema for a record that meant the second.
-    # Archived revisions filed under this marker. Two KINDS of match, and the
-    # difference decides what may be returned:
-    #   EXACT   -- the segment IS our encoded marker. Authoritative.
-    #   LOOSE   -- a "<base>--<fingerprint>" sibling that MIGHT be ours. The
-    #              writer's trim is lossy, so this cannot be verified (three
-    #              designs tried and each admitted a wrong answer). It is only
-    #              ever CORROBORATING: enough to prove ambiguity, never enough
-    #              to be the answer on its own.
+    # Archived revisions filed under this marker. THREE kinds of match, and
+    # the difference decides what may be returned:
+    #   EXACT   -- the segment IS our encoded marker (the plain base), OR an
+    #              UNTRIMMED sibling whose seg_base is byte-identical to it
+    #              AND whose archived content re-derives that exact segment
+    #              via sibling_marker (bd polyglot-pdf-amojb: shape alone is
+    #              not enough -- an unrelated kit's marker could coincidentally
+    #              LOOK like a sibling of ours; the content-fingerprint
+    #              re-derivation below proves this segment was actually
+    #              WRITTEN as our sibling, not merely shaped like one).
+    #              Authoritative either way.
+    #   LOOSE   -- a "<base>--<fingerprint>" sibling whose base was TRIMMED,
+    #              so it only MIGHT be ours. The writer's trim is lossy for
+    #              this case, so it cannot be verified (three designs tried
+    #              and each admitted a wrong answer). It is only ever
+    #              CORROBORATING: enough to prove ambiguity, never enough to
+    #              be the answer on its own.
+    from backend.services.form_kits import sibling_marker
+
     exact_count = 0
     for segment in await store.list_archived_markers(kit_id):
         is_exact = segment == base
-        if not is_exact and not _might_be_sibling_of(segment, base):
-            continue
+        if not is_exact:
+            match = _sibling_match(segment, base)
+            if match == "no":
+                continue
+            is_exact = match == "exact"
         archived = await store.load_archived_revision_or_none(kit_id, segment)
-        if archived is not None:
-            candidates.append((f"archive:{segment}", archived))
-            if is_exact:
-                exact_count += 1
+        if archived is None:
+            continue
+        if is_exact and not (segment == base):
+            # PROVENANCE, not just shape (bd polyglot-pdf-amojb round 2, Opus
+            # cross-surface review): `seg_base == base` only proves the
+            # CANDIDATE SEGMENT'S TEXT matches the shape sibling_marker would
+            # produce for an untrimmed base -- it does NOT prove THIS segment
+            # was actually WRITTEN by sibling_marker for THIS marker. An
+            # unrelated kit's edition_date that happens to literally contain
+            # "<base>--sha256-<12hex>" (a pasted-in string, a coincidental
+            # collision) would pass the shape check and silently return that
+            # kit's own schema -- exactly the "confident wrong schema" this
+            # tool's whole design exists to prevent. Recomputing the sibling
+            # segment FROM the archived schema's own content-derived
+            # fingerprint (the same value the WRITER used to build it) closes
+            # the loop: only a segment that a real write of THIS schema under
+            # THIS marker could have produced counts as exact. A segment that
+            # merely LOOKS like one, but was not, demotes to loose --
+            # corroborating an ambiguity, never returned on its own.
+            fingerprint = resolve_edition_marker(None, archived) or "revision"
+            is_exact = sibling_marker(marker, fingerprint) == segment
+        candidates.append((f"archive:{segment}", archived))
+        if is_exact:
+            exact_count += 1
     if current is not None and any(s == "current" for s, _ in candidates):
         exact_count += 1  # the live schema matched the marker exactly
 
