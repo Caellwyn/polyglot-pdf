@@ -320,22 +320,40 @@ class Settings(BaseModel):
 	# stressful legal intake, and the SI's slow/deliberate PACE + ARTICULATION
 	# prose does not reliably override delivery on native audio (the Live docs
 	# document NO pace/prosody/style parameter, so voice choice is the only real
-	# lever). "Iapetus" (Clear) is the maintainer's pick (2026-08-03) for
-	# non-native speakers concentrating on each word. Other calm candidates if
-	# this needs tuning: Schedar (Even), Vindemiatrix (Gentle), Achernar (Soft),
-	# Algieba (Smooth).
+	# lever). "Algieba" (Smooth) is the current pick -- see the DEFAULT CHANGED
+	# note below for why it replaced "Iapetus" (Clear). Other calm candidates if
+	# this needs tuning: Schedar (Even), Vindemiatrix (Gentle), Achernar (Soft).
 	# VERIFY BEFORE DEPLOY -- an unaccepted voice name is a HARD failure, not a
 	# degrade: the SDK types voice_name as a bare Optional[str] with NO enum, and
 	# Vertex closes the session with `1007 Invalid voice name` at connect, so a
 	# bad value breaks EVERY session. A 2026-07-30 probe (bd polyglot-pdf-e1x9)
 	# endpoint-verified 11 prebuilt voices ACCEPTED on
 	# gemini-live-2.5-flash-native-audio with `NotARealVoiceXYZ` correctly
-	# rejected -- but the probe did not record its 11 names, so "Iapetus" is
-	# documented-valid (it is one of Google's 30 TTS voices, and native-audio
-	# accepts the TTS set) yet NOT endpoint-verified on this tier. First deploy
-	# must confirm the session connects; set LIVE_VOICE_NAME="" to fall back to
-	# the API default if it 1007s.
-	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Iapetus")
+	# rejected -- but the probe did not record its 11 names and was never
+	# committed. VERIFY ANY NEW VOICE LOCALLY FIRST, it takes 30 seconds:
+	#   VERTEXAI=true backend/.venv/Scripts/python.exe \
+	#       backend/scripts/probe_voice_name.py <VoiceName>
+	# Local and demo hit the SAME Vertex Live endpoint, so a name that connects
+	# locally connects on the demo -- this is NOT a deploy-time-only risk.
+	# Both Algieba (2026-08-11) and Iapetus are connect-verified ACCEPTED on
+	# gemini-live-2.5-flash-native-audio by that probe. If a voice ever does
+	# 1007, set LIVE_VOICE_NAME="" to fall back to the API default.
+	# DEFAULT CHANGED 2026-08-11 (Iapetus -> Algieba): Iapetus was chosen for
+	# clarity but shipped with a MISPRONUNCIATION defect the maintainer heard
+	# in the live demo -- "not applicable" spoken as "not a pickle" (bd
+	# polyglot-pdf-0rpu, second half). Lowering LIVE_TEMPERATURE to 0.4 was the
+	# standing hypothesis for that and was DISCONFIRMED in production, which
+	# points at the voice model rather than the sampling. Algieba is the
+	# maintainer's own pick from their Chirp 3 notebook.
+	# NOTE this also changes the SPELL-BACK CLIP's voice (resolve_spellback_voice
+	# derives {locale}-Chirp3-HD-{this}), which is intended -- one speaker
+	# across both surfaces. The clip's loudness gain is DERIVED from whichever
+	# persona ends up speaking (spellback_tts.spellback_gain_db), because
+	# voices differ in base loudness -- Iapetus's +7.0 dB CLIPS on Algieba --
+	# so changing this name cannot leave a stale gain behind. A persona with no
+	# recorded measurement takes the conservative (quietest) value and a test
+	# fails until it is measured.
+	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Algieba")
 	# Sampling temperature for the Live session (bd polyglot-pdf-0rpu; DEPLOYABLE
 	# since 2026-08-10). EMPTY by default = do not send it at all, so a service
 	# that does not set it keeps Google's default (1.0) unchanged.

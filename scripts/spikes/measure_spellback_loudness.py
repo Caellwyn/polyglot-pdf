@@ -1,7 +1,7 @@
 """Measure the spell-back clip's loudness against the Live model's voice.
 
 WHY THIS SHIPS (fresh-eyes round 1 on bd polyglot-pdf-9oejl): the gain constant
-SPELLBACK_VOLUME_GAIN_DB in backend/services/spellback_tts.py is a magic number
+the per-persona gain table in backend/services/spellback_tts.py holds numbers
 in a production audio path, and no unit test can tell whether its VALUE is
 right -- only that it is passed through. So the evidence for it must be
 reproducible rather than quoted from a scratchpad. Run this to re-derive it.
@@ -128,7 +128,13 @@ def main() -> int:
     ap.add_argument("--dumps", default=os.path.join(
         "backend", "logs", "audio_out", "gemini_*", "*.wav"),
         help="glob for Live-model output dumps")
-    ap.add_argument("--gains", default="0,5,6,7",
+    # Spans every value in _MEASURED_GAIN_DB (Algieba +4, Iapetus +7) plus 0
+    # as the un-boosted baseline, so the printed sweep BRACKETS whatever is
+    # shipped. A sweep that skips the shipped value would send an operator
+    # following the on-screen rule to a different number than the live one
+    # (Opus cross-surface review: the old 0,5,6,7 default missed Algieba's +4
+    # entirely, and both 6 and 7 CLIP on that voice).
+    ap.add_argument("--gains", default="0,3,4,5,6,7",
                     help="comma-separated volume_gain_db values to try")
     ap.add_argument("--out-dir", default=os.path.join("backend", "logs"),
                     help="where to write the synthesized comparison clips")
@@ -155,7 +161,8 @@ def main() -> int:
                  "CLIPPING" if peak >= 0.999 else "headroom ok"))
     print()
     print("Pick the gain closest to 100%% of model WITHOUT clipping, and set")
-    print("SPELLBACK_VOLUME_GAIN_DB in backend/services/spellback_tts.py.")
+    print("_MEASURED_GAIN_DB['<persona>'] in backend/services/spellback_tts.py")
+    print("(the gain is looked up BY PERSONA -- there is no single constant).")
     print("Perceived loudness is not RMS -- confirm the pick BY EAR.")
     return 0
 

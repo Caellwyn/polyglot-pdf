@@ -33,6 +33,7 @@ SSML approach):
 
 import asyncio
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -57,20 +58,70 @@ MAX_SPELLBACK_CHARS = 60
 # (HTMLAudioElement.volume only ATTENUATES, and it is already at 1.0), so the
 # leveling happens in the ENCODE.
 #
-# MEASURED, not derived. Reproduce with:
-#   backend/.venv/Scripts/python.exe scripts/spikes/measure_spellback_loudness.py
-# 2026-08-10 run (63 real Gemini output dumps, median speech-gated RMS 0.1487):
-#   +0 dB -> 0.0840 (57% of the model)   peak 0.720
-#   +5 dB -> 0.1286 (86%)                peak 0.705
-#   +6 dB -> 0.1327 (89%)                peak 0.631
-#   +7 dB -> 0.1473 (99%)                peak 0.696   <- parity, no clipping
-# volume_gain_db is NOT a clean linear boost (a 5 dB deficit is not closed by
-# +5 dB), and Chirp3 is a GENERATIVE voice whose clip loudness varies a few
-# percent run to run -- so this number must be re-measured, never re-derived
-# from the dB arithmetic, and never quoted from a single earlier reading.
-# Re-run the script if either voice changes; confirm BY EAR (perceived
-# loudness is not RMS).
-SPELLBACK_VOLUME_GAIN_DB = 7.0
+# THE RIGHT GAIN IS PER-VOICE -- measured, never derived. Reproduce with:
+#   SPELLBACK_TTS_VOICE={locale}-Chirp3-HD-{persona} \
+#     backend/.venv/Scripts/python.exe scripts/spikes/measure_spellback_loudness.py
+# against a model median speech-gated RMS of 0.1487 (63 real Gemini dumps):
+#
+#   Iapetus (2026-08-10):  +0 dB -> 57%   +6 dB -> 89%   +7 dB -> 99% peak 0.696
+#   Algieba (2026-08-11):  +0 dB -> 72%   +4 dB -> 92% peak 0.975
+#                          ...but +6 dB CLIPS (peak 1.025) and +7 dB hits 111%
+#
+# Two traps this table exists to stop:
+#   1. volume_gain_db is NOT a clean linear boost -- a 5 dB deficit is not
+#      closed by +5 dB.
+#   2. VOICES DIFFER IN BASE LOUDNESS. Algieba starts 15 points louder than
+#      Iapetus, so Iapetus's +7.0 would drive it past full scale and CLIP --
+#      audibly worse than the quiet clip this leveling was added to fix.
+# Chirp3 is also GENERATIVE, so the same text varies a few percent run to run;
+# never trust a single earlier reading. Re-run the script whenever the voice
+# changes, and confirm BY EAR (perceived loudness is not RMS).
+#
+# The gain is DERIVED FROM THE PERSONA, not configured beside it. An earlier
+# revision made it a separate env knob; fresh-eyes round 1 pointed out that the
+# override path this created is exactly how the pair drifts -- an operator who
+# swaps LIVE_VOICE_NAME on Cloud Run without also setting the gain ships a
+# mismatch that no test, log, or startup check can see (the unit test only pins
+# the compile-time defaults). Looking the gain up BY VOICE makes that
+# impossible by construction rather than by discipline.
+#
+# An unmeasured persona falls back to the CONSERVATIVE end of the table, never
+# to the loudest measured value: too quiet is the defect we started with, but
+# too loud CLIPS, which is worse and irreversible in the encode.
+_MEASURED_GAIN_DB = {
+    "Algieba": 4.0,
+    "Iapetus": 7.0,
+}
+_UNMEASURED_PERSONA_GAIN_DB = min(_MEASURED_GAIN_DB.values())
+
+
+def spellback_gain_db(voice_name: str) -> float:
+    """The measured volume_gain_db for the persona in `voice_name`.
+
+    `voice_name` is a full Cloud TTS voice ("en-US-Chirp3-HD-Algieba") or ""
+    (the locale's default voice, whose loudness is unmeasured). An explicit
+    SPELLBACK_VOLUME_GAIN_DB still wins -- it is the escape hatch for tuning a
+    new voice by ear before its measurement lands in the table.
+    """
+    override = (os.getenv("SPELLBACK_VOLUME_GAIN_DB", "") or "").strip()
+    if override:
+        try:
+            return float(override)
+        except ValueError:
+            # Log the LENGTH, never a field named `value` -- the no-PII sweep
+            # (test_no_pii_logging) bans that shape in backend logs outright,
+            # and an operator-set env var is not worth carving an exception
+            # into a privacy guard for. The env var name in the event is
+            # enough to find the typo.
+            _log.warning("spellback_gain_override_not_a_number",
+                         chars=len(override))
+    persona = voice_name.rsplit("-", 1)[-1] if voice_name else ""
+    if persona in _MEASURED_GAIN_DB:
+        return _MEASURED_GAIN_DB[persona]
+    _log.info("spellback_gain_unmeasured_persona",
+              persona=persona or "(locale default)",
+              using_db=_UNMEASURED_PERSONA_GAIN_DB)
+    return _UNMEASURED_PERSONA_GAIN_DB
 
 _FRAMES_PATH = Path(__file__).resolve().parent / "spellback_frames.json"
 _FALLBACK_LOCALE = "en-US"
@@ -251,7 +302,10 @@ def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
         input=texttospeech.SynthesisInput(text=text),
         voice=texttospeech.VoiceSelectionParams(**voice_params),
         audio_config=texttospeech.AudioConfig(
-            volume_gain_db=SPELLBACK_VOLUME_GAIN_DB,
+            # Derived from the voice ACTUALLY resolved (which may be a
+            # fallback persona, not LIVE_VOICE_NAME's) -- the gain follows the
+            # voice that will speak, never a stale pairing.
+            volume_gain_db=spellback_gain_db(voice_name),
             audio_encoding=texttospeech.AudioEncoding.MP3
         ),
     )

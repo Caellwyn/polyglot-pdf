@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-08 (bd polyglot-pdf-44ywm: the spell-back clip is plain-text, session-language, and carries the verification question; plus bd polyglot-pdf-4hnyq -- the /ws/fill handshake no longer blocks ~9.4s on serial adapter construction. Earlier this day: the merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
+*Last updated: 2026-08-11 (bd polyglot-pdf-0rpu: LIVE_VOICE_NAME default Iapetus -> Algieba after Iapetus was heard mispronouncing words in the live demo -- "not applicable" as "not a pickle"; the spell-back clip follows that persona and DERIVES its loudness gain from it. The flag-gated name_spellback tool, its spellback/spellback_response wire pair and the POST /api/tts/spellback route are current as described below.)*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -167,7 +167,14 @@ must not be read as overriding `REGISTER`'s warm, conversational register.
 before it instructed articulation, and the model hit an unhurried pace while
 still slurring word endings. They are independent controls; instruct both.
 
-A **voice** IS configured: `LIVE_VOICE_NAME` (default `Iapetus`, "Clear") rides
+A **voice** IS configured: `LIVE_VOICE_NAME` (default `Algieba` since
+2026-08-11, "Smooth" -- it replaced `Iapetus`, "Clear", after Iapetus was heard
+MISPRONOUNCING words in the live demo: "not applicable" spoken as "not a
+pickle", bd polyglot-pdf-0rpu. Lowering `LIVE_TEMPERATURE` to 0.4 was the
+standing hypothesis for that and was disconfirmed in production, which pointed
+at the voice model rather than the sampling. Whether Algieba actually fixes it
+is a by-ear judgment on the demo; Schedar/Achernar/Vindemiatrix are the next
+candidates, all verified present in the Chirp3 en-US set) rides
 `speech_config.voice_config.prebuilt_voice_config.voice_name`. Before this, no
 voice was set and the API assigned its default -- documented as `Puck`
 ("Upbeat"), the wrong register for a stressful legal intake. Voice selection is
@@ -196,13 +203,40 @@ voice), so changing the Live voice never 502s the spell-back. See the
 user's language, no longer the model's persona); pin the clip voice explicitly
 via `SPELLBACK_TTS_VOICE` to decouple it from the Live voice entirely.
 
-Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
-connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`
-rejected as `1007 Invalid voice name`. **That probe did not record which 11**, so
-`Iapetus` is documented-valid (native audio accepts the 30-voice TTS set) but not
-yet endpoint-verified here -- and an unaccepted name is a hard `1007` at connect,
-not a silent degrade. The first deploy must confirm the session connects, and
-whether the voice actually fixes the diction is only answerable **by listening**.
+An unaccepted voice name is a hard `1007 Invalid voice name` at connect, not a
+silent degrade -- it breaks EVERY session. **Connect-verify any new voice
+locally before deploying**; it takes 30 seconds and local hits the SAME Vertex
+Live endpoint as the demo, so this is not a deploy-time-only risk:
+
+```
+VERTEXAI=true backend/.venv/Scripts/python.exe backend/scripts/probe_voice_name.py Algieba
+```
+
+With no arguments it probes the configured `LIVE_VOICE_NAME`. It exits non-zero
+if any voice is rejected (so it can gate a deploy) and always probes a bogus
+name as a CONTROL -- a probe that accepts everything proves nothing. `Algieba`
+and `Iapetus` are both verified ACCEPTED on
+`gemini-live-2.5-flash-native-audio` (2026-08-11); `NotARealVoiceXYZ` is
+correctly rejected. Rollback if one ever 1007s: `LIVE_VOICE_NAME=""` falls back
+to the API default.
+
+Connect-acceptance is all the probe can tell you. Whether a voice actually
+fixes the diction is only answerable **by listening** -- `Iapetus` connected
+fine and was still replaced, for mispronunciation.
+
+**Changing `LIVE_VOICE_NAME` also changes the SPELL-BACK CLIP's voice** (bd
+polyglot-pdf-44ywm: `resolve_spellback_voice` derives
+`{locale}-Chirp3-HD-{persona}`), which is intended -- one speaker across both
+surfaces. The clip's loudness gain is DERIVED FROM the persona rather than
+configured beside it (`spellback_tts.spellback_gain_db`), because voices differ
+in base loudness -- Iapetus's measured +7.0 dB CLIPS on Algieba (peak 1.025),
+which is audibly worse than the quiet clip the leveling fixed. Deriving it
+means an operator overriding `LIVE_VOICE_NAME` on Cloud Run cannot ship a
+stale gain, and a FALLBACK persona (a locale without the configured voice) gets
+its own value rather than the configured voice's. A persona with no recorded
+measurement takes the conservative (quietest) end -- too quiet degrades, too
+loud clips -- and a test fails until it is measured with
+`scripts/spikes/measure_spellback_loudness.py`.
 
 ## Tool calling
 
