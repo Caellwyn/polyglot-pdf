@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-08 (bd polyglot-pdf-44ywm: the spell-back clip is plain-text, session-language, and carries the verification question; plus bd polyglot-pdf-4hnyq -- the /ws/fill handshake no longer blocks ~9.4s on serial adapter construction. Earlier this day: the merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
+*Last updated: 2026-08-11 (bd polyglot-pdf-0rpu: LIVE_VOICE_NAME default Iapetus -> Algieba after Iapetus was heard mispronouncing words in the live demo; the spell-back clip's voice AND its loudness gain follow the persona. Earlier 2026-08-08, bd polyglot-pdf-44ywm: the spell-back clip is plain-text, session-language, and carries the verification question; plus bd polyglot-pdf-4hnyq -- the /ws/fill handshake no longer blocks ~9.4s on serial adapter construction. Earlier this day: the merge of bd polyglot-pdf-22h1f and the v4 SI diet, bd polyglot-pdf-6a79: the flag-gated `name_spellback` deterministic spell-back tool bullet -- wire messages `spellback`/`spellback_response`, TTS route `POST /api/tts/spellback` -- plus the corrected spoken-delivery map: the DTI SI now has ONE DELIVERY block, the two SIs' delivery prose is no longer byte-identical, the ten-percent pace target is retired and spell-back is removed from the SI delivery prose).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -167,7 +167,14 @@ must not be read as overriding `REGISTER`'s warm, conversational register.
 before it instructed articulation, and the model hit an unhurried pace while
 still slurring word endings. They are independent controls; instruct both.
 
-A **voice** IS configured: `LIVE_VOICE_NAME` (default `Iapetus`, "Clear") rides
+A **voice** IS configured: `LIVE_VOICE_NAME` (default `Algieba` since
+2026-08-11, "Smooth" -- it replaced `Iapetus`, "Clear", after Iapetus was heard
+MISPRONOUNCING words in the live demo: "not applicable" spoken as "not a
+pickle", bd polyglot-pdf-0rpu. Lowering `LIVE_TEMPERATURE` to 0.4 was the
+standing hypothesis for that and was disconfirmed in production, which pointed
+at the voice model rather than the sampling. Whether Algieba actually fixes it
+is a by-ear judgment on the demo; Schedar/Achernar/Vindemiatrix are the next
+candidates, all verified present in the Chirp3 en-US set) rides
 `speech_config.voice_config.prebuilt_voice_config.voice_name`. Before this, no
 voice was set and the API assigned its default -- documented as `Puck`
 ("Upbeat"), the wrong register for a stressful legal intake. Voice selection is
@@ -199,10 +206,20 @@ via `SPELLBACK_TTS_VOICE` to decouple it from the Live voice entirely.
 Prebuilt voices are endpoint-verified available on this tier: 11 were ACCEPTED at
 connect on `gemini-live-2.5-flash-native-audio` (Vertex) with `NotARealVoiceXYZ`
 rejected as `1007 Invalid voice name`. **That probe did not record which 11**, so
-`Iapetus` is documented-valid (native audio accepts the 30-voice TTS set) but not
-yet endpoint-verified here -- and an unaccepted name is a hard `1007` at connect,
-not a silent degrade. The first deploy must confirm the session connects, and
-whether the voice actually fixes the diction is only answerable **by listening**.
+the configured voice is documented-valid (native audio accepts the 30-voice TTS
+set) but not yet endpoint-verified here -- and an unaccepted name is a hard
+`1007` at connect, not a silent degrade. The first deploy must confirm the
+session connects, and whether the voice actually fixes the diction is only
+answerable **by listening**. (`Iapetus` DID connect fine in the demo, so the
+tier accepts it -- it was replaced for mispronunciation, not availability.)
+
+**Changing `LIVE_VOICE_NAME` also changes the SPELL-BACK CLIP's voice** (bd
+polyglot-pdf-44ywm: `resolve_spellback_voice` derives
+`{locale}-Chirp3-HD-{persona}`), which is intended -- one speaker across both
+surfaces. But the clip's loudness gain is TIED to the persona: voices differ in
+base loudness, and Iapetus's measured +7.0 dB CLIPS on Algieba (peak 1.025).
+Re-measure with `scripts/spikes/measure_spellback_loudness.py` and move
+`SPELLBACK_VOLUME_GAIN_DB` with the voice; a unit test pins the pair.
 
 ## Tool calling
 

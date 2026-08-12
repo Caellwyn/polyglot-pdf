@@ -627,6 +627,39 @@ class TestSpellbackText:
             spellback_tts.SPELLBACK_VOLUME_GAIN_DB), (
             "the synthesis request dropped the loudness gain")
 
+    def test_gain_default_is_the_one_measured_for_the_default_voice(self):
+        """The gain is PER-VOICE and the two defaults must move together.
+
+        Voices differ in base loudness: measured 2026-08-11, Algieba starts at
+        72% of the model's level where Iapetus starts at 57%, so Iapetus's
+        +7.0 dB drives Algieba past full scale and CLIPS (peak 1.025) --
+        audibly worse than the quiet clip the leveling was added to fix. A
+        voice-default change that forgets the gain is therefore a silent audio
+        regression, which is exactly what this pins (bd polyglot-pdf-0rpu voice
+        swap). Re-measure with scripts/spikes/measure_spellback_loudness.py and
+        update BOTH when either moves.
+        """
+        from backend.services import spellback_tts
+
+        measured_for = {
+            # persona -> the gain measured to reach ~parity without clipping
+            "Algieba": 4.0,
+            "Iapetus": 7.0,
+        }
+        persona = Settings().LIVE_VOICE_NAME
+        assert persona in measured_for, (
+            "LIVE_VOICE_NAME default is %r but no loudness measurement is "
+            "recorded for it -- run scripts/spikes/measure_spellback_loudness.py "
+            "with SPELLBACK_TTS_VOICE=en-US-Chirp3-HD-%s and add the result "
+            "here and in spellback_tts" % (persona, persona)
+        )
+        assert spellback_tts.SPELLBACK_VOLUME_GAIN_DB == measured_for[persona], (
+            "the spell-back gain (%.1f dB) is not the value measured for the "
+            "default voice %r (%.1f dB) -- one default moved without the other"
+            % (spellback_tts.SPELLBACK_VOLUME_GAIN_DB, persona,
+               measured_for[persona])
+        )
+
     def test_char_cap_matches_frontend_mirror(self):
         """MAX_SPELLBACK_CHARS is mirrored (not shared) as SPELLBACK_MAX_CHARS
         in frontend/src/shared/spellbackPlayer.ts -- the client's fail-fast
