@@ -563,11 +563,22 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
         except NameError:  # pragma: no cover -- the ImportError path above
             unattributed = collection.where("kit_id", "==", None).limit(1)
         if any(True for _ in unattributed.stream()):
+            _log.info("confirmation_unattributed_records_block_delete", kit_id=kit_id)
             raise ConfirmationCheckUnavailable(
                 "confirmation records exist that name no kit, so this kit cannot "
                 "be cleared for deletion"
             )
         return False
+    except ConfirmationCheckUnavailable:
+        # The "records name no kit" refusal is raised INSIDE the try above, so
+        # without this it fell into the handler below and was logged as
+        # `confirmation_kit_existence_check_failed` -- an ERROR naming a broken
+        # client. That is the one path where the guard's answer is a deliberate
+        # product decision rather than an infrastructure fault, and the whole
+        # ConfirmationCheckUnavailable-vs-False design exists to keep those
+        # apart; re-merging them in the telemetry sends an operator hunting a
+        # Firestore outage that never happened (Opus fresh-eyes round 3).
+        raise
     except Exception as e:
         _log.error(
             "confirmation_kit_existence_check_failed",

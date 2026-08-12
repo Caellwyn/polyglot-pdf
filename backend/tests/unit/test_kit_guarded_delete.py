@@ -261,24 +261,33 @@ def test_delete_kit_does_not_touch_a_SIBLING_with_a_shared_prefix(tmp_path):
 
 
 class _FilteringQuery:
-    def __init__(self, docs, field=None, value=None, limit=None, sink=None):
+    def __init__(self, docs, field=None, value=None, limit=None, sink=None, op=None):
         self._docs = docs
         self._field = field
         self._value = value
         self._limit = limit
         self._sink = sink
+        self._op = op
 
     def limit(self, n):
-        return _FilteringQuery(self._docs, self._field, self._value, n, self._sink)
+        return _FilteringQuery(
+            self._docs, self._field, self._value, n, self._sink, self._op
+        )
+
+    def _match(self, d):
+        # Mirror the SDK's resolved semantics: IS_NULL matches a STORED null and
+        # not a missing key; IS_NOT_NULL is its complement.
+        op = getattr(self._op, "name", None) or str(self._op or "")
+        if "IS_NOT_NULL" in op:
+            return self._field in d and d[self._field] is not None
+        if "IS_NULL" in op:
+            return self._field in d and d[self._field] is None
+        return self._field in d and d[self._field] == self._value
 
     def stream(self):
         matched = [
             d for d in self._docs
-            if self._field is None
-            # Firestore's equality-on-null matches a stored null, NOT a missing
-            # key -- session start/end events omit kit_id entirely, so the two
-            # cases must not be conflated here.
-            or (self._field in d and d[self._field] == self._value)
+            if self._field is None or self._match(d)
         ]
         if self._limit is not None:
             matched = matched[:self._limit]
@@ -302,11 +311,19 @@ class _FilteringCollection:
     def where(self, *args, **kwargs):
         flt = kwargs.get("filter")
         if flt is not None:
-            field, _op, value = flt.field_path, flt.op_string, flt.value
+            # op_string is what the SDK RESOLVED to, not what the caller typed:
+            # ("kit_id","==",None) becomes a UnaryFilter whose op_string is the
+            # IS_NULL enum. Record it, because an inverted sweep (IS_NOT_NULL)
+            # would make every kit permanently undeletable in production while
+            # a value-only fake stayed green (Opus fresh-eyes round 3).
+            field, op, value = flt.field_path, flt.op_string, flt.value
         else:
-            field, _op, value = args
-        self.where_calls.append((field, value))
-        return _FilteringQuery(self.docs, field, value, sink=self.streams)
+            field, op, value = args
+        # A resolved unary op is an ENUM whose str() is its integer ("3"), so
+        # record .name when there is one -- otherwise every operator assertion
+        # compares against a meaningless digit.
+        self.where_calls.append((field, getattr(op, "name", None) or str(op), value))
+        return _FilteringQuery(self.docs, field, value, op=op, sink=self.streams)
 
 
 class _FilteringDB:
@@ -333,7 +350,7 @@ def test_firestore_existence_query_finds_a_record_for_THIS_kit(monkeypatch):
     # Filtered on kit_id server-side, not by streaming everything and checking
     # client-side -- an equality query needs no composite index, and streaming a
     # kit's whole history to answer yes/no is the wrong shape.
-    assert db._collection.where_calls == [("kit_id", "w7")]
+    assert db._collection.where_calls == [("kit_id", "==", "w7")]
 
 
 def test_firestore_existence_query_ignores_records_for_OTHER_kits(monkeypatch):
@@ -547,11 +564,24 @@ def test_a_record_naming_NO_kit_blocks_deletion_rather_than_clearing_it(monkeypa
     """
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
-    _firestore_with(monkeypatch, [{"kit_id": None, "form_id": "W-7"}])
+    db = _firestore_with(monkeypatch, [{"kit_id": None, "form_id": "W-7"}])
 
     with pytest.raises(ConfirmationCheckUnavailable) as exc:
         kit_has_confirmation_records("w7")
     assert "name no kit" in str(exc.value)
+
+    # PIN THE OPERATOR, not just the outcome. The SDK resolves
+    # ("kit_id","==",None) to a UnaryFilter(IS_NULL); the INVERSE (IS_NOT_NULL)
+    # matches every record that HAS a kit_id, which would make every kit
+    # permanently undeletable in production -- and a value-only assertion
+    # cannot tell the two apart (Opus fresh-eyes round 3 proved that inversion
+    # kept all 31 tests green).
+    field, op, value = db._collection.where_calls[-1]
+    assert (field, value) == ("kit_id", None)
+    assert op == "IS_NULL", (
+        f"the sweep must resolve to IS_NULL, got {op!r} -- IS_NOT_NULL would "
+        f"match every record that HAS a kit_id and make every kit undeletable"
+    )
 
 
 def test_an_unattributed_record_does_not_mask_a_DIRECT_hit(monkeypatch):
@@ -595,3 +625,61 @@ def test_a_session_event_with_NO_kit_id_KEY_does_not_block_deletion(monkeypatch)
     ])
 
     assert kit_has_confirmation_records("w7") is False
+
+
+def test_the_NULL_SWEEP_also_asks_for_at_most_one_document(monkeypatch):
+    """The sweep is the newer and more expensive of the two queries, and its
+    limit(1) was unpinned: the existing limit test seeds docs that all name the
+    kit, so the first query returns True and the sweep never runs (Opus
+    fresh-eyes round 3). Seeded so ONLY the sweep matches."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    docs = [{"kit_id": None, "form_id": f"F{i}"} for i in range(50)]
+    db = _firestore_with(monkeypatch, docs)
+
+    with pytest.raises(ConfirmationCheckUnavailable):
+        kit_has_confirmation_records("w7")
+
+    # Both queries ran, and NEITHER streamed more than one document.
+    assert db._collection.streams == [
+        {"limit": 1, "streamed": 0},   # kit-scoped: no record names w7
+        {"limit": 1, "streamed": 1},   # the sweep: found one unattributed
+    ]
+
+
+def test_the_refusal_is_NOT_reported_as_a_query_failure(monkeypatch):
+    """An operator triaging "why can't I delete this?" must not be sent hunting
+    a Firestore outage that never happened.
+
+    The refusal is raised INSIDE the try that wraps the queries, so without an
+    explicit re-raise it was caught and logged as
+    `confirmation_kit_existence_check_failed` -- an ERROR naming a broken
+    client. The ConfirmationCheckUnavailable-vs-False design exists to keep
+    "product decision" apart from "infrastructure fault"; the telemetry must
+    not re-merge them (Opus fresh-eyes round 3).
+
+    Captures structlog directly: my first attempt used caplog, which does not
+    see these events, so the assertion was vacuous and the mutation survived.
+    """
+    import backend.utils.confirmation_logger as cl
+
+    # Patch the MODULE's logger, not the global config: structlog binds the
+    # logger at import, so reconfiguring afterwards never reaches it (my
+    # structlog.configure attempt captured nothing and the assertion was
+    # vacuous a second time).
+    names = []
+
+    class _Spy:
+        def _record(self, event, **kw):
+            names.append(event)
+        info = warning = error = debug = _record
+
+    monkeypatch.setattr(cl, "_log", _Spy())
+
+    _firestore_with(monkeypatch, [{"kit_id": None, "form_id": "W-7"}])
+    with pytest.raises(ConfirmationCheckUnavailable):
+        cl.kit_has_confirmation_records("w7")
+    assert "confirmation_kit_existence_check_failed" not in names, (
+        f"a legitimate refusal was logged as a query failure: {names}"
+    )
+    assert "confirmation_unattributed_records_block_delete" in names, names
