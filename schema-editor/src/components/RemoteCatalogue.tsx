@@ -2,7 +2,8 @@ import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
-  onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
+  onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
+  translateRemoteKitOptions,
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
@@ -106,6 +107,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   const [deletePrompt, setDeletePrompt] = React.useState<RemoteKitEntry | null>(null);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  // The kit whose lock is being taken/released right now (bd
+  // polyglot-pdf-hqztg), so its buttons can disable without freezing the
+  // whole catalogue.
+  const [lockingId, setLockingId] = React.useState<string | null>(null);
   // Monotonic token: a slow progress load from a superseded refresh must not
   // clobber the current one (same stale-scan discipline as FormCatalogue).
   const refreshSeq = React.useRef(0);
@@ -295,6 +300,34 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // language is covered. The sweep is slow (a pro-tier call per language with
   // retry), so a complete flip shows the elapsed ticker via completingId, and a
   // 409 "N of M translations complete" refusal surfaces as the error to re-press.
+  // Take or release a kit for editing. An author can always take one back from
+  // an editor -- that preemption IS the stale-lock release, so a kit someone
+  // abandoned is freed by a human rather than a timer (bd polyglot-pdf-hqztg).
+  const handleLock = React.useCallback(async (
+    kit: RemoteKitEntry, take: boolean,
+  ) => {
+    setError(null);
+    setLockingId(kit.id);
+    try {
+      const res = take ? await takeKitLock(kit.id) : await releaseKitLock(kit.id);
+      // Say so when we TOOK it from someone, rather than silently winning --
+      // the other person cannot be notified (there is no server-to-client
+      // channel), so the person who did it should at least know they did.
+      setNotice(res.preempted
+        ? `You took "${kit.label}" from an editor. They will find out when they `
+          + 'next try to save.'
+        : take
+          ? `You have "${kit.label}" for editing.`
+          : `Released "${kit.label}".`);
+      await refresh();
+    } catch (err) {
+      if (err instanceof AuthError) { onAuthError?.(); return; }
+      setError(err instanceof Error ? err.message : 'Could not change the lock');
+    } finally {
+      setLockingId(null);
+    }
+  }, [refresh, onAuthError]);
+
   const handleSetStatus = React.useCallback(async (
     kit: RemoteKitEntry, status: KitLifecycleStatus, authorVersion?: string,
   ) => {
@@ -997,6 +1030,48 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     </div>
                   )}
                 </button>
+
+                {/* The editing lock (bd polyglot-pdf-hqztg). Shown per kit so
+                    an author can see who has it and take it back. There is no
+                    server-to-client channel, so a preempted editor learns of it
+                    on their next save (a 409) rather than from a push. */}
+                {kit.hasSchema && (
+                  <div className="mt-1 flex items-center justify-end gap-2 px-1">
+                    {kit.heldBy && (
+                      <span
+                        className="text-xs text-slate-500"
+                        title={kit.heldBy === 'author'
+                          ? 'An author has this form for editing.'
+                          : 'An editor has this form for editing.'}
+                      >
+                        {kit.heldBy === 'author' ? 'Author editing' : 'Editor editing'}
+                      </span>
+                    )}
+                    {kit.heldBy === (isAuthor ? 'author' : 'editor') ? (
+                      <button
+                        className="btn-sm text-xs"
+                        onClick={() => void handleLock(kit, false)}
+                        disabled={busy || lockingId !== null}
+                        title="Release this form so someone else can edit it"
+                      >
+                        {lockingId === kit.id ? 'Releasing...' : 'Release'}
+                      </button>
+                    ) : (isAuthor || kit.heldBy !== 'author') && (
+                      <button
+                        className="btn-sm text-xs"
+                        onClick={() => void handleLock(kit, true)}
+                        disabled={busy || lockingId !== null}
+                        title={kit.heldBy === 'editor' && isAuthor
+                          ? 'Take this form back from the editor who has it'
+                          : 'Take this form for editing'}
+                      >
+                        {lockingId === kit.id
+                          ? 'Taking...'
+                          : kit.heldBy === 'editor' && isAuthor ? 'Take back' : 'Take for editing'}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {kit.hasSchema && (
                   <div className="mt-1 flex items-center justify-end gap-2 px-1">

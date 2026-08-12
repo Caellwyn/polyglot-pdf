@@ -236,6 +236,11 @@ class EditorKitInfo(BaseModel):
     # Absent when the kit has never been saved since C4 shipped (or its stamp
     # is unreadable) -- the card then shows the verify hint, not a percentage.
     readiness: Optional[ReadinessStamp] = None
+    # Who holds this kit for editing, if anyone (bd polyglot-pdf-hqztg). A ROLE,
+    # not a person -- the editor API has only two shared tokens. The catalogue
+    # cannot show a lock it cannot see, so this rides the listing rather than
+    # forcing a per-kit probe.
+    heldBy: Optional[str] = None
 
 
 class EditorKitListResponse(BaseModel):
@@ -950,6 +955,7 @@ async def list_editor_kits(
                 label=label if isinstance(label, str) and label else kit_id,
                 description=description if isinstance(description, str) else None,
                 status=_status_of(meta),
+                heldBy=_lock_holder(meta),
                 hasSchema=schema_file in names,
                 hasPdf=pdf_file in names,
                 schemaFile=schema_file,

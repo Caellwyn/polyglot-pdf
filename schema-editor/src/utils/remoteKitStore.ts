@@ -79,6 +79,9 @@ export interface RemoteKitEntry {
   schemaFile: string;
   pdfFile: string;
   readiness?: ReadinessStamp | null;
+  /** Who holds this kit for editing, if anyone (bd polyglot-pdf-hqztg).
+   * 'editor' | 'author' | null -- a ROLE, not a person. */
+  heldBy?: string | null;
 }
 
 /** The access code was missing/wrong (HTTP 401): clear it and re-prompt. */

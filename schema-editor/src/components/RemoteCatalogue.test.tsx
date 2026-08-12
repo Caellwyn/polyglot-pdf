@@ -15,6 +15,8 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     loadRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
     deleteRemoteKit: vi.fn(),
+    takeKitLock: vi.fn(),
+    releaseKitLock: vi.fn(),
     setRemoteLabel: vi.fn(),
     onboardRemoteKit: vi.fn(),
     extractRemoteKit: vi.fn(),
@@ -26,6 +28,7 @@ import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
+  releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type RemoteKitEntry, type KitStatusResult,
 } from '../utils/remoteKitStore';
@@ -1142,5 +1145,79 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
       expect(screen.getByText(/has confirmation records/)).toBeInTheDocument());
     // Still open, so the refusal sits next to the form it names.
     expect(screen.getByText('Delete permanently')).toBeTruthy();
+  });
+});
+
+
+describe('the editing lock is reachable from the UI (bd polyglot-pdf-hqztg)', () => {
+  async function cards(role: 'author' | 'editor') {
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role={role} />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+  }
+
+  function card(label: string) {
+    return screen.getByText(label).closest('li') as HTMLElement;
+  }
+
+  it('offers Take for editing on an unheld kit', async () => {
+    await cards('editor');
+    expect(within(card('Draft Form')).getByText('Take for editing')).toBeTruthy();
+  });
+
+  it('takes the lock through the API, not just in local state', async () => {
+    vi.mocked(takeKitLock).mockResolvedValueOnce({
+      ok: true, kitId: 'draft-kit', heldBy: 'editor', preempted: false });
+    await cards('editor');
+
+    fireEvent.click(within(card('Draft Form')).getByText('Take for editing'));
+
+    await waitFor(() => expect(takeKitLock).toHaveBeenCalledWith('draft-kit'));
+    await waitFor(() =>
+      expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('shows the holder and RELEASES through the API', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, heldBy: 'editor' } : k)));
+    vi.mocked(releaseKitLock).mockResolvedValueOnce({
+      ok: true, kitId: 'draft-kit', heldBy: null, preempted: false });
+    await cards('editor');
+
+    expect(within(card('Draft Form')).getByText('Editor editing')).toBeTruthy();
+    fireEvent.click(within(card('Draft Form')).getByText('Release'));
+
+    await waitFor(() => expect(releaseKitLock).toHaveBeenCalledWith('draft-kit'));
+  });
+
+  it('lets an AUTHOR take a kit back from an editor', async () => {
+    // The maintainer's rule, reachable in the product rather than only in the
+    // API: authors can always steal it back.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, heldBy: 'editor' } : k)));
+    vi.mocked(takeKitLock).mockResolvedValueOnce({
+      ok: true, kitId: 'draft-kit', heldBy: 'author', preempted: true });
+    await cards('author');
+
+    fireEvent.click(within(card('Draft Form')).getByText('Take back'));
+
+    await waitFor(() => expect(takeKitLock).toHaveBeenCalledWith('draft-kit'));
+    // The person who took it is TOLD they took it -- the other side cannot be
+    // notified, so silently winning would leave nobody aware.
+    await waitFor(() =>
+      expect(screen.getByText(/took "Draft Form" from an editor/)).toBeInTheDocument());
+  });
+
+  it('does NOT offer an editor a kit an author holds', async () => {
+    // Preemption is one-way. The server refuses it too; the button must not be
+    // there to click.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, heldBy: 'author' } : k)));
+    await cards('editor');
+
+    const c = card('Draft Form');
+    expect(within(c).getByText('Author editing')).toBeTruthy();
+    expect(within(c).queryByText('Take for editing')).not.toBeInTheDocument();
+    expect(within(c).queryByText('Take back')).not.toBeInTheDocument();
+    expect(within(c).queryByText('Release')).not.toBeInTheDocument();
   });
 });
