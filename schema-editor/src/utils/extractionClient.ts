@@ -18,6 +18,14 @@ export interface ExtractionResult {
   detail: string;
   schemaFile?: string;
   exitCode?: number;
+  /**
+   * True when a USABLE draft was stored that did not fully validate (the
+   * extractor's EXIT_ISSUES=3 contract -- store it with its issue report, same
+   * as the hosted route). `ok` is true in this case: the draft exists and is
+   * openable, but it carries validation and/or lint problems to fix in the
+   * editor. `detail` already leads with "stored with issues".
+   */
+  storedWithIssues?: boolean;
 }
 
 const ENDPOINT = '/api/extract';
