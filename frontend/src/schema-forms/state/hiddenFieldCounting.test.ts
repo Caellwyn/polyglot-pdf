@@ -7,18 +7,22 @@
  * denominator is now filtered, so the assertions are flipped to the FIXED
  * behavior and stand as the regression guard.
  *
- * What getProgress counts (schemaFormState.ts):
+ * What getProgress / getProgressCounts count (schemaFormState.ts):
  *   - NOT `hidden`
  *   - unconditional, OR `show_if` currently satisfied
  *   - `ignored` needs no filter: ignoring quarantines the field out of
  *     `schema.fields` entirely (schema-editor/src/utils/ignoreField.ts), so it
  *     never reaches any counting surface.
  *
- * Still-unfixed sites (verified 2026-08-03), tracked separately: VoiceOverlay.tsx
- * (4 sites) and VoiceOverlayMobile.tsx (1) inline `schema.fields.length` in React
- * state, and the backend renders its own unfiltered "Progress: N/M" into the
- * voice model's prompt (ai_context.py). This file pins the shared
- * state-manager path only.
+ * VoiceOverlay.tsx's 3 live progress-counter sites (the field-count/section-
+ * switch effects) were migrated onto getProgressCounts, and VoiceOverlayMobile
+ * has none (its `fieldCount`/`requiredCount` render a static whole-form
+ * inventory -- "N fields, M required" -- not a completion ratio, so raw
+ * schema.fields.length is the CORRECT count there) -- bd polyglot-pdf-kbkd.
+ * Still separately tracked: the backend renders its own unfiltered
+ * "Progress: N/M" into the voice model's prompt (ai_context.py) -- a distinct
+ * surface this bead did not touch. This file pins the shared state-manager
+ * path only.
  */
 import { describe, expect, it } from "vitest";
 import w7 from "../../../../form-kits/w7/schema.json";
@@ -238,5 +242,83 @@ describe("W-7 completion denominator", () => {
       fieldValues: {},
     } as unknown as ProgressState;
     expect(SchemaFormStateManager.getProgress(empty)).toBe(0);
+  });
+});
+
+describe("getProgressCounts (bd polyglot-pdf-kbkd)", () => {
+  it("total matches the VISIBLE count, not schema.fields.length", () => {
+    // Same premise as "measures against the VISIBLE count" above, but
+    // asserting the raw counts a UI counter displays ("N of M"), not just the
+    // derived percentage.
+    const unconditionalVisible = fields.filter(f => !f.hidden && !f.show_if);
+    const { total } = SchemaFormStateManager.getProgressCounts(
+      stateFrom({})
+    );
+    expect(total).toBe(unconditionalVisible.length);
+    expect(total).toBeLessThan(fields.length);
+  });
+
+  it("filled/total agree exactly with getProgress's own ratio", () => {
+    // getProgress delegates to getProgressCounts internally; this pins that
+    // the two can never drift apart (a caller reading one must be able to
+    // trust the other means the same thing).
+    const state = stateWithAllVisibleFieldsFilled();
+    const { filled, total } = SchemaFormStateManager.getProgressCounts(state);
+    expect(filled).toBe(total);
+    expect(SchemaFormStateManager.getProgress(state)).toBe(100);
+  });
+
+  it("a SKIPPED field counts as filled in the numerator too", () => {
+    const trigger: Field & Partial<FormField> = { id: "trig", type: "text" };
+    const tiny = { ...schema, fields: [trigger] } as unknown as FormSchema;
+    const state = {
+      schema: tiny,
+      fieldValues: { trig: { skipped: true } },
+    } as unknown as ProgressState;
+    expect(SchemaFormStateManager.getProgressCounts(state)).toEqual({
+      filled: 1,
+      total: 1,
+    });
+  });
+
+  it("returns {filled: 0, total: 0} rather than NaN when nothing is visible", () => {
+    const empty = {
+      schema: { ...schema, fields: [] },
+      fieldValues: {},
+    } as unknown as ProgressState;
+    expect(SchemaFormStateManager.getProgressCounts(empty)).toEqual({
+      filled: 0,
+      total: 0,
+    });
+  });
+});
+
+describe("VoiceOverlay wiring (bd polyglot-pdf-kbkd)", () => {
+  it("VoiceOverlay.tsx's progress counters call getProgressCounts, not a raw schema.fields.length scan", async () => {
+    // A mechanical source-text guard, not a rendered-component test: fully
+    // rendering VoiceOverlay needs heavy VAD/connection-manager mocking (see
+    // VoiceOverlay.disclaimer.test.tsx), which is disproportionate for pinning
+    // "did this call site get migrated." Reads the real file so a future
+    // revert of the fix (reintroducing a raw schema.fields.length denominator
+    // or a raw fieldValues key scan) fails here.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const filePath = path.resolve(__dirname, "../../demo/VoiceOverlay.tsx");
+    const src = fs.readFileSync(filePath, "utf-8");
+
+    // The fix: all 3 live counter sites call the shared helper.
+    const callSites = (src.match(/getProgressCounts\(/g) || []).length;
+    expect(callSites).toBeGreaterThanOrEqual(3);
+
+    // The regression this guards against: a raw denominator/numerator scan
+    // reintroduced at a progress-counter call site. Strip comment lines first
+    // so this doesn't trip on prose ABOUT the old pattern (as in the
+    // migration comments this fix itself left behind).
+    const codeLines = src
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//"))
+      .join("\n");
+    expect(codeLines).not.toMatch(/schema\.fields\.length/);
+    expect(codeLines).not.toMatch(/Object\.keys\([^)]*fieldValues[^)]*\)\.filter/);
   });
 });

@@ -1058,14 +1058,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		setCurrentSectionId(state.currentSectionId || schema.sections?.[0]?.id || '')
 		setCompletedSections(state.completedSections || new Set())
 
-		// Update field counter
-		const totalFields = schema.fields.length
-		const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
-			const fieldValue = state.fieldValues[fieldId]
-			const actualValue = fieldValue?.value
-			return actualValue !== null && actualValue !== undefined && actualValue !== ""
-		}).length
-		setSectionFieldCount({ filled: filledFields, total: totalFields })
+		// Update field counter -- visible-field-aware (bd polyglot-pdf-kbkd): the
+		// old raw schema.fields.length denominator counted statically-hidden and
+		// unmet-show_if fields the user can never fill, capping the displayed
+		// percentage below 100% on any kit with such fields; the old raw
+		// fieldValues key scan independently counted stale values left on
+		// fields that are no longer visible. getProgressCounts shares the SAME
+		// visible-field filter the progress bar itself uses.
+		setSectionFieldCount(SchemaFormStateManager.getProgressCounts(state))
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []) // Only run once on mount, not when schema changes
 
@@ -1074,13 +1074,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const interval = setInterval(() => {
 			const state = SchemaFormStateManager.load()
 			if (state) {
-				const totalFields = schema.fields.length
-				const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
-					const fieldValue = state.fieldValues[fieldId]
-					const actualValue = fieldValue?.value
-					return actualValue !== null && actualValue !== undefined && actualValue !== ""
-				}).length
-				setSectionFieldCount({ filled: filledFields, total: totalFields })
+				// Visible-field-aware (bd polyglot-pdf-kbkd) -- see the mount effect
+				// above for why raw schema.fields.length / raw fieldValues scans
+				// undercounted the denominator and could inflate the numerator.
+				setSectionFieldCount(SchemaFormStateManager.getProgressCounts(state))
 
 				// Update section if changed (AI completed section and moved forward)
 				if (state.currentSectionId && state.currentSectionId !== currentSectionId) {
@@ -1397,8 +1394,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const isPausedState = status.toLowerCase() === 'paused'
 	const isWarming = status.toLowerCase().includes('warming')
 	const isReady = status.toLowerCase() === 'ready'
-	const fieldCount = schema.fields.length
-	const requiredCount = schema.fields.filter(f => f.validation?.required).length
 	// Sol, the avatar + status indicator (bd polyglot-pdf-2p4y). It replaces the
 	// status icon and subsumes the ear/meter chip: one wordless object that says
 	// whose turn it is, legible in every spoken language we ship. The mapping is a
@@ -1566,18 +1561,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 												setCurrentSectionId(section.id)
 												setStatus('Reconnecting to section ' + section.order)
 
-												// Update field count for new section (from state, before reconnect)
+												// Update field count for new section (from state, before reconnect).
+												// Visible-field-aware (bd polyglot-pdf-kbkd) -- see the mount effect
+												// above for the full rationale.
 												const state = SchemaFormStateManager.load()
 												if (state) {
 													// Switch section in state first
 													const updatedState = SchemaFormStateManager.switchToSection(state, section.id)
-													const totalFields = schema.fields.length
-													const filledFields = Object.keys(updatedState.fieldValues).filter(fieldId => {
-														const fieldValue = updatedState.fieldValues[fieldId]
-														const actualValue = fieldValue?.value
-														return actualValue !== null && actualValue !== undefined && actualValue !== ""
-													}).length
-													setSectionFieldCount({ filled: filledFields, total: totalFields })
+													setSectionFieldCount(SchemaFormStateManager.getProgressCounts(updatedState))
 												}
 
 												// Now do the actual connection switch (async, may take time)

@@ -314,7 +314,18 @@ class FormFillingService:
         
         # Extract form_id here so it can be passed to CallbackHandler (confirmation
         # audit logging guard requires both ids at construction time, bd rwjy).
-        form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+        # isinstance-guarded on the nested form_metadata key (bd polyglot-pdf-ypk4):
+        # websocket_routes' legacy (non-JIT) branch validates only that `schema`
+        # itself is a dict, never that its form_metadata is one. A client whose
+        # form_metadata is a string/list would otherwise raise AttributeError out
+        # of this .get().get() chain and drop the WS session on the very first
+        # handshake of a session (jitModeEnabled starts false).
+        _schema_meta = schema.get("form_metadata") if isinstance(schema, dict) else None
+        form_id = (
+            _schema_meta.get("form_number", "unknown")
+            if isinstance(_schema_meta, dict)
+            else "unknown"
+        )
         # Kit identity + government EDITION for the audit trail (bd
         # polyglot-pdf-47r3). form_id alone identifies neither which KIT was used
         # (two kits can share a form number) nor which EDITION the client
@@ -710,9 +721,14 @@ class FormFillingService:
         # normally resolves correctly -- but an older client omitting the key
         # still yields "unknown", and two different forms must never share a
         # cache entry, so the full-schema number stays the preferred source.
-        translation_form_id = (
-            (schema.get("form_metadata") or {}).get("form_number") or form_id
-        )
+        # isinstance-guarded (bd polyglot-pdf-ypk4): `schema.get("form_metadata")
+        # or {}` does NOT protect against a truthy non-dict (e.g. a non-empty
+        # string) -- `or {}` only substitutes on a falsy/missing value, so
+        # form_metadata="12/2024" would still reach .get() and raise.
+        _translate_meta = schema.get("form_metadata")
+        if not isinstance(_translate_meta, dict):
+            _translate_meta = {}
+        translation_form_id = _translate_meta.get("form_number") or form_id
         # An internal restart (section switch) re-enters here while an earlier
         # awaiter may still be in flight -- cancel it so the reference we are
         # about to overwrite never becomes an unjoinable orphan (fresh-eyes,
@@ -890,7 +906,14 @@ class FormFillingService:
             sm = self._last_section_metadata or {}
             # Pass the REAL title or None (not a "Form" default) so render_section_metadata's
             # "nothing substantive -> return ''" guard can fire on a metadata-less session.
-            form_title = (self._schema or {}).get("form_metadata", {}).get("title") or None
+            # isinstance-guarded (bd polyglot-pdf-ypk4): the `{}` default on
+            # .get("form_metadata", {}) only applies when the key is MISSING, not
+            # when it is present but a non-dict (e.g. a string) -- a malformed
+            # handshake would still raise AttributeError on the following .get().
+            _title_meta = (self._schema or {}).get("form_metadata")
+            form_title = (
+                _title_meta.get("title") if isinstance(_title_meta, dict) else None
+            ) or None
             # Continuous-session mode (bd polyglot-pdf-x8rt): the whole form is one
             # session with no sections to navigate, so suppress the "Section N of M"
             # progress line -- telling the model it is on "section 1 of 8" with no

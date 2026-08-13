@@ -37,8 +37,13 @@ import type { Plugin, Connect } from 'vite';
 /** A kit id must be ONE safe path segment: no separators, no `..`, no leading dot. */
 const KIT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/** The demo bucket the deploy script defaults to when FORM_KITS_BUCKET is unset. */
-const DEFAULT_BUCKET = 'polyglot-demo-aa709-form-kits';
+/**
+ * The demo bucket the deploy script defaults to when FORM_KITS_BUCKET is unset.
+ * Exported (not just a local const) so a test can pin this against
+ * scripts/deploy-form-kit.sh's own default -- they must agree, or "unset" means
+ * two different things depending on which caller runs (bd polyglot-pdf-d7hy).
+ */
+export const DEFAULT_BUCKET = 'polyglot-demo-aa709-form-kits';
 
 export interface DeployKitResponse {
   ok: boolean;

@@ -544,7 +544,16 @@ def build_form_context(
 
         fields_info.append(field_info)
     
-    form_title = schema.get("form_metadata", {}).get("title", "Form")
+    # isinstance-guarded (bd polyglot-pdf-ypk4): the `{}` default on
+    # .get("form_metadata", {}) only applies when the key is MISSING, not when
+    # it is present but a non-dict (e.g. a client-supplied string) -- reachable
+    # here via build_form_context(schema, ...) where schema is the raw,
+    # client-handshake schema (websocket_routes.py's legacy branch validates
+    # only that schema itself is a dict, never the nested form_metadata key).
+    _title_meta = schema.get("form_metadata")
+    form_title = (
+        _title_meta.get("title", "Form") if isinstance(_title_meta, dict) else "Form"
+    )
     total_fields = len(schema.get("fields", []))
     unfilled_count = total_fields - filled_count
     

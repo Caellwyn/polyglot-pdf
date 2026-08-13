@@ -181,10 +181,18 @@ def resolve_edition_marker(
     "draft" and "v9_conformant"). That field stays a display string; this one is
     author-asserted and audit-facing.
 
-    The fingerprint covers field ids + types + option values (the answerable
-    shape of the form), not labels or guidance prose: a typo fix in help text
-    must not read as a different revision, while adding/removing/retyping a
-    field or changing an option's value must.
+    The fingerprint covers field ids + types + option values + the answerable
+    CONSTRAINTS (validation rules, the required flag, and pdf_field_name --
+    bd polyglot-pdf-8x56), not labels or guidance prose: a typo fix in help
+    text must not read as a different revision, while adding/removing/
+    retyping a field, changing an option's value, tightening/loosening a
+    validation rule, flipping required, or remapping which PDF widget a field
+    prints into (the same answers now landing on a DIFFERENT printed
+    document) must. Measured on the shipped W-7 kit: 0 of 53 fields carry a
+    top-level 'required' key but 27 of 53 carry a 'validation' block, so
+    before this fix over half the answerable constraints in a real kit were
+    invisible to the marker -- a genuine revision of what the client was
+    asked could fingerprint identically to the one before it.
 
     The author version above IS the "third, better source" this docstring used
     to anticipate (bd polyglot-pdf-xzw5). It needed no manifest/wire change in
@@ -214,21 +222,48 @@ def resolve_edition_marker(
         if not isinstance(field, dict):
             continue
         options = field.get("options")
+        # sorted(<generator>) PRESERVES duplicates, so a kit with a duplicated
+        # option value fingerprinted differently from the de-duplicated one --
+        # a false-positive drift signal (bd polyglot-pdf-8x56). De-dup via a
+        # set before sorting; lower-impact than the constraint gaps below
+        # (duplicate option values are already a separate lint ERROR), fixed
+        # alongside them since both live in this same shape-building loop.
         option_values = (
-            sorted(
+            sorted({
                 str(o.get("value"))
                 for o in options
                 if isinstance(o, dict) and o.get("value") is not None
-            )
+            })
             if isinstance(options, list)
             else []
         )
+        # validation rules + the top-level required flag + pdf_field_name (bd
+        # polyglot-pdf-8x56): each is a genuine revision of what the client was
+        # asked / what document was produced, and previously left the
+        # fingerprint byte-identical. json.dumps(sort_keys=True) below makes
+        # the validation dict's own key order irrelevant; only its content
+        # (and the field's position in the outer `shape.sort()`) affects the
+        # digest. A validation dict that fails to json-serialize (should not
+        # happen -- schema.json is itself JSON) degrades to its repr() rather
+        # than raising, so a malformed kit still fingerprints instead of
+        # crashing the audit path.
+        validation = field.get("validation")
+        try:
+            validation_repr = (
+                _json.dumps(validation, sort_keys=True)
+                if isinstance(validation, dict) else None
+            )
+        except TypeError:
+            validation_repr = repr(validation)
         shape.append([
             str(field.get("id") or ""),
             str(field.get("type") or ""),
             option_values,
+            validation_repr,
+            bool(field.get("required")),
+            str(field.get("pdf_field_name") or ""),
         ])
-    shape.sort()
+    shape.sort(key=lambda s: repr(s))
     if not shape:
         return None
 

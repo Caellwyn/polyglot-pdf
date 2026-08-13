@@ -253,3 +253,26 @@ def test_legacy_si_renders_note_and_carries_convey_directive():
     # The Note itself is rendered (jnjj.23) AND the directive to convey it exists.
     assert "Note: Indicate if your name has legally changed" in si
     assert "briefly convey that context in your own words WHILE asking" in si
+
+
+def test_a_non_dict_form_metadata_degrades_the_title_instead_of_raising():
+    """bd polyglot-pdf-ypk4: a truthy non-dict form_metadata (e.g. a client-
+    supplied string) must not raise AttributeError out of build_form_context.
+
+    Reachable via FormFillingService.build_form_context_message's client-
+    handshake schema on the LEGACY (non-JIT) WS transport: websocket_routes.py
+    validates only that `schema` itself is a dict, never the nested
+    form_metadata key. The old `schema.get("form_metadata", {})` guard did NOT
+    protect against this -- the {} default only applies when the KEY IS
+    MISSING, not when it is present but a non-dict.
+    """
+    schema = {
+        "form_metadata": "12/2024",  # a STRING, not a dict
+        "fields": [{"id": "name", "name": "Full Name", "type": "text"}],
+    }
+
+    si = build_form_context(schema, {}, "English")
+
+    # Degrades to the "Form" fallback rather than raising.
+    assert "Form" in si
+    assert "ID: name" in si

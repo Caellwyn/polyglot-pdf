@@ -14,7 +14,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
-import { resolveKitDir, isSameOrigin, handleDeploy } from './deployKitEndpoint';
+import path from 'node:path';
+import { resolveKitDir, isSameOrigin, handleDeploy, DEFAULT_BUCKET } from './deployKitEndpoint';
 
 const ROOT = 'C:/repo/form-kits';
 
@@ -165,5 +166,21 @@ describe('handleDeploy: guards that run before any spawn', () => {
     await handleDeploy(fakeReq({ kitId: 'w7' }), res, opts(root));
     expect(state.status).toBe(500);
     expect(String((state.body as { detail: string }).detail)).toMatch(/script not found/);
+  });
+});
+
+describe('deployKitEndpoint: default bucket parity with deploy-form-kit.sh (bd polyglot-pdf-d7hy)', () => {
+  // The plugin always passes FORM_KITS_BUCKET explicitly when it spawns the
+  // script (see handleDeploy's env block), so the script's OWN default only
+  // matters for a bare CLI run with no env var set -- but if the two disagree,
+  // "unset" silently means a different bucket depending on which caller runs.
+  // This reads the actual script text rather than hand-copying its default, so
+  // editing one side without the other fails here instead of drifting silently.
+  it('scripts/deploy-form-kit.sh defaults FORM_KITS_BUCKET to the SAME bucket as the plugin', () => {
+    const scriptPath = path.resolve(__dirname, '../../scripts/deploy-form-kit.sh');
+    const scriptText = fs.readFileSync(scriptPath, 'utf-8');
+    const m = scriptText.match(/BUCKET_NAME="\$\{FORM_KITS_BUCKET:-([^}]+)\}"/);
+    expect(m, 'expected to find BUCKET_NAME="${FORM_KITS_BUCKET:-...}" in deploy-form-kit.sh').not.toBeNull();
+    expect(m![1]).toBe(DEFAULT_BUCKET);
   });
 });
