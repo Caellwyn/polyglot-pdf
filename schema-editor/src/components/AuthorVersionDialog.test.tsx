@@ -67,7 +67,7 @@ describe('AuthorVersionDialog', () => {
     render(<AuthorVersionDialog {...props} onConfirm={onConfirm} />);
 
     fireEvent.change(screen.getByLabelText('Version'), { target: { value: ' v9 ' } });
-    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(screen.getByText('Save version & publish'));
 
     expect(onConfirm).toHaveBeenCalledWith('9');
   });
@@ -77,7 +77,7 @@ describe('AuthorVersionDialog', () => {
     render(<AuthorVersionDialog {...props} onConfirm={onConfirm} />);
 
     fireEvent.change(screen.getByLabelText('Version'), { target: { value: '   ' } });
-    const publish = screen.getByText('Publish') as HTMLButtonElement;
+    const publish = screen.getByText('Save version & publish') as HTMLButtonElement;
 
     expect(publish.disabled).toBe(true);
     fireEvent.click(publish);

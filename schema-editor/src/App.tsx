@@ -24,9 +24,8 @@ import {
   invalidateLocalStamp, stampKitReadinessRemote,
 } from './utils/localStamp';
 import {
-  loadKitSchema, verifySameFolder, versionInfoFromSchema,
-  type CatalogueEntry, type FolderCheck, type KitVersionInfo,
-} from './utils/formKitDirectory';
+  loadKitSchema, verifySameFolder, versionInfoFromSchema, isWriteLocked,
+  type CatalogueEntry, type FolderCheck, type KitVersionInfo } from './utils/formKitDirectory';
 import {
   AuthError,
   hasBackend,
@@ -796,7 +795,12 @@ export const App: React.FC = () => {
         // block would otherwise be -- Opus round 3). The backend restamp
         // route 409s on them anyway; the client must not touch the file
         // either, not even to retract a stamp claim.
-        if (entry.status === 'complete' || entry.status === 'unpublished') {
+        // Derived from the shared set, NOT hand-listed: this guard named two
+        // of the three write-locked statuses and silently let a SUBMITTED kit
+        // through, so a Cmd+S rewrote metadata.json under the author reviewing
+        // it -- with no server involved at all when the backend is unreachable
+        // (Opus fresh-eyes round 7, the seventh instance of this pattern).
+        if (isWriteLocked(entry.status)) {
           return;
         }
         const canStamp = hasBackend() && folderCheck?.ok === true;
@@ -1532,7 +1536,11 @@ export const App: React.FC = () => {
                     <li>- Click fields in the list or PDF viewer; edit in the right panel</li>
                     <li>- Yellow/red fields need attention; green fields are done</li>
                     <li>- Undo/redo with Cmd+Z / Cmd+Shift+Z; Cmd+S saves back to the workspace</li>
-                    <li>- When every field looks right, click Mark complete on its card</li>
+                    <li>
+                      - When every field looks right, click{' '}
+                      {role === 'author' ? 'Publish' : 'Submit for review'} on its card
+                      {role === 'author' ? '' : ' -- an author checks it and publishes it'}
+                    </li>
                   </>
                 ) : (
                   <>

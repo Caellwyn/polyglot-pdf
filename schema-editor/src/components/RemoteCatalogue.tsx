@@ -2,11 +2,12 @@ import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
-  onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
+  onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
+  translateRemoteKitOptions,
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
-import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
+import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
 import { AuthorVersionDialog } from './AuthorVersionDialog';
 import { DeleteKitDialog } from './DeleteKitDialog';
 
@@ -55,6 +56,10 @@ interface RemoteKitProgress {
 const STATUS_STYLE: Record<string, string> = {
   complete: 'bg-green-100 text-green-700',
   draft: 'bg-yellow-100 text-yellow-700',
+  // Awaiting an author's review: visibly NOT done, but not a draft either
+  // -- the editor's work is finished and out of their hands (bd
+  // polyglot-pdf-hqztg).
+  submitted: 'bg-blue-100 text-blue-700',
   // A retired revision reads as neutral-but-deliberate: it is not a draft
   // awaiting work, and not an error (bd polyglot-pdf-6dz0).
   unpublished: 'bg-slate-200 text-slate-700',
@@ -102,6 +107,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   const [deletePrompt, setDeletePrompt] = React.useState<RemoteKitEntry | null>(null);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  // The kit whose lock is being taken/released right now (bd
+  // polyglot-pdf-hqztg), so its buttons can disable without freezing the
+  // whole catalogue.
+  const [lockingId, setLockingId] = React.useState<string | null>(null);
   // Monotonic token: a slow progress load from a superseded refresh must not
   // clobber the current one (same stale-scan discipline as FormCatalogue).
   const refreshSeq = React.useRef(0);
@@ -291,6 +300,39 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // language is covered. The sweep is slow (a pro-tier call per language with
   // retry), so a complete flip shows the elapsed ticker via completingId, and a
   // 409 "N of M translations complete" refusal surfaces as the error to re-press.
+  // Take or release a kit for editing. An author can always take one back from
+  // an editor -- that preemption IS the stale-lock release, so a kit someone
+  // abandoned is freed by a human rather than a timer (bd polyglot-pdf-hqztg).
+  const handleLock = React.useCallback(async (
+    kit: RemoteKitEntry, take: boolean,
+  ) => {
+    setError(null);
+    // Clear the stale notice too, as all six sibling handlers do. This is the
+    // one handler that WRITES a success notice, so it is precisely the one
+    // that can leave "You have X for editing" sitting above a later failure
+    // about the same kit (Opus fresh-eyes round 5).
+    setNotice(null);
+    setLockingId(kit.id);
+    try {
+      const res = take ? await takeKitLock(kit.id) : await releaseKitLock(kit.id);
+      // Say so when we TOOK it from someone, rather than silently winning --
+      // the other person cannot be notified (there is no server-to-client
+      // channel), so the person who did it should at least know they did.
+      setNotice(res.preempted
+        ? `You took "${kit.label}" from an editor. They will find out when they `
+          + 'next try to save.'
+        : take
+          ? `You have "${kit.label}" for editing.`
+          : `Released "${kit.label}".`);
+      await refresh();
+    } catch (err) {
+      if (err instanceof AuthError) { onAuthError?.(); return; }
+      setError(err instanceof Error ? err.message : 'Could not change the lock');
+    } finally {
+      setLockingId(null);
+    }
+  }, [refresh, onAuthError]);
+
   const handleSetStatus = React.useCallback(async (
     kit: RemoteKitEntry, status: KitLifecycleStatus, authorVersion?: string,
   ) => {
@@ -331,6 +373,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           + 'files are kept, and it cannot be edited. Publish it again to put '
           + 'it back in service.',
         );
+      } else if (status === 'submitted') {
+        // A FOURTH status, and this chain's terminal `else` said "reverted to
+        // draft" for anything it did not name -- so the editor tier's most-used
+        // new action reported the OPPOSITE of what happened. The `unpublished`
+        // branch above exists because that status hit this same bug; adding a
+        // status without adding a branch reintroduced it (Opus fresh-eyes
+        // round 6). Name every status explicitly rather than relying on the
+        // fall-through.
+        setNotice(
+          `"${kit.label}" is submitted for review. An author checks it and `
+          + 'publishes it; it is frozen until they do.',
+        );
       } else {
         setNotice(`"${kit.label}" reverted to draft.`);
       }
@@ -356,7 +410,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // refusal line (sprint-18 C1): the refusal renders next to the counts
       // it contradicts, with click-to-focus links for any "(id=x)" the gate
       // names. A refusal about a DIFFERENT kit stays on its card only.
-      if (status === 'complete' && mirrorsToStrip) onStatusRefusal?.(detail);
+      // BOTH gated transitions, not just publish: an editor's SUBMIT runs
+      // the same readiness/lint gate, and its refusal names the same
+      // fields -- so it belongs on the strip beside the counts it
+      // contradicts. Keying on 'complete' alone meant the tier that
+      // actually does the work never saw the field links (bd
+      // polyglot-pdf-hqztg; caught by an App-level test, not by this file).
+      if ((status === 'complete' || status === 'submitted') && mirrorsToStrip) {
+        onStatusRefusal?.(detail);
+      }
     } finally {
       // BOTH resets belong here. setBusy(false) used to live at the end of the
       // catch, which every early `return` in that block skipped -- and `busy`
@@ -727,6 +789,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   {kit.status}
                 </span>
                 {kit.hasSchema && (kit.status === 'complete' ? (
+                  // BOTH live-kit actions are author-only (bd
+                  // polyglot-pdf-hqztg): reopening AND retiring reach back into
+                  // a form clients are using. Rendering them to an editor left
+                  // two controls that 403 -- one of which (Unpublish) actually
+                  // SUCCEEDED before the server gate was widened. An editor
+                  // gets the reason instead of a dead button.
+                  isAuthor ? (
                   <>
                     <button
                       className="btn-sm btn-secondary text-xs"
@@ -745,6 +814,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       Unpublish
                     </button>
                   </>
+                  ) : (
+                    <span
+                      className="text-xs text-slate-600"
+                      title="This form is live. Only an author can reopen or retire it."
+                    >
+                      Published -- ask an author to reopen it
+                    </span>
+                  )
                 ) : kit.status === 'unpublished' ? (
                   // A retired revision returns to service ONLY through the full
                   // publish gate -- never via draft, which would make its
@@ -759,24 +836,66 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       ? `Re-translating & validating... ${completeElapsed}s`
                       : 'Publish again'}
                   </button>
+                ) : kit.status === 'submitted' ? (
+                  // The strip's twin of the card-grid block below. Both must
+                  // move together -- editing one of a pair and missing the
+                  // other is this repo's most repeated defect.
+                  isAuthor ? (
+                    <>
+                      <button
+                        className="btn-sm btn-primary text-xs"
+                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        disabled={busy || completingId !== null}
+                        title="Publish this form -- runs the full publish gate"
+                      >
+                        {completingId === kit.id
+                          ? `Re-translating & validating... ${completeElapsed}s`
+                          : 'Publish'}
+                      </button>
+                      <button
+                        className="btn-sm text-xs"
+                        onClick={() => void handleSetStatus(kit, 'draft')}
+                        disabled={busy || completingId !== null}
+                        title="Send this back to the editor for more work. Any version they entered is cleared, since it was never published."
+                      >
+                        Send back
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="btn-sm text-xs"
+                      onClick={() => void handleSetStatus(kit, 'draft')}
+                      disabled={busy || completingId !== null}
+                      title="Reopen your own submission to keep working on it"
+                    >
+                      Reopen
+                    </button>
+                  )
                 ) : (
                   <button
                     className="btn-sm btn-primary text-xs"
-                    onClick={() => void handleSetStatus(kit, 'complete')}
+                    onClick={() => void handleSetStatus(
+                      kit, isAuthor ? 'complete' : 'submitted',
+                    )}
                     disabled={busy || stripDirty || completingId !== null}
                     title={stripDirty
-                      ? 'Save your changes first (Cmd+S) -- completing now '
-                        + 'would publish the last saved version, not your edits'
-                      : "Mark complete (re-translates any drifted names/options, "
-                        + "then ships with the maintainer's next deploy)"}
+                      ? 'Save your changes first (Cmd+S) -- submitting now '
+                        + 'would send the last saved version, not your edits'
+                      : isAuthor
+                        ? "Publish (re-translates any drifted names/options, "
+                          + "then ships with the maintainer's next deploy)"
+                        : 'Submit for review -- an author checks it and '
+                          + 'publishes it'}
                   >
                     {completingId === kit.id
                       ? `Re-translating & validating... ${completeElapsed}s`
-                      : 'Mark complete'}
+                      : isAuthor ? 'Publish' : 'Submit for review'}
                   </button>
                 ))}
-                {isAuthor && kit.hasSchema && kit.status !== 'complete'
-                  && kit.status !== 'unpublished' && (
+                {/* Derived, not hand-listed: this predicate named two of the
+                    three write-locked statuses, so it offered a live-looking
+                    action on a submitted kit that the server 409s. */}
+                {isAuthor && kit.hasSchema && !isWriteLocked(kit.status) && (
                   <button
                     className="btn-sm btn-secondary text-xs"
                     onClick={() => void handleTranslateOptions(kit)}
@@ -931,9 +1050,73 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   )}
                 </button>
 
+                {/* The editing lock (bd polyglot-pdf-hqztg). Shown per kit so
+                    an author can see who has it and take it back. There is no
+                    server-to-client channel, so a preempted editor learns of it
+                    on their next save (a 409) rather than from a push. */}
+                {kit.hasSchema && (
+                  <div className="mt-1 flex items-center justify-end gap-2 px-1">
+                    {kit.heldBy && (
+                      <span
+                        className="text-xs text-slate-500"
+                        title={kit.heldBy === 'author'
+                          ? 'An author has this form for editing.'
+                          : 'An editor has this form for editing.'}
+                      >
+                        {kit.heldBy === 'author' ? 'Author editing' : 'Editor editing'}
+                      </span>
+                    )}
+                    {kit.heldBy === (isAuthor ? 'author' : 'editor') ? (
+                      <button
+                        className="btn-sm text-xs"
+                        onClick={() => void handleLock(kit, false)}
+                        disabled={busy || lockingId !== null}
+                        title="Release this form so someone else can edit it"
+                      >
+                        {lockingId === kit.id ? 'Releasing...' : 'Release'}
+                      </button>
+                    ) : (isAuthor || kit.heldBy !== 'author') && (
+                      <>
+                        <button
+                          className="btn-sm text-xs"
+                          onClick={() => void handleLock(kit, true)}
+                          disabled={busy || lockingId !== null}
+                          title={kit.heldBy === 'editor' && isAuthor
+                            ? 'Take this form back from the editor who has it'
+                            : 'Take this form for editing'}
+                        >
+                          {lockingId === kit.id
+                            ? 'Taking...'
+                            : kit.heldBy === 'editor' && isAuthor ? 'Take back' : 'Take for editing'}
+                        </button>
+                        {kit.heldBy === 'editor' && isAuthor && (
+                          // The stale-lock escape, and it must be its own
+                          // action: "Take back" TRANSFERS the lock to the
+                          // author, so freeing an abandoned kit would take two
+                          // steps and leave it locked to an absent author if
+                          // they forgot the second (found by enumerating the
+                          // six holder x viewer cells).
+                          <button
+                            className="btn-sm text-xs"
+                            onClick={() => void handleLock(kit, false)}
+                            disabled={busy || lockingId !== null}
+                            title="Free this form without taking it -- for a lock someone left behind"
+                          >
+                            {lockingId === kit.id ? 'Releasing...' : 'Free it'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {kit.hasSchema && (
                   <div className="mt-1 flex items-center justify-end gap-2 px-1">
                     {kit.status === 'complete' ? (
+                      // The card-grid TWIN of the strip block above. Both
+                      // live-kit actions are author-only (bd
+                      // polyglot-pdf-hqztg); an editor sees the reason.
+                      isAuthor ? (
                       <>
                         <button
                           className="btn-sm btn-secondary text-xs"
@@ -952,6 +1135,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           Unpublish
                         </button>
                       </>
+                      ) : (
+                        <span
+                          className="text-xs text-slate-600"
+                          title="This form is live. Only an author can reopen or retire it."
+                        >
+                          Published -- ask an author to reopen it
+                        </span>
+                      )
                     ) : kit.status === 'unpublished' ? (
                       // Retired: back into service ONLY through the publish
                       // gate, never via draft (which would make its
@@ -966,20 +1157,60 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           ? `Re-translating & validating... ${completeElapsed}s`
                           : 'Publish again'}
                       </button>
+                    ) : kit.status === 'submitted' ? (
+                      // Awaiting review. An AUTHOR publishes or sends it back;
+                      // the EDITOR who submitted it can only reopen their own
+                      // work (bd polyglot-pdf-hqztg).
+                      isAuthor ? (
+                        <>
+                          <button
+                            className="btn-sm btn-primary text-xs"
+                            onClick={() => void handleSetStatus(kit, 'complete')}
+                            disabled={busy || completingId !== null}
+                            title="Publish this form -- runs the full publish gate"
+                          >
+                            {completingId === kit.id
+                              ? `Re-translating & validating... ${completeElapsed}s`
+                              : 'Publish'}
+                          </button>
+                          <button
+                            className="btn-sm text-xs"
+                            onClick={() => void handleSetStatus(kit, 'draft')}
+                            disabled={busy || completingId !== null}
+                            title="Send this back to the editor for more work. Any version they entered is cleared, since it was never published."
+                          >
+                            Send back
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="btn-sm text-xs"
+                          onClick={() => void handleSetStatus(kit, 'draft')}
+                          disabled={busy || completingId !== null}
+                          title="Reopen your own submission to keep working on it"
+                        >
+                          Reopen
+                        </button>
+                      )
                     ) : (
                       <button
                         className="btn-sm btn-primary text-xs"
-                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        onClick={() => void handleSetStatus(
+                          kit, isAuthor ? 'complete' : 'submitted',
+                        )}
                         disabled={busy || openDirty || completingId !== null}
                         title={openDirty
-                          ? 'Save your changes first (Cmd+S) -- completing now '
-                            + 'would publish the last saved version, not your edits'
-                          : "Mark complete (re-translates any drifted names/options, "
-                            + "then ships with the maintainer's next deploy)"}
+                          ? 'Save your changes first (Cmd+S) -- submitting now '
+                            + 'would send the last saved version, not your edits'
+                          : isAuthor
+                            ? "Publish (re-translates any drifted names/options, "
+                              + "then ships with the maintainer's next deploy)"
+                            : 'Submit for review -- an author checks it and '
+                              + 'publishes it'}
                       >
                         {completingId === kit.id
                           ? `Re-translating & validating... ${completeElapsed}s`
-                          : 'Mark complete'}
+                          : isAuthor ? 'Publish' : 'Submit for review'}
                       </button>
                     )}
                   </div>

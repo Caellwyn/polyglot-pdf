@@ -878,7 +878,7 @@ def test_mark_complete_stamps_readiness_from_the_published_schema(client):
 
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 200, r.text
@@ -949,7 +949,7 @@ def test_publish_stamp_measures_the_POST_sweep_schema(client, monkeypatch):
 
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 200, r.text
@@ -989,7 +989,7 @@ def test_mark_complete_survives_a_failing_readiness_stamp(client, monkeypatch):
 
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     # The publish SUCCEEDED...
@@ -1764,7 +1764,7 @@ def test_status_flip_preserves_other_metadata(client):
               label="Form I-90", extra_meta={"description": "Green card"})
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 200
@@ -1816,7 +1816,7 @@ def test_a_kit_with_no_edition_date_can_still_be_published(client):
 
     r = c.post(
         "/api/editor/kits/acme-intake/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete", "author_version": "2026-08-07"},
     )
 
@@ -1831,7 +1831,7 @@ def test_promotion_stamps_the_publish_date(client):
 
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
 
@@ -1853,9 +1853,12 @@ def test_revert_to_draft_keeps_the_last_publish_date(client):
     _make_kit(root, "i-90", status="complete", schema=VALID_SCHEMA,
               extra_meta={"published_at": "2026-01-15T00:00:00+00:00"})
 
+    # AUTHOR token: reopening a LIVE form is the author's unlock (bd
+    # polyglot-pdf-hqztg). The property under test -- published_at survives the
+    # revert -- is unchanged by who performs it.
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "draft"},
     )
 
@@ -1873,7 +1876,7 @@ def test_republishing_moves_the_publish_date(client):
 
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
 
@@ -1946,7 +1949,7 @@ def test_mark_complete_runs_the_drift_sweep_then_completes(client, monkeypatch):
     monkeypatch.setattr(ekr, "bake_label_translations", _fake_bake)
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 200, r.json()
@@ -1984,7 +1987,7 @@ def test_mark_complete_blocked_when_coverage_incomplete(client, monkeypatch):
     monkeypatch.setattr(ekr, "bake_label_translations", _partial_bake)
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 409
@@ -2011,7 +2014,7 @@ def test_mark_complete_blocked_when_translation_unconfigured(client, monkeypatch
     _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA, label="I-90")
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 503
@@ -2040,7 +2043,7 @@ def test_mark_complete_sweep_is_noop_when_fully_translated(client, monkeypatch):
     monkeypatch.setattr(ekr, "bake_label_translations", _noop_bake)
     r = c.post(
         "/api/editor/kits/i-90/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 200, r.json()
@@ -2131,10 +2134,13 @@ def test_label_rename_requires_the_access_token(client):
 def test_status_revert_to_draft_is_unconditional(client):
     c, _store, root = client
     # Broken schema -- reverting to draft must still work (only PROMOTION gates).
+    # AUTHOR token: reopening a LIVE form is the author's unlock (bd
+    # polyglot-pdf-hqztg). The property under test is that the revert itself is
+    # ungated by schema quality, which is unchanged.
     _make_kit(root, "broken", status="complete", schema={"fields": "oops"})
     r = c.post(
         "/api/editor/kits/broken/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "draft"},
     )
     assert r.status_code == 200
@@ -2147,7 +2153,7 @@ def test_mark_complete_requires_a_schema(client):
     _make_kit(root, "fresh")  # no schema yet
     r = c.post(
         "/api/editor/kits/fresh/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 409
@@ -2180,7 +2186,7 @@ def test_mark_complete_publish_gate_refuses_a_duplicate_option_schema(client):
     _make_kit(root, "linty", schema=linty)
     r = c.post(
         "/api/editor/kits/linty/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 422
@@ -2203,7 +2209,7 @@ def test_mark_complete_requires_v2_schema_version(client):
     _make_kit(root, "unstamped", schema=unstamped)
     r = c.post(
         "/api/editor/kits/unstamped/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 422
@@ -2218,7 +2224,7 @@ def test_mark_complete_validates_against_form_contract(client):
     _make_kit(root, "broken", schema={"fields": [{"id": "only-an-id"}]})
     r = c.post(
         "/api/editor/kits/broken/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 422
@@ -2227,7 +2233,7 @@ def test_mark_complete_validates_against_form_contract(client):
     _make_kit(root, "good", schema=VALID_SCHEMA)
     r2 = c.post(
         "/api/editor/kits/good/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r2.status_code == 200
@@ -2277,7 +2283,7 @@ def test_mark_complete_requires_a_pdf(client):
     (kit / "schema.json").write_text(json.dumps(VALID_SCHEMA), encoding="utf-8")
     r = c.post(
         "/api/editor/kits/no-pdf/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 409
@@ -2293,7 +2299,7 @@ def test_mark_complete_requires_extraction_info_for_pdf_schema(client):
     _make_kit(root, "no-provenance", schema=schema)
     r = c.post(
         "/api/editor/kits/no-provenance/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 422
@@ -3011,7 +3017,7 @@ def test_mark_complete_publish_gate_refuses_to_review_fields(client):
     _make_kit(root, "pending", schema=pending)
     r = c.post(
         "/api/editor/kits/pending/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 409, r.text
@@ -3032,7 +3038,7 @@ def test_mark_complete_publish_gate_refuses_to_review_fields(client):
     assert put.status_code == 200, put.text
     r2 = c.post(
         "/api/editor/kits/pending/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r2.status_code == 200, r2.text
@@ -3053,7 +3059,7 @@ def test_mark_complete_publish_gate_refuses_unbacked_field(client):
     _make_kit(root, "unbacked", schema=unbacked)
     r = c.post(
         "/api/editor/kits/unbacked/status",
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
     assert r.status_code == 409, r.text

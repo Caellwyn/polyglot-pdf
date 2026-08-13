@@ -65,7 +65,9 @@ export interface ReadinessStamp {
  *                 confirmation records were confirmed against. It returns to
  *                 service only through the full publish gate, never via draft.
  */
-export type KitLifecycleStatus = 'draft' | 'complete' | 'unpublished';
+// 'submitted' means an editor finished it and an author has not yet
+// published it (bd polyglot-pdf-hqztg). Not deployable, and write-locked.
+export type KitLifecycleStatus = 'draft' | 'submitted' | 'complete' | 'unpublished';
 
 export interface RemoteKitEntry {
   id: string;
@@ -77,6 +79,9 @@ export interface RemoteKitEntry {
   schemaFile: string;
   pdfFile: string;
   readiness?: ReadinessStamp | null;
+  /** Who holds this kit for editing, if anyone (bd polyglot-pdf-hqztg).
+   * 'editor' | 'author' | null -- a ROLE, not a person. */
+  heldBy?: string | null;
 }
 
 /** The access code was missing/wrong (HTTP 401): clear it and re-prompt. */
@@ -500,6 +505,38 @@ export async function setRemoteStatus(
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the status'));
   return (await res.json()) as KitStatusResult;
+}
+
+/** Who holds a kit for editing (bd polyglot-pdf-hqztg). */
+export interface KitLockResult {
+  ok: boolean;
+  kitId: string;
+  /** 'editor' | 'author' | null -- a ROLE, not a person: the editor API has
+   * only two shared tokens (bd polyglot-pdf-ijntk lifts that). */
+  heldBy: string | null;
+  /** True when this call TOOK the lock from someone else, so the UI can say so
+   * rather than silently winning. */
+  preempted: boolean;
+}
+
+/** Take a kit for editing. An author can always take one back from an editor;
+ * the reverse 409s. */
+export async function takeKitLock(kitId: string): Promise<KitLockResult> {
+  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/lock`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not take the form'));
+  return (await res.json()) as KitLockResult;
+}
+
+/** Release a kit. An author may release anyone's lock; an editor cannot evict
+ * an author. */
+export async function releaseKitLock(kitId: string): Promise<KitLockResult> {
+  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/lock`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not release the form'));
+  return (await res.json()) as KitLockResult;
 }
 
 /** Permanently delete a kit and everything under it, archives included.

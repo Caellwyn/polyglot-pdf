@@ -1257,7 +1257,7 @@ describe('FormCatalogue -- run extraction', () => {
         expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
 
       fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v2026-08-07' } });
-      fireEvent.click(screen.getByText('Publish'));
+      fireEvent.click(screen.getByText('Save version & publish'));
 
       await waitFor(() => expect(posted.length).toBe(2));
       // Leading v stripped, and sent under the wire key the route reads.
@@ -1679,5 +1679,29 @@ describe('FormCatalogue -- run extraction', () => {
     // backlog AND the sub-counts stop summing to the total.
     expect(summary.textContent).toMatch(/1 retired/);
     expect(summary.textContent).not.toMatch(/1 in progress/);
+  });
+});
+
+
+describe('local mode respects the submitted lock (bd polyglot-pdf-hqztg)', () => {
+  it('does NOT offer Mark complete on a submitted kit', async () => {
+    // Local mode bypasses the server when the backend is unreachable, so this
+    // button would have promoted a kit awaiting author review with no publish
+    // gate and no role check.
+    const root = mockRoot([
+      mockKit('w7', {
+        'schema.json': SCHEMA,
+        'metadata.json': JSON.stringify({ label: 'W-7', status: 'submitted' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('W-7')).toBeTruthy());
+
+    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+    expect(screen.getByText(/an author publishes it/i)).toBeTruthy();
   });
 });

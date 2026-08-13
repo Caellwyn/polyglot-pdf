@@ -38,6 +38,49 @@ function entry(id: string, dirHandle: CatalogueEntry['dirHandle']): CatalogueEnt
 }
 
 describe('setKitStatus', () => {
+  it('REFUSES to write over a SUBMITTED kit', async () => {
+    // `submitted` joined the write-locked set (bd polyglot-pdf-hqztg) and this
+    // guard was left behind -- so local mode, which bypasses the server when
+    // the backend is unreachable, would promote a kit awaiting author review
+    // with no gate and no role check (Opus fresh-eyes round 6).
+    const mock = mockKitDir(JSON.stringify({ label: 'W-7', status: 'submitted' }));
+
+    await expect(setKitStatus(entry('w7', mock.dirHandle), 'complete'))
+      .rejects.toThrow(/submitted/);
+
+    expect(JSON.parse(mock.read()!).status).toBe('submitted');
+  });
+
+  it('refuses EVERY write-locked status, not just the one it was written for', async () => {
+    // The guard originally named a single status. Enumerate the set instead:
+    // adding a value to _WRITE_LOCKED_STATUSES without revisiting every reader
+    // is how this bead lost the invariant twice.
+    for (const locked of ['submitted', 'unpublished'] as const) {
+      const mock = mockKitDir(JSON.stringify({ label: 'W-7', status: locked }));
+      await expect(setKitStatus(entry('w7', mock.dirHandle), 'complete'))
+        .rejects.toThrow();
+      expect(JSON.parse(mock.read()!).status).toBe(locked);
+    }
+  });
+
+  it('still allows revert-to-draft on a COMPLETE kit', async () => {
+    // The guard must refuse local PROMOTION, not every write. Deriving it from
+    // the shared write-locked set broke exactly this, and only this test
+    // caught it -- "may its bytes change?" and "may a local write promote it?"
+    // are different questions (Opus fresh-eyes round 7 fallout).
+    const mock = mockKitDir(JSON.stringify({ label: 'N-400', status: 'complete' }));
+    const updated = await setKitStatus(entry('n-400', mock.dirHandle), 'draft');
+    expect(updated.status).toBe('draft');
+  });
+
+  it('still allows a DRAFT to be promoted locally', async () => {
+    // The guard must not make local mode useless -- a draft is exactly what it
+    // is for.
+    const mock = mockKitDir(JSON.stringify({ label: 'W-7', status: 'draft' }));
+    const updated = await setKitStatus(entry('w7', mock.dirHandle), 'complete');
+    expect(updated.status).toBe('complete');
+  });
+
   it('REFUSES to write over an unpublished (retired) kit', async () => {
     // The write-lock lives at this primitive, not only in the component that
     // calls it: a component guard protects one path, and once the render hides
