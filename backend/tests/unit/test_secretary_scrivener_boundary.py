@@ -78,17 +78,61 @@ def test_secretary_is_told_to_quote_official_text_not_rewrite_it():
     assert "do not rewrite" in si or "not rewrite it" in si
 
 
-def test_secretary_is_told_to_decline_advice_shaped_questions():
-    """Declining is a POSITIVE instruction, not an absence of permission.
+def test_advice_shaped_questions_get_answer_conditions_defer_not_a_refusal():
+    """MAINTAINER DIRECTIVE 2026-08-12: hedge and defer, do not stonewall.
 
-    A rubric that merely omits 'you may advise' leaves the model to infer the
-    boundary. The refusal has to be stated.
+    The first cut of this boundary told the secretary to DECLINE an
+    applicant-framed question outright. That is defensible legally and poor as
+    a product: the user asked a real question and got a redirect, leaving them
+    to extract the answer from quoted prose themselves -- and if they extract
+    it wrongly, the refusal bought nothing.
+
+    The shipped shape is three parts, all mandatory: state what the official
+    text says (attributed), flag EVERY condition that text puts on it, then
+    defer the applicant's own situation to the reviewing professional. Part 2
+    is what makes part 1 safe to give -- see the sibling test.
     """
     si = SECRETARY_SI.lower()
-    assert "decline" in si, "the secretary must be told to DECLINE, explicitly"
-    # ...and told WHAT to decline, in the applicant's own framing.
-    for shape in ("what should i put", "do i qualify", "applies to me"):
-        assert shape in si, f"the declined question shape {shape!r} must be named"
+    assert "do not refuse and stop" in si, (
+        "the rubric must say a refusal alone is NOT the answer shape")
+    # The applicant's own framings must still be NAMED as the trigger.
+    for shape in ("what should i put", "do i qualify", "would my passport work"):
+        assert shape in si, f"the hedged question shape {shape!r} must be named"
+    # ...and the three parts must each be instructed.
+    assert "attribute" in si, "part 1: attribute the text"
+    assert "flag every condition" in si, "part 2: the conditions are mandatory"
+    assert "defer" in si, "part 3: hand the decision back"
+
+
+def test_the_CONDITIONS_half_is_mandatory_not_optional():
+    """The safety of answering rests entirely on this clause.
+
+    'A passport can establish identity and foreign status' is true and, alone,
+    dangerous -- the same text requires an ORIGINAL or an agency-certified
+    copy, so a user acting on the favorable half mails a photocopy and is
+    rejected. A model that states the permission without the qualifier has
+    produced a confidently wrong answer, which is worse than the refusal this
+    replaced.
+    """
+    si = SECRETARY_SI.lower()
+    assert "mandatory" in si, (
+        "the conditions clause must be marked mandatory, not advisory")
+    assert "half of a rule" in si or "favorable-sounding half" in si, (
+        "the rubric should say WHY: a partial rule is worse than no answer")
+    assert "you have not finished answering" in si, (
+        "omitting a condition must be framed as an INCOMPLETE answer")
+
+
+def test_the_uncrossable_line_is_the_conclusion_about_this_applicant():
+    """Where hedged answering stops. The rubric must draw it by example,
+    because 'do not advise' is too abstract to apply under pressure: the text
+    speaking ('a passport can work, and it must be certified') versus the
+    model deciding ('yes, your passport works')."""
+    si = SECRETARY_SI.lower()
+    assert "never cross" in si and "conclusion" in si
+    assert "however many times they press" in si, (
+        "the boundary must hold under repeated asking, which is exactly when "
+        "a helpful model caves")
 
 
 def test_secretary_is_told_to_redirect_to_the_reviewing_human():
@@ -277,12 +321,19 @@ def test_declaration_frames_guidance_as_what_the_instructions_SAY():
         "the declaration must frame use (3) as asking what the text SAYS")
 
 
-def test_declaration_disclaims_applicability_and_advice():
+def test_declaration_tells_the_caller_to_relay_ALL_THREE_parts():
+    """The caller is the bypass. A voice model that receives text + conditions
+    + deferral and reads only the favorable sentence has undone the rubric at
+    the last hop, so the declaration must say relay all of it -- and name the
+    two specific ways it gets trimmed."""
     decl = _ask_secretary_declaration()
     text = decl["description"].lower()
-    assert "declines" in text or "decline" in text, (
-        "the caller must be told the secretary declines advice-shaped asks, so "
-        "a refusal is expected behavior rather than a tool malfunction")
+    assert "defers" in text or "defer" in text
+    assert "never concludes their case" in text
+    assert "do not trim the conditions" in text, (
+        "dropping the qualifier to give a cleaner yes is the likely failure")
+    assert "do not add a verdict" in text, (
+        "appending 'so yours should be fine' is the other one")
     assert "applicant" in text
 
 
@@ -351,12 +402,31 @@ def test_si_tells_the_model_to_ask_what_the_instructions_say():
         "user should do")
 
 
-def test_si_tells_the_model_to_RELAY_a_refusal_rather_than_answer_itself():
-    """THE BYPASS THIS CLOSES. A well-behaved secretary declines; a helpful
-    voice model then answers the question itself from its own knowledge, and
-    the refusal has bought nothing. The SI must say: relay, do not substitute."""
+def test_si_tells_the_model_to_relay_FAITHFULLY_AND_WHOLE():
+    """THE BYPASS THIS CLOSES, in its post-directive form. The secretary now
+    returns text + conditions + deferral. A helpful voice model can still
+    defeat that two ways: drop the conditions to give a cleaner answer, or
+    append its own verdict on top. Both are named."""
     si = _si_text().lower()
-    assert "do not answer it yourself" in si, (
-        "the SI must forbid the model answering an advice question the "
-        "secretary declined")
-    assert "choice is theirs" in si or "theirs to make" in si
+    assert "faithfully and whole" in si
+    assert "never trim the conditions" in si, (
+        "the qualifier is the part that protects the user")
+    assert "never add a conclusion of your own" in si
+    assert "you do not decide their case" in si
+
+
+def test_si_makes_hedge_and_defer_UNCONDITIONAL():
+    """The maintainer's directive: ALWAYS defer on anything edging toward a
+    legal determination -- not only when the secretary was consulted, and not
+    only when the model feels unsure. Pressure and confidence are exactly the
+    conditions under which a model drops a hedge, so both are named."""
+    si = _si_text().lower()
+    assert "always hedge and defer" in si
+    assert "even when the answer looks obvious" in si
+    assert "even if they press" in si
+    assert "even if you are sure" in si
+    # The deferral target is the firm's reviewer -- this product is never
+    # used for self-filing (maintainer: a core product invariant), so the
+    # hedge must not point at a lawyer the applicant may not have.
+    assert "reviewing their form" in si
+    assert "reviewed by a qualified human before filing" in si

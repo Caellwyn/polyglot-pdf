@@ -129,6 +129,54 @@ hard-codes a kind-(B) query so a (C) decline cannot reach it. Setting
 appends "ask the user to describe the field more specifically", nonsense for
 an eligibility refusal.
 
+## DIRECTION CHANGE mid-PR: hedge-and-defer, not decline (maintainer 2026-08-12)
+
+After the reviews cleared, the maintainer walked a real W-7 exchange -- "what
+documents do I need?" then "would a copy of my Italian passport work?" -- and
+rejected the DECLINE shape this bead originally shipped. It is defensible
+legally and poor as a product: the user asked a real question and got a
+redirect, leaving them to extract the answer from quoted prose. If they
+extract it wrongly the refusal bought nothing.
+
+The directive: ALWAYS hedge and defer, but ANSWER. The shape is the
+maintainer's own example -- "According to the IRS documentation for this form,
+a passport can work for both identity and connection to the foreign country.
+It also says it must be original or a certified copy. However, please consult
+with your legal professional regarding your specific situation."
+
+So kind (C) now answers in THREE mandatory parts: (1) attribute and state what
+the official text says, (2) FLAG EVERY CONDITION that text puts on it, (3)
+defer the applicant's own situation to the reviewing professional. Part 2 is
+what makes part 1 safe to give, and the rubric says so: a favorable-sounding
+half of a rule is worse than no answer, because the applicant acts on it. The
+worked case is exactly why -- "a passport establishes identity and foreign
+status" is true and, alone, dangerous: the same text requires an ORIGINAL or
+an agency-certified copy, so a user acting on the favorable half mails a
+photocopy and is rejected. The uncrossable line is now drawn by example
+rather than abstraction: "a passport can work, and it must be certified" is
+the text speaking; "yes, your passport works" is the model deciding their
+case.
+
+The live SI gained an UNCONDITIONAL hedge rule (always defer on anything
+touching eligibility, requirements, or what a rule means for THIS user --
+"even when the answer looks obvious, even if they press, even if you are
+sure") plus a faithful-relay rule naming the two ways a helpful voice model
+would otherwise leak: trimming the conditions for a cleaner yes, or appending
+its own verdict ("so yours should be fine").
+
+WHO the hedge defers to changed too, and it is a product invariant worth
+recording: NOT "your legal professional" but the firm or professional
+REVIEWING THE FORM. The maintainer states this app is never used for
+self-filing -- it is used by a legal entity to pre-prepare first drafts, and
+customer contracts require staff review before filing. Deferring to a lawyer
+the applicant may not have would misdescribe the product; the shipped
+DisclaimerModal already says "have a qualified professional check your final
+form", so the SI now matches language the user has already agreed to.
+
+Both new clauses are mutation-verified: weakening "FLAG EVERY CONDITION", or
+making the always-hedge rule conditional ("hedge when unsure"), each reddens
+its own test.
+
 ## Lessons
 
 - **Mutation-testing the test found a real weakness, not just a checkbox.** The
@@ -162,6 +210,11 @@ an eligibility refusal.
   instruction can be perfectly worded and still false in production. Measure
   the premise against shipped content, not against the one kit you had in
   mind (the W-7).
+- **A legally-safe answer and a useful answer are not opposites.** The first
+  cut treated refusal as the safe default; the maintainer's shape is safer AND
+  more useful, because the CONDITIONS reach the user instead of depending on
+  them parsing quoted prose. When a boundary makes the product worse, check
+  whether the boundary is drawn in the wrong place before accepting the cost.
 - **Deriving ONE member of a set is not deriving the set.** The derived-marker
   test looked rigorous -- it called the real renderer instead of restating a
   string -- but it fed that renderer a single-key fixture, so only one branch
