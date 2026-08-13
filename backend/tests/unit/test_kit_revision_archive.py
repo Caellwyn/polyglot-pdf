@@ -398,9 +398,9 @@ def test_sibling_suffix_matches_the_real_fingerprint_format(tmp_path):
 
     rkr = _read_kit_revision()
     encoded_suffix = encode_marker(fingerprint)
-    assert rkr._might_be_sibling_of(f"12-2024--{encoded_suffix}", "12-2024")
+    assert rkr._sibling_match(f"12-2024--{encoded_suffix}", "12-2024") != "no"
     # ...and a non-fingerprint suffix is not a sibling candidate at all.
-    assert not rkr._might_be_sibling_of("12-2024--rev2", "12-2024")
+    assert rkr._sibling_match("12-2024--rev2", "12-2024") == "no"
 
 
 @pytest.mark.parametrize("base_len", [8, 50, 106, 107, 108, 127, 128, 200])
@@ -417,7 +417,7 @@ def test_a_genuine_sibling_is_found_at_every_length(base_len):
     mine = "E" * base_len
     fp = "sha256:1a2b3c4d5e6f"
 
-    assert rkr._might_be_sibling_of(sibling_marker(mine, fp), enc(mine)), (
+    assert rkr._sibling_match(sibling_marker(mine, fp), enc(mine)) != "no", (
         f"a real sibling was missed at base_len={base_len}"
     )
 
@@ -484,6 +484,95 @@ def test_an_unrelated_prefix_marker_resolves_to_not_found(tmp_path):
         _resolve_revision(store, "w7", "12/2024")
 
 
+def test_an_untrimmed_sibling_resolves_when_the_plain_base_is_gone(tmp_path):
+    """bd polyglot-pdf-amojb, exit criterion 1: an UNTRIMMED sibling's
+    seg_base is byte-identical to the marker's encoded base -- no lossy trim
+    was involved, so it is provably ours, not a guess. If the plain-base
+    archive directory is independently removed (a GCS lifecycle rule, a
+    partial restore, manual cleanup), the untrimmed sibling must still
+    resolve rather than reporting the revision as unarchived when it
+    demonstrably is."""
+    from backend.services.form_kits import encode_marker as enc, sibling_marker
+
+    store = LocalFormKitStore(tmp_path)
+    rev_1 = _schema("a", edition="12/2024")
+    rev_2 = _schema("a", "b", edition="12/2024")  # same marker, different bytes
+
+    base = enc("12/2024")
+    fingerprint = resolve_edition_marker(None, rev_2)
+    sib = sibling_marker("12/2024", fingerprint)
+    assert sib.startswith(base + "--"), (
+        "fixture assumption changed: sibling_marker trimmed the base for this "
+        "short a marker -- pick a marker short enough to stay untrimmed"
+    )
+
+    _run(store.put_archived_revision("w7", "12/2024", rev_1, {"status": "complete"}))
+    _run(store.put_archived_revision("w7", sib, rev_2, {"status": "complete"}))
+    # Simulate the plain-base archive directory being independently removed --
+    # only the untrimmed sibling survives.
+    import shutil
+
+    shutil.rmtree(tmp_path / "w7" / "_archive" / base)
+
+    source, found = _resolve_revision(store, "w7", "12/2024")
+    assert found == rev_2
+    assert source == f"archive:{sib}"
+
+
+def test_an_impostor_segment_that_merely_LOOKS_like_a_sibling_is_not_trusted(tmp_path):
+    """bd polyglot-pdf-amojb, round 2 (Opus cross-surface review): shape alone
+    ('seg_base == base') does not prove a segment was actually WRITTEN by
+    sibling_marker for THIS marker -- an UNRELATED kit's own raw
+    edition_date could coincidentally contain the exact
+    "<base>--sha256-<12hex>" shape (a pasted-in string, a coincidental
+    collision), which would pass the shape check but was never really our
+    sibling. That must resolve to the honest NOT FOUND (or AMBIGUOUS if
+    there is a genuine candidate too), never silently return the impostor's
+    schema -- the "confident wrong schema" failure this whole tool exists to
+    prevent."""
+    store = LocalFormKitStore(tmp_path)
+    # The archived segment's raw marker LOOKS exactly like a disambiguated
+    # sibling of "12/2024" (same shape sibling_marker would produce), but it
+    # was never actually written as one -- it is an unrelated kit's own
+    # edition_date that happens to contain that literal text.
+    impostor_marker = "12/2024--sha256-aaaaaaaaaaaa"
+    impostor_schema = _schema("z", edition=impostor_marker)
+
+    _run(store.put_archived_revision(
+        "w7", impostor_marker, impostor_schema, {"status": "complete"}
+    ))
+
+    with pytest.raises(FormKitNotFound):
+        _resolve_revision(store, "w7", "12/2024")
+
+
+def test_a_trimmed_only_sibling_still_resolves_to_not_found(tmp_path):
+    """bd polyglot-pdf-amojb, exit criterion 2: only the UNTRIMMED case is
+    provable. A TRIMMED-base sibling (seg_base != base, only a prefix
+    relationship) is still just a "might be ours" -- if it is the SOLE
+    candidate, that must stay NOT FOUND, exactly as before this fix."""
+    from backend.services.form_kits import _MARKER_MAX_LEN, encode_marker as enc, sibling_marker
+
+    store = LocalFormKitStore(tmp_path)
+    long_marker = "E" * (_MARKER_MAX_LEN + 50)  # forces sibling_marker to trim
+    rev = _schema("a", edition=long_marker)
+
+    fingerprint = resolve_edition_marker(None, rev)
+    sib = sibling_marker(long_marker, fingerprint)
+    base = enc(long_marker)
+    assert not sib.startswith(base + "--"), (
+        "fixture assumption changed: sibling_marker did not trim this marker "
+        "-- lengthen it so the trimmed-only case is actually exercised"
+    )
+
+    # Only the TRIMMED sibling exists -- no plain-base directory was ever
+    # written (mirrors amojb's own reproduction: nothing under the exact base).
+    _run(store.put_archived_revision("w7", sib, rev, {"status": "complete"}))
+
+    with pytest.raises(FormKitNotFound):
+        _resolve_revision(store, "w7", long_marker)
+
+
 @pytest.mark.parametrize("raw", ["12/2024", "12//2024", "12/2024/", "12-2024-", "a"])
 def test_sibling_round_trips_for_markers_with_dash_runs(tmp_path, raw):
     """The split point (rfind('--')) must survive markers that themselves
@@ -493,7 +582,7 @@ def test_sibling_round_trips_for_markers_with_dash_runs(tmp_path, raw):
 
     rkr = _read_kit_revision()
     sib = sibling_marker(raw, "sha256:1a2b3c4d5e6f")
-    assert rkr._might_be_sibling_of(sib, enc(raw)), f"round trip failed for {raw!r}"
+    assert rkr._sibling_match(sib, enc(raw)) != "no", f"round trip failed for {raw!r}"
 
 
 def test_sibling_marker_never_exceeds_the_segment_cap():

@@ -207,8 +207,42 @@ class ValidationRules(BaseModel):
     required: Optional[bool] = False
     min_length: Optional[int] = None
     max_length: Optional[int] = None
-    min: Optional[float] = None  # For numeric fields
-    max: Optional[float] = None  # For numeric fields
+    # For numeric fields, a plain number. For DATE fields, field_validator's
+    # _validate_date accepts a bound authored as a date string (the field's
+    # own layout, e.g. "01/01/2000", or ISO "2000-01-01") -- see
+    # test_min_max_bounds_accept_the_fields_own_layout_or_iso
+    # (test_date_format_resolution.py). A float-only type here would reject
+    # kit construction for exactly the input that code path was built to
+    # accept (bd polyglot-pdf-ondn): Pydantic raised float_parsing for
+    # ValidationRules(min='01/01/2000') before this widening.
+    #
+    # The @field_validator below (mode='before') tries numeric coercion
+    # FIRST: Pydantic's smart-mode Union[float, str] resolution picks the str
+    # arm for ANY string input without attempting to parse it as a number
+    # first -- so a NUMERIC-STRING bound authored on a number field (e.g.
+    # min="18", a plausible typo/authoring habit) would silently stay a str
+    # and then be SKIPPED by _validate_number's isinstance guard (added in
+    # the same bead, to stop a non-numeric bound from crashing that
+    # function) -- turning "reject values under 18" into "no bound at all",
+    # with no error anywhere (round 2, Opus cross-surface review; confirmed:
+    # on origin/dev, plain Optional[float] coerced "18" -> 18.0 and enforced
+    # it, so this widening silently regressed that case). Coercing digit-only
+    # strings to float here restores that behavior while still leaving a
+    # genuine date string (which float() rejects) to pass through as str for
+    # _validate_date to consume.
+    min: Optional[Union[float, str]] = None
+    max: Optional[Union[float, str]] = None
+
+    @field_validator("min", "max", mode="before")
+    @classmethod
+    def _coerce_numeric_bound(cls, v):
+        if isinstance(v, str):
+            try:
+                return float(v)
+            except ValueError:
+                return v  # not numeric -- leave as a date-string bound
+        return v
+
     pattern: Optional[str] = Field(None, description="Regex pattern")
     custom_error: Optional[str] = Field(None, description="Custom error message")
 

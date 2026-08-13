@@ -157,6 +157,78 @@ def test_no_dump_is_a_safe_noop(tmp_path):
     assert res == {"fields_completed": 0, "options_added": 0}
 
 
+# --- bd polyglot-pdf-pixq: a mixed family (one name repeated via multiple ---
+# widget KIDS) must not mint a duplicate option ------------------------------
+
+
+def _write_mixed_duplicate_family_dump(tmp_path):
+    """A Family-B numbered-leaf-run dump reproducing the bead's own repro: ONE
+    AcroForm field name (c1_1) with TWO widget kids sharing the same
+    on_value at different y-positions (group_candidates._button_widgets
+    flattens one entry PER KID, so this field's name enters the flattened
+    widget list twice), alongside two ordinary single-kid siblings c1_2 and
+    c1_3 -- forming a consecutive numbered run c1_1, c1_1, c1_2, c1_3 that
+    passes the >= 2 members guard even discounting the duplicate."""
+    dump = {"fields": [
+        {"name": "form1[0].P1[0].c1_1[0]", "logical_type": "checkbox", "widgets": [
+            {"type": "checkbox", "on_value": "1",
+             "rect": {"page": 0, "x": 10, "y": 20, "width": 8, "height": 8}},
+            {"type": "checkbox", "on_value": "1",
+             "rect": {"page": 0, "x": 10, "y": 40, "width": 8, "height": 8}},
+        ]},
+        {"name": "form1[0].P1[0].c1_2[0]", "logical_type": "checkbox", "widgets": [
+            {"type": "checkbox", "on_value": "1",
+             "rect": {"page": 0, "x": 10, "y": 60, "width": 8, "height": 8}},
+        ]},
+        {"name": "form1[0].P1[0].c1_3[0]", "logical_type": "checkbox", "widgets": [
+            {"type": "checkbox", "on_value": "1",
+             "rect": {"page": 0, "x": 10, "y": 80, "width": 8, "height": 8}},
+        ]},
+    ]}
+    p = tmp_path / "dump.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    return str(p)
+
+
+def test_a_repeated_widget_name_never_yields_two_options_for_one_pdf_field_name():
+    """bd polyglot-pdf-pixq, exit criterion 1: a family whose widgets list
+    repeats one name (because that field has 2 kids) alongside >=2 distinct
+    names must produce a completed field whose option pdf_field_names are
+    UNIQUE -- no duplicate option carrying the same name (which would paint
+    two options on top of the same rect)."""
+    import tempfile, os
+
+    from group_candidates import find_group_candidates  # noqa: E402
+
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    dp = _write_mixed_duplicate_family_dump(tmp)
+
+    dump = json.loads(pathlib.Path(dp).read_text(encoding="utf-8"))
+    families = find_group_candidates(dump)
+    assert families, "fixture assumption changed: no family clustered at all"
+    # Confirm the fixture actually reproduces the duplicate-in-widgets shape
+    # the bead describes, so this test targets the real bug rather than a
+    # family that never carries a repeat.
+    fam = families[0]
+    assert fam["widgets"].count("form1[0].P1[0].c1_1[0]") == 2, (
+        "fixture assumption changed: c1_1 no longer appears twice in the "
+        "clustered family's widgets list"
+    )
+
+    schema = {"fields": [{
+        "id": "reason", "type": "checkbox_group",
+        "options": [_opt("form1[0].P1[0].c1_2[0]", "first")],
+    }]}
+    res = ef._complete_grouped_families(schema, dp)
+    os.remove(dp)
+
+    opt_names = [o["pdf_field_name"] for o in schema["fields"][0]["options"]]
+    assert len(opt_names) == len(set(opt_names)), (
+        f"duplicate pdf_field_name in completed options: {opt_names!r}"
+    )
+    assert res["options_added"] == len(set(opt_names)) - 1  # minus the pre-existing claim
+
+
 # --- Tier 2: the real i-90 dump ------------------------------------------- #
 
 _I90_PDF = _REPO / "form-kits" / "i-90" / "form.pdf"

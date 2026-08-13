@@ -129,6 +129,11 @@ if [ "$START_BACKEND" = "1" ]; then
         )"
     fi
 
+    # --reload-dir backend scopes the reload watcher. A bare --reload watches the
+    # WHOLE cwd tree, and the repo root holds .claude/worktrees/ with ~130 sibling
+    # worktrees, each a full checkout -- so an agent editing any .py in ANY of them
+    # restarted this backend mid-request. Safe to scope: backend/ imports no other
+    # top-level package (shared/ is one JSON file, no Python).
     (
         cd "$ROOT_DIR"
         PYTHONPATH="$ROOT_DIR" \
@@ -137,7 +142,8 @@ if [ "$START_BACKEND" = "1" ]; then
         SCHEMA_AUTHOR_TOKEN="$SCHEMA_AUTHOR_TOKEN" \
         GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
         "$VENV_PYTHON" -m uvicorn backend.main:app \
-            --host 127.0.0.1 --port "$BACKEND_PORT" --reload
+            --host 127.0.0.1 --port "$BACKEND_PORT" --reload \
+            --reload-dir backend
     ) &
     BACKEND_PID=$!
 

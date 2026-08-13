@@ -685,11 +685,18 @@ class Settings(BaseModel):
 				"uses: (1) recall a past ANSWER/value -- 'what previous name did "
 				"they give?', 'have we got their date of birth yet?'; (2) IDENTIFY "
 				"which field the user means when you need to jump to a field you do "
-				"NOT currently hold -- 'which field is the mailing city?'; (3) look "
-				"up OFFICIAL GUIDANCE the secretary holds (the form's full official "
-				"instructions text) when the current field's reference text does "
-				"not clearly answer a requirements question -- 'what documents does "
-				"exception 3 require?'. The "
+				"NOT currently hold -- 'which field is the mailing city?'; (3) get "
+				"the OFFICIAL INSTRUCTION TEXT quoted back when the current field's "
+				"reference text does not cover something -- 'what do the "
+				"instructions say about exception 3?'. Use (3) to obtain the form's "
+				"OWN WORDS, which you may then read to the user. On anything shaped "
+				"like 'do I qualify' or 'would my document work', it answers FROM "
+				"the official text, flags the conditions that text puts on it, and "
+				"defers the applicant's own situation to the firm or professional "
+				"reviewing the form -- it never concludes their case. Relay all "
+				"three parts: do not trim the conditions to give a cleaner yes, and "
+				"do not add a verdict of your own. Ask it what the instructions SAY, "
+				"never what the user SHOULD DO. The "
 				"secretary holds the whole form catalog + the applicant's answers "
 				"and replies in prose; when it identifies fields, the response also "
 				"carries a `fields` list of exact {field_id, spoken_name} you can "
@@ -704,9 +711,12 @@ class Settings(BaseModel):
 						"type": "string",
 						"description": (
 							"The plain-language question: a past answer/value "
-							"('what is their mailing zip code?'), or which field the "
+							"('what is their mailing zip code?'), which field the "
 							"user means for navigation ('which field is the apartment "
-							"number?')."
+							"number?'), or what the official instructions SAY about "
+							"something ('what do the instructions say about exception "
+							"3?'). Phrase a guidance question as what the text says, "
+							"never as what this applicant should do or qualifies for."
 						)
 					}
 				},
@@ -836,11 +846,29 @@ class Settings(BaseModel):
 	# verification question, so the model waits instead of asking). The
 	# LEGACY SI still carries its old verify-by-spelling wording, which this
 	# addendum also overrides (fresh-eyes round 1 on bd 22h1f).
+	#
+	# THE ASK IS RESTATED HERE ON PURPOSE (bd polyglot-pdf-ku69b). This block
+	# is the LAST text in the assembled SI and the only one whose heading names
+	# a mechanism, so it carries disproportionate authority -- and every earlier
+	# revision of it was pure PROHIBITION ("do NOT read back", "stop speaking")
+	# opening with "For a NAME". Measured on the shipped SI: the DTI names
+	# block's "HOW DO THEY SPELL THEIR NAME" lands ~4,600 chars earlier, so the
+	# model's final, most-specific naming instruction told it only to stay
+	# silent. The maintainer observed the consequence on the live demo -- the
+	# model asks for the name and fills what it hears, never asking for the
+	# spelling, which makes the clip verify a value that may already be wrong.
+	# The scoping line and the closing SO-THE-SHAPE line exist to keep this
+	# block from reading as the whole naming policy. Keep BOTH if you edit
+	# this; test_spellback_si_addendum pins them.
 	DTI_SPELLBACK_SI_ADDENDUM: str = (
 		"\n\nSPELL-BACK AUDIO TOOL (this is the mechanism that voices "
 		"spellings outside this conversation, and it overrides any earlier "
 		"instruction to read a LETTER spelling aloud or to verify by spelling "
 		"yourself):\n"
+		"This changes only how a spelling is READ BACK. It does NOT change how "
+		"you ASK: you still ask every person's name by asking for its SPELLING "
+		"up front, every time, exactly as instructed above -- never just the "
+		"name.\n"
 		"For a NAME or any letter-spelled value: after the fill succeeds, do "
 		"NOT read the value back and do NOT ask whether it is correct -- call "
 		"the name_spellback tool instead, and stop speaking. A deterministic "
@@ -848,7 +876,9 @@ class Settings(BaseModel):
 		"session language, and asks them whether it is correct. When the tool "
 		"returns delivered, stay SILENT and listen for their answer; once they "
 		"agree, confirm as usual. Numbers are unaffected: keep reading "
-		"identifier numbers back digit by digit yourself."
+		"identifier numbers back digit by digit yourself.\n"
+		"So the shape of every name field is: ASK for the spelling -> fill the "
+		"letters they gave -> call name_spellback -> stay silent."
 	)
 
 	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
@@ -1099,7 +1129,7 @@ class Settings(BaseModel):
 		"WORKFLOW (one field at a time):\n"
 		"1. ASK for the current field. If it has options, present them as PRESENTING OPTIONS directs: read EVERY option aloud for a list (never one-by-one as yes/no questions), ONE natural question for a TWO-option field the guidance marks that way, ask directly for a standard list.\n"
 		"2. FILL that ONE field from the user's answer, using its exact field_id.\n"
-		"3. READ BACK the STORED value the fill tool returned ('stored_values' / 'Stored value') -- the authoritative saved value, never your own memory of what was said. Say a name as a word; read identifier numbers digit by digit. Then ask 'Is that correct?'\n"
+		"3. READ BACK the STORED value the fill tool returned ('stored_values' / 'Stored value') -- the authoritative saved value, never your own memory of what was said. Unless a later instruction gives you a different way to verify a name, say a name as a word; read identifier numbers digit by digit. Then ask 'Is that correct?'\n"
 		"4. WAIT for explicit agreement (yes / correct / that's right).\n"
 		"5. CONFIRM with confirmation_method='verbal'.\n"
 		"6. The confirmation returns the NEXT field's guidance: ask for that field, following ITS instructions and copying ITS field_id.\n"
@@ -1118,7 +1148,7 @@ class Settings(BaseModel):
 		"The SPELLING is the answer -- never build one from the sound (Nguyen, Johansen, Thi mishear into Anglo defaults). The stored name is ALWAYS Latin characters, never Chinese, Cyrillic, Arabic or any other script.\n"
 		"So your FIRST question asks for all of it at once: HOW DO THEY SPELL THEIR NAME IN LATIN CHARACTERS, EXACTLY AS ON THEIR PASSPORT OR GREEN CARD. Ask that in full -- never a bare 'how do you spell it?', never the name first and the spelling after. Fill the exact letters they give.\n"
 		"That spelling comes from THEM, never from you: NEVER transliterate or romanize a name yourself. Most names have several plausible romanizations and their document uses exactly one, so a guess is a wrong name on a legal form. If they answer in another script, ask how it is written in Latin characters on their document. If they truly do not know, say the form needs that spelling and offer to skip for now -- leaving it for later is correct; storing a guess, or another script, is not. Ask warmly: the requirement is the form's, never a judgement about their name.\n"
-		"Verify by saying the name back as a word ('Nguyen -- did I get that right?').\n"
+		"Never accept just the spoken name and fill your best guess at its spelling -- if they answer with the name alone, ask for the spelling before you fill anything. Unless a later instruction gives you a different way to verify a name, verify by saying the name back as a word ('Nguyen -- did I get that right?').\n"
 		"\n"
 		"DATES:\n"
 		"Accept a date spoken naturally ('January first two thousand one') and convert it to the required format YOURSELF -- never ask the user to restate a date in a format; the format is for you, not them. If it is ambiguous or incomplete, ask a natural clarifying question (which year?). Read it back naturally, then confirm.\n"
@@ -1139,7 +1169,8 @@ class Settings(BaseModel):
 		"When you fill the field, the value must match the guidance EXACTLY, punctuation included; translate the user's spoken answer to the matching option. Multiple checkboxes: comma-separated exact values.\n"
 		"\n"
 		"ANSWERING QUESTIONS:\n"
-		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary also holds the user's past answers and can identify a field you do not hold.\n"
+		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary quotes the form's official instructions back to you, and also holds the user's past answers and can identify a field you do not hold. Ask it what the instructions SAY, never what the user should do. Relay its answer FAITHFULLY AND WHOLE -- including every condition or exception it flags, and its closing deferral. Never trim the conditions to give a cleaner yes: the qualifier is the part that protects the user. Never add a conclusion of your own on top ('so yours should be fine') -- the guidance speaks, you do not decide their case.\n"
+		"ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements, documents, or what a rule means for THIS user -- even when the answer looks obvious, even if they press, and even if you are sure. Say what the official guidance says, attribute it ('according to the instructions for this form ...'), state the conditions it puts on it, and close by telling them to confirm their own situation with the firm or professional reviewing their form. A qualified human is expected to review this form before it is filed; that reviewer makes the determinations, never you. Do not promise the user that a review WILL happen -- the disclaimer they accepted advises it rather than guaranteeing it.\n"
 		"INFORMATION, NEVER ADVICE: you explain what a field expects and what the official instructions say. You never tell the user what to enter, which option to choose, or what applies to their situation -- those decisions are theirs alone. 'The instructions say category a covers X' is information; 'you should check box a' is advice. Never give advice."
 	)
 

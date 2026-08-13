@@ -1,8 +1,8 @@
 # Testing
 
-**Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
+**Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-07. See [the gnb0 journal entry](../journal/entries/2026-08-07-bd-gnb0-serialize-regenerate-guidance.md) for closeout details.*
+*Last updated: 2026-08-11 (bd polyglot-pdf-5xhbb: documented the K_SERVICE isolation fixtures in both conftest.py files). Earlier: 2026-08-07, see [the gnb0 journal entry](../journal/entries/2026-08-07-bd-gnb0-serialize-regenerate-guidance.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -88,10 +88,22 @@ The backend suite is organized **by directory**, not by marker:
   `test_tool_contracts.py` (both set a module-level
   `pytestmark = pytest.mark.external`). It needs live credentials and costs
   tokens — deselect it in the default loop with `-m "not external"`.
-- **Hermetic logs.** `backend/tests/conftest.py` has one autouse fixture that
+- **Hermetic logs.** `backend/tests/conftest.py` has an autouse fixture that
   redirects `CONFIRMATION_LOG_DIR` to a per-test `tmp_path`, so confirmation-audit
   tests don't dirty the repo's real `logs/confirmations/` tree. Keep new tests that
   write logs hermetic the same way.
+- **K_SERVICE isolation.** `backend/tests/conftest.py` also strips `K_SERVICE`
+  from the environment -- both at import time (a module-level `os.environ.pop`,
+  so it is gone before any test module is even collected) and per-test (an
+  autouse fixture, as defense-in-depth) -- so a bare `Settings()` never
+  inherits a deployed-service identity from the ambient shell.
+  `backend/config.py`'s VERTEXAI and VFF_DISABLE_AUTH guards both key off this
+  var; Cloud Run sets it, a local shell normally does not. The top-level
+  `tests/` suite (pytest.ini's other testpath) carries the same import-time
+  guard in its own `tests/conftest.py`, since it does not share
+  `backend/tests/conftest.py`'s fixtures. Tests that deliberately exercise the
+  deployed path still work -- they set `K_SERVICE` themselves via
+  `monkeypatch.setenv`, which wins over both guards.
 
 ### Running the backend suite (split-venv gotcha)
 

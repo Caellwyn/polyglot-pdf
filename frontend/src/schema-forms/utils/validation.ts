@@ -338,13 +338,18 @@ function validateNumberValue(field: FormField, value: any, rules: ValidationRule
     return `${field.name} must be a valid number`;
   }
 
-  // Min value
-  if (rules.min !== undefined && numValue < rules.min) {
+  // Min/max are typed number | string (a date-typed field's bound is a date
+  // string -- see ValidationRules.min/max, bd polyglot-pdf-hhwgi), but this
+  // function only ever runs for NUMBER-typed fields; a string bound here
+  // would be an authoring mistake, not a value to compare against. Mirrors
+  // the backend's own defensive guard (field_validator.py's _validate_number,
+  // bd polyglot-pdf-ondn) -- skip a non-numeric bound rather than let it
+  // silently coerce through a numeric comparison.
+  if (typeof rules.min === "number" && numValue < rules.min) {
     return `${field.name} must be at least ${rules.min}`;
   }
 
-  // Max value
-  if (rules.max !== undefined && numValue > rules.max) {
+  if (typeof rules.max === "number" && numValue > rules.max) {
     return `${field.name} must be at most ${rules.max}`;
   }
 

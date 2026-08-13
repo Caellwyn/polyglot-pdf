@@ -64,6 +64,14 @@
   This knob is DOUBLE-GATED on backend/.env.DEV, so it does nothing in a
   deployed service even if the env var is set -- deliberately.
 
+.PARAMETER DisableVad
+  Mirrors scripts/dev-local.sh's DISABLE_GEMINI_VAD (bd polyglot-pdf-6vo
+  debugging): chooses who detects turn boundaries. Default here is NATIVE
+  (Gemini's own VAD), matching prod. Pass this switch (or set
+  $env:DISABLE_GEMINI_VAD='true' before launching) for MANUAL mode -- the
+  client sends explicit activity_start/end (PTT or Silero) and Gemini does
+  NOT rely on detecting silence in a continuous stream.
+
 .PARAMETER Transcripts
   LOCAL-DEV-ONLY: capture what was SAID (both sides) into
   backend/logs/gemini_YYYY-MM-DD.jsonl as `transcript` records.
@@ -111,7 +119,8 @@ param(
     # drop it. Leave unset to send no temperature at all (Google default 1.0).
     [ValidateRange(0.1, 2.0)]
     [double]$Temperature = 0,
-    [switch]$Transcripts
+    [switch]$Transcripts,
+    [switch]$DisableVad
 )
 
 $ErrorActionPreference = 'Stop'
@@ -238,7 +247,13 @@ if ($Model -eq 'premium') {
 # and restore the prior values so a re-run in the same shell stays clean.
 $BackendArgs = @(
     '-m', 'uvicorn', 'backend.main:app',
-    '--host', '127.0.0.1', '--port', '8000', '--reload'
+    '--host', '127.0.0.1', '--port', '8000', '--reload',
+    # Scope the reload watcher to backend/ (bare --reload watches the WHOLE cwd
+    # tree). The repo root holds .claude/worktrees/ with ~130 sibling worktrees,
+    # each a full checkout: an agent editing any .py in ANY of them restarted
+    # this backend. Safe to scope -- backend/ imports no other top-level package
+    # (shared/ is one JSON file, no Python).
+    '--reload-dir', 'backend'
 )
 # GOOGLE_CLOUD_PROJECT is used by the Vertex path (google-genai + ADC); harmless
 # on the Studio (premium) path, which uses GEMINI_API_KEY. Respect an already-set
@@ -255,11 +270,25 @@ $VertexProject = if ($env:GOOGLE_CLOUD_PROJECT) { $env:GOOGLE_CLOUD_PROJECT } el
 # CATALOGUE 401s and the app shows "Unable to load forms" -- a wider break than
 # the original WS-only symptom. Override per run: $env:VFF_DISABLE_AUTH='false'
 $DisableAuth = if ($env:VFF_DISABLE_AUTH) { $env:VFF_DISABLE_AUTH } else { 'true' }
+# DISABLE_GEMINI_VAD and SEND_TRANSCRIPT (bd polyglot-pdf-cgeh): scripts/
+# dev-local.sh sets both; this script omitted them, so a Windows dev-local
+# run got NATIVE VAD unconditionally (the -DisableVad switch below is the
+# only way to reach MANUAL mode) and NO audio transcription in the dev log
+# by default -- the decisive datapoint dev-local.sh's own comment calls out
+# for diagnosing "audio reaches Gemini but it stays silent". An explicit
+# $env:DISABLE_GEMINI_VAD / $env:SEND_TRANSCRIPT still wins over the
+# defaults below, matching the .sh script's ${VAR:-default} precedence.
+$VadMode = if ($env:DISABLE_GEMINI_VAD) { $env:DISABLE_GEMINI_VAD }
+    elseif ($DisableVad) { 'true' }
+    else { 'false' }
+$SendTranscript = if ($env:SEND_TRANSCRIPT) { $env:SEND_TRANSCRIPT } else { 'true' }
 $BackendEnvVars = @{
     'VERTEXAI'             = $VertexAi
     'USE_PREMIUM_MODEL'    = $UsePremium
     'GOOGLE_CLOUD_PROJECT' = $VertexProject
     'VFF_DISABLE_AUTH'     = $DisableAuth
+    'DISABLE_GEMINI_VAD'   = $VadMode
+    'SEND_TRANSCRIPT'      = $SendTranscript
     'PYTHONPATH'           = $RepoRoot
     'PYTHONUNBUFFERED'     = '1'
     # Empty string = "do not send" (Google's default stands).
@@ -282,8 +311,8 @@ foreach ($k in $BackendEnvVars.Keys) {
 Write-Host ""
 $TempLabel = if ($Temperature -gt 0) { "$Temperature" } else { 'default(1.0)' }
 $TxLabel = if ($Transcripts) { 'ON' } else { 'off' }
-Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth)..." -ForegroundColor Cyan
-Write-Host "  temperature=$TempLabel   transcripts=$TxLabel (LOCAL-DEV ONLY)" -ForegroundColor DarkGray
+Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth, DISABLE_GEMINI_VAD=$VadMode)..." -ForegroundColor Cyan
+Write-Host "  temperature=$TempLabel   transcripts=$TxLabel (LOCAL-DEV ONLY)   SEND_TRANSCRIPT=$SendTranscript" -ForegroundColor DarkGray
 
 try {
     $BackendProc = Start-Process -FilePath $VenvPython -ArgumentList $BackendArgs `

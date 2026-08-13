@@ -321,6 +321,63 @@ def test_malformed_field_entries_stay_in_the_denominator():
     assert v.ready is False
 
 
+def test_a_non_string_field_id_still_picks_up_its_own_lint_error(): # bd 36kqn
+    """A field whose id is a NON-STRING (e.g. int 123) must still pick up its
+    own findings by POSITION -- the old string-id-only bucket lookup
+    (`by_field.get(fid, ()) if isinstance(fid, str) else ()`) meant a
+    non-string id NEVER saw its own ERROR, so it counted reviewed while
+    carrying one."""
+    field = {"id": 123, "type": "text", "_review": {"status": "reviewed_correct"}}
+    err = _finding("field-unbacked", "fields[0] (id=123)", severity="ERROR")
+
+    v = publish_readiness({"fields": [field]}, [err])
+
+    assert v.counts.errors == 1
+    assert v.counts.reviewed == 0
+    assert v.blocking_ids == ["fields[0] (no id)"]
+    assert v.blocking_schema_errors == []
+
+
+def test_an_id_less_fields_own_error_is_not_double_reported(): # bd ukch0
+    """An id-less field's own field-anchored ERROR must appear ONCE -- named
+    positionally in blocking_ids -- never ALSO in blocking_schema_errors
+    under the stringified `(id=None)` path. Covers all three id shapes the
+    bead names: missing, non-string, and empty-string."""
+    for field, path in [
+        ({"type": "text", "_review": {"status": "reviewed_correct"}},
+         "fields[0] (id=None)"),
+        ({"id": 5, "type": "text", "_review": {"status": "reviewed_correct"}},
+         "fields[0] (id=5)"),
+        ({"id": "", "type": "text", "_review": {"status": "reviewed_correct"}},
+         "fields[0] (id=)"),
+    ]:
+        err = _finding("field-unbacked", path, severity="ERROR")
+        v = publish_readiness({"fields": [field]}, [err])
+        # Named exactly once, positionally, in blocking_ids -- never also in
+        # blocking_schema_errors.
+        assert v.blocking_ids == ["fields[0] (no id)"], (field, v.blocking_ids)
+        assert v.blocking_schema_errors == [], (field, v.blocking_schema_errors)
+        assert v.counts.errors == 1
+
+
+def test_duplicate_id_fields_do_not_cross_contaminate_findings(): # bd ele9z
+    """Two fields sharing one id string (a hand-edited/drift-corrupted kit --
+    nothing enforces id uniqueness) must NOT let a lint ERROR anchored to
+    ONE of them demote/block the OTHER: bucketing by POSITIONAL index (not
+    string id) means fields[0]'s ERROR affects only fields[0]."""
+    fields = [
+        _reviewed("dup"),
+        _reviewed("dup"),
+    ]
+    err = _finding("field-unbacked", "fields[0] (id=dup)", severity="ERROR")
+
+    v = publish_readiness({"fields": fields}, [err])
+
+    assert v.counts.errors == 1, "only fields[0] actually carries the ERROR"
+    assert v.counts.reviewed == 1, "fields[1] is untouched by fields[0]'s finding"
+    assert v.blocking_ids == ["dup"], "only the field that OWNS the error blocks"
+
+
 @pytest.mark.parametrize("reviewed,total,expected", [
     # Exact .5 ratios: Python's round() is BANKER'S rounding (ties to even) and
     # would give 12 / 62 / 38 here, while the client's Math.round ties UP. A
@@ -533,7 +590,8 @@ def test_predicate_parity_with_the_client(name, case):
         # else branch, so any literal (non-"@identity") hash raised KeyError
         # instead of asserting -- a trap laid directly in the path the
         # fixture's own header invites future authors down (Opus fresh-eyes
-        # round 7).
+        # round 7). Pinned by the "LITERAL ackSha1" case in
+        # reviewPredicateParity.json (bd polyglot-pdf-eh2i).
         raw_ack = review.pop("ackSha1")
         review["guidance_ack_sha1"] = identity if raw_ack == "@identity" else raw_ack
     findings = [

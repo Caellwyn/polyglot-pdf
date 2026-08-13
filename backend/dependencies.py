@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 from fastapi import Depends
 from typing import Any
@@ -76,6 +77,38 @@ def get_text_ai_pro(settings: Settings = Depends(get_settings)) -> ITextAI | Non
 # Settings miss the cache by construction.
 _TEXT_AI_CACHE: dict = {}
 _TEXT_AI_CACHE_MAX = 8
+_MISSING = object()  # sentinel: distinguishes "no entry" from a falsy/None value
+# bd polyglot-pdf-oqqxj / polyglot-pdf-ioe8d: get_form_filling_service fires
+# _cached_text_ai and _cached_text_ai_pro CONCURRENTLY via asyncio.gather(
+# asyncio.to_thread(...), asyncio.to_thread(...)), so _cache_get_or_build runs
+# on real worker threads, not merely interleaved coroutines. This dict is
+# guarded by a per-key IN-PROGRESS PLACEHOLDER pattern (see _BuildInProgress
+# and _cache_get_or_build below), not spellback_tts.py's simpler
+# double-checked `_client`/`_available_voices` lock: that pattern is safe
+# there only because those globals are never evicted once built, while
+# _TEXT_AI_CACHE supports eviction on overflow -- an eviction racing a
+# build's own dict bookkeeping is exactly the hazard the placeholder design
+# closes. Holding the lock across the (slow, ~3s) build() call itself would
+# also be correct but SERIALIZES unrelated keys (_cached_text_ai and
+# _cached_text_ai_pro build concurrently in production; FORM_COMPLETE_PRO_
+# VALIDATOR defaults ON), eating into the 9.4s->3.2s cold-start latency win
+# bd 4hnyq exists to protect -- so the lock here guards ONLY the dict
+# mutations (presence check, eviction, placeholder claim/publish), never the
+# build itself.
+_TEXT_AI_CACHE_LOCK = threading.Lock()
+
+
+class _BuildInProgress:
+    """Placeholder held in _TEXT_AI_CACHE while a build is running, so a
+    concurrent caller for the SAME key waits on the result instead of
+    starting a duplicate build (or observing a torn/missing entry)."""
+
+    __slots__ = ("event", "value", "error")
+
+    def __init__(self):
+        self.event = threading.Event()
+        self.value = None
+        self.error = None
 
 
 def _text_ai_cache_key(kind: str, settings: Settings) -> tuple:
@@ -94,11 +127,72 @@ def _text_ai_cache_key(kind: str, settings: Settings) -> tuple:
 
 def _cache_get_or_build(kind: str, settings: Settings, build):
     key = _text_ai_cache_key(kind, settings)
-    if key not in _TEXT_AI_CACHE:
-        if len(_TEXT_AI_CACHE) >= _TEXT_AI_CACHE_MAX:
-            _TEXT_AI_CACHE.clear()
-        _TEXT_AI_CACHE[key] = build(settings)
-    return _TEXT_AI_CACHE[key]
+
+    while True:
+        with _TEXT_AI_CACHE_LOCK:
+            entry = _TEXT_AI_CACHE.get(key, _MISSING)
+            if entry is _MISSING:
+                # We are the (first) builder for this key: claim it with a
+                # placeholder BEFORE releasing the lock, so no other thread
+                # starts a duplicate build for the same key.
+                if len(_TEXT_AI_CACHE) >= _TEXT_AI_CACHE_MAX:
+                    # Evict FINISHED entries only. Wiping an IN-PROGRESS
+                    # placeholder here would let a caller for that OTHER key
+                    # see _MISSING and start a duplicate build -- exactly the
+                    # race this cache exists to prevent -- while that
+                    # build's own waiters are still blocked on an Event no
+                    # longer reachable through the dict.
+                    for k in [
+                        k
+                        for k, v in _TEXT_AI_CACHE.items()
+                        if not isinstance(v, _BuildInProgress)
+                    ]:
+                        del _TEXT_AI_CACHE[k]
+                placeholder = _BuildInProgress()
+                _TEXT_AI_CACHE[key] = placeholder
+                is_builder = True
+            elif isinstance(entry, _BuildInProgress):
+                # Someone else is already building this exact key -- wait for
+                # them OUTSIDE the lock (below), not here.
+                placeholder = entry
+                is_builder = False
+            else:
+                # A real, finished value.
+                return entry
+
+        if is_builder:
+            try:
+                value = build(settings)
+            except BaseException as exc:  # noqa: BLE001 - must propagate to every waiter
+                with _TEXT_AI_CACHE_LOCK:
+                    # Only remove OUR OWN placeholder: an eviction may have
+                    # already cleared it (or replaced it with someone else's
+                    # retry), and removing THAT would be wrong.
+                    if _TEXT_AI_CACHE.get(key) is placeholder:
+                        del _TEXT_AI_CACHE[key]
+                placeholder.error = exc
+                placeholder.event.set()
+                raise
+            with _TEXT_AI_CACHE_LOCK:
+                # Only overwrite if OUR placeholder is still the live entry:
+                # a concurrent eviction may have already cleared it (or
+                # another builder already replaced it after a clear). Either
+                # way, publishing the value we just built is still correct
+                # for OUR callers (below) -- we just don't clobber a newer
+                # cache state with a stale one.
+                if _TEXT_AI_CACHE.get(key) is placeholder:
+                    _TEXT_AI_CACHE[key] = value
+            placeholder.value = value
+            placeholder.event.set()
+            return value
+
+        # Not the builder: wait for the in-progress build to finish, then
+        # loop back around to fetch (or re-attempt) rather than trusting a
+        # value that might have been captured before completion.
+        placeholder.event.wait()
+        if placeholder.error is not None:
+            raise placeholder.error
+        return placeholder.value
 
 
 def _cached_text_ai(settings: Settings) -> ITextAI:

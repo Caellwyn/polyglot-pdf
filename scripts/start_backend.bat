@@ -65,4 +65,9 @@ echo  Press Ctrl+C to stop
 echo ========================================
 echo.
 
-uvicorn backend.main:app --reload --port 8000
+REM --reload-dir backend scopes the reload watcher. A bare --reload watches the
+REM WHOLE cwd tree, and the repo root holds .claude/worktrees/ with ~130 sibling
+REM worktrees, each a full checkout -- so an agent editing any .py in ANY of them
+REM restarts this backend. Safe to scope: backend/ imports no other top-level
+REM package (shared/ is one JSON file, no Python).
+uvicorn backend.main:app --reload --reload-dir backend --port 8000

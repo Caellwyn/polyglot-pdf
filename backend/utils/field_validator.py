@@ -64,6 +64,11 @@ def _resolve_constraint(field: Dict[str, Any], top_key: str, nested_key: str) ->
     for nested callers (bd polyglot-pdf-0mv2; parallel to the format_preset miss
     fixed in bd polyglot-pdf-cn0e). `validation` may be a dict or a Pydantic
     model, so read it tolerantly. Returns None when the constraint is absent.
+
+    The TOP-LEVEL fallback also tries BOTH forms (bd polyglot-pdf-1dz2): a real
+    on-disk kit (form-kits/w7/schema.json's date_of_entry_us) carries the
+    constraint as a top-level SNAKE_CASE key with no `validation` block at all
+    -- trying only `top_key` (camelCase) there silently dropped the constraint.
     """
     validation = field.get("validation")
     if isinstance(validation, dict):
@@ -75,7 +80,11 @@ def _resolve_constraint(field: Dict[str, Any], top_key: str, nested_key: str) ->
         value = getattr(validation, nested_key, None)
         if value is not None:
             return value
-    return field.get(top_key)
+    for key in (top_key, nested_key):
+        value = field.get(key)
+        if value is not None:
+            return value
+    return None
 
 
 def _resolve_format_preset(field: Dict[str, Any]) -> Optional[str]:
@@ -189,9 +198,19 @@ def _validate_number(field: Dict[str, Any], value: Any, field_id: str, field_nam
         ))
         return errors  # If not a number, can't check min/max
 
-    # Check min constraint
+    # Check min constraint. min/max may carry a DATE-STRING bound when authored
+    # against a date-typed field (bd polyglot-pdf-ondn widened ValidationRules
+    # to accept that) -- on a NUMBER field that shape is an authoring mistake,
+    # not a value to compare against, so skip it rather than crash the whole
+    # validate_field_value call on a TypeError (`'<' not supported between
+    # instances of 'float' and 'str'`). A NUMERIC-looking string (e.g. "18")
+    # is coerced to float by ValidationRules' own field_validator before it
+    # ever reaches here when the caller goes through the real Pydantic model
+    # -- this isinstance guard is defense-in-depth for a raw-dict caller
+    # (tests, any future non-Pydantic path), which bypasses that coercion
+    # entirely and could still hand this function a bare numeric string.
     min_val = _resolve_constraint(field, "min", "min")
-    if min_val is not None:
+    if isinstance(min_val, (int, float)) and not isinstance(min_val, bool):
         if num_value < min_val:
             errors.append(ValidationError(
                 field_id, field_name, value, "min",
@@ -201,7 +220,7 @@ def _validate_number(field: Dict[str, Any], value: Any, field_id: str, field_nam
 
     # Check max constraint
     max_val = _resolve_constraint(field, "max", "max")
-    if max_val is not None:
+    if isinstance(max_val, (int, float)) and not isinstance(max_val, bool):
         if num_value > max_val:
             errors.append(ValidationError(
                 field_id, field_name, value, "max",
