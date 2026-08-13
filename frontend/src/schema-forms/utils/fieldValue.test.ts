@@ -651,5 +651,80 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
     it('returns an empty map when both sides are empty', () => {
       expect(reconcileFieldValues({} as any, {} as any)).toEqual({});
     });
+
+    // --- bd polyglot-pdf-ii6g: a kit declaring BOTH x and x[] as distinct fields --
+
+    it('does NOT merge x and x[] when the schema declares BOTH as real, distinct fields', () => {
+      // The exact regression: schemaKeyFor always preferred the bare key when
+      // both variants existed in knownFieldIds, so the bracketed field's
+      // entry was silently re-keyed onto the bare field, destroying one of
+      // the two answers.
+      const out = reconcileFieldValues(
+        { 'x[]': { value: ['a'], lastModified: 100 } } as any,
+        {} as any,
+        ['x', 'x[]']
+      );
+      expect(Object.keys(out)).toEqual(['x[]']);
+      expect(out['x[]'].value).toEqual(['a']);
+    });
+
+    it('keeps BOTH answers live when both x and x[] carry real values', () => {
+      const out = reconcileFieldValues(
+        {
+          'x': { value: 'scalar-answer', lastModified: 100 },
+          'x[]': { value: ['group-answer'], lastModified: 100 },
+        } as any,
+        {} as any,
+        ['x', 'x[]']
+      );
+      expect(out['x'].value).toBe('scalar-answer');
+      expect(out['x[]'].value).toEqual(['group-answer']);
+    });
+
+    it('each variant still resolves cross-side conflicts independently when both are real fields', () => {
+      const out = reconcileFieldValues(
+        {
+          'x': { value: 'persisted-x', lastModified: 100 },
+          'x[]': { value: ['persisted-bracket'], lastModified: 100 },
+        } as any,
+        {
+          'x': { value: 'memory-x', lastModified: 200 },
+          'x[]': { value: ['memory-bracket'], lastModified: 50 },
+        } as any,
+        ['x', 'x[]']
+      );
+      // x: memory is newer (200 > 100) -> memory wins.
+      expect(out['x'].value).toBe('memory-x');
+      // x[]: persisted is newer (100 > 50) -> persisted wins.
+      expect(out['x[]'].value).toEqual(['persisted-bracket']);
+    });
+
+    it('a single-variant kit (the ordinary case) is unaffected by the both-real-fields check', () => {
+      // Only 'p1_grp[]' is a real schema id -- 'p1_grp' is NOT -- so the
+      // normal alias-collapse behaviour must still apply, unchanged.
+      const out = reconcileFieldValues(
+        { 'p1_grp': { value: ['old'], lastModified: 100 } } as any,
+        { 'p1_grp[]': { value: ['new'], lastModified: 200 } } as any,
+        ['p1_grp[]']
+      );
+      expect(Object.keys(out)).toEqual(['p1_grp[]']);
+      expect(out['p1_grp[]'].value).toEqual(['new']);
+    });
+
+    it('the riskiest split shape: ONE variant per side, both real fields -- neither is lost or cross-contaminated', () => {
+      // The adversarial probe of bothAreRealFields: persisted holds ONLY x,
+      // in-memory holds ONLY x[] -- if the per-key reconciliation ever fell
+      // back to alias-aware reads (readFieldEntryWithAlias) instead of exact
+      // per-key lookups, this shape would resolve as if it were a single
+      // aliased field and merge/drop one side.
+      const out = reconcileFieldValues(
+        { 'x': { value: 'persisted-only-x', lastModified: 100 } } as any,
+        { 'x[]': { value: ['memory-only-bracket'], lastModified: 100 } } as any,
+        ['x', 'x[]']
+      );
+      expect(out['x'].value).toBe('persisted-only-x');
+      expect(out['x[]'].value).toEqual(['memory-only-bracket']);
+      expect(Object.keys(out).sort()).toEqual(['x', 'x[]']);
+    });
   });
 });

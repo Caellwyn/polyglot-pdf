@@ -125,6 +125,17 @@ export function reconcileFieldValues(
     if (schemaIds.has(bracket)) return bracket;
     return undefined;
   };
+  // bd polyglot-pdf-ii6g: the whole alias-collapse design assumes `x` and
+  // `x[]` are two SPELLINGS of one field. When the schema declares BOTH as
+  // real, distinct fields (a plausible LLM-extraction output -- the bracket
+  // is exactly the character bd 5k52 documents the model dropping/re-adding,
+  // so a kit that emits both is not far-fetched), that assumption is wrong:
+  // collapsing them into one logical field silently discards whichever
+  // variant `schemaKeyFor` did not pick, destroying a real answer. Detect
+  // this per base and skip the collapse entirely for that pair -- each
+  // variant is then reconciled on its OWN, same as any other un-aliased key.
+  const bothAreRealFields = (base: string): boolean =>
+    !!schemaIds && schemaIds.has(base) && schemaIds.has(base + '[]');
 
   // Group both maps by logical field so an alias pair resolves as ONE decision.
   const baseKeys = new Set<string>();
@@ -135,6 +146,23 @@ export function reconcileFieldValues(
 
   for (const base of baseKeys) {
     const bracket = base + '[]';
+
+    if (bothAreRealFields(base)) {
+      // Two distinct schema fields -- reconcile each independently, exactly
+      // as an ordinary un-aliased key would be (last-write-wins via the same
+      // shared helpers, never merged with its sibling).
+      for (const key of [base, bracket]) {
+        const p = persisted[key];
+        const m = inMemory[key];
+        if (p === undefined && m === undefined) continue;
+        if (p === undefined) { out[key] = m!; continue; }
+        if (m === undefined) { out[key] = p; continue; }
+        const pWins = firstWins(p, m, 'second');
+        out[key] = mergeEntries(pWins ? p : m, pWins ? m : p) as FieldValue;
+      }
+      continue;
+    }
+
     // The key each side actually used for this field. A side that (illegally)
     // holds both variants is read through the established alias precedence.
     const persistedKey = persisted[base] !== undefined ? base
