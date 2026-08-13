@@ -366,33 +366,80 @@ def _positional_name(index: int) -> str:
     return f"fields[{index}] (no id)"
 
 
-def _bucket_by_field(
-    findings: Optional[Iterable[LintFinding]],
-) -> Dict[str, List[LintFinding]]:
-    """Group findings by the field they anchor to; field-less ones are skipped
-    (no field's review can cover a schema-level finding).
+_FIELD_INDEX_RE = re.compile(r"^fields\[(\d+)\]")
+_FIELD_ID_ANCHOR_RE = re.compile(r"^fields(?:\[\d+\])? \(id=(.*?)\)")
 
-    A bucket keyed on an id that names no REAL field (the `to-review-pending`
-    ERROR carries `sections[i] (id=sec_to_review_x)`, a section id) is harmless
-    here: the only reader looks buckets up by a real field's own id, so such a
-    bucket is never consulted. An earlier draft of this bead filtered them out
-    anyway, which read as the load-bearing fix but was unreachable -- deleting
-    the filter left every test green, and no test could be written to pin it
-    (Opus fresh-eyes). What actually makes a section-anchored ERROR block is
-    _schema_level_errors below, which does its own `fid in field_ids` test.
+
+def _field_index_of(path: str, id_to_index: Dict[str, int]) -> Optional[int]:
+    """The POSITIONAL field index a finding path anchors to, or None.
+
+    Most field-anchored findings are emitted as `fields[{i}] (id=...)`
+    (schema_lint.py) -- the index `i` is always present and unambiguous,
+    unlike the id: it survives a MISSING id (`(id=None)`), a NON-STRING id
+    (the path still renders `(id=123)`, a valid index either way), and a
+    DUPLICATE id shared by two fields (bd polyglot-pdf-ele9z: two fields can
+    legally -- if a kit is hand-edited or drift-corrupted -- share one id
+    string, and nothing in schema_lint enforces uniqueness; bucketing by
+    string id alone would cross-contaminate both fields' findings).
+
+    THREE emitters anchor WITHOUT a bracketed index, all `fields (id=X)...`
+    shaped: guidance-identity-stale (schema_lint.py, deliberately -- its own
+    comment: "field_id_of() ignores the trailing segment, so the editor's
+    click-to-focus still resolves this path"), show-if-cycle (schema_lint.py,
+    same shape), and enrich_instructions.py's instructions-rectified /
+    instructions-ungrounded-dropped guidance flags (re-emitted into findings
+    by _emit_guidance_flags). All three are WARNING severity today, never
+    ERROR -- for that shape, fall back to resolving the id through
+    `id_to_index` (built from the schema's OWN string ids, each field's own
+    id -> its own index) -- this keeps their existing behavior for the
+    ordinary (unique-id) case; a duplicate id under this specific unindexed
+    shape still resolves to whichever field the dict last saw, a narrower
+    and pre-existing ambiguity this fix does not newly introduce (unlike the
+    indexed shapes, which never had this problem). If a FUTURE rule ever
+    emits an ERROR on this unindexed shape, a duplicate id could make that
+    ERROR resolve to the wrong field's index and silently vanish from BOTH
+    blocking_ids and blocking_schema_errors (verified unreachable today by
+    the current severity set; re-check this if that set ever changes).
     """
-    out: Dict[str, List[LintFinding]] = {}
+    m = _FIELD_INDEX_RE.match(path or "")
+    if m:
+        return int(m.group(1))
+    m = _FIELD_ID_ANCHOR_RE.match(path or "")
+    if m:
+        fid = m.group(1)
+        if fid and fid != "None":
+            return id_to_index.get(fid)
+    return None
+
+
+def _bucket_by_field_index(
+    findings: Optional[Iterable[LintFinding]],
+    id_to_index: Dict[str, int],
+) -> Dict[int, List[LintFinding]]:
+    """Group findings by the POSITIONAL field index they anchor to (bd
+    polyglot-pdf-36kqn / ukch0 / ele9z); index-less (schema/section-anchored)
+    findings are skipped -- no field's review can cover those.
+
+    Bucketing by index rather than string id fixes three related bugs in one
+    move: a NON-STRING id no longer loses its own findings (36kqn -- the old
+    `by_field.get(fid, ()) if isinstance(fid, str) else ()` guard meant an
+    int/None id NEVER picked up its own ERROR), an id-less field's own ERROR
+    is unambiguously its own rather than being reclassified as schema-level
+    (ukch0), and two fields sharing one id string no longer cross-contaminate
+    each other's findings for any INDEXED finding (ele9z).
+    """
+    out: Dict[int, List[LintFinding]] = {}
     for f in findings or ():
-        fid = field_id_of(f.path)
-        if not fid:
+        idx = _field_index_of(f.path, id_to_index)
+        if idx is None:
             continue
-        out.setdefault(fid, []).append(f)
+        out.setdefault(idx, []).append(f)
     return out
 
 
 def _schema_level_errors(
     findings: Optional[Iterable[LintFinding]],
-    field_ids: set,
+    id_to_index: Dict[str, int],
 ) -> List[str]:
     """The ERROR findings no field row can carry, as `<rule> at <path>`.
 
@@ -401,24 +448,22 @@ def _schema_level_errors(
     field-anchored ones. Ignoring them let a fully-reviewed kit stamp
     ready=True and then 409 at publish (bd polyglot-pdf-dm3c8).
 
-    "No field row can carry it" means the path's id token does not resolve to a
-    real entry in fields[]. Three shapes reach that:
-      - no id token at all (`widget '<name>'`);
-      - a token naming a SECTION (`sections[i] (id=sec_to_review_x)`);
-      - the literal token "None", which is what `fields[i] (id={f.get('id')})`
-        renders for a field carrying no id. Such a field genuinely has no
-        clickable row, so landing here is right -- but it is ALSO named
-        positionally in blocking_ids, so a caller rendering both lists shows
-        one defect twice (bd polyglot-pdf-7ehws; reporting quality, not a gate
-        error -- `ready` is False either way).
+    "No field row can carry it" now means the path resolves to NO field
+    position at all (see _field_index_of) -- the only two shapes that reach
+    here are a section-anchored ERROR (`sections[i] (id=sec_to_review_x)`,
+    the `to-review-pending` rule) and a dump-only ERROR with no schema anchor
+    at all (`widget '<name>'`, `dump-widget-multiclaim`). A field WITH a
+    resolvable anchor -- including one with a missing/non-string/duplicate id
+    -- is never double-reported here (bd polyglot-pdf-ukch0): it is that
+    field's own finding, named once in blocking_ids via the field-index
+    bucket, never a second time here under a stringified `(id=None)` path.
     """
     out: List[str] = []
     for f in findings or ():
         if f.severity != SEVERITY_ERROR:
             continue
-        fid = field_id_of(f.path)
-        if fid and fid in field_ids:
-            continue  # a real field owns it; the review counts already saw it
+        if _field_index_of(f.path, id_to_index) is not None:
+            continue  # a real field (by POSITION) owns it, named in blocking_ids
         out.append(f"{f.rule} at {f.path}")
     return out
 
@@ -455,12 +500,20 @@ def publish_readiness(
     # typed as an Iterable a generator could satisfy -- which the second pass
     # would find already exhausted.
     findings = list(lint_findings) if lint_findings is not None else []
-    real_field_ids = {
-        f.get("id") for f in fields
+    # Each STRING id's own position -- the fallback _field_index_of uses for
+    # the one unindexed-path rule (guidance-identity-stale). Last-write-wins
+    # on a duplicate id here is a narrow, pre-existing ambiguity for that one
+    # rule only; every indexed-path rule is unaffected (resolved by index).
+    id_to_index = {
+        f.get("id"): i for i, f in enumerate(fields)
         if isinstance(f, dict) and isinstance(f.get("id"), str)
     }
-    by_field = _bucket_by_field(findings)
-    schema_errors = _schema_level_errors(findings, real_field_ids)
+    # Bucketed by POSITIONAL index (bd polyglot-pdf-36kqn/ukch0/ele9z), not by
+    # string id: an id can be missing, non-string, or duplicated across two
+    # fields, and none of those may cause a field to lose (or steal) its own
+    # findings. See _bucket_by_field_index / _schema_level_errors above.
+    by_field_index = _bucket_by_field_index(findings, id_to_index)
+    schema_errors = _schema_level_errors(findings, id_to_index)
     reviewed = 0
     errors = 0
     blocking: List[str] = []
@@ -476,7 +529,7 @@ def publish_readiness(
             continue
         total += 1
         fid = field.get("id")
-        own = by_field.get(fid, ()) if isinstance(fid, str) else ()
+        own = by_field_index.get(index, ())
         if any(f.severity == SEVERITY_ERROR for f in own):
             errors += 1
         if is_counted_reviewed(field, own):

@@ -795,7 +795,11 @@ describe('the strip refusal clears on a kit switch (sprint-18 C1)', () => {
     await passGate();
     await openKit('draft-kit');
     await screen.findByTestId('pdf');
-    fireEvent.click(screen.getAllByText('Mark complete')[0]);
+    // Editor tier (the suite's default session role), so the control is
+    // 'Submit for review' now (bd polyglot-pdf-hqztg). The property under
+    // test -- a refusal is PER-FORM and clears on a kit switch -- is
+    // unchanged, and a submit can be refused for exactly the same reasons.
+    fireEvent.click(screen.getAllByText('Submit for review')[0]);
     await screen.findByTestId('strip-refusal');
     await openKit('second-kit');
     await waitFor(() =>

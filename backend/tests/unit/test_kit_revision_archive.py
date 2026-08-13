@@ -633,10 +633,13 @@ def test_revert_to_draft_route_archives_the_published_revision(route_client):
     published = _schema("a", "b", edition="12/2024")
     _make_kit(root, "w7", published, {"status": "complete"})
 
+    # AUTHOR token: reopening a LIVE kit is the author's unlock (bd
+    # polyglot-pdf-hqztg). What this test pins -- that the revert archives the
+    # published revision -- is unchanged by who performs it.
     resp = client.post(
         "/api/editor/kits/w7/status",
         json={"status": "draft"},
-        headers={"X-Editor-Token": "edit-tok"},
+        headers={"X-Editor-Token": "auth-tok"},
     )
 
     assert resp.status_code == 200, resp.text

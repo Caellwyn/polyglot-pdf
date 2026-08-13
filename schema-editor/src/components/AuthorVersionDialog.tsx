@@ -128,7 +128,11 @@ export function AuthorVersionDialog({
             onClick={submit}
             disabled={!valid || busy}
           >
-            {busy ? 'Publishing...' : 'Publish'}
+            {/* 'Save version & publish' rather than 'Publish': the card
+                button behind this dialog now also says Publish (bd
+                polyglot-pdf-hqztg), and two identical labels on screen at
+                once is ambiguous to a person, not only to a test query. */}
+            {busy ? 'Publishing...' : 'Save version & publish'}
           </button>
         </div>
       </div>

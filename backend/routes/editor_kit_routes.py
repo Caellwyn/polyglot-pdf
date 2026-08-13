@@ -228,7 +228,7 @@ class EditorKitInfo(BaseModel):
     id: str
     label: str
     description: Optional[str] = None
-    status: str  # draft | complete | unpublished | unknown
+    status: str  # draft | submitted | complete | unpublished | unknown
     hasSchema: bool
     hasPdf: bool
     schemaFile: str
@@ -236,6 +236,11 @@ class EditorKitInfo(BaseModel):
     # Absent when the kit has never been saved since C4 shipped (or its stamp
     # is unreadable) -- the card then shows the verify hint, not a percentage.
     readiness: Optional[ReadinessStamp] = None
+    # Who holds this kit for editing, if anyone (bd polyglot-pdf-hqztg). A ROLE,
+    # not a person -- the editor API has only two shared tokens. The catalogue
+    # cannot show a lock it cannot see, so this rides the listing rather than
+    # forcing a per-kit probe.
+    heldBy: Optional[str] = None
 
 
 class EditorKitListResponse(BaseModel):
@@ -247,7 +252,10 @@ class KitStatusBody(BaseModel):
     # write-locked so its bytes stay exactly what its confirmation records were
     # confirmed against (bd polyglot-pdf-6dz0). Omitting it here would 422 the
     # unpublish request before the route ever ran.
-    status: Literal["draft", "complete", "unpublished"]
+    # "submitted" omitted here would 422 the request before the route's own
+    # transition rules ever ran -- the exact trap bd polyglot-pdf-6dz0 hit when
+    # "unpublished" was added to the status set but not to this Literal.
+    status: Literal["draft", "submitted", "complete", "unpublished"]
     # Cross-kit supersede: when publishing a kit while ANOTHER live kit serves
     # the same form, name it here and it is unpublished in the same request, so
     # the catalogue never shows two entries for one form. Same-kit republish
@@ -291,6 +299,19 @@ class KitDeleteResponse(BaseModel):
     # What was actually removed, counted from the store rather than assumed --
     # a delete that reports 0 is worth noticing.
     objectsRemoved: int
+
+
+class KitLockResponse(BaseModel):
+    """Who holds a kit for editing (bd polyglot-pdf-hqztg)."""
+
+    ok: bool
+    kitId: str
+    # "editor" | "author" | null. A ROLE, not a person -- the editor API has
+    # only two shared tokens (bd polyglot-pdf-ijntk lifts that).
+    heldBy: Optional[str] = None
+    # True when this call took the lock from someone else, so the UI can say so
+    # rather than silently succeeding.
+    preempted: bool = False
 
 
 class KitLabelBody(BaseModel):
@@ -457,14 +478,153 @@ def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
 #                  confirmation records were confirmed against (bd
 #                  polyglot-pdf-w3zw), so it must never become editable again;
 #                  it returns to complete only through the full publish gate.
-_KIT_STATUSES = ("draft", "complete", "unpublished")
+#   submitted   -- FINISHED BY AN EDITOR, awaiting an author's review. Not
+#                  deployable (deploy gates on "complete"), and WRITE-LOCKED:
+#                  if an editor could keep editing after submitting, the author
+#                  would review one thing and approve another. An editor
+#                  reopens it deliberately via Revert to draft; an author
+#                  publishes it (bd polyglot-pdf-hqztg -- editors are
+#                  subcontractors, so releasing is the accountable party's act).
+_KIT_STATUSES = ("draft", "submitted", "complete", "unpublished")
 
 # Statuses whose schema may NOT be rewritten. The distinction that matters is
 # write-locked vs editable, NOT "is it complete" -- every write gate asks this
 # rather than comparing to "complete" directly, so adding a fourth status
 # cannot silently reopen a lock (the two-value checks were the trap: an
 # unpublished kit coerced to "unknown" and fell through every one of them).
-_WRITE_LOCKED_STATUSES = ("complete", "unpublished")
+_WRITE_LOCKED_STATUSES = ("submitted", "complete", "unpublished")
+
+# Statuses meaning THIS KIT HAS BEEN SERVED TO CLIENTS. Deliberately NOT the
+# same tuple as the write-lock, though they overlap: write-locked answers "may
+# its bytes change?", while this answers "do confirmation records name it?".
+# `submitted` is write-locked but was NEVER live -- reusing the write-lock
+# tuple as a proxy made a submitted kit look published, so an author fixing a
+# typo in its version was refused with a message about confirmation records
+# that do not exist (Opus fresh-eyes round 4, reproduced). That is the exact
+# bug bd polyglot-pdf-xzw5 fixed for drafts, reintroduced one status over by
+# sharing a constant between two different questions.
+_PUBLISHED_STATUSES = ("complete", "unpublished")
+
+
+# --- the editing lock (bd polyglot-pdf-hqztg) --------------------------------
+#
+# ROLE-SCOPED, not user-scoped, and that is a known limitation rather than a
+# design preference: the editor API authenticates with two SHARED tokens, so
+# the server can record "an editor holds this" but never WHICH editor. Two
+# subcontractors sharing one token still collide with each other exactly as
+# they do today -- no better, no worse. bd polyglot-pdf-ijntk adds per-user
+# identity and re-scopes this lock to a person.
+#
+# The rule the maintainer asked for: an AUTHOR can always take a lock back
+# from an editor, and never the reverse. Preemption also IS the stale-lock
+# release -- there is no timer, because a clock that steals a lock from
+# someone actively working is worse than a human deciding to take it.
+_LOCK_KEY = "editing_lock"
+
+
+def _lock_after_transition(
+    meta: Optional[dict], current: str, target: str, actor_role: str
+) -> Optional[dict]:
+    """The `editing_lock` value a kit should carry AFTER a status transition.
+
+    A transition normally ends the editing turn -- handed up for review, handed
+    back for changes, or published and write-locked -- so the lock is released
+    and the next person can take it. Keeping it bricked the send-back flow: the
+    editor 409'd on every action with no control to self-rescue (round 8).
+
+    THE EXCEPTION: reopening a LIVE kit (`complete|unpublished -> draft`) does
+    not end an editing turn, it BEGINS one. The author clicks "Revert to draft
+    to edit it" precisely in order to edit, so dropping their lock there let an
+    editor take it and write mid-edit -- a lost-update window against the
+    accountable party the lock exists to protect (round 9, reproduced).
+
+    The SOURCE is what separates the two, not the target: `submitted -> draft`
+    is also a `-> draft`, but it is the send-back, which hands the kit to the
+    editor and must release. Keying on the target alone recreated the round-8
+    lockout -- caught because that round's test still asserted the send-back
+    releases. The holder also keeps it only when THEY are acting; anyone
+    else's stale lock is cleared regardless.
+    """
+    holder = _lock_holder(meta)
+    if holder is None:
+        return None
+    reopening_a_live_kit = (
+        target == "draft" and current in _PUBLISHED_STATUSES
+    )
+    if reopening_a_live_kit and holder == actor_role:
+        return {"role": holder}
+    return None
+
+
+def _refuse_if_metadata_unreadable(
+    meta: Optional[dict], files: set[str], kit_id: str, action: str
+) -> None:
+    """Refuse a read-merge-write when metadata.json is present but UNPARSEABLE.
+
+    load_metadata degrades a parse failure to None (documented on the store
+    ABC), so `meta is None` means EITHER "no metadata yet" OR "metadata exists
+    and is corrupt". Merging into `{}` and writing is correct for the first and
+    catastrophic for the second: it REPLACES the file, taking `status` with it
+    -- and deploy-all.sh greps for `"status": "complete"`, so a live form
+    silently drops out of the manifest and stops being served (Opus fresh-eyes
+    round 5, reproduced: a take-lock returned 200 while leaving metadata.json
+    as exactly {"editing_lock": {...}}).
+
+    The filename set disambiguates, which is why _load_meta_or_404 returns it.
+    _stamp_readiness already does this; this is the same rule, shared rather
+    than copied a third time.
+    """
+    if meta is not None or _METADATA_FILE not in files:
+        return
+    _log.warning("editor_metadata_unreadable_write_refused",
+                 kit_id=kit_id, action=action)
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"This form's metadata.json cannot be read, so {action} would "
+            f"overwrite it and lose the form's status. Fix the file first."
+        ),
+    )
+
+
+def _lock_holder(meta: Optional[dict]) -> Optional[str]:
+    """The role currently holding this kit for editing, or None."""
+    lock = (meta or {}).get(_LOCK_KEY)
+    holder = lock.get("role") if isinstance(lock, dict) else None
+    return holder if holder in ("editor", "author") else None
+
+
+def _lock_refusal(holder: str, role: str) -> Optional[str]:
+    """Why `role` may not take a kit held by `holder` -- None when it may.
+
+    An author outranks an editor, so only one pairing is refused. Same-role
+    contention cannot be resolved at all with shared tokens (both callers look
+    identical to the server), so it is allowed rather than pretended about:
+    refusing would block a second author on a lock the first may have
+    abandoned, with no way to tell them apart.
+    """
+    if holder == "author" and role != "author":
+        return (
+            "An author is working on this form right now, so it is locked. "
+            "They will release it when they are done."
+        )
+    return None
+
+
+def _require_edit_lock(meta: Optional[dict], role: str) -> None:
+    """Refuse a schema write when someone else holds this kit for editing.
+
+    One helper rather than five copies: bd polyglot-pdf-6dz0 and 6x1j both shipped
+    a guard applied to ONE of N sibling routes, and both times the other N-1 were
+    found by a reviewer rather than by me. The enumeration that found this gap is
+    reproducible -- every route containing put_schema must call this.
+    """
+    holder = _lock_holder(meta)
+    if not holder:
+        return
+    refusal = _lock_refusal(holder, role)
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
 
 
 def _normalize_author_version(value: object) -> str:
@@ -497,6 +657,13 @@ def _is_write_locked(meta: Optional[dict]) -> bool:
 
 def _lock_reason(meta: Optional[dict]) -> str:
     """The 409 detail for a write refused by the lock, naming the real state."""
+    if _status_of(meta) == "submitted":
+        return (
+            "This form is submitted for review, so it is frozen while an "
+            "author checks it -- otherwise they would review one version and "
+            "publish another. Revert it to draft if you need to keep working "
+            "on it."
+        )
     if _status_of(meta) == "unpublished":
         return (
             "This form is unpublished (a superseded revision). Its schema is "
@@ -864,6 +1031,7 @@ async def list_editor_kits(
                 label=label if isinstance(label, str) and label else kit_id,
                 description=description if isinstance(description, str) else None,
                 status=_status_of(meta),
+                heldBy=_lock_holder(meta),
                 hasSchema=schema_file in names,
                 hasPdf=pdf_file in names,
                 schemaFile=schema_file,
@@ -1090,6 +1258,12 @@ async def save_editor_kit_schema(
     # store), so work-in-progress never reaches users.
     if _is_write_locked(meta):
         raise HTTPException(status_code=409, detail=_lock_reason(meta))
+    # The EDITING lock, one layer over the status write-lock: an author who
+    # took this kit back is mid-review, and a save from under them would mean
+    # they approve something they never saw (bd polyglot-pdf-hqztg). This is
+    # also where an editor DISCOVERS they were preempted -- there is no channel
+    # from server to editor, so the next save is the notification.
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         await store.put_schema(kit_id, schema, schema_file)
@@ -1246,6 +1420,7 @@ async def repair_editor_kit(
             status_code=409,
             detail=f"{_lock_reason(meta)} (Repair rewrites the schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1327,6 +1502,7 @@ async def translate_editor_kit_options(
             detail=f"{_lock_reason(meta)} (The translation bake rewrites the "
                    "schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1428,6 +1604,7 @@ async def derive_editor_kit_divisions(
             detail=f"{_lock_reason(meta)} (Regenerating divisions rewrites the "
                    "schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, pdf_file = _resolve_meta_names(meta)
     if pdf_file not in files:
         raise HTTPException(
@@ -1636,6 +1813,7 @@ async def _regenerate_guidance_locked(
             detail=f"{_lock_reason(meta)} (Regenerating guidance rewrites the "
                    "schema.)",
         )
+    _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1958,8 +2136,13 @@ async def set_editor_kit_status(
     body: KitStatusBody,
     role: Annotated[str, Depends(require_editor_role)],
 ) -> KitStatusResponse:
-    """Set a kit's status (draft | complete | unpublished), preserving other
-    metadata keys.
+    """Set a kit's status (draft | submitted | complete | unpublished),
+    preserving other metadata keys.
+
+    THE ROLE DEPENDS ON THE TRANSITION, not the route (bd polyglot-pdf-hqztg).
+    An editor submits for review; an author publishes. Editors are
+    subcontractors, so marking a form ready must not release it -- and an
+    editor cannot reach back into a live form at all.
 
     `complete` is the PUBLISH gate: the deploy ships only complete kits to the
     voice app, so that transition requires a schema that exists AND validates
@@ -2001,6 +2184,18 @@ async def set_editor_kit_status(
 
     current_status = _status_of(meta)
 
+    # THE EDITING LOCK GUARDS THIS WHOLE ROUTE, hoisted here so it DOMINATES
+    # every write below rather than sitting between them (bd polyglot-pdf-hqztg,
+    # Opus fresh-eyes). This route has TWO put_schema calls -- the rejection
+    # clear and the author-version persistence -- and the guard used to sit
+    # after the first. An editor reopening their own submission therefore
+    # rewrote the schema while an AUTHOR held the lock, which is exactly the
+    # "they approve something they never saw" case the lock exists to prevent,
+    # and worse: it also flipped the kit out of write-locked `submitted`, so
+    # every later editor write was permitted too. Reproduced end to end before
+    # this fix. It also now covers the archive hook below.
+    _require_edit_lock(meta, role)
+
     # An UNPUBLISHED kit may never walk back to draft (bd polyglot-pdf-6dz0).
     # Draft is editable, and this kit's schema is what earlier confirmation
     # records were confirmed against -- letting it become editable would make
@@ -2016,6 +2211,65 @@ async def set_editor_kit_status(
                    "again to put it back in service; that archives the retired "
                    "copy first.",
         )
+
+    # --- the role split, PER TRANSITION (bd polyglot-pdf-hqztg) -------------
+    #
+    # One route carries several transitions, so the role check belongs HERE
+    # rather than on the route -- the s18 plan's insight, kept; only the
+    # mapping changed (maintainer decision 2026-08-11, which amended epic
+    # polyglot-pdf-4qul's rubric criterion 3):
+    #
+    #   draft -> submitted     editor-allowed  ("I believe this is ready")
+    #   submitted -> complete  AUTHOR-ONLY     (releasing is accountable)
+    #   * -> draft             editor-allowed  (reopening one's own work)
+    #   complete -> anything   author-only     (already covered below)
+    #
+    # Editors are subcontractors. Marking a form ready must not release it.
+    if body.status == "complete" and role != "author":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Publishing is an author action. Submit this form for review "
+                "instead -- an author checks it and publishes it."
+            ),
+        )
+
+    # An editor may not reach back into a LIVE form AT ALL -- neither to reopen
+    # it nor to retire it. Both destinations, not just draft: unpublishing takes
+    # a form away from every client, and it is a ONE-WAY door for an editor
+    # (revert-to-draft then 409s under the 6dz0 immutability rule, and
+    # republishing 403s under the rule above), so a subcontractor could pull a
+    # live form and be unable to restore it. My first version checked only
+    # `draft` while the comment claimed "complete -> anything" was covered --
+    # a false claim a later reader would trust (Opus fresh-eyes round 2,
+    # reproduced end to end). Reverting one's own SUBMITTED work stays allowed.
+    if (
+        body.status in ("draft", "unpublished")
+        and current_status in ("complete", "unpublished")
+        and role != "author"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This form is published, so only an author can reopen or retire "
+                "it. Ask an author."
+            ),
+        )
+
+    # Submitting is only meaningful from draft: a submitted kit is already
+    # awaiting review, and a published one would be a downgrade nobody asked
+    # for (reopen it deliberately instead).
+    if body.status == "submitted" and current_status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only a draft can be submitted for review (this one is "
+                   f"{current_status}).",
+        )
+
+    # Publishing goes through review: an author publishes what an editor
+    # submitted, or their own draft. There is no path from a RETIRED kit
+    # straight to complete that skips the gate -- that stays the republish
+    # route, which runs every check (bd polyglot-pdf-6dz0/xzw5).
 
     # Unpublishing is only meaningful for a kit that is actually live.
     if body.status == "unpublished" and current_status != "complete":
@@ -2063,7 +2317,56 @@ async def set_editor_kit_status(
                        "nothing to retire.",
             )
 
-    if body.status == "complete":
+
+    # REJECTION clears the author version (maintainer decision 2026-08-11). A
+    # submitted kit was never live, so no confirmation record names its version
+    # -- there is nothing to protect, and the next publish asks for one again.
+    #
+    # Scoped to submitted -> draft, NOT to every revert: reopening a PUBLISHED
+    # kit must KEEP its version, because records DO name that one. Clearing it
+    # there would let the next publish invent a different marker for a revision
+    # clients already confirmed against, which is precisely the re-pointing the
+    # xzw5 immutability lock exists to prevent. This keeps the lock's meaning
+    # exact -- it protects PUBLISHED versions only.
+    version_cleared = False
+    if body.status == "draft" and current_status == "submitted":
+        try:
+            schema = await store.load_schema(kit_id, schema_file)
+        except (FormKitNotFound, FormKitStoreError):
+            schema = None
+        meta_block = (schema or {}).get("form_metadata")
+        if isinstance(meta_block, dict) and meta_block.get("author_version"):
+            meta_block = {k: v for k, v in meta_block.items() if k != "author_version"}
+            schema = {**schema, "form_metadata": meta_block}
+            try:
+                await store.put_schema(kit_id, schema, schema_file)
+                version_cleared = True
+            except FormKitStoreError as exc:
+                # Best-effort, like the archive hook above: failing to clear a
+                # version must not strand a kit in submitted, which would leave
+                # the editor unable to reopen their own work.
+                _log.warning("editor_version_clear_failed", kit_id=kit_id, error=str(exc))
+    if version_cleared:
+        _log.info("editor_rejected_version_cleared", kit_id=kit_id, role=role)
+
+    # STRUCTURAL GATES apply to BOTH promotions. Submitting used to run
+    # NOTHING: an editor could freeze a kit around a garbage, PDF-less,
+    # non-v2 schema, filling an author's review queue with kits that could
+    # never publish -- and `submitted` is write-locked, so the author had to
+    # manually reject each one. My own UI comment claimed "an editor's
+    # SUBMIT runs the same readiness/lint gate"; it did not (Opus fresh-eyes
+    # round 4, reproduced live). Cheap refusals belong at the point the work
+    # leaves the editor's hands.
+    if body.status in ("submitted", "complete"):
+        # These gates now front BOTH promotions, so the refusals must name the
+        # action the caller actually attempted. Telling an editor a form
+        # "cannot be marked complete" named an action their tier is 403'd from
+        # -- and the editor is this gate's main audience, since the strip
+        # deliberately surfaces submit refusals to them (round 9).
+        action = ("submitted for review" if body.status == "submitted"
+                  else "marked complete")
+        gerund = ("submitting it for review" if body.status == "submitted"
+                  else "marking it complete")
         # The voice app serves BOTH the schema and the PDF of a complete kit;
         # the deploy manifest falls back to a conventional pdf name when none
         # exists, so promoting a PDF-less kit would ship a form whose PDF read
@@ -2071,8 +2374,8 @@ async def set_editor_kit_status(
         if pdf_file not in files:
             raise HTTPException(
                 status_code=409,
-                detail=f"Kit has no {pdf_file} -- a complete kit needs its "
-                       "form PDF (the voice app serves it)",
+                detail=f"Kit has no {pdf_file} -- it needs its form PDF "
+                       f"(the voice app serves it) before being {action}",
             )
         try:
             schema = await store.load_schema(kit_id, schema_file)
@@ -2080,7 +2383,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=409,
                 detail="Kit has no schema yet -- extract and save one before "
-                       "marking it complete",
+                       f"{gerund}",
             ) from exc
         except FormKitStoreError as exc:
             raise HTTPException(
@@ -2093,7 +2396,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=422,
                 detail=f"Schema does not validate against the form contract, so "
-                       f"it cannot be marked complete: {str(exc)[:400]}",
+                       f"it cannot be {action}: {str(exc)[:400]}",
             ) from exc
         # Pydantic v2 does not run field validators for an OMITTED default, so
         # the model's "extraction_info required for PDF forms" rule never fires
@@ -2105,7 +2408,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=422,
                 detail="Schema is missing extraction_info (required for PDF "
-                       "forms), so it cannot be marked complete",
+                       f"forms), so it cannot be {action}",
             )
         # v2-only gate (bd h76m.16, P6.2 flip): schema v2 is the only shape a
         # complete kit may carry. The model IGNORES unknown keys (extra="ignore"),
@@ -2118,7 +2421,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=422,
                 detail="Schema is not v2 (schema_version must be \"2\"); migrate "
-                       "it before marking complete",
+                       f"it before {gerund}",
             )
         # Lint gate (bd h76m.5, P2.1): zero lint ERRORs to promote. Pydantic
         # above enforces the wire contract; lint catches the class of defect
@@ -2176,6 +2479,9 @@ async def set_editor_kit_status(
         # structurally broken schema was told to supply a version instead of
         # being shown the actual defect (caught by the neighbouring suite's
         # test_mark_complete_validates_against_form_contract).
+        # Version handling and the sweep are PUBLISH-only from here.
+
+    if body.status == "complete":
         meta_block = schema.get("form_metadata")
         meta_block = meta_block if isinstance(meta_block, dict) else {}
         existing_edition = meta_block.get("edition_date")
@@ -2209,7 +2515,7 @@ async def set_editor_kit_status(
             # refused, citing confirmation records that do not exist, on a kit
             # the route explicitly expects them to re-press. A draft has no
             # records to protect, so its version stays editable.
-            was_published = current_status in _WRITE_LOCKED_STATUSES
+            was_published = current_status in _PUBLISHED_STATUSES
             if has_existing_version and was_published:
                 # Locked: only a REPUBLISH of the same version is allowed.
                 if supplied_version and supplied_version != _normalize_author_version(
@@ -2286,6 +2592,11 @@ async def set_editor_kit_status(
         # and then thrown away -- the marker has to be IN the served schema,
         # because that is where the voice path reads it from. Only runs when the
         # gate above actually set it (no edition_date, no prior version).
+        # This route DOES write the schema (the author-version persistence
+        # below), so it honours the editing lock like every other writer.
+        # Reachable only author-to-author: publishing is already author-only,
+        # so an editor cannot get here -- but a second author publishing a kit
+        # the first is reviewing is exactly the collision the lock exists for.
         if version_to_persist is not None:
             try:
                 await store.put_schema(kit_id, schema, schema_file)
@@ -2316,12 +2627,41 @@ async def set_editor_kit_status(
     # Same-kit republish needs no flag: one kit_id is one catalogue slot, so a
     # kit always replaces itself.
     if superseded_kit is not None:
+        # The lock applies to the OUTGOING kit too. The guard at the top of
+        # this route only ever saw the INCOMING kit's metadata, so a
+        # supersede archived and retired a second kit that no guard had
+        # checked (Opus fresh-eyes round 2). Inert today -- the lock is
+        # role-scoped, so a same-role holder would not be refused anyway --
+        # but it becomes a live hole the moment bd polyglot-pdf-ijntk makes
+        # locks per-user, and it contradicts the helper's own "every schema
+        # write" contract.
+        _require_edit_lock(superseded_meta, role)
+
         # Archive its bytes now -- the archive is additive and harmless even if
         # the publish below fails, whereas the STATUS flip is not, so that is
         # deferred until the incoming kit is actually live (see below).
         await _archive_published_revision(store, superseded_kit, superseded_meta)
 
     next_meta = {**(meta or {}), "status": body.status}
+    # A STATUS CHANGE HANDS THE KIT OVER, so it releases the lock. Keeping it
+    # bricked the bead's headline flow: an author takes the lock to review,
+    # sends the kit back to draft, and the lock stays theirs -- so the editor
+    # 409s on save, on re-submit, and on BOTH lock routes, with no control
+    # rendered to self-rescue (an editor is offered nothing on an author-held
+    # kit, by design). The subcontractor could not do the work they were sent
+    # back to do (Opus fresh-eyes round 8, reproduced end to end).
+    #
+    # It also outlived a publish, so a live kit advertised "Editor editing"
+    # forever -- cosmetic today, a real hole once bd polyglot-pdf-ijntk makes
+    # locks per-user.
+    #
+    # Editing is what the lock guards, and a status transition ends the editing
+    # turn either way: handed to an author for review, handed back for changes,
+    # or published and write-locked. Nobody holds it across that boundary.
+    kept_lock = _lock_after_transition(meta, current_status, body.status, role)
+    next_meta.pop(_LOCK_KEY, None)
+    if kept_lock is not None:
+        next_meta[_LOCK_KEY] = kept_lock
     # Stamp the PUBLISH DATE on promotion (bd polyglot-pdf-47r3, maintainer
     # 2026-08-04). It is the revision marker for a kit with no government
     # edition date -- a firm's own intake form has no "12/2024", but it does
@@ -2381,10 +2721,22 @@ async def set_editor_kit_status(
     # by unpublishing the old one.
     if superseded_kit:
         try:
-            await store.put_metadata(
-                superseded_kit,
-                {**(superseded_meta or {}), "status": "unpublished"},
-            )
+            # Retiring the outgoing kit is a status transition too, so it releases
+            # ITS lock -- this second write merges superseded_meta verbatim and
+            # kept a stale lock, recreating the same dead end one kit over
+            # (round 9, reproduced). Same helper as the incoming kit so the two
+            # sites cannot drift apart again -- ACTUALLY sharing it, not just
+            # claiming to: the hardcoded pop this replaced agreed with the
+            # helper only by accident of the current gating, so a future
+            # change to the keep-rule (bd polyglot-pdf-ijntk) would have
+            # applied to one site and silently not the other (round 10).
+            retired_meta = {**(superseded_meta or {}), "status": "unpublished"}
+            retired_kept = _lock_after_transition(
+                superseded_meta, _status_of(superseded_meta), "unpublished", role)
+            retired_meta.pop(_LOCK_KEY, None)
+            if retired_kept is not None:
+                retired_meta[_LOCK_KEY] = retired_kept
+            await store.put_metadata(superseded_kit, retired_meta)
         except FormKitStoreError as exc:
             _log.error("editor_supersede_failed", kit_id=kit_id,
                        superseded=superseded_kit, error=str(exc))
@@ -2483,6 +2835,73 @@ async def delete_editor_kit(
 
     _log.info("editor_kit_deleted", kit_id=kit_id, role=role, objects_removed=removed)
     return KitDeleteResponse(ok=True, kitId=kit_id, objectsRemoved=removed)
+
+
+@router.post("/kits/{kit_id}/lock", response_model=KitLockResponse)
+async def take_editor_kit_lock(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> KitLockResponse:
+    """Take this kit for editing, or report who already has it.
+
+    An AUTHOR can always take a lock back from an editor (maintainer decision
+    2026-08-11) -- that preemption doubles as the stale-lock release, so there
+    is no timer. A clock that steals a lock from someone actively working is
+    worse than a human choosing to take it.
+
+    Same-role contention is ALLOWED rather than pretended about: two callers
+    holding the same shared token are indistinguishable to the server, so
+    refusing would block a second author on a lock the first may have
+    abandoned, with no way to tell them apart. bd polyglot-pdf-ijntk is what
+    makes editor-vs-editor resolvable.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, files = await _load_meta_or_404(store, kit_id)
+    _refuse_if_metadata_unreadable(meta, files, kit_id, "taking the lock")
+
+    holder = _lock_holder(meta)
+    refusal = _lock_refusal(holder, role) if holder else None
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
+
+    preempted = holder is not None and holder != role
+    next_meta = {**(meta or {}), _LOCK_KEY: {"role": role}}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to take the lock") from exc
+
+    if preempted:
+        _log.info("editor_kit_lock_preempted", kit_id=kit_id, role=role, took_from=holder)
+    return KitLockResponse(ok=True, kitId=kit_id, heldBy=role, preempted=preempted)
+
+
+@router.delete("/kits/{kit_id}/lock", response_model=KitLockResponse)
+async def release_editor_kit_lock(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> KitLockResponse:
+    """Release this kit. An author may release anyone's lock; an editor only
+    releases a lock an editor holds (they cannot evict an author)."""
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, files = await _load_meta_or_404(store, kit_id)
+    _refuse_if_metadata_unreadable(meta, files, kit_id, "releasing the lock")
+
+    holder = _lock_holder(meta)
+    if holder is None:
+        return KitLockResponse(ok=True, kitId=kit_id, heldBy=None)
+    refusal = _lock_refusal(holder, role)
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
+
+    next_meta = {k: v for k, v in (meta or {}).items() if k != _LOCK_KEY}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to release the lock") from exc
+    return KitLockResponse(ok=True, kitId=kit_id, heldBy=None)
 
 
 @router.post("/kits/{kit_id}/label")
@@ -2822,6 +3241,7 @@ async def extract_editor_kit(
                    "in place, losing the revision its confirmation records "
                    "name.)",
         )
+    _require_edit_lock(meta, role)
     if pdf_file not in files:
         raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
     if schema_file in files and not force:

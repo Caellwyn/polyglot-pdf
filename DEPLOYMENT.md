@@ -22,7 +22,7 @@ Unified deployment script that handles all deployment tasks:
 
 **Environment variables:**
 - `POLYGLOT_PROJECT_NAME` - GCP project ID (auto-detected if not set)
-- `FORM_KITS_BUCKET` - GCS bucket for form kits (default: `polyglot-pdf-form-kits`)
+- `FORM_KITS_BUCKET` - GCS bucket for form kits (default: `polyglot-demo-aa709-form-kits`; `deploy-production.sh` overrides this to the prod bucket explicitly)
 
 ## Helper Scripts
 

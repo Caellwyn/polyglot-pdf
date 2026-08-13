@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-08 (bd polyglot-pdf-6x1j: guarded hard delete -- the only thing that removes an archive, author-only, and refused when the confirmation check cannot run. Earlier, bd polyglot-pdf-xzw5: the revision marker resolves through three ranks, and the archive keys on the same one a confirmation record names).*
+*Last updated: 2026-08-12 (bd polyglot-pdf-hqztg: a fourth status, `submitted`, and the per-transition role split -- editors submit, authors publish -- plus a role-scoped editing lock authors can always take back. Earlier, bd polyglot-pdf-6x1j: guarded hard delete, the only thing that removes an archive).*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -194,6 +194,35 @@ answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
 several do -- for a confirmation record, a confident wrong schema is worse than
 an honest "cannot tell". `--segment` reads one exact archived segment after the
 operator disambiguates from `--list`.
+
+**The kit lifecycle has FOUR statuses** (bd `polyglot-pdf-hqztg`):
+`draft -> submitted -> complete`, plus `unpublished` for a retired revision.
+`submitted` exists because editors are SUBCONTRACTORS: marking a form ready
+must not release it. An editor may submit and may reopen their own submission;
+publishing and reaching back into a live kit are author-only, enforced per
+TRANSITION inside the one `/status` handler rather than per route. `submitted`
+is write-locked like `complete` -- otherwise an author would review one version
+and publish another -- and reopening it CLEARS any author version, since a kit
+that was never live has no confirmation record naming its version (the xzw5
+immutability lock protects PUBLISHED versions only).
+
+An **editing lock** (`POST`/`DELETE /api/editor/kits/{kit_id}/lock`) sits over
+that: an author can always take a kit back from an editor, never the reverse,
+and that preemption doubles as the stale-lock release. **A status transition
+also releases it** -- handing a kit up for review, sending it back, publishing
+it or retiring it all end the editing turn, and the retired kit in a
+replace-publish is released too. The one exception is REOPENING a live kit
+(`complete -> draft`), which begins an editing turn rather than ending one, so
+the author who reopened it keeps their own lock; a stale lock held by anyone
+else is still cleared. Without the release, an author who sent a kit back left
+the editor unable to touch their own draft, with no control offered to
+self-rescue. It is ROLE-scoped, not
+user-scoped, because the editor API has only two shared tokens -- two editors
+sharing one still collide (bd `polyglot-pdf-ijntk`). A preempted editor finds
+out on their NEXT SAVE, which 409s: there is no channel from server to editor,
+so the save is the notification. Every route that rewrites a schema honours the
+lock, enforced through one `_require_edit_lock` helper and pinned by a property
+test that derives the route list from the shipped module.
 
 **The one thing that removes an archive** is `DELETE /api/editor/kits/{kit_id}`
 (bd `polyglot-pdf-6x1j`) -- author-only, and guarded by a THREE-state check

@@ -13,6 +13,7 @@
  *  3. Reload-from-file (the local discard) never writes a stamp -- only a
  *     SAVE may.
  */
+import { WRITE_LOCKED_STATUSES } from './utils/formKitDirectory';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { FormSchema } from './types/schema';
@@ -163,11 +164,15 @@ describe('local-save readiness stamping (bd na1zy)', () => {
     expect(localStamp.stampKitReadinessRemote).not.toHaveBeenCalled();
   });
 
-  // The FULL bd 6dz0 write-locked set, not a sample: a complete kit is live,
+  // DERIVED from the shipped set, not retyped: this list said "the FULL set,
+  // not a sample" while naming two of three, and stayed green when a fourth
+  // status made it a sample again (Opus fresh-eyes round 7). Enumerating the
+  // real constant is the only version of this test that cannot drift.
+  // A complete kit is live,
   // an unpublished one holds the bytes earlier confirmation records were
   // confirmed against. Neither may have its metadata touched -- not even to
   // retract a stamp claim (Opus cross-surface round 3).
-  it.each(['complete', 'unpublished'] as const)(
+  it.each(WRITE_LOCKED_STATUSES)(
     'a write-locked kit (%s) gets NO stamp activity on save', async (status) => {
       hasBackendMock.mockReturnValue(true);
       kitEntry.status = status;

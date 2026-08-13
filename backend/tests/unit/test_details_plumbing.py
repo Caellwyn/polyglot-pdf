@@ -146,3 +146,24 @@ def test_catalog_byte_identical_for_schema_without_reference():
     assert "OFFICIAL FORM INSTRUCTIONS" not in catalog
     # and it still ends with the canonical single trailing newline
     assert catalog.endswith("\n") and not catalog.endswith("\n\n")
+
+
+def test_a_non_dict_form_metadata_does_not_crash_the_secretary_catalog():
+    """bd polyglot-pdf-ypk4: a truthy non-dict form_metadata (e.g. a client-
+    supplied string) must not raise AttributeError out of _render_form_reference.
+
+    Reachable via handle_ask_secretary's client-handshake schema on the LEGACY
+    (non-JIT) WS transport: websocket_routes.py validates only that `schema`
+    itself is a dict, never the nested form_metadata key, so a malformed
+    handshake can carry form_metadata as a plain string all the way into the
+    secretary's static catalog render. The old `schema.get("form_metadata") or
+    {}` guard did NOT protect against this -- a non-empty string is truthy, so
+    `or {}` never substitutes, and .get() on the string raises.
+    """
+    schema = _schema(with_reference=False)
+    schema["form_metadata"] = "12/2024"  # a STRING, not a dict
+
+    catalog = render_static_catalog(schema)
+
+    assert "FORM-LEVEL GUIDANCE" not in catalog
+    assert "OFFICIAL FORM INSTRUCTIONS" not in catalog

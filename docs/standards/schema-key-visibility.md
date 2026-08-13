@@ -1,6 +1,6 @@
 # Schema-key visibility matrix -- which model sees what
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: fixed pattern-row visibility, reconciled the getProgress fix, and re-measured the size/ratio numbers).*
+*Last updated: 2026-08-13 (bd polyglot-pdf-kbkd: VoiceOverlay.tsx's progress-counter sites migrated onto getProgressCounts; VoiceOverlayMobile.tsx's inventory line deliberately left unmigrated).*
 
 Two models read the form and they must read **different** things. This doc is the
 single answer to "if I add a key to a form-kit schema, who sees it?"
@@ -74,12 +74,15 @@ On W-7 that is the 7 `agent_*` Acceptance-Agent fields. Pinned by
 
 `SchemaFormStateManager.getProgress` filters its denominator correctly (fixed in
 bd `polyglot-pdf-jtbg`, 2026-08-04) -- it no longer counts statically hidden
-fields. The flags are **still** missing from `VoiceOverlay.tsx` (4 inline
-`schema.fields.length` sites) and `VoiceOverlayMobile.tsx` (1 site), and from the
-backend's own unfiltered `Progress: N/M` render in `ai_context.py`. Pinned by
-`frontend/src/schema-forms/state/hiddenFieldCounting.test.ts`, which drives the
-real `getProgress` as a regression guard and documents the remaining unfixed
-sites in its header comment.
+fields. `VoiceOverlay.tsx`'s 3 progress-counter sites were migrated onto the
+shared `getProgressCounts` helper (bd `polyglot-pdf-kbkd`); `VoiceOverlayMobile.tsx`'s
+one `schema.fields.length` site is deliberately unmigrated -- it renders a
+static "N fields, M required" whole-form inventory, not a completion ratio, so
+the raw total is the correct count there. The backend's own unfiltered
+`Progress: N/M` render in `ai_context.py` remains a separate, still-open gap.
+Pinned by `frontend/src/schema-forms/state/hiddenFieldCounting.test.ts`, which
+drives the real `getProgress`/`getProgressCounts` as a regression guard and
+documents the remaining unfixed surface in its header comment.
 
 ## Logging a rejected field id
 

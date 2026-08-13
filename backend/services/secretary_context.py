@@ -228,7 +228,14 @@ def _render_form_reference(schema: dict) -> str:
     FormSchema Pydantic field, every form-kits/*/schema.json, and the client
     handshake full_schema all use it) -- caught by the wsao.1 Opus fresh-eyes
     round after a test helper's invented `metadata` key masked a silent no-op."""
-    meta = schema.get("form_metadata") or {}
+    # isinstance-guarded (bd polyglot-pdf-ypk4): `or {}` only substitutes on a
+    # falsy/missing value, not a truthy non-dict (e.g. a client-supplied
+    # string) -- reachable here via handle_ask_secretary's client-handshake
+    # schema (websocket_routes.py's legacy branch validates only that schema
+    # itself is a dict, never the nested form_metadata key), which would
+    # otherwise raise AttributeError out of the .get() calls below.
+    _meta = schema.get("form_metadata")
+    meta = _meta if isinstance(_meta, dict) else {}
     out = []
     form_details = (meta.get("details") or "").strip()
     if form_details:

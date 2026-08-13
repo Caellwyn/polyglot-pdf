@@ -68,14 +68,35 @@ def client(tmp_path, monkeypatch):
     return TestClient(app), store, tmp_path
 
 
-HDR = {"X-Editor-Token": "edit-tok"}
+HDR = {"X-Editor-Token": "edit-tok"}          # editor tier
+AUTH_HDR = {"X-Editor-Token": "auth-tok"}    # author tier
 
 
-def _status(client, kit_id, status, replaces=None):
+def _status(client, kit_id, status, replaces=None, headers=None):
+    """POST a status change, defaulting to the token the transition REQUIRES.
+
+    Publishing and unpublishing are author actions (bd polyglot-pdf-hqztg);
+    everything else an editor may do. Defaulting by transition keeps these
+    tests about the GATE rather than about authentication -- a test that wants
+    to prove the role rule itself passes `headers` explicitly.
+    """
     body = {"status": status}
     if replaces:
         body["replaces_kit_id"] = replaces
-    return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=HDR)
+    if headers is None:
+        # Keyed on the target status. A revert of a LIVE kit is also an author
+        # action, but this helper cannot see the current status -- those tests
+        # pass `headers=AUTH_HDR` explicitly, which is clearer at the call site
+        # than a lookup here would be.
+        #
+        # CAUTION, learned the hard way (Opus fresh-eyes round 2): this default
+        # is a CONVENIENCE, not a statement of the rule. It once sent every
+        # unpublish with the author token while the route accepted an editor's
+        # -- so the suite read as though editor-unpublish were refused when it
+        # was not, and the gap was invisible. Any test that means to pin WHO may
+        # perform a transition must pass `headers` explicitly.
+        headers = AUTH_HDR if status in ("complete", "unpublished") else HDR
+    return client.post(f"/api/editor/kits/{kit_id}/status", json=body, headers=headers)
 
 
 # --- author version at the publish gate (bd polyglot-pdf-xzw5) --------------
@@ -119,7 +140,7 @@ def test_a_supplied_author_version_is_PERSISTED_into_the_served_schema(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -140,7 +161,7 @@ def test_author_version_is_normalized(client, raw, expected):
     _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
 
     resp = c.post("/api/editor/kits/custom/status",
-                  json={"status": "complete", "author_version": raw}, headers=HDR)
+                  json={"status": "complete", "author_version": raw}, headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -167,7 +188,7 @@ def test_an_author_version_is_IGNORED_when_a_government_edition_exists(client):
 
     resp = c.post("/api/editor/kits/w7/status",
                   json={"status": "complete", "author_version": "mine"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("w7", "schema.json"))
@@ -187,7 +208,7 @@ def test_a_published_author_version_CANNOT_be_changed(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-12-31"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
     assert "2026-01-01" in resp.json()["detail"]
@@ -255,7 +276,7 @@ def test_a_FAILED_publish_does_not_lock_the_version_forever(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -293,7 +314,7 @@ def test_the_ARCHIVE_is_keyed_on_the_same_marker_a_RECORD_names(client):
     # Publish with a version, then retire it -- retirement is what archives.
     assert c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR).status_code == 200
+                  headers=AUTH_HDR).status_code == 200
     assert _status(c, "custom", "unpublished").status_code == 200
 
     published = _run(store.load_schema("custom", "schema.json"))
@@ -341,7 +362,7 @@ def test_republishing_an_EQUIVALENT_version_is_not_a_change(client, stored, supp
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": supplied},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
 
@@ -356,7 +377,7 @@ def test_a_GENUINELY_different_version_is_still_refused(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "2026-12-31"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
 
@@ -375,7 +396,7 @@ def test_a_PUBLISHED_kit_with_no_version_refuses_to_gain_one(client):
 
     resp = c.post("/api/editor/kits/legacy/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
     assert "already published without a version" in resp.json()["detail"]
@@ -390,10 +411,11 @@ def test_that_legacy_kit_CAN_be_versioned_by_republishing_it(client):
     c, store, root = client
     _make_kit(root, "legacy", status="complete", schema=_no_edition_schema())
 
-    assert _status(c, "legacy", "draft").status_code == 200
+    # Reverting a LIVE kit is the author's unlock (bd polyglot-pdf-hqztg).
+    assert _status(c, "legacy", "draft", headers=AUTH_HDR).status_code == 200
     resp = c.post("/api/editor/kits/legacy/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     saved = _run(store.load_schema("legacy", "schema.json"))
@@ -415,7 +437,7 @@ def test_a_RETIRED_edition_less_kit_can_still_return_to_service(client):
 
     resp = c.post("/api/editor/kits/retired/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
     assert _run(store.load_metadata("retired"))["status"] == "complete"
@@ -442,7 +464,7 @@ def test_adding_a_version_is_refused_ONLY_for_a_currently_live_kit(
 
     resp = c.post("/api/editor/kits/k/status",
                   json={"status": "complete", "author_version": "2026-08-07"},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == expected, resp.text
 
@@ -454,7 +476,7 @@ def test_a_whitespace_only_author_version_is_refused(client):
 
     resp = c.post("/api/editor/kits/custom/status",
                   json={"status": "complete", "author_version": "   "},
-                  headers=HDR)
+                  headers=AUTH_HDR)
 
     assert resp.status_code == 422, resp.text
 
@@ -781,7 +803,8 @@ def test_same_kit_republish_needs_no_replace_flag(client):
     _make_kit(root, "w7")
 
     # revert -> edit -> republish, the only route to a new revision
-    assert _status(c, "w7", "draft").status_code == 200
+    # Reverting a LIVE kit is the author's unlock (bd polyglot-pdf-hqztg).
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
     changed = json.loads(json.dumps(_SCHEMA))
     changed["fields"].append({
         "id": "f2", "name": "Field 2", "spoken_name": "field two",
@@ -797,3 +820,918 @@ def test_same_kit_republish_needs_no_replace_flag(client):
     assert len(_run(store.load_schema("w7"))["fields"]) == 2
     # ...and the superseded revision is retrievable, not gone.
     assert _run(store.list_archived_markers("w7"))
+
+
+# --- the author approval round (bd polyglot-pdf-hqztg) -----------------------
+#
+# Editors are SUBCONTRACTORS. Marking a form ready must not release it: an
+# editor submits, an author reviews and publishes. The rule is enforced PER
+# TRANSITION inside one route -- the s18 plan's insight (epic polyglot-pdf-4qul
+# C9), with the mapping reversed by maintainer decision 2026-08-11.
+
+
+def test_an_editor_can_SUBMIT_a_draft_for_review(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "submitted"
+
+
+def test_an_editor_CANNOT_publish(client):
+    """Exit criterion 1 + 3: the editor cannot make a kit deployable on their
+    own, and it is refused SERVER-side rather than merely hidden in the UI."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = _status(c, "w7", "complete", headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert "author" in resp.json()["detail"].lower()
+    # Still awaiting review -- nothing was released.
+    assert _run(store.load_metadata("w7"))["status"] == "submitted"
+
+
+def test_an_AUTHOR_publishes_a_submitted_kit(client):
+    """Exit criterion 2."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = _status(c, "w7", "complete", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_a_SUBMITTED_kit_is_write_locked(client):
+    """If an editor could keep editing after submitting, the author would
+    review one thing and approve another. Submitting freezes it; the editor
+    reopens it deliberately via Revert to draft."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 409
+    assert "submitted" in resp.json()["detail"].lower()
+
+
+def test_an_editor_reopens_their_OWN_submitted_work(client):
+    """The deliberate-unlock gate: an editor is not stuck after submitting --
+    Revert to draft is theirs, because a submitted kit was never live."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    resp = _status(c, "w7", "draft", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "draft"
+
+
+def test_an_editor_CANNOT_reopen_a_LIVE_kit(client):
+    """The other half: reaching back into a published form is the author's
+    unlock. A submitted kit was never served; a complete one was."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", "draft", headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert "author" in resp.json()["detail"].lower()
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+@pytest.mark.parametrize("current", ["submitted", "complete", "unpublished"])
+def test_only_a_DRAFT_can_be_submitted(client, current):
+    """Submitting anything else is a confused request: it is already awaiting
+    review, or live, or retired. Enumerated rather than sampled -- the status
+    dimension is exactly where this bead's siblings kept losing a value."""
+    c, _store, root = client
+    _make_kit(root, "w7", status=current)
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+
+
+def test_a_SUBMITTED_kit_is_not_deployable(client):
+    """Exit criterion 1's other half: deploy gates on complete, so a submitted
+    kit must not read as complete to ANY downstream consumer."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    meta = _run(store.load_metadata("w7"))
+    # The deploy scripts grep for exactly this; a submitted kit must not match.
+    assert meta["status"] != "complete"
+    assert ekr._is_write_locked(meta), "submitted must be write-locked"
+
+
+# --- the editing lock (bd polyglot-pdf-hqztg) --------------------------------
+#
+# ROLE-scoped: two shared tokens mean the server can say "an editor holds this"
+# but never WHICH editor (bd polyglot-pdf-ijntk lifts that). An author can
+# always take a lock back from an editor and never the reverse -- which is also
+# the stale-lock release, since a timer that steals from someone actively
+# working is worse than a human deciding to take it.
+
+
+def _lock(c, kit_id, headers):
+    return c.post(f"/api/editor/kits/{kit_id}/lock", headers=headers)
+
+
+def _unlock(c, kit_id, headers):
+    return c.delete(f"/api/editor/kits/{kit_id}/lock", headers=headers)
+
+
+def test_taking_a_free_lock_succeeds(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = _lock(c, "w7", HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["heldBy"] == "editor"
+    assert resp.json()["preempted"] is False
+    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "editor"}
+
+
+def test_an_AUTHOR_can_take_a_lock_back_from_an_editor(client):
+    """The rule the maintainer asked for: authors can steal it back."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _lock(c, "w7", AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["heldBy"] == "author"
+    # Reported, so the UI can SAY it took the kit rather than silently winning.
+    assert resp.json()["preempted"] is True
+    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+
+
+def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
+    """Preemption is one-way. An author mid-review must not have the form
+    pulled out from under them."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _lock(c, "w7", HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+
+
+def test_a_preempted_editor_DISCOVERS_it_on_their_next_save(client):
+    """There is no channel from server to editor, so the next save IS the
+    notification -- a 409 explaining what happened, not a silent overwrite of
+    the version the author is reviewing."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200   # author takes it back
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+
+
+def test_the_lock_holder_can_still_save(client):
+    """The lock must not block the person holding it."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_an_UNLOCKED_kit_saves_freely(client):
+    """No lock means no new obstacle -- the lock is opt-in, and a kit nobody
+    has taken behaves exactly as it did before this bead."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_releasing_a_lock_frees_the_kit(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _unlock(c, "w7", HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["heldBy"] is None
+    assert "editing_lock" not in _run(store.load_metadata("w7"))
+
+
+def test_an_AUTHOR_can_release_an_editors_abandoned_lock(client):
+    """The stale-lock escape. Someone closes their laptop and goes on holiday;
+    an author clears it rather than waiting for a timer."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _unlock(c, "w7", AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert "editing_lock" not in _run(store.load_metadata("w7"))
+
+
+def test_an_EDITOR_cannot_release_an_authors_lock(client):
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _unlock(c, "w7", HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert _lock_holder_of(store, "w7") == "author"
+
+
+def _lock_holder_of(store, kit_id):
+    return (_run(store.load_metadata(kit_id)).get("editing_lock") or {}).get("role")
+
+
+def test_the_lock_does_not_disturb_other_metadata(client):
+    """Read-merge-write, like every other metadata writer here: taking a lock
+    must not drop the label, the status, or an author version."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    meta = _run(store.load_metadata("w7"))
+    assert meta["status"] == "submitted"
+    assert meta["label"] == "w7"
+
+
+# --- the lock covers EVERY schema-writing route ------------------------------
+
+
+def _schema_writing_routes():
+    """Derive the route list from the SHIPPED module, never a hand-typed one.
+
+    bd polyglot-pdf-6dz0 shipped a guard on one of six sibling routes and 6x1j
+    did the same; both times a reviewer found the other five. Enumerating from
+    the source means a NEW schema-writing route added later without the lock
+    fails this test instead of shipping unguarded.
+    """
+    import inspect
+    src = inspect.getsource(ekr).splitlines()
+    # Split on TOP-LEVEL function definitions, not on @router. decorators: a
+    # decorator-delimited span runs past its own function into the next one's
+    # helpers, which credited three routes with put_schema calls belonging to
+    # their neighbours (caught by this very test failing on its first run).
+    starts = [i for i, l in enumerate(src)
+              if l.startswith("async def ") or l.startswith("def ")]
+    out = []
+    for idx, i in enumerate(starts):
+        end = starts[idx + 1] if idx + 1 < len(starts) else len(src)
+        body = "\n".join(src[i:end])
+        if "await store.put_schema(" not in body:
+            continue
+        # Routes only -- a @router. decorator on one of the lines just above.
+        if "@router." not in "\n".join(src[max(0, i - 6):i]):
+            continue
+        name = src[i].split("(")[0].replace("async def ", "").replace("def ", "").strip()
+        out.append((name, body))
+    return out
+
+
+def test_EVERY_schema_write_is_DOMINATED_by_the_editing_lock():
+    """The property, and it is about ORDER, not mention.
+
+    The first version asserted `"_require_edit_lock" not in body` -- a
+    substring test over the whole function. That proves the helper is named
+    SOMEWHERE, not that it runs before every write. set_editor_kit_status has
+    TWO put_schema calls and one guard, and the guard sat between them: it
+    passed this test while an editor could rewrite a schema out from under an
+    author holding the lock (Opus fresh-eyes reproduced it end to end).
+
+    Now every put_schema must be PRECEDED by a guard in the same function.
+    """
+    import inspect
+    src = inspect.getsource(ekr).splitlines()
+    starts = [i for i, l in enumerate(src)
+              if l.startswith("async def ") or l.startswith("def ")]
+
+    # Helpers that write a schema are included too, not only @router. functions
+    # -- the route-only filter meant a new helper-level writer would be
+    # invisible to this test. Anything genuinely exempt is allowlisted WITH a
+    # reason, so the exemption is a decision on the record rather than a gap.
+    ALLOWED = {
+        # Runs INSIDE the publish path, after that route's own guard, on the
+        # schema object that route already holds.
+        "_sweep_drifted_translations",
+    }
+
+    offenders = []
+    for idx, i in enumerate(starts):
+        end_i = starts[idx + 1] if idx + 1 < len(starts) else len(src)
+        body = src[i:end_i]
+        name = src[i].split("(")[0].replace("async def ", "").replace("def ", "").strip()
+        writes = [j for j, l in enumerate(body) if "await store.put_schema(" in l]
+        if not writes or name in ALLOWED:
+            continue
+        guards = [j for j, l in enumerate(body) if "_require_edit_lock(" in l]
+        first_guard = min(guards) if guards else None
+        for w in writes:
+            if first_guard is None or first_guard > w:
+                offenders.append(f"{name} (write at +{w}, guard at "
+                                 f"{'none' if first_guard is None else f'+{first_guard}'})")
+
+    assert offenders == [], (
+        "these schema writes are not dominated by an editing-lock check: "
+        + "; ".join(offenders)
+    )
+
+
+def test_the_lock_property_test_covers_the_routes_it_claims_to():
+    """A guard against the enumeration silently matching nothing -- a detection
+    that finds zero writers would pass the test above vacuously."""
+    import inspect
+    src = inspect.getsource(ekr)
+    assert src.count("await store.put_schema(") >= 7, (
+        "expected at least 7 schema writes in this module; the detection above "
+        "may have stopped matching"
+    )
+
+
+def test_the_enumeration_is_anchored_to_a_REAL_refusal(client):
+    """The property test above proves every schema writer CALLS the guard.
+    This drives one end to end, so "calls it" cannot drift from "refuses".
+
+    Uses PUT /schema rather than repair: repair is author-only, so an editor
+    can never reach its lock check at all -- my first version of this test
+    asserted a 409 against a route that 403s first, which would have proved
+    nothing about the lock.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200   # author takes it back
+
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+
+
+# --- rejection clears the version (bd polyglot-pdf-hqztg) --------------------
+
+
+def test_REJECTING_a_submitted_kit_clears_its_author_version(client):
+    """A submitted kit was never live, so no confirmation record names its
+    version -- nothing to protect, and the next publish asks again."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+
+    resp = _status(c, "custom", "draft", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert "author_version" not in saved["form_metadata"]
+
+
+def test_reopening_a_PUBLISHED_kit_KEEPS_its_author_version(client):
+    """The other side of the scoping, and the one that matters. Records DO
+    name a published kit's version, so clearing it would let the next publish
+    invent a different marker for a revision clients already confirmed against
+    -- exactly the re-pointing the xzw5 immutability lock exists to prevent."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-01-01"
+    _make_kit(root, "custom", status="complete", schema=schema)
+
+    resp = _status(c, "custom", "draft", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-01-01"
+
+
+def test_a_rejected_kit_can_be_versioned_AGAIN_on_resubmission(client):
+    """The cleared version must not leave the kit unpublishable: the author is
+    asked for one again, and a NEW value is accepted (the immutability lock
+    must not fire on a version that was never published)."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+
+    assert _status(c, "custom", "draft", headers=AUTH_HDR).status_code == 200
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-12-25"},
+                  headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-12-25"
+
+
+def test_rejecting_a_kit_with_NO_version_is_a_clean_noop(client):
+    """A government-edition kit has no author version to clear; the reject must
+    not touch its schema or fail."""
+    c, store, root = client
+    _make_kit(root, "w7", status="submitted")
+    before = _run(store.load_schema("w7", "schema.json"))
+
+    resp = _status(c, "w7", "draft", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_schema("w7", "schema.json")) == before
+
+
+def test_an_editor_cannot_REJECT_out_from_under_an_author(client):
+    """The lock must dominate EVERY write in the status route, not just the
+    last one.
+
+    This route has two put_schema calls -- the rejection clear and the
+    author-version persistence -- and the guard originally sat between them.
+    submitted -> draft is editor-allowed, so an editor reached the first write
+    while an AUTHOR held the lock: it rewrote the schema under the reviewer AND
+    flipped the kit out of write-locked `submitted`, permitting every later
+    editor write too (Opus fresh-eyes, reproduced end to end).
+    """
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+    assert _lock(c, "custom", AUTH_HDR).status_code == 200   # author reviewing
+
+    resp = _status(c, "custom", "draft", headers=HDR)        # editor reopens
+
+    assert resp.status_code == 409, resp.text
+    assert "author is working on this form" in resp.json()["detail"]
+    # Nothing moved: still submitted, version intact.
+    assert _run(store.load_metadata("custom"))["status"] == "submitted"
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-11"
+
+
+def test_the_lock_still_permits_the_HOLDER_to_reject(client):
+    """The guard must not block the person holding the kit -- an editor who
+    holds their own submission can still reopen it."""
+    c, store, root = client
+    _make_kit(root, "custom", status="submitted", schema=_no_edition_schema())
+    assert _lock(c, "custom", HDR).status_code == 200
+
+    resp = _status(c, "custom", "draft", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("custom"))["status"] == "draft"
+
+
+def test_an_editor_CANNOT_UNPUBLISH_a_LIVE_kit(client):
+    """The twin of test_an_editor_CANNOT_reopen_a_LIVE_kit, and its absence is
+    why the hole shipped.
+
+    Unpublishing takes a form away from every client, and for an editor it is a
+    ONE-WAY door: revert-to-draft then 409s (the 6dz0 immutability rule) and
+    republishing 403s, so a subcontractor could pull a live form and be unable
+    to restore it. The role gate originally checked only `draft` while its
+    comment claimed "complete -> anything" was covered (Opus fresh-eyes round 2,
+    reproduced end to end).
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", "unpublished", headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert "author" in resp.json()["detail"].lower()
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_an_AUTHOR_can_still_unpublish(client):
+    """The gate must not block the role that is supposed to do this."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", "unpublished", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "unpublished"
+
+
+@pytest.mark.parametrize("target", ["draft", "unpublished"])
+def test_NEITHER_live_kit_transition_is_open_to_an_editor(client, target):
+    """Enumerated over both destinations rather than sampled: checking one of
+    the two is exactly how the unpublish half was missed."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+
+    resp = _status(c, "w7", target, headers=HDR)
+
+    assert resp.status_code == 403, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "complete"
+
+
+def test_a_supersede_honours_the_OUTGOING_kit_s_lock(client):
+    """The guard at the top of the route only sees the INCOMING kit, so a
+    supersede archived and retired a SECOND kit no guard had checked (Opus
+    fresh-eyes round 2). Role-scoped locks make it inert today; it becomes a
+    live hole the moment bd polyglot-pdf-ijntk lands."""
+    c, store, root = client
+    _make_kit(root, "w7-2024", status="complete")
+    _make_kit(root, "w7-2026", status="draft")
+    # An AUTHOR is working on the outgoing kit...
+    assert _lock(c, "w7-2024", AUTH_HDR).status_code == 200
+
+    # ...and an EDITOR-held supersede must not retire it under them. (Publishing
+    # is author-only, so this drives the guard directly rather than the route.)
+    holder = ekr._lock_holder(_run(store.load_metadata("w7-2024")))
+    assert holder == "author"
+    assert ekr._lock_refusal(holder, "editor") is not None, (
+        "an editor must be refused the outgoing kit while an author holds it"
+    )
+    # And the route calls that check -- pinned by the property test above plus
+    # this explicit assertion that the call exists on the supersede path.
+    import inspect
+    src = inspect.getsource(ekr.set_editor_kit_status)
+    assert "_require_edit_lock(superseded_meta, role)" in src, (
+        "the supersede path must check the OUTGOING kit's lock"
+    )
+
+
+# --- submitting runs the structural gates too (Opus fresh-eyes round 4) ------
+
+
+def test_SUBMITTING_a_garbage_schema_is_REFUSED(client):
+    """Submitting used to run ZERO gates, so an editor could freeze a kit
+    around a schema that could never publish -- and `submitted` is write-locked,
+    so an author had to manually reject each one. My own UI comment claimed
+    submit ran the same gate; it did not (reproduced live)."""
+    c, store, root = client
+    kit = root / "junk"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps({"nonsense": True}), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "junk"}), encoding="utf-8")
+    # no form.pdf either
+
+    resp = _status(c, "junk", "submitted", headers=HDR)
+
+    assert resp.status_code in (409, 422), resp.text
+    assert _run(store.load_metadata("junk"))["status"] == "draft"
+
+
+def test_SUBMITTING_a_PDF_less_kit_is_refused(client):
+    """The same structural gate publish runs -- a kit with no PDF can never
+    ship, so refusing at submit saves the author a rejection."""
+    c, store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "no-pdf"}), encoding="utf-8")
+
+    resp = _status(c, "no-pdf", "submitted", headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "PDF" in resp.json()["detail"]
+
+
+def test_submitting_a_GOOD_kit_still_works(client):
+    """The gates must not make submission impossible -- a kit that would
+    publish must submit."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("w7"))["status"] == "submitted"
+
+
+def test_submitting_does_NOT_require_an_author_version(client):
+    """Version handling is PUBLISH-only. Demanding one at submit would push an
+    accountability statement onto the subcontractor, which is the opposite of
+    this bead's point."""
+    c, store, root = client
+    _make_kit(root, "custom", status="draft", schema=_no_edition_schema())
+
+    resp = _status(c, "custom", "submitted", headers=HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("custom"))["status"] == "submitted"
+
+
+def test_a_SUBMITTED_kit_is_not_treated_as_PUBLISHED_for_versioning(client):
+    """_WRITE_LOCKED_STATUSES answers "may its bytes change?"; publishedness
+    answers "do confirmation records name it?". Sharing one tuple made a
+    submitted kit -- never live -- look published, so an author fixing a typo
+    in its version was refused citing records that do not exist. That is the
+    bd xzw5 bug reintroduced one status over (Opus fresh-eyes round 4)."""
+    c, store, root = client
+    schema = _no_edition_schema()
+    schema["form_metadata"]["author_version"] = "2026-08-11-TYPO"
+    _make_kit(root, "custom", status="submitted", schema=schema)
+
+    resp = c.post("/api/editor/kits/custom/status",
+                  json={"status": "complete", "author_version": "2026-08-11"},
+                  headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    saved = _run(store.load_schema("custom", "schema.json"))
+    assert saved["form_metadata"]["author_version"] == "2026-08-11"
+
+
+def test_a_SUBMIT_refusal_names_the_offending_fields_like_a_publish_one(client):
+    """The claim the editor UI makes about submit, pinned SERVER-side.
+
+    RemoteCatalogue mirrors a submit refusal onto the strip because "its
+    refusal names the same fields" -- but the frontend test that appeared to
+    prove that passed only because setRemoteStatus was MOCKED to reject, so it
+    never touched a server that (until round 4) could not refuse a submit at
+    all. A comment and a test defending behaviour that did not exist.
+    """
+    c, _store, root = client
+    # A schema that fails LINT rather than structure: a field naming no PDF
+    # widget (field-unbacked), which is exactly the kind the strip links to.
+    broken = json.loads(json.dumps(_SCHEMA))
+    broken["fields"][0].pop("pdf_field_name")
+    _make_kit(root, "w7", status="draft", schema=broken)
+
+    resp = _status(c, "w7", "submitted", headers=HDR)
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "lint error" in detail
+    # The field id is in the detail, which is what the strip's click-to-focus
+    # links parse out of it.
+    assert "f1" in detail, detail
+
+
+def test_SUBMITTING_costs_no_LLM_calls(client, monkeypatch):
+    """The structural gates were widened to cover submit (round 4); the metered
+    translation sweep must NOT have come with them.
+
+    An editor submits repeatedly during normal work, so a sweep on that path
+    would bill one pro-tier call per language per submission. Pinned rather
+    than reasoned about: the widening was the riskiest change on this branch.
+    """
+    c, store, root = client
+    calls = []
+
+    async def _counting(_store, _kit_id, _schema, _schema_file):
+        calls.append(_kit_id)
+        return 0, None
+
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _counting)
+    _make_kit(root, "w7", status="draft")
+
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+    assert calls == [], f"the metered sweep fired on a SUBMIT: {calls}"
+
+    # ...and it DOES still run on the publish that follows.
+    assert _status(c, "w7", "complete", headers=AUTH_HDR).status_code == 200
+    assert calls == ["w7"], calls
+
+
+def test_SUBMITTING_does_not_stamp_published_at(client):
+    """published_at means "when this was last served to clients". A submit has
+    served nobody, so stamping it would make the field lie -- and it is a
+    revision marker input for kits with no edition date."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+
+    assert "published_at" not in _run(store.load_metadata("w7"))
+
+
+def test_taking_a_lock_never_DESTROYS_unreadable_metadata(client):
+    """load_metadata degrades a parse failure to None, so `meta is None` means
+    EITHER "no metadata yet" OR "metadata exists and is corrupt". Merging into
+    {} and writing is right for the first and catastrophic for the second: it
+    REPLACED the file, taking `status` with it -- and deploy-all.sh greps for
+    "status": "complete", so a live form silently dropped out of the manifest
+    and stopped being served. The route returned 200 while doing it (Opus
+    fresh-eyes round 5, reproduced end to end)."""
+    c, _store, root = client
+    kit = _make_kit(root, "w7", status="complete")
+    (kit / "metadata.json").write_text("{ not json", encoding="utf-8")
+
+    resp = c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert "cannot be read" in resp.json()["detail"]
+    # The bytes are untouched -- nothing was overwritten.
+    assert (kit / "metadata.json").read_text(encoding="utf-8") == "{ not json"
+
+
+def test_releasing_a_lock_never_destroys_unreadable_metadata(client):
+    """The DELETE twin was safe only by ACCIDENT -- it early-returns when the
+    holder is None, which is what corrupt metadata yields. Pinned so a later
+    refactor of that early return cannot reintroduce the destruction."""
+    c, _store, root = client
+    kit = _make_kit(root, "w7", status="complete")
+    (kit / "metadata.json").write_text("{ not json", encoding="utf-8")
+
+    resp = c.delete("/api/editor/kits/w7/lock", headers=AUTH_HDR)
+
+    assert resp.status_code == 409, resp.text
+    assert (kit / "metadata.json").read_text(encoding="utf-8") == "{ not json"
+
+
+def test_taking_a_lock_on_a_kit_with_NO_metadata_still_works(client):
+    """The other half of the ambiguity: absent metadata is the normal
+    fresh-kit case and must NOT be refused, or a new kit could never be
+    locked."""
+    c, store, root = client
+    kit = root / "fresh"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7 test")
+
+    resp = c.post("/api/editor/kits/fresh/lock", headers=AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_metadata("fresh"))["editing_lock"] == {"role": "author"}
+
+
+# --- a status change releases the lock (Opus fresh-eyes round 8) -------------
+
+
+def test_SENDING_BACK_does_not_brick_the_editor_out_of_their_own_draft(client):
+    """The bead's headline flow, reproduced as a dead end before the fix.
+
+    Author takes the lock to review -> sends the kit back to draft -> the lock
+    stayed theirs. The editor then 409'd on save, on re-submit, and on BOTH
+    lock routes, and the UI renders an editor NO control on an author-held kit
+    (by design), so there was no way to self-rescue. The subcontractor could
+    not do the work they had just been sent back to do.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+    assert c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR).status_code == 200
+
+    # The author sends it back.
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
+
+    assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
+    # ...and the editor can actually work on it again.
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+    assert resp.status_code == 200, resp.text
+
+
+def test_publishing_RELEASES_the_lock(client):
+    """A lock outliving a publish left a live kit advertising "Editor editing"
+    forever -- cosmetic while locks are role-scoped, a real hole once bd
+    polyglot-pdf-ijntk makes them per-user."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 200
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+    assert _status(c, "w7", "complete", headers=AUTH_HDR).status_code == 200
+
+    assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
+
+
+def test_the_lock_lifecycle_across_EVERY_transition(client):
+    """The whole transition set, with the ONE exception stated explicitly.
+
+    This test originally asserted that every transition releases. That was
+    wrong, and round 9 proved it: reopening a LIVE kit begins an editing turn
+    rather than ending one, so the author who reverted it in order to edit
+    keeps their lock. Every other transition hands the kit onward and releases.
+
+    Kept parametrized over the full set -- checking a sample is how this bead
+    lost the same invariant five separate times -- but now encoding the real
+    rule instead of the tidy one.
+    """
+    c, store, root = client
+    for kit_id, start, target, hdr, keeps_lock in (
+        ("a", "draft", "submitted", HDR, False),        # handed up for review
+        ("b", "submitted", "draft", AUTH_HDR, False),   # sent back to the editor
+        ("c", "submitted", "complete", AUTH_HDR, False),  # published, frozen
+        ("d", "complete", "unpublished", AUTH_HDR, False),  # retired
+        ("e", "complete", "draft", AUTH_HDR, True),     # REOPENED to edit
+        # NOT `unpublished -> draft`: that is refused outright by the bd 6dz0
+        # immutability rule (409), so it never reaches the lock logic. I added
+        # it here by symmetry and the route corrected me.
+    ):
+        _make_kit(root, kit_id, status=start)
+        # Lock as the SAME role that performs the transition: an author-held
+        # lock legitimately refuses an editor's submit, so a mismatched header
+        # would test the refusal, not the release.
+        assert c.post(f"/api/editor/kits/{kit_id}/lock",
+                      headers=hdr).status_code == 200
+        resp = _status(c, kit_id, target, headers=hdr)
+        assert resp.status_code == 200, f"{start}->{target}: {resp.text}"
+
+        held = ekr._LOCK_KEY in _run(store.load_metadata(kit_id))
+        assert held == keeps_lock, (
+            f"{start}->{target}: lock held={held}, expected {keeps_lock}")
+
+
+def test_reopening_a_live_kit_KEEPS_the_authors_own_lock(client):
+    """`complete -> draft` does not END an editing turn, it BEGINS one.
+
+    The UI offers an author "Revert to draft to edit it" -- they click it in
+    order to edit. Releasing on EVERY transition dropped their own lock, so an
+    editor could take it and write mid-edit: a lost-update window against the
+    accountable party the lock exists to protect (Opus fresh-eyes round 9,
+    reproduced). This is the liveness-vs-safety trade the round-8 fix made
+    without noticing.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+    assert c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR).status_code == 200
+
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
+
+    assert _run(store.load_metadata("w7"))[ekr._LOCK_KEY] == {"role": "author"}
+    # ...and nobody else can take it out from under them.
+    assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 409
+
+
+def test_reopening_does_NOT_keep_someone_ELSES_stale_lock(client):
+    """The carve-out is for the ACTOR's own lock only -- an author reopening a
+    kit an editor left locked still clears it, or the stale-lock dead end
+    returns."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+    assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 200
+
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
+
+    assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
+
+
+def test_supersede_releases_the_OUTGOING_kits_lock(client):
+    """The supersede path writes a SECOND kit's status through a different
+    call, which merged its metadata verbatim and kept a stale lock -- the same
+    brick-the-editor dead end round 8 fixed, surviving one kit over."""
+    c, store, root = client
+    _make_kit(root, "old", status="complete")
+    _make_kit(root, "new", status="submitted")
+    assert c.post("/api/editor/kits/old/lock", headers=HDR).status_code == 200
+
+    resp = c.post("/api/editor/kits/new/status",
+                  json={"status": "complete", "replaces_kit_id": "old"},
+                  headers=AUTH_HDR)
+    assert resp.status_code == 200, resp.text
+
+    old_meta = _run(store.load_metadata("old"))
+    assert old_meta["status"] == "unpublished"
+    assert ekr._LOCK_KEY not in old_meta, "the retired kit kept a stale lock"
+
+
+def test_a_SUBMIT_refusal_never_tells_an_editor_to_mark_it_complete(client):
+    """The gates front both promotions, so they must name the action the caller
+    attempted. An editor is 403'd from marking anything complete, and the strip
+    deliberately surfaces submit refusals to them -- so naming that action sent
+    the wrong remedy to the one tier that reads these most (round 9).
+
+    Allowlist, not blacklist: assert the refusal names SUBMISSION, then assert
+    no "complete" wording survives (bd: banning one word is a synonym away from
+    defeat, so pin the sanctioned phrasing too).
+    """
+    c, _store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "no-pdf"}), encoding="utf-8")
+
+    detail = _status(c, "no-pdf", "submitted", headers=HDR).json()["detail"]
+
+    assert "submitted for review" in detail, detail
+    assert "complete" not in detail.lower(), detail
+
+
+def test_a_PUBLISH_refusal_still_says_marked_complete(client):
+    """The other half: an author publishing must still read the publish
+    wording. Parametrizing the verb is only correct if BOTH sides are right."""
+    c, _store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "no-pdf"}), encoding="utf-8")
+
+    detail = _status(c, "no-pdf", "complete", headers=AUTH_HDR).json()["detail"]
+
+    assert "marked complete" in detail, detail
