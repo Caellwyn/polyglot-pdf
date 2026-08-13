@@ -202,6 +202,16 @@ def resolve_edition_marker(
 
     Returns None when there is neither an edition_date, an author_version, nor
     a usable schema.
+
+    COMPAT NOTE (bd polyglot-pdf-8x56): widening the fingerprint's inputs
+    changes its OUTPUT for any kit on this fallback tier -- an already-
+    archived revision or confirmation record keyed on the narrower pre-8x56
+    digest will not match a freshly-recomputed marker after this change
+    ships. Zero live impact at the time of this fix (every shipped
+    form-kits/*/schema.json carries an edition_date or author_version, so
+    none are on the fingerprint tier), but a future kit that reaches this
+    fallback should not assume its marker is stable across THIS kind of
+    change again.
     """
     if isinstance(edition_date, str) and edition_date.strip():
         return edition_date.strip()

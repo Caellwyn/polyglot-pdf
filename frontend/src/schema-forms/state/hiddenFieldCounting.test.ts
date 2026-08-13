@@ -313,11 +313,15 @@ describe("VoiceOverlay wiring (bd polyglot-pdf-kbkd)", () => {
     // The regression this guards against: a raw denominator/numerator scan
     // reintroduced at a progress-counter call site. Strip comment lines first
     // so this doesn't trip on prose ABOUT the old pattern (as in the
-    // migration comments this fix itself left behind).
+    // migration comments this fix itself left behind), then collapse all
+    // whitespace so a cosmetic reformat (e.g. `schema . fields . length` or a
+    // line break mid-expression) cannot silently defeat this regex the way
+    // the un-collapsed version could.
     const codeLines = src
       .split("\n")
       .filter((line) => !line.trim().startsWith("//"))
-      .join("\n");
+      .join("\n")
+      .replace(/\s+/g, "");
     expect(codeLines).not.toMatch(/schema\.fields\.length/);
     expect(codeLines).not.toMatch(/Object\.keys\([^)]*fieldValues[^)]*\)\.filter/);
   });
