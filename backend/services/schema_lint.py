@@ -943,8 +943,18 @@ def lint_schema(
     for i, f in enumerate(fields):
         sid = f.get("section_id")
         if isinstance(sid, str) and sid.startswith(TO_REVIEW_PREFIX):
-            if isinstance(f.get("id"), str):
-                flagged_review_fields.add(f["id"])
+            # Track by the STRINGIFIED id, not only a str-typed one (bd
+            # polyglot-pdf-5ry1). The section's own fields[] list below is
+            # filtered to string entries only (line ~964), so a field whose id
+            # is e.g. the int 123 would never be added here under the old
+            # isinstance(..., str) guard -- the section-level check then wrongly
+            # calls "123" stale even though the field is genuinely still sitting
+            # in this very holding section, and the emitted message asserts the
+            # id "names no field at all" / "is already filed in a proper
+            # section", both false. Skip only a MISSING id (None can't usefully
+            # stringify into a section's fields[] list anyway).
+            if f.get("id") is not None:
+                flagged_review_fields.add(str(f["id"]))
             out.append(LintFinding(
                 SEVERITY_ERROR, "to-review-pending",
                 f"fields[{i}] (id={f.get('id')})",

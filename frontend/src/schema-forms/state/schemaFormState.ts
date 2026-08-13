@@ -676,7 +676,24 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Get form completion progress (percentage).
+   * Get form completion progress (percentage). Delegates to getProgressCounts
+   * (below) for the actual {filled, total} -- see that method's doc for the
+   * full visible-field-filtering rationale (bd polyglot-pdf-52qm.7 /
+   * polyglot-pdf-kbkd); this wrapper only turns the ratio into a percentage.
+   */
+  static getProgress(state: SchemaFormState): number {
+    const { filled, total } = this.getProgressCounts(state);
+    if (total === 0) return 0;
+    return (filled / total) * 100;
+  }
+
+  /**
+   * Get the raw {filled, total} counts behind getProgress -- for a caller
+   * that wants to display "N of M fields" rather than a percentage (bd
+   * polyglot-pdf-kbkd). Same visible-field filter, same SKIPPED-counts-as-done
+   * rule, factored out so a UI counter cannot drift from what the progress
+   * bar itself counts -- the exact drift VoiceOverlay/VoiceOverlayMobile had
+   * with their own inline `schema.fields.length` + raw fieldValues scans.
    *
    * Counts ONLY the fields the user can actually act on right now (bd
    * polyglot-pdf-52qm.7). Visibility is `shouldShowField` ALONE -- deliberately
@@ -693,27 +710,23 @@ export class SchemaFormStateManager {
    * `schema.fields` entirely (schema-editor/src/utils/ignoreField.ts), so they
    * are already absent here.
    *
-   * Both halves matter. The denominator used to be `schema.fields.length`, so
-   * the 7 statically hidden fields on the shipped W-7 could never be filled and
-   * progress capped around 87% -- the form never read complete. The NUMERATOR
-   * was independently wrong: it counted keys of `fieldValues`, so a stale value
+   * Both halves matter. `total` used to be `schema.fields.length`, so the 7
+   * statically hidden fields on the shipped W-7 could never be filled and
+   * progress capped around 87% -- the form never read complete. `filled` was
+   * independently wrong: it counted keys of `fieldValues`, so a stale value
    * for a field that has since been hidden (or whose show_if flipped off) kept
    * counting, and could even push progress past 100%. Both now walk the SAME
    * visible-field list, which is what makes the ratio meaningful.
    *
-   * The denominator is intentionally DYNAMIC: revealing a conditional field
-   * grows it, so progress can move backwards when the user's answer opens a new
-   * branch. That is honest -- there really is more work to do.
-   *
-   * A SKIPPED field counts as DONE, consistent with isSectionValid and
-   * computeReadyWindows' SETTLED definition. An empty array counts as NOT done,
-   * matching isSectionValid's emptiness test.
+   * `total` is intentionally DYNAMIC: revealing a conditional field grows it,
+   * so progress can move backwards when the user's answer opens a new branch.
+   * That is honest -- there really is more work to do.
    */
-  static getProgress(state: SchemaFormState): number {
+  static getProgressCounts(state: SchemaFormState): { filled: number; total: number } {
     const visibleFields = state.schema.fields.filter((f) =>
       shouldShowField(f, state.fieldValues, state.schema.fields)
     );
-    if (visibleFields.length === 0) return 0;
+    if (visibleFields.length === 0) return { filled: 0, total: 0 };
 
     // A SKIPPED field counts as done, matching isSectionValid (which accepts a
     // skipped required field) and computeReadyWindows' SETTLED definition
@@ -733,7 +746,7 @@ export class SchemaFormStateManager {
       );
     }).length;
 
-    return (doneFields / visibleFields.length) * 100;
+    return { filled: doneFields, total: visibleFields.length };
   }
 
   /**

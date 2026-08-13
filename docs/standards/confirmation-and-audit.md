@@ -115,12 +115,17 @@ marker in **three** ranks, best source first:
    e.g. `"2026-08-07"`. Human-readable, which is the whole reason it outranks
    the fingerprint below. Never invented: it is recorded only when an author
    actually supplied one.
-3. **A short fingerprint of the kit's answerable shape** -- field ids + types +
-   option values, formatted `sha256:<12 hex>`. It deliberately excludes labels
-   and guidance prose, so a copy edit does not read as a new revision while
-   adding/removing/retyping a field or changing an option value does. Not
-   human-readable, but it answers the question a disputed filing actually asks:
-   *was this the same version of the form the client saw?*
+3. **A short fingerprint of the kit's answerable shape** -- field ids, types,
+   option values (de-duplicated), validation rules, the `required` flag, and
+   `pdf_field_name` (bd `polyglot-pdf-8x56`), formatted `sha256:<12 hex>`. It
+   deliberately excludes labels and guidance prose, so a copy edit does not
+   read as a new revision -- but a tightened/loosened validation rule, a
+   flipped `required` flag, adding/removing/retyping a field, changing an
+   option value, or remapping which PDF widget a field prints into (the same
+   answers now landing on a DIFFERENT printed document) all count as a real
+   revision. Not human-readable, but it answers the question a disputed
+   filing actually asks: *was this the same version of the form the client
+   saw?*
 
 Two properties of `author_version` matter for the audit trail:
 
@@ -250,14 +255,8 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-xzw5: the revision marker gained a
-THIRD rank -- an author-supplied `form_metadata.author_version` between the
-government `edition_date` and the shape fingerprint, required to publish a kit
-that has neither and immutable once published. The "a better fallback is
-coming" paragraph described exactly this and is now the shipped behavior above.
-Earlier, 2026-08-06: post-merge freshness check against
-backend/services/callback_handler.py -- `_handle_confirm_field_tool` (default
-`confirmation_method="verbal"`), the `recorded`-guard, and the
-`log_field_confirmation(...)` call site (gated on `self._form_id and
-self._form_session_id`, carrying `kit_id`/`edition_date`) all re-verified
-line-for-line, no drift found).*
+*Last updated: 2026-08-13 (bd polyglot-pdf-8x56: the shape-fingerprint tier's
+answerable-shape inputs widened to include validation rules, the `required`
+flag, and `pdf_field_name`, above -- the earlier "field ids + types + option
+values" description was accurate for the pre-8x56 fingerprint but is not the
+current-state doctrine this file is meant to hold).*

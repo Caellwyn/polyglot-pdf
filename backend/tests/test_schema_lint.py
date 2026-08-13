@@ -849,6 +849,37 @@ def test_ordinary_sections_never_trip_to_review():
     assert [f for f in lint_schema(s) if f.rule == "to-review-pending"] == []
 
 
+def test_to_review_non_string_id_does_not_falsely_double_report():
+    """bd polyglot-pdf-5ry1: a field with a NON-STRING id (e.g. an int 123)
+    sitting in a to-review section must NOT ALSO trip a section-level
+    to-review-pending finding claiming the id "names no field at all" / "is
+    already filed in a proper section" -- both are false, since field 123 is
+    real and is still sitting in that very holding section.
+
+    Root cause: flagged_review_fields only tracked str-typed ids
+    (isinstance(f["id"], str)), while the section's own fields[] list is
+    filtered to string entries only -- so an int id never matched its own
+    stringified entry there, and the section-level check wrongly called it
+    stale. Mirrors test_to_review_field_trips_once_per_field's "no double
+    report" shape, but with a non-string id.
+    """
+    s = _schema([
+        {"id": 123, "type": "text", "pdf_field_name": "f123[0]",
+         "section_id": "sec_to_review_p1"},
+    ])
+    s["sections"] = [
+        {"id": "sec_to_review_p1", "label": "To review", "order": 1,
+         "fields": ["123"]},
+    ]
+    findings = [f for f in lint_schema(s) if f.rule == "to-review-pending"]
+    # Exactly the ONE field-level finding (field 123 is still un-reviewed --
+    # that part is true and correctly still an ERROR); the section-level
+    # "stale id" finding must NOT also fire for the same field.
+    assert len(findings) == 1
+    assert "123" in findings[0].path
+    assert "sections[" not in findings[0].path
+
+
 # ---------------------------------------------------------------------------
 # Translation verify/rectify flags (bd polyglot-pdf-9djc): the bake persists
 # LintFinding-shaped flags at _bakeoff.authoring.option_translation.flags and

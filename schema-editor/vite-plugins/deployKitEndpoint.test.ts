@@ -14,7 +14,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
-import { resolveKitDir, isSameOrigin, handleDeploy } from './deployKitEndpoint';
+import path from 'node:path';
+import { resolveKitDir, isSameOrigin, handleDeploy, DEFAULT_BUCKET } from './deployKitEndpoint';
 
 const ROOT = 'C:/repo/form-kits';
 
@@ -165,5 +166,55 @@ describe('handleDeploy: guards that run before any spawn', () => {
     await handleDeploy(fakeReq({ kitId: 'w7' }), res, opts(root));
     expect(state.status).toBe(500);
     expect(String((state.body as { detail: string }).detail)).toMatch(/script not found/);
+  });
+});
+
+describe('deployKitEndpoint: default bucket parity across every FORM_KITS_BUCKET default (bd polyglot-pdf-d7hy, polyglot-pdf-n2awd)', () => {
+  // The plugin always passes FORM_KITS_BUCKET explicitly when it spawns
+  // deploy-form-kit.sh (see handleDeploy's env block), and deploy-demo.sh /
+  // deploy-production.sh both export it explicitly before delegating to
+  // deploy-all.sh -- so every script's OWN bare `${FORM_KITS_BUCKET:-...}`
+  // default only matters for a bare CLI run with no env var set. If any two
+  // of them disagree, "unset" silently means a DIFFERENT bucket depending on
+  // which entry point ran -- exactly the d7hy hazard, and exactly how
+  // deploy-all.sh's own default was missed in the first round (bd n2awd:
+  // the original version of this test checked only deploy-form-kit.sh).
+  //
+  // This reads the actual script text rather than hand-copying each default,
+  // so editing any ONE of them without the others fails here instead of
+  // drifting silently -- the "enumerate the set" guard CLAUDE.md scar #7
+  // asks for: the failure mode is never re-discovered one script at a time.
+  //
+  // Every script that assigns a bare `${FORM_KITS_BUCKET:-...}` default MUST
+  // be listed here. Adding a new bucket-consuming script without adding it
+  // to this list is itself the omission this test exists to catch --
+  // deliberately no directory-wide scan (a real, intentional prod-default
+  // export like deploy-production.sh's `export FORM_KITS_BUCKET=` must NOT
+  // be swept in and flagged as a false mismatch).
+  const SCRIPTS_WITH_BARE_DEFAULTS = [
+    '../../scripts/deploy-form-kit.sh',
+    '../../scripts/pull-form-kits.sh',
+    '../../deploy-all.sh',
+  ];
+
+  it.each(SCRIPTS_WITH_BARE_DEFAULTS)(
+    '%s defaults FORM_KITS_BUCKET to the SAME bucket as the plugin',
+    (relPath) => {
+      const scriptPath = path.resolve(__dirname, relPath);
+      const scriptText = fs.readFileSync(scriptPath, 'utf-8');
+      const m = scriptText.match(/\w+="\$\{FORM_KITS_BUCKET:-([^}]+)\}"/);
+      expect(m, `expected to find a bare \${FORM_KITS_BUCKET:-...} default in ${relPath}`).not.toBeNull();
+      expect(m![1]).toBe(DEFAULT_BUCKET);
+    }
+  );
+
+  it('deploy-production.sh explicitly EXPORTS the prod bucket rather than defaulting to it', () => {
+    // The one legitimate prod-bucket reference: not a bare default (which
+    // would silently apply to demo too), but an explicit, unconditional
+    // export -- confirms the SCRIPTS_WITH_BARE_DEFAULTS allowlist above
+    // isn't hiding a real prod path by omission.
+    const scriptPath = path.resolve(__dirname, '../../deploy-production.sh');
+    const scriptText = fs.readFileSync(scriptPath, 'utf-8');
+    expect(scriptText).toMatch(/export FORM_KITS_BUCKET="polyglot-pdf-form-kits"/);
   });
 });
