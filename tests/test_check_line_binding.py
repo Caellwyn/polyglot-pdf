@@ -283,6 +283,158 @@ def test_collect_markers_rejects_a_column_that_repeats_a_token():
     assert len(clb.collect_markers(varied)) == 4
 
 
+def test_a_genuine_gutter_survives_an_adjacent_repeating_legend(capsys):
+    """bd polyglot-pdf-qk97 exit criterion 1: a clustered column combining a
+    REAL gutter with an adjacent, x-close repeating legend must not lose the
+    real gutter's markers -- and the legend's markers must not leak into the
+    return value either (an earlier fix attempt returned all 9: it re-derived
+    membership by re-filtering ALL candidates through an x-tolerance band,
+    which re-admitted the dropped legend markers because their x1 (302.4)
+    fell within tolerance of the surviving gutter's own band).
+
+    Synthetic shape from the bead: 6 markers at x_right=300 (a genuine
+    numbered gutter) plus 3 identical tokens at x_right=302.4 (dx=2.4 <=
+    _GUTTER_COL_TOL=2.5, so they chain into ONE cluster with the gutter).
+    Before ANY fix, the whole combined column was rejected the moment the
+    legend's repeat was seen -- 0 markers, not 6.
+    """
+    class _Page:
+        def __init__(self, words):
+            self._w = words
+
+        def get_text(self, _kind):
+            return self._w
+
+    gutter = [(0, 100 + 12 * i, 300, 110 + 12 * i, f"{i + 1}a", 0, 0, 0)
+              for i in range(6)]
+    legend = [(0, 100 + 12 * i + 3, 302.4, 108 + 12 * i, "1", 0, 0, 0)
+              for i in (1, 3, 5)]
+    page = _Page(sorted(gutter + legend, key=lambda w: w[1]))
+
+    markers = clb.collect_markers(page)
+    # The FULL return value, not a position-filtered subset: asserts the
+    # legend's "1" markers are genuinely EXCLUDED, not merely that the
+    # gutter's own texts happen to still be present somewhere in a larger set.
+    assert sorted(m[0] for m in markers) == ["1a", "2a", "3a", "4a", "5a", "6a"], (
+        f"expected exactly the 6 gutter markers, got {sorted(m[0] for m in markers)}"
+    )
+    # exit criterion 2: the drop is now OBSERVABLE (stderr), not silent.
+    err = capsys.readouterr().err
+    assert "dropped" in err.lower() and "repeat" in err.lower()
+
+
+def test_a_genuine_gutter_survives_a_legend_sharing_the_SAME_x_right(capsys):
+    """bd polyglot-pdf-qk97: the harder case the bead's own description names
+    -- 'a form whose left and right gutters share an x_right ... produces
+    repeated texts within one column' -- where gutter and legend markers
+    interleave at the IDENTICAL x_right, not merely a nearby one.
+
+    A position-based split (e.g. splitting a column at a y-order
+    discontinuity) cannot separate this case: gutter and legend rows can
+    interleave while the combined y-sequence stays monotonic overall, so no
+    discontinuity is ever detected and the whole column stays one run. Only a
+    text-VALUE-based rejection (drop just the repeating token, regardless of
+    where its instances sit) correctly isolates the gutter here.
+    """
+    class _Page:
+        def __init__(self, words):
+            self._w = words
+
+        def get_text(self, _kind):
+            return self._w
+
+    gutter = [(0, 100 + 24 * i, 300, 108 + 24 * i, f"{i + 1}a", 0, 0, 0)
+              for i in range(6)]
+    # Interleaved at the SAME x_right as the gutter, y-monotonic when merged.
+    legend = [(0, 106 + 24 * i, 300, 114 + 24 * i, "1", 0, 0, 0)
+              for i in (0, 1, 2)]
+    page = _Page(sorted(gutter + legend, key=lambda w: w[1]))
+
+    markers = clb.collect_markers(page)
+    assert sorted(m[0] for m in markers) == ["1a", "2a", "3a", "4a", "5a", "6a"], (
+        f"expected exactly the 6 gutter markers, got {sorted(m[0] for m in markers)}"
+    )
+    err = capsys.readouterr().err
+    assert "dropped" in err.lower()
+
+
+def test_a_column_with_no_genuine_survivors_drops_everything_but_is_observable(capsys):
+    """The pure-legend case (every token repeats, nothing survives) still
+    rejects the whole column -- the fix must not accidentally start
+    ACCEPTING a legend with no genuine gutter mixed in -- and the drop is
+    still logged (not silent)."""
+    class _Page:
+        def __init__(self, words):
+            self._w = words
+
+        def get_text(self, _kind):
+            return self._w
+
+    same = _Page([(0, 100 + 12 * i, 300, 110 + 12 * i, "1", 0, 0, 0)
+                  for i in range(4)])
+    assert clb.collect_markers(same) == []
+    err = capsys.readouterr().err
+    assert "dropped" in err.lower()
+
+
+def _page_marker_fingerprint(page) -> str:
+    """A stable per-page hash of collect_markers' exact output set (text,
+    rounded x1/y0/y1), sorted for order-independence. Rounds floats to 1
+    decimal so a platform-level float-repr difference (not a real content
+    change) cannot spuriously fail the pin."""
+    import hashlib
+
+    markers = clb.collect_markers(page)
+    normalized = sorted(
+        (t, round(x1, 1), round(y0, 1), round(y1, 1)) for t, x1, y0, y1 in markers
+    )
+    return hashlib.sha256(repr(normalized).encode()).hexdigest()[:16]
+
+
+# Per-KIT, per-PAGE fingerprints, measured directly against the real
+# form-kits/<kit>/form.pdf at fix time (both before and after the
+# text-value-rejection rewrite -- confirmed byte-identical). This is a real
+# per-page SET pin, not a summed count: a change that drops one marker and
+# gains a different one at the same total count (which a bare count comparison
+# would miss) changes the hash and fails here.
+_SHIPPED_KIT_PAGE_FINGERPRINTS = {
+    "f1040": ["bffd641b41a58e9e", "70b00746c831b142"],
+    "w7": ["fa3d46cbd391b51a"],
+    "i-90": ["4f53cda18c2baa0c"] * 7,
+}
+
+
+@pytest.mark.parametrize("kit", ["f1040", "w7", "i-90"])
+def test_collect_markers_is_byte_identical_on_every_page_of_the_shipped_kits(kit):
+    """bd polyglot-pdf-qk97 exit criterion 3: the text-value-based rejection
+    must not change collect_markers' output on any REAL shipped kit -- this
+    fix targets a synthetic shape none of the three kits currently exhibit
+    (confirmed here, not just asserted in prose).
+
+    Regression-guards the exact marker SET (text, x1, y0, y1) per PAGE, via a
+    fingerprint hash of each page's sorted, rounded marker tuples -- not a
+    summed count, which a marker moving between pages (or one marker
+    swapping for a different one at the same count) would not catch.
+    """
+    import fitz
+
+    pdf_path = _REPO / "form-kits" / kit / "form.pdf"
+    if not pdf_path.exists():
+        pytest.skip(f"{kit} form.pdf not present in this checkout")
+
+    doc = fitz.open(str(pdf_path))
+    actual = [_page_marker_fingerprint(page) for page in doc]
+    expected = _SHIPPED_KIT_PAGE_FINGERPRINTS[kit]
+    assert len(actual) == len(expected), (
+        f"{kit}: expected {len(expected)} pages, got {len(actual)} -- "
+        f"the shipped PDF's page count changed"
+    )
+    assert actual == expected, (
+        f"{kit}: collect_markers' per-page output changed on a REAL shipped "
+        f"kit (fingerprint mismatch on at least one page)"
+    )
+
+
 @needs_f1040
 def test_the_page2_prose_column_is_suppressed_by_the_ROW_guard():
     """Pins WHICH guard suppresses f1040 page 2's accepted prose column, because

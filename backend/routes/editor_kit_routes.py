@@ -2715,9 +2715,31 @@ async def set_editor_kit_status(
         # partly happened. An unstamped publish is a card showing the verify
         # hint; a 500 is a broken publish.
         try:
+            # `verified` must match _stamp_readiness's semantics, not just
+            # hardcode True (bd polyglot-pdf-ucjlu): dump_data at this point
+            # came from the GATE's _load_kit_dump call above, which by design
+            # collapses FormKitNotFound (no dump -- fine) and FormKitStoreError
+            # (dump exists but could not be READ -- a real failure) to the
+            # same None. Hardcoding verified=True stamped "fully checked" even
+            # when the dump-gated rules silently never ran because the read
+            # FAILED -- and since this re-stamp runs AFTER the save path
+            # (bd polyglot-pdf-kwh3t) already recorded an honest verified=False
+            # for that same corrupt dump, publish immediately overwrote it
+            # with the dishonest claim. Re-derive whether THIS read failed --
+            # not whether the dump merely doesn't exist -- via the same direct
+            # read _stamp_readiness uses. The dump itself cannot have changed
+            # between the gate's read and here (only `schema` was mutated by
+            # the drift sweep), so re-reading it is safe and cheap.
+            try:
+                await store.load_json_artifact(kit_id, _ACROFORM_ARTIFACT)
+                dump_verified = True
+            except FormKitNotFound:
+                dump_verified = True  # no dump ever existed -- not a failure
+            except FormKitStoreError:
+                dump_verified = False  # a real read failure
             post_sweep_findings = lint_schema(schema, dump_data)
             next_meta[_READINESS_KEY] = _readiness_stamp(
-                schema, post_sweep_findings, verified=True,
+                schema, post_sweep_findings, verified=dump_verified,
             )
         except Exception:  # noqa: BLE001 -- never fail a gated publish
             _log.warning("editor_status_stamp_failed", kit_id=kit_id,

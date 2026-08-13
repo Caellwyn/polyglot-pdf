@@ -1,0 +1,67 @@
+"""scripts/deploy-form-kit.sh's post-deploy hints must not be actively wrong
+(bd polyglot-pdf-pnye).
+
+Two hints went stale after bd polyglot-pdf-z2is:
+
+1. `gcloud run services update ... --set-env-vars ...` REPLACES the whole env
+   set, silently dropping CONFIRMATION_FIRESTORE_ENABLED, GOOGLE_CLOUD_PROJECT,
+   and VERTEXAI (added under z2is) -- disabling the durable confirmation audit
+   sink with no error if an operator follows the hint literally.
+2. `curl https://your-backend-url/api/form-kits` (no auth) 401s unconditionally
+   once that route became auth-gated (z2is), making a CORRECT deploy look
+   broken.
+
+These tests read the ACTUAL shipped script text, not a reimplementation, so a
+regression to either stale hint fails here.
+
+ASCII only.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEPLOY_KIT = REPO_ROOT / "scripts" / "deploy-form-kit.sh"
+
+
+def _hint_text() -> str:
+    return DEPLOY_KIT.read_text(encoding="utf-8")
+
+
+def _gcloud_env_flag_invocation_lines(text: str) -> list[str]:
+    """The line(s) that print the ACTUAL `gcloud ... --*-env-vars <vars>`
+    invocation an operator would copy-paste -- i.e. the flag immediately
+    followed by the FORM_KITS_MODE=... variable assignment -- excluding
+    prose that merely MENTIONS the flag name to explain why it is wrong
+    (e.g. "NOT --set-env-vars -- the latter REPLACES..."). That prose line
+    legitimately contains the destructive flag's name as a warning; only the
+    copy-pasteable command line is the thing this test must pin."""
+    return [
+        line for line in text.splitlines()
+        if re.search(r'--(set|update)-env-vars\s+FORM_KITS_MODE=', line)
+    ]
+
+
+def test_the_env_var_hint_uses_update_not_set():
+    lines = _gcloud_env_flag_invocation_lines(_hint_text())
+    assert lines, "expected exactly one printed --*-env-vars invocation line"
+    for line in lines:
+        assert "--update-env-vars" in line, (
+            f"printed invocation line uses the wrong flag (must be "
+            f"--update-env-vars, a merge, not --set-env-vars, a replace-"
+            f"the-whole-env-set): {line!r}"
+        )
+        assert "--set-env-vars" not in line
+
+
+def test_the_verify_hint_does_not_suggest_a_tokenless_curl():
+    text = _hint_text()
+    # The old hint literally embedded this exact tokenless curl -- if it
+    # comes back, an operator following it gets a 401 that reads as a
+    # broken deploy on a route that has been auth-gated since bd z2is.
+    assert 'curl https://your-backend-url/api/form-kits' not in text
+    # A working replacement must actually show HOW to authenticate the
+    # request, not just gesture at "add a token somewhere".
+    assert "Authorization: Bearer" in text
+    assert "AUTH-GATED" in text or "auth-gated" in text.lower()

@@ -448,18 +448,22 @@ def test_uncovered_structural_error_clause_and_backend_robustness():
     assert is_counted_reviewed({"type": "text", "_review": signed}) is False
     assert is_counted_reviewed({"id": "x", "_review": signed}) is False
 
-    # BACKEND-ONLY robustness -- deliberately NOT a parity claim. On these
-    # exact shapes the CLIENT mirror THROWS (options.some is not a function; a
-    # property read on null), so asserting them here as "mirrors the client"
-    # would document a parity that does not hold (Opus fresh-eyes round 7
-    # measured 12 divergent shapes out of 720, all client-throws). The backend
-    # degrades instead of throwing because it runs over hand-edited and legacy
-    # kits at publish time, where a crash would be a 500 rather than a blank
-    # panel. The client-side crash is pre-existing (C1, reviewStatus.ts is
-    # untouched by this bead) and tracked as bd polyglot-pdf-93p8; when it is
-    # fixed, these shapes belong in the shared parity fixture instead.
+    # FORMERLY backend-only robustness, now a REAL parity claim (bd
+    # polyglot-pdf-93p8 fixed the client mirror to degrade instead of
+    # throwing on these exact shapes -- Array.isArray + a per-option object
+    # guard, matching this function's own isinstance guards). Both malformed
+    # cases now also live in the shared reviewPredicateParity.json fixture,
+    # which asserts is_counted_reviewed/isCountedReviewed agree on them too;
+    # kept here as well as direct has_uncovered_structural_error-level
+    # documentation of the exact clause.
+    # None FIRST: the client's Array.prototype.some evaluates in order and a
+    # trailing non-throwing element (e.g. a string, whose property read is
+    # merely undefined, not a throw) can short-circuit .some() to `true`
+    # before ever reaching a later null -- so ["junk", None] alone would not
+    # actually mutation-prove the null-safety half of the fix. None-first
+    # forces the client's per-element guard to run on the very first element.
     assert has_uncovered_structural_error(
-        {"id": "c", "type": "radio", "options": ["junk", None]}) is True
+        {"id": "c", "type": "radio", "options": [None, "junk"]}) is True
     assert has_uncovered_structural_error(
         {"id": "c", "type": "select", "options": "not-a-list"}) is False
 
