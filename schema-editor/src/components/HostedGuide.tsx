@@ -83,10 +83,12 @@ const SECTIONS: GuideSection[] = [
             <K>Next to review</K> (or press <K>N</K>) to jump to the next one.
           </li>
           <li>
-            <K>Save, then mark it complete.</K> Press <K>Cmd+S</K> (
+            <K>Save, then submit it for review.</K> Press <K>Cmd+S</K> (
             <K>Ctrl+S</K>) to save. When every field is green, click{' '}
-            <K>Mark complete</K> next to the form selector (or on its card via
-            <K>Show form cards</K>) so the maintainer can publish it.
+            <K>Submit for review</K> next to the form selector (or on its card
+            via <K>Show form cards</K>). An author checks it and publishes it --
+            your work is frozen while they review, so nothing changes under
+            them.
           </li>
         </UL>
       </>
@@ -333,10 +335,13 @@ const SECTIONS: GuideSection[] = [
             <K>Cmd+Shift+Z</K> (Ctrl on Windows/Linux).
           </li>
           <li>
-            <K>Mark complete</K> (in the selector strip, or on a form's card)
-            promotes it. Save first -- the
-            button uses your last saved version. The server validates the schema
-            and refuses a broken one with the reason.
+            <K>Submit for review</K> (in the selector strip, or on a form's
+            card) hands it to an author. Save first -- the button uses your last
+            saved version. The server runs the same checks it runs at publish
+            and refuses a broken schema with the reason, so a form that cannot
+            ship never reaches the review queue. An author sees
+            <K>Publish</K> instead, and can send a form back to you for more
+            work.
           </li>
           <li>
             Completed forms ship to the voice app on the maintainer's next

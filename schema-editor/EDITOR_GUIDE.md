@@ -93,7 +93,7 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
    └─→ Save (Cmd/Ctrl+S)
 
 3. MARK COMPLETE
-   └─→ "Mark complete" on the card -> eligible for deploy (status gate)
+   └─→ "Submit for review" (editor) -> "Publish" (author) -> eligible for deploy
 ```
 
 ## Quick Start
@@ -123,7 +123,8 @@ A hosted build (`npm run build:hosted`, `VITE_DELIVERY_MODE=hosted` from
 2. The catalogue lists every kit in the shared workspace -- drafts included
    (drafts ARE the work list). Open a card, edit exactly as in local mode.
 3. **Cmd/Ctrl+S** saves back to the shared store (watch for the `Saving...` ->
-   `Saved` header state). **Mark complete** promotes the kit; the server
+   `Saved` header state). **Submit for review** hands the kit to an author,
+   who publishes it; the server
    validates the schema against the form contract first and refuses with the
    reason if it's broken. Completed kits reach the voice app on the
    maintainer's next deploy.
@@ -401,10 +402,26 @@ scrolling: type part of the field's id, spoken name, or PDF field name. The list
 filters to matches (grouping preserved); selecting a result selects that field
 across the PDF, list, and editor. Clear the box to restore the full list.
 
-### Mark a Form Complete (deploy gating)
+### Submit and Publish a Form (deploy gating)
+
+A form moves through four states, and who may make each move differs:
+
+| State | Meaning | Who moves it on |
+|-------|---------|-----------------|
+| `draft` | being worked on | the editor submits it |
+| `submitted` | waiting for an author to review | an author publishes, or sends it back |
+| `complete` | live -- the voice app serves it | an author retires or reopens it |
+| `unpublished` | retired; its bytes are what earlier confirmations name | an author republishes |
+
+A `submitted` form is frozen: nobody edits it while an author reviews, so the
+version they check is the version they publish. If an author sends it back, it
+returns to `draft` and is yours again.
 
 A kit is **draft** until you promote it. On each catalogue card:
-- **Mark complete** -- the PUBLISH GATE, not just a flag. With the backend
+- **Submit for review** (editor) / **Publish** (author) -- the PUBLISH GATE,
+  not just a flag. An editor submits and an author publishes: the same
+  structural checks run at BOTH steps, so a form that could never ship is
+  refused before it reaches the review queue. With the backend
   running (which `scripts/run-schema-editor.sh` starts for you), the server
   checks the kit before promoting it: the PDF is present, the schema validates,
   it carries extraction info and the v2 stamp, and lint is error-free. It then
@@ -420,13 +437,15 @@ A kit is **draft** until you promote it. On each catalogue card:
   and regenerates the manifest, after a confirmation naming the kit and bucket.
   It publishes form DATA only -- it does not deploy the app (no Cloud Run, no
   Hosting); that stays `deploy-demo.sh`.
-- **Revert to draft** -- the inverse, on a complete kit. Always available, even
-  with no backend: you must be able to un-publish something.
+- **Revert to draft** -- the inverse, on a complete kit. **Author only**: an
+  editor cannot reopen or retire a form that is already live, because pulling
+  a published form away from clients is not a subcontractor's call. An editor
+  sees "Published -- ask an author to reopen it" instead of the button.
 
 Promote a form only after its review % is where you want it -- once complete, the
 next deploy ships it to the voice app.
 
-> **Running without a backend?** Mark complete still works, but it writes the
+> **Running without a backend?** Publishing still works, but it writes the
 > status **unchecked** -- no schema validation, no lint, and no re-translation --
 > and says so on the card. A kit promoted that way can reach the voice app with
 > fields that speak English to every non-English user. Start the backend and mark
