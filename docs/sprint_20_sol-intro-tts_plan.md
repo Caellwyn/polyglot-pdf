@@ -189,6 +189,13 @@ deliverable** for counsel review and for auditing all 18 translations.
 on this table. Nothing downstream starts before then -- every other artifact
 derives from it.
 
+> *(Filing annotation, 2026-08-13: this table describes the pre-freeze element
+> set. The maintainer's post-filing decisions -- end of this file -- dropped
+> elements 10 and 14 and added element 16; the AUTHORITATIVE matrix for the
+> frozen master lives in
+> `scripts/spikes/intro_duration_findings.md` under "Authoritative
+> traceability matrix".)*
+
 ## HARD INVARIANT: the modal text IS the TTS input
 
 **Maintainer directive.** Whatever is written in the modal is exactly what is sent
@@ -487,6 +494,11 @@ after Agree, so **the wait and the click must swap order** in every driver, plus
 `RUNBOOK.md`.
 
 ## Epic exit criteria
+
+> *(Filing annotation, 2026-08-13: criterion 5 is AMENDED by the post-filing
+> maintainer decisions at the end of this file -- the duration window is
+> 60-95 seconds, and "all 15 legal elements" reads as the frozen 14-element
+> set: 1-9, 11-13, 15, 16.)*
 
 1. A first-time user in **any** supported language hears one continuous scripted
    intro+disclaimer in the `Algieba` persona at their locale, and the spoken words

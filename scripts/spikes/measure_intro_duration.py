@@ -64,7 +64,10 @@ from backend.services.spellback_tts import (  # noqa: E402
 )
 
 TARGET_LOW_S = 60.0
-TARGET_HIGH_S = 90.0
+# 95, not the plan's original 90: the maintainer widened the window 2026-08-13
+# when freezing the (longer) edited master -- see the "Post-filing maintainer
+# decisions" section of docs/sprint_20_sol-intro-tts_plan.md.
+TARGET_HIGH_S = 95.0
 SYNTH_INPUT_BYTE_CAP = 5000  # Cloud TTS synthesizeSpeech input limit (UTF-8).
 
 

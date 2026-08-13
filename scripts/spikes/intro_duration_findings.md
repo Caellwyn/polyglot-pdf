@@ -71,7 +71,11 @@ File: [`data/intro_en_v4.txt`](data/intro_en_v4.txt) (canonical master:
 replace `Form I-90` -> `[FORM NUMBER]`, `I Agree` -> `[AGREE LABEL]`).
 Evidence audio: [`data/intro_en_v4.mp3`](data/intro_en_v4.mp3) (81.3s run).
 
-### Legal-element traceability matrix (v4 clauses)
+### Legal-element traceability matrix (v4 clauses) -- SUPERSEDED
+
+**This round-1 table maps the pre-amendment 15-element set onto v4, which was
+never frozen. The authoritative matrix for the FROZEN master (v5) is in the
+"FROZEN" section below.** Kept for the round-1 record only.
 
 | # | Element | v4 clause |
 |---|---|---|
@@ -183,6 +187,45 @@ intro route: 0 dB (the +4 dB spell-back gain clips long-form content, and the
 standalone intro clip does not need the mid-conversation loudness match).
 Decision log also in `docs/sprint_20_sol-intro-tts_plan.md` post-filing
 section and on beads polyglot-pdf-s1iex / s1iex.1.
+
+#### Authoritative traceability matrix -- the FROZEN element set on the frozen master
+
+This is the counsel-review deliverable: 14 live elements (1-9, 11-13, 15, 16)
+mapped to the frozen master's clauses, with the two maintainer-dropped
+elements shown explicitly so counsel reviews the delta, not just the text.
+
+| # | Element | Frozen-master clause |
+|---|---|---|
+| 1 | Is an AI tool | "I'm an artificial intelligence -- a computer program." |
+| 2 | Language + form data entry only | "I'll be helping you fill out your [FORM NUMBER] today" + "I'll enter your response on the form" |
+| 3 | Not a lawyer | "I'm not a lawyer" |
+| 4 | Not a certified translator | "...or a certified translator." |
+| 5 | No legal / immigration / professional advice | "I can't give you legal or immigration advice" |
+| 6 | Does not tell you how to answer | "But I can't give you advice on what to enter or what to do." |
+| 7 | No lawyer-client relationship | "working with me doesn't make me or PolyGlot Forms your lawyer" |
+| 8 | Output is a DRAFT | "What we make together is a first draft of this document." |
+| 9 | Not a certified/official/sworn translation | shared with #4 (the speaker is not a certified translator), per the plan's original mapping |
+| 10 | **DROPPED** (USCIS may require certified review + signature) | removed by maintainer decision 2026-08-13; counsel pass pending reviews this drop |
+| 11 | Advise professional check before submitting | "review it with a certified interpreter or legal professional before you file or submit" |
+| 12 | AI makes mistakes | "I do make mistakes -- I can mishear a word, translate incorrectly, or just encounter an error." |
+| 13 | Must check every answer on the English form | "Check every answer on the English form" |
+| 14 | **DROPPED** (user responsible for every answer) | removed by maintainer decision 2026-08-13; partially succeeded by element 16's agree-to-review commitment; counsel pass pending reviews this drop |
+| 15 | Company not responsible for AI errors | "PolyGlot Forms cannot be responsible for my mistakes." |
+| 16 | **NEW** -- affirmative release as agreement terms | "By clicking \"[AGREE LABEL]\", you agree to review the completed document yourself and with a certified professional before filing, and you agree to absolve PolyGlot Forms and their staff of all responsibility for any mistakes or omissions." |
+
+Every translation carries the same 14 live elements (verified by the
+independent second-pass review, STATUS 0-ISSUES, recorded on bd s1iex.2).
+
+#### Evidence audio for the frozen master
+
+`data/intro_en_master.mp3` -- synthesized from the frozen master text itself
+(placeholders instantiated as `Form I-90` / `I Agree`, i.e. the typo-fixed
+text, byte-consistent with `intro_en_master.txt`), at the intro-route ship
+config (0 dB, MP3). **Measured: 94.3 s, IN the amended 60-95 s window; peak
+0.725 (no clipping at 0 dB on this draw -- consistent with the 0 dB gain
+decision).** The earlier `intro_en_v5.mp3` (+4 dB, pre-typo-fix text) stays
+as the round-2 historical artifact. This evidence run: 1 synthesis call,
+~USD 0.05; cumulative ~USD 0.86.
 
 ## Round 3 (2026-08-13): 18-language store + non-English spot-checks
 
