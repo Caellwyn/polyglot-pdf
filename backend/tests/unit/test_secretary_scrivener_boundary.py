@@ -429,4 +429,16 @@ def test_si_makes_hedge_and_defer_UNCONDITIONAL():
     # used for self-filing (maintainer: a core product invariant), so the
     # hedge must not point at a lawyer the applicant may not have.
     assert "reviewing their form" in si
-    assert "reviewed by a qualified human before filing" in si
+    # REGISTER MATTERS (Opus round 4): the shipped DisclaimerModal -- the text
+    # the user clicks "I Agree" to, and which is read aloud verbatim -- says
+    # "We strongly ADVISE you to have a qualified professional check your final
+    # form". It recommends review; it does not guarantee it. An SI that told
+    # the user review WILL happen would upgrade that recommendation into a
+    # promise, in the one place the two speak to the same person -- and it is
+    # exactly the premise an applicant would lean on when accepting a hedged
+    # answer about their own eligibility. Pin the conditional register.
+    assert "expected to review this form" in si
+    assert "do not promise the user that a review will happen" in si
+    assert "reviewed by a qualified human before filing" not in si, (
+        "that phrasing asserts review as certain; the disclaimer only advises "
+        "it -- keep the SI in the disclaimer's register")

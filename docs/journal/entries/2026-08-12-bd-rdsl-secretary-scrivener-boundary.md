@@ -171,7 +171,23 @@ self-filing -- it is used by a legal entity to pre-prepare first drafts, and
 customer contracts require staff review before filing. Deferring to a lawyer
 the applicant may not have would misdescribe the product; the shipped
 DisclaimerModal already says "have a qualified professional check your final
-form", so the SI now matches language the user has already agreed to.
+form".
+
+REGISTER CORRECTION (Opus round 4, and the one thing in this bead I got wrong
+on my own initiative): my first wording had the SI assert "Every form drafted
+here IS reviewed by a qualified human before filing" -- a categorical
+guarantee. The disclaimer the user actually clicks "I Agree" to, and which is
+read aloud verbatim, says "We strongly ADVISE you to have a qualified
+professional check your final form." That is a RECOMMENDATION, and its whole
+force is that review might not happen. My journal even claimed the SI
+"matches language the user has already agreed to" -- it did not; it upgraded
+an advisory into a promise, in the one place the two speak to the same person,
+and it is exactly the premise an applicant would lean on when accepting a
+hedged answer about their own eligibility. The mandatory-review arrangement is
+real, but it is a CONTRACT WITH THE FIRM, not a fact the applicant was told.
+Corrected to "A qualified human is expected to review this form before it is
+filed", plus an explicit "do not promise the user that a review WILL happen",
+and pinned (including a negative assertion on the guarantee phrasing).
 
 Both new clauses are mutation-verified: weakening "FLAG EVERY CONDITION", or
 making the always-hedge rule conditional ("hedge when unsure"), each reddens
