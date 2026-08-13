@@ -894,6 +894,20 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         Retired -- start the backend to publish again
                       </span>
                     )
+                  ) : kit.status === 'submitted' ? (
+                    // Awaiting an author's review, and write-locked: local mode
+                    // must not offer a promotion it would perform WITHOUT the
+                    // publish gate or any role check (bd polyglot-pdf-hqztg).
+                    // The terminal `else` below rendered "Mark complete" for
+                    // any status it did not name -- the same fall-through that
+                    // made a submit report "reverted to draft" in the hosted
+                    // catalogue.
+                    <span
+                      className="text-xs text-slate-600"
+                      title="This form is submitted for review. An author publishes it through the backend, which runs the full publish gate."
+                    >
+                      Submitted -- an author publishes it
+                    </span>
                   ) : (
                     <button
                       className="btn-sm btn-primary text-xs"

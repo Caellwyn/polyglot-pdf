@@ -183,11 +183,18 @@ export async function setKitStatus(
   // local write.
   const metaHandle = await tryGetFile(dir, METADATA_FILE);
   const existing = metaHandle ? await readJsonFile<KitMetadata>(metaHandle) : null;
-  if (existing?.status === 'unpublished') {
+  // Every WRITE-LOCKED status, not just unpublished. `submitted` joined that
+  // set (bd polyglot-pdf-hqztg) and this guard was left behind, so local mode
+  // -- which bypasses the server entirely when the backend is unreachable --
+  // would promote a kit that is awaiting author approval, with no role check
+  // at all. Same shape as the bug this guard was written for: the lock belongs
+  // at the primitive that writes, and it must know the WHOLE set.
+  if (existing?.status === 'submitted' || existing?.status === 'unpublished') {
     throw new Error(
-      `"${entry.id}" is unpublished (a superseded revision) and cannot be `
-      + 'changed by a local write -- publish it again through the backend, '
-      + 'which runs the full publish gate.',
+      `"${entry.id}" is ${existing?.status} and cannot be changed by a local `
+      + 'write -- a submitted kit is awaiting author review, and a superseded '
+      + 'one is what earlier confirmations point at. Use the backend, which '
+      + 'runs the full gate.',
     );
   }
   const next: KitMetadata = { ...(existing || {}), status };

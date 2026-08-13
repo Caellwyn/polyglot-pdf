@@ -1249,3 +1249,27 @@ describe('the editing lock is reachable from the UI (bd polyglot-pdf-hqztg)', ()
   });
 });
 
+
+describe('the submit notice names what happened (bd polyglot-pdf-hqztg)', () => {
+  it('a successful SUBMIT does not report "reverted to draft"', async () => {
+    // The notice chain branched on complete and unpublished and let everything
+    // else fall into a terminal else that said "reverted to draft" -- so the
+    // editor tier's most-used new action reported the OPPOSITE of what it did.
+    // The unpublished branch exists because that status hit this same bug;
+    // adding a fourth status reintroduced it (Opus fresh-eyes round 6).
+    vi.mocked(setRemoteStatus).mockResolvedValue({
+      ok: true, status: 'submitted', retranslated: 0,
+      translationModel: null, supersededKitId: null });
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+      selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(within(
+      screen.getByText('Draft Form').closest('li') as HTMLElement,
+    ).getByText('Submit for review'));
+
+    const notice = await screen.findByText(/submitted for review/);
+    expect(notice.textContent).not.toMatch(/reverted to draft/);
+    expect(notice.textContent).toMatch(/An author checks it/);
+  });
+});

@@ -373,6 +373,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           + 'files are kept, and it cannot be edited. Publish it again to put '
           + 'it back in service.',
         );
+      } else if (status === 'submitted') {
+        // A FOURTH status, and this chain's terminal `else` said "reverted to
+        // draft" for anything it did not name -- so the editor tier's most-used
+        // new action reported the OPPOSITE of what happened. The `unpublished`
+        // branch above exists because that status hit this same bug; adding a
+        // status without adding a branch reintroduced it (Opus fresh-eyes
+        // round 6). Name every status explicitly rather than relying on the
+        // fall-through.
+        setNotice(
+          `"${kit.label}" is submitted for review. An author checks it and `
+          + 'publishes it; it is frozen until they do.',
+        );
       } else {
         setNotice(`"${kit.label}" reverted to draft.`);
       }
