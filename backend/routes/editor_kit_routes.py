@@ -2707,9 +2707,17 @@ async def set_editor_kit_status(
             # ITS lock -- this second write merges superseded_meta verbatim and
             # kept a stale lock, recreating the same dead end one kit over
             # (round 9, reproduced). Same helper as the incoming kit so the two
-            # sites cannot drift apart again.
+            # sites cannot drift apart again -- ACTUALLY sharing it, not just
+            # claiming to: the hardcoded pop this replaced agreed with the
+            # helper only by accident of the current gating, so a future
+            # change to the keep-rule (bd polyglot-pdf-ijntk) would have
+            # applied to one site and silently not the other (round 10).
             retired_meta = {**(superseded_meta or {}), "status": "unpublished"}
+            retired_kept = _lock_after_transition(
+                superseded_meta, _status_of(superseded_meta), "unpublished", role)
             retired_meta.pop(_LOCK_KEY, None)
+            if retired_kept is not None:
+                retired_meta[_LOCK_KEY] = retired_kept
             await store.put_metadata(superseded_kit, retired_meta)
         except FormKitStoreError as exc:
             _log.error("editor_supersede_failed", kit_id=kit_id,
