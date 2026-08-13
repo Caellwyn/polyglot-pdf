@@ -123,3 +123,47 @@ describe("the static bundle ships published kits only", () => {
     }
   });
 });
+
+describe("retiring the LAST published kit empties the bundle", () => {
+  // The sharpest case, and the one the first version got wrong: the fs.rm that
+  // clears the previous build lived inside copyKitsToPublic, which an
+  // `if (!forms.length) return` skipped. So a tree whose only kit had just been
+  // retired kept serving that kit's schema, its PDF, and a stale index.json
+  // naming it -- the exact scenario this gate exists for (Opus fresh-eyes
+  // round 1).
+  it("wipes a STALE bundle when every kit is withheld", async () => {
+    const source = await fs.mkdtemp(path.join(os.tmpdir(), "kits-empty-src-"));
+    const outRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kits-empty-out-"));
+    const out = path.join(outRoot, "form-kits");
+
+    // A kit that WAS published and has just been retired.
+    const kit = path.join(source, "retired");
+    await fs.mkdir(kit, { recursive: true });
+    await fs.writeFile(path.join(kit, "schema.json"), '{"fields":[]}');
+    await fs.writeFile(path.join(kit, "form.pdf"), "%PDF-1.7");
+    await fs.writeFile(
+      path.join(kit, "metadata.json"), '{"status":"unpublished","label":"Retired"}');
+
+    // The bundle left behind by the build that ran while it was live.
+    await fs.mkdir(path.join(out, "retired"), { recursive: true });
+    await fs.writeFile(path.join(out, "retired", "schema.json"), '{"stale":true}');
+    await fs.writeFile(path.join(out, "retired", "form.pdf"), "%PDF-stale");
+    await fs.writeFile(
+      path.join(out, "index.json"),
+      JSON.stringify({ generatedAt: "old", forms: [{ id: "retired" }] }));
+
+    await promisify(execFile)(
+      process.execPath,
+      [path.join(FRONTEND, "node_modules", "tsx", "dist", "cli.mjs"), SCRIPT],
+      { env: { ...process.env, FORM_KITS_SOURCE_DIR: source, FORM_KITS_PUBLIC_DIR: out },
+        cwd: FRONTEND },
+    );
+
+    // The files must be GONE, not merely unindexed.
+    expect(await exists(path.join(out, "retired"))).toBe(false);
+    // ...and the index must not still name it.
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "index.json"), "utf-8"));
+    expect(manifest.forms).toEqual([]);
+    expect(manifest.generatedAt).not.toBe("old");
+  }, 120_000);
+});

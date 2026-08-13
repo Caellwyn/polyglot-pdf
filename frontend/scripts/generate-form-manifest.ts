@@ -191,16 +191,27 @@ async function run() {
   await validateSourceDir();
   const forms = await collectKits();
 
-  if (!forms.length) {
-    await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
-    console.warn("[form-manifest] No form kits detected. Skipping copy + manifest generation.");
-    return;
-  }
-
-  // Derived from the descriptors collectKits already admitted, NOT recomputed:
-  // one gate decision, consulted twice.
-  await copyKitsToPublic(new Set(forms.map((form) => form.id)));
+  // NO early return on an empty result. It used to skip copyKitsToPublic --
+  // and the fs.rm that CLEARS the previous build lives inside that function, so
+  // skipping it left the old bundle in place. Harmless when it only meant "no
+  // kits exist", but this bead gave `forms` a second way to come back empty:
+  // every kit was WITHHELD. Retiring your last published form then left its
+  // schema, its PDF and a stale index.json still served -- the precise scenario
+  // this gate exists for, failing (Opus fresh-eyes round 1, reproduced).
+  //
+  // The wipe now always runs, and an empty manifest is written rather than an
+  // old one left behind. An empty bundle is the CORRECT output for a tree with
+  // nothing publishable.
+  const publishable = new Set(forms.map((form) => form.id));
+  await copyKitsToPublic(publishable);
   await writeManifest(forms);
+
+  if (!forms.length) {
+    console.warn(
+      "[form-manifest] No publishable kits: the bundle is now EMPTY. " +
+      "(Kits exist but were withheld, or none were found.)",
+    );
+  }
 }
 
 run().catch((error) => {
