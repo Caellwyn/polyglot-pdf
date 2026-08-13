@@ -874,7 +874,23 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
     than to no stamp at all.
     """
     try:
-        dump = await _load_kit_dump(store, kit_id)
+        # NOT _load_kit_dump here (bd polyglot-pdf-kwh3t): that helper
+        # collapses BOTH FormKitNotFound (the legitimate pre-v96b "no dump"
+        # case) and FormKitStoreError (a corrupt/transient-unreadable
+        # acroform.json) to None -- so a lint that ran dump-BLIND because the
+        # READ failed looked identical to one that ran dump-blind because
+        # there was genuinely never a dump, and stamped verified=True either
+        # way. That silently missed the two dump-gated rules
+        # (dump-widget-multiclaim ERROR, dump-widget-unclaimed WARNING) while
+        # the stamp claimed the checks ran. Mirrors POST /kits/{kit_id}/lint's
+        # own read (see that route's comment): a missing dump is fine, a
+        # FAILED read must degrade to unverified, matching the open editor's
+        # strip's degraded state for the identical kit.
+        try:
+            raw_dump = await store.load_json_artifact(kit_id, _ACROFORM_ARTIFACT)
+            dump = raw_dump if isinstance(raw_dump, dict) else None
+        except FormKitNotFound:
+            dump = None
         findings = lint_schema(schema, dump)
         verified = True
     except Exception:  # noqa: BLE001 -- see the docstring: never fail the save

@@ -555,6 +555,70 @@ def test_a_failed_lint_stamps_UNVERIFIED(client, monkeypatch):
     assert meta["readiness"]["verified"] is False
 
 
+def test_a_corrupt_acroform_dump_stamps_UNVERIFIED_not_dump_blind_true(client):
+    """bd polyglot-pdf-kwh3t: a present-but-UNREADABLE acroform.json must
+    degrade the stamp to unverified, not silently run a dump-blind lint that
+    still claims verified=True.
+
+    Root cause: _load_kit_dump collapses BOTH FormKitNotFound (no dump ever
+    existed -- fine) and FormKitStoreError (the dump exists but could not be
+    READ -- a real failure) to None. A lint against dump=None is a completely
+    normal, unremarkable call, so _stamp_readiness's `verified = True` fired
+    regardless of WHICH reason the dump came back empty -- missing the two
+    dump-gated rules (dump-widget-multiclaim ERROR, dump-widget-unclaimed
+    WARNING) while the stamp told the card "this was fully checked". POST
+    /kits/{kit_id}/lint already treats this distinction correctly (a missing
+    dump degrades gracefully; a failed READ is a 502) -- this pins the SAVE
+    path (_stamp_readiness) matching that same distinction instead of erasing
+    it.
+    """
+    c, _store, root = client
+    kit_dir = _make_kit(root, "i-90", schema={"fields": []})
+    # A present acroform.json that is NOT valid JSON -- LocalFormKitStore's
+    # load_json_artifact raises FormKitStoreError on exactly this shape
+    # (json.JSONDecodeError), the real-world equivalent of a corrupted or
+    # truncated dump file, not a mock.
+    (kit_dir / "acroform.json").write_text("{not valid json", encoding="utf-8")
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text",
+                          "_review": {"status": "reviewed_correct"}}]},
+    )
+    assert r.status_code == 200, r.text
+    stamp = r.json()["readiness"]
+    # The counts are still recorded (honest: what we know without the dump)...
+    assert stamp["total"] == 1
+    # ...but verified must be False -- the dump-gated rules did NOT run
+    # against a real dump, and the card must show the verify hint rather than
+    # a confident percentage that silently skipped two lint rules.
+    assert stamp["verified"] is False
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["readiness"]["verified"] is False
+
+
+def test_a_genuinely_absent_acroform_dump_still_stamps_verified_TRUE(client):
+    """Sibling to the corrupt-dump test above: a kit with NO acroform.json at
+    all (the ordinary pre-v96b / never-extracted-with-a-dump case) must still
+    stamp verified=True -- only a FAILED read degrades it, not a missing one.
+    Guards against an over-broad fix that treats "no dump" as unverified too.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", schema={"fields": []})
+    # No acroform.json written at all.
+
+    r = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": [{"id": "a", "type": "text",
+                          "_review": {"status": "reviewed_correct"}}]},
+    )
+    assert r.status_code == 200, r.text
+    stamp = r.json()["readiness"]
+    assert stamp["verified"] is True
+
+
 def test_save_never_destroys_unparseable_metadata(client):
     """A save must not REPLACE a corrupt metadata.json with just the stamp.
 

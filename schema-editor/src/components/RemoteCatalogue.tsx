@@ -43,6 +43,17 @@ interface RemoteCatalogueProps {
    * contradicts.
    */
   onStatusRefusal?: (detail: string | null) => void;
+  /**
+   * Reset the host's open-kit state (bd polyglot-pdf-hbfky), the same
+   * callback FormCatalogue already receives for exactly this purpose.
+   * Deleting the kit that is CURRENTLY OPEN must close the editor pane too --
+   * without it, the card vanishes from the catalogue while the editor keeps
+   * showing the deleted kit's fields, and Cmd+S then 404s with no indication
+   * why (the kit simply no longer exists to save to). Optional so a caller
+   * that never opens a kit through this catalogue (none exist today, but the
+   * contract shouldn't force one) is not required to supply it.
+   */
+  clearOpenKit?: () => void;
 }
 
 interface RemoteKitProgress {
@@ -79,7 +90,7 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   onOpenKit, selectedKitId, role, onAuthError, liveProgress,
-  defaultExpanded = false, onStatusRefusal,
+  defaultExpanded = false, onStatusRefusal, clearOpenKit,
 }) => {
   const [kits, setKits] = React.useState<RemoteKitEntry[]>([]);
   // bd tynm: the card grid is collapsed by default behind a compact selector
@@ -280,6 +291,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       await deleteRemoteKit(kit.id);
       setDeletePrompt(null);
       setNotice(`"${kit.label}" was deleted permanently.`);
+      // Close the editor pane if the deleted kit was the OPEN one (bd
+      // polyglot-pdf-hbfky) -- without this, the card vanishes from the
+      // catalogue below while the editor keeps showing the deleted kit's
+      // fields, and Cmd+S then 404s with no indication why.
+      if (kit.id === selectedKitId) clearOpenKit?.();
       await refresh();
     } catch (err) {
       if (err instanceof AuthError) { onAuthError?.(); return; }
@@ -290,7 +306,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     } finally {
       setDeletingId(null);
     }
-  }, [refresh, onAuthError]);
+  }, [refresh, onAuthError, selectedKitId, clearOpenKit]);
 
   // Promote/demote a kit in the SHARED store. Promotion can be refused by the
   // server's publish gate (schema must validate) -- surface that detail. A
@@ -1029,7 +1045,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       </div>
                       <div className="mt-0.5 h-1.5 bg-gray-200 rounded overflow-hidden">
                         <div
-                          className={`h-full ${pct === 100 ? 'bg-green-500' : 'bg-yellow-500'}`}
+                          // Exact ratio, not the ROUNDED pct (bd polyglot-pdf-87zbs):
+                          // pct===100 also fires at 199/200 (Math.round(99.5)),
+                          // painting a confident GREEN 100% bar on a kit that is
+                          // NOT actually finished -- directly contradicting this
+                          // same card's own hover title a few lines up.
+                          className={`h-full ${completeFields === totalFields && totalFields > 0 ? 'bg-green-500' : 'bg-yellow-500'}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>

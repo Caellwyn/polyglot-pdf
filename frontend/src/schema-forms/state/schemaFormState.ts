@@ -544,8 +544,21 @@ export class SchemaFormStateManager {
     const section = this.getCurrentSection(state);
     if (!section) return [];
 
+    // []-alias-aware lookup (bd polyglot-pdf-rctj), matching
+    // findSectionIdForField below: a section.fields entry and the matching
+    // field.id can carry DIFFERENT bracket forms of the same field (Gemini
+    // drops/adds the trailing [] inconsistently), so an exact-only match can
+    // silently drop a field that IS in this section from the rendered list
+    // -- the field would appear missing even though onNextField correctly
+    // paged the UI to this section for it.
     return section.fields
-      .map((fieldId) => state.schema.fields.find((f) => f.id === fieldId))
+      .map((fieldId) => {
+        const exact = state.schema.fields.find((f) => f.id === fieldId);
+        if (exact) return exact;
+        const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
+        const aliasId = baseId + '[]';
+        return state.schema.fields.find((f) => f.id === baseId || f.id === aliasId);
+      })
       .filter((f): f is FormField => f !== undefined);
   }
 

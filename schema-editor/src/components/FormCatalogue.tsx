@@ -776,7 +776,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                     </div>
                     <div className="mt-0.5 h-1.5 bg-gray-200 rounded overflow-hidden">
                       <div
-                        className={`h-full ${pct === 100 ? 'bg-green-500' : 'bg-yellow-500'}`}
+                        // Exact ratio, not the ROUNDED pct (bd polyglot-pdf-87zbs):
+                        // pct===100 also fires at 199/200 (Math.round(99.5)),
+                        // painting a confident GREEN 100% bar on a kit that is
+                        // NOT actually finished -- directly contradicting this
+                        // same card's own hover title a few lines up.
+                        className={`h-full ${completeFields === totalFields && totalFields > 0 ? 'bg-green-500' : 'bg-yellow-500'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
