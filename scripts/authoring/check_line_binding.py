@@ -207,8 +207,8 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
         else:
             columns.append([c])
 
-    kept: list[tuple[float, float]] = []
-    dropped_for_repetition = 0
+    kept: list[tuple[str, float, float, float]] = []
+    dropped_texts_total = 0
     for col in columns:
         if len(col) < _GUTTER_MIN_COL:
             continue
@@ -218,56 +218,65 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
         # the amount column ('2a', '8', '9' all appear twice on page 1, and up to
         # three times on page 2). Hoisting this check to page scope would reject
         # both real gutters and take f1040 from 20 findings to 0.
-        # Requiring uniqueness rather than a minimum distinct count is what makes
-        # the rule robust: a nearby unrelated token can join the cluster and
-        # supply "variety", but it cannot remove a repeat.
-        # Measured on every page of the three real kits: every genuine gutter has
-        # distinct == n (f1040 p1 x=100.8 4/4, x=105.3 7/7, x=495.4 19/19; p2
-        # x=100.8 23/23, x=497.6 22/22; w7 x=123.1 7/7), while both f1040 legend
-        # columns are 1 distinct out of 3.
         #
-        # SPLIT AT Y-ORDER DISCONTINUITY before checking for repeats (bd
-        # polyglot-pdf-qk97). A genuine gutter numbers rows top-to-bottom, so
-        # its y0 sequence is monotonic non-decreasing within the cluster; a
-        # cluster combining a real gutter with an adjacent, x-close legend (or
-        # two gutters restarting the same numbering, e.g. a continuation
-        # table) interleaves rows from BOTH, and a repeat anywhere in the
-        # combined column used to reject the WHOLE column -- including the
-        # genuine gutter's markers, not just the legend's. Splitting into
-        # maximal monotonic-y runs first isolates the genuine gutter (whose
-        # own run has no internal repeat) from the offending run, so only the
-        # actually-repeating run is dropped.
-        runs: list[list[tuple[str, float, float, float]]] = []
-        for c in col:
-            if runs and c[2] < runs[-1][-1][2]:
-                runs.append([c])
-            else:
-                if not runs:
-                    runs.append([])
-                runs[-1].append(c)
-        for run in runs:
-            if len(run) < _GUTTER_MIN_COL:
-                continue
-            texts = [c[0] for c in run]
-            if len(set(texts)) != len(texts):
-                # Observable drop (exit criterion 2): a column dropped for
-                # repetition is now DISTINGUISHABLE from a page with no
-                # gutter at all, rather than silently indistinguishable.
-                dropped_for_repetition += 1
-                continue
-            kept.append((run[0][1], run[-1][1]))
-    if dropped_for_repetition:
+        # REJECT ONLY THE REPEATING TEXT VALUES, not the whole column (bd
+        # polyglot-pdf-qk97). The earlier rule rejected the ENTIRE column the
+        # moment any text repeated within it -- correct for a pure legend
+        # column, but a genuine gutter clustered adjacent to (or sharing the
+        # exact x_right of, e.g. two gutters restarting the same numbering in
+        # a continuation table) a repeating legend lost its own markers too.
+        # A position-based split (e.g. "split at a y-order discontinuity")
+        # was tried and rejected: it only separates gutter from legend when
+        # they happen to occupy different x_right bands that column-building
+        # sorts apart first, and still re-admits dropped members through any
+        # x-tolerance re-scan -- neither holds when gutter and legend
+        # genuinely interleave at THE SAME x_right, which f1040-shaped forms
+        # can do (a form whose left and right gutters share an x_right, or a
+        # continuation table restarting numbering in the same gutter).
+        # Rejecting only the TEXT VALUES that repeat is position-independent:
+        # a gutter's own tokens are still all distinct (measured on every
+        # page of the three real kits: f1040 p1 x=100.8 4/4, x=105.3 7/7,
+        # x=495.4 19/19; p2 x=100.8 23/23, x=497.6 22/22; w7 x=123.1 7/7), so
+        # none of its markers are ever in the repeating set, however the
+        # legend's repeats are interleaved with them.
+        texts = [c[0] for c in col]
+        text_counts: dict[str, int] = {}
+        for t in texts:
+            text_counts[t] = text_counts.get(t, 0) + 1
+        repeating_texts = {t for t, n in text_counts.items() if n > 1}
+        if not repeating_texts:
+            kept.extend(col)
+            continue
+        survivors = [c for c in col if c[0] not in repeating_texts]
+        dropped_texts_total += len(repeating_texts)
+        # The survivors must STILL clear the minimum-column-size bar: a
+        # column that is mostly-repeating with a couple of stray distinct
+        # tokens is not thereby promoted to a gutter (mirrors the ORIGINAL
+        # rule's intent -- a handful of leftover unique tokens is not
+        # "recurs down the page").
+        if len(survivors) >= _GUTTER_MIN_COL:
+            kept.extend(survivors)
+    if dropped_texts_total:
+        # Observable drop (exit criterion 2): a repeated marker text is now
+        # DISTINGUISHABLE from a page with no gutter at all, rather than
+        # silently indistinguishable -- and unlike the whole-column-reject
+        # version, this counts DISTINCT repeating text values, not columns,
+        # since a column is no longer an atomic accept/reject unit.
         print(
-            f"NOTE: dropped {dropped_for_repetition} column run(s) for a "
-            f"repeated marker text (a legend or restarted numbering, not a "
-            f"gutter)",
+            f"NOTE: dropped {dropped_texts_total} repeated marker text "
+            f"value(s) from column candidates (a legend or restarted "
+            f"numbering, not a gutter)",
             file=sys.stderr,
         )
     if not kept:
         return []
-    return [c for c in cands
-            if any(lo - _GUTTER_COL_TOL <= c[1] <= hi + _GUTTER_COL_TOL
-                   for lo, hi in kept)]
+    # Return the KEPT markers directly, not a re-filter of `cands` by x-tolerance
+    # bounds: re-deriving membership from a padded band would re-admit a
+    # DROPPED marker whose x1 happens to fall within tolerance of a KEPT run's
+    # band (exactly the bug an earlier version of this fix had -- a dropped
+    # legend marker close in x to a surviving gutter leaked back in). `kept`
+    # is already the exact, correct marker set.
+    return kept
 
 
 def marker_for_widget(markers, rect) -> Optional[str]:
