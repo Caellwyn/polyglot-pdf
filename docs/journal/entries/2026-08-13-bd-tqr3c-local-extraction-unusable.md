@@ -93,6 +93,23 @@ worktree edit does not. Only then was the claim earned.
 - `tsc --noEmit` clean; schema-editor suite green; backend suite 3071 passed /
   3 skipped on the dev-merged tree.
 
+## Doc-freshness review
+
+`closeout_prep.py` flagged STALE docs. Reviewed against this branch: **none of
+them trace to this diff.** This change touches 5 source files
+(`scripts/run-schema-editor.sh`, `scripts/dev-local.ps1`,
+`schema-editor/vite.config.ts`, `schema-editor/vite-plugins/extractEndpoint.ts`,
+`schema-editor/src/utils/extractionClient.ts`), and not one appears among the
+"-> updated" triggers behind any flagged doc -- every trigger is a file changed
+on `dev` (`form_models.py`, `field_validator.py`, `live_ai_gemini.py`,
+`config.py`, the conftests, `deploy-demo.sh`, ...). Pre-existing debt from other
+branches, not introduced or worsened here.
+
+Also checked directly for docs this change could invalidate: `schema-editor/`'s
+README makes no claim about the reload watcher, and the only prose describing
+exit-3 behavior lives in journal entries (historical record -- correctly left
+alone). No tier-1/tier-2 doc states the behavior this PR changes.
+
 ## Follow-ups filed
 
 - **polyglot-pdf-ysn61** -- `extractEndpoint.test.ts` has 28 tests and NONE reach
