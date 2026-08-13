@@ -377,6 +377,33 @@ def test_a_column_with_no_genuine_survivors_drops_everything_but_is_observable(c
     assert "dropped" in err.lower()
 
 
+def _page_marker_fingerprint(page) -> str:
+    """A stable per-page hash of collect_markers' exact output set (text,
+    rounded x1/y0/y1), sorted for order-independence. Rounds floats to 1
+    decimal so a platform-level float-repr difference (not a real content
+    change) cannot spuriously fail the pin."""
+    import hashlib
+
+    markers = clb.collect_markers(page)
+    normalized = sorted(
+        (t, round(x1, 1), round(y0, 1), round(y1, 1)) for t, x1, y0, y1 in markers
+    )
+    return hashlib.sha256(repr(normalized).encode()).hexdigest()[:16]
+
+
+# Per-KIT, per-PAGE fingerprints, measured directly against the real
+# form-kits/<kit>/form.pdf at fix time (both before and after the
+# text-value-rejection rewrite -- confirmed byte-identical). This is a real
+# per-page SET pin, not a summed count: a change that drops one marker and
+# gains a different one at the same total count (which a bare count comparison
+# would miss) changes the hash and fails here.
+_SHIPPED_KIT_PAGE_FINGERPRINTS = {
+    "f1040": ["bffd641b41a58e9e", "70b00746c831b142"],
+    "w7": ["fa3d46cbd391b51a"],
+    "i-90": ["4f53cda18c2baa0c"] * 7,
+}
+
+
 @pytest.mark.parametrize("kit", ["f1040", "w7", "i-90"])
 def test_collect_markers_is_byte_identical_on_every_page_of_the_shipped_kits(kit):
     """bd polyglot-pdf-qk97 exit criterion 3: the text-value-based rejection
@@ -384,9 +411,10 @@ def test_collect_markers_is_byte_identical_on_every_page_of_the_shipped_kits(kit
     fix targets a synthetic shape none of the three kits currently exhibit
     (confirmed here, not just asserted in prose).
 
-    Regression-guards the exact marker SET (text, x1, y0, y1) per page, not
-    just a count, so a change that drops one marker and gains a different
-    one at the same count would still be caught.
+    Regression-guards the exact marker SET (text, x1, y0, y1) per PAGE, via a
+    fingerprint hash of each page's sorted, rounded marker tuples -- not a
+    summed count, which a marker moving between pages (or one marker
+    swapping for a different one at the same count) would not catch.
     """
     import fitz
 
@@ -395,17 +423,15 @@ def test_collect_markers_is_byte_identical_on_every_page_of_the_shipped_kits(kit
         pytest.skip(f"{kit} form.pdf not present in this checkout")
 
     doc = fitz.open(str(pdf_path))
-    # Each kit's EXPECTED total marker count across the whole document,
-    # measured directly against form-kits/<kit>/form.pdf at fix time (both
-    # before and after the text-value-rejection rewrite -- confirmed
-    # identical). A change to this number would mean the rule started
-    # including/excluding something different on a REAL kit, not just the
-    # synthetic repro shapes above.
-    totals = {"f1040": 101, "w7": 10, "i-90": 0}
-    total = sum(len(clb.collect_markers(page)) for page in doc)
-    assert total == totals[kit], (
-        f"{kit}: expected {totals[kit]} total markers across all pages, got {total} "
-        f"-- collect_markers' output changed on a REAL shipped kit"
+    actual = [_page_marker_fingerprint(page) for page in doc]
+    expected = _SHIPPED_KIT_PAGE_FINGERPRINTS[kit]
+    assert len(actual) == len(expected), (
+        f"{kit}: expected {len(expected)} pages, got {len(actual)} -- "
+        f"the shipped PDF's page count changed"
+    )
+    assert actual == expected, (
+        f"{kit}: collect_markers' per-page output changed on a REAL shipped "
+        f"kit (fingerprint mismatch on at least one page)"
     )
 
 
