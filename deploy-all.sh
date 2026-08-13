@@ -118,7 +118,16 @@ FORM_KITS_DIR="$SCRIPT_DIR/form-kits"
 
 BACKEND_SERVICE_NAME="polyglot-backend"
 REGION="us-central1"
-FORM_KITS_BUCKET="${FORM_KITS_BUCKET:-polyglot-pdf-form-kits}"
+# Demo bucket by default (bd polyglot-pdf-d7hy, enumerated the set after the
+# outer cross-surface review caught this 4th caller), matching every other
+# bucket-default in the repo (scripts/deploy-form-kit.sh, scripts/pull-form-
+# kits.sh, schema-editor/vite-plugins/deployKitEndpoint.ts's DEFAULT_BUCKET)
+# -- "unset" means demo everywhere, never a silent prod upload. Both
+# deploy-demo.sh and deploy-production.sh export FORM_KITS_BUCKET explicitly
+# before calling this script, so this default only matters for a bare
+# `./deploy-all.sh --form-kits` invocation (DEPLOYMENT.md's documented usage);
+# explicitly set FORM_KITS_BUCKET for a real prod deploy run this way.
+FORM_KITS_BUCKET="${FORM_KITS_BUCKET:-polyglot-demo-aa709-form-kits}"
 FORM_KITS_PREFIX="${FORM_KITS_PREFIX:-form-kits}"
 
 # Frontend build command, overridable by the channel deploy scripts. The deployed

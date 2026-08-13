@@ -17,10 +17,11 @@
 set -e
 
 # Configuration
-# Demo bucket by default (bd polyglot-pdf-d7hy), matching every other caller in
-# this repo (schema-editor/vite-plugins/deployKitEndpoint.ts's DEFAULT_BUCKET,
-# scripts/pull-form-kits.sh's BUCKET) -- "unset" means demo everywhere, never a
-# silent prod upload. The editor's deploy endpoint always passes FORM_KITS_BUCKET
+# Demo bucket by default (bd polyglot-pdf-d7hy), matching every other bucket-
+# default in this repo (schema-editor/vite-plugins/deployKitEndpoint.ts's
+# DEFAULT_BUCKET, scripts/pull-form-kits.sh's BUCKET, deploy-all.sh's own
+# FORM_KITS_BUCKET default) -- "unset" means demo everywhere, never a silent
+# prod upload. The editor's deploy endpoint always passes FORM_KITS_BUCKET
 # explicitly (it never relies on this default), so this only matters for a bare
 # CLI invocation with no env var; explicitly set FORM_KITS_BUCKET for a real prod
 # deploy.
