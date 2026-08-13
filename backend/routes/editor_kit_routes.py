@@ -2582,6 +2582,22 @@ async def set_editor_kit_status(
         await _archive_published_revision(store, superseded_kit, superseded_meta)
 
     next_meta = {**(meta or {}), "status": body.status}
+    # A STATUS CHANGE HANDS THE KIT OVER, so it releases the lock. Keeping it
+    # bricked the bead's headline flow: an author takes the lock to review,
+    # sends the kit back to draft, and the lock stays theirs -- so the editor
+    # 409s on save, on re-submit, and on BOTH lock routes, with no control
+    # rendered to self-rescue (an editor is offered nothing on an author-held
+    # kit, by design). The subcontractor could not do the work they were sent
+    # back to do (Opus fresh-eyes round 8, reproduced end to end).
+    #
+    # It also outlived a publish, so a live kit advertised "Editor editing"
+    # forever -- cosmetic today, a real hole once bd polyglot-pdf-ijntk makes
+    # locks per-user.
+    #
+    # Editing is what the lock guards, and a status transition ends the editing
+    # turn either way: handed to an author for review, handed back for changes,
+    # or published and write-locked. Nobody holds it across that boundary.
+    next_meta.pop(_LOCK_KEY, None)
     # Stamp the PUBLISH DATE on promotion (bd polyglot-pdf-47r3, maintainer
     # 2026-08-04). It is the revision marker for a kit with no government
     # edition date -- a firm's own intake form has no "12/2024", but it does

@@ -1523,3 +1523,67 @@ def test_taking_a_lock_on_a_kit_with_NO_metadata_still_works(client):
 
     assert resp.status_code == 200, resp.text
     assert _run(store.load_metadata("fresh"))["editing_lock"] == {"role": "author"}
+
+
+# --- a status change releases the lock (Opus fresh-eyes round 8) -------------
+
+
+def test_SENDING_BACK_does_not_brick_the_editor_out_of_their_own_draft(client):
+    """The bead's headline flow, reproduced as a dead end before the fix.
+
+    Author takes the lock to review -> sends the kit back to draft -> the lock
+    stayed theirs. The editor then 409'd on save, on re-submit, and on BOTH
+    lock routes, and the UI renders an editor NO control on an author-held kit
+    (by design), so there was no way to self-rescue. The subcontractor could
+    not do the work they had just been sent back to do.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+    assert c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR).status_code == 200
+
+    # The author sends it back.
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
+
+    assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
+    # ...and the editor can actually work on it again.
+    resp = c.put("/api/editor/kits/w7/schema",
+                 json={"fields": [{"id": "f1"}]}, headers=HDR)
+    assert resp.status_code == 200, resp.text
+
+
+def test_publishing_RELEASES_the_lock(client):
+    """A lock outliving a publish left a live kit advertising "Editor editing"
+    forever -- cosmetic while locks are role-scoped, a real hole once bd
+    polyglot-pdf-ijntk makes them per-user."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 200
+    assert _status(c, "w7", "submitted", headers=HDR).status_code == 200
+    assert _status(c, "w7", "complete", headers=AUTH_HDR).status_code == 200
+
+    assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
+
+
+def test_EVERY_status_transition_releases_the_lock(client):
+    """Parametrized over the whole transition set rather than the two that
+    prompted the fix -- checking a sample of a set is exactly how this bead
+    lost the same invariant repeatedly."""
+    c, store, root = client
+    for kit_id, start, target, hdr in (
+        ("a", "draft", "submitted", HDR),
+        ("b", "submitted", "draft", AUTH_HDR),
+        ("c", "submitted", "complete", AUTH_HDR),
+        ("d", "complete", "unpublished", AUTH_HDR),
+        ("e", "complete", "draft", AUTH_HDR),
+    ):
+        _make_kit(root, kit_id, status=start)
+        # Lock as the SAME role that will perform the transition: an
+        # author-held lock legitimately refuses an editor's submit, so using
+        # AUTH_HDR here would test the refusal, not the release.
+        assert c.post(f"/api/editor/kits/{kit_id}/lock",
+                      headers=hdr).status_code == 200
+        resp = _status(c, kit_id, target, headers=hdr)
+        assert resp.status_code == 200, f"{start}->{target}: {resp.text}"
+        assert ekr._LOCK_KEY not in _run(store.load_metadata(kit_id)), (
+            f"{start}->{target} kept the lock")
