@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-12 (bd polyglot-pdf-hqztg: a fourth kit status, `submitted`, with the role checked PER TRANSITION -- editors submit for review, authors publish -- plus two lock routes an author can always preempt. Also bd polyglot-pdf-6x1j: a guarded DELETE route -- author-only, and refused when the confirmation-record check cannot run. Also bd polyglot-pdf-xzw5 -- the /status route
+*Last updated: 2026-08-13 (bd polyglot-pdf-hqztg: a fourth kit status, `submitted`, with the role checked PER TRANSITION -- editors submit for review, authors publish -- plus two lock routes an author can always preempt. A status transition RELEASES the lock, except reopening a live kit, which keeps it for the author doing the reopening; and the structural gates now run on a submit as well as a publish. Also bd polyglot-pdf-6x1j: a guarded DELETE route -- author-only, and refused when the confirmation-record check cannot run. Also bd polyglot-pdf-xzw5 -- the /status route
 gained `author_version`, required to publish a kit with no government
 edition_date and immutable once published, and the audit record's
 `edition_date` column now carries a three-rank marker. Also bd
