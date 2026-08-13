@@ -231,6 +231,50 @@ describe('FormCatalogue', () => {
     await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
   });
 
+  it('a 199-of-200 kit shows a YELLOW bar, not a green 100% one (bd polyglot-pdf-87zbs)', async () => {
+    // pct is a ROUNDED percentage (Math.round(199/200*100) === 100), so a
+    // predicate keyed on pct===100 alone paints a confident green "finished"
+    // bar on a kit that still has 1 unreviewed field -- directly contradicting
+    // this same card's own hover title ("199 of 200 fields complete") right
+    // next to it, and the publish gate that will still refuse it.
+    const fullSchema = JSON.stringify({
+      form_metadata: { form_number: 'T-1' }, sections: [],
+      fields: [{
+        id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1',
+        read_only: false, spoken_name: 'first',
+        help: { instructions: 'Enter it.' },
+        _review: { status: 'reviewed_correct' },
+      }],
+    });
+    const root = mockRoot([
+      mockKit('almost-done', {
+        'schema.json': fullSchema,
+        'metadata.json': JSON.stringify({
+          label: 'Almost Done', status: 'draft',
+          readiness: {
+            reviewed: 199, toReview: 0, total: 200, errors: 0, percent: 100,
+            ready: false, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+
+    await screen.findByText('Almost Done');
+    await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
+
+    const bars = document.querySelectorAll('.h-full');
+    const progressBars = Array.from(bars).filter((el) =>
+      el.className.includes('bg-green-500') || el.className.includes('bg-yellow-500'));
+    expect(progressBars.length).toBe(1);
+    expect(progressBars[0].className).toContain('bg-yellow-500');
+    expect(progressBars[0].className).not.toContain('bg-green-500');
+  });
+
   it('the compact STRIP dropdown shows no percentage for an unstamped kit (bd g687)', async () => {
     // The strip is the DEFAULT view (cards are behind "Show form cards"), and
     // it originally kept reading the local disk re-scan -- so it printed a

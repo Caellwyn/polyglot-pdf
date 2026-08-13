@@ -129,7 +129,15 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
               {editingHere && (
                 <FieldEditPopover
                   field={editingHere}
-                  value={fieldValues[editingHere.id]}
+                  // []-alias-aware read (bd polyglot-pdf-1utg), matching the
+                  // overlay's own readFieldEntryWithAlias read a few lines up
+                  // (bd polyglot-pdf-7sdc). A bare fieldValues[editingHere.id]
+                  // opened the popover BLANK for a field whose only surviving
+                  // fieldValues entry (post-got6 dedup) sits under the OTHER
+                  // bracket variant than editingHere.id -- the overlay already
+                  // shows it filled/confirmed, so clicking to edit it would
+                  // show an empty input and risk overwriting the real answer.
+                  value={readFieldEntryWithAlias(fieldValues, editingHere.id)}
                   allFieldValues={fieldValues}
                   error={validationErrors?.[editingHere.id] ?? null}
                   onChange={(value) => onFieldChange!(editingHere.id, value)}

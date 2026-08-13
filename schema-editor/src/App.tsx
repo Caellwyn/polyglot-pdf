@@ -1305,6 +1305,10 @@ export const App: React.FC = () => {
             // A Mark-complete refusal is homed on the strip's refusal line
             // beside the counts it contradicts (sprint-18 C1, decision 1).
             onStatusRefusal={setPublishRefusal}
+            // Deleting the OPEN kit must close the editor pane too (bd
+            // polyglot-pdf-hbfky), the same callback FormCatalogue below
+            // already receives for this purpose.
+            clearOpenKit={clearOpenKit}
             liveProgress={
               selectedKitId && schema
                 ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema, lintFindings) }

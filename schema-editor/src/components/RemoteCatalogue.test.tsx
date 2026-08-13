@@ -139,6 +139,56 @@ describe('RemoteCatalogue', () => {
     expect(screen.queryByTestId('readiness-hint')).not.toBeInTheDocument();
   });
 
+  it('a 199-of-200 kit shows a YELLOW bar, not a green 100% one (bd polyglot-pdf-87zbs)', async () => {
+    // pct is a ROUNDED percentage (Math.round(199/200*100) === 100), so a
+    // predicate keyed on pct===100 alone paints a confident green "finished"
+    // bar on a kit that still has 1 unreviewed field -- directly contradicting
+    // this same card's own hover title ("199 of 200 fields complete") right
+    // next to it, and the publish gate that will still refuse it.
+    vi.mocked(listRemoteKits).mockResolvedValue(KITS.map((k) => (
+      k.hasSchema
+        ? { ...k, readiness: {
+            reviewed: 199, toReview: 0, total: 200, errors: 0, percent: 100,
+            ready: false, verified: true, schemaSha1: 'abc123',
+          } }
+        : k
+    )));
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getAllByText('100%').length).toBe(2));
+
+    const bars = document.querySelectorAll('.h-full');
+    const progressBars = Array.from(bars).filter((el) =>
+      el.className.includes('bg-green-500') || el.className.includes('bg-yellow-500'));
+    expect(progressBars.length).toBe(2);
+    for (const bar of progressBars) {
+      expect(bar.className).toContain('bg-yellow-500');
+      expect(bar.className).not.toContain('bg-green-500');
+    }
+  });
+
+  it('a genuinely complete (200-of-200) kit still shows a GREEN bar', async () => {
+    // Regression guard for the fix above: the exact-ratio predicate must
+    // still recognize TRUE completion, not just stop recognizing 100%.
+    vi.mocked(listRemoteKits).mockResolvedValue(KITS.map((k) => (
+      k.hasSchema
+        ? { ...k, readiness: {
+            reviewed: 200, toReview: 0, total: 200, errors: 0, percent: 100,
+            ready: true, verified: true, schemaSha1: 'abc123',
+          } }
+        : k
+    )));
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getAllByText('100%').length).toBe(2));
+
+    const bars = document.querySelectorAll('.h-full');
+    const progressBars = Array.from(bars).filter((el) =>
+      el.className.includes('bg-green-500') || el.className.includes('bg-yellow-500'));
+    expect(progressBars.length).toBe(2);
+    for (const bar of progressBars) {
+      expect(bar.className).toContain('bg-green-500');
+    }
+  });
+
   it('an UNREADABLE schema shows the corruption notice, never a stamped % (bd g687)', async () => {
     // A stamp measured an EARLIER, readable schema. If schema.json later
     // becomes corrupt, the card must say so -- not print the old stamp's
@@ -1145,6 +1195,56 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
       expect(screen.getByText(/has confirmation records/)).toBeInTheDocument());
     // Still open, so the refusal sits next to the form it names.
     expect(screen.getByText('Delete permanently')).toBeTruthy();
+  });
+
+  it('calls clearOpenKit when the DELETED kit is the currently-open one (bd polyglot-pdf-hbfky)', async () => {
+    vi.mocked(deleteRemoteKit).mockResolvedValueOnce(3);
+    const clearOpenKit = vi.fn();
+    render(
+      <RemoteCatalogue
+        onOpenKit={() => {}}
+        selectedKitId="done-kit"
+        role="author"
+        clearOpenKit={clearOpenKit}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    expect(clearOpenKit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT call clearOpenKit when the deleted kit is NOT the open one', async () => {
+    // The editor pane must stay put when a different, unrelated kit is
+    // deleted -- only the SAME kit id being open triggers the reset.
+    vi.mocked(deleteRemoteKit).mockResolvedValueOnce(3);
+    const clearOpenKit = vi.fn();
+    render(
+      <RemoteCatalogue
+        onOpenKit={() => {}}
+        selectedKitId="some-other-open-kit"
+        role="author"
+        clearOpenKit={clearOpenKit}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    expect(clearOpenKit).not.toHaveBeenCalled();
   });
 });
 

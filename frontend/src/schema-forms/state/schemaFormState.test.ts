@@ -1110,6 +1110,49 @@ describe('SchemaFormStateManager', () => {
   })
 
   // ============================================================================
+  // getCurrentSectionFields() -- []-alias-consistent with findSectionIdForField
+  // (bd polyglot-pdf-rctj)
+  // ============================================================================
+
+  describe('getCurrentSectionFields() []-alias handling', () => {
+    it('renders a field whose section lists the []-alias while field.id is the base', () => {
+      const schema = createTestSchema()
+      // Section lists the field under its []-alias; field-4's own id is the base.
+      schema.sections[2].fields = ['field-4[]', 'field-5']
+      const state = { ...SchemaFormStateManager.init(schema), currentSectionId: 'section-2a' }
+
+      const fields = SchemaFormStateManager.getCurrentSectionFields(state)
+
+      expect(fields.map((f) => f.id)).toContain('field-4')
+    })
+
+    it('stays symmetric with findSectionIdForField: paging to the section renders the field', () => {
+      // The exact bd rctj repro: onNextField pages the UI to the section
+      // findSectionIdForField resolves, and the paged section must then
+      // actually render that field -- not appear to be missing it.
+      const schema = createTestSchema()
+      schema.sections[2].fields = ['field-4[]', 'field-5']
+      const state = SchemaFormStateManager.init(schema)
+
+      const targetSectionId = SchemaFormStateManager.findSectionIdForField(state, 'field-4')
+      expect(targetSectionId).toBe('section-2a')
+
+      const pagedState = { ...state, currentSectionId: targetSectionId! }
+      const fields = SchemaFormStateManager.getCurrentSectionFields(pagedState)
+
+      expect(fields.map((f) => f.id)).toContain('field-4')
+    })
+
+    it('still returns exact-id fields unchanged (no regression to the common case)', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+
+      const fields = SchemaFormStateManager.getCurrentSectionFields(state)
+
+      expect(fields.map((f) => f.id)).toEqual(['field-1', 'field-2'])
+    })
+  })
+
+  // ============================================================================
   // setVisibleSection() -- continuous-mode UI paging that PRESERVES the pin
   // (bd polyglot-pdf-gz20)
   // ============================================================================
