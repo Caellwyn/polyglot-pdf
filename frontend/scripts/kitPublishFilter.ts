@@ -18,6 +18,16 @@
  * whenever the backend call fails, so a retired form stayed reachable there --
  * which is precisely what `unpublished` exists to prevent.
  *
+ * KNOWN INTERACTION -- local dev (bd polyglot-pdf-pk2ns). The local backend
+ * store is deliberately permissive (`enforce_complete_on_public_reads = False`)
+ * so a maintainer can test-drive drafts, and its manifest hardcodes the STATIC
+ * path `/form-kits/<id>/schema.json`. That path is exactly what this gate stops
+ * producing, so local mode now lists a draft it cannot load. Deployed surfaces
+ * are unaffected (GCS filters by status and deploy-all.sh never uploaded a
+ * draft). The fix belongs in the local store -- serve the draft through the API
+ * it already has, rather than pointing at a bundle that legitimately excludes
+ * it -- which is why it is pk2ns's and not this module's.
+ *
  * FAIL CLOSED. Anything that is not demonstrably `complete` is withheld:
  * unreadable metadata, absent metadata.json, a missing `status` key, or a
  * status this build does not recognise. A kit wrongly withheld is a visible,
