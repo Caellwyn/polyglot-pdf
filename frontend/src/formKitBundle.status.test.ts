@@ -19,6 +19,13 @@
  * -- the file is one direct request away.
  */
 import { describe, expect, it, beforeAll } from "vitest";
+
+// Run this file ALONE. Each test here spawns a real tsx subprocess, and that
+// CPU contention makes a timing-sensitive render elsewhere in the suite miss
+// its window -- SchemaForm.previewEdit.test.tsx (bd polyglot-pdf-cfl28) is an
+// intermittent flake on its own, and these subprocesses turn it into a
+// reliable failure. The flake is worth fixing on its own merits; making the
+// whole suite red from a NEIGHBOURING file is this file's problem to avoid.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
@@ -74,7 +81,24 @@ beforeAll(async () => {
     }
   }
 
+  // Root-level files: authoring material that is not a kit.
+  await fs.writeFile(path.join(source, "README.md"), "# how to build a kit");
+  await fs.writeFile(path.join(source, "notes.txt"), "scratch");
+
   publicDir = path.join(outRoot, "form-kits");
+
+  // A STALE bundle from a previous build, seeded BEFORE the script runs. The
+  // withheld kits below then prove two things at once: they are not published,
+  // AND a previously-published copy of them is cleared. The wipe lives inside
+  // copyKitsToPublic, which an `if (!forms.length) return` used to skip
+  // (Opus fresh-eyes round 1).
+  for (const kit of CASES) {
+    await fs.mkdir(path.join(publicDir, kit.id), { recursive: true });
+    await fs.writeFile(path.join(publicDir, kit.id, "schema.json"), '{"stale":true}');
+  }
+  await fs.writeFile(
+    path.join(publicDir, "index.json"),
+    JSON.stringify({ generatedAt: "old", forms: CASES.map((c) => ({ id: c.id })) }));
   // Drive the REAL script through tsx -- the SAME runner prebuild/predev/pretest
   // use, so this exercises the real invocation rather than a different one that
   // happens to work.
@@ -115,6 +139,16 @@ describe("the static bundle ships published kits only", () => {
     expect(await exists(path.join(publicDir, "live", "form.pdf"))).toBe(true);
   });
 
+  it("does not publish root-level files like the authoring README", async () => {
+    // form-kits/README.md is authoring notes for whoever builds kits, and it
+    // was being served at /form-kits/README.md. Only kit directories belong in
+    // the bundle. Pinned because this fell out of the kit-id lookup rather
+    // than being asked for -- an unpinned side effect is one refactor from
+    // silently reverting (Opus fresh-eyes round 2).
+    expect(await exists(path.join(publicDir, "README.md"))).toBe(false);
+    expect(await exists(path.join(publicDir, "notes.txt"))).toBe(false);
+  });
+
   it("withholds every unpublished kit's FILES, not just its index entry", async () => {
     // Stated as its own assertion because the index and the copy are separate
     // code paths in the script, and fixing one is the plausible partial fix.
@@ -124,19 +158,37 @@ describe("the static bundle ships published kits only", () => {
   });
 });
 
+describe("a stale bundle from a previous build is cleared", () => {
+  it("removes a withheld kit that WAS published in the previous build", async () => {
+    // Seeded stale, must be gone -- not merely absent from the index.
+    expect(await exists(path.join(publicDir, "retired"))).toBe(false);
+    expect(await exists(path.join(publicDir, "wip"))).toBe(false);
+  });
+
+  it("rewrites the stale index rather than leaving it", async () => {
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(publicDir, "index.json"), "utf-8"));
+    expect(manifest.generatedAt).not.toBe("old");
+    expect(manifest.forms.map((f: { id: string }) => f.id)).toEqual(["live"]);
+  });
+});
+
 describe("retiring the LAST published kit empties the bundle", () => {
-  // The sharpest case, and the one the first version got wrong: the fs.rm that
-  // clears the previous build lived inside copyKitsToPublic, which an
-  // `if (!forms.length) return` skipped. So a tree whose only kit had just been
-  // retired kept serving that kit's schema, its PDF, and a stale index.json
-  // naming it -- the exact scenario this gate exists for (Opus fresh-eyes
-  // round 1).
-  it("wipes a STALE bundle when every kit is withheld", async () => {
+  /**
+   * This needs its OWN script run, and that is not negotiable: the bug is in
+   * the `forms.length === 0` path, and the shared fixture above always has one
+   * publishable kit, so it never reaches it.
+   *
+   * I learned that the expensive way -- I folded this case into the shared run
+   * to save a subprocess, all 12 tests stayed green, and the mutation that
+   * restores the bug ALSO stayed green. Cheaper tests that cannot fail are not
+   * cheaper.
+   */
+  it("wipes a stale bundle when EVERY kit is withheld", async () => {
     const source = await fs.mkdtemp(path.join(os.tmpdir(), "kits-empty-src-"));
     const outRoot = await fs.mkdtemp(path.join(os.tmpdir(), "kits-empty-out-"));
     const out = path.join(outRoot, "form-kits");
 
-    // A kit that WAS published and has just been retired.
     const kit = path.join(source, "retired");
     await fs.mkdir(kit, { recursive: true });
     await fs.writeFile(path.join(kit, "schema.json"), '{"fields":[]}');
@@ -144,10 +196,8 @@ describe("retiring the LAST published kit empties the bundle", () => {
     await fs.writeFile(
       path.join(kit, "metadata.json"), '{"status":"unpublished","label":"Retired"}');
 
-    // The bundle left behind by the build that ran while it was live.
     await fs.mkdir(path.join(out, "retired"), { recursive: true });
     await fs.writeFile(path.join(out, "retired", "schema.json"), '{"stale":true}');
-    await fs.writeFile(path.join(out, "retired", "form.pdf"), "%PDF-stale");
     await fs.writeFile(
       path.join(out, "index.json"),
       JSON.stringify({ generatedAt: "old", forms: [{ id: "retired" }] }));
@@ -159,9 +209,7 @@ describe("retiring the LAST published kit empties the bundle", () => {
         cwd: FRONTEND },
     );
 
-    // The files must be GONE, not merely unindexed.
     expect(await exists(path.join(out, "retired"))).toBe(false);
-    // ...and the index must not still name it.
     const manifest = JSON.parse(await fs.readFile(path.join(out, "index.json"), "utf-8"));
     expect(manifest.forms).toEqual([]);
     expect(manifest.generatedAt).not.toBe("old");

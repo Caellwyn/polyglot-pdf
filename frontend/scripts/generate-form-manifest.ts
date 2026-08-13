@@ -171,6 +171,12 @@ async function copyKitsToPublic(publishable: Set<string>) {
       if (rel === "") {
         return true;
       }
+      // ONLY kit directories ship. A root-level file (form-kits/README.md is
+      // the one today) has no kit id, so it is not publishable -- authoring
+      // notes are not client assets, and Hosting would otherwise serve them at
+      // /form-kits/README.md. Stated explicitly rather than left to fall out of
+      // the kit-id lookup, since a silent scope change is the kind of thing
+      // that gets "fixed" back later (Opus fresh-eyes round 2).
       const kitId = rel.split(path.sep)[0];
       return publishable.has(kitId);
     },
