@@ -208,7 +208,15 @@ immutability lock protects PUBLISHED versions only).
 
 An **editing lock** (`POST`/`DELETE /api/editor/kits/{kit_id}/lock`) sits over
 that: an author can always take a kit back from an editor, never the reverse,
-and that preemption doubles as the stale-lock release. It is ROLE-scoped, not
+and that preemption doubles as the stale-lock release. **A status transition
+also releases it** -- handing a kit up for review, sending it back, publishing
+it or retiring it all end the editing turn, and the retired kit in a
+replace-publish is released too. The one exception is REOPENING a live kit
+(`complete -> draft`), which begins an editing turn rather than ending one, so
+the author who reopened it keeps their own lock; a stale lock held by anyone
+else is still cleared. Without the release, an author who sent a kit back left
+the editor unable to touch their own draft, with no control offered to
+self-rescue. It is ROLE-scoped, not
 user-scoped, because the editor API has only two shared tokens -- two editors
 sharing one still collide (bd `polyglot-pdf-ijntk`). A preempted editor finds
 out on their NEXT SAVE, which 409s: there is no channel from server to editor,

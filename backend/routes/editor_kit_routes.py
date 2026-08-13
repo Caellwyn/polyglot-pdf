@@ -522,6 +522,40 @@ _PUBLISHED_STATUSES = ("complete", "unpublished")
 _LOCK_KEY = "editing_lock"
 
 
+def _lock_after_transition(
+    meta: Optional[dict], current: str, target: str, actor_role: str
+) -> Optional[dict]:
+    """The `editing_lock` value a kit should carry AFTER a status transition.
+
+    A transition normally ends the editing turn -- handed up for review, handed
+    back for changes, or published and write-locked -- so the lock is released
+    and the next person can take it. Keeping it bricked the send-back flow: the
+    editor 409'd on every action with no control to self-rescue (round 8).
+
+    THE EXCEPTION: reopening a LIVE kit (`complete|unpublished -> draft`) does
+    not end an editing turn, it BEGINS one. The author clicks "Revert to draft
+    to edit it" precisely in order to edit, so dropping their lock there let an
+    editor take it and write mid-edit -- a lost-update window against the
+    accountable party the lock exists to protect (round 9, reproduced).
+
+    The SOURCE is what separates the two, not the target: `submitted -> draft`
+    is also a `-> draft`, but it is the send-back, which hands the kit to the
+    editor and must release. Keying on the target alone recreated the round-8
+    lockout -- caught because that round's test still asserted the send-back
+    releases. The holder also keeps it only when THEY are acting; anyone
+    else's stale lock is cleared regardless.
+    """
+    holder = _lock_holder(meta)
+    if holder is None:
+        return None
+    reopening_a_live_kit = (
+        target == "draft" and current in _PUBLISHED_STATUSES
+    )
+    if reopening_a_live_kit and holder == actor_role:
+        return {"role": holder}
+    return None
+
+
 def _refuse_if_metadata_unreadable(
     meta: Optional[dict], files: set[str], kit_id: str, action: str
 ) -> None:
@@ -2293,6 +2327,15 @@ async def set_editor_kit_status(
     # round 4, reproduced live). Cheap refusals belong at the point the work
     # leaves the editor's hands.
     if body.status in ("submitted", "complete"):
+        # These gates now front BOTH promotions, so the refusals must name the
+        # action the caller actually attempted. Telling an editor a form
+        # "cannot be marked complete" named an action their tier is 403'd from
+        # -- and the editor is this gate's main audience, since the strip
+        # deliberately surfaces submit refusals to them (round 9).
+        action = ("submitted for review" if body.status == "submitted"
+                  else "marked complete")
+        gerund = ("submitting it for review" if body.status == "submitted"
+                  else "marking it complete")
         # The voice app serves BOTH the schema and the PDF of a complete kit;
         # the deploy manifest falls back to a conventional pdf name when none
         # exists, so promoting a PDF-less kit would ship a form whose PDF read
@@ -2300,8 +2343,8 @@ async def set_editor_kit_status(
         if pdf_file not in files:
             raise HTTPException(
                 status_code=409,
-                detail=f"Kit has no {pdf_file} -- a complete kit needs its "
-                       "form PDF (the voice app serves it)",
+                detail=f"Kit has no {pdf_file} -- it needs its form PDF "
+                       f"(the voice app serves it) before being {action}",
             )
         try:
             schema = await store.load_schema(kit_id, schema_file)
@@ -2309,7 +2352,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=409,
                 detail="Kit has no schema yet -- extract and save one before "
-                       "marking it complete",
+                       f"{gerund}",
             ) from exc
         except FormKitStoreError as exc:
             raise HTTPException(
@@ -2322,7 +2365,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=422,
                 detail=f"Schema does not validate against the form contract, so "
-                       f"it cannot be marked complete: {str(exc)[:400]}",
+                       f"it cannot be {action}: {str(exc)[:400]}",
             ) from exc
         # Pydantic v2 does not run field validators for an OMITTED default, so
         # the model's "extraction_info required for PDF forms" rule never fires
@@ -2334,7 +2377,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=422,
                 detail="Schema is missing extraction_info (required for PDF "
-                       "forms), so it cannot be marked complete",
+                       f"forms), so it cannot be {action}",
             )
         # v2-only gate (bd h76m.16, P6.2 flip): schema v2 is the only shape a
         # complete kit may carry. The model IGNORES unknown keys (extra="ignore"),
@@ -2347,7 +2390,7 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=422,
                 detail="Schema is not v2 (schema_version must be \"2\"); migrate "
-                       "it before marking complete",
+                       f"it before {gerund}",
             )
         # Lint gate (bd h76m.5, P2.1): zero lint ERRORs to promote. Pydantic
         # above enforces the wire contract; lint catches the class of defect
@@ -2597,7 +2640,10 @@ async def set_editor_kit_status(
     # Editing is what the lock guards, and a status transition ends the editing
     # turn either way: handed to an author for review, handed back for changes,
     # or published and write-locked. Nobody holds it across that boundary.
+    kept_lock = _lock_after_transition(meta, current_status, body.status, role)
     next_meta.pop(_LOCK_KEY, None)
+    if kept_lock is not None:
+        next_meta[_LOCK_KEY] = kept_lock
     # Stamp the PUBLISH DATE on promotion (bd polyglot-pdf-47r3, maintainer
     # 2026-08-04). It is the revision marker for a kit with no government
     # edition date -- a firm's own intake form has no "12/2024", but it does
@@ -2657,10 +2703,14 @@ async def set_editor_kit_status(
     # by unpublishing the old one.
     if superseded_kit:
         try:
-            await store.put_metadata(
-                superseded_kit,
-                {**(superseded_meta or {}), "status": "unpublished"},
-            )
+            # Retiring the outgoing kit is a status transition too, so it releases
+            # ITS lock -- this second write merges superseded_meta verbatim and
+            # kept a stale lock, recreating the same dead end one kit over
+            # (round 9, reproduced). Same helper as the incoming kit so the two
+            # sites cannot drift apart again.
+            retired_meta = {**(superseded_meta or {}), "status": "unpublished"}
+            retired_meta.pop(_LOCK_KEY, None)
+            await store.put_metadata(superseded_kit, retired_meta)
         except FormKitStoreError as exc:
             _log.error("editor_supersede_failed", kit_id=kit_id,
                        superseded=superseded_kit, error=str(exc))

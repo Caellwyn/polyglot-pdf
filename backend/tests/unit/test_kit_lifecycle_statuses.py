@@ -1565,25 +1565,129 @@ def test_publishing_RELEASES_the_lock(client):
     assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
 
 
-def test_EVERY_status_transition_releases_the_lock(client):
-    """Parametrized over the whole transition set rather than the two that
-    prompted the fix -- checking a sample of a set is exactly how this bead
-    lost the same invariant repeatedly."""
+def test_the_lock_lifecycle_across_EVERY_transition(client):
+    """The whole transition set, with the ONE exception stated explicitly.
+
+    This test originally asserted that every transition releases. That was
+    wrong, and round 9 proved it: reopening a LIVE kit begins an editing turn
+    rather than ending one, so the author who reverted it in order to edit
+    keeps their lock. Every other transition hands the kit onward and releases.
+
+    Kept parametrized over the full set -- checking a sample is how this bead
+    lost the same invariant five separate times -- but now encoding the real
+    rule instead of the tidy one.
+    """
     c, store, root = client
-    for kit_id, start, target, hdr in (
-        ("a", "draft", "submitted", HDR),
-        ("b", "submitted", "draft", AUTH_HDR),
-        ("c", "submitted", "complete", AUTH_HDR),
-        ("d", "complete", "unpublished", AUTH_HDR),
-        ("e", "complete", "draft", AUTH_HDR),
+    for kit_id, start, target, hdr, keeps_lock in (
+        ("a", "draft", "submitted", HDR, False),        # handed up for review
+        ("b", "submitted", "draft", AUTH_HDR, False),   # sent back to the editor
+        ("c", "submitted", "complete", AUTH_HDR, False),  # published, frozen
+        ("d", "complete", "unpublished", AUTH_HDR, False),  # retired
+        ("e", "complete", "draft", AUTH_HDR, True),     # REOPENED to edit
+        # NOT `unpublished -> draft`: that is refused outright by the bd 6dz0
+        # immutability rule (409), so it never reaches the lock logic. I added
+        # it here by symmetry and the route corrected me.
     ):
         _make_kit(root, kit_id, status=start)
-        # Lock as the SAME role that will perform the transition: an
-        # author-held lock legitimately refuses an editor's submit, so using
-        # AUTH_HDR here would test the refusal, not the release.
+        # Lock as the SAME role that performs the transition: an author-held
+        # lock legitimately refuses an editor's submit, so a mismatched header
+        # would test the refusal, not the release.
         assert c.post(f"/api/editor/kits/{kit_id}/lock",
                       headers=hdr).status_code == 200
         resp = _status(c, kit_id, target, headers=hdr)
         assert resp.status_code == 200, f"{start}->{target}: {resp.text}"
-        assert ekr._LOCK_KEY not in _run(store.load_metadata(kit_id)), (
-            f"{start}->{target} kept the lock")
+
+        held = ekr._LOCK_KEY in _run(store.load_metadata(kit_id))
+        assert held == keeps_lock, (
+            f"{start}->{target}: lock held={held}, expected {keeps_lock}")
+
+
+def test_reopening_a_live_kit_KEEPS_the_authors_own_lock(client):
+    """`complete -> draft` does not END an editing turn, it BEGINS one.
+
+    The UI offers an author "Revert to draft to edit it" -- they click it in
+    order to edit. Releasing on EVERY transition dropped their own lock, so an
+    editor could take it and write mid-edit: a lost-update window against the
+    accountable party the lock exists to protect (Opus fresh-eyes round 9,
+    reproduced). This is the liveness-vs-safety trade the round-8 fix made
+    without noticing.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+    assert c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR).status_code == 200
+
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
+
+    assert _run(store.load_metadata("w7"))[ekr._LOCK_KEY] == {"role": "author"}
+    # ...and nobody else can take it out from under them.
+    assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 409
+
+
+def test_reopening_does_NOT_keep_someone_ELSES_stale_lock(client):
+    """The carve-out is for the ACTOR's own lock only -- an author reopening a
+    kit an editor left locked still clears it, or the stale-lock dead end
+    returns."""
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+    assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 200
+
+    assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
+
+    assert ekr._LOCK_KEY not in _run(store.load_metadata("w7"))
+
+
+def test_supersede_releases_the_OUTGOING_kits_lock(client):
+    """The supersede path writes a SECOND kit's status through a different
+    call, which merged its metadata verbatim and kept a stale lock -- the same
+    brick-the-editor dead end round 8 fixed, surviving one kit over."""
+    c, store, root = client
+    _make_kit(root, "old", status="complete")
+    _make_kit(root, "new", status="submitted")
+    assert c.post("/api/editor/kits/old/lock", headers=HDR).status_code == 200
+
+    resp = c.post("/api/editor/kits/new/status",
+                  json={"status": "complete", "replaces_kit_id": "old"},
+                  headers=AUTH_HDR)
+    assert resp.status_code == 200, resp.text
+
+    old_meta = _run(store.load_metadata("old"))
+    assert old_meta["status"] == "unpublished"
+    assert ekr._LOCK_KEY not in old_meta, "the retired kit kept a stale lock"
+
+
+def test_a_SUBMIT_refusal_never_tells_an_editor_to_mark_it_complete(client):
+    """The gates front both promotions, so they must name the action the caller
+    attempted. An editor is 403'd from marking anything complete, and the strip
+    deliberately surfaces submit refusals to them -- so naming that action sent
+    the wrong remedy to the one tier that reads these most (round 9).
+
+    Allowlist, not blacklist: assert the refusal names SUBMISSION, then assert
+    no "complete" wording survives (bd: banning one word is a synonym away from
+    defeat, so pin the sanctioned phrasing too).
+    """
+    c, _store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "no-pdf"}), encoding="utf-8")
+
+    detail = _status(c, "no-pdf", "submitted", headers=HDR).json()["detail"]
+
+    assert "submitted for review" in detail, detail
+    assert "complete" not in detail.lower(), detail
+
+
+def test_a_PUBLISH_refusal_still_says_marked_complete(client):
+    """The other half: an author publishing must still read the publish
+    wording. Parametrizing the verb is only correct if BOTH sides are right."""
+    c, _store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "no-pdf"}), encoding="utf-8")
+
+    detail = _status(c, "no-pdf", "complete", headers=AUTH_HDR).json()["detail"]
+
+    assert "marked complete" in detail, detail
