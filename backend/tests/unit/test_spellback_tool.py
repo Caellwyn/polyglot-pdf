@@ -318,6 +318,144 @@ class TestSpellbackSiAddendum:
         # number read-back, and the addendum must not suppress it.
         assert "digit by digit yourself" in si
 
+    def test_addendum_reasserts_the_ask_after_its_prohibitions(self):
+        """The model's LAST naming instruction must tell it to ASK.
+
+        bd polyglot-pdf-ku69b: this addendum is the final text in the assembled
+        SI, and every earlier revision was pure prohibition ("do NOT read the
+        value back", "stop speaking") opening with "For a NAME". The DTI names
+        block's ask-for-the-spelling instruction lands thousands of characters
+        EARLIER, so the model's last and most specific naming instruction said
+        only "be silent" -- and on the live demo it stopped asking for
+        spellings altogether, filling whatever name it heard. That makes the
+        spell-back clip verify a value that may already be wrong.
+
+        So this pins ORDER, not mere presence: an ask-instruction must survive
+        AFTER the last prohibition. Asserting "the ask appears somewhere"
+        would pass on exactly the broken SI this bead fixed -- the ask was
+        always present, just buried.
+        """
+        si = self._si(enabled=True)
+
+        last_prohibition = max(
+            si.rfind("do NOT read the value back"),
+            si.rfind("stay SILENT and listen"),
+        )
+        assert last_prohibition != -1, "the addendum's prohibitions are gone"
+
+        tail = si[last_prohibition:]
+        assert "ASK for the spelling" in tail, (
+            "nothing tells the model to ASK for the spelling after the "
+            "addendum's do-NOT-speak block -- the last naming instruction it "
+            "reads is a prohibition, which is exactly the state that stopped "
+            "it asking on the live demo (bd polyglot-pdf-ku69b)"
+        )
+
+        # The addendum must also SCOPE itself: without this it reads as the
+        # whole naming policy rather than a read-back rule.
+        assert "changes only how a spelling is READ BACK" in si
+        assert "does NOT change how you ASK" in si
+
+    def test_dti_names_block_forbids_filling_a_guessed_spelling(self):
+        """The names block must refuse a spoken-name-only answer.
+
+        The failure mode is not just "did not ask" -- it is filling a GUESS
+        when the user answers with the name alone. Pinned separately from the
+        addendum because it is the base SI's job, and the two texts drifted
+        apart once the addendum took over the read-back (bd ku69b).
+        """
+        names_block = Settings().DTI_SYSTEM_INSTRUCTION
+        assert "ask for the spelling before you fill anything" in names_block
+
+    def test_every_name_read_back_instruction_yields_to_the_addendum(self):
+        """ENUMERATE THE SET, do not fix one instance (CLAUDE.md scar #7).
+
+        bd polyglot-pdf-5s3pp was filed against ONE unconditional
+        verify-a-name-by-word sentence in the DTI names block. Fixing only
+        that left a sibling 3,377 chars away in WORKFLOW step 3 -- in the
+        MORE authoritative numbered-procedure block -- which the Opus
+        cross-surface review then found (bd polyglot-pdf-wvjpo).
+
+        So this derives the set MECHANICALLY from the shipped SI rather than
+        trusting a hand-list: every instruction telling the model to speak a
+        NAME back must carry the yields-to clause, or the assembled SI
+        contradicts the spell-back addendum whenever the tool is on.
+
+        Deliberately NOT in scope (the addendum's own preamble already
+        overrides these in so many words):
+          - verify-by-SPELLING wording ("read the SPELLING back") -- the
+            preamble names it explicitly.
+          - digit-by-digit NUMBER read-back -- the addendum preserves it.
+        """
+        import re
+
+        si = Settings().DTI_SYSTEM_INSTRUCTION
+        # Instructions to speak a NAME back as a word. Derived by pattern, so
+        # a newly-added sibling is caught instead of silently joining the set.
+        # Broad on purpose: any speak/say/read verb, any determiner, reaching
+        # "as a word" / "as one word". A guard matching only the CURRENT
+        # phrasing silently shrinks when a site is reworded -- which reads as
+        # coverage while covering nothing (Opus cross-surface, bd
+        # polyglot-pdf-9rauk: "say THEIR name back as a word" escaped the
+        # first version and left the guard green with a live unqualified site).
+        name_readback = re.compile(
+            r"(say|saying|speak|speaking|read|reading|repeat)\b[^.;]{0,40}"
+            r"\bname\b[^.;]{0,40}\bas (a|one) word", re.I)
+        hits = list(name_readback.finditer(si))
+
+        # CARDINALITY IS PART OF THE PIN. Without it, a reword that escapes the
+        # pattern drops the set from 2 to 1 and the guard still reports "0
+        # unqualified" -- green while an unqualified instruction ships. If this
+        # number needs changing, re-derive the set FIRST and confirm every site
+        # is qualified; do not just bump it to make the suite pass.
+        EXPECTED_SITES = 2  # WORKFLOW step 3, and the NAMES block.
+        assert len(hits) == EXPECTED_SITES, (
+            "expected %d name-read-back instruction(s) in the DTI SI, found "
+            "%d -- a site was added, removed, or REWORDED past this pattern. "
+            "Re-derive the set (search the SI for read-back verbs near "
+            "'name') and confirm each carries the yields-to clause before "
+            "changing this number.\n  found: %s"
+            % (EXPECTED_SITES, len(hits),
+               [si[max(0, m.start() - 40):m.end() + 10] for m in hits])
+        )
+
+        unqualified = []
+        for m in hits:
+            preceding = si[max(0, m.start() - 130):m.start()]
+            if "Unless a later instruction" not in preceding:
+                unqualified.append(si[max(0, m.start() - 90):m.end() + 40])
+        assert not unqualified, (
+            "%d name-read-back instruction(s) are stated UNCONDITIONALLY, so "
+            "they contradict the spell-back addendum when the tool is on "
+            "(bd polyglot-pdf-5s3pp / wvjpo). Each needs the 'Unless a later "
+            "instruction' clause:\n  %s"
+            % (len(unqualified), "\n  ".join(repr(u) for u in unqualified))
+        )
+
+    def test_verify_by_word_yields_to_the_spellback_addendum(self):
+        """The two verification rules must not flatly contradict each other.
+
+        The names block says to verify a name by saying it back as a word; the
+        addendum (appended whenever SPELLBACK_TOOL_ENABLED, which is the
+        demo's shipped state) says do NOT read the value back at all and call
+        the tool instead. Opus cross-surface review, bd polyglot-pdf-5s3pp:
+        with the flag ON the assembled SI carried both, unqualified.
+
+        The names-block sentence must therefore be CONDITIONAL -- it still
+        governs flag-off sessions, where no addendum ever arrives, so deleting
+        it would leave those with no name verification at all.
+        """
+        names_block = Settings().DTI_SYSTEM_INSTRUCTION
+        idx = names_block.find("verify by saying the name back as a word")
+        assert idx != -1, "the flag-off verification rule is gone"
+        # It must be qualified by a yields-to clause, not stated absolutely.
+        preceding = names_block[max(0, idx - 120):idx]
+        assert "Unless a later instruction" in preceding, (
+            "the verify-by-word rule is stated unconditionally, so it "
+            "contradicts the spell-back addendum whenever the tool is on "
+            "(bd polyglot-pdf-5s3pp)"
+        )
+
     def test_flag_off_leaves_si_untouched(self):
         si = self._si(enabled=False)
         assert "name_spellback" not in si
