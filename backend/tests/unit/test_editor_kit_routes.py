@@ -1066,6 +1066,76 @@ def test_mark_complete_survives_a_failing_readiness_stamp(client, monkeypatch):
     assert "readiness" not in meta
 
 
+def test_a_corrupt_acroform_dump_does_not_block_publish_but_stamps_UNVERIFIED(client):
+    """bd polyglot-pdf-ucjlu: the PUBLISH path's re-stamp must match
+    _stamp_readiness's semantics (bd kwh3t), not hardcode verified=True.
+
+    Two separate claims, both pinned here:
+    1. The publish GATE's blocking behavior is UNCHANGED -- a corrupt dump
+       still does not block mark-complete (its documented contract: a
+       missing/unreadable dump degrades to the dump-less rules, never
+       blocks). This is the exit-criterion-2 guard.
+    2. The re-STAMP's verified bit now honestly reflects that the dump-gated
+       rules could not run because the READ failed -- not hardcoded True.
+    """
+    c, _store, root = client
+    kit_dir = _make_kit(root, "i-90", schema=VALID_SCHEMA)
+    # A present acroform.json that is NOT valid JSON -- same real-filesystem
+    # corruption shape as bd kwh3t's save-path test, not a mock.
+    (kit_dir / "acroform.json").write_text("{not valid json", encoding="utf-8")
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"status": "complete"},
+    )
+    # Claim 1: publish still SUCCEEDS despite the corrupt dump.
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["status"] == "complete"
+    # Claim 2: the stamp honestly says the checks did not fully run.
+    assert meta["readiness"]["verified"] is False
+
+
+def test_save_then_publish_on_a_corrupt_dump_kit_agree_on_verified(client):
+    """bd polyglot-pdf-ucjlu exit criterion 3: the two stamp writers must not
+    disagree for the SAME corrupt-dump kit.
+
+    Before the fix, a save correctly stamped verified=False (bd kwh3t), but
+    an immediately-following publish overwrote it with verified=True --
+    the publish path's hardcoded claim silently undoing the save path's
+    honest one. Both must now agree.
+    """
+    c, _store, root = client
+    kit_dir = _make_kit(root, "i-90", schema=VALID_SCHEMA)
+    (kit_dir / "acroform.json").write_text("{not valid json", encoding="utf-8")
+
+    # Save first (drives _stamp_readiness, the kwh3t-fixed path).
+    save_body = json.loads(json.dumps(VALID_SCHEMA))
+    r1 = c.put(
+        "/api/editor/kits/i-90/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=save_body,
+    )
+    assert r1.status_code == 200, r1.text
+    save_verified = r1.json()["readiness"]["verified"]
+    assert save_verified is False  # bd kwh3t's own guard
+
+    # Then publish (drives the ucjlu-fixed re-stamp).
+    r2 = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"status": "complete"},
+    )
+    assert r2.status_code == 200, r2.text
+    meta = json.loads((root / "i-90" / "metadata.json").read_text(encoding="utf-8"))
+    publish_verified = meta["readiness"]["verified"]
+
+    # The two paths must agree -- publish must not overwrite an honest
+    # unverified stamp with a confident one.
+    assert publish_verified == save_verified == False  # noqa: E712 -- explicit
+
+
 def test_readiness_stamp_leaves_status_values_byte_identical(client):
     """Adding the readiness stamp must not perturb metadata.json's STATUS
     values (sprint-18 C4 exit criterion).

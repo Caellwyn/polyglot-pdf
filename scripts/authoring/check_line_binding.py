@@ -208,6 +208,7 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
             columns.append([c])
 
     kept: list[tuple[float, float]] = []
+    dropped_for_repetition = 0
     for col in columns:
         if len(col) < _GUTTER_MIN_COL:
             continue
@@ -224,10 +225,44 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
         # distinct == n (f1040 p1 x=100.8 4/4, x=105.3 7/7, x=495.4 19/19; p2
         # x=100.8 23/23, x=497.6 22/22; w7 x=123.1 7/7), while both f1040 legend
         # columns are 1 distinct out of 3.
-        texts = [c[0] for c in col]
-        if len(set(texts)) != len(texts):
-            continue
-        kept.append((col[0][1], col[-1][1]))
+        #
+        # SPLIT AT Y-ORDER DISCONTINUITY before checking for repeats (bd
+        # polyglot-pdf-qk97). A genuine gutter numbers rows top-to-bottom, so
+        # its y0 sequence is monotonic non-decreasing within the cluster; a
+        # cluster combining a real gutter with an adjacent, x-close legend (or
+        # two gutters restarting the same numbering, e.g. a continuation
+        # table) interleaves rows from BOTH, and a repeat anywhere in the
+        # combined column used to reject the WHOLE column -- including the
+        # genuine gutter's markers, not just the legend's. Splitting into
+        # maximal monotonic-y runs first isolates the genuine gutter (whose
+        # own run has no internal repeat) from the offending run, so only the
+        # actually-repeating run is dropped.
+        runs: list[list[tuple[str, float, float, float]]] = []
+        for c in col:
+            if runs and c[2] < runs[-1][-1][2]:
+                runs.append([c])
+            else:
+                if not runs:
+                    runs.append([])
+                runs[-1].append(c)
+        for run in runs:
+            if len(run) < _GUTTER_MIN_COL:
+                continue
+            texts = [c[0] for c in run]
+            if len(set(texts)) != len(texts):
+                # Observable drop (exit criterion 2): a column dropped for
+                # repetition is now DISTINGUISHABLE from a page with no
+                # gutter at all, rather than silently indistinguishable.
+                dropped_for_repetition += 1
+                continue
+            kept.append((run[0][1], run[-1][1]))
+    if dropped_for_repetition:
+        print(
+            f"NOTE: dropped {dropped_for_repetition} column run(s) for a "
+            f"repeated marker text (a legend or restarted numbering, not a "
+            f"gutter)",
+            file=sys.stderr,
+        )
     if not kept:
         return []
     return [c for c in cands

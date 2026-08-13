@@ -283,6 +283,62 @@ def test_collect_markers_rejects_a_column_that_repeats_a_token():
     assert len(clb.collect_markers(varied)) == 4
 
 
+def test_a_genuine_gutter_survives_an_adjacent_repeating_legend(capsys):
+    """bd polyglot-pdf-qk97 exit criterion 1: a clustered column combining a
+    REAL monotonic gutter with an adjacent, x-close repeating legend must not
+    lose the real gutter's markers -- only the offending run should drop.
+
+    Synthetic shape from the bead: 6 markers at x_right=300 (a genuine
+    numbered gutter, y increasing monotonically) plus 3 identical tokens at
+    x_right=302.4 (dx=2.4 <= _GUTTER_COL_TOL=2.5, so they chain into ONE
+    cluster with the gutter). Before the fix, the whole combined column was
+    rejected the moment the legend's repeat was seen -- 0 markers, not 6.
+    """
+    class _Page:
+        def __init__(self, words):
+            self._w = words
+
+        def get_text(self, _kind):
+            return self._w
+
+    gutter = [(0, 100 + 12 * i, 300, 110 + 12 * i, f"{i + 1}a", 0, 0, 0)
+              for i in range(6)]
+    # Interleaved with the gutter's rows (not appended after) so a naive
+    # "reject the whole cluster" bug would still lose the gutter even though
+    # the LEGEND's own y-span sits inside the gutter's -- the realistic shape
+    # (a legend printed beside several gutter rows, not below all of them).
+    legend = [(0, 100 + 12 * i + 3, 302.4, 108 + 12 * i, "1", 0, 0, 0)
+              for i in (1, 3, 5)]
+    page = _Page(sorted(gutter + legend, key=lambda w: w[1]))
+
+    markers = clb.collect_markers(page)
+    gutter_texts = {m[0] for m in markers if 297 <= m[1] <= 300}
+    assert gutter_texts == {"1a", "2a", "3a", "4a", "5a", "6a"}, (
+        f"the genuine gutter must survive intact: got {gutter_texts}"
+    )
+    # exit criterion 2: the drop is now OBSERVABLE (stderr), not silent.
+    err = capsys.readouterr().err
+    assert "dropped" in err.lower() and "repeat" in err.lower()
+
+
+def test_a_column_with_no_genuine_run_still_drops_silently_free_of_crashes(capsys):
+    """The pure-legend case (no genuine gutter mixed in) still rejects
+    everything -- the fix must not accidentally start ACCEPTING a legend
+    that never had a monotonic run at all -- and the drop is still logged."""
+    class _Page:
+        def __init__(self, words):
+            self._w = words
+
+        def get_text(self, _kind):
+            return self._w
+
+    same = _Page([(0, 100 + 12 * i, 300, 110 + 12 * i, "1", 0, 0, 0)
+                  for i in range(4)])
+    assert clb.collect_markers(same) == []
+    err = capsys.readouterr().err
+    assert "dropped" in err.lower()
+
+
 @needs_f1040
 def test_the_page2_prose_column_is_suppressed_by_the_ROW_guard():
     """Pins WHICH guard suppresses f1040 page 2's accepted prose column, because

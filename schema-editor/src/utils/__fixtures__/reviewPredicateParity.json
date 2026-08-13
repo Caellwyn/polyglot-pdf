@@ -189,6 +189,26 @@
         { "severity": "WARNING", "rule": "guidance-identity-stale", "path": "fields[0] (id=a).help[identity:@identity]", "message": "drifted", "field_id": "a" }
       ],
       "expected": false
+    },
+    {
+      "name": "options containing null/non-object entries is a structural error, not a crash (bd polyglot-pdf-93p8)",
+      "field": {
+        "id": "c", "type": "radio", "name": "C", "spoken_name": "c",
+        "options": [null, "junk"],
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": false
+    },
+    {
+      "name": "a non-array options value degrades instead of throwing (bd polyglot-pdf-93p8, polyglot-pdf-wjes)",
+      "field": {
+        "id": "c", "type": "select", "name": "C", "spoken_name": "c",
+        "options": "not-a-list",
+        "_review": { "status": "reviewed_correct" }
+      },
+      "findings": [],
+      "expected": true
     }
   ]
 }

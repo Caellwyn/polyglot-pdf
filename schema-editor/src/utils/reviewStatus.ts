@@ -332,9 +332,20 @@ function hasUncoveredStructuralError(field: FormField): boolean {
   if (!field.id || !field.type) return true;
   const isChoice = field.type === 'select' || field.type === 'radio'
     || field.type === 'checkbox_group';
-  const options = field.options ?? [];
+  // Array.isArray + a per-element object guard (bd polyglot-pdf-93p8),
+  // matching the Python mirror's `options if isinstance(options, list) else
+  // []` + `o.get(...) if isinstance(o, dict) else None`. A hand-edited or
+  // script-drifted kit can carry `options` as a non-array (e.g. a stray
+  // string -- `?? []` only replaces null/undefined, and a string HAS
+  // `.length`, so `options.some` threw "options.some is not a function")
+  // or as an array containing a null/non-object entry (`o.pdf_field_name`
+  // on null threw too). Either throw propagated out of isCountedReviewed ->
+  // reviewCounts -> App.liveStats, blanking the whole review strip instead
+  // of degrading one field's count -- the two mirrors must both degrade,
+  // never throw, on the same malformed input.
+  const options = Array.isArray(field.options) ? field.options : [];
   if (!isChoice || options.length === 0 || field.pdf_field_name) return false;
-  return options.some(o => !o.pdf_field_name);
+  return options.some(o => !(o && typeof o === 'object' ? o.pdf_field_name : undefined));
 }
 
 /**

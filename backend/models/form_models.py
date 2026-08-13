@@ -613,9 +613,34 @@ class FormField(BaseModel):
     rows: Optional[int] = Field(None, description="Specific row count for textarea")
 
     # Type-specific properties - Numeric fields
-    min: Optional[float] = None
-    max: Optional[float] = None
+    #
+    # Union[float, str] (bd polyglot-pdf-9ec2u), matching the nested
+    # ValidationRules.min/max above (bd polyglot-pdf-ondn) and the frontend
+    # FormField.min/max type (bd polyglot-pdf-hhwgi): a date-typed field's
+    # top-level bound can be a date string (e.g. adult_intake_demo_schema.json's
+    # dob min "1900-01-01"), not just a number. Currently dormant --
+    # build_fields_from_schema does not pass min/max through when constructing
+    # FormField from raw kit JSON -- but a float-only constraint here would
+    # reject what the FE type and the sibling nested model both already
+    # accept, the moment any future caller DOES construct FormField(min=...)
+    # from a raw kit dict.
+    min: Optional[Union[float, str]] = None
+    max: Optional[Union[float, str]] = None
     step: Optional[float] = Field(None, description="Increment for number spinners")
+
+    @field_validator("min", "max", mode="before")
+    @classmethod
+    def _coerce_numeric_bound(cls, v):
+        # Same coercion as ValidationRules._coerce_numeric_bound above: a
+        # digit-only string ("18") still enforces numerically rather than
+        # silently degrading to a string comparison; a genuine date string
+        # (which float() rejects) passes through as str.
+        if isinstance(v, str):
+            try:
+                return float(v)
+            except ValueError:
+                return v
+        return v
 
     # Type-specific properties - Select/Radio/Checkbox fields
     options: Optional[List[FieldOption]] = None
