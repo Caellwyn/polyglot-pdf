@@ -169,6 +169,21 @@ in HTMLAudioElement).
 Round-2 spend: 6 billed synthesis calls (~9 KB) = ~USD 0.27; cumulative
 ~USD 0.63.
 
+### FROZEN (2026-08-13): maintainer sign-off received
+
+Maintainer verdicts: **MP3 sounded better than the WAV** in the ear test --
+the 32 kbps shipped encode stays (the codec is not the quality ceiling);
+**"95 seconds is fine"** -- the window is 60-95 s and v5's measured
+92.6-94.3 s passes; **elements 10 and 14 stay dropped, element 16 (the
+release clause) stays added** -- a counsel pass is still pending and reviews
+that delta. The frozen master (v5 + the two typographical fixes, placeholders
+restored) is [`data/intro_en_master.txt`](data/intro_en_master.txt); its
+frozen element set is 1-9, 11-13, 15, 16 (14 elements). Gain decision for the
+intro route: 0 dB (the +4 dB spell-back gain clips long-form content, and the
+standalone intro clip does not need the mid-conversation loudness match).
+Decision log also in `docs/sprint_20_sol-intro-tts_plan.md` post-filing
+section and on beads polyglot-pdf-s1iex / s1iex.1.
+
 ## Reproduce
 
     backend/.venv/Scripts/python.exe scripts/spikes/measure_intro_duration.py \

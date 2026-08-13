@@ -1,0 +1,221 @@
+{
+  "_comment": "Canonical intro+disclaimer scripts (sprint 20, epic polyglot-pdf-s1iex, bd s1iex.2). One paragraphs[] per SPOKEN_LANGUAGES name (exact-sync with backend/utils/language_codes.py SPOKEN_LANGUAGE_BCP47, pinned by test_intro_script.py). HARD INVARIANT: the modal renders exactly these paragraphs and the TTS input is these paragraphs joined -- one source, no separate fullText, the h2 title is a heading and is never spoken. Placeholders: [FORM NUMBER] is interpolated by the intro route from its known-form table (identical across languages, e.g. 'Form I-90'); [AGREE LABEL] is interpolated from the per-language agree-button label table. English master frozen by the maintainer 2026-08-13 (verbatim; element set 1-9, 11-13, 15, 16 -- elements 10 and 14 dropped and the element-16 release clause added by maintainer decision; a counsel pass is still pending). Translations follow the maintainer directive: Sol is MALE in every language -- masculine verb morphology (ru/uk past tense, hi/ur habitual+future), masculine first-person predicates (ar, es/fr/it/pt 'abogado/avocat/avvocato/advogado') -- while the ADDRESSED USER stays gender-neutral. 'PolyGlot Forms' is a brand and is never translated (three mentions per language, pinned). Quotation glyphs are per-language typography; code stays ASCII, this file is UTF-8 data (scar #6 exemption).",
+  "languages": {
+    "English": {
+      "paragraphs": [
+        "Hello. I'm Sol, and I'll be helping you fill out your [FORM NUMBER] today.",
+        "Once we start I'll ask one question at a time, and you can press the 'talk' button and answer out loud. I'll enter your response on the form and read it back so you can check if I got it right. If something's wrong, tell me and we'll fix it together — or change it directly on the screen, and I'll keep your version.",
+        "If a question isn't clear, you can ask me about it. I can explain what the form wants and what the official instructions say. But I can't give you advice on what to enter or what to do.",
+        "A few things before we begin.",
+        "I'm an artificial intelligence — a computer program. I'm not a lawyer or a certified translator. I can't give you legal or immigration advice, and working with me doesn't make me or PolyGlot Forms your lawyer. I'll do my very best for you, but I do make mistakes — I can mishear a word, translate incorrectly, or just encounter an error. PolyGlot Forms cannot be responsible for my mistakes.",
+        "What we make together is a first draft of this document. Check every answer on the English form, and review it with a certified interpreter or legal professional before you file or submit. I'm just here to help as much as I can.",
+        "By clicking \"[AGREE LABEL]\", you agree to review the completed document yourself and with a certified professional before filing, and you agree to absolve PolyGlot Forms and their staff of all responsibility for any mistakes or omissions.",
+        "We can start when you press \"[AGREE LABEL]\"."
+      ]
+    },
+    "Spanish": {
+      "paragraphs": [
+        "Hola. Soy Sol, y hoy le ayudaré a llenar su [FORM NUMBER].",
+        "Cuando empecemos, le haré una pregunta a la vez, y usted puede presionar el botón de hablar y responder en voz alta. Escribiré su respuesta en el formulario y se la leeré para que compruebe que la entendí bien. Si algo está mal, dígamelo y lo corregiremos juntos — o cámbielo directamente en la pantalla, y yo conservaré su versión.",
+        "Si una pregunta no está clara, puede preguntarme. Puedo explicarle qué pide el formulario y qué dicen las instrucciones oficiales. Pero no puedo aconsejarle qué escribir ni qué hacer.",
+        "Algunas cosas antes de empezar.",
+        "Soy una inteligencia artificial — un programa de computadora. No soy abogado ni traductor certificado. No puedo darle asesoría legal ni migratoria, y trabajar conmigo no nos convierte ni a mí ni a PolyGlot Forms en su abogado. Haré todo lo posible por usted, pero cometo errores — puedo escuchar mal una palabra, traducir incorrectamente o simplemente fallar. PolyGlot Forms no puede hacerse responsable de mis errores.",
+        "Lo que hacemos juntos es un primer borrador de este documento. Revise cada respuesta en el formulario en inglés, y repáselo con un intérprete certificado o un profesional legal antes de presentarlo. Yo solo estoy aquí para ayudar en todo lo que pueda.",
+        "Al hacer clic en «[AGREE LABEL]», usted acepta revisar el documento terminado por su cuenta y con un profesional certificado antes de presentarlo, y acepta eximir a PolyGlot Forms y a su personal de toda responsabilidad por cualquier error u omisión.",
+        "Podemos empezar cuando presione «[AGREE LABEL]»."
+      ]
+    },
+    "Chinese": {
+      "paragraphs": [
+        "您好。我是 Sol，今天我将帮助您填写您的 [FORM NUMBER]。",
+        "开始后，我会一次问您一个问题，您可以按下“说话”按钮，大声回答。我会把您的回答填进表格，并读给您听，让您确认我有没有听对。如果有错误，请告诉我，我们一起改正 — 您也可以直接在屏幕上修改，我会保留您的版本。",
+        "如果哪个问题不清楚，您可以问我。我可以解释表格在问什么，以及官方说明是怎么写的。但我不能建议您填什么或做什么。",
+        "开始之前，有几件事需要您了解。",
+        "我是人工智能 — 一个计算机程序。我不是律师，也不是认证翻译员。我不能为您提供法律或移民方面的建议，与我合作也不会使我或 PolyGlot Forms 成为您的律师。我会尽全力帮助您，但我也会出错 — 我可能听错一个词、翻译不准确，或出现故障。PolyGlot Forms 无法对我的错误负责。",
+        "我们一起完成的只是这份文件的初稿。请核对英文表格上的每一个答案，并在提交之前请认证口译员或法律专业人士帮您审核。我只是尽我所能来帮助您。",
+        "点击“[AGREE LABEL]”即表示您同意在提交之前自己并与认证专业人士一起审核完成的文件，并同意免除 PolyGlot Forms 及其工作人员对任何错误或遗漏的全部责任。",
+        "当您按下“[AGREE LABEL]”，我们就可以开始了。"
+      ]
+    },
+    "Tagalog": {
+      "paragraphs": [
+        "Kumusta. Ako si Sol, at tutulungan ko kayong punan ang inyong [FORM NUMBER] ngayon.",
+        "Kapag nagsimula na tayo, isang tanong ang itatanong ko sa bawat pagkakataon, at maaari ninyong pindutin ang butones para magsalita at sumagot nang malakas. Isusulat ko ang inyong sagot sa form at babasahin ko itong muli para matiyak ninyong tama ang pagkakuha ko. Kung may mali, sabihin ninyo sa akin at aayusin natin itong magkasama — o baguhin ninyo mismo sa screen, at pananatilihin ko ang inyong bersyon.",
+        "Kung hindi malinaw ang isang tanong, maaari ninyo akong tanungin. Maipapaliwanag ko kung ano ang hinihingi ng form at kung ano ang sinasabi ng opisyal na mga tagubilin. Pero hindi ako maaaring magpayo kung ano ang ilalagay o gagawin ninyo.",
+        "Ilang bagay bago tayo magsimula.",
+        "Ako ay isang artificial intelligence — isang computer program. Hindi ako abogado o sertipikadong tagasalin. Hindi ako makapagbibigay ng payong legal o pang-imigrasyon, at ang pakikipagtulungan sa akin ay hindi ginagawang abogado ninyo ako o ang PolyGlot Forms. Gagawin ko ang lahat ng makakaya ko para sa inyo, pero nagkakamali ako — maaari kong marinig nang mali ang isang salita, magsalin nang hindi tama, o magkaroon ng problema. Hindi maaaring managot ang PolyGlot Forms sa aking mga pagkakamali.",
+        "Ang ginagawa nating magkasama ay isang unang burador ng dokumentong ito. Suriin ang bawat sagot sa form na nasa Ingles, at ipasuri ito sa isang sertipikadong interpreter o legal na propesyonal bago ninyo isumite. Nandito lang ako para tumulong hangga't kaya ko.",
+        "Sa pag-click ng “[AGREE LABEL]”, sumasang-ayon kayong suriin ang natapos na dokumento nang kayo mismo at kasama ang isang sertipikadong propesyonal bago ito ihain, at sumasang-ayon kayong palayain ang PolyGlot Forms at ang kanilang mga tauhan sa lahat ng pananagutan para sa anumang pagkakamali o pagkukulang.",
+        "Makakapagsimula na tayo kapag pinindot ninyo ang “[AGREE LABEL]”."
+      ]
+    },
+    "Arabic": {
+      "paragraphs": [
+        "مرحبًا. أنا سول، وسأساعدك اليوم في تعبئة [FORM NUMBER] الخاص بك.",
+        "عندما نبدأ، سأطرح عليك سؤالًا واحدًا في كل مرة، ويمكنك الضغط على زر التحدث والإجابة بصوت مرتفع. سأكتب إجابتك في النموذج وأقرأها لك مرة أخرى لتتأكد من أنني فهمتها بشكل صحيح. إذا كان هناك خطأ، أخبرني وسنصححه معًا — أو غيّره بنفسك مباشرة على الشاشة، وسأحتفظ بنسختك.",
+        "إذا لم يكن سؤال ما واضحًا، يمكنك أن تسألني عنه. أستطيع أن أشرح لك ما يطلبه النموذج وما تقوله التعليمات الرسمية. لكنني لا أستطيع أن أنصحك بما تكتبه أو بما تفعله.",
+        "بعض الأمور قبل أن نبدأ.",
+        "أنا ذكاء اصطناعي — برنامج حاسوب. لست محاميًا ولست مترجمًا معتمدًا. لا أستطيع أن أقدم لك استشارة قانونية أو استشارة هجرة، والعمل معي لا يجعلني أنا أو PolyGlot Forms محاميك. سأبذل قصارى جهدي من أجلك، لكنني أخطئ — قد أسمع كلمة بشكل خاطئ، أو أترجم بشكل غير صحيح، أو أواجه خللًا. لا يمكن أن تتحمل PolyGlot Forms المسؤولية عن أخطائي.",
+        "ما نصنعه معًا هو مسودة أولى لهذه الوثيقة. راجع كل إجابة في النموذج باللغة الإنجليزية، وراجعه مع مترجم فوري معتمد أو مختص قانوني قبل أن تقدمه. أنا هنا فقط لأساعد بقدر ما أستطيع.",
+        "بالنقر على «[AGREE LABEL]»، فإنك توافق على مراجعة الوثيقة المكتملة بنفسك ومع مختص معتمد قبل التقديم، وتوافق على إعفاء PolyGlot Forms وموظفيها من كل المسؤولية عن أي أخطاء أو سهو.",
+        "يمكننا أن نبدأ عندما تضغط على «[AGREE LABEL]»."
+      ]
+    },
+    "French": {
+      "paragraphs": [
+        "Bonjour. Je suis Sol, et je vais vous aider aujourd'hui à remplir votre [FORM NUMBER].",
+        "Une fois que nous aurons commencé, je vous poserai une question à la fois, et vous pourrez appuyer sur le bouton pour parler et répondre à voix haute. J'inscrirai votre réponse sur le formulaire et je vous la relirai pour que vous puissiez vérifier que j'ai bien compris. Si quelque chose est faux, dites-le-moi et nous le corrigerons ensemble — ou modifiez-le vous-même directement à l'écran, et je garderai votre version.",
+        "Si une question n'est pas claire, vous pouvez me la poser. Je peux vous expliquer ce que le formulaire demande et ce que disent les instructions officielles. Mais je ne peux pas vous conseiller sur ce qu'il faut écrire ni sur ce qu'il faut faire.",
+        "Quelques points avant de commencer.",
+        "Je suis une intelligence artificielle — un programme informatique. Je ne suis ni avocat ni traducteur agréé. Je ne peux pas vous donner de conseils juridiques ni de conseils en immigration, et travailler avec moi ne fait ni de moi ni de PolyGlot Forms votre avocat. Je ferai de mon mieux pour vous, mais je fais des erreurs — je peux mal entendre un mot, mal traduire, ou tout simplement rencontrer un problème. PolyGlot Forms ne peut pas être tenu responsable de mes erreurs.",
+        "Ce que nous créons ensemble est un premier brouillon de ce document. Vérifiez chaque réponse sur le formulaire en anglais, et faites-le relire par un interprète agréé ou un professionnel du droit avant de le déposer. Je suis simplement là pour aider autant que je le peux.",
+        "En cliquant sur « [AGREE LABEL] », vous acceptez de relire le document final vous-même et avec un professionnel agréé avant de le déposer, et vous acceptez de dégager PolyGlot Forms et son personnel de toute responsabilité pour toute erreur ou omission.",
+        "Nous pourrons commencer dès que vous appuierez sur « [AGREE LABEL] »."
+      ]
+    },
+    "Korean": {
+      "paragraphs": [
+        "안녕하세요. 저는 Sol입니다. 오늘 [FORM NUMBER] 작성을 도와드리겠습니다.",
+        "시작하면 한 번에 하나씩 질문을 드리겠습니다. 말하기 버튼을 누르고 소리 내어 대답해 주세요. 답변을 양식에 적고 다시 읽어 드릴 테니, 제가 제대로 이해했는지 확인해 주세요. 잘못된 부분이 있으면 말씀해 주세요. 함께 고치겠습니다 — 화면에서 직접 수정하셔도 되며, 그 경우 고객님의 버전을 그대로 유지하겠습니다.",
+        "질문이 이해되지 않으면 저에게 물어보세요. 양식이 무엇을 요구하는지, 공식 안내문에 어떤 내용이 있는지 설명해 드릴 수 있습니다. 하지만 무엇을 적어야 할지, 어떻게 해야 할지에 대한 조언은 드릴 수 없습니다.",
+        "시작하기 전에 몇 가지 알려드립니다.",
+        "저는 인공지능 — 컴퓨터 프로그램입니다. 저는 변호사도 아니고 공인 번역사도 아닙니다. 법률이나 이민에 관한 조언을 드릴 수 없으며, 저와 함께 작업한다고 해서 저나 PolyGlot Forms가 고객님의 변호사가 되는 것은 아닙니다. 최선을 다하겠지만 저도 실수를 합니다 — 단어를 잘못 듣거나, 잘못 번역하거나, 오류가 생길 수 있습니다. PolyGlot Forms는 저의 실수에 대해 책임을 질 수 없습니다.",
+        "우리가 함께 만드는 것은 이 문서의 초안입니다. 영어 양식의 모든 답변을 확인하시고, 제출하기 전에 공인 통역사나 법률 전문가와 함께 검토하세요. 저는 그저 제가 할 수 있는 만큼 도와드릴 뿐입니다.",
+        "“[AGREE LABEL]”을 클릭하시면, 제출 전에 완성된 문서를 직접, 그리고 공인 전문가와 함께 검토할 것에 동의하시는 것이며, 어떠한 실수나 누락에 대해서도 PolyGlot Forms와 그 직원에게 모든 책임을 묻지 않을 것에 동의하시는 것입니다.",
+        "“[AGREE LABEL]” 버튼을 누르시면 시작하겠습니다."
+      ]
+    },
+    "German": {
+      "paragraphs": [
+        "Hallo. Ich bin Sol, und ich helfe Ihnen heute dabei, Ihr [FORM NUMBER] auszufüllen.",
+        "Sobald wir anfangen, stelle ich Ihnen eine Frage nach der anderen, und Sie können die Sprechtaste drücken und laut antworten. Ich trage Ihre Antwort in das Formular ein und lese sie Ihnen noch einmal vor, damit Sie prüfen können, ob ich Sie richtig verstanden habe. Wenn etwas falsch ist, sagen Sie es mir, und wir korrigieren es gemeinsam — oder ändern Sie es direkt auf dem Bildschirm, und ich behalte Ihre Version bei.",
+        "Wenn eine Frage unklar ist, können Sie mich dazu fragen. Ich kann Ihnen erklären, was das Formular verlangt und was die offiziellen Anweisungen sagen. Aber ich kann Ihnen nicht raten, was Sie eintragen oder tun sollen.",
+        "Ein paar Dinge, bevor wir anfangen.",
+        "Ich bin eine künstliche Intelligenz — ein Computerprogramm. Ich bin kein Anwalt und kein zertifizierter Übersetzer. Ich kann Ihnen keine Rechts- oder Einwanderungsberatung geben, und die Arbeit mit mir macht weder mich noch PolyGlot Forms zu Ihrem Anwalt. Ich werde mein Bestes für Sie geben, aber ich mache Fehler — ich kann ein Wort falsch verstehen, falsch übersetzen oder einfach auf einen Fehler stoßen. PolyGlot Forms kann für meine Fehler nicht verantwortlich gemacht werden.",
+        "Was wir gemeinsam erstellen, ist ein erster Entwurf dieses Dokuments. Prüfen Sie jede Antwort auf dem englischen Formular, und gehen Sie es vor dem Einreichen mit einem zertifizierten Dolmetscher oder einem Rechtsexperten durch. Ich bin nur hier, um so gut zu helfen, wie ich kann.",
+        "Indem Sie auf „[AGREE LABEL]“ klicken, erklären Sie sich damit einverstanden, das fertige Dokument vor dem Einreichen selbst und mit einer zertifizierten Fachkraft zu überprüfen, und Sie erklären sich damit einverstanden, PolyGlot Forms und dessen Mitarbeiter von jeder Verantwortung für Fehler oder Auslassungen freizustellen.",
+        "Wir können anfangen, sobald Sie „[AGREE LABEL]“ drücken."
+      ]
+    },
+    "Portuguese": {
+      "paragraphs": [
+        "Olá. Eu sou o Sol, e hoje vou ajudar você a preencher o seu [FORM NUMBER].",
+        "Quando começarmos, farei uma pergunta de cada vez, e você pode apertar o botão de falar e responder em voz alta. Vou escrever a sua resposta no formulário e lê-la de volta para você conferir se entendi direito. Se algo estiver errado, me diga e corrigiremos juntos — ou mude direto na tela, e eu manterei a sua versão.",
+        "Se uma pergunta não estiver clara, você pode me perguntar. Posso explicar o que o formulário está pedindo e o que dizem as instruções oficiais. Mas não posso aconselhar você sobre o que escrever ou o que fazer.",
+        "Algumas coisas antes de começarmos.",
+        "Eu sou uma inteligência artificial — um programa de computador. Não sou advogado nem tradutor juramentado. Não posso dar a você aconselhamento jurídico nem de imigração, e trabalhar comigo não faz de mim nem da PolyGlot Forms o seu advogado. Farei o meu melhor por você, mas eu cometo erros — posso ouvir uma palavra errado, traduzir incorretamente ou simplesmente ter uma falha. A PolyGlot Forms não pode se responsabilizar pelos meus erros.",
+        "O que fazemos juntos é um primeiro rascunho deste documento. Confira cada resposta no formulário em inglês, e revise-o com um intérprete certificado ou um profissional jurídico antes de protocolar ou enviar. Eu estou aqui só para ajudar no que eu puder.",
+        "Ao clicar em “[AGREE LABEL]”, você concorda em revisar o documento concluído por conta própria e com um profissional certificado antes de enviá-lo, e concorda em isentar a PolyGlot Forms e sua equipe de toda responsabilidade por quaisquer erros ou omissões.",
+        "Podemos começar quando você apertar “[AGREE LABEL]”."
+      ]
+    },
+    "Hindi": {
+      "paragraphs": [
+        "नमस्ते। मैं सोल हूँ, और आज मैं आपका [FORM NUMBER] भरने में आपकी मदद करूँगा।",
+        "शुरू करने के बाद, मैं एक बार में एक ही सवाल पूछूँगा, और आप बोलने वाला बटन दबाकर ज़ोर से जवाब दे सकते हैं। मैं आपका जवाब फ़ॉर्म में लिखूँगा और उसे दोबारा पढ़कर सुनाऊँगा, ताकि आप देख सकें कि मैंने सही समझा या नहीं। अगर कुछ गलत हो, तो मुझे बताइए और हम मिलकर उसे ठीक करेंगे — या आप स्क्रीन पर खुद बदल दीजिए, और मैं आपका ही संस्करण रखूँगा।",
+        "अगर कोई सवाल साफ़ न हो, तो आप मुझसे पूछ सकते हैं। मैं समझा सकता हूँ कि फ़ॉर्म क्या माँग रहा है और आधिकारिक निर्देश क्या कहते हैं। लेकिन मैं आपको यह सलाह नहीं दे सकता कि क्या लिखना है या क्या करना है।",
+        "शुरू करने से पहले कुछ बातें।",
+        "मैं एक आर्टिफ़िशियल इंटेलिजेंस हूँ — एक कंप्यूटर प्रोग्राम। मैं वकील नहीं हूँ और न ही प्रमाणित अनुवादक हूँ। मैं आपको कानूनी या इमिग्रेशन संबंधी सलाह नहीं दे सकता, और मेरे साथ काम करने से न मैं और न ही PolyGlot Forms आपका वकील बनता है। मैं आपके लिए पूरी कोशिश करूँगा, लेकिन मुझसे गलतियाँ होती हैं — मैं कोई शब्द गलत सुन सकता हूँ, गलत अनुवाद कर सकता हूँ, या मुझमें कोई खराबी आ सकती है। PolyGlot Forms मेरी गलतियों की ज़िम्मेदारी नहीं ले सकता।",
+        "हम मिलकर जो बनाते हैं, वह इस दस्तावेज़ का पहला मसौदा है। अंग्रेज़ी फ़ॉर्म पर हर जवाब की जाँच कीजिए, और जमा करने से पहले किसी प्रमाणित दुभाषिए या कानूनी विशेषज्ञ के साथ उसकी समीक्षा कीजिए। मैं तो बस जितनी मदद कर सकता हूँ, करने के लिए यहाँ हूँ।",
+        "“[AGREE LABEL]” पर क्लिक करके, आप सहमत होते हैं कि जमा करने से पहले आप पूरा दस्तावेज़ खुद और किसी प्रमाणित विशेषज्ञ के साथ जाँचेंगे, और आप सहमत होते हैं कि किसी भी गलती या चूक के लिए PolyGlot Forms और उसके कर्मचारियों की कोई ज़िम्मेदारी नहीं होगी।",
+        "जब आप “[AGREE LABEL]” दबाएँगे, तब हम शुरू कर सकते हैं।"
+      ]
+    },
+    "Italian": {
+      "paragraphs": [
+        "Salve. Sono Sol, e oggi La aiuterò a compilare il Suo [FORM NUMBER].",
+        "Una volta iniziato, Le farò una domanda alla volta, e Lei potrà premere il pulsante per parlare e rispondere a voce alta. Scriverò la Sua risposta sul modulo e gliela rileggerò, così potrà controllare che io abbia capito bene. Se qualcosa è sbagliato, me lo dica e lo correggeremo insieme — oppure lo cambi direttamente sullo schermo, e io manterrò la Sua versione.",
+        "Se una domanda non è chiara, può chiedermelo. Posso spiegarLe che cosa chiede il modulo e che cosa dicono le istruzioni ufficiali. Ma non posso consigliarLe che cosa scrivere né che cosa fare.",
+        "Alcune cose prima di cominciare.",
+        "Sono un'intelligenza artificiale — un programma per computer. Non sono un avvocato né un traduttore certificato. Non posso darLe consigli legali o in materia di immigrazione, e lavorare con me non rende né me né PolyGlot Forms il Suo avvocato. Farò del mio meglio per Lei, ma commetto errori — posso sentire male una parola, tradurre in modo sbagliato o semplicemente incontrare un errore. PolyGlot Forms non può essere ritenuta responsabile dei miei errori.",
+        "Quello che creiamo insieme è una prima bozza di questo documento. Controlli ogni risposta sul modulo in inglese, e lo riveda con un interprete certificato o un professionista legale prima di presentarlo. Io sono qui solo per aiutare quanto posso.",
+        "Cliccando su “[AGREE LABEL]”, Lei accetta di rivedere personalmente il documento completato, e con un professionista certificato, prima della presentazione, e accetta di sollevare PolyGlot Forms e il suo personale da ogni responsabilità per qualsiasi errore od omissione.",
+        "Possiamo cominciare quando preme “[AGREE LABEL]”."
+      ]
+    },
+    "Urdu": {
+      "paragraphs": [
+        "السلام علیکم۔ میں سول ہوں، اور آج میں آپ کا [FORM NUMBER] بھرنے میں آپ کی مدد کروں گا۔",
+        "شروع کرنے کے بعد، میں ایک وقت میں ایک ہی سوال پوچھوں گا، اور آپ بولنے والا بٹن دبا کر بلند آواز میں جواب دے سکتے ہیں۔ میں آپ کا جواب فارم میں لکھوں گا اور اسے دوبارہ پڑھ کر سناؤں گا تاکہ آپ دیکھ سکیں کہ میں نے صحیح سمجھا یا نہیں۔ اگر کچھ غلط ہو تو مجھے بتائیے اور ہم مل کر اسے ٹھیک کریں گے — یا آپ خود اسکرین پر بدل دیجیے، اور میں آپ ہی کا ورژن رکھوں گا۔",
+        "اگر کوئی سوال واضح نہ ہو تو آپ مجھ سے پوچھ سکتے ہیں۔ میں بتا سکتا ہوں کہ فارم کیا مانگ رہا ہے اور سرکاری ہدایات کیا کہتی ہیں۔ لیکن میں آپ کو یہ مشورہ نہیں دے سکتا کہ کیا لکھنا ہے یا کیا کرنا ہے۔",
+        "شروع کرنے سے پہلے چند باتیں۔",
+        "میں ایک مصنوعی ذہانت ہوں — ایک کمپیوٹر پروگرام۔ میں وکیل نہیں ہوں اور نہ ہی مصدقہ مترجم ہوں۔ میں آپ کو قانونی یا امیگریشن سے متعلق مشورہ نہیں دے سکتا، اور میرے ساتھ کام کرنے سے نہ میں اور نہ ہی PolyGlot Forms آپ کا وکیل بنتا ہے۔ میں آپ کے لیے پوری کوشش کروں گا، لیکن مجھ سے غلطیاں ہوتی ہیں — میں کوئی لفظ غلط سن سکتا ہوں، غلط ترجمہ کر سکتا ہوں، یا مجھ میں کوئی خرابی آ سکتی ہے۔ PolyGlot Forms میری غلطیوں کی ذمہ داری نہیں لے سکتا۔",
+        "ہم مل کر جو بناتے ہیں وہ اس دستاویز کا پہلا مسودہ ہے۔ انگریزی فارم پر ہر جواب کی جانچ کیجیے، اور جمع کرانے سے پہلے کسی مصدقہ مترجم یا قانونی ماہر کے ساتھ اس کا جائزہ لیجیے۔ میں تو بس جتنی مدد کر سکتا ہوں، کرنے کے لیے یہاں ہوں۔",
+        "“[AGREE LABEL]” پر کلک کر کے آپ اس بات سے اتفاق کرتے ہیں کہ جمع کرانے سے پہلے آپ مکمل دستاویز کا خود اور کسی مصدقہ ماہر کے ساتھ جائزہ لیں گے، اور آپ اس بات سے اتفاق کرتے ہیں کہ کسی بھی غلطی یا کوتاہی کے لیے PolyGlot Forms اور اس کے عملے پر کوئی ذمہ داری عائد نہیں ہوگی۔",
+        "جب آپ “[AGREE LABEL]” دبائیں گے تو ہم شروع کر سکتے ہیں۔"
+      ]
+    },
+    "Persian": {
+      "paragraphs": [
+        "سلام. من سُل هستم و امروز به شما کمک می‌کنم [FORM NUMBER] خود را پر کنید.",
+        "وقتی شروع کنیم، هر بار یک سؤال می‌پرسم و شما می‌توانید دکمه صحبت را فشار دهید و با صدای بلند جواب بدهید. جواب شما را در فرم می‌نویسم و دوباره برایتان می‌خوانم تا مطمئن شوید درست متوجه شده‌ام. اگر چیزی اشتباه بود، به من بگویید تا با هم درستش کنیم — یا خودتان مستقیم روی صفحه تغییرش دهید، و من نسخه شما را نگه می‌دارم.",
+        "اگر سؤالی روشن نبود، می‌توانید از من بپرسید. می‌توانم توضیح بدهم فرم چه می‌خواهد و دستورالعمل‌های رسمی چه می‌گویند. اما نمی‌توانم به شما توصیه کنم چه بنویسید یا چه کاری انجام دهید.",
+        "چند نکته پیش از شروع.",
+        "من یک هوش مصنوعی هستم — یک برنامه کامپیوتری. من وکیل نیستم و مترجم رسمی هم نیستم. نمی‌توانم به شما مشاوره حقوقی یا مهاجرتی بدهم، و کار کردن با من، نه من و نه PolyGlot Forms را وکیل شما نمی‌کند. تمام تلاشم را برای شما می‌کنم، اما اشتباه هم می‌کنم — ممکن است کلمه‌ای را اشتباه بشنوم، اشتباه ترجمه کنم، یا به خطایی بربخورم. PolyGlot Forms نمی‌تواند مسئول اشتباهات من باشد.",
+        "چیزی که با هم می‌سازیم پیش‌نویس اول این سند است. هر جواب را روی فرم انگلیسی بررسی کنید و پیش از ارائه یا ارسال، آن را با یک مترجم رسمی یا متخصص حقوقی مرور کنید. من فقط اینجا هستم تا هر قدر بتوانم کمک کنم.",
+        "با کلیک روی «[AGREE LABEL]»، موافقت می‌کنید که سند کامل‌شده را پیش از ارسال، خودتان و همراه یک متخصص رسمی بررسی کنید، و موافقت می‌کنید که PolyGlot Forms و کارکنانش از هر مسئولیتی بابت هر اشتباه یا از قلم‌افتادگی مبرا باشند.",
+        "هر وقت «[AGREE LABEL]» را فشار دهید، شروع می‌کنیم."
+      ]
+    },
+    "Dutch": {
+      "paragraphs": [
+        "Hallo. Ik ben Sol, en ik help u vandaag met het invullen van uw [FORM NUMBER].",
+        "Zodra we beginnen, stel ik u één vraag tegelijk, en u kunt op de spreekknop drukken en hardop antwoorden. Ik zet uw antwoord op het formulier en lees het aan u terug, zodat u kunt controleren of ik het goed heb begrepen. Als er iets fout is, zeg het me en dan lossen we het samen op — of pas het zelf direct op het scherm aan, dan bewaar ik uw versie.",
+        "Als een vraag niet duidelijk is, kunt u het mij vragen. Ik kan uitleggen wat het formulier vraagt en wat de officiële instructies zeggen. Maar ik kan u niet adviseren over wat u moet invullen of doen.",
+        "Een paar dingen voordat we beginnen.",
+        "Ik ben een kunstmatige intelligentie — een computerprogramma. Ik ben geen advocaat en geen beëdigd vertaler. Ik kan u geen juridisch of immigratieadvies geven, en met mij werken maakt mij noch PolyGlot Forms uw advocaat. Ik zal mijn uiterste best voor u doen, maar ik maak fouten — ik kan een woord verkeerd verstaan, verkeerd vertalen of gewoon een fout tegenkomen. PolyGlot Forms kan niet verantwoordelijk worden gehouden voor mijn fouten.",
+        "Wat we samen maken is een eerste concept van dit document. Controleer elk antwoord op het Engelse formulier, en neem het vóór het indienen door met een beëdigd tolk of een juridisch professional. Ik ben er alleen om te helpen zoveel als ik kan.",
+        "Door op “[AGREE LABEL]” te klikken, gaat u ermee akkoord het voltooide document vóór het indienen zelf en met een gecertificeerde professional te controleren, en gaat u ermee akkoord PolyGlot Forms en hun medewerkers te ontslaan van alle verantwoordelijkheid voor eventuele fouten of weglatingen.",
+        "We kunnen beginnen zodra u op “[AGREE LABEL]” drukt."
+      ]
+    },
+    "Ukrainian": {
+      "paragraphs": [
+        "Вітаю. Я Сол, і сьогодні я допоможу вам заповнити ваш [FORM NUMBER].",
+        "Коли ми почнемо, я ставитиму по одному запитанню, а ви можете натиснути кнопку розмови й відповісти вголос. Я запишу вашу відповідь у форму та прочитаю її вам, щоб ви перевірили, чи правильно я зрозумів. Якщо щось не так, скажіть мені — і ми виправимо це разом, або змініть самі прямо на екрані, і я збережу вашу версію.",
+        "Якщо запитання незрозуміле, можете запитати мене про нього. Я можу пояснити, що вимагає форма і що сказано в офіційних інструкціях. Але я не можу радити вам, що писати чи що робити.",
+        "Кілька речей, перш ніж ми почнемо.",
+        "Я — штучний інтелект, комп'ютерна програма. Я не юрист і не сертифікований перекладач. Я не можу надавати вам юридичні чи імміграційні консультації, і робота зі мною не робить ні мене, ні PolyGlot Forms вашим юристом. Я зроблю для вас усе, що зможу, але я припускаюся помилок — я можу неправильно почути слово, неправильно перекласти або просто дати збій. PolyGlot Forms не може нести відповідальність за мої помилки.",
+        "Те, що ми створюємо разом, — це перша чернетка цього документа. Перевірте кожну відповідь в англійській формі та перегляньте її з сертифікованим перекладачем або юристом, перш ніж подавати. Я тут лише для того, щоб допомогти, чим зможу.",
+        "Натискаючи «[AGREE LABEL]», ви погоджуєтеся самостійно та разом із сертифікованим фахівцем перевірити готовий документ перед поданням, і погоджуєтеся звільнити PolyGlot Forms та її працівників від будь-якої відповідальності за будь-які помилки чи упущення.",
+        "Ми можемо почати, щойно ви натиснете «[AGREE LABEL]»."
+      ]
+    },
+    "Russian": {
+      "paragraphs": [
+        "Здравствуйте. Я Сол, и сегодня я помогу вам заполнить ваш [FORM NUMBER].",
+        "Когда мы начнём, я буду задавать по одному вопросу, а вы можете нажать кнопку разговора и ответить вслух. Я запишу ваш ответ в форму и прочитаю его вам, чтобы вы проверили, правильно ли я понял. Если что-то не так, скажите мне — и мы исправим это вместе, или измените сами прямо на экране, и я сохраню вашу версию.",
+        "Если вопрос непонятен, вы можете спросить меня о нём. Я могу объяснить, что требует форма и что сказано в официальных инструкциях. Но я не могу советовать вам, что писать или что делать.",
+        "Несколько слов, прежде чем мы начнём.",
+        "Я — искусственный интеллект, компьютерная программа. Я не юрист и не сертифицированный переводчик. Я не могу давать вам юридические или иммиграционные консультации, и работа со мной не делает ни меня, ни PolyGlot Forms вашим юристом. Я сделаю для вас всё, что смогу, но я ошибаюсь — я могу неправильно расслышать слово, неверно перевести или просто дать сбой. PolyGlot Forms не может нести ответственность за мои ошибки.",
+        "То, что мы создаём вместе, — это первый черновик этого документа. Проверьте каждый ответ в английской форме и просмотрите её с сертифицированным переводчиком или юристом, прежде чем подавать. Я здесь только для того, чтобы помочь, чем смогу.",
+        "Нажимая «[AGREE LABEL]», вы соглашаетесь самостоятельно и вместе с сертифицированным специалистом проверить готовый документ перед подачей, и соглашаетесь освободить PolyGlot Forms и её сотрудников от любой ответственности за любые ошибки или упущения.",
+        "Мы можем начать, как только вы нажмёте «[AGREE LABEL]»."
+      ]
+    },
+    "Swedish": {
+      "paragraphs": [
+        "Hej. Jag är Sol, och i dag hjälper jag dig att fylla i din [FORM NUMBER].",
+        "När vi sätter igång ställer jag en fråga i taget, och du kan trycka på talknappen och svara högt. Jag skriver in ditt svar i formuläret och läser upp det igen, så att du kan kontrollera att jag uppfattade rätt. Om något är fel, säg till mig så rättar vi det tillsammans — eller ändra det själv direkt på skärmen, så behåller jag din version.",
+        "Om en fråga är otydlig kan du fråga mig om den. Jag kan förklara vad formuläret efterfrågar och vad de officiella anvisningarna säger. Men jag kan inte ge dig råd om vad du ska skriva eller göra.",
+        "Några saker innan vi börjar.",
+        "Jag är en artificiell intelligens — ett datorprogram. Jag är inte advokat och inte auktoriserad översättare. Jag kan inte ge dig juridisk rådgivning eller invandringsrådgivning, och att arbeta med mig gör varken mig eller PolyGlot Forms till din advokat. Jag ska göra mitt allra bästa för dig, men jag gör misstag — jag kan höra fel på ett ord, översätta fel eller helt enkelt stöta på ett fel. PolyGlot Forms kan inte hållas ansvarigt för mina misstag.",
+        "Det vi skapar tillsammans är ett första utkast av det här dokumentet. Kontrollera varje svar i det engelska formuläret, och gå igenom det med en auktoriserad tolk eller en jurist innan du lämnar in det. Jag är bara här för att hjälpa till så gott jag kan.",
+        "Genom att klicka på ”[AGREE LABEL]” godkänner du att själv och tillsammans med en certifierad yrkesperson granska det färdiga dokumentet innan det lämnas in, och du godkänner att befria PolyGlot Forms och deras personal från allt ansvar för eventuella fel eller utelämnanden.",
+        "Vi kan börja när du trycker på ”[AGREE LABEL]”."
+      ]
+    },
+    "Afrikaans": {
+      "paragraphs": [
+        "Hallo. Ek is Sol, en vandag help ek u om u [FORM NUMBER] in te vul.",
+        "Sodra ons begin, vra ek een vraag op 'n slag, en u kan die praatknoppie druk en hardop antwoord. Ek skryf u antwoord op die vorm neer en lees dit vir u terug, sodat u kan seker maak dat ek dit reg verstaan het. As iets verkeerd is, sê vir my en ons maak dit saam reg — of verander dit self direk op die skerm, dan behou ek u weergawe.",
+        "As 'n vraag nie duidelik is nie, kan u my daaroor vra. Ek kan verduidelik wat die vorm vra en wat die amptelike instruksies sê. Maar ek kan u nie adviseer oor wat om in te vul of wat om te doen nie.",
+        "'n Paar dinge voordat ons begin.",
+        "Ek is 'n kunsmatige intelligensie — 'n rekenaarprogram. Ek is nie 'n prokureur of 'n gesertifiseerde vertaler nie. Ek kan nie vir u regsadvies of immigrasie-advies gee nie, en om saam met my te werk maak nie vir my of PolyGlot Forms u prokureur nie. Ek sal my uiterste bes vir u doen, maar ek maak foute — ek kan 'n woord verkeerd hoor, verkeerd vertaal, of net 'n fout teëkom. PolyGlot Forms kan nie vir my foute verantwoordelik gehou word nie.",
+        "Wat ons saam maak, is 'n eerste konsep van hierdie dokument. Gaan elke antwoord op die Engelse vorm na, en hersien dit saam met 'n gesertifiseerde tolk of 'n regspersoon voordat u dit indien. Ek is net hier om te help soveel as wat ek kan.",
+        "Deur op “[AGREE LABEL]” te klik, stem u in om die voltooide dokument self en saam met 'n gesertifiseerde professionele persoon na te gaan voordat dit ingedien word, en stem u in om PolyGlot Forms en hul personeel van alle verantwoordelikheid vir enige foute of weglatings te onthef.",
+        "Ons kan begin sodra u “[AGREE LABEL]” druk."
+      ]
+    }
+  }
+}

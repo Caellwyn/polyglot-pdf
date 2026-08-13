@@ -660,3 +660,35 @@ preserved by construction here (label and script share one per-language table).
 
 Line-number citations in the plan were taken against the maintainer's reading
 and may drift; treat the named symbols, not the line numbers, as the anchors.
+
+## Post-filing maintainer decisions (2026-08-13, during bead s1iex.1)
+
+Recorded per the rubric-change rule (changes logged, never silent). Full
+measurement record: `scripts/spikes/intro_duration_findings.md`.
+
+1. **The English master is FROZEN as the maintainer's own edit** (v5, plus
+   two typographical fixes: "outloud" -> "out loud", "PolyGlot forms" ->
+   "PolyGlot Forms"). Canonical master with placeholders:
+   `scripts/spikes/data/intro_en_master.txt`.
+2. **Length window widened to ~95 s** ("95 seconds is fine"). The frozen
+   master measures 92.6-94.3 s across four synthesis draws. Epic exit
+   criterion 5's "60-90 seconds" reads as "60-95 seconds" from here on.
+3. **Element set changed by maintainer decision**: element 10 (USCIS may
+   require certified review + signature) and element 14 (user responsible
+   for every answer) are DROPPED; a NEW element 16 is added (affirmative
+   release: "you agree to absolve PolyGlot Forms and their staff of all
+   responsibility for any mistakes or omissions"). The frozen set is
+   therefore 14 elements: 1-9, 11-13, 15, 16. A LEGAL PASS IS STILL PENDING
+   (maintainer: "this is going to need a legal pass anyway") -- counsel may
+   reverse these drops; the traceability matrix records them explicitly so
+   counsel reviews the delta, not just the text.
+4. **Encode: the shipped 32 kbps MP3 stays.** In the maintainer's ear test
+   (same text, 0 dB, WAV vs MP3 vs Opus) the MP3 sounded BETTER than the
+   uncompressed WAV -- the encode is not the quality ceiling. No transcode
+   dependency, no WAV serving, no Opus/iOS question. Bead .3 keeps
+   AudioEncoding.MP3.
+5. **Gain (orchestrator technical call, from measurement): the intro route
+   uses 0 dB**, not the spell-back +4.0 dB -- the +4 dB gain measurably
+   CLIPS ~90 s content (WAV peak 1.000), and the intro clip plays standalone
+   so the mid-conversation loudness match that motivated +4 dB does not
+   apply.
