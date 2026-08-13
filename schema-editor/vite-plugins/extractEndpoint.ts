@@ -606,13 +606,22 @@ export async function handleExtract(
     // vanished with a bare "did not validate" -- the local-vs-hosted drift that
     // running the real backend locally exists to eliminate.
     //
-    // Re-derive the usability floor from the WRITTEN draft rather than trusting
-    // the exit code alone (mirrors the hosted route), so a mis-exit can never
-    // store garbage: parseable JSON with >= 1 dict-shaped field.
-    const EXIT_ISSUES = 3;
-    const wrote = fs.existsSync(tmpOut);
+    // Usability is derived from the WRITTEN DRAFT ALONE -- written, parseable,
+    // >= 1 dict-shaped field -- with NO exit-code pre-check, which is exactly
+    // what the hosted route does (editor_kit_routes.py: `out_path.exists()`,
+    // then a non-empty `real_fields` dict filter). ONE authoritative definition
+    // of "usable", not two that merely coincide today.
+    //
+    // An earlier revision gated this read on the exit code (0 or the extractor's
+    // EXIT_ISSUES=3). That is unreachable given extract_form.py's current shape
+    // (its single write happens at the end of extract(), and _classify_exit
+    // returns EXIT_HARD_FAIL exactly when there are 0 dict-shaped fields, so a
+    // usable file implies exit 0 or 3) -- but it was a landmine: any future early
+    // or partial write to --out, or a caller killing the process with another
+    // code after the write, would silently drop this endpoint BELOW the hosted
+    // floor and re-introduce the very drift this change removes.
     let usable = false;
-    if (wrote && (code === 0 || code === EXIT_ISSUES)) {
+    if (fs.existsSync(tmpOut)) {
       try {
         const draft = JSON.parse(fs.readFileSync(tmpOut, 'utf-8'));
         usable = Array.isArray(draft?.fields)
@@ -621,7 +630,11 @@ export async function handleExtract(
         usable = false; // unparseable draft is no draft
       }
     }
-    const storedWithIssues = usable && code === EXIT_ISSUES;
+    // Report issues on ANY non-clean exit, not only the extractor's EXIT_ISSUES
+    // code: a usable draft from an unexpected code is still a draft the user
+    // must inspect, and silently calling it clean is the failure mode that
+    // matters here.
+    const storedWithIssues = usable && code !== 0;
     const ok = usable;
     if (ok) {
       // Promote the temp file to the real path only on success.
