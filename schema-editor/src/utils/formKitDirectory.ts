@@ -20,6 +20,23 @@ import { migrateLegacyRequired } from './schemaMigrate';
 // 'unpublished' is a SUPERSEDED revision (bd polyglot-pdf-6dz0): hidden from
 // the voice app like a draft, but write-locked like complete, because its
 // schema is what earlier confirmation records were confirmed against.
+/** The statuses whose bytes must not change -- the mirror of the backend's
+ * _WRITE_LOCKED_STATUSES. A submitted kit is awaiting an author's review, a
+ * complete one is live, and an unpublished one holds the bytes earlier
+ * confirmation records were confirmed against.
+ *
+ * EXPORTED because hand-listing this set is how bd polyglot-pdf-hqztg lost the
+ * invariant three separate times: adding a fourth status left the local
+ * setKitStatus guard, the App save-stamp guard, and a catalogue predicate each
+ * enumerating three of four, and each had to be found by a separate review
+ * round. Import this; do not retype the members.
+ */
+export const WRITE_LOCKED_STATUSES = ['submitted', 'complete', 'unpublished'] as const;
+
+export function isWriteLocked(status: string | undefined | null): boolean {
+  return (WRITE_LOCKED_STATUSES as readonly string[]).includes(status ?? '');
+}
+
 export type KitStatus = 'draft' | 'submitted' | 'complete' | 'unpublished' | 'unknown';
 
 export interface KitMetadata {
@@ -183,12 +200,17 @@ export async function setKitStatus(
   // local write.
   const metaHandle = await tryGetFile(dir, METADATA_FILE);
   const existing = metaHandle ? await readJsonFile<KitMetadata>(metaHandle) : null;
-  // Every WRITE-LOCKED status, not just unpublished. `submitted` joined that
-  // set (bd polyglot-pdf-hqztg) and this guard was left behind, so local mode
-  // -- which bypasses the server entirely when the backend is unreachable --
-  // would promote a kit that is awaiting author approval, with no role check
-  // at all. Same shape as the bug this guard was written for: the lock belongs
-  // at the primitive that writes, and it must know the WHOLE set.
+  // NOT the full write-locked set: `complete -> draft` is revert-to-draft, a
+  // legitimate local action this guard has always allowed. What must be
+  // refused is a local PROMOTION of a kit that is not the author's to promote
+  // -- a submitted kit awaiting review, or an unpublished one whose bytes
+  // earlier confirmation records name.
+  //
+  // Deriving this from WRITE_LOCKED_STATUSES looked like the tidy fix and
+  // broke revert-to-draft; the shared set answers "may its bytes change?",
+  // which is a DIFFERENT question from "may a local write promote it?". Same
+  // trap as _WRITE_LOCKED_STATUSES vs _PUBLISHED_STATUSES on the backend --
+  // caught here only because a test drove the real revert path.
   if (existing?.status === 'submitted' || existing?.status === 'unpublished') {
     throw new Error(
       `"${entry.id}" is ${existing?.status} and cannot be changed by a local `

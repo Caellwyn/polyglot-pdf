@@ -7,7 +7,7 @@ import {
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
-import { versionInfoFromSchema, type KitVersionInfo } from '../utils/formKitDirectory';
+import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
 import { AuthorVersionDialog } from './AuthorVersionDialog';
 import { DeleteKitDialog } from './DeleteKitDialog';
 
@@ -892,8 +892,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       : isAuthor ? 'Publish' : 'Submit for review'}
                   </button>
                 ))}
-                {isAuthor && kit.hasSchema && kit.status !== 'complete'
-                  && kit.status !== 'unpublished' && (
+                {/* Derived, not hand-listed: this predicate named two of the
+                    three write-locked statuses, so it offered a live-looking
+                    action on a submitted kit that the server 409s. */}
+                {isAuthor && kit.hasSchema && !isWriteLocked(kit.status) && (
                   <button
                     className="btn-sm btn-secondary text-xs"
                     onClick={() => void handleTranslateOptions(kit)}

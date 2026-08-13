@@ -63,6 +63,16 @@ describe('setKitStatus', () => {
     }
   });
 
+  it('still allows revert-to-draft on a COMPLETE kit', async () => {
+    // The guard must refuse local PROMOTION, not every write. Deriving it from
+    // the shared write-locked set broke exactly this, and only this test
+    // caught it -- "may its bytes change?" and "may a local write promote it?"
+    // are different questions (Opus fresh-eyes round 7 fallout).
+    const mock = mockKitDir(JSON.stringify({ label: 'N-400', status: 'complete' }));
+    const updated = await setKitStatus(entry('n-400', mock.dirHandle), 'draft');
+    expect(updated.status).toBe('draft');
+  });
+
   it('still allows a DRAFT to be promoted locally', async () => {
     // The guard must not make local mode useless -- a draft is exactly what it
     // is for.
