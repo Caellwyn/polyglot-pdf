@@ -97,8 +97,15 @@ export interface ValidationRules {
   required?: boolean;
   min_length?: number;
   max_length?: number;
-  min?: number; // For numeric fields
-  max?: number; // For numeric fields
+  // For NUMERIC fields, a plain number. For DATE fields, asDateBound()
+  // (validation.ts) accepts a bound authored as a date string (the field's
+  // own layout, or ISO) -- shipped kits carry exactly that shape (e.g.
+  // adult_intake dob: min "1900-01-01"). Matches the backend model
+  // (backend/models/form_models.py ValidationRules.min/max,
+  // Optional[Union[float, str]]) -- this was the last number-only holdout
+  // (bd polyglot-pdf-hhwgi).
+  min?: number | string;
+  max?: number | string;
   pattern?: string; // Regex pattern
   custom_error?: string;
   digits_only?: boolean; // Only allow numeric digits (0-9)
@@ -247,9 +254,11 @@ export interface FormField {
   textarea_size?: TextareaSize;
   rows?: number;
 
-  // Type-specific properties - Numeric fields
-  min?: number;
-  max?: number;
+  // Type-specific properties - Numeric fields (min/max also carry a
+  // date-string bound for date-typed fields -- see ValidationRules.min/max
+  // above, bd polyglot-pdf-hhwgi)
+  min?: number | string;
+  max?: number | string;
   step?: number;
 
   // Type-specific properties - Select/Radio/Checkbox fields

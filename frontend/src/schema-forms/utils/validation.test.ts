@@ -661,3 +661,72 @@ describe('shouldShowField (is_empty / is_not_empty with a checkbox-group array)'
     expect(shouldShowField(gatedIsNotEmpty, { cbg: 'hi' })).toBe(true);
   });
 });
+
+describe('validateField (min/max as number | string, bd polyglot-pdf-hhwgi)', () => {
+  const numberField: FormField = {
+    id: 'age',
+    name: 'Age',
+    spoken_name: 'age',
+    type: 'number',
+    section_id: 's1',
+    validation: { min: 18, max: 120 },
+  };
+
+  const dateFieldWithStringBounds: FormField = {
+    id: 'dob',
+    name: 'Date of Birth',
+    spoken_name: 'date of birth',
+    type: 'date',
+    section_id: 's1',
+    // Mirrors the real adult_intake kit shape: top-level string bounds, no
+    // min_date/max_date.
+    min: '1900-01-01',
+    max: '2007-10-13',
+  } as unknown as FormField;
+
+  it('a NUMBER field still enforces its plain numeric min/max', () => {
+    expect(validateField(numberField, 10)).not.toBeNull();
+    expect(validateField(numberField, 25)).toBeNull();
+    expect(validateField(numberField, 200)).not.toBeNull();
+  });
+
+  it('a DATE field enforces a string min/max bound (widened type must still validate)', () => {
+    expect(validateField(dateFieldWithStringBounds, '1850-01-01')).not.toBeNull();
+    expect(validateField(dateFieldWithStringBounds, '1990-06-15')).toBeNull();
+    expect(validateField(dateFieldWithStringBounds, '2010-01-01')).not.toBeNull();
+  });
+
+  it('a stray non-numeric bound on a NUMBER field is skipped, not compared (authoring mistake)', () => {
+    const misauthored: FormField = {
+      id: 'age2',
+      name: 'Age',
+      spoken_name: 'age',
+      type: 'number',
+      section_id: 's1',
+      validation: { min: '01/01/2000' as unknown as number },
+    };
+    // Must not throw, and must not reject a value on the strength of a
+    // string comparison -- the bound is simply inert for a number field.
+    expect(validateField(misauthored, 5)).toBeNull();
+  });
+
+  it('a string bound that JS numeric coercion would misread must not reject a valid value', () => {
+    // The mutation this pins: JS relational operators coerce a string
+    // operand via ToNumber before comparing (numValue < rules.min), and
+    // ToNumber("") === 0 -- so an EMPTY-STRING bound (a plausible drift
+    // artifact, e.g. a stray field that resolved to "") would silently
+    // reject any negative value as "below zero" under a bare `<`/`>`
+    // comparison, even though typeof rules.min !== "number" says this
+    // bound was never meant to be compared at all. The guard must reject
+    // on TYPE, not rely on the comparison happening to come out false.
+    const strayEmptyBound: FormField = {
+      id: 'delta',
+      name: 'Delta',
+      spoken_name: 'delta',
+      type: 'number',
+      section_id: 's1',
+      validation: { min: '' as unknown as number },
+    };
+    expect(validateField(strayEmptyBound, -5)).toBeNull();
+  });
+});
