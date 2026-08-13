@@ -81,6 +81,15 @@ beforeAll(async () => {
     }
   }
 
+  // Inside the PUBLISHED kit: the underscore-excluded surfaces. These ride the
+  // same script run so the COMPOSED filter is pinned, not just its status half
+  // (Opus fresh-eyes round 3).
+  await fs.mkdir(path.join(source, "live", "_archive", "12-2024"), { recursive: true });
+  await fs.writeFile(
+    path.join(source, "live", "_archive", "12-2024", "schema.json"), '{"superseded":true}');
+  await fs.mkdir(path.join(source, "_translation"), { recursive: true });
+  await fs.writeFile(path.join(source, "_translation", "es.json"), '{"hola":true}');
+
   // Root-level files: authoring material that is not a kit.
   await fs.writeFile(path.join(source, "README.md"), "# how to build a kit");
   await fs.writeFile(path.join(source, "notes.txt"), "scratch");
@@ -139,6 +148,29 @@ describe("the static bundle ships published kits only", () => {
     expect(await exists(path.join(publicDir, "live", "form.pdf"))).toBe(true);
   });
 
+  it("still prunes _archive inside a PUBLISHED kit", async () => {
+    // This diff turned `filter: shouldCopyKitPath` into a hand-composed lambda.
+    // formKitBundle.archive.test.ts drives the PREDICATE through its own fs.cp,
+    // so after that change it proved the predicate correct but no longer proved
+    // the SCRIPT still calls it -- deleting the underscore guard left all 17
+    // tests green while republishing every superseded schema to Hosting
+    // (Opus fresh-eyes round 3, verified by mutation).
+    //
+    // <kit>/_archive holds operator-only superseded revisions; Hosting would
+    // serve them at /form-kits/<kit>/_archive/<marker>/schema.json.
+    expect(await exists(path.join(publicDir, "live", "_archive"))).toBe(false);
+    expect(await exists(path.join(publicDir, "_translation"))).toBe(false);
+  });
+
+  it("still prunes _archive when the underscore rule is scoped WRONG", async () => {
+    // The subtler drift the kitCopyFilter docstring warns about: a filter
+    // scoped to the TOP level only still looks correct and still leaks a
+    // NESTED _archive. Asserting the nested path specifically is what
+    // separates the two.
+    expect(await exists(
+      path.join(publicDir, "live", "_archive", "12-2024", "schema.json"))).toBe(false);
+  });
+
   it("does not publish root-level files like the authoring README", async () => {
     // form-kits/README.md is authoring notes for whoever builds kits, and it
     // was being served at /form-kits/README.md. Only kit directories belong in
@@ -149,11 +181,14 @@ describe("the static bundle ships published kits only", () => {
     expect(await exists(path.join(publicDir, "notes.txt"))).toBe(false);
   });
 
-  it("withholds every unpublished kit's FILES, not just its index entry", async () => {
-    // Stated as its own assertion because the index and the copy are separate
-    // code paths in the script, and fixing one is the plausible partial fix.
+  it("wipes a withheld kit that the PREVIOUS build had published", async () => {
+    // Not a restatement of the it.each above: those would pass vacuously in a
+    // fresh output dir. The fixture pre-seeds every kit as if a previous build
+    // had published it, so this can only pass if the wipe actually ran -- the
+    // round-1 bug. (The earlier version of this test re-asserted the copy half
+    // and could not fail independently; round 3 caught that.)
     for (const kit of CASES.filter((c) => !c.shipped)) {
-      expect(await exists(path.join(publicDir, kit.id))).toBe(false);
+      expect(await exists(path.join(publicDir, kit.id, "schema.json"))).toBe(false);
     }
   });
 });
