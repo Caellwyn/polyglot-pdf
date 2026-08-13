@@ -102,6 +102,73 @@ Evidence audio: [`data/intro_en_v4.mp3`](data/intro_en_v4.mp3) (81.3s run).
   masculine-grammar Sol in a feminine-reading voice is worse than either
   alone) needs a human ear on the attached MP3.
 
+## Round 2 (2026-08-13, after maintainer edit + "robotic voice" report)
+
+**The maintainer edited the candidate** (clarity pass; now
+`data/intro_en_v5.txt`, verbatim -- the measured v4 text is restored in
+`data/intro_en_v4.txt` as the round-1 audit artifact) and reported the round-1
+MP3 sounded ROBOTIC for an HD voice, asking whether it was resampled.
+
+### Voice-quality investigation (measured, not guessed)
+
+- The audio WAS genuine `en-US-Chirp3-HD-Algieba` at its native **24,000 Hz**
+  mono -- no downsampling anywhere.
+- **Cloud TTS v1's default MP3 encode is 32.0 kbps** (measured from the
+  artifact) -- bitrate-starved for a 24 kHz HD voice. This is also the encode
+  the shipped spell-back clips use.
+- **`MP3_64_KBPS` (v1beta1) is REJECTED by Chirp3-HD voices** (measured 400:
+  "This voice currently only supports LINEAR16, MP3, OGG_OPUS, MULAW, ALAW").
+- **OGG_OPUS also lands at ~33 kbps** -- there is NO higher-bitrate
+  compressed output from Cloud TTS for this voice. The only high-fidelity
+  output is LINEAR16 (384 kbps WAV, ~4.4 MB for this clip).
+- **The shipped +4.0 dB Algieba gain CLIPS on long-form content**: the +4 dB
+  WAV peaked at 1.000 (hard clip) and the +4 dB MP3 at 0.998, while a 0 dB
+  WAV draw peaked 0.784. The +4 dB figure was measured on SHORT spell-back
+  clips (peak 0.975, bd 9oejl) and does not transfer to ~90 s of speech --
+  clipping distortion plausibly contributes to the "robotic" impression.
+  The intro clip plays standalone (not mid-conversation), so it does not
+  need the conversation-loudness match anyway: **bead .3 should pick its own
+  gain (0 dB or server-side peak normalization), not inherit +4.**
+- Chirp3 generates fresh audio per request, so peaks/durations differ
+  slightly across draws; cross-arm ear comparisons should tolerate small
+  draw-to-draw differences.
+
+Ear-test files (same maintainer text, all at 0 dB): `intro_en_v5_gain0.wav`
+(uncompressed reference), `intro_en_v5_gain0.mp3` (32 kbps, the shipped
+encode), `intro_en_v5_gain0.ogg` (Opus ~33 kbps). Verdict tree: if the WAV
+still sounds robotic, the VOICE is the ceiling (try another Chirp3 persona);
+if only the MP3 does, the encode is the culprit -- ship options then are
+(a) server-side transcode of LINEAR16 to a higher-bitrate format (new
+encoder dependency), (b) serve WAV (~4.4 MB, cached + ETag), (c) OGG_OPUS
+only if playback verifies on a real iOS Safari (historically no Ogg support
+in HTMLAudioElement).
+
+### Maintainer-edit measurements
+
+| Candidate | Words | Measured duration (s) | Verdict vs 60-90 s |
+|---|---|---|---|
+| v5 (maintainer edit, verbatim) | 278 | 94.3 (+4 dB), 92.6, 92.6, 93.1 (0 dB arms) | **over, consistently** |
+| v6 (v5 + elements 10 and 14 restored, "outloud" fixed) | 307 | 104.5 | **well over** |
+
+### Matrix audit of the maintainer edit (v5)
+
+- **Element 10 DROPPED** (USCIS may require certified review + signature).
+- **Element 14 DROPPED** (user is responsible for every answer) -- partially
+  replaced by the new agree-clause's "you agree to review", which is a
+  different commitment.
+- **NEW element added** (tracked as #16): an affirmative release -- "you
+  agree to absolve PolyGlot Forms and their staff of all responsibility" --
+  converting disclosure into agreement terms. Counsel-grade addition.
+- Element 1 lost "not a person" but keeps "a computer program" -- intact.
+- All other elements present. Nits staged in v6 only: "outloud" -> "out
+  loud", "PolyGlot forms" -> "PolyGlot Forms". The 'talk' button reference is
+  accurate for the default mode (PTT defaults ON; the desktop label is
+  "Hold to Talk (or Spacebar)"; in the optional continuous mode there is no
+  button).
+
+Round-2 spend: 6 billed synthesis calls (~9 KB) = ~USD 0.27; cumulative
+~USD 0.63.
+
 ## Reproduce
 
     backend/.venv/Scripts/python.exe scripts/spikes/measure_intro_duration.py \
