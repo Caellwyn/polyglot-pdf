@@ -685,11 +685,18 @@ class Settings(BaseModel):
 				"uses: (1) recall a past ANSWER/value -- 'what previous name did "
 				"they give?', 'have we got their date of birth yet?'; (2) IDENTIFY "
 				"which field the user means when you need to jump to a field you do "
-				"NOT currently hold -- 'which field is the mailing city?'; (3) look "
-				"up OFFICIAL GUIDANCE the secretary holds (the form's full official "
-				"instructions text) when the current field's reference text does "
-				"not clearly answer a requirements question -- 'what documents does "
-				"exception 3 require?'. The "
+				"NOT currently hold -- 'which field is the mailing city?'; (3) get "
+				"the OFFICIAL INSTRUCTION TEXT quoted back when the current field's "
+				"reference text does not cover something -- 'what do the "
+				"instructions say about exception 3?'. Use (3) to obtain the form's "
+				"OWN WORDS, which you may then read to the user. On anything shaped "
+				"like 'do I qualify' or 'would my document work', it answers FROM "
+				"the official text, flags the conditions that text puts on it, and "
+				"defers the applicant's own situation to the firm or professional "
+				"reviewing the form -- it never concludes their case. Relay all "
+				"three parts: do not trim the conditions to give a cleaner yes, and "
+				"do not add a verdict of your own. Ask it what the instructions SAY, "
+				"never what the user SHOULD DO. The "
 				"secretary holds the whole form catalog + the applicant's answers "
 				"and replies in prose; when it identifies fields, the response also "
 				"carries a `fields` list of exact {field_id, spoken_name} you can "
@@ -704,9 +711,12 @@ class Settings(BaseModel):
 						"type": "string",
 						"description": (
 							"The plain-language question: a past answer/value "
-							"('what is their mailing zip code?'), or which field the "
+							"('what is their mailing zip code?'), which field the "
 							"user means for navigation ('which field is the apartment "
-							"number?')."
+							"number?'), or what the official instructions SAY about "
+							"something ('what do the instructions say about exception "
+							"3?'). Phrase a guidance question as what the text says, "
+							"never as what this applicant should do or qualifies for."
 						)
 					}
 				},
@@ -1159,7 +1169,8 @@ class Settings(BaseModel):
 		"When you fill the field, the value must match the guidance EXACTLY, punctuation included; translate the user's spoken answer to the matching option. Multiple checkboxes: comma-separated exact values.\n"
 		"\n"
 		"ANSWERING QUESTIONS:\n"
-		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary also holds the user's past answers and can identify a field you do not hold.\n"
+		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary quotes the form's official instructions back to you, and also holds the user's past answers and can identify a field you do not hold. Ask it what the instructions SAY, never what the user should do. Relay its answer FAITHFULLY AND WHOLE -- including every condition or exception it flags, and its closing deferral. Never trim the conditions to give a cleaner yes: the qualifier is the part that protects the user. Never add a conclusion of your own on top ('so yours should be fine') -- the guidance speaks, you do not decide their case.\n"
+		"ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements, documents, or what a rule means for THIS user -- even when the answer looks obvious, even if they press, and even if you are sure. Say what the official guidance says, attribute it ('according to the instructions for this form ...'), state the conditions it puts on it, and close by telling them to confirm their own situation with the firm or professional reviewing their form. A qualified human is expected to review this form before it is filed; that reviewer makes the determinations, never you. Do not promise the user that a review WILL happen -- the disclaimer they accepted advises it rather than guaranteeing it.\n"
 		"INFORMATION, NEVER ADVICE: you explain what a field expects and what the official instructions say. You never tell the user what to enter, which option to choose, or what applies to their situation -- those decisions are theirs alone. 'The instructions say category a covers X' is information; 'you should check box a' is advice. Never give advice."
 	)
 

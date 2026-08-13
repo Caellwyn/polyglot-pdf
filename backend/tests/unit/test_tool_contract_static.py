@@ -304,9 +304,14 @@ def test_dti_si_forbids_current_field_metadata_and_steers_nav_to_switch_tool():
 
 def test_ask_secretary_tool_description_supports_nav_identification_not_current_field():
     """The ask_secretary tool DESCRIPTION must agree with the SI: it advertises the
-    two legitimate uses (recall a past answer; identify a field for navigation, with
-    a `fields` list) and forbids ONLY the current field's own name/id (bd
-    polyglot-pdf-2af7 + polyglot-pdf-3vby)."""
+    three legitimate uses (recall a past answer; identify a field for navigation,
+    with a `fields` list; get official instruction text QUOTED back, bd
+    polyglot-pdf-rdsl) and forbids ONLY the current field's own name/id (bd
+    polyglot-pdf-2af7 + polyglot-pdf-3vby).
+
+    This test's own assertions cover the navigation half only; the third use and
+    the scrivener/advisor boundary around it are pinned by
+    test_secretary_scrivener_boundary.py."""
     decls = {d["name"]: d for d in Settings().TOOL_DECLARATIONS}
     desc = decls["ask_secretary"]["description"]
     lowered = desc.lower()
