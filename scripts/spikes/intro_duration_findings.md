@@ -184,6 +184,35 @@ standalone intro clip does not need the mid-conversation loudness match).
 Decision log also in `docs/sprint_20_sol-intro-tts_plan.md` post-filing
 section and on beads polyglot-pdf-s1iex / s1iex.1.
 
+## Round 3 (2026-08-13): 18-language store + non-English spot-checks
+
+The frozen master + 17 translations landed in
+`backend/services/intro_script.json` (bd s1iex.2), pinned by
+`backend/tests/unit/test_intro_script.py` (language set DERIVED from
+SPOKEN_LANGUAGE_BCP47; byte cap; placeholder/brand counts; 8-paragraph
+structure; no-fullText shape). All six assertion families mutation-verified
+red-then-green against six different languages.
+
+Duration spot-checks through the real path at 0 dB (the intro-route gain),
+placeholders instantiated (Form I-90 + the language's agree label):
+
+| Language | Voice resolved (rung 1) | Bytes | Measured duration |
+|---|---|---|---|
+| German | `de-DE-Chirp3-HD-Algieba` | 1942 | **120.2 s** (+29% vs EN ~93s) |
+| Hindi | `hi-IN-Chirp3-HD-Algieba` | 4068 | **113.5 s** (+22%) |
+
+Both inside the plan's recorded +/-50% working assumption -- now MEASURED
+for the two expected worst offenders, not assumed. German runs a full two
+minutes; the maintainer accepted the assumption knowingly (no per-language
+copy tuning planned). Hindi instantiated lands at 4068 of 5000 bytes --
+the byte-cap margin is real but not generous; the derived test is what
+keeps language growth honest. MP3-decoded peaks slightly above 1.0
+(1.063) appear on these draws at 0 dB -- lossy-decode overshoot on hot
+draws (the 0 dB RAW waveform measured 0.784 peak on English); distinct
+from the +4 dB case where the raw waveform itself hit full scale.
+
+Round-3 spend: 2 synthesis calls (~6 KB) = ~USD 0.18; cumulative ~USD 0.81.
+
 ## Reproduce
 
     backend/.venv/Scripts/python.exe scripts/spikes/measure_intro_duration.py \
