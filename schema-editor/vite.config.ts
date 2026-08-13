@@ -36,6 +36,18 @@ export default defineConfig({
   server: {
     port: 3001,
     open: true,
+    watch: {
+      // Never watch sibling git worktrees. The repo root holds .claude/worktrees/
+      // with ~130 full checkouts, so an agent editing files in ANY of them would
+      // reload this dev server -- dropping the in-flight POST /api/extract, which
+      // runs for MINUTES (it spawns extract_form.py plus the `claude` CLI). The
+      // browser reports that dropped connection as a bare "Failed to fetch", and
+      // extractEndpoint's res.on('close') handler kills the extractor tree with it.
+      // Defence in depth: this config's root is schema-editor/, which already
+      // excludes the worktrees dir -- the observed reload loop was uvicorn's
+      // watcher, fixed separately in the launcher scripts.
+      ignored: ['**/.claude/worktrees/**'],
+    },
     fs: {
       // Permit the link-resolved node_modules so a worktree's junctioned deps
       // (esp. the pdfjs worker) are servable; see fsAllowList above.

@@ -593,11 +593,36 @@ export async function handleExtract(
     responded = true;
     detachClientGone();
     // extract_form.py prints a "[OK]/[INVALID] wrote ... ; <validation detail>"
-    // line and exits 0 only when the draft validated. Surface its last line as
-    // the human-readable detail.
+    // line. Surface its last line as the human-readable detail.
     const lines = (stdout + stderr).trim().split(/\r?\n/).filter(Boolean);
     const lastLine = lines.length ? lines[lines.length - 1] : '(no output)';
-    const ok = code === 0 && fs.existsSync(tmpOut);
+
+    // Tri-state exit code (extract_form.py EXIT_*): 0 VALID, 3 ISSUES, 1 HARD_FAIL.
+    // Exit 3 means a USABLE draft was written that is invalid and/or carries lint
+    // ERRORs -- the extractor's contract is "STORE it with its issue report", and
+    // the hosted route does exactly that (editor_kit_routes.py, bd v96b). This
+    // endpoint used to treat any nonzero code as failure and cleanupTmp() the
+    // draft away, so a local extraction that hosted would have stored for repair
+    // vanished with a bare "did not validate" -- the local-vs-hosted drift that
+    // running the real backend locally exists to eliminate.
+    //
+    // Re-derive the usability floor from the WRITTEN draft rather than trusting
+    // the exit code alone (mirrors the hosted route), so a mis-exit can never
+    // store garbage: parseable JSON with >= 1 dict-shaped field.
+    const EXIT_ISSUES = 3;
+    const wrote = fs.existsSync(tmpOut);
+    let usable = false;
+    if (wrote && (code === 0 || code === EXIT_ISSUES)) {
+      try {
+        const draft = JSON.parse(fs.readFileSync(tmpOut, 'utf-8'));
+        usable = Array.isArray(draft?.fields)
+          && draft.fields.some((f: unknown) => f !== null && typeof f === 'object' && !Array.isArray(f));
+      } catch {
+        usable = false; // unparseable draft is no draft
+      }
+    }
+    const storedWithIssues = usable && code === EXIT_ISSUES;
+    const ok = usable;
     if (ok) {
       // Promote the temp file to the real path only on success.
       try {
@@ -616,11 +641,21 @@ export async function handleExtract(
     const cleanDetail = lastLine
       .split(tmpOut).join(outPath)
       .split(path.basename(tmpOut)).join(schemaFile);
+    // A stored-with-issues draft must NOT read as a clean success: it is saved and
+    // openable, but it has validation and/or lint problems to fix in the editor.
+    // Say so in the detail line the catalogue renders.
+    const detail = ok
+      ? (storedWithIssues
+        ? `stored with issues -- the draft was saved to ${schemaFile} but did not `
+          + `fully validate; open it and fix the flagged fields. ${cleanDetail}`
+        : cleanDetail)
+      : `extraction failed (exit ${code}): ${cleanDetail}`;
     sendJson(res, ok ? 200 : 500, {
       ok,
-      detail: ok ? cleanDetail : `extraction failed (exit ${code}): ${cleanDetail}`,
+      detail,
       schemaFile,
       exitCode: code ?? -1,
+      storedWithIssues,
     });
   });
 }

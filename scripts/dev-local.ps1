@@ -247,7 +247,13 @@ if ($Model -eq 'premium') {
 # and restore the prior values so a re-run in the same shell stays clean.
 $BackendArgs = @(
     '-m', 'uvicorn', 'backend.main:app',
-    '--host', '127.0.0.1', '--port', '8000', '--reload'
+    '--host', '127.0.0.1', '--port', '8000', '--reload',
+    # Scope the reload watcher to backend/ (bare --reload watches the WHOLE cwd
+    # tree). The repo root holds .claude/worktrees/ with ~130 sibling worktrees,
+    # each a full checkout: an agent editing any .py in ANY of them restarted
+    # this backend. Safe to scope -- backend/ imports no other top-level package
+    # (shared/ is one JSON file, no Python).
+    '--reload-dir', 'backend'
 )
 # GOOGLE_CLOUD_PROJECT is used by the Vertex path (google-genai + ADC); harmless
 # on the Studio (premium) path, which uses GEMINI_API_KEY. Respect an already-set
