@@ -3,8 +3,13 @@ import { promises as fs } from "fs";
 import path from "path";
 
 import { shouldCopyKitPath } from "./kitCopyFilter";
+import { isPubliclyServable } from "./kitPublishFilter";
 
 interface KitMetadata {
+  // Declared so the status gate reads a real field rather than a stray
+  // property: this interface omitting `status` is WHY the bundle shipped
+  // drafts and retired forms (bd polyglot-pdf-fqexm).
+  status?: string;
   label?: string;
   description?: string;
   schema?: string;
@@ -31,7 +36,14 @@ const REPO_ROOT = path.resolve(PROJECT_ROOT, "..");
 const FORM_KITS_SOURCE_DIR = process.env.FORM_KITS_SOURCE_DIR
   ? path.resolve(process.env.FORM_KITS_SOURCE_DIR)
   : path.resolve(REPO_ROOT, "form-kits");
-const FORM_KITS_PUBLIC_DIR = path.resolve(PROJECT_ROOT, "public", "form-kits");
+// Overridable like FORM_KITS_SOURCE_DIR above, so a test can drive this
+// script end to end without writing into the real public bundle. Testing
+// the REAL script rather than a copy of its logic is the lesson from
+// formKitBundle.archive.test.ts, where a hand-copied predicate stayed
+// green under the exact bug it was written for.
+const FORM_KITS_PUBLIC_DIR = process.env.FORM_KITS_PUBLIC_DIR
+  ? path.resolve(process.env.FORM_KITS_PUBLIC_DIR)
+  : path.resolve(PROJECT_ROOT, "public", "form-kits");
 const MANIFEST_PATH = path.join(FORM_KITS_PUBLIC_DIR, "index.json");
 
 function capitalize(word: string) {
@@ -96,6 +108,19 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
       return null;
     });
 
+    // The lifecycle gate, FAIL CLOSED: unreadable metadata, an absent
+    // metadata.json, or any status other than complete withholds the kit.
+    // Shared with the copy path below so the index and the shipped files
+    // cannot disagree -- an index that hides a retired form whose schema.json
+    // is still served at /form-kits/<id>/ looks fixed and is not.
+    if (!isPubliclyServable(metadata)) {
+      console.warn(
+        `[form-manifest] Withholding ${entry.name}: status ` +
+        `${JSON.stringify(metadata?.status ?? null)} is not "complete"`,
+      );
+      continue;
+    }
+
     const schemaFile = metadata?.schema ?? "schema.json";
     const pdfFile = metadata?.pdf ?? "form.pdf";
 
@@ -126,7 +151,7 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
   return descriptors;
 }
 
-async function copyKitsToPublic() {
+async function copyKitsToPublic(publishable: Set<string>) {
   await fs.rm(FORM_KITS_PUBLIC_DIR, { recursive: true, force: true });
   await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
   // shouldCopyKitPath keeps <kit>/_archive/** (superseded revisions, bd
@@ -134,7 +159,27 @@ async function copyKitsToPublic() {
   // this script and its test share one definition -- see kitCopyFilter.ts.
   await fs.cp(FORM_KITS_SOURCE_DIR, FORM_KITS_PUBLIC_DIR, {
     recursive: true,
-    filter: shouldCopyKitPath,
+    filter: (src, dest) => {
+      if (!shouldCopyKitPath(src)) {
+        return false;
+      }
+      // fs.cp's filter sees PATHS, not metadata, so the publishable set is
+      // decided once by collectKits and consulted here. Only the top level is
+      // a kit id; deeper paths belong to a kit already admitted, and the root
+      // itself must pass or nothing is copied at all.
+      const rel = path.relative(FORM_KITS_SOURCE_DIR, src);
+      if (rel === "") {
+        return true;
+      }
+      // ONLY kit directories ship. A root-level file (form-kits/README.md is
+      // the one today) has no kit id, so it is not publishable -- authoring
+      // notes are not client assets, and Hosting would otherwise serve them at
+      // /form-kits/README.md. Stated explicitly rather than left to fall out of
+      // the kit-id lookup, since a silent scope change is the kind of thing
+      // that gets "fixed" back later (Opus fresh-eyes round 2).
+      const kitId = rel.split(path.sep)[0];
+      return publishable.has(kitId);
+    },
   });
 }
 
@@ -152,14 +197,27 @@ async function run() {
   await validateSourceDir();
   const forms = await collectKits();
 
-  if (!forms.length) {
-    await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
-    console.warn("[form-manifest] No form kits detected. Skipping copy + manifest generation.");
-    return;
-  }
-
-  await copyKitsToPublic();
+  // NO early return on an empty result. It used to skip copyKitsToPublic --
+  // and the fs.rm that CLEARS the previous build lives inside that function, so
+  // skipping it left the old bundle in place. Harmless when it only meant "no
+  // kits exist", but this bead gave `forms` a second way to come back empty:
+  // every kit was WITHHELD. Retiring your last published form then left its
+  // schema, its PDF and a stale index.json still served -- the precise scenario
+  // this gate exists for, failing (Opus fresh-eyes round 1, reproduced).
+  //
+  // The wipe now always runs, and an empty manifest is written rather than an
+  // old one left behind. An empty bundle is the CORRECT output for a tree with
+  // nothing publishable.
+  const publishable = new Set(forms.map((form) => form.id));
+  await copyKitsToPublic(publishable);
   await writeManifest(forms);
+
+  if (!forms.length) {
+    console.warn(
+      "[form-manifest] No publishable kits: the bundle is now EMPTY. " +
+      "(Kits exist but were withheld, or none were found.)",
+    );
+  }
 }
 
 run().catch((error) => {
