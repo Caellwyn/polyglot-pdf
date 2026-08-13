@@ -275,6 +275,46 @@ describe('FormCatalogue', () => {
     expect(progressBars[0].className).not.toContain('bg-green-500');
   });
 
+  it('a genuinely complete (200-of-200) kit still shows a GREEN bar', async () => {
+    // Regression guard for the fix above: the exact-ratio predicate must
+    // still recognize TRUE completion, not just stop recognizing 100%.
+    const fullSchema = JSON.stringify({
+      form_metadata: { form_number: 'T-1' }, sections: [],
+      fields: [{
+        id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1',
+        read_only: false, spoken_name: 'first',
+        help: { instructions: 'Enter it.' },
+        _review: { status: 'reviewed_correct' },
+      }],
+    });
+    const root = mockRoot([
+      mockKit('really-done', {
+        'schema.json': fullSchema,
+        'metadata.json': JSON.stringify({
+          label: 'Really Done', status: 'complete',
+          readiness: {
+            reviewed: 200, toReview: 0, total: 200, errors: 0, percent: 100,
+            ready: true, verified: true, schema_sha1: 'abc123',
+          },
+        }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+
+    await screen.findByText('Really Done');
+    await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
+
+    const bars = document.querySelectorAll('.h-full');
+    const progressBars = Array.from(bars).filter((el) =>
+      el.className.includes('bg-green-500') || el.className.includes('bg-yellow-500'));
+    expect(progressBars.length).toBe(1);
+    expect(progressBars[0].className).toContain('bg-green-500');
+  });
+
   it('the compact STRIP dropdown shows no percentage for an unstamped kit (bd g687)', async () => {
     // The strip is the DEFAULT view (cards are behind "Show form cards"), and
     // it originally kept reading the local disk re-scan -- so it printed a

@@ -1150,6 +1150,21 @@ describe('SchemaFormStateManager', () => {
 
       expect(fields.map((f) => f.id)).toEqual(['field-1', 'field-2'])
     })
+
+    it('renders a field whose section lists the BASE id while field.id is bracketed (reverse direction)', () => {
+      // The mirror of the first test above: findSectionIdForField matches
+      // BOTH directions (section-lists-base + field.id-bracketed is the
+      // other half of its own bidirectional lookup), so getCurrentSectionFields
+      // must stay symmetric here too, not just for the alias-in-section case.
+      const schema = createTestSchema()
+      schema.fields[3].id = 'field-4[]' // field-4 becomes the bracketed variant
+      schema.sections[2].fields = ['field-4', 'field-5'] // section still lists the base
+      const state = { ...SchemaFormStateManager.init(schema), currentSectionId: 'section-2a' }
+
+      const fields = SchemaFormStateManager.getCurrentSectionFields(state)
+
+      expect(fields.map((f) => f.id)).toContain('field-4[]')
+    })
   })
 
   // ============================================================================
