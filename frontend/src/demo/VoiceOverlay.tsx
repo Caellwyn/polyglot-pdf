@@ -1404,7 +1404,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// accessor (bd polyglot-pdf-2p4y).
 	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
 	const solSpeaking = useGeminiSpeaking(solAudioManager)
-	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// `clipPlaying` carries the SAME signal, but ungated by the live-session
+	// check: a synthesized clip (spell-back, and Sol's intro once bd s1iex.5
+	// lands) is audible with no session behind it, and the hook's flag is
+	// driven by the audio element's own lifecycle rather than a backend
+	// message, so the stale-flag hazard the live gate guards against does not
+	// apply (bd polyglot-pdf-s1iex.4).
+	const solState = deriveSolState({
+		status, thinking, speaking: solSpeaking, micSending,
+		clipPlaying: solSpeaking,
+	})
 	// Sol reads the AI's OUTPUT level for its speaking ray-breathing (the mic is
 	// silent while the assistant talks). Reads the ref rather than closing over
 	// the manager, since it is recreated across reconnects -- but caches the lookup

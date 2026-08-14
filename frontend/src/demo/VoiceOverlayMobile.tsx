@@ -1083,7 +1083,14 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 	// matters twice as much here (bd polyglot-pdf-2p4y).
 	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
 	const solSpeaking = useGeminiSpeaking(solAudioManager)
-	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// See the twin comment in VoiceOverlay.tsx: `clipPlaying` is the same
+	// signal ungated by the live-session check, so a synthesized clip animates
+	// Sol even with no session (bd polyglot-pdf-s1iex.4). Mobile matters most
+	// here -- on the collapsed FAB, Sol is the ONLY status indicator there is.
+	const solState = deriveSolState({
+		status, thinking, speaking: solSpeaking, micSending,
+		clipPlaying: solSpeaking,
+	})
 	// Sol reads the AI's OUTPUT level for its speaking ray-breathing (the mic is
 	// silent while the assistant talks). Reads the ref rather than closing over
 	// the manager, since it is recreated across reconnects -- but caches the lookup

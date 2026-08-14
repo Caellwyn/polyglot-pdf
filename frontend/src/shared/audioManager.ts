@@ -57,6 +57,14 @@ export interface AudioManager {
 	// loop) rather than a subscription, because the only consumer is an avatar
 	// that already animates per-frame.
 	getOutputEnergy: () => number
+	// Route an <audio> element's clip (spell-back, Sol's intro) through the SAME
+	// playback graph the model's PCM uses, so getOutputEnergy sees it and the
+	// avatar animates while a clip plays (bd polyglot-pdf-s1iex.4). Returns a
+	// release function: call it when the clip ends/errors/is cancelled. Safe to
+	// call when the Web Audio path is unavailable -- it degrades to
+	// element-only playback (audible, unanimated) rather than throwing.
+	// The caller still owns play()/pause(): this only taps the signal.
+	attachClipElement: (el: HTMLAudioElement) => () => void
 	destroy: () => void
 }
 
@@ -240,6 +248,92 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		}
 		// Same *100 scaling the capture worklet applies to its RMS.
 		return Math.min(100, Math.sqrt(sum / outputBuf.length) * 100)
+	}
+
+	/**
+	 * Clip elements already spliced into the playback graph (bd
+	 * polyglot-pdf-s1iex.4).
+	 *
+	 * WHY A MAP: `createMediaElementSource` may be called only ONCE per element
+	 * -- a second call on the same element throws InvalidStateError, and a
+	 * caught-and-ignored throw would leave the clip audible but unanimated.
+	 * Replaying the same element (Listen Again) must therefore reuse the node
+	 * built the first time.
+	 *
+	 * WHY IT MUST BE A BLOB URL, NOT THE CLOUD RUN URL: a media element whose
+	 * src is cross-origin without CORS is "tainted", and routing a tainted
+	 * element through Web Audio yields SILENCE (zeros) with no error -- killing
+	 * the audio AND the animation. Callers fetch the clip (they need the auth
+	 * header anyway) and pass an object-URL element.
+	 */
+	const clipSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>()
+	// How many clips are currently routed + playing. Ref-counted because the
+	// spell-back clip and the intro clip are different callers that must not
+	// clear each other's speaking state.
+	let activeClipCount = 0
+
+	function attachClipElement(el: HTMLAudioElement): () => void {
+		// The clip plays with no Live session (Sol's intro runs BEFORE any
+		// connect), so the playback context may not exist yet. Build it here;
+		// the caller resumes it inside the user gesture.
+		if (!nodes.playbackContext) {
+			try {
+				nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
+				playbackTime = 0
+			} catch (err) {
+				// No Web Audio (unsupported/blocked/jsdom): let the element play
+				// on its own. Audible but unanimated beats silent.
+				console.warn('[AudioManager] [warn] clip attach: no AudioContext', err)
+				return () => {}
+			}
+		}
+		const ctx = nodes.playbackContext
+
+		let source = clipSources.get(el)
+		if (!source) {
+			try {
+				source = ctx.createMediaElementSource(el)
+				clipSources.set(el, source)
+			} catch (err) {
+				// Already-attached-elsewhere or unsupported: degrade to
+				// element-only playback rather than breaking the clip.
+				console.warn('[AudioManager] [warn] clip attach failed', err)
+				return () => {}
+			}
+		}
+		// Through the analyser (which is itself wired to ctx.destination), so the
+		// avatar reads the clip's real level -- the SAME single energy source the
+		// model's PCM uses, so deriveSolState needs no new input.
+		source.connect(getOutputAnalyser(ctx))
+
+		activeClipCount++
+		const wasNotSpeaking = !geminiIsSpeaking
+		geminiIsSpeaking = true
+		if (wasNotSpeaking && window.vffOnAudioPlaybackStart) {
+			window.vffOnAudioPlaybackStart()
+		}
+
+		let released = false
+		return () => {
+			// Idempotent: onended and an explicit cancel can both fire.
+			if (released) return
+			released = true
+			activeClipCount = Math.max(0, activeClipCount - 1)
+			// Only clear the speaking state if no other clip is playing AND the
+			// model is not mid-utterance -- playAudio owns that flag too, and a
+			// clip ending must not silence Sol during a model turn.
+			if (activeClipCount === 0 && activeAudioSources.length === 0) {
+				geminiIsSpeaking = false
+				if (window.vffOnAudioPlaybackEnd) {
+					window.vffOnAudioPlaybackEnd()
+				}
+			}
+			try {
+				source?.disconnect(getOutputAnalyser(ctx))
+			} catch {
+				// Context torn down under us -- nothing to release.
+			}
+		}
 	}
 
 	/**
@@ -1011,6 +1105,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setNativeVad,
 		setEnergyCallback,
 		getOutputEnergy,
+		attachClipElement,
 		destroy,
 	}
 }
