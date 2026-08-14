@@ -231,8 +231,24 @@ legacy kit.
 - One review cycle, five gaps, three blocking -- and the two most
   serious were self-inflicted by this branch rather than pre-existing.
   Every finding was reproduced in node before being fixed.
-- Two review layers, two cycles at the inner and one at the outer;
+- The outer review's second pass also established something the first
+  could not: the coercion is a net IMPROVEMENT over `dev` at the one place
+  it changes persisted data. On `dev`, "+ Add Option" on a string-option
+  kit wrote `["A", "B", {label:"", value:"option"}]` -- a MIXED array the
+  Pydantic publish gate rejects outright. The new code writes all-dicts.
+  So the pre-fix editor was already corrupting these kits; it just did it
+  one option at a time instead of all at once.
+- Beads filed rather than folded in, all genuinely out of scope:
+  `polyglot-pdf-teizj` (a doc with no `Tracks:` line silently opts out of
+  the freshness gate), `polyglot-pdf-9jc53` (a finding anchored to an
+  all-malformed options block is counted but unreachable), and
+  `polyglot-pdf-r771m` (`FormField.normalize_options` decides the legacy
+  shape from `v[0]` alone, so a MIXED string/dict list lints clean on
+  every surface and then dies at the publish gate -- pre-existing on
+  `dev`, and unreachable from the editor, whose write paths all rebuild
+  `options` as all-dict).
+- Two review layers, two cycles at the inner and two at the outer;
   the inner found 5 gaps (2 self-inflicted), the outer found 2 more that
-  only a cross-surface trace could see. Every finding was reproduced
+  only a cross-surface trace could see (1 self-inflicted). Every finding was reproduced
   before being fixed.
 - Total across rounds 1-8: 44 beads closed over 8 PRs.
