@@ -1,14 +1,15 @@
 ---
 tags: [bug-hunt, testing, schema-editor, authoring, auth, docs]
-beads: [polyglot-pdf-8bjdx, polyglot-pdf-6p0z, polyglot-pdf-8lh77, polyglot-pdf-qs7m6]
+beads: [polyglot-pdf-8bjdx, polyglot-pdf-6p0z, polyglot-pdf-8lh77, polyglot-pdf-qs7m6, polyglot-pdf-yb41u]
 surfaces: [schema-editor, scripts/authoring, backend/routes, docs/components]
 ---
 
 # Bug-hunt round 8: the complete options-consumer set, review-id squatting, a stale docstring, and an unpinned auth set
 
 Eighth round of the ongoing bug-hunt bead roundup (rounds 1-7: PRs #573,
-#576, #578, #581, #583, #585, #587). Four beads, three of which are
-"enumerate the set" fixes rather than single-instance ones.
+#576, #578, #581, #583, #585, #587). FIVE beads -- four planned, plus one
+(`yb41u`) that the review surfaced and this branch then fixed -- three of
+them "enumerate the set" fixes rather than single-instance ones.
 
 1. **Malformed `options` still threw across the schema-editor** (bd
    8bjdx). Round 7's bd 93p8 guarded ONE consumer
@@ -21,7 +22,10 @@ Eighth round of the ongoing bug-hunt bead roundup (rounds 1-7: PRs #573,
 3. **`collect_markers`' docstring stated the pre-round-7 rule** (bd
    8lh77), contradicting the code directly beneath it.
 4. **The `require_auth` route enumeration omitted a route** (bd qs7m6):
-   four routes gated in code, three listed in two docs.
+   four routes gated in code, three listed in three docs.
+5. **`ConditionBuilder`'s trigger predicate had the same truthy-length
+   trap** (bd yb41u) -- filed by the review as pre-existing, then fixed
+   here once the widened set-guard started pointing at it.
 
 ## Scar tissue
 
@@ -70,13 +74,17 @@ guard -> 12 red) to show that neither was riding on the other's guard.
 8bjdx, 6p0z and qs7m6 are all the same shape: a rule correctly applied
 in one place and silently missing in its siblings.
 
-- **8bjdx**: the bead named 2 sites. Mechanical enumeration found **9**
-  iterating consumers across 5 files. The discriminator turned out to
-  be crisp once measured in node rather than reasoned about: `.length`
-  and truthiness checks are SAFE on both malformed shapes (a string has
-  a `.length`; an array with nulls has a `.length`), while every array
-  METHOD throws. That one measurement separated real offenders from
-  ~15 benign reads that a textual grep flags identically.
+- **8bjdx**: the bead named 2 sites. My first enumeration found 9
+  across 5 files -- and was still incomplete, because it anchored on the
+  literal `field.options` and so could not see a consumer that names the
+  same object `trigger` (see the evasion-surface note below). The
+  discriminator for WHICH reads are dangerous did hold up once measured
+  in node rather than reasoned about: `.length` and truthiness checks are
+  SAFE on both malformed shapes (a string has a `.length`; an array with
+  nulls has a `.length`), while every array METHOD throws. That
+  measurement separated real offenders from ~15 benign reads a textual
+  grep flags identically -- but it says nothing about reads the SEARCH
+  never reached, which is the failure that actually happened.
 - **6p0z**: the guard existed 15 lines above the missing one, in the
   same function.
 - **qs7m6**: three routes had individual 401 tests; the fourth had
@@ -108,6 +116,54 @@ in the other, so on Windows the exemption matched in one place and not
 the other. A hand-checked exemption list would have absorbed that
 silently.
 
+### The review found TWO regressions this branch itself introduced
+
+Both came from the same decision: `safeOptions` (drops malformed entries)
+and `safeOptionsPreservingArity` (keeps them as `null`) are near-identical
+in shape, and I picked between them per call site.
+
+In `FieldEditor` I picked BOTH -- arity-preserving for `optionValues` (which
+feeds the lint-finding anchor map) and dropping for the option-row render
+loop. Those are two different index spaces over one array. With
+`options=[null, a, b]`, a finding anchored to option 'a' (raw index 1) was
+looked up at 'b's row, and an edit to 'a' spliced position 0. The tell was
+sitting in my own comment: `optionValues` is annotated "arity preserved
+because the values are matched positionally against the option rows below"
+-- and I then changed those rows to the other view, invalidating the stated
+invariant without re-reading it.
+
+The second was subtler and shows the limit of the crash-shaped fix: the
+`atFloor` guard ("a choice field needs >= 2 real options before Remove is
+allowed") reads `field.options.length`. `.length` NEVER THROWS on either
+malformed shape -- that is exactly the fact that made the crash enumeration
+tractable -- so this site was invisible to both the crash hunt and the
+source-scan guard, while still being wrong: 2 real options plus 1 malformed
+entry counts as 3, Remove stays enabled, and one click yields the
+single-option choice field the backend rejects.
+
+Lesson: a bug class defined as "throws" and a bug class defined as "reads
+the wrong count" overlap on the same lines but not on the same set of them.
+Fixing the first does not sweep the second, and the guard built for the
+first cannot see the second.
+
+### A set-guard is only as good as its evasion surface
+
+The first `optionsConsumerSet.test.ts` anchored on the literal
+`field.options`. The reviewer broke it three ways in node -- alias
+(`const o = field.options; o.map(...)`), destructure, and a differently-named
+receiver -- and the third was not hypothetical: `ConditionBuilder.tsx` calls
+the trigger field `trigger`, which is precisely why my "mechanical
+enumeration" missed it and why the journal's original "9 consumers across 5
+files" claim was wrong.
+
+Widening the receiver pattern immediately surfaced two genuinely unguarded
+sites (`ConditionBuilder` and `App.tsx`'s option drag-drop). The cost is
+false positives on safe locals, which now carry documented exemptions -- and
+the exemption mechanism needed its own hardening: matching a fragment with a
+`>= 1` check meant a NEW call sharing common text like `.map((opt, idx) =>`
+would silently inherit an exemption written for a different call's
+reachability argument. It now pins an exact occurrence count.
+
 ## Process notes
 
 - Recon correctly flagged `8bjdx` as claimed-by-another-session; it was
@@ -127,4 +183,7 @@ silently.
 - Four beads cleared, none touching a runtime request path; the only
   behavioral changes are in the schema-editor UI, an authoring script,
   and two test files.
-- Total across rounds 1-8: 42 beads closed over 8 PRs.
+- One review cycle, five gaps, three blocking -- and the two most
+  serious were self-inflicted by this branch rather than pre-existing.
+  Every finding was reproduced in node before being fixed.
+- Total across rounds 1-8: 43 beads closed over 8 PRs.
