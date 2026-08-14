@@ -343,3 +343,82 @@ describe('checkFieldComplete position diagnostics (bd g63j)', () => {
     expect(checkFieldComplete(offDoc, 0).reviewReasons).toEqual([]);
   });
 });
+
+// ============================================================================
+// Malformed `options` must DEGRADE, never throw (bd polyglot-pdf-8bjdx)
+// ============================================================================
+//
+// Two shapes a hand-edited or script-drifted kit can carry escape the ordinary
+// `?? []` / `|| []` guards, because both are TRUTHY and both have a `.length`:
+//   1. a NON-ARRAY value (e.g. "not-a-list") -- array methods throw
+//      "is not a function";
+//   2. an array with NULL / non-object entries -- `o.pdf_field_name` throws
+//      "Cannot read properties of null".
+//
+// bd polyglot-pdf-93p8 fixed ONE member of this set (reviewStatus.ts's
+// hasUncoveredStructuralError). This bead is the REMAINDER: checkFieldComplete
+// and the render/edit paths that call it. A throw here is not a wrong number,
+// it is a BLANK SCREEN -- checkFieldComplete sits on the per-field render path
+// (FieldList rows + tooltips, FieldOverlay boxes, FieldEditor's panel), so one
+// malformed field took down the whole list rather than degrading its own row.
+describe('malformed options degrade instead of throwing (bd polyglot-pdf-8bjdx)', () => {
+  const MALFORMED: Array<[string, unknown]> = [
+    ['a non-array options value', 'not-a-list'],
+    ['an array whose FIRST entry is null', [null, { label: 'ok', value: 'ok' }]],
+    ['an array whose LAST entry is null', [{ label: 'ok', value: 'ok' }, null]],
+    ['an array of non-object junk', ['junk', 42, null]],
+    ['a numeric options value', 7],
+    ['an object (non-array) options value', { label: 'x' }],
+  ];
+
+  // Every CHOICE type reaches the options branch in checkFieldComplete; a
+  // non-choice type skips it. Both must survive.
+  const TYPES = ['select', 'radio', 'checkbox_group', 'text'] as const;
+
+  for (const [shapeName, options] of MALFORMED) {
+    for (const type of TYPES) {
+      it(`checkFieldComplete survives ${shapeName} on a ${type} field`, () => {
+        // pdf_field_name MUST be cleared: the options branch is nested inside
+        // `if (!field.pdf_field_name)`, so a field carrying a field-level
+        // widget name short-circuits before the throwing .filter/.map and the
+        // test would be vacuous (measured -- an earlier cut of this test kept
+        // the fixture's default pdf_field_name and passed against the
+        // UNFIXED code).
+        const f = field('malformed', {
+          type, options, pdf_field_name: undefined,
+        } as unknown as Partial<FormField>);
+        // The assertion is "does not throw" -- the exact status is a
+        // degradation detail, but it must be a real FieldStatus.
+        const status = checkFieldComplete(f);
+        expect(status).toBeDefined();
+        expect(Array.isArray(status.errors)).toBe(true);
+        expect(Array.isArray(status.reviewReasons)).toBe(true);
+      });
+    }
+  }
+
+  it('a WELL-FORMED choice field still reports its unmapped options (no regression)', () => {
+    // The degradation must not blunt the real check: a genuine partially-mapped
+    // choice field still names which options lack a widget.
+    const f = field('partly', {
+      type: 'radio',
+      pdf_field_name: undefined,
+      options: [
+        { label: 'Mapped', value: 'a', pdf_field_name: 'A[0]' },
+        { label: 'Unmapped', value: 'b' },
+      ],
+    } as unknown as Partial<FormField>);
+    const status = checkFieldComplete(f);
+    expect(status.errors.join(' ')).toContain('Unmapped');
+  });
+
+  it('a choice field with NO mapped option anywhere still reports the hard error', () => {
+    const f = field('none', {
+      type: 'select',
+      pdf_field_name: undefined,
+      options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }],
+    } as unknown as Partial<FormField>);
+    const status = checkFieldComplete(f);
+    expect(status.errors.join(' ')).toContain('No PDF mapping');
+  });
+});

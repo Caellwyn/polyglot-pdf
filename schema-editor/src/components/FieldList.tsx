@@ -2,7 +2,7 @@ import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
 import { GUIDANCE_STALE_RULE, currentIdentity, needsGuidanceAck, staleFieldIds }
   from '../utils/guidanceStaleness';
-import { checkFieldComplete } from '../utils/validation';
+import { checkFieldComplete, safeOptions } from '../utils/validation';
 import { getReview, isReviewTargetFromFindings, statusFromFindings }
   from '../utils/reviewStatus';
 import { isFindingDismissable, ruleLabel, RULE_REMEDIES }
@@ -857,7 +857,12 @@ export const FieldList: React.FC<FieldListProps> = ({
                     const isSelected = field.id === selectedFieldId;
                     const isDragOver = dragOverField === field.id;
                     const isDragging = draggedField?.fieldId === field.id;
-                    const hasOptions = field.options && field.options.length > 0;
+                    // safeOptions (bd polyglot-pdf-8bjdx): a truthy non-array
+                    // `options` (or one carrying null entries) passes a bare
+                    // `.length > 0` check and then throws out of the `.map`
+                    // below, blanking the WHOLE field list rather than one row.
+                    const safeOpts = safeOptions(field);
+                    const hasOptions = safeOpts.length > 0;
                     const isFieldExpanded = expandedFields.has(field.id);
                     const canAcceptOption = draggedOption && (field.type === 'radio' || field.type === 'checkbox') && draggedOption.fieldId !== field.id;
 
@@ -944,9 +949,9 @@ export const FieldList: React.FC<FieldListProps> = ({
                               <span className="text-xs text-gray-400 font-mono">
                                 [{field.type}]
                               </span>
-                              {hasOptions && field.options && (
+                              {hasOptions && (
                                 <span className="text-xs text-gray-500">
-                                  ({field.options.length})
+                                  ({safeOpts.length})
                                 </span>
                               )}
                             </button>
@@ -954,9 +959,9 @@ export const FieldList: React.FC<FieldListProps> = ({
                         </div>
 
                         {/* Show options when expanded */}
-                        {hasOptions && isFieldExpanded && field.options && (
+                        {hasOptions && isFieldExpanded && (
                           <div className="ml-6 border-l-2 border-gray-200 bg-gray-50">
-                            {field.options.map((option, idx) => {
+                            {safeOpts.map((option, idx) => {
                               const isOptionDragging = draggedOption?.fieldId === field.id && draggedOption?.optionIndex === idx;
                               
                               return (

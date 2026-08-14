@@ -1,7 +1,64 @@
-import type { FormSchema, FormField, FieldStatus, ValidationError } from '../types/schema';
+import type {
+  FormSchema, FormField, FieldOption, FieldStatus, ValidationError,
+} from '../types/schema';
 import { normalizeToComposite } from './normalizeToComposite';
 import { overlayBlockReason } from './pdfCoordinates';
 import { isToReviewSection } from './sectionOps';
+
+/**
+ * A field's options as a SAFELY ITERABLE array of option objects (bd
+ * polyglot-pdf-8bjdx). THE one place malformed `options` is normalized --
+ * reuse it rather than hand-rolling `field.options ?? []` at each call site,
+ * which is exactly how this set drifted apart in the first place.
+ *
+ * Two shapes a hand-edited or script-drifted kit can carry escape the
+ * ordinary `?? []` / `|| []` guards, because both are TRUTHY and both have a
+ * `.length`:
+ *   1. a NON-ARRAY value (e.g. the string "not-a-list") -- `?? []` does not
+ *      replace it, `.length` is the string's length, and any array method
+ *      (`.filter`/`.every`/`.map`/`.some`) then throws "is not a function";
+ *   2. an array containing NULL / non-object entries (e.g. `[null, "junk"]`)
+ *      -- the array methods run, then `o.pdf_field_name` on `null` throws
+ *      "Cannot read properties of null".
+ *
+ * A throw here is not a wrong number, it is a BLANK SCREEN: these consumers
+ * sit on the per-field RENDER path (FieldList rows + tooltips, the PDF
+ * overlay boxes, FieldEditor's completeness panel), so one malformed field
+ * takes down the whole list rather than degrading its own row.
+ *
+ * Mirrors the backend's own guards (publish_readiness.has_uncovered_structural_error:
+ * `options if isinstance(options, list) else []` plus `o.get(...) if
+ * isinstance(o, dict) else None`), and the sibling fix bd polyglot-pdf-93p8
+ * already applied inline in reviewStatus.ts.
+ *
+ * Non-object entries are DROPPED rather than coerced: an option that is not a
+ * dict carries no `value`/`label`/`pdf_field_name` to read, so every consumer
+ * would have to special-case it anyway, and dropping matches the backend
+ * mirror's effective behavior (its `isinstance(o, dict) else None` makes a
+ * non-dict read as "no pdf_field_name", i.e. an unmapped option -- see
+ * safeOptionsPreservingArity below for the consumers that need that arity).
+ */
+export function safeOptions(field: { options?: unknown }): FieldOption[] {
+  const raw = field.options;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((o): o is FieldOption => !!o && typeof o === 'object');
+}
+
+/**
+ * Like safeOptions, but KEEPS non-object entries as `null` placeholders so a
+ * consumer that must not change its option COUNT (e.g. checkFieldComplete's
+ * "N of M options are unmapped" message, or anything indexing options
+ * positionally) still sees the real arity. A `null` slot reads as an option
+ * with no `pdf_field_name` / no `value`, matching the backend mirror
+ * (`o.get("pdf_field_name") if isinstance(o, dict) else None`).
+ */
+export function safeOptionsPreservingArity(
+  field: { options?: unknown },
+): Array<FieldOption | null> {
+  const raw = field.options;
+  if (!Array.isArray(raw)) return [];
+  return raw.map(o => (!!o && typeof o === 'object' ? (o as FieldOption) : null));
+}
 
 // Flatten a legacy-or-composite condition to its atomic conditions (bd
 // h76m.8) for reference checking. [] for absent/malformed shapes.
@@ -41,16 +98,23 @@ export function checkFieldComplete(
   // legitimately has NO field-level name -- each option carries its own
   // pdf_field_name instead. Flagging those as "Missing PDF field name" marked
   // every merged group red with nothing actually wrong (bd polyglot-pdf-0x10.6).
-  const options = field.options ?? [];
+  // safeOptionsPreservingArity, not `field.options ?? []` (bd
+  // polyglot-pdf-8bjdx): a non-array or null-bearing `options` threw out of
+  // the .filter/.map below, and this function is on the per-field RENDER path
+  // (FieldList rows + tooltips, FieldOverlay boxes, FieldEditor's panel), so
+  // one malformed field blanked the whole list. Arity-preserving because the
+  // "N of M unmapped" branch below compares counts -- a dropped entry would
+  // silently change which message fires.
+  const options = safeOptionsPreservingArity(field);
   const isChoice =
     field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group';
   if (isChoice && options.length > 0) {
     if (!field.pdf_field_name) {
-      const unmapped = options.filter(o => !o.pdf_field_name);
+      const unmapped = options.filter(o => !o?.pdf_field_name);
       if (unmapped.length === options.length) {
         errors.push('No PDF mapping: neither the field nor its options name a PDF widget');
       } else if (unmapped.length > 0) {
-        const names = unmapped.map(o => o.label || String(o.value ?? '?')).join(', ');
+        const names = unmapped.map(o => o?.label || String(o?.value ?? '?')).join(', ');
         errors.push(`Options missing a PDF widget mapping: ${names}`);
       }
     }
