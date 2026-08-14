@@ -17,5 +17,20 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // Firm records (firms/{firm_id}): Admin-SDK-only (bd polyglot-pdf-lo88).
+    // The backend reads this collection via get_db() (firebase-admin), which
+    // BYPASSES Security Rules entirely -- so this block grants/enables
+    // nothing; it is an explicit defense-in-depth backstop ensuring no
+    // client-SDK query can ever read or write firm profiles/allowlists, and
+    // it self-documents that intent next to the other blocks rather than
+    // relying on the trailing implicit default deny.
+    // NOTE: rules reach the live project only via a frontend/full deploy
+    // (deploy-demo.sh) or an explicit
+    //   firebase deploy --only firestore:rules --project <project>
+    // -- a backend-only deploy does NOT ship this file.
+    match /firms/{firmId} {
+      allow read, write: if false;
+    }
   }
 }
