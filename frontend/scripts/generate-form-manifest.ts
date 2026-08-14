@@ -4,7 +4,8 @@ import path from "path";
 
 import { shouldCopyKitPath } from "./kitCopyFilter";
 import { isPubliclyServable } from "./kitPublishFilter";
-import { publishableKitFiles } from "./kitAssetFilter";
+import { publishableKitFiles, safeKitFilename,
+         DEFAULT_SCHEMA_FILE, DEFAULT_PDF_FILE } from "./kitAssetFilter";
 
 interface KitMetadata {
   // Declared so the status gate reads a real field rather than a stray
@@ -122,8 +123,11 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
       continue;
     }
 
-    const schemaFile = metadata?.schema ?? "schema.json";
-    const pdfFile = metadata?.pdf ?? "form.pdf";
+    // Coerced HERE, so the manifest entry and the copy allowlist are built
+    // from the SAME value. Accepting the declared name verbatim let the two
+    // disagree: a "sub/schema.json" was indexed but never copied (round 1).
+    const schemaFile = safeKitFilename(metadata?.schema, DEFAULT_SCHEMA_FILE);
+    const pdfFile = safeKitFilename(metadata?.pdf, DEFAULT_PDF_FILE);
 
     const schemaPathFs = path.join(kitDir, schemaFile);
     const pdfPathFs = path.join(kitDir, pdfFile);

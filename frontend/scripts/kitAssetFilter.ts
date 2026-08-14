@@ -43,19 +43,53 @@ export const DEFAULT_SCHEMA_FILE = "schema.json";
 export const DEFAULT_PDF_FILE = "form.pdf";
 export const METADATA_FILE = "metadata.json";
 
+/** Mirrors backend/services/form_kits.py `_SAFE_FILENAME_RE`. */
+const SAFE_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/**
+ * Coerce a kit-declared filename to a safe BARE filename, else the default.
+ *
+ * This is the frontend half of `safe_filename` in backend/services/form_kits.py
+ * and deliberately degrades the same way -- to the conventional name -- rather
+ * than raising, so one malformed kit neither breaks the build nor escapes its
+ * own directory.
+ *
+ * Without it the two halves of this script DISAGREED: `collectKits` accepted a
+ * declared `"sub/schema.json"` verbatim and emitted a manifest entry pointing
+ * at it, while the copy filter compared that whole string against a single path
+ * segment and never matched -- so the kit was listed in the catalogue and
+ * published with no schema, a silent per-form outage (Opus fresh-eyes round 1,
+ * reproduced against both branches). A declared `"../secret.json"` had the same
+ * split: refused by the copy filter, but still emitted into the manifest as a
+ * path that normalises outside the kit.
+ *
+ * Coercing HERE means the manifest and the bundle are built from the same
+ * value, so they cannot disagree again.
+ */
+export function safeKitFilename(name: unknown, fallback: string): string {
+  if (typeof name !== "string") {
+    return fallback;
+  }
+  if (name.includes("/") || name.includes("\\") || name.includes("..")) {
+    return fallback;
+  }
+  return SAFE_FILENAME.test(name) ? name : fallback;
+}
+
 /**
  * The files a published kit may serve.
  *
  * `schemaFile`/`pdfFile` come from the kit's own metadata, so a kit that names
- * a non-conventional schema or PDF still ships the right one.
+ * a non-conventional schema or PDF still ships the right one -- after the same
+ * coercion the manifest uses.
  */
 export function publishableKitFiles(
   schemaFile: string | undefined,
   pdfFile: string | undefined,
 ): Set<string> {
   return new Set([
-    schemaFile || DEFAULT_SCHEMA_FILE,
-    pdfFile || DEFAULT_PDF_FILE,
+    safeKitFilename(schemaFile, DEFAULT_SCHEMA_FILE),
+    safeKitFilename(pdfFile, DEFAULT_PDF_FILE),
     METADATA_FILE,
   ]);
 }

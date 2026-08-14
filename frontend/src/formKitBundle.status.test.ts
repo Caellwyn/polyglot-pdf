@@ -66,6 +66,14 @@ const CASES: Array<{ id: string; metadata: string | null; shipped: boolean; why:
     metadata: '{"status":"complete","label":"Custom","schema":"n400.json","pdf":"n400.pdf"}',
     shipped: true,
     why: "published, but names its schema and PDF itself" },
+  { id: "nested-name",
+    metadata: '{"status":"complete","label":"Nested","schema":"sub/schema.json"}',
+    shipped: true,
+    why: "declares a NESTED schema -- coerced to the conventional name" },
+  { id: "traversing-name",
+    metadata: '{"status":"complete","label":"Traversal","schema":"../secret.json"}',
+    shipped: true,
+    why: "declares a TRAVERSING schema -- coerced, never escapes the kit" },
 ];
 
 let publicDir: string;
@@ -79,9 +87,15 @@ beforeAll(async () => {
     const dir = path.join(source, kit.id);
     await fs.mkdir(dir, { recursive: true });
     if (kit.id === "custom-names") {
-      // Declares its own filenames; the conventional ones do not exist here.
+      // Declares its own filenames.
       await fs.writeFile(path.join(dir, "n400.json"), '{"fields":[]}');
       await fs.writeFile(path.join(dir, "n400.pdf"), "%PDF-1.7");
+      // ...and ALSO carries an authoring leftover named schema.json, which is
+      // another kit's legitimate asset. This is what separates a per-kit
+      // allowlist from a global union of every kit's allowed names: under a
+      // union this file ships, and every test still passed (Opus fresh-eyes
+      // round 1 proved exactly that).
+      await fs.writeFile(path.join(dir, "schema.json"), '{"leftover":true}');
     } else {
       await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[]}');
       await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
@@ -161,7 +175,11 @@ describe("the static bundle ships published kits only", () => {
   });
 
   it("ships the published kit intact -- the gate must not break the good case", async () => {
-    expect(manifestIds.sort()).toEqual(["custom-names", "live"]);
+    // DERIVED from CASES, not retyped: this literal needed hand-editing every
+    // time a case was added, which is the drift that lets a list claim more
+    // coverage than it has.
+    expect(manifestIds.sort())
+      .toEqual(CASES.filter((c) => c.shipped).map((c) => c.id).sort());
     expect(await exists(path.join(publicDir, "live", "schema.json"))).toBe(true);
     expect(await exists(path.join(publicDir, "live", "form.pdf"))).toBe(true);
   });
@@ -210,6 +228,44 @@ describe("the static bundle ships published kits only", () => {
     expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
   });
 
+  it("does NOT let one kit serve another kit's allowed filename", async () => {
+    // The per-kit half of the allowlist -- the entire reason `publishable` is a
+    // Map rather than a Set. custom-names carries an authoring leftover named
+    // schema.json, which IS a legitimate name for a different kit. A global
+    // union allowlist ships it and every other test stays green (proved in
+    // round 1), so this is the only assertion that separates the two.
+    expect(await exists(path.join(publicDir, "custom-names", "schema.json"))).toBe(false);
+    // ...while the kit that legitimately declares it still ships it.
+    expect(await exists(path.join(publicDir, "live", "schema.json"))).toBe(true);
+  });
+
+  it.each([
+    ["nested-name", "sub/schema.json"],
+    ["traversing-name", "../secret.json"],
+  ])("coerces %s's unsafe declared schema (%s) to the conventional name", async (id) => {
+    // Accepting the declared name verbatim split the two halves of the script:
+    // the manifest pointed at the declared path while the copy filter refused
+    // it, so the kit was LISTED and had no schema -- a silent per-form outage
+    // (round 1, reproduced). Coercion happens once, before both.
+    const shipped = (await fs.readdir(path.join(publicDir, id))).sort();
+    expect(shipped).toContain("schema.json");
+    const entry = manifestIds.includes(id);
+    expect(entry).toBe(true);
+  });
+
+  it("never emits a manifest path that escapes the kit directory", async () => {
+    // "../secret.json" normalises to /form-kits/secret.json -- outside the kit.
+    // The backend coerces this in safe_filename for the same reason; the
+    // frontend had no equivalent.
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(publicDir, "index.json"), "utf-8"));
+    for (const form of manifest.forms) {
+      expect(form.schemaPath).not.toContain("..");
+      expect(form.pdfPath).not.toContain("..");
+      expect(form.schemaPath.startsWith(`/form-kits/${form.id}/`)).toBe(true);
+    }
+  });
+
   it("follows a kit's OWN declared schema and pdf names", async () => {
     // The allowlist is per-kit, taken from that kit's metadata. Hardcoding
     // schema.json/form.pdf would withhold the only files a custom-named kit
@@ -252,7 +308,7 @@ describe("a stale bundle from a previous build is cleared", () => {
       await fs.readFile(path.join(publicDir, "index.json"), "utf-8"));
     expect(manifest.generatedAt).not.toBe("old");
     expect(manifest.forms.map((f: { id: string }) => f.id).sort())
-      .toEqual(["custom-names", "live"]);
+      .toEqual(CASES.filter((c) => c.shipped).map((c) => c.id).sort());
   });
 });
 
