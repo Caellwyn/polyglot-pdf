@@ -83,6 +83,32 @@ rewriting it would destroy the historical account rather than correct it.
 That line -- annotate a doc that POINTS at current state, leave one that
 RECORDS a past decision -- is the useful distinction.
 
+### The docs were only half the fix: a bd MEMORY still asserted the old number
+
+The reported symptom was *"I keep getting quoted"* by agents. Correcting the
+docs does not fix that on its own, because `bd remember` memories are loaded
+into EVERY session's context the same way tier-1 docs are -- and
+`cost-invariant-moved-audio-now-dominates` still asserted the raw 56%/66%
+split, the pre-caveat figures measured on the unshipped slim SI.
+
+Fixing six markdown files while leaving that memory in place would have
+shipped a PR that looked complete and left the actual complaint intact,
+because the wrong number would still have been in every agent's context
+window at turn zero.
+
+Updated in place, with the SI-size dependency stated explicitly so the next
+reader can tell whether it still holds. Also annotated a SECOND memory,
+`sliding-window-shelved-pivot-to-si-diet`, which reasons from the same
+obsolete premise -- and which is doubly stale, since compression was
+un-shelved and now ships by default. That one is a dated DECISION RECORD, so
+it keeps its original text and gains a superseded-by note rather than being
+rewritten; same distinction applied to `docs/archive/`.
+
+**The transferable lesson: "where does this claim live?" is a bigger question
+than "which docs mention it."** For a claim that agents quote, the set
+includes bd memories and bead bodies, not just markdown -- and memories are
+the highest-leverage members of that set, since they load unconditionally.
+
 ## bd rtyia -- an invariant with real consequences, recorded only in a prompt
 
 The app produces a DRAFT, is never used for self-filing, and depends on an
@@ -126,4 +152,14 @@ disclaimer and read it beside the prompt. A stated invariant makes the next
 - Confirms bd `teizj` (filed round 8) is real: `schema-key-visibility.md`
   has no `Tracks:` line, so the freshness gate skips it entirely -- which
   is part of why a stale current-state claim survived there.
+- Two bd memories corrected and pushed to dolt (so the fix reaches web and
+  cloud sessions, which never see this worktree).
+- The fresh-eyes review caught me introducing `Prior:`/`Earlier:` stamp
+  chains, which `doc-architecture.md` bans by PATTERN while
+  `check_doc_freshness.py` only greps the literal `Previously:` -- so all
+  three of my edits passed the checker while violating the rule. I inherited
+  the shape from the recovered commit without checking it against doctrine.
+  Collapsed; bd `polyglot-pdf-cqyke` owns the sweep of the two pre-existing
+  offenders plus broadening the regex so the rule stops depending on authors
+  remembering it.
 - Backend + scripts: 3312 passed, 3 skipped (exit 0).
