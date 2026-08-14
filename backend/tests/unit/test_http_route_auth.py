@@ -167,7 +167,7 @@ def _routes_depending_on_require_auth() -> set:
     return gated
 
 
-# The four routes that carry user data or gate paid work. Update this list ONLY
+# The five routes that carry user data or gate paid work. Update this list ONLY
 # together with the prose enumerations in:
 #   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
 #   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)
@@ -176,6 +176,7 @@ _EXPECTED_GATED_ROUTES = {
     ("GET", "/api/form-kits/{kit_id}/schema"),
     ("POST", "/api/fill-pdf"),
     ("POST", "/api/tts/spellback"),
+    ("POST", "/api/tts/intro"),
 }
 
 

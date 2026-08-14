@@ -122,10 +122,11 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
-`verify_token` (so the same dev bypass applies). It gates FOUR routes: `POST
+`verify_token` (so the same dev bypass applies). It gates FIVE routes: `POST
 /api/fill-pdf` (the body carries user-entered field values), the kit-catalogue
-reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, and `POST
-/api/tts/spellback` (the body carries the text to synthesize). The frontend
+reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, and both TTS
+routes `POST /api/tts/spellback` + `POST /api/tts/intro` (each synthesizes
+audio, so each is paid work as well as a user-data path). The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
