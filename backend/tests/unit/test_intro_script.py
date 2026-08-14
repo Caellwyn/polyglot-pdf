@@ -118,6 +118,9 @@ def test_paragraphs_is_the_only_content_key(language):
 # in the Latin-script languages lands at 120-235 chars -- is caught by the
 # ENGLISH anchor below rather than by length alone.
 _MIN_UNDERTAKING_CHARS = 80
+# Floor under the measured 0.93 minimum (French), with headroom for
+# legitimate re-wording. Re-measure if a language is added.
+_MIN_UNDERTAKING_RATIO = 0.80
 
 # The English source text is NOT translated, so it can be asserted verbatim.
 # This is the guard that actually pins clause (a): an adversarial mutation that
@@ -194,6 +197,29 @@ def test_review_undertaking_paragraph_survives_translation(language):
     )
     # Substantive, not a stub: the English clause is ~230 chars; a translation
     # that collapsed to just the placeholder would pass a bare truthiness check.
+    # SCRIPT-INDEPENDENT two-clause guard. An absolute floor is weak: it must
+    # clear Chinese (89 chars) so it cannot catch a Latin-script paragraph that
+    # lost a clause and still runs 120-235 chars. Measuring the undertaking
+    # against THIS LANGUAGE'S OWN paragraph 5 removes the script variable --
+    # both shrink together in a dense script. Measured across all 18 languages
+    # the ratio sits in 0.93-1.31 (min French 0.93, max Chinese 1.31); dropping
+    # either clause takes roughly 40-55% out of the numerator and lands far
+    # below the floor.
+    #
+    # A per-language LEXICAL check was tried and rejected: matching shared
+    # "certified professional" vocabulary against paragraph 5 works in 16 of 18
+    # languages but returns zero tokens for Chinese and Korean, which do not
+    # space-delimit words. A guard that is green for 16 and structurally blind
+    # for 2 is worse than an honest one -- it would read as full coverage.
+    para5 = paragraphs[5]
+    ratio = len(undertaking[0]) / len(para5)
+    assert ratio >= _MIN_UNDERTAKING_RATIO, (
+        f"{language}: the undertaking paragraph is {ratio:.2f}x this language's "
+        f"paragraph 5, below the {_MIN_UNDERTAKING_RATIO} floor (observed range "
+        f"across all 18 languages: 0.93-1.31). That is the signature of a "
+        f"DROPPED CLAUSE -- most likely the review undertaking, leaving only the "
+        f"liability release. See docs/standards/confirmation-and-audit.md."
+    )
     assert len(undertaking[0]) >= _MIN_UNDERTAKING_CHARS, (
         f"{language}: the review-undertaking paragraph is suspiciously short "
         f"({len(undertaking[0])} chars) -- verify the clause survived."
