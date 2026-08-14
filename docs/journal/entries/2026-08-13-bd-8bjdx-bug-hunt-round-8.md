@@ -1,15 +1,16 @@
 ---
 tags: [bug-hunt, testing, schema-editor, authoring, auth, docs]
-beads: [polyglot-pdf-8bjdx, polyglot-pdf-6p0z, polyglot-pdf-8lh77, polyglot-pdf-qs7m6, polyglot-pdf-yb41u]
+beads: [polyglot-pdf-8bjdx, polyglot-pdf-6p0z, polyglot-pdf-8lh77, polyglot-pdf-qs7m6, polyglot-pdf-yb41u, polyglot-pdf-fzt0a]
 surfaces: [schema-editor, scripts/authoring, backend/routes, docs/components]
 ---
 
 # Bug-hunt round 8: the complete options-consumer set, review-id squatting, a stale docstring, and an unpinned auth set
 
 Eighth round of the ongoing bug-hunt bead roundup (rounds 1-7: PRs #573,
-#576, #578, #581, #583, #585, #587). FIVE beads -- four planned, plus one
-(`yb41u`) that the review surfaced and this branch then fixed -- three of
-them "enumerate the set" fixes rather than single-instance ones.
+#576, #578, #581, #583, #585, #587). SIX beads -- four planned, plus two
+(`yb41u`, `fzt0a`) that the two review layers surfaced and this branch then
+fixed -- three of them "enumerate the set" fixes rather than
+single-instance ones.
 
 1. **Malformed `options` still threw across the schema-editor** (bd
    8bjdx). Round 7's bd 93p8 guarded ONE consumer
@@ -26,6 +27,9 @@ them "enumerate the set" fixes rather than single-instance ones.
 5. **`ConditionBuilder`'s trigger predicate had the same truthy-length
    trap** (bd yb41u) -- filed by the review as pre-existing, then fixed
    here once the widened set-guard started pointing at it.
+6. **My own normalizer treated a LEGACY option shape as malformed** (bd
+   fzt0a) -- found by the Opus outer review tracing the new helper out
+   to the other three surfaces.
 
 ## Scar tissue
 
@@ -164,6 +168,47 @@ the exemption mechanism needed its own hardening: matching a fragment with a
 would silently inherit an exemption written for a different call's
 reachability argument. It now pins an exact occurrence count.
 
+### The outer review's whole job, demonstrated: my normalizer disagreed with three other surfaces
+
+The inner review cleared at zero gaps. The outer review then traced
+`safeOptions` OUT of the diff and found it contradicting every other
+surface that reads `options`.
+
+`"options": ["A", "B", "C"]` -- a bare list of strings -- is not malformed.
+It is a DOCUMENTED accepted input: `FormField.normalize_options` coerces it
+(`[FieldOption(value=opt, label=opt) for opt in v]`, docstring: "Accepts
+both List[str] and List[FieldOption] formats"), the voice frontend's
+`optionValue()` takes it, and `schema_lint`'s `ref-option-value` rule builds
+its legal-value set INCLUDING `isinstance(o, str)` entries. My helper
+classified it as junk and dropped it.
+
+The consequence was worse than the crash the helper was written to prevent.
+A string-option field rendered zero option rows, so FieldEditor's Options
+panel fell to its EMPTY-STATE branch -- whose "+ Add Option" *overwrites*
+`options` rather than appending. One click destroyed every option, silently,
+and invisibly: the rows whose absence would have warned the author were
+precisely the ones not rendering. Separately, `isChoiceTrigger` went false,
+so ConditionBuilder offered a free-text box for values the publish gate
+constrains -- inviting the exact `ref-option-value` ERROR the gate raises,
+which is the editor/backend parity break bd 93p8 and wjes exist to end.
+
+The general lesson is about what "malformed" means. I derived that
+definition from ONE surface's crash behavior -- "what makes an array method
+throw" -- and never checked it against what the other surfaces consider
+VALID. Those are different questions, and the gap between them is where a
+crash-safety fix turns into data loss. A normalizer is a contract, not a
+local convenience, and its definition of "bad input" has to be reconciled
+with every producer and consumer of that input, not just the one that
+crashed.
+
+Worth noting for calibration: the reviewer FILED rather than blocked,
+because no shipped kit reproduces it (1377 option entries scanned across
+`schema-editor/public/schemas` and `form-kits`, zero non-dict). That was a
+defensible call. I fixed it anyway -- the editor opens ARBITRARY kits
+through three raw-`JSON.parse` paths with no normalization, and silent data
+loss is the wrong thing to leave armed against the day someone opens a
+legacy kit.
+
 ## Process notes
 
 - Recon correctly flagged `8bjdx` as claimed-by-another-session; it was
@@ -186,4 +231,8 @@ reachability argument. It now pins an exact occurrence count.
 - One review cycle, five gaps, three blocking -- and the two most
   serious were self-inflicted by this branch rather than pre-existing.
   Every finding was reproduced in node before being fixed.
-- Total across rounds 1-8: 43 beads closed over 8 PRs.
+- Two review layers, two cycles at the inner and one at the outer;
+  the inner found 5 gaps (2 self-inflicted), the outer found 2 more that
+  only a cross-surface trace could see. Every finding was reproduced
+  before being fixed.
+- Total across rounds 1-8: 44 beads closed over 8 PRs.
