@@ -75,9 +75,9 @@ const CASES: Array<{ id: string; metadata: string | null; shipped: boolean; why:
     shipped: true,
     why: "declares a TRAVERSING schema -- coerced, never escapes the kit" },
   { id: "charset-name",
-    metadata: '{"status":"complete","label":"Charset","schema":"_archive_secret.json"}',
+    metadata: '{"status":"complete","label":"Charset","schema":"archive$secret.json"}',
     shipped: true,
-    why: "declares a name with NO slash and no .. -- only the charset rule stops it" },
+    why: "declares a name only the CHARSET rule rejects -- no underscore, no slash" },
   { id: "spacey-name",
     metadata: '{"status":"complete","label":"Spacey","schema":"real schema.json"}',
     shipped: true,
@@ -108,7 +108,7 @@ beforeAll(async () => {
       // The declared file EXISTS on disk, so nothing but the charset rule
       // stops it shipping. The conventional fallback carries different content
       // so serving the wrong one is visible.
-      const declared = kit.id === "charset-name" ? "_archive_secret.json" : "real schema.json";
+      const declared = kit.id === "charset-name" ? "archive$secret.json" : "real schema.json";
       await fs.writeFile(path.join(dir, declared), '{"DECLARED_SECRET":true}');
       await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[],"conventional":true}');
       await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
@@ -278,15 +278,21 @@ describe("the static bundle ships published kits only", () => {
   });
 
   it.each([
-    ["charset-name", "_archive_secret.json"],
+    ["charset-name", "archive$secret.json"],
     ["spacey-name", "real schema.json"],
   ])("%s: a declared name failing the CHARSET rule never ships (%s)", async (id, declared) => {
-    // Neither name has a slash or a '..', so the traversal guard passes them
-    // through -- only the charset rule refuses them. Deleting that rule left
-    // 30/30 green while republishing the declared file AND indexing it: the
-    // allowlist then CONTAINS the name, so it admits it, and the underscore
-    // rule cannot help because the basename only starts with '_' by
-    // coincidence in one case (Opus fresh-eyes round 3).
+    // Both names are refused ONLY by the charset rule: no leading underscore
+    // (the underscore guard's job), no slash or '..' (the traversal guard's).
+    // Deleting the charset rule left 30/30 green while the declared file was
+    // republished AND indexed -- once coerced past, the allowlist CONTAINS the
+    // name, so it admits it.
+    //
+    // The first version of this fixture used "_archive_secret.json", which the
+    // UNDERSCORE guard excluded before the charset rule was ever consulted --
+    // so its leak assertion could not fail, and the comment claiming otherwise
+    // was wrong. Second time in this bead I picked a fixture excluded for the
+    // wrong reason (Opus fresh-eyes rounds 3 and 4). The test for a rule must
+    // be refused by THAT rule and no other.
     expect(await exists(path.join(publicDir, id, declared))).toBe(false);
     const shipped = (await fs.readdir(path.join(publicDir, id))).sort();
     expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
