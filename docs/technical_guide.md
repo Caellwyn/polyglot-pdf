@@ -1,11 +1,11 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-13 (bd polyglot-pdf-s1iex.3: the `/api/tts/intro` route
-row plus the previously-missing `/api/tts/spellback` row in the routes table).
-See [the s1iex.3 journal entry](journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md)
-for closeout details; earlier same-day changes are in their own journal entries.
-The Surface contracts section is the code-derived cross-surface data-contract
-map for blast-radius review (bd polyglot-pdf-n18q).
+*Last updated: 2026-08-14 (bd polyglot-pdf-a4v4 + polyglot-pdf-qxad: two stale
+citations corrected -- the `PDFFillRequest` line range no longer straddles into
+`fill_pdf`, and the dropped-key example names `form_number`, the key that
+actually produces `form_id="unknown"` (a dropped `kit_id` degrades to
+`kit_id=None` instead)). The Surface contracts section is the code-derived
+cross-surface data-contract map for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -235,7 +235,8 @@ Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:976`;
 handshake keys parsed :1044-1168).
 **No Pydantic model or TS interface pins this shape** -- every key is read with
 `.get()` and a default, so a renamed key silently degrades (e.g. a dropped
-`kit_id` logs `form_id="unknown"` in the audit trail).
+`form_metadata.form_number` logs `form_id="unknown"` in the audit trail; a
+dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
 - Key keys: `type` (`handshake` vs `handshake_jit` switches the whole parse,
   :1044), `manifest`/`first_field_schema`/`loaded_field_ids` (JIT, :1059-1061),
@@ -341,7 +342,7 @@ plus the in-browser preview
 `{kit_id, pdf_filename, field_values, form_schema}`
 (`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`). A payload-shape change
 made against only one call site silently misses the other two.
-Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-45`).
+Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
 
 - **The backend fills from the CLIENT-SUBMITTED `form_schema`**, typed
   `Dict[str, Any]` -- no `FormSchema` validation runs at fill time, the kit

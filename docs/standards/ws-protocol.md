@@ -2,9 +2,12 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the `spellback` /
-`spellback_response` round-trip pair -- the flag-gated deterministic
-spell-back tool's wire messages. This doc's message-type union is pinned by
+*Last updated: 2026-08-14 (bd polyglot-pdf-e3t7: the `initial_field_hint` row
+no longer claims both handshake builders send it -- only the JIT builder does,
+the same asymmetry already documented for `section_id` and `kit_id`. Also
+current: the `spellback` / `spellback_response` round-trip pair, the flag-gated
+deterministic spell-back tool's wire messages, added bd polyglot-pdf-22h1f.
+This doc's message-type union is pinned by
 backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
@@ -50,7 +53,7 @@ removed JIT SI mode (bd polyglot-pdf-en2j).
 | `total_sections` | int | both | Section count (line 1160). |
 | `section_id` | string \| null | both* | Section ID, e.g. `"part_1_2_addresses"` (line 1157). Used for the token-log context. *See DRIFT note below -- the primary builder does NOT send it. |
 | `previous_spoken_names` | string[] | both | Spoken names from completed sections; defaults to `[]` (line 1161). Sent by both builders (the JIT builder since A2). |
-| `initial_field_hint` | string \| null | both | First-unfilled-field hint computed by the frontend; `null` when the form is complete (line 1164). Sent by both builders (the JIT builder since A2, gap D-hint). |
+| `initial_field_hint` | string \| null | both* | First-unfilled-field hint computed by the frontend; `null` when the form is complete (line 1164). *Only the JIT builder sends it (since A2, gap D-hint) -- `getHandshakePayload` (legacy) omits it, the same asymmetry as `section_id` and `kit_id` above. It reaches the backend on a section switch via `webFormConnection.ts`, but not on the legacy builder's initial connect. |
 | `resume` | bool | both | Reconnect flag. Read as `is_reconnect` (line 1168); suppresses the greeting/section-intro on a mid-section reconnect (bd polyglot-pdf-vmxx). |
 | `kit_id` | string \| null | both | The KIT identifier (e.g. `"w7"`) -- the catalogue key the user selected, read from `onboardingStorage`. Recorded in the confirmation audit trail because `form_number` is **not unique**: two kits can share one (a standard W-7 and a firm-specific variant, which the firm-tier epic anticipates), and only `kit_id` tells them apart in a liability record (bd `polyglot-pdf-47r3`). Read at the SHARED handshake scope -- it names the kit, not the form, so it is NOT a `form_metadata` key and is threaded as its own argument through `start_session` -> `CallbackHandler`. **Only the JIT builder sends it today**; the legacy builder's omission is bd `polyglot-pdf-d95y`. Null on an older client. |
 

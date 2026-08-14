@@ -87,8 +87,14 @@ them right and I had them wrong. `doc-architecture.md` section 3 is explicit --
 tier 1/2 are CURRENT STATE ONLY, history and rationale live in the tier-3 journal.
 My draft said those files "also carry rationale, file those findings," which would
 have told reviewers to shrug at exactly the content the tier system forbids --
-**legitimising a violation instead of flagging it.** Corrected, plus a note that
-history *found* in a tier-1/2 doc is itself a violation to file.
+**legitimising a violation instead of flagging it.** The round-1 reviewer (bd
+polyglot-pdf-qzvz1) caught the same over-broad reading landing in the shipped
+rule text, which narrowed the final scope to the three CHRONOLOGICAL shapes
+section 3 actually names -- a `Previously:`/`Prior:` stamp chain, an `## Update
+history`/`## Changelog` heading, or a "Sprint NN did X" narrative -- plus an
+explicit carve-out: **design RATIONALE is NOT a violation**, since section 3
+bans those three shapes only and `review-flow.md` deliberately keeps its
+rationale "so it is not re-litigated."
 
 ### Rule 3 -- TEST THE TESTS (CLAUDE.md scar tissue #8 + `testing.md`)
 
@@ -143,5 +149,10 @@ mutation actually applied, mutate per parametrization, restore and re-verify.
 
 - `CLAUDE.md` (scar tissue #7 + #8)
 - `.claude/skills/closeout/SKILL.md` (the triage rule)
-- `.claude/agents/fresh-eyes-reviewer.md`, `.claude/agents/cross-surface-reviewer.md`
+- `.claude/agents/fresh-eyes-reviewer.md`, `.claude/agents/cross-surface-reviewer.md`,
+  `.claude/agents/docs-reviewer.md` (all three reviewer agents carry the triage rule --
+  the round-1 miss rule 1 caught in its own PR, see Lessons)
 - `docs/standards/testing.md`
+- `docs/doctrine/review-flow.md` (the same doc-tier triage rule, since it is the
+  canonical review-flow doc CLAUDE.md points at -- missed in the first
+  enumeration and caught by the outer review one round later)

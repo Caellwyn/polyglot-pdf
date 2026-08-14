@@ -19,12 +19,14 @@ instructions for -- the least constrained possible state.
 WHAT IS PINNED HERE. The boundary is drawn in three places and all three must
 hold together, because each alone is defeatable: the secretary's own rubric
 (where the answer is generated), the tool declaration (what the caller is told
-it may ask), and the live model's SI (when it calls, and what it does with a
-refusal).
+it may ask), and the live model's SI (when it calls, and how it relays a
+hedge-and-defer answer -- see MAINTAINER DIRECTIVE 2026-08-12 below; a bare
+refusal is no longer the shape).
 
 ALLOWLIST, NOT BLACKLIST. These tests assert the SANCTIONED behavior is stated
--- quote official text, decline advice, redirect to the reviewing human. They
-deliberately do NOT assert "the word 'advise' never appears": a banned-word
+-- quote official text, hedge and defer rather than conclude, redirect to the
+reviewing human. They deliberately do NOT assert "the word 'advise' never
+appears": a banned-word
 test is one synonym from defeat, and it would also fail on prose that names the
 prohibition in order to forbid it (repo memory: pin-message-tests-with-allowlists).
 The one negative assertion here is narrow and specific -- the exact
@@ -136,12 +138,13 @@ def test_the_uncrossable_line_is_the_conclusion_about_this_applicant():
 
 
 def test_secretary_is_told_to_redirect_to_the_reviewing_human():
-    """A refusal that dead-ends is a worse product AND a worse legal posture:
-    the applicant still needs an answer, and the answer is a human's."""
+    """A hedged answer that dead-ends is a worse product AND a worse legal
+    posture: the applicant still needs a conclusion, and the conclusion is a
+    human's, not the model's."""
     si = SECRETARY_SI.lower()
     assert "applicant" in si
     assert "reviewing" in si or "reviewer" in si, (
-        "a declined question must redirect to the human reviewing the form")
+        "a hedged answer must redirect to the human reviewing the form")
 
 
 def test_secretary_is_barred_from_applying_instructions_to_this_applicant():
@@ -384,7 +387,7 @@ def test_declaration_never_instructs_answering_a_requirements_question(field):
 
 
 # --------------------------------------------------------------------------- #
-# Layer 3 -- the live model's SI: when it calls, and what it does with a refusal
+# Layer 3 -- the live model's SI: when it calls, and how it relays a hedge
 # --------------------------------------------------------------------------- #
 
 def test_si_still_carries_the_information_never_advice_rule():
