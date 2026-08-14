@@ -313,9 +313,5 @@ Audit logs are runtime artifacts, not source — keep them out of version contro
 (this was the subject of bd `polyglot-pdf-0rx`).
 
 *Last updated: 2026-08-14 (bd polyglot-pdf-rtyia: records the draft-app /
-no-self-filing / outside-reviewer deployment invariant and the advisory-vs-required
-register distinction. Earlier: 2026-08-13 (bd polyglot-pdf-8x56: the shape-fingerprint tier's
-answerable-shape inputs widened to include validation rules, the `required`
-flag, and `pdf_field_name`, above -- the earlier "field ids + types + option
-values" description was accurate for the pre-8x56 fingerprint but is not the
-current-state doctrine this file is meant to hold).*
+no-self-filing / outside-reviewer deployment invariant and the advisory-vs-
+required register distinction).*

@@ -3,10 +3,9 @@
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
 *Last updated: 2026-08-14 (bd polyglot-pdf-77j0d: the MEASURED COST INVARIANT is
-rewritten -- AUDIO-IN now leads where text-in was said to be 95-98%. Recovered
-from the unshipped bd polyglot-pdf-89mt measurement and RE-WEIGHTED for today's
-shipped SI. Prior: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected
-compression-epic citation from l3a to x8rt/7872).*
+rewritten -- AUDIO-IN now leads where text-in was said to be 95-98%, recovered
+from the unshipped bd polyglot-pdf-89mt measurement and re-weighted for today's
+shipped SI).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
