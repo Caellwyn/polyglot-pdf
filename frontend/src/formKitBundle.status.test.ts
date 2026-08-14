@@ -74,6 +74,14 @@ const CASES: Array<{ id: string; metadata: string | null; shipped: boolean; why:
     metadata: '{"status":"complete","label":"Traversal","schema":"../secret.json"}',
     shipped: true,
     why: "declares a TRAVERSING schema -- coerced, never escapes the kit" },
+  { id: "charset-name",
+    metadata: '{"status":"complete","label":"Charset","schema":"_archive_secret.json"}',
+    shipped: true,
+    why: "declares a name with NO slash and no .. -- only the charset rule stops it" },
+  { id: "spacey-name",
+    metadata: '{"status":"complete","label":"Spacey","schema":"real schema.json"}',
+    shipped: true,
+    why: "declares a name with a SPACE -- fallback must not serve stale bytes silently" },
 ];
 
 let publicDir: string;
@@ -96,6 +104,14 @@ beforeAll(async () => {
       // union this file ships, and every test still passed (Opus fresh-eyes
       // round 1 proved exactly that).
       await fs.writeFile(path.join(dir, "schema.json"), '{"leftover":true}');
+    } else if (kit.id === "charset-name" || kit.id === "spacey-name") {
+      // The declared file EXISTS on disk, so nothing but the charset rule
+      // stops it shipping. The conventional fallback carries different content
+      // so serving the wrong one is visible.
+      const declared = kit.id === "charset-name" ? "_archive_secret.json" : "real schema.json";
+      await fs.writeFile(path.join(dir, declared), '{"DECLARED_SECRET":true}');
+      await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[],"conventional":true}');
+      await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
     } else {
       await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[]}');
       await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
@@ -259,6 +275,30 @@ describe("the static bundle ships published kits only", () => {
     // published, not what is not.
     const shipped = (await fs.readdir(path.join(publicDir, "live"))).sort();
     expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
+  });
+
+  it.each([
+    ["charset-name", "_archive_secret.json"],
+    ["spacey-name", "real schema.json"],
+  ])("%s: a declared name failing the CHARSET rule never ships (%s)", async (id, declared) => {
+    // Neither name has a slash or a '..', so the traversal guard passes them
+    // through -- only the charset rule refuses them. Deleting that rule left
+    // 30/30 green while republishing the declared file AND indexing it: the
+    // allowlist then CONTAINS the name, so it admits it, and the underscore
+    // rule cannot help because the basename only starts with '_' by
+    // coincidence in one case (Opus fresh-eyes round 3).
+    expect(await exists(path.join(publicDir, id, declared))).toBe(false);
+    const shipped = (await fs.readdir(path.join(publicDir, id))).sort();
+    expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
+  });
+
+  it("serves the CONVENTIONAL bytes when a declared name is refused", async () => {
+    // The fallback must not silently serve different content than the manifest
+    // implies. Assert the actual bytes, not just the filename.
+    const served = JSON.parse(await fs.readFile(
+      path.join(publicDir, "spacey-name", "schema.json"), "utf-8"));
+    expect(served.conventional).toBe(true);
+    expect(served.DECLARED_SECRET).toBeUndefined();
   });
 
   it("does NOT let one kit serve another kit's allowed filename", async () => {

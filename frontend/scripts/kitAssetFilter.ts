@@ -70,6 +70,12 @@ export function safeKitFilename(name: unknown, fallback: string): string {
   if (typeof name !== "string") {
     return fallback;
   }
+  // Redundant with the charset rule below, which rejects / \ and .. anyway --
+  // deleting this block alone keeps every test green. Kept because it mirrors
+  // backend safe_filename line-for-line, and a cross-language pair that reads
+  // identically is worth more than minimality: the next person to change one
+  // will see the other. The CHARSET rule is the load-bearing half and is
+  // pinned (Opus fresh-eyes round 3).
   if (name.includes("/") || name.includes("\\") || name.includes("..")) {
     return fallback;
   }
