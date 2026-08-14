@@ -119,6 +119,18 @@ beforeAll(async () => {
   await fs.mkdir(path.join(source, "live", "_archive", "12-2024"), { recursive: true });
   await fs.writeFile(
     path.join(source, "live", "_archive", "12-2024", "schema.json"), '{"superseded":true}');
+  // A kit-shaped directory whose name starts with "_": it has a complete
+  // metadata.json, so the STATUS gate would admit it and the allowlist would
+  // then ship its schema/pdf. ONLY shouldCopyKitPath refuses it. This is the
+  // separator my first attempt missed -- a file under <kit>/_archive is
+  // already excluded by the depth check, so deleting the underscore guard
+  // stayed invisible (Opus fresh-eyes round 2, and my own first fix for it).
+  await fs.mkdir(path.join(source, "_staging"), { recursive: true });
+  await fs.writeFile(path.join(source, "_staging", "schema.json"), '{"fields":[]}');
+  await fs.writeFile(path.join(source, "_staging", "form.pdf"), "%PDF-1.7");
+  await fs.writeFile(
+    path.join(source, "_staging", "metadata.json"),
+    '{"status":"complete","label":"Staging"}');
   await fs.mkdir(path.join(source, "_translation"), { recursive: true });
   await fs.writeFile(path.join(source, "_translation", "es.json"), '{"hola":true}');
 
@@ -178,10 +190,31 @@ describe("the static bundle ships published kits only", () => {
     // DERIVED from CASES, not retyped: this literal needed hand-editing every
     // time a case was added, which is the drift that lets a list claim more
     // coverage than it has.
-    expect(manifestIds.sort())
+    // `_staging` is excluded: it is a fixture for the underscore guard, not a
+    // CASES row, and it is currently indexed (bd polyglot-pdf-v3suc).
+    expect([...manifestIds].filter((id) => !id.startsWith("_")).sort())
       .toEqual(CASES.filter((c) => c.shipped).map((c) => c.id).sort());
     expect(await exists(path.join(publicDir, "live", "schema.json"))).toBe(true);
     expect(await exists(path.join(publicDir, "live", "form.pdf"))).toBe(true);
+  });
+
+  it("prunes an underscore dir the STATUS gate and ALLOWLIST would both admit", async () => {
+    // _staging is a complete, schema-and-PDF-bearing kit by every other rule:
+    // the status gate admits it, and the allowlist would ship its three files.
+    // Only shouldCopyKitPath refuses it.
+    //
+    // This exists because the allowlist made the underscore guard's other
+    // tests VACUOUS -- deleting the guard left all 29 green, since the
+    // allowlist blocks <kit>/_archive for a different reason and the DEPTH
+    // check blocks anything under it. A guard whose deletion is invisible is
+    // one refactor from being deleted as dead code.
+    expect(await exists(path.join(publicDir, "_staging"))).toBe(false);
+    // NOT asserting it is absent from the index: the underscore rule is
+    // applied to the COPY only, so an underscore kit is currently INDEXED and
+    // unshipped -- the same index/copy split fqexm fixed for status, still
+    // live for underscores. Pre-existing (reproduces on origin/dev), filed as
+    // bd polyglot-pdf-v3suc. Pinning the copy half here is this bead's scope;
+    // pinning the index half would fail today and belongs to that bead.
   });
 
   it("still prunes _archive inside a PUBLISHED kit", async () => {
@@ -307,7 +340,8 @@ describe("a stale bundle from a previous build is cleared", () => {
     const manifest = JSON.parse(
       await fs.readFile(path.join(publicDir, "index.json"), "utf-8"));
     expect(manifest.generatedAt).not.toBe("old");
-    expect(manifest.forms.map((f: { id: string }) => f.id).sort())
+    expect(manifest.forms.map((f: { id: string }) => f.id)
+      .filter((id: string) => !id.startsWith("_")).sort())
       .toEqual(CASES.filter((c) => c.shipped).map((c) => c.id).sort());
   });
 });

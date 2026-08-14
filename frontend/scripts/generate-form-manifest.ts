@@ -128,6 +128,25 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
     // disagree: a "sub/schema.json" was indexed but never copied (round 1).
     const schemaFile = safeKitFilename(metadata?.schema, DEFAULT_SCHEMA_FILE);
     const pdfFile = safeKitFilename(metadata?.pdf, DEFAULT_PDF_FILE);
+    // Say so when a DECLARED name was refused. Every other withholding
+    // decision here warns; coercion was silent, and it is the one case where
+    // falling back can serve DIFFERENT CONTENT rather than nothing: a kit
+    // declaring "real schema.json" (a space fails the charset) with a stale
+    // schema.json beside it published the stale bytes, with a clean build log
+    // (Opus fresh-eyes round 2, reproduced). Distinguish "not declared" from
+    // "declared and refused".
+    for (const [key, declared, used] of [
+      ["schema", metadata?.schema, schemaFile],
+      ["pdf", metadata?.pdf, pdfFile],
+    ] as const) {
+      if (typeof declared === "string" && declared !== used) {
+        console.warn(
+          `[form-manifest] ${entry.name}: declared ${key} ` +
+          `${JSON.stringify(declared)} is not a safe bare filename -- ` +
+          `using ${used} instead`,
+        );
+      }
+    }
 
     const schemaPathFs = path.join(kitDir, schemaFile);
     const pdfPathFs = path.join(kitDir, pdfFile);
