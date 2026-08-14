@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-08-08. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for closeout details.*
+*Last updated: 2026-08-13. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -122,9 +122,10 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
-`verify_token` (so the same dev bypass applies). It gates `POST /api/fill-pdf`
-(the body carries user-entered field values) and the kit-catalogue reads
-`GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`. The frontend
+`verify_token` (so the same dev bypass applies). It gates FOUR routes: `POST
+/api/fill-pdf` (the body carries user-entered field values), the kit-catalogue
+reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, and `POST
+/api/tts/spellback` (the body carries the text to synthesize). The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).

@@ -702,6 +702,17 @@ def build_output(form_id: str, strategy: str, sections: list[DerivedSection],
             # otherwise emit the same part id, and get_part/get_sections_in_part
             # silently first-match the collision (bd polyglot-pdf-n2t3).
             part_base = f"part_{_slug(sec.part_label)}"
+            if not sec.review and part_base.startswith("part_to_review"):
+                # Same guard the SECTION path applies above (bd
+                # polyglot-pdf-6p0z): a real printed part whose label slugs to
+                # 'to_review' must not squat on the well-known review part id.
+                # Without this, precedence runs the WRONG way -- the review
+                # section is APPENDED LAST, so the real part claims
+                # 'part_to_review' first and the actual review bucket is
+                # renamed to 'part_to_review_2', which every consumer keying
+                # on the exact id (tests/test_derive_sections.py, the editor's
+                # review gate) then silently misses.
+                part_base = f"part_x_{_slug(sec.part_label)}"
             pid = part_base
             pn = 2
             while pid in used_part_ids:

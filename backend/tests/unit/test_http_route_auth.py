@@ -126,3 +126,73 @@ def test_require_auth_missing_header_is_401(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(require_auth(None))
     assert exc.value.status_code == 401
+
+
+# --------------------------------------------------------------------------
+# The COMPLETE gated set (bd polyglot-pdf-qs7m6)
+# --------------------------------------------------------------------------
+#
+# Every route above was pinned INDIVIDUALLY, so /api/tts/spellback -- added
+# later, and correctly gated in code -- had no test, and two docs
+# (components/auth.md, components/config-deployment.md) enumerated only the
+# original three. Nothing failed, because nothing asserted the SET.
+#
+# This derives the gated set from the live app and pins it whole (CLAUDE.md
+# scar #7): adding or removing a require_auth dependency now fails HERE, with
+# the doc sites named in the message, instead of surfacing as a stale doc a
+# reviewer happens to notice.
+
+
+def _routes_depending_on_require_auth() -> set:
+    """(method, path) for every app route wired to the require_auth dependency.
+
+    Reads the actual dependency objects off each route, so it cannot drift the
+    way a hand-maintained list does.
+    """
+    gated = set()
+    for route in app.routes:
+        for dep in getattr(route, "dependencies", []) or []:
+            if getattr(dep, "dependency", None) is require_auth:
+                for method in sorted(route.methods or []):
+                    gated.add((method, route.path))
+        # The common spelling in this repo is a PARAMETER default
+        # (`_user: dict = Depends(require_auth)`), which FastAPI flattens into
+        # the route's dependant graph rather than route.dependencies.
+        dependant = getattr(route, "dependant", None)
+        if dependant is not None:
+            for sub in dependant.dependencies:
+                if sub.call is require_auth:
+                    for method in sorted(route.methods or []):
+                        gated.add((method, route.path))
+    return gated
+
+
+# The four routes that carry user data or gate paid work. Update this list ONLY
+# together with the prose enumerations in:
+#   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
+#   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)
+_EXPECTED_GATED_ROUTES = {
+    ("GET", "/api/form-kits"),
+    ("GET", "/api/form-kits/{kit_id}/schema"),
+    ("POST", "/api/fill-pdf"),
+    ("POST", "/api/tts/spellback"),
+}
+
+
+def test_the_complete_require_auth_route_set_is_pinned():
+    actual = _routes_depending_on_require_auth()
+    assert actual == _EXPECTED_GATED_ROUTES, (
+        "The set of require_auth-gated routes changed.\n"
+        f"  added:   {sorted(actual - _EXPECTED_GATED_ROUTES)}\n"
+        f"  removed: {sorted(_EXPECTED_GATED_ROUTES - actual)}\n"
+        "Update _EXPECTED_GATED_ROUTES *and* both prose enumerations:\n"
+        "  docs/components/auth.md\n"
+        "  docs/components/config-deployment.md"
+    )
+
+
+def test_spellback_requires_token(_auth_on):
+    # The route this bead's doc fix was missing -- gated in code since it was
+    # added, but never pinned, so nothing caught the docs falling behind.
+    resp = client.post("/api/tts/spellback", json={"text": "A1234"})
+    assert resp.status_code == 401

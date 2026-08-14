@@ -175,7 +175,9 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
     needed -- recurrence alone is not enough:
 
       1. the right edges cluster into a column of >= _GUTTER_MIN_COL tokens; and
-      2. no marker text REPEATS within that column.
+      2. within that column, any marker text that REPEATS is rejected -- and
+         the surviving distinct-text markers must still number
+         >= _GUTTER_MIN_COL.
 
     Condition 2 exists because recurring body text also forms columns, so
     recurrence by itself does not identify a gutter. f1040's line-4c/5a/5b rows
@@ -188,6 +190,16 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
     prints the same token on every row. Counting distinct texts is therefore the
     structural discriminator; a position rule would reject the amount column,
     which is where most f1040 findings come from.
+
+    Condition 2 rejects the repeating TEXT VALUES, not the whole column (bd
+    polyglot-pdf-qk97): the earlier whole-column reject was right for a pure
+    legend column but also discarded a genuine gutter that happened to cluster
+    adjacent to -- or share the exact x_right of -- a repeating legend. Because
+    a gutter's own tokens are all distinct, none of them ever land in the
+    repeating set, however the legend's repeats interleave with them. The
+    survivor re-check preserves the original rule's intent: a mostly-repeating
+    column with a few stray distinct tokens is not thereby promoted to a
+    gutter. See the body for why a position-based split was tried and rejected.
     """
     cands = []
     for x0, y0, x1, y1, word, *_ in page.get_text("words"):
