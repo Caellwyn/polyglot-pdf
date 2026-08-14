@@ -750,8 +750,14 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					activeAudioSources.splice(index, 1)
 				}
 				
-				// Only mark as not speaking if no more active sources
-				if (activeAudioSources.length === 0) {
+				// Only mark as not speaking if no more active sources AND no
+				// synthesized clip is still audible (bd polyglot-pdf-s1iex.4):
+				// spellbackPlayer's drain-wait is BOUNDED (8s) and plays anyway
+				// on timeout, so a clip can legitimately overlap the tail of a
+				// model turn. Zeroing the flag here would flatten the avatar's
+				// amplitude for the rest of the clip (getOutputEnergy is gated
+				// on it) and fire a premature playback-end at the watchdog.
+				if (activeAudioSources.length === 0 && activeClipCount === 0) {
 					geminiIsSpeaking = false
 
 					// CRITICAL: Only notify activity watchdog when ALL chunks finished playing naturally
@@ -766,7 +772,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			}
 
 		} catch (error) {
-			geminiIsSpeaking = false
+			// A PCM failure must not silence a clip that is still playing
+			// (bd polyglot-pdf-s1iex.4 -- same shared-flag invariant as above).
+			if (activeClipCount === 0) {
+				geminiIsSpeaking = false
+			}
 			console.error('[VFF Audio] Playback failed:', error)
 		}
 	}
@@ -840,7 +850,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			playbackTime = nodes.playbackContext.currentTime
 		}
 
-		geminiIsSpeaking = false
+		// Draining the MODEL's queue says nothing about a synthesized clip: the
+		// clip is not in this queue at all, and in client-VAD mode a barge-in
+		// flush lands here while a spell-back clip is still audible (bd
+		// polyglot-pdf-s1iex.4). Its own release owns the transition.
+		if (activeClipCount === 0) {
+			geminiIsSpeaking = false
+		}
 	}
 
 	/**

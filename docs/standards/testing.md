@@ -215,6 +215,14 @@ compliance) additionally need realistic CONTENT — production-length system
 instructions and plausible answers — because the unevictable base (SI + tools)
 sets the floor the numbers sit on.
 
+**A test that READS SOURCE must resolve the path from the test file, not
+`process.cwd()`.** Worktree vitest runs are invoked from the MAIN checkout
+here (the `node_modules` junction workaround), so a cwd-relative
+`readFileSync` audits **main's** copy: a set-pin for bd
+`polyglot-pdf-s1iex.4` counted 3 sites while the branch under review had 4,
+and would have passed against an unfixed branch. Use
+`expect.getState().testPath` (`import.meta.url` is a non-file URL under vite).
+
 **Suspect a NEW harness before you suspect the code — and never let a harness
 depend on tab focus.** A browser check for bd `polyglot-pdf-s1iex.4` reported
 `FAIL` (peak audio energy 0.00) against a correct implementation: it sampled

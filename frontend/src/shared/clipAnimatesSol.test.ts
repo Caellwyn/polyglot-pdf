@@ -18,6 +18,8 @@
  *      (Sol's intro clip speaks before any session exists).
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createSpellbackPlayer } from './spellbackPlayer'
 import { deriveSolState } from './solState'
@@ -48,6 +50,89 @@ describe('audioManager.attachClipElement (bd s1iex.4)', () => {
     // silently un-animates every clip, which is the defect this bead fixes.
     const am = createAudioManager()
     expect(typeof am.attachClipElement).toBe('function')
+    expect(typeof am.isClipPlaying).toBe('function')
+  })
+
+  it('keeps the speaking flag while a clip plays, whatever the MODEL path does', () => {
+    // The shared-flag invariant (fresh-eyes round 1). `geminiIsSpeaking` gates
+    // getOutputEnergy, and FOUR code paths write it: the clip release, and
+    // three model-audio paths (a PCM source ending, a playAudio error, and
+    // resetPlaybackClock/flushAudioQueue). The clip's drain-wait is BOUNDED,
+    // so a clip legitimately overlaps a model turn's tail -- and in
+    // client-VAD mode a barge-in flush lands mid-clip. If any model-side
+    // writer zeroes the flag while a clip is audible, Sol's state stays
+    // 'speaking' but its amplitude flatlines for the rest of the clip.
+    // jsdom has no Web Audio, so give attach a minimal context to splice
+    // into -- without one it degrades to a no-op and never sets the flag,
+    // which would make this test vacuous.
+    const prevAC = (globalThis as any).AudioContext
+    ;(globalThis as any).AudioContext = function () {
+      return {
+        state: 'running', currentTime: 0, destination: {},
+        createAnalyser: () => ({ fftSize: 256, connect: () => {},
+          getByteTimeDomainData: () => {} }),
+        createMediaElementSource: () => ({ connect: () => {}, disconnect: () => {} }),
+        resume: async () => {}, close: async () => {},
+      }
+    } as any
+    const am = createAudioManager()
+    const release = am.attachClipElement({} as HTMLAudioElement)
+    try {
+    expect(am.isSpeaking()).toBe(true)
+
+    // The reachable model-side writers, driven through the PUBLIC surface.
+    am.resetPlaybackClock()
+    expect(am.isSpeaking()).toBe(true)   // clip still audible
+    am.flushAudioQueue()
+    expect(am.isSpeaking()).toBe(true)
+    am.resumePlayback()
+    expect(am.isSpeaking()).toBe(true)
+
+    // Only the clip's OWN release ends it.
+    release()
+    expect(am.isSpeaking()).toBe(false)
+    } finally {
+      release()
+      if (prevAC === undefined) delete (globalThis as any).AudioContext
+      else (globalThis as any).AudioContext = prevAC
+    }
+  })
+
+  it('lets the model path clear the flag normally when NO clip is playing', () => {
+    // The other half: the gate must not strand `speaking` true after a
+    // barge-in in the ordinary no-clip case.
+    const am = createAudioManager()
+    am.resetPlaybackClock()
+    expect(am.isSpeaking()).toBe(false)
+  })
+
+  it('pins the COMPLETE set of geminiIsSpeaking clear-sites', () => {
+    // Enumerate the set rather than trusting the three fixed sites (CLAUDE.md
+    // scar #7): every `geminiIsSpeaking = false` in the module must be guarded
+    // by an activeClipCount check, or a future writer silently reintroduces
+    // the flatline. Read from source so a NEW unguarded writer fails here.
+    // Resolve from THIS TEST FILE's own location, never process.cwd(): in
+    // this repo a worktree vitest run is invoked from the MAIN checkout (the
+    // node_modules junction workaround), so cwd points at main and a
+    // cwd-relative read silently audits the WRONG copy -- it read 3 sites
+    // while the branch had 4 (measured). vitest exposes the real path of the
+    // running test file, which is always the copy under review.
+    const here = expect.getState().testPath as string
+    const src = readFileSync(resolve(here, '../audioManager.ts'), 'utf-8')
+    const lines = src.split('\n')
+    const clearSites = lines
+      .map((line, i) => ({ line: line.trim(), i }))
+      // Assignments only -- skip the `let geminiIsSpeaking = false` declaration.
+      .filter(x => /^geminiIsSpeaking\s*=\s*false\b/.test(x.line))
+    // 4 writers today: clip release, PCM onended, playAudio catch, reset.
+    // A NEW clear-site (or a removed guard) fails this and must be reviewed
+    // against the clip invariant rather than silently added.
+    expect(clearSites.length).toBe(4)
+    for (const site of clearSites) {
+      // The guard sits within a few lines above each write.
+      const window = lines.slice(Math.max(0, site.i - 6), site.i).join('\n')
+      expect(window).toContain('activeClipCount')
+    }
   })
 })
 
