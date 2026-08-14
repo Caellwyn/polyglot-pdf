@@ -292,7 +292,14 @@ def resolve_spellback_voice(settings, language_name=None):
     return "", locale
 
 
-def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
+def _synthesize_sync(text: str, voice_name: str, locale: str,
+                     gain_db: float | None = None) -> bytes:
+    """One synthesizeSpeech call. `gain_db=None` (the spell-back default)
+    applies the per-voice measured gain; an explicit value overrides it --
+    the intro clip (intro_tts.py) passes 0.0 because the +4 dB spell-back
+    gain, measured on ~4s clips, CLIPS ~90s content (raw-waveform peak
+    1.000, measured 2026-08-13; see scripts/spikes/intro_duration_findings.md).
+    """
     from google.cloud import texttospeech
 
     voice_params = {"language_code": locale}
@@ -305,7 +312,8 @@ def _synthesize_sync(text: str, voice_name: str, locale: str) -> bytes:
             # Derived from the voice ACTUALLY resolved (which may be a
             # fallback persona, not LIVE_VOICE_NAME's) -- the gain follows the
             # voice that will speak, never a stale pairing.
-            volume_gain_db=spellback_gain_db(voice_name),
+            volume_gain_db=(spellback_gain_db(voice_name)
+                            if gain_db is None else gain_db),
             audio_encoding=texttospeech.AudioEncoding.MP3
         ),
     )

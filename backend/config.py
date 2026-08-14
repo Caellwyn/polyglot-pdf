@@ -429,6 +429,16 @@ class Settings(BaseModel):
 	# spellback_tts.resolve_spellback_voice.
 	SPELLBACK_TTS_VOICE: str = os.getenv("SPELLBACK_TTS_VOICE", "")
 
+	# Scripted intro+disclaimer clip (sprint 20, bd polyglot-pdf-s1iex.3):
+	# gates POST /api/tts/intro (503 while off). The BACKEND half of the
+	# epic's two-flag design -- the frontend lifecycle flag is a separate
+	# build-time flag, and the two can skew across the two-surface deploy
+	# (the skew matrix lives in docs/sprint_20_sol-intro-tts_plan.md; deploy
+	# backend first, frontend second). Default OFF: the route lands dark.
+	INTRO_TTS_ENABLED: bool = (
+		os.getenv("INTRO_TTS_ENABLED", "false").lower() == "true"
+	)
+
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
 	# the secretary (lite text model) translates the form's option labels into
 	# the session language (one batched call per form+language per process,
