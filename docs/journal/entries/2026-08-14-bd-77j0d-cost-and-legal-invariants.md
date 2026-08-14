@@ -142,6 +142,51 @@ review rounds -- caught only because one reviewer happened to open the
 disclaimer and read it beside the prompt. A stated invariant makes the next
 "tightening" wrong on its face instead of dependent on someone noticing.
 
+### The legal invariant had THREE registers, and my first test pinned the wrong clause
+
+Writing rtyia's doc required reading what actually ships, and the shipped
+surfaces disagree more than the bead described.
+
+There are **three** registers, not two: contracts REQUIRE review; the spoken
+`intro_script.json` has the applicant UNDERTAKE it ("you agree to review the
+completed document ... with a certified professional"); `DisclaimerModal.tsx`
+merely ADVISES it. Three speech acts by three parties -- *we advise*, *they
+agree*, *contracts require* -- and the SI deliberately sits at the weakest,
+which is correct and must stay, since the model cannot know whether a review
+actually happened.
+
+Two self-inflicted errors along the way, both worth recording:
+
+**The doc overclaimed.** I wrote that the undertaking lives in the spoken
+script "and the modal that renders the same paragraphs." It does not:
+`DisclaimerModal.tsx` has zero occurrences of "agree to review", and no
+frontend component reads those paragraphs at all -- the one-source wiring is
+unshipped (bd `s1iex.5`). `intro_script.json` and `intro_tts.py` BOTH assert a
+HARD INVARIANT that the modal renders exactly those paragraphs, and that
+invariant is simply false today. I had documented the intended end state as
+current -- exactly the failure the current-state-only rule exists to prevent,
+committed in the doc written to prevent it.
+
+**The test pinned the wrong clause.** The undertaking paragraph is two
+clauses: agree-to-review, and absolve-the-brand. My structural proxy (one
+paragraph carrying both the agree-placeholder and the brand, over 80 chars) is
+satisfied by the RELEASE alone. Proved it: keeping both markers, keeping the
+release, staying 235 chars, and dropping only the review undertaking left the
+suite fully green -- while the docstring claimed the undertaking was pinned.
+
+The reason my first mutation missed it is the transferable part: **I mutated
+toward an obviously-broken value (a short stub) rather than the plausible one
+a translation sweep would actually produce.** A mutation that is too crude
+tests the guard you wrote, not the failure you fear. The fix is an
+English-anchored assertion -- English is the source language and untranslated,
+so the clause is assertable verbatim -- and the exact mutation that defeated
+v1 now reddens that test alone.
+
+**Which register an applicant accepted currently depends on whether they
+LISTENED or READ.** That is a legal/product call, not an implementation
+detail, so it is filed (bd `nsb4y`, P1) rather than settled here --
+`intro_script.json`'s own comment notes a counsel pass is still pending.
+
 ## Process notes
 
 - The `config.py` change is a COMMENT only. Verified
@@ -162,4 +207,10 @@ disclaimer and read it beside the prompt. A stated invariant makes the next
   Collapsed; bd `polyglot-pdf-cqyke` owns the sweep of the two pre-existing
   offenders plus broadening the regex so the rule stops depending on authors
   remembering it.
-- Backend + scripts: 3312 passed, 3 skipped (exit 0).
+- Backend + scripts: 3330 passed, 3 skipped (exit 0) -- the +18 are the new
+  per-language undertaking cases.
+- Two outer-review passes died to a transport stall (no verdict returned).
+  Per doctrine that is never read as clean; both were re-run rather than
+  assumed. The second stall correctly flagged an uncommitted tree -- I had
+  been editing while a review was in flight, which is my process error, not
+  the reviewer's.
