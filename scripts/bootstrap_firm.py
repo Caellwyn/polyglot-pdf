@@ -71,6 +71,14 @@ FIRM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 ROLE_MANAGER = "manager"
 ROLE_EMPLOYEE = "employee"
 
+# Kept as literals (NOT imported from backend.services.firms) deliberately:
+# any backend.* import at module scope would run before main()'s
+# initialize_app(projectId=...) and could trip the bare initialize_app() in
+# backend/services/auth.py -- the exact ordering trap main() documents.
+# test_status_choices_match_service_constants pins these against the
+# service's FIRM_STATUS_* constants so drift fails CI instead of silently.
+STATUS_CHOICES = ["active", "suspended"]
+
 
 def stamp_firm_claims(email: str, firm_id: str, firm_role: str) -> tuple[str, str]:
     """Stamp firm_id + firm_role on the Firebase account for `email`.
@@ -136,7 +144,7 @@ def main(argv=None) -> int:
         help="staff account email to stamp firm_role=employee (repeatable)",
     )
     parser.add_argument(
-        "--status", default="active", choices=["active", "suspended"]
+        "--status", default="active", choices=STATUS_CHOICES
     )
     parser.add_argument(
         "--project",
@@ -152,7 +160,10 @@ def main(argv=None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not FIRM_ID_RE.match(args.firm_id):
+    # fullmatch, not match: a $-anchored .match still accepts a trailing
+    # newline ("acme\n"), the exact bug class _KIT_ID_RE was fixed for
+    # (backend/routes/form_kit_routes.py, bd polyglot-pdf-sbfk).
+    if not FIRM_ID_RE.fullmatch(args.firm_id):
         print(
             f"firm_id {args.firm_id!r} is not a valid slug "
             "(lowercase ^[a-z0-9][a-z0-9_-]{0,127}$)",
@@ -163,6 +174,15 @@ def main(argv=None) -> int:
         print(
             f"project {args.project} is DEAD and unreachable (maintainer "
             "2026-08-14, bd polyglot-pdf-je6iy); refusing.",
+            file=sys.stderr,
+        )
+        return 2
+    duplicated = set(args.manager_email) & set(args.employee_email)
+    if duplicated:
+        print(
+            "email(s) listed under BOTH --manager-email and --employee-email: "
+            + ", ".join(sorted(duplicated))
+            + " -- refusing (ambiguous role; the last stamp would silently win).",
             file=sys.stderr,
         )
         return 2

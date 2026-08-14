@@ -100,7 +100,8 @@ is DEAD -- nothing may reference it (purge bead polyglot-pdf-je6iy filed).
 - Reviewed and left (stale from OTHER beads' files, none tracked by this
   branch's changes): context-compression.md, jit-schema.md, pdf-view.md,
   schema-forms.md, tool-call-flow.md, websocket-routing.md,
-  standards/ai-models.md.
+  standards/ai-models.md, standards/validation-delegation.md,
+  standards/voice-and-vad.md, standards/ws-protocol.md.
 
 ## Files touched
 

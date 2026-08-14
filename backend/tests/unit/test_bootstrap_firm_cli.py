@@ -244,6 +244,51 @@ def test_invalid_firm_slug_is_refused(wired, capsys):
     assert wired.upserts == []
 
 
+def test_trailing_newline_firm_id_is_refused(wired, capsys):
+    """FIRM_ID_RE must be applied with fullmatch: a $-anchored .match still
+    accepts a trailing newline (the _KIT_ID_RE / bd sbfk bug class), so
+    'acme-legal\\n' would pass and become a Firestore path segment.
+    Mutation: revert fullmatch to match -- red."""
+    rc = bootstrap_firm.main(_argv(firm_id="acme-legal\n"))
+
+    assert rc == 2
+    assert "not a valid slug" in capsys.readouterr().err
+    assert wired.upserts == []
+
+
+def test_email_in_both_role_flags_is_refused(wired, capsys):
+    """An address under BOTH --manager-email and --employee-email is an
+    ambiguous role assignment: refuse (exit 2, nothing written) rather than
+    silently letting the last stamp win. Mutation: drop the duplicate-email
+    check -- the address gets stamped and this goes red."""
+    wired.auth.users["ada@x.example"] = _FakeUser("uid-ada")
+
+    rc = bootstrap_firm.main(
+        _argv(
+            "--manager-email", "ada@x.example",
+            "--employee-email", "ada@x.example",
+        )
+    )
+
+    assert rc == 2
+    assert "BOTH" in capsys.readouterr().err
+    assert wired.auth.stamps == {}
+    assert wired.upserts == []
+
+
+def test_status_choices_match_service_constants():
+    """The CLI's status choices are deliberate literals (a module-scope
+    backend import would break main()'s init-ordering trick); this pin turns
+    drift between them and the service's FIRM_STATUS_* constants into a CI
+    failure. Mutation: change a STATUS_CHOICES literal -- red."""
+    import backend.services.firms as firms
+
+    assert bootstrap_firm.STATUS_CHOICES == [
+        firms.FIRM_STATUS_ACTIVE,
+        firms.FIRM_STATUS_SUSPENDED,
+    ]
+
+
 def test_rerun_is_idempotent(wired):
     """Running the same invocation twice succeeds twice with the same end
     state (upsert_firm carries the real merge semantics, pinned in
