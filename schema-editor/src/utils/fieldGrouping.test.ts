@@ -286,6 +286,36 @@ describe('ungroupField (crit 2: reversible)', () => {
     expect(ungroupField(schema, 'plain')).toBe(schema);
   });
 
+  // bd polyglot-pdf-8bjdx + fzt0a: ungroup is DESTRUCTIVE, so every malformed
+  // or legacy options shape must leave it REFUSED. The two shapes reach that
+  // refusal by different routes, and the coercion of legacy strings (fzt0a)
+  // changed which route -- so both are pinned, not just the outcome for one.
+  it.each([
+    ['a non-array options value', 'not-a-list'],
+    ['an array with a null entry', [null, { value: 'a', pdf_field_name: 'A[0]' },
+                                    { value: 'b', pdf_field_name: 'B[0]' }]],
+    ['legacy bare-string options', ['A', 'B']],
+    ['a nested-array entry', [[], { value: 'a', pdf_field_name: 'A[0]' }]],
+  //
+  // Mutation coverage, measured per-parametrization rather than once for the
+  // block: reverting canUngroup to its pre-8bjdx `(field.options || []).every`
+  // reddens the first TWO cases (they threw before the guard existed). The
+  // string and nested-array cases stay green under that revert -- a coerced
+  // string and a nested array carry no pdf_field_name either way, so they pin
+  // the OUTCOME (ungroup stays refused for every non-standard shape) rather
+  // than this specific guard. Both are worth keeping; only the first two are
+  // evidence about the guard itself.
+  ])('refuses ungroup on %s', (_label, options) => {
+    const schema = w7Schema();
+    schema.fields = [{
+      id: 'weird', name: 'Weird', type: 'select', section_id: 'reason',
+      read_only: false, options,
+    } as unknown as typeof schema.fields[0]];
+    // Never throws, and never permits the destructive path.
+    expect(canUngroup(schema.fields[0])).toBe(false);
+    expect(ungroupField(schema, 'weird')).toBe(schema);
+  });
+
   it('de-dupes a reconstructed id that would collide with a surviving field (fallback path)', () => {
     // A hand-authored consolidated field (NO stash) takes the reconstruction
     // path, where option.value -> id can collide with a surviving field id.

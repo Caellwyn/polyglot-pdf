@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { checkFieldComplete, validateSchema } from './validation';
+import {
+  checkFieldComplete, safeOptions, safeOptionsPreservingArity, validateSchema,
+} from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
 // Minimal valid field; override per test. read_only/pdf_field_name are the
@@ -341,5 +343,227 @@ describe('checkFieldComplete position diagnostics (bd g63j)', () => {
       ...complete, pdf_position: { ...rect, page: 7 },
     } as Partial<FormField>);
     expect(checkFieldComplete(offDoc, 0).reviewReasons).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Malformed `options` must DEGRADE, never throw (bd polyglot-pdf-8bjdx)
+// ============================================================================
+//
+// Two shapes a hand-edited or script-drifted kit can carry escape the ordinary
+// `?? []` / `|| []` guards, because both are TRUTHY and both have a `.length`:
+//   1. a NON-ARRAY value (e.g. "not-a-list") -- array methods throw
+//      "is not a function";
+//   2. an array with NULL / non-object entries -- `o.pdf_field_name` throws
+//      "Cannot read properties of null".
+//
+// bd polyglot-pdf-93p8 fixed ONE member of this set (reviewStatus.ts's
+// hasUncoveredStructuralError). This bead is the REMAINDER: checkFieldComplete
+// and the render/edit paths that call it. A throw here is not a wrong number,
+// it is a BLANK SCREEN -- checkFieldComplete sits on the per-field render path
+// (FieldList rows + tooltips, FieldOverlay boxes, FieldEditor's panel), so one
+// malformed field took down the whole list rather than degrading its own row.
+describe('malformed options degrade instead of throwing (bd polyglot-pdf-8bjdx)', () => {
+  const MALFORMED: Array<[string, unknown]> = [
+    ['a non-array options value', 'not-a-list'],
+    ['an array whose FIRST entry is null', [null, { label: 'ok', value: 'ok' }]],
+    ['an array whose LAST entry is null', [{ label: 'ok', value: 'ok' }, null]],
+    ['an array of non-object junk', ['junk', 42, null]],
+    ['a numeric options value', 7],
+    ['an object (non-array) options value', { label: 'x' }],
+  ];
+
+  // Every CHOICE type reaches the options branch in checkFieldComplete; a
+  // non-choice type skips it. Both must survive.
+  const TYPES = ['select', 'radio', 'checkbox_group', 'text'] as const;
+
+  for (const [shapeName, options] of MALFORMED) {
+    for (const type of TYPES) {
+      it(`checkFieldComplete survives ${shapeName} on a ${type} field`, () => {
+        // pdf_field_name MUST be cleared: the options branch is nested inside
+        // `if (!field.pdf_field_name)`, so a field carrying a field-level
+        // widget name short-circuits before the throwing .filter/.map and the
+        // test would be vacuous (measured -- an earlier cut of this test kept
+        // the fixture's default pdf_field_name and passed against the
+        // UNFIXED code).
+        const f = field('malformed', {
+          type, options, pdf_field_name: undefined,
+        } as unknown as Partial<FormField>);
+        // The assertion is "does not throw" -- the exact status is a
+        // degradation detail, but it must be a real FieldStatus.
+        const status = checkFieldComplete(f);
+        expect(status).toBeDefined();
+        expect(Array.isArray(status.errors)).toBe(true);
+        expect(Array.isArray(status.reviewReasons)).toBe(true);
+      });
+    }
+  }
+
+  it('a WELL-FORMED choice field still reports its unmapped options (no regression)', () => {
+    // The degradation must not blunt the real check: a genuine partially-mapped
+    // choice field still names which options lack a widget.
+    const f = field('partly', {
+      type: 'radio',
+      pdf_field_name: undefined,
+      options: [
+        { label: 'Mapped', value: 'a', pdf_field_name: 'A[0]' },
+        { label: 'Unmapped', value: 'b' },
+      ],
+    } as unknown as Partial<FormField>);
+    const status = checkFieldComplete(f);
+    expect(status.errors.join(' ')).toContain('Unmapped');
+  });
+
+  it('a choice field with NO mapped option anywhere still reports the hard error', () => {
+    const f = field('none', {
+      type: 'select',
+      pdf_field_name: undefined,
+      options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }],
+    } as unknown as Partial<FormField>);
+    const status = checkFieldComplete(f);
+    expect(status.errors.join(' ')).toContain('No PDF mapping');
+  });
+});
+
+// ============================================================================
+// The two index spaces must not diverge (bd polyglot-pdf-8bjdx, fresh-eyes r1)
+// ============================================================================
+//
+// safeOptions DROPS malformed entries; safeOptionsPreservingArity KEEPS them as
+// null placeholders. Mixing the two over one field inside a single component is
+// a silent correctness bug, not a crash: FieldEditor built its lint-finding
+// anchor map from the arity-preserving list (raw indices) while rendering rows
+// from the dropping list (compacted indices), so with options=[null, a, b] a
+// finding anchored to option 'a' (raw index 1) was looked up at 'b's row.
+//
+// These pin the PROPERTY that makes the two interchangeable-looking helpers
+// actually different, so the next person choosing between them sees it stated.
+describe('safeOptions vs safeOptionsPreservingArity index spaces', () => {
+  const field = {
+    options: [null, { label: 'A', value: 'a' }, { label: 'B', value: 'b' }],
+  };
+
+  it('preserving keeps RAW indices; dropping COMPACTS them', () => {
+    const preserving = safeOptionsPreservingArity(field);
+    const dropping = safeOptions(field);
+
+    expect(preserving.length).toBe(3);
+    expect(preserving[0]).toBeNull();
+    expect(preserving[1]?.value).toBe('a');
+
+    expect(dropping.length).toBe(2);
+    expect(dropping[0].value).toBe('a');   // 'a' moved from index 1 -> 0
+
+    // The divergence, stated as an assertion: the SAME option has different
+    // indices in the two views. Anything that indexes one must not be read
+    // with an index derived from the other.
+    expect(preserving.findIndex(o => o?.value === 'a'))
+      .not.toBe(dropping.findIndex(o => o.value === 'a'));
+  });
+
+  it('both agree exactly when every entry is well-formed', () => {
+    const clean = { options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }] };
+    expect(safeOptions(clean)).toEqual(safeOptionsPreservingArity(clean));
+  });
+
+  it('an option index is only meaningful in ONE space -- raw', () => {
+    // The cross-component contract (fresh-eyes round 2). FieldList hands an
+    // option's row index to onMoveOption; App.tsx then indexes `options` with
+    // it. Both must use the SAME space, and it must be RAW, because App.tsx
+    // writes back a rebuilt options array.
+    //
+    // The round-1 fix moved App.tsx to arity-preserving while FieldList still
+    // rendered from the dropping view -- which RELOCATED the bug instead of
+    // fixing it: with [null, a, b], dragging 'a' (dropped idx 0) selected
+    // preserving[0] === null (silent no-op), and dragging 'b' (dropped idx 1)
+    // selected preserving[1] === 'a', moving the WRONG option.
+    const preserving = safeOptionsPreservingArity(field);
+    const dropping = safeOptions(field);
+
+    // What the buggy pairing did, stated so it cannot silently come back:
+    expect(preserving[dropping.findIndex(o => o.value === 'b')]?.value)
+      .toBe('a');            // dropped-space idx read in raw space -> WRONG option
+    expect(preserving[dropping.findIndex(o => o.value === 'a')])
+      .toBeNull();           // ...or nothing at all
+
+    // The contract: a raw index round-trips to the same option.
+    const rawIdxOfA = preserving.findIndex(o => o?.value === 'a');
+    expect(preserving[rawIdxOfA]?.value).toBe('a');
+  });
+
+  it('a real-option COUNT must come from safeOptions, not the raw length', () => {
+    // FieldEditor's atFloor guard ("a choice field needs >= 2 real options")
+    // read field.options.length, which counts the malformed entry: 3 > 2, so
+    // Remove stayed enabled and one click produced a single-option choice
+    // field the v2 backend rejects.
+    expect(field.options.length).toBe(3);        // the misleading raw count
+    expect(safeOptions(field).length).toBe(2);   // the count the guard needs
+  });
+});
+
+// ============================================================================
+// A bare-string option is LEGACY, not malformed (bd polyglot-pdf-fzt0a)
+// ============================================================================
+//
+// `"options": ["A", "B", "C"]` is a DOCUMENTED accepted input on every other
+// surface: backend FormField.normalize_options coerces it to
+// [FieldOption(value=opt, label=opt)]; the voice frontend's optionValue()
+// accepts it; schema_lint's ref-option-value rule builds its legal-value set
+// including isinstance(o, str) entries.
+//
+// The first cut of safeOptions treated it as malformed and DROPPED it, which
+// broke that agreement badly in the editor:
+//   - zero option rows rendered, so the Options panel fell to its empty-state
+//     branch whose "+ Add Option" OVERWRITES options instead of appending --
+//     silently destroying every option, and invisibly, because the rows whose
+//     absence would have tipped the author off were the ones not rendering;
+//   - isChoiceTrigger went false, so ConditionBuilder offered a free-text box
+//     for a field whose values the publish gate constrains -- inviting the
+//     exact ref-option-value ERROR the gate then raises.
+describe('legacy bare-string options are coerced, not dropped (bd polyglot-pdf-fzt0a)', () => {
+  const legacy = { type: 'select', options: ['A', 'B', 'C'] };
+
+  it('safeOptions coerces each string to {value, label}', () => {
+    const opts = safeOptions(legacy);
+    expect(opts).toHaveLength(3);
+    expect(opts[0]).toEqual({ value: 'A', label: 'A' });
+    expect(opts.map(o => o.value)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('safeOptionsPreservingArity coerces them too, keeping arity', () => {
+    const opts = safeOptionsPreservingArity(legacy);
+    expect(opts).toHaveLength(3);
+    expect(opts[2]).toEqual({ value: 'C', label: 'C' });
+    expect(opts.every(o => o !== null)).toBe(true);
+  });
+
+  it('the option COUNT matches the raw length -- the overwrite trap', () => {
+    // This is the assertion that actually guards the data loss: the Options
+    // panel renders (and "+ Add Option" APPENDS) only while this count is
+    // nonzero. Zero here is what routed the author into the overwriting
+    // empty-state branch.
+    expect(safeOptions(legacy).length).toBe(legacy.options.length);
+    expect(safeOptions(legacy).length).toBeGreaterThan(0);
+  });
+
+  it('a MIXED legacy/modern array keeps every real option', () => {
+    const mixed = { type: 'radio', options: ['A', { value: 'b', label: 'B' }] };
+    expect(safeOptions(mixed).map(o => o.value)).toEqual(['A', 'b']);
+  });
+
+  it('genuinely unreadable entries are still dropped', () => {
+    // The coercion must not become "keep everything" -- null/number/array
+    // carry no value, label or pdf_field_name any consumer could read.
+    const junk = { type: 'radio', options: [null, 42, [], { value: 'a', label: 'A' }] };
+    expect(safeOptions(junk).map(o => o.value)).toEqual(['a']);
+  });
+
+  it('a string-option choice field is still judged on its PDF mapping', () => {
+    // Coercing must not accidentally make the field look mapped: a bare string
+    // carries no pdf_field_name, so an unmapped choice field still reports.
+    const status = checkFieldComplete(field('legacy', {
+      type: 'select', pdf_field_name: undefined, options: ['A', 'B'],
+    } as unknown as Partial<FormField>));
+    expect(status.errors.join(' ')).toContain('No PDF mapping');
   });
 });

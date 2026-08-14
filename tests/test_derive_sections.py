@@ -162,6 +162,37 @@ def test_colliding_part_labels_get_unique_part_ids():
     assert [p["label"] for p in out["parts"]] == labels
 
 
+def test_real_part_labelled_to_review_cannot_squat_on_the_review_part_id():
+    # A real printed part whose label slugs to 'to_review' collides with the
+    # well-known review part id (bd polyglot-pdf-6p0z). Precedence ran the
+    # WRONG way: the review section is APPENDED LAST by build_output, so the
+    # real part claimed 'part_to_review' first and the actual review bucket
+    # was renamed 'part_to_review_2' -- silently invisible to every consumer
+    # keying on the exact id (this file's own assertions above, and the
+    # editor's review gate, 6cfu.3).
+    #
+    # The SECTION-id path has always guarded this (a colliding heading is
+    # rewritten to 'sec_x_...'); the part path did not.
+    real = ds.DerivedSection("Applicant Info", 1, 1, [_field("f1", page=1)])
+    real.part_label = "To Review"   # slugs to exactly 'to_review'
+
+    # An unassigned (positionless) field forces the real review part to exist.
+    out = ds.build_output("t", "name-convention", [real],
+                          [_field("unplaced", page=None)], [], cap=40)
+
+    by_label = {p["label"]: p["id"] for p in out["parts"]}
+    # The REVIEW part keeps the well-known id, whoever else wanted it.
+    assert by_label["To review"] == "part_to_review", out["parts"]
+    # The real part is disambiguated rather than dropped or merged.
+    assert by_label["To Review"] == "part_x_to_review", out["parts"]
+    # Two DISTINCT parts -- the collision must not have merged the buckets.
+    pids = [p["id"] for p in out["parts"]]
+    assert len(pids) == len(set(pids)) == 2, pids
+    # And the review part actually carries the unplaced field's section.
+    review_part = next(p for p in out["parts"] if p["id"] == "part_to_review")
+    assert review_part["section_ids"] == ["sec_to_review_unplaced"]
+
+
 def test_clean_derivation_has_empty_to_review():
     fields = [_field(f"p1_line{i}", page=1, y=float(i),
                      name=f"P1_Line{i}_Thing[0]") for i in range(1, 6)]

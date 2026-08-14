@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react';
 import type { FormField, FormSchema, FormSection } from '../types/schema';
 import { isFieldRequired, shouldShowField } from '../utils/conditionalVisibility';
+import { safeOptions } from '../utils/validation';
 
 interface PreviewPaneProps {
   schema: FormSchema;
@@ -203,7 +204,10 @@ interface PreviewInputProps extends PreviewFieldProps {
 }
 
 function PreviewInput({ field, value, disabled, inputId, onSetValue, onToggleOption }: PreviewInputProps) {
-  const options = field.options || [];
+  // safeOptions (bd polyglot-pdf-8bjdx): a non-array or null-bearing
+  // `options` threw out of the per-option .map renders below, blanking the
+  // whole preview pane rather than one field's control.
+  const options = safeOptions(field);
 
   // RADIO (and a select-as-radio consolidated group): mutually exclusive -- a
   // single selected value. Clicking another option replaces the prior one.

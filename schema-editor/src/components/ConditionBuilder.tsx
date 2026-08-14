@@ -29,6 +29,7 @@ import type {
   FormSchema,
 } from '../types/schema';
 import { normalizeToComposite } from '../utils/normalizeToComposite';
+import { safeOptions } from '../utils/validation';
 
 interface ConditionBuilderProps {
   /** Card heading, e.g. "Shown when" / "Required when". */
@@ -60,18 +61,30 @@ const TRIGGERABLE_TYPES = new Set<FormField['type']>([
 // A trigger whose value is constrained to its options[] (choice fields). The
 // legacy checkbox-with-options shape is a checkbox GROUP in all but type (the
 // pre-v2 modeling still shipping in kits) and gets the same option controls.
+// safeOptions().length, not `!!field.options && field.options.length > 0` (bd
+// polyglot-pdf-yb41u): the raw check is TRUE for a non-array `options` (a
+// string has a .length) and for an array of nulls, and every caller then does
+// `trigger!.options!.some(...)` / `.map(...)` / `[0].value` -- which throws and
+// blanks the whole show_if/require_if panel for the field being edited, because
+// some OTHER field in the schema has malformed options. Counting only real
+// option objects makes these predicates false for both malformed shapes, so the
+// callers take their existing no-options branch instead.
+function realOptionCount(field: FormField | undefined): number {
+  return field ? safeOptions(field).length : 0;
+}
+
 function isChoiceTrigger(field: FormField | undefined): boolean {
   if (!field) return false;
   if (field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group') {
-    return !!field.options && field.options.length > 0;
+    return realOptionCount(field) > 0;
   }
-  return field.type === 'checkbox' && !!field.options && field.options.length > 0;
+  return field.type === 'checkbox' && realOptionCount(field) > 0;
 }
 
 function isGroupTrigger(field: FormField | undefined): boolean {
   if (!field) return false;
   if (field.type === 'checkbox_group') return true;
-  return field.type === 'checkbox' && !!field.options && field.options.length > 0;
+  return field.type === 'checkbox' && realOptionCount(field) > 0;
 }
 
 // The v2 operator/trigger compatibility matrix, editor side (mirrors
@@ -167,7 +180,7 @@ function defaultAtom(schema: FormSchema, selfId: string): ConditionalDisplay {
   const atom: ConditionalDisplay = { field: trigger?.id ?? '', operator };
   if (!NO_VALUE_OPERATORS.has(operator)) {
     if (isChoiceTrigger(trigger)) {
-      atom.value = LIST_VALUED_OPERATORS.has(operator) ? [] : trigger!.options![0].value;
+      atom.value = LIST_VALUED_OPERATORS.has(operator) ? [] : safeOptions(trigger!)[0].value;
     } else {
       atom.value = LIST_VALUED_OPERATORS.has(operator) ? [] : '';
     }
@@ -180,7 +193,7 @@ function defaultAtom(schema: FormSchema, selfId: string): ConditionalDisplay {
 function coerceAtom(atom: ConditionalDisplay, trigger: FormField | undefined): ConditionalDisplay {
   const next: ConditionalDisplay = { field: atom.field, operator: atom.operator };
   if (NO_VALUE_OPERATORS.has(atom.operator)) return next;
-  const options = isChoiceTrigger(trigger) ? trigger!.options! : null;
+  const options = isChoiceTrigger(trigger) ? safeOptions(trigger!) : null;
   if (LIST_VALUED_OPERATORS.has(atom.operator)) {
     const current = Array.isArray(atom.value) ? atom.value : [];
     next.value = options
@@ -331,12 +344,12 @@ function ConditionRow({ atom, bucket, index, selfId, schema, onChangeRow, onRemo
   const choice = isChoiceTrigger(trigger) && !NO_VALUE_OPERATORS.has(atom.operator);
   const staleScalar =
     choice && !LIST_VALUED_OPERATORS.has(atom.operator) &&
-    !trigger!.options!.some(o => o.value === atom.value)
+    !safeOptions(trigger!).some(o => o.value === atom.value)
       ? String(atom.value ?? '')
       : null;
   const staleListMembers =
     choice && LIST_VALUED_OPERATORS.has(atom.operator) && Array.isArray(atom.value)
-      ? atom.value.filter((v: string) => !trigger!.options!.some(o => o.value === v))
+      ? atom.value.filter((v: string) => !safeOptions(trigger!).some(o => o.value === v))
       : [];
   // An existing rule with an off-matrix operator (legacy data) still displays
   // itself -- else the select silently falls back and rewrites a stored rule.
@@ -392,7 +405,7 @@ function ConditionRow({ atom, bucket, index, selfId, schema, onChangeRow, onRemo
               aria-label={`${rowLabel}: options`}
             >
               {[
-                ...trigger!.options!,
+                ...safeOptions(trigger!),
                 ...staleListMembers.map(v => ({ value: v, label: `(missing option) ${v}` })),
               ].map(opt => {
                 const selected = Array.isArray(atom.value) && atom.value.includes(opt.value);
@@ -426,7 +439,7 @@ function ConditionRow({ atom, bucket, index, selfId, schema, onChangeRow, onRemo
                 {staleScalar !== null && (
                   <option value={staleScalar}>{`(missing option) ${staleScalar}`}</option>
                 )}
-                {trigger!.options!.map(opt => (
+                {safeOptions(trigger!).map(opt => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>

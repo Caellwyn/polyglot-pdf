@@ -15,7 +15,7 @@ import {
 } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
-import { checkFieldComplete } from '../utils/validation';
+import { checkFieldComplete, safeOptions, safeOptionsPreservingArity } from '../utils/validation';
 import { getReview, newFindingsSinceReview, withGuidanceAck, withReviewNote,
   withReviewStatus } from '../utils/reviewStatus';
 import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
@@ -794,8 +794,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     instructions: [], details: [], conditions: [], field: [],
     byOption: new Map(),
   };
-  const optionValues = (field.options ?? []).map(o =>
-    o.value !== undefined ? String(o.value) : undefined);
+  // safeOptionsPreservingArity (bd polyglot-pdf-8bjdx): a non-array or
+  // null-bearing `options` threw out of this .map. Arity preserved because
+  // the values are matched positionally against the option rows below.
+  const optionValues = safeOptionsPreservingArity(field).map(o =>
+    o?.value !== undefined ? String(o.value) : undefined);
   // The Options block below renders only for these types -- an option bucket
   // on any OTHER options-carrying field (backend lint checks options[] on
   // every field regardless of type) would be counted by the chip yet render
@@ -1452,9 +1455,24 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               <h4 className="text-sm font-semibold text-gray-900">Options</h4>
             </div>
 
-            {field.options && field.options.length > 0 ? (
+            {/* ARITY-PRESERVING, and malformed rows are SKIPPED rather than
+                compacted away (bd polyglot-pdf-8bjdx, fresh-eyes round 1).
+                `idx` here is not just a React key -- it indexes
+                anchored.byOption (built from optionValues above, which uses
+                safeOptionsPreservingArity) and it is the index every edit
+                handler below splices on. Rendering over the DROPPING variant
+                gave this block a second, compacted index space: with
+                options=[null, a, b], a finding anchored to raw index 1 (that
+                is, option 'a') was looked up at 'b's row, and an edit to 'a'
+                spliced position 0. One index space, raw, is the invariant --
+                a malformed entry renders nothing but still consumes its slot.
+                The write handlers deliberately keep safeOptions(): they
+                REBUILD options, and dropping the malformed entry there is the
+                repair, not a desync. */}
+            {safeOptions(field).length > 0 ? (
               <div className="space-y-2">
-                {field.options.map((option, idx) => (
+                {safeOptionsPreservingArity(field).map((option, idx) => (
+                  option === null ? null : (
                   <div key={idx} className="space-y-1 border-l-2 border-gray-100 pl-2">
                     {/* Findings ABOUT this option render at its row
                         (sprint-18 C1): missing/duplicate/comma value, wrong
@@ -1474,7 +1492,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // per keystroke churned the slug through every
                           // intermediate label (and visibly mutated the chip
                           // under the author's cursor), bd polyglot-pdf-0x10.5.
-                          const newOptions = [...(field.options || [])];
+                          const newOptions = [...safeOptions(field)];
                           // A label edit invalidates the option's baked
                           // label_translations -- they translate the OLD text,
                           // and the runtime keys them by language on the option,
@@ -1497,13 +1515,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // dependents' references stay intact.
                           const label = option.label || '';
                           if (!label.trim()) return;
-                          const otherLabels = (field.options || [])
+                          const otherLabels = safeOptions(field)
                             .filter((_, i) => i !== idx)
                             .map(o => o.label || '');
                           const oldValue = option.value;
                           const value = mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
                           if (!value || value === oldValue) return;
-                          const newOptions = [...(field.options || [])];
+                          const newOptions = [...safeOptions(field)];
                           newOptions[idx] = { ...option, value };
                           const updatedField = { ...field, options: newOptions };
                           // A dependent's show_if/require_if can reference this
@@ -1549,9 +1567,18 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         // group unsaveable/unpromotable in one click. Structural
                         // splits go through Ungroup, not option-by-option Remove
                         // (Codex PR #310 round 3).
+                        // safeOptions().length, not the RAW length (bd
+                        // polyglot-pdf-8bjdx, fresh-eyes round 1): a malformed
+                        // entry inflates the raw count, so a field with only 2
+                        // real options read as 3 and left Remove enabled --
+                        // one click away from the single-option choice field
+                        // this floor exists to prevent, which the v2 backend
+                        // model rejects at the promotion gate. `.length` never
+                        // throws, so the crash-focused fix above did not cover
+                        // this and the source-scan guard cannot see it.
                         const atFloor =
                           field.type !== 'checkbox' &&
-                          (field.options?.length ?? 0) <= 2;
+                          safeOptions(field).length <= 2;
                         const blocked = referencedBy.length > 0 || atFloor;
                         const reason = referencedBy.length > 0
                           ? `Used by a condition on: ${referencedBy.join(', ')}. Retarget those first.`
@@ -1564,7 +1591,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             disabled={blocked}
                             title={reason}
                             onClick={() => {
-                              const newOptions = (field.options || []).filter((_, i) => i !== idx);
+                              const newOptions = safeOptions(field).filter((_, i) => i !== idx);
                               updateField({ options: newOptions });
                             }}
                           >
@@ -1648,14 +1675,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // affordance (its lint ERROR flags it until mapped).
                           <OptionWidgetSelect
                             value={option.pdf_field_name || ''}
-                            siblingNames={(field.options || [])
+                            siblingNames={safeOptions(field)
                               .filter((_, i) => i !== idx)
                               .map(o => o.pdf_field_name)
                               .filter((n): n is string => !!n)}
                             onLoadUnclaimedWidgets={onLoadUnclaimedWidgets}
                             ariaLabel={`Option ${idx + 1} PDF widget`}
                             onChange={(name) => {
-                              const newOptions = [...(field.options || [])];
+                              const newOptions = [...safeOptions(field)];
                               newOptions[idx] = { ...option, pdf_field_name: name };
                               updateField({ options: newOptions });
                             }}
@@ -1664,12 +1691,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                       </details>
                     )}
                   </div>
-                ))}
+                )))}
                 {(authorTier || field.type === 'select') && (
                   <button
                     className="btn btn-secondary w-full text-sm"
                     onClick={() => {
-                      const opts = field.options || [];
+                      const opts = safeOptions(field);
                       const value = mintUniqueSlugs(
                         [...opts.map(o => o.label || ''), 'option'],
                       ).slice(-1)[0];
@@ -1686,11 +1713,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 {onLoadUnclaimedWidgets
                   && (field.type === 'checkbox_group' || field.type === 'radio') && (
                   <WidgetPicker
-                    existingValues={(field.options || []).map(o => o.value || '')}
+                    existingValues={safeOptions(field).map(o => o.value || '')}
                     onLoad={onLoadUnclaimedWidgets}
                     onPick={(opt, fieldPdfFieldName) =>
                       updateField({
-                        options: [...(field.options || []), opt],
+                        options: [...safeOptions(field), opt],
                         // A shared-name group carries the widget name on the
                         // FIELD. Gate on type=radio: v2 FORBIDS a field-level
                         // pdf_field_name on a checkbox_group (form_models

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-13. See [the s1iex.3 journal entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for closeout details.*
+*Last updated: 2026-08-13. See [the s1iex.3 journal entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for the intro-TTS route, [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -94,7 +94,8 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the
   `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
-  `/api/fill-pdf` + form-kit list/schema reads). **LOCAL ONLY, fail-closed on
+  `/api/fill-pdf`, the form-kit list/schema reads, and both TTS routes
+  `/api/tts/spellback` + `/api/tts/intro`). **LOCAL ONLY, fail-closed on
   deploy** (bd `polyglot-pdf-knmp`): with `K_SERVICE` set, `Settings` refuses
   to start and `verify_token` ignores the flag — no override exists. Auth
   canon: [auth.md](auth.md).

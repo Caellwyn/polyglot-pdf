@@ -46,6 +46,12 @@ import type {
 // would desync silently on a rename. One-way import -- ignoreField never imports
 // this module, so no cycle.
 import { IGNORED_FIELDS_KEY } from './ignoreField';
+// Malformed-options normalization (bd polyglot-pdf-8bjdx). One-way import --
+// validation.ts never imports this module (only mentions it in a comment), so
+// no cycle. Reused rather than re-rolled here for exactly the reason this bead
+// exists: hand-rolled `field.options || []` guards at each site are what let
+// the set drift apart.
+import { safeOptions } from './validation';
 
 // Field types that can participate in a merge group. A consolidated options[]
 // field is a single-select group, so only radio/checkbox source fields qualify.
@@ -120,7 +126,17 @@ function optionLabelFor(field: FormField): string {
 // True when this consolidated field can be un-merged: it has 2+ options that each
 // carry a pdf_field_name (so each can be reconstructed into a standalone field).
 export function canUngroup(field: FormField): boolean {
-  const opts = field.options || [];
+  // safeOptions, not `field.options || []` (bd polyglot-pdf-8bjdx): `.every`
+  // threw on a non-array or null-bearing options. This is also the GATE
+  // protecting ungroupField's own `field.options.map` below. Neither
+  // malformed shape can carry a pdf_field_name -- an unreadable entry is
+  // dropped (caught by the raw-length compare, so survivors alone cannot
+  // satisfy the check), and a coerced legacy string (bd polyglot-pdf-fzt0a)
+  // fails the `every` check -- so ungroup stays refused either way, which is
+  // the safe direction for a destructive restructure.
+  const opts = safeOptions(field);
+  const rawLength = Array.isArray(field.options) ? field.options.length : 0;
+  if (opts.length !== rawLength) return false;
   return opts.length >= 2 && opts.every(o => !!o.pdf_field_name);
 }
 
@@ -842,14 +858,28 @@ export function changeGroupKindBlockReason(
   // kind === 'checkbox_group': forbid a field-level pdf_field_name, and require
   // every option to carry its own pdf_field_name (pdf_on_value is NOT enough).
   if (field.pdf_field_name) return 'pdf-widgets';
-  if (!(field.options || []).every(o => !!o.pdf_field_name)) return 'pdf-widgets';
+  // safeOptions, not `field.options || []` (bd polyglot-pdf-8bjdx): a
+  // non-array or null-bearing options threw out of .every/.map here.
+  // Refusal is the safe direction for a destructive group-kind flip, and
+  // this gate reaches it two ways: an UNREADABLE entry (null/number/nested
+  // array) is dropped, so the length check below fires; a LEGACY STRING
+  // entry is coerced (bd polyglot-pdf-fzt0a) and so passes the length check
+  // -- but carries no pdf_field_name, so the `every` check below refuses it
+  // anyway. Both shapes stay refused; only the reason differs.
+  const opts = safeOptions(field);
+  if (opts.length !== (Array.isArray(field.options) ? field.options.length : 0)) {
+    return 'pdf-widgets';  // an unreadable entry is, by definition, not widget-backed
+  }
+  if (!opts.every(o => !!o.pdf_field_name)) return 'pdf-widgets';
   // ...and refuse if a dependent has an in/not_in atom on this group that cannot
   // be losslessly expanded to a checkbox_group-valid membership condition (nested
   // in a composite, or a top-level list that is non-array / empty / has a stale
   // member) -- else the flip would strand a checkbox_group-invalid list operator
   // or silently narrow/widen the condition (bd polyglot-pdf-8qfj).
   const optionSlugs = new Set(
-    (field.options || []).map(o => String(o.value)).filter(v => v !== ''),
+    // safeOptions (bd polyglot-pdf-8bjdx): a malformed entry carries no
+    // `value` to contribute a slug, so dropping it is the right degradation.
+    safeOptions(field).map(o => String(o.value)).filter(v => v !== ''),
   );
   if (hasUnflippableListMembership(schema, field.id, optionSlugs)) {
     return 'nested-list-membership';
@@ -898,7 +928,9 @@ export function changeGroupKind(
   // whole-group operator (is_checked/is_empty on the group, no value) is
   // kind-agnostic and left untouched.
   const optionSlugs = new Set(
-    (field.options || []).map(o => String(o.value)).filter(v => v !== ''),
+    // safeOptions (bd polyglot-pdf-8bjdx): a malformed entry carries no
+    // `value` to contribute a slug, so dropping it is the right degradation.
+    safeOptions(field).map(o => String(o.value)).filter(v => v !== ''),
   );
 
   // The option slugs named by a list-valued (`in`/`not_in`) atom, filtered to

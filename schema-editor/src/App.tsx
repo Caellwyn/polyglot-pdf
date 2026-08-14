@@ -44,6 +44,7 @@ import {
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
 import { isReviewTargetFromFindings, reviewCounts } from './utils/reviewStatus';
+import { safeOptions, safeOptionsPreservingArity } from './utils/validation';
 import {
   bucketFindingsByField, visibleFormFindings, withFormFindingDismissed,
 } from './utils/lintFindings';
@@ -613,16 +614,22 @@ export const App: React.FC = () => {
       return;
     }
 
-    // Get the option being moved
-    const optionToMove = sourceField.options[optionIndex];
+    // Get the option being moved. safeOptionsPreservingArity (bd
+    // polyglot-pdf-8bjdx): optionIndex comes from the FieldList row the author
+    // dragged, which indexes the RAW options array, so the arity-preserving
+    // view is the one that agrees with it -- and a non-array `options` would
+    // otherwise throw out of the .filter below, killing the drop handler.
+    const sourceOptions = safeOptionsPreservingArity(sourceField);
+    const optionToMove = sourceOptions[optionIndex];
     if (!optionToMove) return;
 
     // Remove from source
-    const newSourceOptions = sourceField.options.filter((_, idx) => idx !== optionIndex);
+    const newSourceOptions = sourceOptions.filter(
+      (o, idx): o is NonNullable<typeof o> => idx !== optionIndex && o !== null);
     const newSourceWidgets = sourceField.consolidated_widgets?.filter(w => w !== optionToMove.value);
 
     // Add to target
-    const newTargetOptions = [...(targetField.options || []), optionToMove];
+    const newTargetOptions = [...safeOptions(targetField), optionToMove];
     const newTargetWidgets = [...(targetField.consolidated_widgets || []), optionToMove.value];
 
     // Update both fields
