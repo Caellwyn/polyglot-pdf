@@ -1,0 +1,129 @@
+---
+tags: [cost, legal-posture, docs, recovery, si-reduction, scar-tissue]
+beads: [polyglot-pdf-77j0d, polyglot-pdf-rtyia]
+surfaces: [docs/standards, CLAUDE.md, backend/config]
+---
+
+# Two tier-1 invariants: one obsolete and being quoted, one nowhere and violable
+
+Both beads are about the same failure class from opposite directions. An
+invariant that lives in tier-1 gets read into EVERY session, so a wrong one
+is not inert -- agents quote it back as current and plan against it. An
+invariant that lives nowhere authoritative can be silently violated by
+someone who never had reason to look.
+
+## bd 77j0d -- recovering a measurement without inheriting its errors
+
+The maintainer's report was blunt: *"'text is a greater cost than audio' ...
+I keep getting quoted by agents, but which is obsolete."*
+
+The bead's instruction was RECOVER, do not re-measure -- bd 89mt had
+measured this properly and expensively, and the doc correction was stranded
+on an abandoned local branch when the maintainer declined the spike
+artifacts. Cherry-pick the three doc hunks from commit `7b35c227`.
+
+Doing exactly that would have shipped numbers the author had already
+retracted.
+
+### Two layers of staleness, neither in the bead
+
+**First:** a LATER commit on the same abandoned branch (`5888cda7`, "carry
+the unshipped-SI caveat into the standards docs") corrected the one the
+bead named. Its own fresh-eyes review had caught that the 56%/66% audio-in
+split was measured on a SLIMMED system instruction that was not shipped;
+re-weighted for the deployed SI, audio-in was nearer ~49%. The bead cited
+only the first commit. Applying it alone would have landed a figure its
+author already knew was wrong.
+
+**Second, and the reason this needed more than careful cherry-picking:**
+that caveat is ITSELF now stale. It assumed the deployed SI was ~4,388 tok
+pending bd `6a79`. But 6a79 SHIPPED (PR #565, 2026-08-08), after the branch
+was abandoned. Measuring `Settings().DTI_SYSTEM_INSTRUCTION` today gives
+**~3,363 tok** -- neither the ~2,485 the split was measured on, nor the
+~4,388 the caveat assumed. The SI was cut, then grew back partway.
+
+So there was no version of the recovered text that was correct: the
+original figures assumed a smaller SI than ships, the caveat assumed a
+larger one. The numbers had to be re-weighted against a value MEASURED FROM
+TODAY'S CODE rather than copied from either.
+
+The general lesson, and it generalizes past this bead: **a recovered commit
+is a claim about the world at the time it was written, and the world
+includes commits that came after it -- including later commits on the same
+abandoned branch.** The bead's own warning ("treat the recovered prose as
+stale-by-default") was right and still understated it, because it framed
+staleness as prose drift against `dev`. The real drift was that a
+DEPENDENCY of the numbers had shipped in the interim.
+
+This is also why the doc now states the ORDERING as the durable finding and
+the percentages as approximate, names the configuration they hold on, and
+says what would invalidate them. A number with no provenance invites
+exactly this: silent re-quoting long after its premise moved.
+
+### The set was twice what the bead named
+
+The bead named three files. A grep found **six** live sites:
+
+- `CLAUDE.md`, `logging-and-cost.md`, `si-reduction.md` -- the three named.
+- `schema-key-visibility.md` -- a comparison table asserting "per-turn
+  text-in = **95-98% of session cost**" as current fact.
+- `sprint_20_sol-intro-tts_plan.md` -- an ACTIVE plan using the stale claim
+  to argue AGAINST a cost justification ("Not a cost saving ... audio is
+  negligible"). Now doubly wrong: audio leads, so moving speech off the
+  Live model onto deterministic TTS is plausibly a cost WIN. Flagged rather
+  than re-argued, and pointed at bd `n1y9h`, which owns re-checking that
+  exact premise.
+- `secretary-agent-research-plan.md` -- cites `logging-and-cost.md` as
+  current justification, so a reader following the pointer would hit a
+  contradiction. Annotated, argument left intact.
+
+`docs/archive/sliding-window-go-no-go-brief.md` was deliberately left: it
+is explicitly a point-in-time record ("What we now know (measured)"), and
+rewriting it would destroy the historical account rather than correct it.
+That line -- annotate a doc that POINTS at current state, leave one that
+RECORDS a past decision -- is the useful distinction.
+
+## bd rtyia -- an invariant with real consequences, recorded only in a prompt
+
+The app produces a DRAFT, is never used for self-filing, and depends on an
+outside qualified human reviewing before filing. Before this, that lived in
+`backend/config.py`'s prompt text, a test docstring, and tier-3 journal
+entries. Nothing authoritative.
+
+It is not a nicety -- shipped behavior rests on it. The hedge-and-defer
+answer policy (bd `rdsl`) closes by deferring to "the firm or professional
+reviewing their form." **Opened to self-filers, demoed to a prospect with
+no reviewing staff, or sold direct-to-consumer, that deferral points at a
+person who does not exist -- in every supported language -- and a careful
+hedge becomes a dead end.** Nothing in the codebase would object, and the
+person making that business call has no reason to grep prompt strings.
+
+### The register distinction is the thing most likely to get re-broken
+
+Internally, review is REQUIRED (contracts). To the applicant, review is
+ADVISED, never guaranteed. Those are different statements on purpose.
+
+Verified against shipped text rather than the bead's description:
+`DisclaimerModal.tsx` says *"We strongly advise you to have a qualified
+professional check your final form before you submit it"*, and the SI
+already carries *"Do not promise the user that a review WILL happen -- the
+disclaimer they accepted advises it rather than guaranteeing it."*
+
+The bead flags this because it has already been broken once: in rdsl the SI
+wrongly PROMISED review ("Every form drafted here is reviewed...") where the
+disclaimer only advises it. That survived the author, the tests, and two
+review rounds -- caught only because one reviewer happened to open the
+disclaimer and read it beside the prompt. A stated invariant makes the next
+"tightening" wrong on its face instead of dependent on someone noticing.
+
+## Process notes
+
+- The `config.py` change is a COMMENT only. Verified
+  `DTI_SYSTEM_INSTRUCTION` is byte-identical at 13,451 chars, so there is
+  no prompt change and no cost impact -- worth checking explicitly on a
+  file where an accidental string edit would silently alter every session's
+  behavior and bill.
+- Confirms bd `teizj` (filed round 8) is real: `schema-key-visibility.md`
+  has no `Tracks:` line, so the freshness gate skips it entirely -- which
+  is part of why a stale current-state claim survived there.
+- Backend + scripts: 3312 passed, 3 skipped (exit 0).
