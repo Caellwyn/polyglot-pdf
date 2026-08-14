@@ -128,11 +128,12 @@ function optionLabelFor(field: FormField): string {
 export function canUngroup(field: FormField): boolean {
   // safeOptions, not `field.options || []` (bd polyglot-pdf-8bjdx): `.every`
   // threw on a non-array or null-bearing options. This is also the GATE
-  // protecting ungroupField's own `field.options.map` below -- a malformed
-  // entry cannot carry a pdf_field_name, so it fails the `every` check and
-  // ungroup stays refused, which is the safe direction for a destructive
-  // restructure. Comparing against the raw length keeps a dropped malformed
-  // entry from silently satisfying the check via the survivors alone.
+  // protecting ungroupField's own `field.options.map` below. Neither
+  // malformed shape can carry a pdf_field_name -- an unreadable entry is
+  // dropped (caught by the raw-length compare, so survivors alone cannot
+  // satisfy the check), and a coerced legacy string (bd polyglot-pdf-fzt0a)
+  // fails the `every` check -- so ungroup stays refused either way, which is
+  // the safe direction for a destructive restructure.
   const opts = safeOptions(field);
   const rawLength = Array.isArray(field.options) ? field.options.length : 0;
   if (opts.length !== rawLength) return false;
@@ -858,14 +859,16 @@ export function changeGroupKindBlockReason(
   // every option to carry its own pdf_field_name (pdf_on_value is NOT enough).
   if (field.pdf_field_name) return 'pdf-widgets';
   // safeOptions, not `field.options || []` (bd polyglot-pdf-8bjdx): a
-  // non-array or null-bearing options threw out of .every/.map here. A
-  // dropped non-object entry cannot satisfy "every option carries its own
-  // pdf_field_name" anyway, so dropping (rather than preserving arity) is
-  // the correct degradation for this gate -- it stays refused, which is the
-  // safe direction for a destructive group-kind flip.
+  // non-array or null-bearing options threw out of .every/.map here.
+  // Refusal is the safe direction for a destructive group-kind flip, and
+  // this gate reaches it two ways: an UNREADABLE entry (null/number/nested
+  // array) is dropped, so the length check below fires; a LEGACY STRING
+  // entry is coerced (bd polyglot-pdf-fzt0a) and so passes the length check
+  // -- but carries no pdf_field_name, so the `every` check below refuses it
+  // anyway. Both shapes stay refused; only the reason differs.
   const opts = safeOptions(field);
   if (opts.length !== (Array.isArray(field.options) ? field.options.length : 0)) {
-    return 'pdf-widgets';  // a malformed entry is, by definition, not widget-backed
+    return 'pdf-widgets';  // an unreadable entry is, by definition, not widget-backed
   }
   if (!opts.every(o => !!o.pdf_field_name)) return 'pdf-widgets';
   // ...and refuse if a dependent has an in/not_in atom on this group that cannot
