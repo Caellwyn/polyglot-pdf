@@ -281,49 +281,48 @@ top of it, and would become wrong if it stopped holding.
 ### The register distinction (do not collapse this)
 
 **The internal invariant and what the app TELLS the applicant are different
-statements, deliberately.** There are THREE registers in shipped surfaces, not
-two -- check which one you are touching before editing any of them.
+statements, deliberately.**
 
-| Register | Where | Wording |
-|---|---|---|
-| **Required** (internal) | customer contracts | review is a contractual obligation; this is what makes the deferral coherent |
-| **Undertaken** (the applicant agrees) | `intro_script.json` para 6, all 18 languages -- **the SPOKEN clip only**, see the drift note below | "you **agree to** review the completed document yourself and with a certified professional before filing" |
-| **Advised** (we recommend) | `DisclaimerModal.tsx` `p2`/`fullText` | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
+**What SHIPS today -- both user-facing surfaces are ADVISORY, and they are the
+same text.** The modal's `fullText` is what the Live model reads aloud
+(`VoiceOverlay.tsx` -> `readDisclaimer` -> the `read_disclaimer` WS message ->
+`websocket_routes.py`), so the spoken and written disclaimers do not differ:
+both say *"We strongly advise you to have a qualified professional check your
+final form before you submit it."* Neither asks the applicant to undertake
+anything.
 
-The SI sits deliberately at the WEAKEST of these: "Do not promise the user that
-a review WILL happen -- the disclaimer they accepted advises it rather than
-guaranteeing it." That is correct and should stay. The model must not assert a
-review will occur, even though the applicant has undertaken to obtain one --
-an undertaking by the user is not a guarantee by us, and the model cannot know
-whether it was honoured.
+| Register | Status | Where | Wording |
+|---|---|---|---|
+| **Required** (internal) | live, contractual | customer contracts | review is an obligation on the customer; this is what makes the SI's deferral coherent |
+| **Advised** (we recommend) | **LIVE -- both surfaces** | `DisclaimerModal.tsx` `p2`/`fullText`, written AND read aloud | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
+| **Undertaken** (they agree) | **STAGED, NOT LIVE** | `intro_script.json` para 6, 18 languages | "you **agree to** review the completed document yourself and with a certified professional before filing" |
 
-**Note the asymmetry, because it is easy to "fix" in the wrong direction:** the
-spoken/agreed register is STRONGER than the written-disclaimer register. Do not
-level them by weakening the agreement (it is the applicant's undertaking, and
-the `[AGREE LABEL]` click is what records it) or by strengthening the SI (which
-would re-introduce the exact rdsl bug). They are different speech acts by
-different parties: *we advise*, *they agree*, *contracts require*.
+**The Undertaken register is not reachable by any user today.** The intro clip
+has no frontend player (bd `polyglot-pdf-s1iex.5`, open -- `grep -rn "tts/intro"
+frontend/src` returns nothing), and `INTRO_TTS_ENABLED` defaults false, so
+`POST /api/tts/intro` 503s. `intro_script.json` and `intro_tts.py` both assert
+a HARD INVARIANT that "the modal renders exactly these paragraphs -- one
+source, no separate fullText"; **that invariant describes the intended end
+state, not shipped behavior.** Do not cite it as current.
 
-**KNOWN DRIFT between the two user-facing surfaces (bd `polyglot-pdf-nsb4y`).**
-`intro_script.json`'s own comment and `intro_tts.py` both assert a HARD
-INVARIANT that "the modal renders exactly these paragraphs -- one source, no
-separate fullText." **That is not true today.** `DisclaimerModal.tsx` renders
-its own `p1`/`p2`/`p3` and contains no undertaking at all (`grep -ci "agree to
-review"` returns 0); no frontend component reads `intro_script.json`'s
-paragraphs. The one-source wiring is unshipped work (bd `polyglot-pdf-s1iex.5`,
-open). **So which register a given applicant accepted currently depends on
-whether they LISTENED to the clip or READ the modal.** Do not cite the
-"one source" invariant as though it holds. Resolving this -- whether the modal
-adopts the spoken undertaking, or the invariant claim is dropped -- is a
-legal/product decision (`intro_script.json` notes a counsel pass is still
-pending), tracked in `nsb4y`, not something to settle in passing.
+**Why this matters when s1iex.5 ships.** It changes the user-facing legal
+posture, not just the audio: today the applicant is ADVISED to obtain review;
+the staged script has them AGREE to obtain it, and the `[AGREE LABEL]` click
+would record that undertaking. Whether the written modal should adopt the same
+undertaking -- so the two surfaces stay in one register -- is a legal/product
+decision, tracked in bd `polyglot-pdf-nsb4y`; `intro_script.json` notes a
+counsel pass is still pending. Shipping the player without settling it is what
+would create a listened-vs-read split.
 
-Conflating these is the known failure mode, not a hypothetical one. In bd
-`polyglot-pdf-rdsl` the SI wrongly *promised* review ("Every form drafted here is
-reviewed...") where the disclaimer only advises it. That survived the author, the
-tests, and two review rounds -- it was caught only because one reviewer happened
-to open the disclaimer and read it beside the prompt. **A tightening that upgrades
-"advised" to "guaranteed" in user-facing copy is wrong on its face.**
+**The SI sits at the ADVISORY register and must stay there**, whichever way
+that lands: *"Do not promise the user that a review WILL happen -- the
+disclaimer they accepted advises it rather than guaranteeing it."* Even once
+an applicant undertakes to obtain review, an undertaking by the user is not a
+guarantee by us, and the model cannot know whether it was honoured.
+Strengthening this text re-introduces the exact bd `rdsl` bug: the SI once
+PROMISED review ("Every form drafted here is reviewed...") where the disclaimer
+only advised it, and that survived the author, the tests, and two review rounds
+-- caught only because one reviewer read the disclaimer beside the prompt.
 
 ### What would invalidate this
 

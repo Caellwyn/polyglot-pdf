@@ -182,10 +182,36 @@ English-anchored assertion -- English is the source language and untranslated,
 so the clause is assertable verbatim -- and the exact mutation that defeated
 v1 now reddens that test alone.
 
-**Which register an applicant accepted currently depends on whether they
-LISTENED or READ.** That is a legal/product call, not an implementation
-detail, so it is filed (bd `nsb4y`, P1) rather than settled here --
-`intro_script.json`'s own comment notes a counsel pass is still pending.
+**A third correction, and the one that inverted the claim.** I then wrote that
+which register an applicant accepted depends on whether they LISTENED or READ.
+The outer review traced the spoken path and showed that is also wrong -- in the
+opposite direction from my first error.
+
+The intro clip has no frontend player at all (bd `s1iex.5` is open; `grep -rn
+"tts/intro" frontend/src` returns nothing) and `INTRO_TTS_ENABLED` defaults
+false, so the route 503s. What the Live model actually reads aloud is
+`DISCLAIMER_TRANSLATIONS[lang].fullText` -- **the modal's own advisory text** --
+via `readDisclaimer` and the `read_disclaimer` WS message. So both user-facing
+surfaces are advisory and IDENTICAL today. There is no live undertaking
+register, and no listened-vs-read split.
+
+I had made the same class of error twice in one section: describing a STAGED
+surface as shipped. The first time I said the modal renders the spoken
+paragraphs (it does not); the second time I said the spoken clip carries a
+stronger register (it is not wired). Both came from reading `intro_script.json`
+and `intro_tts.py`, which each assert a HARD INVARIANT that "the modal renders
+exactly these paragraphs -- one source, no separate fullText" -- **an invariant
+that describes the intended end state and is simply not true today.** Trusting
+a file's own stated invariant is exactly the move that
+[[verify-claims-against-code-not-brief]] warns against; the producing file is a
+brief like any other.
+
+The section now carries an explicit STATUS column (live / staged), so the
+distinction cannot be lost again, and states that shipping `s1iex.5` is what
+would CREATE the register split -- which is precisely why bd `nsb4y` (settling
+whether the modal adopts the undertaking) should be decided BEFORE the player
+ships, not after. That is a legal/product call, and `intro_script.json` notes a
+counsel pass is still pending.
 
 ## Process notes
 
