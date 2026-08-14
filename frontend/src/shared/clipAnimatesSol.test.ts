@@ -78,19 +78,21 @@ describe('audioManager.attachClipElement (bd s1iex.4)', () => {
     const am = createAudioManager()
     const release = am.attachClipElement({} as HTMLAudioElement)
     try {
-    expect(am.isSpeaking()).toBe(true)
+    // Assert the UNION (the avatar's gate). isSpeaking() is model-only by
+    // design -- see the dedicated test below.
+    expect(am.isAnyAudioPlaying()).toBe(true)
 
     // The reachable model-side writers, driven through the PUBLIC surface.
     am.resetPlaybackClock()
-    expect(am.isSpeaking()).toBe(true)   // clip still audible
+    expect(am.isAnyAudioPlaying()).toBe(true)   // clip still audible
     am.flushAudioQueue()
-    expect(am.isSpeaking()).toBe(true)
+    expect(am.isAnyAudioPlaying()).toBe(true)
     am.resumePlayback()
-    expect(am.isSpeaking()).toBe(true)
+    expect(am.isAnyAudioPlaying()).toBe(true)
 
     // Only the clip's OWN release ends it.
     release()
-    expect(am.isSpeaking()).toBe(false)
+    expect(am.isAnyAudioPlaying()).toBe(false)
     } finally {
       release()
       if (prevAC === undefined) delete (globalThis as any).AudioContext
@@ -104,6 +106,63 @@ describe('audioManager.attachClipElement (bd s1iex.4)', () => {
     const am = createAudioManager()
     am.resetPlaybackClock()
     expect(am.isSpeaking()).toBe(false)
+    expect(am.isAnyAudioPlaying()).toBe(false)
+  })
+
+  it('isSpeaking() stays MODEL-ONLY so turn-taking is unaffected by a clip', () => {
+    // The cross-surface finding: isSpeaking() has 8 turn-taking callers, and
+    // two form a deadlock pair -- onVADSpeechStart SUSPENDS the playback
+    // context when it is true, onVADSpeechEnd only resumes when false. A clip
+    // now lives INSIDE that context, so counting it there would suspend the
+    // clip mid-word and never resume. The avatar asks for the union instead.
+    const prevAC = (globalThis as any).AudioContext
+    ;(globalThis as any).AudioContext = function () {
+      return {
+        state: 'running', currentTime: 0, destination: {},
+        createAnalyser: () => ({ fftSize: 256, connect: () => {},
+          getByteTimeDomainData: () => {} }),
+        createMediaElementSource: () => ({ connect: () => {}, disconnect: () => {} }),
+        resume: async () => {}, close: async () => {},
+      }
+    } as any
+    const am = createAudioManager()
+    const release = am.attachClipElement({} as HTMLAudioElement)
+    try {
+      expect(am.isSpeaking()).toBe(false)        // model is NOT talking
+      expect(am.isAnyAudioPlaying()).toBe(true)  // but audio IS audible
+      expect(am.isClipPlaying()).toBe(true)
+    } finally {
+      release()
+      if (prevAC === undefined) delete (globalThis as any).AudioContext
+      else (globalThis as any).AudioContext = prevAC
+    }
+  })
+
+  it('destroy() releases clip state so the guards cannot strand', () => {
+    // A stranded activeClipCount would permanently block all four clear-sites
+    // AND isSpeaking(): Sol frozen, turn-taking believing the model is
+    // forever silent. bead s1iex.5 adds a second attach caller.
+    const prevAC = (globalThis as any).AudioContext
+    ;(globalThis as any).AudioContext = function () {
+      return {
+        state: 'running', currentTime: 0, destination: {},
+        createAnalyser: () => ({ fftSize: 256, connect: () => {},
+          getByteTimeDomainData: () => {} }),
+        createMediaElementSource: () => ({ connect: () => {}, disconnect: () => {} }),
+        resume: async () => {}, close: async () => {},
+      }
+    } as any
+    const am = createAudioManager()
+    try {
+      am.attachClipElement({} as HTMLAudioElement)  // deliberately NOT released
+      expect(am.isClipPlaying()).toBe(true)
+      am.destroy()
+      expect(am.isClipPlaying()).toBe(false)
+      expect(am.isAnyAudioPlaying()).toBe(false)
+    } finally {
+      if (prevAC === undefined) delete (globalThis as any).AudioContext
+      else (globalThis as any).AudioContext = prevAC
+    }
   })
 
   it('pins the COMPLETE set of geminiIsSpeaking clear-sites', () => {
@@ -124,15 +183,21 @@ describe('audioManager.attachClipElement (bd s1iex.4)', () => {
       .map((line, i) => ({ line: line.trim(), i }))
       // Assignments only -- skip the `let geminiIsSpeaking = false` declaration.
       .filter(x => /^geminiIsSpeaking\s*=\s*false\b/.test(x.line))
-    // 4 writers today: clip release, PCM onended, playAudio catch, reset.
-    // A NEW clear-site (or a removed guard) fails this and must be reviewed
-    // against the clip invariant rather than silently added.
-    expect(clearSites.length).toBe(4)
+    // 5 writers today: clip release, PCM onended, playAudio catch, reset --
+    // all CLIP-GUARDED -- plus cleanup(), which is the one legitimate
+    // UNGUARDED site (teardown zeroes activeClipCount on the line above, so
+    // guarding there would strand the flag true forever). A NEW clear-site,
+    // or a removed guard, fails this and must be reviewed against the clip
+    // invariant rather than silently added.
+    expect(clearSites.length).toBe(5)
+    let guarded = 0
     for (const site of clearSites) {
-      // The guard sits within a few lines above each write.
-      const window = lines.slice(Math.max(0, site.i - 6), site.i).join('\n')
-      expect(window).toContain('activeClipCount')
+      const window = lines.slice(Math.max(0, site.i - 8), site.i).join('\n')
+      if (window.includes('activeClipCount')) guarded++
     }
+    // Every site references activeClipCount within its window -- four as a
+    // guard, cleanup() as the reset immediately above.
+    expect(guarded).toBe(5)
   })
 })
 

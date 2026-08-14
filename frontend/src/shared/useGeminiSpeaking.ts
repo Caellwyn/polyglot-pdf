@@ -79,7 +79,14 @@ export function useGeminiSpeaking(audioManager: AudioManager | null | undefined)
 			return
 		}
 		const id = setInterval(() => {
-			if (!audioManager.isSpeaking()) setSpeaking(false)
+			// The UNION (bd polyglot-pdf-s1iex.4): this hook backs the avatar,
+			// and isSpeaking() is now model-PCM-only, so reconciling against it
+			// would clear the flag mid-clip -- the flatline this bead exists to
+			// fix. Fall back to isSpeaking on an older manager shape.
+			const audible = audioManager.isAnyAudioPlaying
+				? audioManager.isAnyAudioPlaying()
+				: audioManager.isSpeaking()
+			if (!audible) setSpeaking(false)
 		}, RECONCILE_MS)
 		return () => clearInterval(id)
 	}, [speaking, audioManager])
@@ -98,11 +105,11 @@ export function useGeminiSpeaking(audioManager: AudioManager | null | undefined)
  *
  * A clip is the ONE case where audible speech legitimately has no live
  * session behind it, so only the clip-scoped flag may bypass the live gate.
- * The audio manager owns the ref-counted truth (`isClipPlaying()`); this
- * polls it on the same lazy cadence as the sibling hook rather than adding
- * another global, because clip start/end share the vff* events the sibling
- * already claims and a second claimant would have to re-solve the
- * chain-and-restore problem documented above.
+ * The audio manager owns the ref-counted truth (`isClipPlaying()`). This hook
+ * subscribes to a dedicated `vffOnClipStateChange` global (chained, per the
+ * rule above) for a sharp edge at both ends, and additionally polls -- LAZILY,
+ * only while a clip is believed to be playing -- as the safety net for a
+ * missed END edge, exactly as the sibling hook covers barge-in flushes.
  */
 export function useClipPlaying(audioManager: AudioManager | null | undefined): boolean {
 	const [clipPlaying, setClipPlaying] = useState(false)
@@ -122,14 +129,19 @@ export function useClipPlaying(audioManager: AudioManager | null | undefined): b
 			setClipPlaying(false)
 			return
 		}
-		// Safety net behind the event: reconciles a missed edge (a manager
-		// swapped mid-clip, an unmount landing between attach and release) the
-		// same way the sibling hook covers barge-in flushes.
+		// Safety net behind the event, and LAZY like the sibling hook: only
+		// poll while we believe a clip is playing, so an idle session costs
+		// nothing (cross-surface review round 1 -- an unconditional 5Hz setter
+		// in both overlays contradicted this hook's own docstring). The START
+		// edge always arrives as an event; polling exists only to catch a
+		// missed END (a manager swapped mid-clip, an unmount between attach
+		// and release).
+		if (!clipPlaying) return
 		const id = setInterval(() => {
-			setClipPlaying(audioManager.isClipPlaying())
+			if (!audioManager.isClipPlaying()) setClipPlaying(false)
 		}, RECONCILE_MS)
 		return () => clearInterval(id)
-	}, [audioManager])
+	}, [clipPlaying, audioManager])
 
 	return clipPlaying
 }

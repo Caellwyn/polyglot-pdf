@@ -34,7 +34,15 @@ export interface AudioManager {
 	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
 	resumeAudioContext: () => void // Resume audio context (resume after false positive)
 	isRecording: () => boolean
-	isSpeaking: () => boolean // Is Gemini currently speaking?
+	// Is the MODEL's own audio playing? EXCLUDES synthesized clips (bd
+	// polyglot-pdf-s1iex.4) -- every caller is turn-taking/barge-in logic
+	// asking "is Gemini mid-utterance?", and counting a clip deadlocks the
+	// VAD suspend/resume pair. For "is any audio audible", see
+	// isAnyAudioPlaying below.
+	isSpeaking: () => boolean
+	// The UNION: model PCM or a synthesized clip. What the avatar's energy
+	// gate and the playback watchdog want (bd polyglot-pdf-s1iex.4).
+	isAnyAudioPlaying: () => boolean
 	muteInput: () => void // Mute mic input (send silence - push-to-talk mode only)
 	unmuteInput: () => void // Unmute mic input (send real audio)
 	setSpellbackHold: (active: boolean) => void // bd 22h1f: hard mic gate while the deterministic spell-back clip plays (any mode)
@@ -943,6 +951,17 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		outputAnalyserCtx = null
 		outputBuf = null
 
+		// Clip attachments died with that context (bd polyglot-pdf-s1iex.4). A
+		// stranded count would be permanent: it now gates all four
+		// `geminiIsSpeaking = false` sites AND isSpeaking(), so Sol would
+		// freeze mid-animation and turn-taking would believe the model is
+		// forever silent. Today every destroy() caller happens to cancel the
+		// spell-back player first; bead s1iex.5 adds a second attach caller
+		// with no such pairing, so make it structural rather than incidental.
+		activeClipCount = 0
+		geminiIsSpeaking = false
+		notifyClipState()
+
 		// Drop the energy subscriber on teardown so a destroyed manager holds no
 		// reference into the overlay (bd polyglot-pdf-s3zv).
 		onEnergyCallback = null
@@ -958,9 +977,27 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
-	 * Check if Gemini is currently speaking
+	 * Is the MODEL's own audio playing right now?
+	 *
+	 * DELIBERATELY EXCLUDES synthesized clips (bd polyglot-pdf-s1iex.4). Its
+	 * eight callers are all turn-taking / barge-in / re-prompt logic asking
+	 * "is Gemini mid-utterance?", and two of them form a pair that DEADLOCKS
+	 * if a clip counts: `onVADSpeechStart` suspends the playback context when
+	 * this is true, and `onVADSpeechEnd` only resumes it when this is false --
+	 * a clip (now INSIDE that context) would suspend mid-word and never
+	 * resume. The avatar wants the union instead and asks for it explicitly
+	 * via isAnyAudioPlaying(); nothing else does.
 	 */
 	function isSpeaking(): boolean {
+		return geminiIsSpeaking && activeClipCount === 0
+	}
+
+	/**
+	 * Is ANY audio audible -- the model's PCM or a synthesized clip? The
+	 * avatar's energy gate (getOutputEnergy) and the playback-end watchdog
+	 * want this union; turn-taking logic wants isSpeaking() above.
+	 */
+	function isAnyAudioPlaying(): boolean {
 		return geminiIsSpeaking
 	}
 
@@ -1137,6 +1174,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		resumeAudioContext,
 		isRecording,
 		isSpeaking,
+		isAnyAudioPlaying,
 		muteInput,
 		unmuteInput,
 		setSpellbackHold,
