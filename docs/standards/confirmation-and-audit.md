@@ -281,15 +281,28 @@ top of it, and would become wrong if it stopped holding.
 ### The register distinction (do not collapse this)
 
 **The internal invariant and what the app TELLS the applicant are different
-statements, deliberately.**
+statements, deliberately.** There are THREE registers in shipped surfaces, not
+two -- check which one you are touching before editing any of them.
 
-- **Internally / contractually:** review is *required*. That is what makes the
-  deferral coherent.
-- **To the applicant:** review is *advised*, never guaranteed. The shipped
-  disclaimer says "We strongly advise you to have a qualified professional check
-  your final form before you submit it." The SI is explicit about this too: "Do
-  not promise the user that a review WILL happen -- the disclaimer they accepted
-  advises it rather than guaranteeing it."
+| Register | Where | Wording |
+|---|---|---|
+| **Required** (internal) | customer contracts | review is a contractual obligation; this is what makes the deferral coherent |
+| **Undertaken** (the applicant agrees) | `intro_script.json` para 6, all 18 languages, and the modal that renders the same paragraphs | "you **agree to** review the completed document yourself and with a certified professional before filing" |
+| **Advised** (we recommend) | `DisclaimerModal.tsx` `p2`/`fullText` | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
+
+The SI sits deliberately at the WEAKEST of these: "Do not promise the user that
+a review WILL happen -- the disclaimer they accepted advises it rather than
+guaranteeing it." That is correct and should stay. The model must not assert a
+review will occur, even though the applicant has undertaken to obtain one --
+an undertaking by the user is not a guarantee by us, and the model cannot know
+whether it was honoured.
+
+**Note the asymmetry, because it is easy to "fix" in the wrong direction:** the
+spoken/agreed register is STRONGER than the written-disclaimer register. Do not
+level them by weakening the agreement (it is the applicant's undertaking, and
+the `[AGREE LABEL]` click is what records it) or by strengthening the SI (which
+would re-introduce the exact rdsl bug). They are different speech acts by
+different parties: *we advise*, *they agree*, *contracts require*.
 
 Conflating these is the known failure mode, not a hypothetical one. In bd
 `polyglot-pdf-rdsl` the SI wrongly *promised* review ("Every form drafted here is

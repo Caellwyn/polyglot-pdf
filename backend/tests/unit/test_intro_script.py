@@ -102,3 +102,44 @@ def test_paragraphs_is_the_only_content_key(language):
     """Pin the shape: ONE canonical text per language. A reintroduced
     fullText (the pre-sprint-20 modal-vs-spoken drift bug) fails here."""
     assert set(_languages()[language].keys()) == {"paragraphs"}, language
+
+
+@pytest.mark.parametrize("language", sorted(_languages()))
+def test_review_undertaking_paragraph_survives_translation(language):
+    """The REVIEW UNDERTAKING must survive into every language.
+
+    The legal posture (docs/standards/confirmation-and-audit.md, "The
+    deployment invariant") rests on three DIFFERENT registers, and this one is
+    the strongest user-facing element: the applicant AGREES to obtain review
+    ("you agree to review the completed document yourself and with a certified
+    professional before filing"), where the written DisclaimerModal only
+    ADVISES it. It is the clause the [AGREE LABEL] click records consent to.
+
+    A translation that dropped or softened this paragraph would ship a language
+    in which the applicant never undertook review at all -- invisible, because
+    every other test here (placeholder counts, brand counts, paragraph count)
+    would still pass. Pinned structurally rather than by wording, since the
+    text is genuinely translated: the undertaking lives in the paragraph that
+    carries BOTH agree-placeholders' first occurrence and the brand release,
+    so assert that paragraph exists and is substantive in every language.
+    """
+    paragraphs = _languages()[language]["paragraphs"]
+    # The undertaking paragraph is the one carrying an AGREE placeholder AND
+    # the brand (the "you agree to review ... and absolve <BRAND>" clause).
+    undertaking = [
+        p for p in paragraphs
+        if AGREE_PLACEHOLDER in p and BRAND in p
+    ]
+    assert len(undertaking) == 1, (
+        f"{language}: expected exactly ONE paragraph carrying both the agree "
+        f"placeholder and the brand (the review undertaking + liability "
+        f"release); found {len(undertaking)}. A translation that split or "
+        f"dropped that clause changes the legal posture for this language "
+        f"only -- see docs/standards/confirmation-and-audit.md."
+    )
+    # Substantive, not a stub: the English clause is ~230 chars; a translation
+    # that collapsed to just the placeholder would pass a bare truthiness check.
+    assert len(undertaking[0]) > 80, (
+        f"{language}: the review-undertaking paragraph is suspiciously short "
+        f"({len(undertaking[0])} chars) -- verify the clause survived."
+    )
