@@ -77,7 +77,7 @@ app.add_middleware(
 app.include_router(websocket_routes.router)
 app.include_router(websocket_routes.router, prefix="/api")  # Handle Firebase rewrites
 app.include_router(pdf_fill_routes.router)
-app.include_router(tts_routes.router)  # deterministic spell-back TTS (bd 22h1f; 503 unless SPELLBACK_TOOL_ENABLED)
+app.include_router(tts_routes.router)  # TTS clips: spell-back (bd 22h1f; 503 unless SPELLBACK_TOOL_ENABLED) + Sol's intro (bd s1iex.3; 503 unless INTRO_TTS_ENABLED)
 app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
 app.include_router(editor_kit_routes.router)  # token-gated hosted-editor surface (bd 92qe.1)

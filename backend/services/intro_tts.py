@@ -105,9 +105,20 @@ def resolve_intro_language(language_name) -> str:
 
 def script_version(language: str) -> str:
     """Hash of the language's canonical script text -- the acceptance-record
-    script_version (bd s1iex.7): which exact text the user heard/read."""
+    script_version (bd s1iex.7): which exact text the user heard/read.
+
+    Covers everything LANGUAGE-scoped that reaches the spoken/rendered text:
+    the canonical paragraphs AND the language's agree label -- a label edit
+    changes what the user hears, so it must change the version (fresh-eyes
+    round 1: hashing only the template let intro_agree_labels.json drift
+    silently under an unchanged version). The form number is deliberately
+    OUTSIDE the hash: it is a per-request parameter the acceptance flow
+    records separately alongside the version.
+    """
+    label = _AGREE_LABELS.get(language) or _AGREE_LABELS[_FALLBACK_LANGUAGE]
     joined = " ".join(_LANGUAGES[language]["paragraphs"])
-    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(
+        ("%s\n%s" % (joined, label)).encode("utf-8")).hexdigest()[:16]
 
 
 def build_intro_text(language: str, form_number: str) -> str:
@@ -170,6 +181,8 @@ async def synthesize_intro(language_name, form_number: str,
         "intro_tts_synthesized",
         language=language,
         form_number=form_number,
-        audio_bytes=len(audio),
+        # The CACHED winner's size, not this thread's draw -- under a
+        # concurrent first-request race the loser's bytes are discarded.
+        audio_bytes=len(hit[0]),
     )
     return hit

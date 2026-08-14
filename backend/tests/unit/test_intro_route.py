@@ -236,11 +236,23 @@ class TestIntroTables:
 
     def test_script_version_tracks_the_text(self):
         """script_version() is the acceptance-record hash (bd s1iex.7):
-        re-derivable from the store, distinct per language."""
+        re-derivable from the store + label table, distinct per language."""
         v_en = intro_tts.script_version("English")
         assert v_en == intro_tts.script_version("English")
         assert v_en != intro_tts.script_version("Spanish")
         import hashlib
         joined = " ".join(intro_tts._LANGUAGES["English"]["paragraphs"])
-        assert v_en == hashlib.sha256(
-            joined.encode("utf-8")).hexdigest()[:16]
+        expected = hashlib.sha256(
+            ("%s\n%s" % (joined, _LABELS["English"])).encode("utf-8")
+        ).hexdigest()[:16]
+        assert v_en == expected
+
+    def test_script_version_tracks_the_agree_label_too(self, monkeypatch):
+        """The label IS spoken, so a label edit must change the version --
+        otherwise intro_agree_labels.json can drift under an unchanged
+        acceptance-record hash (fresh-eyes round-1 finding)."""
+        before = intro_tts.script_version("German")
+        mutated = dict(intro_tts._AGREE_LABELS)
+        mutated["German"] = "Zustimmen"
+        monkeypatch.setattr(intro_tts, "_AGREE_LABELS", mutated)
+        assert intro_tts.script_version("German") != before
