@@ -2,7 +2,11 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected compression-epic citation from l3a to x8rt/7872, with link to shipped default in context-compression.md).*
+*Last updated: 2026-08-14 (bd polyglot-pdf-77j0d: the MEASURED COST INVARIANT is
+rewritten -- AUDIO-IN now leads where text-in was said to be 95-98%. Recovered
+from the unshipped bd polyglot-pdf-89mt measurement and RE-WEIGHTED for today's
+shipped SI. Prior: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected
+compression-epic citation from l3a to x8rt/7872).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -61,22 +65,58 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 > bd `polyglot-pdf-x8rt` / `polyglot-pdf-7872`). The cumulative cost in
 > `token_usage.jsonl` is the baseline that work measures against.
 
-> **MEASURED COST INVARIANT (do not re-derive from the rate table — this is
-> counterintuitive and was expensive to establish).** On the **2.5** native-audio
-> model, **text-input is 95-98% of total session cost** (measured: bd
-> `polyglot-pdf-wyhh` / `polyglot-pdf-jnjj.6`, 20-question live sessions). That
-> text-input is overwhelmingly the **system instruction (SI) re-sent as context
-> every turn** — NOT audio, and NOT the user/model transcript. **Audio tokens are
-> a near-rounding-error on 2.5** (hundreds of tokens/turn vs. thousands of text-in
-> tokens), *even though* the rate table above makes audio-in look 6× pricier than
-> text-in per token: the SI's per-turn *volume* dwarfs the per-token rate gap.
-> **Implication: the SI re-sent every turn IS the 2.5 cost lever** — shrinking it
-> is the highest-value cost work (the premise of epic `polyglot-pdf-jnjj`). Do not
-> assume audio or transcript growth dominates; the data disproves that on 2.5.
-> (On **3.1** the split shifts — reasoning/thinking bills as *output*, so text-in
-> drops to ~47-81% and output rises; but 2.5 is the production tier.) Source
-> tables: `scripts/spikes/form_session_costs_findings.md` and
-> `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
+> **MEASURED COST INVARIANT -- AUDIO-IN NOW LEADS (do not re-derive from the rate
+> table).** On the **2.5** native-audio model with the production configuration
+> (continuous DTI + DERIVED context compression), **audio-input is the largest
+> single cost line**, with text-input close behind on the happy path:
+>
+> | | audio-in | text-in | other |
+> |---|---|---|---|
+> | happy path | ~49% | ~47% | ~4% |
+> | unhappy path (corrections) | ~60% | ~36% | ~5% |
+>
+> **This is an EVOLUTION and a WIN, not a contradiction of the older number.**
+> Text-in genuinely *was* 95-98% of session cost when it was measured (bd
+> `polyglot-pdf-wyhh` / `jnjj.6`): the SI was ~4.4k tokens re-sent every turn on
+> top of a context that accumulated without bound, so text volume swamped
+> everything. Two pieces of work removed that -- **context-window compression**
+> (bd `polyglot-pdf-x8rt` / `polyglot-pdf-7872`) bounds the re-sent context to the
+> derived sliding window, and the **SI diet** (epic `polyglot-pdf-jnjj`, shipped in
+> bd `polyglot-pdf-6a79`) cut the static backbone. With text-in capped, the ~6x
+> per-token price gap on audio finally shows through. The text side has been
+> optimized to where it is no longer the dominant problem; what remains is largely
+> the irreducible cost of a voice product.
+>
+> **Implication -- the cost levers have MOVED:**
+> 1. **Audio-in** (how much the user speaks, and how many turns they take) is now
+>    the biggest line. A correction costs disproportionately because it adds
+>    expensive audio, not cheap text -- measured: the unhappy path's audio-in is
+>    2.52x the happy path's while its text-in is only 1.54x.
+> 2. **Billed events per turn.** A turn averages ~2.1 billed events because a tool
+>    call re-sends the whole context, so per-turn text-in runs ~1.7x the context
+>    size. Cutting one tool round-trip per field saves a whole context re-send.
+> 3. **SI size** still matters (it sets the compression floor, and a bigger SI
+>    derives a bigger window -> fewer evictions) but it is no longer the single
+>    dominant line it was.
+>
+> **PROVENANCE, and what would invalidate this.** The underlying run is bd
+> `polyglot-pdf-89mt` (full 22-field W-7, both paths, deploy-fidelity config;
+> $0.59 happy / $1.25 unhappy all-in, ~$0.05/field flat across the form). Its
+> raw artifacts were deliberately NOT shipped -- the numbers live in that bead's
+> close reason, which is the citable record. **Its raw split (56% / 66% audio-in)
+> was measured on a ~2,485-token SI; the SHIPPED `DTI_SYSTEM_INSTRUCTION` is
+> ~3,363 tokens today** (measure it: `len(Settings().DTI_SYSTEM_INSTRUCTION)/4`),
+> so the table above re-weights that extra text at ~2.1 events/turn. **The
+> ORDERING is the durable finding; treat the percentages as approximate.**
+> Re-measure if the SI changes materially, and note the split depends on
+> compression being ON and DERIVED -- on a loose 12000/9000 window text-in
+> re-inflates and the old "SI is everything" shape returns (cost/field rose 2.10x
+> across a form vs 1.15x with the derived window).
+>
+> (On **3.1** the split shifts again -- reasoning/thinking bills as *output*; but
+> 2.5 is the production tier.) Older source tables, superseded but retained for
+> the pre-compression baseline: `scripts/spikes/form_session_costs_findings.md`
+> and `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
 
 ## Structured event schemas (defined, not yet emitting)
 

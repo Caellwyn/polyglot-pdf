@@ -13,7 +13,19 @@
 ## What this is
 
 **polyglot-pdf** is a voice-driven, multilingual form-filler for complex PDFs
-(immigration/legal intake). A browser SPA streams the user's voice over a
+(immigration/legal intake).
+
+**It produces a DRAFT, and it is not a filing app.** It is sold to a legal entity
+that pre-prepares first drafts for its clients -- **never** used for self-filing --
+and an outside qualified human reviews the form before it is filed. That reviewer
+makes the legal determinations; the app never does. This is a **deployment
+precondition that shipped behavior already depends on** (the SI's hedge-and-defer
+answer policy defers to "the firm or professional reviewing their form"), so do
+not reason from a filing-app or self-filer mental model. Full invariant, the
+behaviors resting on it, and the advisory-vs-required register distinction:
+[`docs/standards/confirmation-and-audit.md`](docs/standards/confirmation-and-audit.md).
+
+A browser SPA streams the user's voice over a
 WebSocket to a stateless FastAPI backend, which proxies a **Gemini Live** session
 that drives form-filling through tool calls; all field state lives on the client
 (`sessionStorage`), and PDF rendering is a separate HTTP call (PyMuPDF). Stack:
@@ -51,7 +63,7 @@ closed); the cited code path is the ground truth when a doc and the code disagre
 | WebSocket session routing / handshake (`backend/routes/websocket_routes.py`) | `docs/components/websocket-routing.md` |
 | Gemini Live adapter, tools, models (`backend/adapters/live_ai_gemini.py`, `backend/config.py`) | `docs/components/voice-ai.md` + `docs/standards/ai-models.md` + [`docs/genai_docs/`](docs/genai_docs/README.md) (authoritative SDK syntax) |
 | Context-window compression / session cost+duration bounding (`ContextWindowCompressionConfig`) | `docs/components/context-compression.md` |
-| Token/cost work, or any change to SI size / session cost (esp. SI-reduction epic `polyglot-pdf-jnjj`) | `docs/standards/logging-and-cost.md` -- holds the MEASURED cost invariant (on 2.5, text-in = per-turn SI = 95-98% of cost; audio is negligible) |
+| Token/cost work, or any change to SI size / session cost (esp. SI-reduction epic `polyglot-pdf-jnjj`) | `docs/standards/logging-and-cost.md` -- holds the MEASURED cost invariant (on 2.5 production config, AUDIO-IN is the largest cost line, text-in close behind; the older "text-in is 95-98%" figure is OBSOLETE -- compression + the SI diet capped text-in) |
 | Anything calling the `google-genai` SDK (`from google import genai`) | [`docs/genai_docs/`](docs/genai_docs/README.md) -- vendored SDK reference; web search + Context7 are unreliable for this SDK |
 | Schema forms / client state (`frontend/src/schema-forms/`, `frontend/src/shared/`) | `docs/components/schema-forms.md` |
 | PDF filling (`backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py`) | `docs/components/pdf-filling.md` |

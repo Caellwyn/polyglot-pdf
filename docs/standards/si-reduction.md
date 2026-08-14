@@ -2,7 +2,9 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-08-08 (shipped cut corrected to 31.7%; the 32.4% figure predated a later review round that added back a write-vs-read carve-out. Earlier: 2026-08-07 added the "Editing the SI: REWRITE the block" scar
+*Last updated: 2026-08-14 (bd polyglot-pdf-77j0d: the cost rationale pointer no
+longer asserts the obsolete "text-in is 95-98%" premise -- this epic plus
+compression capped text-in, so audio-in now leads. Earlier: 2026-08-08 (shipped cut corrected to 31.7%; the 32.4% figure predated a later review round that added back a write-vs-read carve-out. Earlier: 2026-08-07 added the "Editing the SI: REWRITE the block" scar
 tissue -- contradictions break as hard as omissions, redundancy is paid every
 turn, and a substring harness cannot see either; measured during the v4 slimming
 work. Earlier: 2026-08-05 docs audit bd polyglot-pdf-2zk3: the ADDRESS CONSISTENCY
@@ -25,9 +27,13 @@ This is the interface the SI templates and their placeholder sets build against,
 work touching the system instruction does not collide on the `config.py` templates.
 It pins: the SI template shapes, the surviving placeholder set, and the status of
 the ADDRESS-CONSISTENCY prose (permanent, not pending removal). The cost rationale
-(why the SI is the lever -- the
-measured "text-in is 95-98% of 2.5 cost, and it's the per-turn SI" invariant) lives
-in [logging-and-cost.md](logging-and-cost.md) (MANDATORY read before SI/cost work);
+(why SI size matters at all, and how much) lives in
+[logging-and-cost.md](logging-and-cost.md) (MANDATORY read before SI/cost work) --
+note that the invariant MOVED: the "text-in is 95-98% of 2.5 cost, and it's the
+per-turn SI" figure that motivated this epic is OBSOLETE. This epic plus context
+compression capped text-in, so AUDIO-IN now leads and SI size is no longer the
+single dominant lever. That is this work succeeding, not being invalidated -- but
+plan new cost work against the current split, not this epic's founding premise;
 the model-selection rule lives in [ai-models.md](ai-models.md); this doc owns the
 **SI shape** contract.
 
