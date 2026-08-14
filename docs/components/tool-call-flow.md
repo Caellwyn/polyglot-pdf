@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-08-08 (bd polyglot-pdf-44ywm: the `name_spellback` clip is plain-text, session-language, and carries the whole verification question, so its delivered response tells the model to stay SILENT rather than ask. Row added by bd polyglot-pdf-22h1f.)*
+*Last updated: 2026-08-14 (bd polyglot-pdf-2k00x: the `ask_secretary` row now names all three shipped uses -- past-answer recall, field identification for navigation, and official instruction text quoted back -- matching the `backend/config.py` declaration, which grew the third use under bd polyglot-pdf-wsao.8. Also current: the `name_spellback` clip is plain-text, session-language, and carries the whole verification question, so its delivered response tells the model to stay SILENT rather than ask (bd polyglot-pdf-22h1f + 44ywm).)*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -25,7 +25,7 @@ was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
 | `confirm_field` | Mark a filled field confirmed after the user verifies | `field_id`, `confirmation_method` |
 | `get_form_status` | Read which fields are filled | `field_ids` |
 | `switch_section` (DEPRECATED) | Navigate to another section -- section-reset fallback only; dropped from the tool set in production continuous mode (bd polyglot-pdf-55jg) | `section_identifier` |
-| `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
+| `ask_secretary` | Ask a cheap text-model helper a plain-language question: recall a past answer, identify a field for navigation, or get the official instruction text quoted back (bd polyglot-pdf-jnjj.45 + wsao.8) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |
 | `switch_to_field` | Jump to one specific field so it becomes current (correction/revisit path, distinct from switch_section) (bd polyglot-pdf-jnjj.36) | `field` |
 | `name_spellback` (FLAG-GATED, `SPELLBACK_TOOL_ENABLED` default off) | Play a deterministic Cloud TTS clip of the CURRENT field's stored value -- letters spoken one by one IN THE SESSION LANGUAGE, and the clip asks the verification question itself, so the model never speaks a spelling and does not re-ask afterwards (bd polyglot-pdf-22h1f + 44ywm). The one round-trip whose tool response is deliberately held open for the client's blocking playback (90s cap). | *(none -- the client resolves the current field; model-supplied args are ignored)* |
