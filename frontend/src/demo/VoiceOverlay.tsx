@@ -30,7 +30,7 @@ import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelec
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState } from '../shared/solState'
-import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
+import { useGeminiSpeaking, useClipPlaying } from '../shared/useGeminiSpeaking'
 
 interface VoiceOverlayProps {
 	schema: FormSchema
@@ -1404,15 +1404,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// accessor (bd polyglot-pdf-2p4y).
 	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
 	const solSpeaking = useGeminiSpeaking(solAudioManager)
-	// `clipPlaying` carries the SAME signal, but ungated by the live-session
-	// check: a synthesized clip (spell-back, and Sol's intro once bd s1iex.5
-	// lands) is audible with no session behind it, and the hook's flag is
-	// driven by the audio element's own lifecycle rather than a backend
-	// message, so the stale-flag hazard the live gate guards against does not
-	// apply (bd polyglot-pdf-s1iex.4).
+	// CLIP-ONLY, deliberately not solSpeaking: a clip is audible with no live
+	// session, so it may bypass deriveSolState's live gate -- but the model's
+	// own speaking flag must NOT, or a stale flag during `reconnecting` would
+	// animate Sol as speaking where it must read `connecting` (the bd
+	// polyglot-pdf-bxng invariant; measured regressing when the two signals
+	// were conflated -- bd polyglot-pdf-s1iex.4).
+	const solClipPlaying = useClipPlaying(solAudioManager)
 	const solState = deriveSolState({
 		status, thinking, speaking: solSpeaking, micSending,
-		clipPlaying: solSpeaking,
+		clipPlaying: solClipPlaying,
 	})
 	// Sol reads the AI's OUTPUT level for its speaking ray-breathing (the mic is
 	// silent while the assistant talks). Reads the ref rather than closing over

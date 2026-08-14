@@ -168,4 +168,26 @@ describe('deriveSolState with a clip playing (bd s1iex.4)', () => {
     // session and no clip, is still not enough to animate.
     expect(deriveSolState({ status: 'Ready', speaking: true })).toBe('idle')
   })
+
+  it('does NOT let a stale model-speaking flag animate a transient session', () => {
+    // The bd polyglot-pdf-bxng invariant. This is the regression an earlier
+    // revision of THIS bead shipped: the overlays passed the model's speaking
+    // flag as `clipPlaying`, so every reconnect state rendered `speaking`
+    // instead of `connecting`. Enumerated over the whole isConnecting set,
+    // not one sample, so a future widening fails here.
+    for (const status of ['reconnecting', 'reconnecting (2)', 'switching_section',
+                          'connecting', 'warming up', 'Setting up audio...']) {
+      expect(deriveSolState({ status, speaking: true })).toBe('connecting')
+      expect(deriveSolState({ status, thinking: true })).toBe('connecting')
+    }
+  })
+
+  it('animates a CLIP during those same transient states', () => {
+    // The flip side, and why the two signals must stay distinct: a real clip
+    // IS audible then (a spell-back can outlive a socket blip), so it should
+    // animate -- which is exactly what the model's stale flag must not do.
+    for (const status of ['reconnecting', 'switching_section', 'connecting']) {
+      expect(deriveSolState({ status, clipPlaying: true })).toBe('speaking')
+    }
+  })
 })

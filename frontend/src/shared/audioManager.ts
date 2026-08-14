@@ -65,6 +65,13 @@ export interface AudioManager {
 	// element-only playback (audible, unanimated) rather than throwing.
 	// The caller still owns play()/pause(): this only taps the signal.
 	attachClipElement: (el: HTMLAudioElement) => () => void
+	// True while >=1 synthesized CLIP is routed and playing (bd
+	// polyglot-pdf-s1iex.4). DISTINCT from isSpeaking(), which is also true for
+	// the model's own PCM: the avatar needs the clip-only signal, because a
+	// clip is audible with no live session while a stale model-speaking flag
+	// during `reconnecting` must NOT animate Sol (the bd polyglot-pdf-bxng
+	// invariant).
+	isClipPlaying: () => boolean
 	destroy: () => void
 }
 
@@ -272,6 +279,22 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// clear each other's speaking state.
 	let activeClipCount = 0
 
+	function isClipPlaying(): boolean {
+		return activeClipCount > 0
+	}
+
+	// Immediate clip-state notification for the UI. The polled hook
+	// (useClipPlaying) is the safety net; this makes the transition sharp
+	// rather than up to one poll interval late at each edge. A plain global,
+	// matching the vff* convention already used on this path.
+	function notifyClipState(): void {
+		try {
+			window.vffOnClipStateChange?.(isClipPlaying())
+		} catch {
+			// A subscriber that throws must never break audio.
+		}
+	}
+
 	function attachClipElement(el: HTMLAudioElement): () => void {
 		// The clip plays with no Live session (Sol's intro runs BEFORE any
 		// connect), so the playback context may not exist yet. Build it here;
@@ -307,6 +330,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		source.connect(getOutputAnalyser(ctx))
 
 		activeClipCount++
+		notifyClipState()
 		const wasNotSpeaking = !geminiIsSpeaking
 		geminiIsSpeaking = true
 		if (wasNotSpeaking && window.vffOnAudioPlaybackStart) {
@@ -319,6 +343,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			if (released) return
 			released = true
 			activeClipCount = Math.max(0, activeClipCount - 1)
+			notifyClipState()
 			// Only clear the speaking state if no other clip is playing AND the
 			// model is not mid-utterance -- playAudio owns that flag too, and a
 			// clip ending must not silence Sol during a model turn.
@@ -1106,6 +1131,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setEnergyCallback,
 		getOutputEnergy,
 		attachClipElement,
+		isClipPlaying,
 		destroy,
 	}
 }

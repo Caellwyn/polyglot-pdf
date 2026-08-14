@@ -86,3 +86,50 @@ export function useGeminiSpeaking(audioManager: AudioManager | null | undefined)
 
 	return speaking
 }
+
+/**
+ * Reactive "is a synthesized CLIP audible right now?" (bd polyglot-pdf-s1iex.4).
+ *
+ * DELIBERATELY NARROWER than useGeminiSpeaking: that hook is true for the
+ * model's own PCM too, and feeding it to `deriveSolState`'s `clipPlaying`
+ * would animate Sol as `speaking` during `reconnecting` / `switching_section`
+ * -- regressing the bd polyglot-pdf-bxng invariant that a live-but-transient
+ * session stays visually distinct (measured: it did exactly that).
+ *
+ * A clip is the ONE case where audible speech legitimately has no live
+ * session behind it, so only the clip-scoped flag may bypass the live gate.
+ * The audio manager owns the ref-counted truth (`isClipPlaying()`); this
+ * polls it on the same lazy cadence as the sibling hook rather than adding
+ * another global, because clip start/end share the vff* events the sibling
+ * already claims and a second claimant would have to re-solve the
+ * chain-and-restore problem documented above.
+ */
+export function useClipPlaying(audioManager: AudioManager | null | undefined): boolean {
+	const [clipPlaying, setClipPlaying] = useState(false)
+
+	useEffect(() => {
+		// Chain, do not clobber -- same rule as the sibling hook above.
+		const prev = window.vffOnClipStateChange
+		window.vffOnClipStateChange = (playing: boolean) => {
+			prev?.(playing)
+			setClipPlaying(playing)
+		}
+		return () => { window.vffOnClipStateChange = prev }
+	}, [])
+
+	useEffect(() => {
+		if (!audioManager?.isClipPlaying) {
+			setClipPlaying(false)
+			return
+		}
+		// Safety net behind the event: reconciles a missed edge (a manager
+		// swapped mid-clip, an unmount landing between attach and release) the
+		// same way the sibling hook covers barge-in flushes.
+		const id = setInterval(() => {
+			setClipPlaying(audioManager.isClipPlaying())
+		}, RECONCILE_MS)
+		return () => clearInterval(id)
+	}, [audioManager])
+
+	return clipPlaying
+}
