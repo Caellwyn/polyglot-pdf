@@ -500,3 +500,70 @@ describe('safeOptions vs safeOptionsPreservingArity index spaces', () => {
     expect(safeOptions(field).length).toBe(2);   // the count the guard needs
   });
 });
+
+// ============================================================================
+// A bare-string option is LEGACY, not malformed (bd polyglot-pdf-fzt0a)
+// ============================================================================
+//
+// `"options": ["A", "B", "C"]` is a DOCUMENTED accepted input on every other
+// surface: backend FormField.normalize_options coerces it to
+// [FieldOption(value=opt, label=opt)]; the voice frontend's optionValue()
+// accepts it; schema_lint's ref-option-value rule builds its legal-value set
+// including isinstance(o, str) entries.
+//
+// The first cut of safeOptions treated it as malformed and DROPPED it, which
+// broke that agreement badly in the editor:
+//   - zero option rows rendered, so the Options panel fell to its empty-state
+//     branch whose "+ Add Option" OVERWRITES options instead of appending --
+//     silently destroying every option, and invisibly, because the rows whose
+//     absence would have tipped the author off were the ones not rendering;
+//   - isChoiceTrigger went false, so ConditionBuilder offered a free-text box
+//     for a field whose values the publish gate constrains -- inviting the
+//     exact ref-option-value ERROR the gate then raises.
+describe('legacy bare-string options are coerced, not dropped (bd polyglot-pdf-fzt0a)', () => {
+  const legacy = { type: 'select', options: ['A', 'B', 'C'] };
+
+  it('safeOptions coerces each string to {value, label}', () => {
+    const opts = safeOptions(legacy);
+    expect(opts).toHaveLength(3);
+    expect(opts[0]).toEqual({ value: 'A', label: 'A' });
+    expect(opts.map(o => o.value)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('safeOptionsPreservingArity coerces them too, keeping arity', () => {
+    const opts = safeOptionsPreservingArity(legacy);
+    expect(opts).toHaveLength(3);
+    expect(opts[2]).toEqual({ value: 'C', label: 'C' });
+    expect(opts.every(o => o !== null)).toBe(true);
+  });
+
+  it('the option COUNT matches the raw length -- the overwrite trap', () => {
+    // This is the assertion that actually guards the data loss: the Options
+    // panel renders (and "+ Add Option" APPENDS) only while this count is
+    // nonzero. Zero here is what routed the author into the overwriting
+    // empty-state branch.
+    expect(safeOptions(legacy).length).toBe(legacy.options.length);
+    expect(safeOptions(legacy).length).toBeGreaterThan(0);
+  });
+
+  it('a MIXED legacy/modern array keeps every real option', () => {
+    const mixed = { type: 'radio', options: ['A', { value: 'b', label: 'B' }] };
+    expect(safeOptions(mixed).map(o => o.value)).toEqual(['A', 'b']);
+  });
+
+  it('genuinely unreadable entries are still dropped', () => {
+    // The coercion must not become "keep everything" -- null/number/array
+    // carry no value, label or pdf_field_name any consumer could read.
+    const junk = { type: 'radio', options: [null, 42, [], { value: 'a', label: 'A' }] };
+    expect(safeOptions(junk).map(o => o.value)).toEqual(['a']);
+  });
+
+  it('a string-option choice field is still judged on its PDF mapping', () => {
+    // Coercing must not accidentally make the field look mapped: a bare string
+    // carries no pdf_field_name, so an unmapped choice field still reports.
+    const status = checkFieldComplete(field('legacy', {
+      type: 'select', pdf_field_name: undefined, options: ['A', 'B'],
+    } as unknown as Partial<FormField>));
+    expect(status.errors.join(' ')).toContain('No PDF mapping');
+  });
+});
