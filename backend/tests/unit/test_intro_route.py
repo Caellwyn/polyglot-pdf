@@ -191,6 +191,27 @@ class TestIntroRoute:
         finally:
             app.dependency_overrides.pop(require_auth, None)
 
+    def test_etag_is_cors_exposed_for_the_cross_origin_dev_client(
+            self, monkeypatch):
+        """ETag is not CORS-safelisted: without expose_headers the bead-.5
+        client reads null on the cross-origin local dev stack (SPA :5173 ->
+        uvicorn :8000) and can never send If-None-Match -- while same-origin
+        production hides the gap (s1iex.3 cross-surface review). Pin the
+        BEHAVIOR at the gate: a CORS response must expose the header."""
+        client, app, require_auth = self._client(monkeypatch, enabled=True)
+        calls: list = []
+        self._fake_synth(monkeypatch, calls)
+        try:
+            resp = client.post(
+                "/api/tts/intro",
+                json={"form_number": "I-90", "language": "English"},
+                headers={"Origin": "http://localhost:5173"})
+            assert resp.status_code == 200
+            exposed = resp.headers.get("access-control-expose-headers", "")
+            assert "etag" in exposed.lower()
+        finally:
+            app.dependency_overrides.pop(require_auth, None)
+
     def test_synthesis_failure_is_502_error_type_only(self, monkeypatch):
         client, app, require_auth = self._client(monkeypatch, enabled=True)
 

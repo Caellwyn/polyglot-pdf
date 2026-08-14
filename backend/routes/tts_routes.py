@@ -118,9 +118,12 @@ async def intro_tts(
         raise HTTPException(status_code=502, detail="tts synthesis failed")
 
     # Private: the route is auth-gated, so shared caches must not store it.
-    # The ETag is derived from the cached audio bytes (stable per process),
-    # so a re-fetch in the same browser session revalidates to a 304 instead
-    # of re-downloading ~400KB.
+    # NOTE the revalidation contract is MANUAL: browsers neither cache POST
+    # responses nor auto-send If-None-Match on POST, so the client (bd
+    # s1iex.5) must store this ETag itself and hand-attach If-None-Match on
+    # a re-fetch to get the 304 instead of re-downloading ~400KB. The
+    # Cache-Control header is inert on a POST today and is kept only because
+    # the plan specifies it (it activates if this ever becomes a GET).
     headers = {"Cache-Control": "private, max-age=3600", "ETag": etag}
     if http_request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)

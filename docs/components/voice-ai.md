@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-11 (bd polyglot-pdf-0rpu: LIVE_VOICE_NAME default Iapetus -> Algieba after Iapetus was heard mispronouncing words in the live demo -- "not applicable" as "not a pickle"; the spell-back clip follows that persona and DERIVES its loudness gain from it. The flag-gated name_spellback tool, its spellback/spellback_response wire pair and the POST /api/tts/spellback route are current as described below.)*
+*Last updated: 2026-08-13 (bd polyglot-pdf-s1iex.3: LIVE_VOICE_NAME gained a THIRD consumer -- the intro-clip route reuses resolve_spellback_voice, at 0 dB rather than the per-voice gain). See [the s1iex.3 journal entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -189,11 +189,15 @@ assigns that key, so a bare assignment on either side would silently drop the
 other (tests pin both orderings plus the empty-name fallback). Set
 `LIVE_VOICE_NAME=""` to fall back to the API default.
 
-**`LIVE_VOICE_NAME` has a SECOND consumer** (bd polyglot-pdf-22h1f, reshaped
-by bd polyglot-pdf-44ywm): `spellback_tts.resolve_spellback_voice` uses it as
-the PERSONA half of the spell-back clip's Cloud TTS voice, so the clip sounds
-like the same speaker -- the Chirp 3 HD family carries the Live API's prebuilt
-voice names. The LOCALE half comes from the SESSION language, not from
+**`LIVE_VOICE_NAME` has a SECOND and a THIRD consumer** (bd
+polyglot-pdf-22h1f, reshaped by bd polyglot-pdf-44ywm; third: the intro clip,
+bd s1iex.3): `spellback_tts.resolve_spellback_voice` uses it as the PERSONA
+half of the spell-back clip's Cloud TTS voice, and the intro-clip route
+(`intro_tts.py`) reuses the same resolution -- so both clips sound like the
+same speaker; the Chirp 3 HD family carries the Live API's prebuilt voice
+names. (Gain differs by surface: the spell-back clip takes the per-voice
+measured gain, the intro clip pins 0 dB -- the measured gain clips ~90s
+content.) The LOCALE half comes from the SESSION language, not from
 `en-US`: a Spanish session derives `es-US-Chirp3-HD-<LIVE_VOICE_NAME>`. A
 persona that has no twin in that locale can NOT break the clip -- the ladder
 degrades (another Chirp3 persona in the same locale, then the locale's default

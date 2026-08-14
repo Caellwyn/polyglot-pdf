@@ -72,6 +72,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # ETag is not a CORS-safelisted response header, so without this the
+    # intro-clip client (bd s1iex.5) reads null on the cross-origin local
+    # dev stack and can never send If-None-Match -- while production
+    # (same-origin via the Hosting rewrite) hides the gap (bd s1iex.3
+    # cross-surface review).
+    expose_headers=["ETag"],
 )
 
 app.include_router(websocket_routes.router)
