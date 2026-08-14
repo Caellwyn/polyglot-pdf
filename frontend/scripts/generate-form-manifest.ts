@@ -4,6 +4,8 @@ import path from "path";
 
 import { shouldCopyKitPath } from "./kitCopyFilter";
 import { isPubliclyServable } from "./kitPublishFilter";
+import { publishableKitFiles, safeKitFilename,
+         DEFAULT_SCHEMA_FILE, DEFAULT_PDF_FILE } from "./kitAssetFilter";
 
 interface KitMetadata {
   // Declared so the status gate reads a real field rather than a stray
@@ -121,8 +123,30 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
       continue;
     }
 
-    const schemaFile = metadata?.schema ?? "schema.json";
-    const pdfFile = metadata?.pdf ?? "form.pdf";
+    // Coerced HERE, so the manifest entry and the copy allowlist are built
+    // from the SAME value. Accepting the declared name verbatim let the two
+    // disagree: a "sub/schema.json" was indexed but never copied (round 1).
+    const schemaFile = safeKitFilename(metadata?.schema, DEFAULT_SCHEMA_FILE);
+    const pdfFile = safeKitFilename(metadata?.pdf, DEFAULT_PDF_FILE);
+    // Say so when a DECLARED name was refused. Every other withholding
+    // decision here warns; coercion was silent, and it is the one case where
+    // falling back can serve DIFFERENT CONTENT rather than nothing: a kit
+    // declaring "real schema.json" (a space fails the charset) with a stale
+    // schema.json beside it published the stale bytes, with a clean build log
+    // (Opus fresh-eyes round 2, reproduced). Distinguish "not declared" from
+    // "declared and refused".
+    for (const [key, declared, used] of [
+      ["schema", metadata?.schema, schemaFile],
+      ["pdf", metadata?.pdf, pdfFile],
+    ] as const) {
+      if (typeof declared === "string" && declared !== used) {
+        console.warn(
+          `[form-manifest] ${entry.name}: declared ${key} ` +
+          `${JSON.stringify(declared)} is not a safe bare filename -- ` +
+          `using ${used} instead`,
+        );
+      }
+    }
 
     const schemaPathFs = path.join(kitDir, schemaFile);
     const pdfPathFs = path.join(kitDir, pdfFile);
@@ -151,7 +175,7 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
   return descriptors;
 }
 
-async function copyKitsToPublic(publishable: Set<string>) {
+async function copyKitsToPublic(publishable: Map<string, Set<string>>) {
   await fs.rm(FORM_KITS_PUBLIC_DIR, { recursive: true, force: true });
   await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
   // shouldCopyKitPath keeps <kit>/_archive/** (superseded revisions, bd
@@ -177,8 +201,30 @@ async function copyKitsToPublic(publishable: Set<string>) {
       // /form-kits/README.md. Stated explicitly rather than left to fall out of
       // the kit-id lookup, since a silent scope change is the kind of thing
       // that gets "fixed" back later (Opus fresh-eyes round 2).
-      const kitId = rel.split(path.sep)[0];
-      return publishable.has(kitId);
+      const segments = rel.split(path.sep);
+      const kitId = segments[0];
+      const allowedFiles = publishable.get(kitId);
+      if (allowedFiles === undefined) {
+        return false;
+      }
+      // The kit's own directory entry.
+      if (segments.length === 1) {
+        return true;
+      }
+      // ALLOWLIST inside a published kit (bd polyglot-pdf-983wp): only the
+      // files the client actually fetches. Everything else in a kit dir --
+      // schema_archived.json, <id>_schema_backup.json, migration_report.json,
+      // the annotated PDF, the instructions booklet the EDITOR reads -- was
+      // being served at a guessable path. Two of those are superseded schemas,
+      // the same bytes the revision archive keeps behind authentication.
+      //
+      // An allowlist, not a denylist: a denylist is one new filename away from
+      // leaking again, which is exactly how these survived bd
+      // polyglot-pdf-w3zw's underscore rule -- they carry ordinary names.
+      //
+      // Depth > 2 cannot occur for an allowed file (they are all flat in the
+      // kit dir), so a nested path is refused by the same check.
+      return segments.length === 2 && allowedFiles.has(segments[1]);
     },
   });
 }
@@ -208,7 +254,11 @@ async function run() {
   // The wipe now always runs, and an empty manifest is written rather than an
   // old one left behind. An empty bundle is the CORRECT output for a tree with
   // nothing publishable.
-  const publishable = new Set(forms.map((form) => form.id));
+  // Each kit maps to the files it may serve, taken from ITS OWN metadata, so a
+  // kit naming a non-conventional schema or PDF still ships the right one.
+  const publishable = new Map(
+    forms.map((form) => [form.id, publishableKitFiles(form.schemaFile, form.pdfFile)]),
+  );
   await copyKitsToPublic(publishable);
   await writeManifest(forms);
 
