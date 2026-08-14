@@ -104,6 +104,61 @@ def test_paragraphs_is_the_only_content_key(language):
     assert set(_languages()[language].keys()) == {"paragraphs"}, language
 
 
+# The undertaking paragraph is TWO clauses: (a) the applicant agrees to REVIEW
+# the document (themselves and with a certified professional), and (b) they
+# absolve the brand of liability. Only (a) is the legal-posture element that
+# docs/standards/confirmation-and-audit.md's "Undertaken" register rests on --
+# (b) is a separate liability release that test_brand_never_translated covers.
+#
+# CALIBRATED FLOOR, not a guess: the shortest real undertaking paragraph is
+# Chinese at 89 chars (CJK packs more meaning per character); the next shortest
+# is Korean at 142. A drop of clause (a) removes roughly 40-55% of the
+# paragraph in every language measured. 80 is set just under the true minimum
+# so a genuine translation never trips it, while a release-only rewrite -- which
+# in the Latin-script languages lands at 120-235 chars -- is caught by the
+# ENGLISH anchor below rather than by length alone.
+_MIN_UNDERTAKING_CHARS = 80
+
+# The English source text is NOT translated, so it can be asserted verbatim.
+# This is the guard that actually pins clause (a): an adversarial mutation that
+# keeps both markers, keeps the release, and stays long (the realistic shape of
+# a translation-sweep loss) passes a structural check but fails this one.
+_EN_REVIEW_CLAUSE = "you agree to review the completed document"
+_EN_PROFESSIONAL = "certified professional"
+
+
+def test_english_undertaking_states_the_REVIEW_clause_verbatim():
+    """The English undertaking must literally state the review agreement.
+
+    English is the source language and is not translated, so the exact clause
+    is assertable. This is the anchor the per-language structural test cannot
+    provide: it pins that the paragraph promises REVIEW, not merely that a
+    paragraph carrying the agree-placeholder and the brand exists.
+
+    Caught a real weakness in the first version of this file's undertaking
+    test: rewriting a paragraph to keep the agree-placeholder, the brand, and
+    a plausible length while DROPPING "agrees to review ... with a certified
+    professional" left that test green. This one goes red.
+    """
+    paragraphs = _languages()["English"]["paragraphs"]
+    undertaking = [
+        p for p in paragraphs if AGREE_PLACEHOLDER in p and BRAND in p
+    ]
+    assert len(undertaking) == 1, "English: expected one undertaking paragraph"
+    text = undertaking[0]
+    assert _EN_REVIEW_CLAUSE in text, (
+        "The English undertaking no longer states that the applicant agrees to "
+        "REVIEW the completed document. That clause is the 'Undertaken' "
+        "register in docs/standards/confirmation-and-audit.md -- the liability "
+        "release alone does not carry it."
+    )
+    assert _EN_PROFESSIONAL in text, (
+        "The English undertaking no longer names a CERTIFIED PROFESSIONAL. "
+        "Self-review alone is a materially weaker undertaking and changes the "
+        "legal posture the deferral language depends on."
+    )
+
+
 @pytest.mark.parametrize("language", sorted(_languages()))
 def test_review_undertaking_paragraph_survives_translation(language):
     """The REVIEW UNDERTAKING must survive into every language.
@@ -139,7 +194,7 @@ def test_review_undertaking_paragraph_survives_translation(language):
     )
     # Substantive, not a stub: the English clause is ~230 chars; a translation
     # that collapsed to just the placeholder would pass a bare truthiness check.
-    assert len(undertaking[0]) > 80, (
+    assert len(undertaking[0]) >= _MIN_UNDERTAKING_CHARS, (
         f"{language}: the review-undertaking paragraph is suspiciously short "
         f"({len(undertaking[0])} chars) -- verify the clause survived."
     )

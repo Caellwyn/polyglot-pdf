@@ -287,7 +287,7 @@ two -- check which one you are touching before editing any of them.
 | Register | Where | Wording |
 |---|---|---|
 | **Required** (internal) | customer contracts | review is a contractual obligation; this is what makes the deferral coherent |
-| **Undertaken** (the applicant agrees) | `intro_script.json` para 6, all 18 languages, and the modal that renders the same paragraphs | "you **agree to** review the completed document yourself and with a certified professional before filing" |
+| **Undertaken** (the applicant agrees) | `intro_script.json` para 6, all 18 languages -- **the SPOKEN clip only**, see the drift note below | "you **agree to** review the completed document yourself and with a certified professional before filing" |
 | **Advised** (we recommend) | `DisclaimerModal.tsx` `p2`/`fullText` | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
 
 The SI sits deliberately at the WEAKEST of these: "Do not promise the user that
@@ -303,6 +303,20 @@ level them by weakening the agreement (it is the applicant's undertaking, and
 the `[AGREE LABEL]` click is what records it) or by strengthening the SI (which
 would re-introduce the exact rdsl bug). They are different speech acts by
 different parties: *we advise*, *they agree*, *contracts require*.
+
+**KNOWN DRIFT between the two user-facing surfaces (bd `polyglot-pdf-nsb4y`).**
+`intro_script.json`'s own comment and `intro_tts.py` both assert a HARD
+INVARIANT that "the modal renders exactly these paragraphs -- one source, no
+separate fullText." **That is not true today.** `DisclaimerModal.tsx` renders
+its own `p1`/`p2`/`p3` and contains no undertaking at all (`grep -ci "agree to
+review"` returns 0); no frontend component reads `intro_script.json`'s
+paragraphs. The one-source wiring is unshipped work (bd `polyglot-pdf-s1iex.5`,
+open). **So which register a given applicant accepted currently depends on
+whether they LISTENED to the clip or READ the modal.** Do not cite the
+"one source" invariant as though it holds. Resolving this -- whether the modal
+adopts the spoken undertaking, or the invariant claim is dropped -- is a
+legal/product decision (`intro_script.json` notes a counsel pass is still
+pending), tracked in `nsb4y`, not something to settle in passing.
 
 Conflating these is the known failure mode, not a hypothetical one. In bd
 `polyglot-pdf-rdsl` the SI wrongly *promised* review ("Every form drafted here is
