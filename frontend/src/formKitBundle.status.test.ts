@@ -62,6 +62,10 @@ const CASES: Array<{ id: string; metadata: string | null; shipped: boolean; why:
     why: "fail closed: absent metadata proves nothing" },
   { id: "unknown-status", metadata: '{"status":"archived","label":"Future status"}', shipped: false,
     why: "fail closed: a status this build does not know is not complete" },
+  { id: "custom-names",
+    metadata: '{"status":"complete","label":"Custom","schema":"n400.json","pdf":"n400.pdf"}',
+    shipped: true,
+    why: "published, but names its schema and PDF itself" },
 ];
 
 let publicDir: string;
@@ -74,12 +78,26 @@ beforeAll(async () => {
   for (const kit of CASES) {
     const dir = path.join(source, kit.id);
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[]}');
-    await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
+    if (kit.id === "custom-names") {
+      // Declares its own filenames; the conventional ones do not exist here.
+      await fs.writeFile(path.join(dir, "n400.json"), '{"fields":[]}');
+      await fs.writeFile(path.join(dir, "n400.pdf"), "%PDF-1.7");
+    } else {
+      await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[]}');
+      await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
+    }
     if (kit.metadata !== null) {
       await fs.writeFile(path.join(dir, "metadata.json"), kit.metadata);
     }
   }
+
+  // Inside the PUBLISHED kit: the internal working files that were being served
+  // at guessable paths (bd polyglot-pdf-983wp). Named after the real ones.
+  await fs.writeFile(path.join(source, "live", "schema_archived.json"), '{"old":true}');
+  await fs.writeFile(path.join(source, "live", "live_schema_backup.json"), '{"bak":true}');
+  await fs.writeFile(path.join(source, "live", "migration_report.json"), '{"rep":true}');
+  await fs.writeFile(path.join(source, "live", "live-annotated.pdf"), "%PDF-annot");
+  await fs.writeFile(path.join(source, "live", "live-instructions.pdf"), "%PDF-instr");
 
   // Inside the PUBLISHED kit: the underscore-excluded surfaces. These ride the
   // same script run so the COMPOSED filter is pinned, not just its status half
@@ -143,7 +161,7 @@ describe("the static bundle ships published kits only", () => {
   });
 
   it("ships the published kit intact -- the gate must not break the good case", async () => {
-    expect(manifestIds).toEqual(["live"]);
+    expect(manifestIds.sort()).toEqual(["custom-names", "live"]);
     expect(await exists(path.join(publicDir, "live", "schema.json"))).toBe(true);
     expect(await exists(path.join(publicDir, "live", "form.pdf"))).toBe(true);
   });
@@ -169,6 +187,35 @@ describe("the static bundle ships published kits only", () => {
     // separates the two.
     expect(await exists(
       path.join(publicDir, "live", "_archive", "12-2024", "schema.json"))).toBe(false);
+  });
+
+  it.each([
+    ["schema_archived.json", "a superseded revision -- the archive keeps these behind auth"],
+    ["live_schema_backup.json", "a superseded revision under an ordinary name"],
+    ["migration_report.json", "an authoring artifact"],
+    ["live-annotated.pdf", "an authoring artifact"],
+    ["live-instructions.pdf", "an EDITOR-side input for booklet extraction"],
+  ])("a published kit does not ship %s (%s)", async (file) => {
+    // These carry ORDINARY names, which is why bd polyglot-pdf-w3zw's
+    // underscore rule never caught them. Enumerated one per case so a
+    // regression names the file it leaked.
+    expect(await exists(path.join(publicDir, "live", file))).toBe(false);
+  });
+
+  it("ships EXACTLY the three files a client fetches, and nothing else", async () => {
+    // The allowlist stated as a complete set rather than five absences: a
+    // denylist is one new filename away from leaking again, so assert what IS
+    // published, not what is not.
+    const shipped = (await fs.readdir(path.join(publicDir, "live"))).sort();
+    expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
+  });
+
+  it("follows a kit's OWN declared schema and pdf names", async () => {
+    // The allowlist is per-kit, taken from that kit's metadata. Hardcoding
+    // schema.json/form.pdf would withhold the only files a custom-named kit
+    // has -- publishing an empty directory and a manifest pointing at nothing.
+    const shipped = (await fs.readdir(path.join(publicDir, "custom-names"))).sort();
+    expect(shipped).toEqual(["metadata.json", "n400.json", "n400.pdf"]);
   });
 
   it("does not publish root-level files like the authoring README", async () => {
@@ -204,7 +251,8 @@ describe("a stale bundle from a previous build is cleared", () => {
     const manifest = JSON.parse(
       await fs.readFile(path.join(publicDir, "index.json"), "utf-8"));
     expect(manifest.generatedAt).not.toBe("old");
-    expect(manifest.forms.map((f: { id: string }) => f.id)).toEqual(["live"]);
+    expect(manifest.forms.map((f: { id: string }) => f.id).sort())
+      .toEqual(["custom-names", "live"]);
   });
 });
 

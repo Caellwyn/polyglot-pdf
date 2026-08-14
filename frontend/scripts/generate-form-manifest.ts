@@ -4,6 +4,7 @@ import path from "path";
 
 import { shouldCopyKitPath } from "./kitCopyFilter";
 import { isPubliclyServable } from "./kitPublishFilter";
+import { publishableKitFiles } from "./kitAssetFilter";
 
 interface KitMetadata {
   // Declared so the status gate reads a real field rather than a stray
@@ -151,7 +152,7 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
   return descriptors;
 }
 
-async function copyKitsToPublic(publishable: Set<string>) {
+async function copyKitsToPublic(publishable: Map<string, Set<string>>) {
   await fs.rm(FORM_KITS_PUBLIC_DIR, { recursive: true, force: true });
   await fs.mkdir(FORM_KITS_PUBLIC_DIR, { recursive: true });
   // shouldCopyKitPath keeps <kit>/_archive/** (superseded revisions, bd
@@ -177,8 +178,30 @@ async function copyKitsToPublic(publishable: Set<string>) {
       // /form-kits/README.md. Stated explicitly rather than left to fall out of
       // the kit-id lookup, since a silent scope change is the kind of thing
       // that gets "fixed" back later (Opus fresh-eyes round 2).
-      const kitId = rel.split(path.sep)[0];
-      return publishable.has(kitId);
+      const segments = rel.split(path.sep);
+      const kitId = segments[0];
+      const allowedFiles = publishable.get(kitId);
+      if (allowedFiles === undefined) {
+        return false;
+      }
+      // The kit's own directory entry.
+      if (segments.length === 1) {
+        return true;
+      }
+      // ALLOWLIST inside a published kit (bd polyglot-pdf-983wp): only the
+      // files the client actually fetches. Everything else in a kit dir --
+      // schema_archived.json, <id>_schema_backup.json, migration_report.json,
+      // the annotated PDF, the instructions booklet the EDITOR reads -- was
+      // being served at a guessable path. Two of those are superseded schemas,
+      // the same bytes the revision archive keeps behind authentication.
+      //
+      // An allowlist, not a denylist: a denylist is one new filename away from
+      // leaking again, which is exactly how these survived bd
+      // polyglot-pdf-w3zw's underscore rule -- they carry ordinary names.
+      //
+      // Depth > 2 cannot occur for an allowed file (they are all flat in the
+      // kit dir), so a nested path is refused by the same check.
+      return segments.length === 2 && allowedFiles.has(segments[1]);
     },
   });
 }
@@ -208,7 +231,11 @@ async function run() {
   // The wipe now always runs, and an empty manifest is written rather than an
   // old one left behind. An empty bundle is the CORRECT output for a tree with
   // nothing publishable.
-  const publishable = new Set(forms.map((form) => form.id));
+  // Each kit maps to the files it may serve, taken from ITS OWN metadata, so a
+  // kit naming a non-conventional schema or PDF still ships the right one.
+  const publishable = new Map(
+    forms.map((form) => [form.id, publishableKitFiles(form.schemaFile, form.pdfFile)]),
+  );
   await copyKitsToPublic(publishable);
   await writeManifest(forms);
 
