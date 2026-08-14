@@ -466,6 +466,31 @@ describe('safeOptions vs safeOptionsPreservingArity index spaces', () => {
     expect(safeOptions(clean)).toEqual(safeOptionsPreservingArity(clean));
   });
 
+  it('an option index is only meaningful in ONE space -- raw', () => {
+    // The cross-component contract (fresh-eyes round 2). FieldList hands an
+    // option's row index to onMoveOption; App.tsx then indexes `options` with
+    // it. Both must use the SAME space, and it must be RAW, because App.tsx
+    // writes back a rebuilt options array.
+    //
+    // The round-1 fix moved App.tsx to arity-preserving while FieldList still
+    // rendered from the dropping view -- which RELOCATED the bug instead of
+    // fixing it: with [null, a, b], dragging 'a' (dropped idx 0) selected
+    // preserving[0] === null (silent no-op), and dragging 'b' (dropped idx 1)
+    // selected preserving[1] === 'a', moving the WRONG option.
+    const preserving = safeOptionsPreservingArity(field);
+    const dropping = safeOptions(field);
+
+    // What the buggy pairing did, stated so it cannot silently come back:
+    expect(preserving[dropping.findIndex(o => o.value === 'b')]?.value)
+      .toBe('a');            // dropped-space idx read in raw space -> WRONG option
+    expect(preserving[dropping.findIndex(o => o.value === 'a')])
+      .toBeNull();           // ...or nothing at all
+
+    // The contract: a raw index round-trips to the same option.
+    const rawIdxOfA = preserving.findIndex(o => o?.value === 'a');
+    expect(preserving[rawIdxOfA]?.value).toBe('a');
+  });
+
   it('a real-option COUNT must come from safeOptions, not the raw length', () => {
     // FieldEditor's atFloor guard ("a choice field needs >= 2 real options")
     // read field.options.length, which counts the malformed entry: 3 > 2, so

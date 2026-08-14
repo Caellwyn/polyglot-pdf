@@ -2,7 +2,8 @@ import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
 import { GUIDANCE_STALE_RULE, currentIdentity, needsGuidanceAck, staleFieldIds }
   from '../utils/guidanceStaleness';
-import { checkFieldComplete, safeOptions } from '../utils/validation';
+import { checkFieldComplete, safeOptions, safeOptionsPreservingArity }
+  from '../utils/validation';
 import { getReview, isReviewTargetFromFindings, statusFromFindings }
   from '../utils/reviewStatus';
 import { isFindingDismissable, ruleLabel, RULE_REMEDIES }
@@ -857,12 +858,21 @@ export const FieldList: React.FC<FieldListProps> = ({
                     const isSelected = field.id === selectedFieldId;
                     const isDragOver = dragOverField === field.id;
                     const isDragging = draggedField?.fieldId === field.id;
-                    // safeOptions (bd polyglot-pdf-8bjdx): a truthy non-array
-                    // `options` (or one carrying null entries) passes a bare
-                    // `.length > 0` check and then throws out of the `.map`
-                    // below, blanking the WHOLE field list rather than one row.
-                    const safeOpts = safeOptions(field);
-                    const hasOptions = safeOpts.length > 0;
+                    // bd polyglot-pdf-8bjdx. Two views, deliberately:
+                    //  - safeOpts (ARITY-PRESERVING) drives the option ROWS,
+                    //    because the row's `idx` is handed to onMoveOption and
+                    //    then indexes the RAW options array in App.tsx. A
+                    //    compacted index there moves the WRONG option (drag
+                    //    'b' -> 'a' moves) or a null one (silent no-op).
+                    //  - realOptCount counts only REAL options, for the
+                    //    "does this field have options at all" gate and the
+                    //    displayed count -- a malformed entry is not an option.
+                    // A truthy non-array `options` passes a bare `.length > 0`
+                    // check and then throws out of the `.map`, which is what
+                    // blanked the WHOLE field list rather than one row.
+                    const safeOpts = safeOptionsPreservingArity(field);
+                    const realOptCount = safeOptions(field).length;
+                    const hasOptions = realOptCount > 0;
                     const isFieldExpanded = expandedFields.has(field.id);
                     const canAcceptOption = draggedOption && (field.type === 'radio' || field.type === 'checkbox') && draggedOption.fieldId !== field.id;
 
@@ -951,7 +961,7 @@ export const FieldList: React.FC<FieldListProps> = ({
                               </span>
                               {hasOptions && (
                                 <span className="text-xs text-gray-500">
-                                  ({safeOpts.length})
+                                  ({realOptCount})
                                 </span>
                               )}
                             </button>
@@ -962,8 +972,11 @@ export const FieldList: React.FC<FieldListProps> = ({
                         {hasOptions && isFieldExpanded && (
                           <div className="ml-6 border-l-2 border-gray-200 bg-gray-50">
                             {safeOpts.map((option, idx) => {
+                              // A malformed entry holds its slot (so idx stays
+                              // in raw space) but renders nothing.
+                              if (option === null) return null;
                               const isOptionDragging = draggedOption?.fieldId === field.id && draggedOption?.optionIndex === idx;
-                              
+
                               return (
                                 <div
                                   key={`${field.id}-option-${idx}`}
