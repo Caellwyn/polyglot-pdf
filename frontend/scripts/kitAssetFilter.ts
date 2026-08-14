@@ -32,16 +32,23 @@
  * WHAT THE CLIENT FETCHES, verified rather than assumed: SchemaFormDemo reads
  * `schemaPath` and `pdfPath` from the manifest, and the manifest builds both
  * from metadata's `schema`/`pdf` keys, falling back to schema.json/form.pdf.
- * Nothing else in frontend/src requests a bundle path other than index.json.
- * metadata.json itself ships too -- it is small, carries the label the
- * catalogue renders, and a kit that reaches this filter is published by
- * definition, so its status is not a disclosure.
+ * Nothing else in frontend/src requests a bundle path other than index.json --
+ * INCLUDING metadata.json, which is why it is no longer shipped either.
+ *
+ * An earlier version of this module allowlisted metadata.json, justified as
+ * "carrying the label the catalogue renders". That was wrong twice over: the
+ * manifest already embeds label and description, so nothing needed it; and the
+ * editor has since grown that file, which now carries a `readiness` block
+ * (review counts, error totals, schema_sha1, who stamped it) and an
+ * `editing_lock` naming the role currently holding the kit. Publishing it
+ * served internal review state to anonymous clients at a guessable path --
+ * the exact class this module exists to close, admitted by the allowlist doing
+ * the closing (Opus fresh-eyes round 5).
  */
 
 /** The conventional names, used when metadata does not override them. */
 export const DEFAULT_SCHEMA_FILE = "schema.json";
 export const DEFAULT_PDF_FILE = "form.pdf";
-export const METADATA_FILE = "metadata.json";
 
 /** Mirrors backend/services/form_kits.py `_SAFE_FILENAME_RE`. */
 const SAFE_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -96,6 +103,5 @@ export function publishableKitFiles(
   return new Set([
     safeKitFilename(schemaFile, DEFAULT_SCHEMA_FILE),
     safeKitFilename(pdfFile, DEFAULT_PDF_FILE),
-    METADATA_FILE,
   ]);
 }

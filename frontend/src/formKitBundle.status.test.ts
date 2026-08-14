@@ -82,10 +82,19 @@ const CASES: Array<{ id: string; metadata: string | null; shipped: boolean; why:
     metadata: '{"status":"complete","label":"Spacey","schema":"real schema.json"}',
     shipped: true,
     why: "declares a name with a SPACE -- fallback must not serve stale bytes silently" },
+  { id: "pdf-unsafe",
+    metadata: '{"status":"complete","label":"PdfUnsafe","pdf":"real form.pdf"}',
+    shipped: true,
+    why: "declares an unsafe PDF -- the coercion's OTHER half, which was unpinned" },
+  { id: "dirtrap",
+    metadata: '{"status":"complete","label":"DirTrap","pdf":"assets"}',
+    shipped: true,
+    why: "its declared pdf name is also a real DIRECTORY -- only the depth check refuses its contents" },
 ];
 
 let publicDir: string;
 let manifestIds: string[];
+let buildStderr: string;
 
 beforeAll(async () => {
   const source = await fs.mkdtemp(path.join(os.tmpdir(), "kits-status-src-"));
@@ -104,6 +113,22 @@ beforeAll(async () => {
       // union this file ships, and every test still passed (Opus fresh-eyes
       // round 1 proved exactly that).
       await fs.writeFile(path.join(dir, "schema.json"), '{"leftover":true}');
+    } else if (kit.id === "dirtrap") {
+      // Its declared pdf name is ALSO a real directory. The basename must BE
+      // an allowed filename exactly for the exploit to reproduce -- my first
+      // attempt used `form.pdf.d`, which is not allowlisted, so the mutation
+      // survived anyway (Opus round 5, and my own first fix for it).
+      await fs.mkdir(path.join(dir, "assets"), { recursive: true });
+      await fs.writeFile(path.join(dir, "assets", "assets"), "%PDF-nested");
+      await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[]}');
+      await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-1.7");
+    } else if (kit.id === "pdf-unsafe") {
+      // Declares an unsafe PDF name that EXISTS on disk. schema/pdf coercion is
+      // written as a symmetric pair, but only the schema half was pinned --
+      // reverting the pdf half alone left 35/35 green (Opus round 5).
+      await fs.writeFile(path.join(dir, "real form.pdf"), "%PDF-DECLARED");
+      await fs.writeFile(path.join(dir, "schema.json"), '{"fields":[]}');
+      await fs.writeFile(path.join(dir, "form.pdf"), "%PDF-CONVENTIONAL");
     } else if (kit.id === "charset-name" || kit.id === "spacey-name") {
       // The declared file EXISTS on disk, so nothing but the charset rule
       // stops it shipping. The conventional fallback carries different content
@@ -150,6 +175,10 @@ beforeAll(async () => {
   await fs.mkdir(path.join(source, "_translation"), { recursive: true });
   await fs.writeFile(path.join(source, "_translation", "es.json"), '{"hola":true}');
 
+  // A DIRECTORY whose basename is an allowed filename, inside the published
+  // kit. Only the depth check refuses its contents: a basename-only match
+  // admits the dir (form.pdf is allowlisted) and then admits allow-named
+  // children at any depth. That mutation left 35/35 green (Opus round 5).
   // Root-level files: authoring material that is not a kit.
   await fs.writeFile(path.join(source, "README.md"), "# how to build a kit");
   await fs.writeFile(path.join(source, "notes.txt"), "scratch");
@@ -175,7 +204,7 @@ beforeAll(async () => {
   // ASYNC rather than execFileSync: a synchronous subprocess blocks this
   // worker's event loop for its whole duration, which is antisocial in a
   // parallel runner even though nothing here currently depends on it.
-  await promisify(execFile)(
+  const run = await promisify(execFile)(
     process.execPath,
     [path.join(FRONTEND, "node_modules", "tsx", "dist", "cli.mjs"), SCRIPT],
     {
@@ -187,6 +216,11 @@ beforeAll(async () => {
       cwd: FRONTEND,
     },
   );
+  // Captured so the coercion WARNING is observable. It was added because
+  // silent coercion served stale bytes with a clean build log -- and the fix
+  // for a silent-diagnostic bug was itself unobservable, deletable with no
+  // signal (Opus round 5).
+  buildStderr = run.stderr.toString();
 
   const manifest = JSON.parse(
     await fs.readFile(path.join(publicDir, "index.json"), "utf-8"),
@@ -269,12 +303,12 @@ describe("the static bundle ships published kits only", () => {
     expect(await exists(path.join(publicDir, "live", file))).toBe(false);
   });
 
-  it("ships EXACTLY the three files a client fetches, and nothing else", async () => {
+  it("ships EXACTLY the two files a client fetches, and nothing else", async () => {
     // The allowlist stated as a complete set rather than five absences: a
     // denylist is one new filename away from leaking again, so assert what IS
     // published, not what is not.
     const shipped = (await fs.readdir(path.join(publicDir, "live"))).sort();
-    expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
+    expect(shipped).toEqual(["form.pdf", "schema.json"]);
   });
 
   it.each([
@@ -295,7 +329,7 @@ describe("the static bundle ships published kits only", () => {
     // be refused by THAT rule and no other.
     expect(await exists(path.join(publicDir, id, declared))).toBe(false);
     const shipped = (await fs.readdir(path.join(publicDir, id))).sort();
-    expect(shipped).toEqual(["form.pdf", "metadata.json", "schema.json"]);
+    expect(shipped).toEqual(["form.pdf", "schema.json"]);
   });
 
   it("serves the CONVENTIONAL bytes when a declared name is refused", async () => {
@@ -350,7 +384,47 @@ describe("the static bundle ships published kits only", () => {
     // schema.json/form.pdf would withhold the only files a custom-named kit
     // has -- publishing an empty directory and a manifest pointing at nothing.
     const shipped = (await fs.readdir(path.join(publicDir, "custom-names"))).sort();
-    expect(shipped).toEqual(["metadata.json", "n400.json", "n400.pdf"]);
+    expect(shipped).toEqual(["n400.json", "n400.pdf"]);
+  });
+
+  it("does not publish metadata.json -- it carries editor-internal state", async () => {
+    // No client fetches it (the manifest already embeds label and
+    // description), and the editor writes a `readiness` block and an
+    // `editing_lock` into it -- review counts and who holds the kit, served to
+    // anonymous clients at a guessable path. The allowlist that exists to stop
+    // exactly this was admitting it (Opus round 5).
+    for (const id of ["live", "custom-names"]) {
+      expect(await exists(path.join(publicDir, id, "metadata.json"))).toBe(false);
+    }
+  });
+
+  it("coerces an unsafe declared PDF, not just an unsafe schema", async () => {
+    // The coercion is written as a symmetric pair and only the schema half
+    // could fail; reverting the pdf half alone left every test green.
+    const shipped = (await fs.readdir(path.join(publicDir, "pdf-unsafe"))).sort();
+    expect(shipped).toEqual(["form.pdf", "schema.json"]);
+    expect(await exists(path.join(publicDir, "pdf-unsafe", "real form.pdf"))).toBe(false);
+    // ...and the manifest points at the coerced name, so index and bundle agree.
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(publicDir, "index.json"), "utf-8"));
+    const entry = manifest.forms.find((f: { id: string }) => f.id === "pdf-unsafe");
+    expect(entry.pdfPath).toBe("/form-kits/pdf-unsafe/form.pdf");
+  });
+
+  it("refuses the CONTENTS of a directory whose name is an allowed file", async () => {
+    // The depth check, which the allowlist alone cannot enforce. `dirtrap`
+    // declares its pdf as "assets" and also has a real `assets/` directory:
+    // a basename-only match admits that directory (its name IS allowlisted)
+    // and then its allow-named children at any depth.
+    expect(await exists(path.join(publicDir, "dirtrap", "assets", "assets"))).toBe(false);
+  });
+
+  it("WARNS when a declared filename is refused", async () => {
+    // The fix for a silent-diagnostic bug must itself be observable.
+    expect(buildStderr).toMatch(/spacey-name: declared schema .* not a safe bare filename/);
+    expect(buildStderr).toMatch(/pdf-unsafe: declared pdf .* not a safe bare filename/);
+    // ...and stays quiet for a kit that declares nothing unsafe.
+    expect(buildStderr).not.toMatch(/custom-names: declared/);
   });
 
   it("does not publish root-level files like the authoring README", async () => {
