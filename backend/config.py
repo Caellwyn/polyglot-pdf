@@ -345,14 +345,18 @@ class Settings(BaseModel):
 	# standing hypothesis for that and was DISCONFIRMED in production, which
 	# points at the voice model rather than the sampling. Algieba is the
 	# maintainer's own pick from their Chirp 3 notebook.
-	# NOTE this also changes the SPELL-BACK CLIP's voice (resolve_spellback_voice
-	# derives {locale}-Chirp3-HD-{this}), which is intended -- one speaker
-	# across both surfaces. The clip's loudness gain is DERIVED from whichever
-	# persona ends up speaking (spellback_tts.spellback_gain_db), because
-	# voices differ in base loudness -- Iapetus's +7.0 dB CLIPS on Algieba --
-	# so changing this name cannot leave a stale gain behind. A persona with no
-	# recorded measurement takes the conservative (quietest) value and a test
-	# fails until it is measured.
+	# NOTE this also changes the SPELL-BACK CLIP's voice AND the INTRO CLIP's
+	# voice (resolve_spellback_voice derives {locale}-Chirp3-HD-{this}; the
+	# intro route reuses that resolution, bd s1iex.3) -- intended: one speaker
+	# across all three surfaces. The SPELL-BACK clip's loudness gain is
+	# DERIVED from whichever persona ends up speaking
+	# (spellback_tts.spellback_gain_db), because voices differ in base
+	# loudness -- Iapetus's +7.0 dB CLIPS on Algieba -- so changing this name
+	# cannot leave a stale gain behind. A persona with no recorded measurement
+	# takes the conservative (quietest) value and a test fails until it is
+	# measured. The INTRO clip does NOT take that gain: it pins 0 dB
+	# (intro_tts.INTRO_GAIN_DB), because the per-voice gain is measured on
+	# ~4s clips and clips ~90s content.
 	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Algieba")
 	# Sampling temperature for the Live session (bd polyglot-pdf-0rpu; DEPLOYABLE
 	# since 2026-08-10). EMPTY by default = do not send it at all, so a service
@@ -428,6 +432,16 @@ class Settings(BaseModel):
 	# voice for every session; resolution lives in
 	# spellback_tts.resolve_spellback_voice.
 	SPELLBACK_TTS_VOICE: str = os.getenv("SPELLBACK_TTS_VOICE", "")
+
+	# Scripted intro+disclaimer clip (sprint 20, bd polyglot-pdf-s1iex.3):
+	# gates POST /api/tts/intro (503 while off). The BACKEND half of the
+	# epic's two-flag design -- the frontend lifecycle flag is a separate
+	# build-time flag, and the two can skew across the two-surface deploy
+	# (the skew matrix lives in docs/sprint_20_sol-intro-tts_plan.md; deploy
+	# backend first, frontend second). Default OFF: the route lands dark.
+	INTRO_TTS_ENABLED: bool = (
+		os.getenv("INTRO_TTS_ENABLED", "false").lower() == "true"
+	)
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
 	# the secretary (lite text model) translates the form's option labels into

@@ -16,15 +16,22 @@ maps through the same table as the ASR bias (language_codes.py).
 
 Gated on SPELLBACK_TOOL_ENABLED (503 when off) so the deployment surface does
 not expose a general-purpose TTS synthesizer while the feature is dark.
+
+Also home to POST /api/tts/intro (sprint 20, bd polyglot-pdf-s1iex.3): Sol's
+scripted intro+disclaimer clip. Keyed route -- the caller sends a bounded
+form-number key and a language name; every synthesized word comes from
+server-side tables (intro_tts.py), never caller text. Gated on
+INTRO_TTS_ENABLED (503 when off).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 import structlog
 
 from backend.config import get_settings
 from backend.services.auth import require_auth
+from backend.services.intro_tts import KNOWN_FORMS, synthesize_intro
 from backend.services.spellback_tts import (
     MAX_SPELLBACK_CHARS,
     synthesize_spellback,
@@ -70,3 +77,54 @@ async def spellback_tts(
         raise HTTPException(status_code=502, detail="tts synthesis failed")
 
     return Response(content=audio, media_type="audio/mpeg")
+
+
+class IntroRequest(BaseModel):
+    # A key into intro_tts.KNOWN_FORMS ("I-90"), never free text.
+    form_number: str
+    # The session's spoken-language NAME as the frontend holds it ("Spanish").
+    # Optional; absent or unknown falls back to the English script + voice,
+    # matching the disclaimer modal's own translation fallback.
+    language: str | None = None
+
+
+@router.post("/api/tts/intro")
+async def intro_tts(
+    request: IntroRequest,
+    http_request: Request,
+    _user: dict = Depends(require_auth),
+) -> Response:
+    settings = get_settings()
+    if not getattr(settings, "INTRO_TTS_ENABLED", False):
+        raise HTTPException(status_code=503, detail="intro tts disabled")
+
+    form_number = (request.form_number or "").strip()
+    if form_number not in KNOWN_FORMS:
+        # Reject before anything reaches synthesis -- the keyed-route
+        # contract: caller text never becomes spoken audio.
+        raise HTTPException(status_code=400, detail="unknown form")
+
+    try:
+        audio, etag = await synthesize_intro(
+            request.language, form_number, settings
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unknown form")
+    except Exception as exc:
+        # Error TYPE only (the p84m principle) -- consistent with the
+        # spell-back route above, even though intro inputs are all
+        # server-side table values rather than PII.
+        _log.error("intro_tts_failed", error_type=type(exc).__name__)
+        raise HTTPException(status_code=502, detail="tts synthesis failed")
+
+    # Private: the route is auth-gated, so shared caches must not store it.
+    # NOTE the revalidation contract is MANUAL: browsers neither cache POST
+    # responses nor auto-send If-None-Match on POST, so the client (bd
+    # s1iex.5) must store this ETag itself and hand-attach If-None-Match on
+    # a re-fetch to get the 304 instead of re-downloading ~400KB. The
+    # Cache-Control header is inert on a POST today and is kept only because
+    # the plan specifies it (it activates if this ever becomes a GET).
+    headers = {"Cache-Control": "private, max-age=3600", "ETag": etag}
+    if http_request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=audio, media_type="audio/mpeg", headers=headers)

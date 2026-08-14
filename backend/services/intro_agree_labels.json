@@ -1,0 +1,21 @@
+{
+  "_comment": "Server-side agree-button labels for the intro clip (sprint 20, bd polyglot-pdf-s1iex.3). MIRRORED (not shared) from BUTTON_TRANSLATIONS in frontend/src/schema-forms/components/DisclaimerModal.tsx -- the two are pinned to each other by a static test (backend/tests/unit/test_intro_route.py::test_agree_labels_match_frontend_mirror). intro_tts.build_intro_text interpolates these into the [AGREE LABEL] placeholders of intro_script.json, so the spoken label matches the on-screen button in every language (the bd s863 requirement, preserved by construction). Data file, UTF-8 -- code files stay ASCII-only (scar #6).",
+  "English": "I Agree",
+  "Spanish": "Estoy de Acuerdo",
+  "Chinese": "我同意",
+  "Tagalog": "Sumasang-ayon Ako",
+  "Arabic": "أوافق",
+  "French": "J'accepte",
+  "Korean": "동의합니다",
+  "German": "Ich Stimme Zu",
+  "Portuguese": "Eu Concordo",
+  "Hindi": "मैं सहमत हूं",
+  "Italian": "Accetto",
+  "Urdu": "میں متفق ہوں",
+  "Persian": "موافقم",
+  "Dutch": "Ik Ga Akkoord",
+  "Ukrainian": "Я Погоджуюсь",
+  "Russian": "Принимаю",
+  "Swedish": "Jag Godkänner",
+  "Afrikaans": "Ek Stem Saam"
+}

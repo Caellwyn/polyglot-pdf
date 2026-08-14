@@ -1,13 +1,9 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-13 (bd polyglot-pdf-hqztg: a fourth kit status, `submitted`, with the role checked PER TRANSITION -- editors submit for review, authors publish -- plus two lock routes an author can always preempt. A status transition RELEASES the lock, except reopening a live kit, which keeps it for the author doing the reopening; and the structural gates now run on a submit as well as a publish. Also bd polyglot-pdf-6x1j: a guarded DELETE route -- author-only, and refused when the confirmation-record check cannot run. Also bd polyglot-pdf-xzw5 -- the /status route
-gained `author_version`, required to publish a kit with no government
-edition_date and immutable once published, and the audit record's
-`edition_date` column now carries a three-rank marker. Also bd
-polyglot-pdf-22h1f -- Surface contracts gained the flag-gated `name_spellback`
-tool row, the `spellback`/`spellback_response` round-trip, and the
-`/api/tts/spellback` route -- and bd polyglot-pdf-na1zy, see
-[the na1zy journal entry](journal/entries/2026-08-07-bd-na1zy-local-folder-readiness-stamping.md).
+*Last updated: 2026-08-13 (bd polyglot-pdf-s1iex.3: the `/api/tts/intro` route
+row plus the previously-missing `/api/tts/spellback` row in the routes table).
+See [the s1iex.3 journal entry](journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md)
+for closeout details; earlier same-day changes are in their own journal entries.
 The Surface contracts section is the code-derived cross-surface data-contract
 map for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
@@ -82,6 +78,8 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is). `components/pdf-filling.md` |
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). `standards/confirmation-and-audit.md` |
+| POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
+| POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304; 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is). `components/pdf-filling.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is). |
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Deliberately public** (no frontend consumer loads this route -- the viewer fetches the STATIC `/form-kits/...` copy; the same public-form bytes ship in the static bundle regardless -- bd z2is). |
