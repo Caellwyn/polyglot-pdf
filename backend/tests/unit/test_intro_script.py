@@ -122,6 +122,41 @@ _MIN_UNDERTAKING_CHARS = 80
 # legitimate re-wording. Re-measure if a language is added.
 _MIN_UNDERTAKING_RATIO = 0.80
 
+# ABSOLUTE per-language baseline, in characters, measured from the shipped
+# file. The ratio guard above has an in-document denominator (paragraph 5),
+# and paragraph 5 is ITSELF a review statement -- so an editorial pass that
+# shortens the review language would plausibly touch paragraphs 5 and 6
+# TOGETHER, and the ratio recovers while the undertaking is gone. Demonstrated:
+# a Korean release-only paragraph at 81 chars with paragraph 5 trimmed to 95
+# gives ratio 0.85 and sails past the ratio guard (bd polyglot-pdf-brd1q).
+#
+# An absolute floor cannot be defeated that way -- there is nothing in the
+# document to move. 0.75x the shipped length leaves generous room for genuine
+# re-wording while a dropped clause (40-55% of the paragraph) lands far below.
+# REGENERATE these when a language is added or the script is legitimately
+# rewritten; do not hand-edit a single entry to make a failure go away.
+_SHIPPED_UNDERTAKING_CHARS = {
+    "Afrikaans": 282,
+    "Arabic": 177,
+    "Chinese": 89,
+    "Dutch": 296,
+    "English": 238,
+    "French": 253,
+    "German": 327,
+    "Hindi": 247,
+    "Italian": 271,
+    "Korean": 142,
+    "Persian": 223,
+    "Portuguese": 257,
+    "Russian": 252,
+    "Spanish": 250,
+    "Swedish": 275,
+    "Tagalog": 309,
+    "Ukrainian": 256,
+    "Urdu": 269,
+}
+_UNDERTAKING_SHRINK_TOLERANCE = 0.75
+
 # The English source text is NOT translated, so it can be asserted verbatim.
 # This is the guard that actually pins clause (a): an adversarial mutation that
 # keeps both markers, keeps the release, and stays long (the realistic shape of
@@ -219,6 +254,19 @@ def test_review_undertaking_paragraph_survives_translation(language):
         f"across all 18 languages: 0.93-1.31). That is the signature of a "
         f"DROPPED CLAUSE -- most likely the review undertaking, leaving only the "
         f"liability release. See docs/standards/confirmation-and-audit.md."
+    )
+    baseline = _SHIPPED_UNDERTAKING_CHARS.get(language)
+    assert baseline is not None, (
+        f"{language}: no shipped-length baseline. A language was added -- "
+        f"regenerate _SHIPPED_UNDERTAKING_CHARS from intro_script.json."
+    )
+    assert len(undertaking[0]) >= baseline * _UNDERTAKING_SHRINK_TOLERANCE, (
+        f"{language}: the undertaking paragraph is {len(undertaking[0])} chars "
+        f"against a shipped baseline of {baseline}. Below "
+        f"{_UNDERTAKING_SHRINK_TOLERANCE:.0%} of the shipped length is the "
+        f"signature of a DROPPED CLAUSE. Unlike the ratio guard above, this "
+        f"cannot be masked by editing a neighbouring paragraph in the same "
+        f"pass (bd polyglot-pdf-brd1q)."
     )
     assert len(undertaking[0]) >= _MIN_UNDERTAKING_CHARS, (
         f"{language}: the review-undertaking paragraph is suspiciously short "
