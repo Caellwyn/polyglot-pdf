@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-11 (bd polyglot-pdf-5xhbb: documented the K_SERVICE isolation fixtures in both conftest.py files). Earlier: 2026-08-07, see [the gnb0 journal entry](../journal/entries/2026-08-07-bd-gnb0-serialize-regenerate-guidance.md) for closeout details.*
+*Last updated: 2026-08-13. See [the s1iex.1 journal entry](../journal/entries/2026-08-13-bd-s1iex.1-intro-copy-master-and-translations.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -214,6 +214,13 @@ probe's default. Cost/behavior measurements (token curves, latency, tool-call
 compliance) additionally need realistic CONTENT — production-length system
 instructions and plausible answers — because the unevictable base (SI + tools)
 sets the floor the numbers sit on.
+
+**A generative endpoint's output varies run to run — never accept a
+single-draw measurement at a decision boundary.** Chirp3-HD TTS re-generates
+prosody per request: identical ~80s text measured 81.6/81.6/88.6s (~9% swing),
+so one draw landing 0.1s inside a duration window proved nothing. Repeat the
+measurement and center with margin for the spread (see the
+[2026-08-13 s1iex.1 journal entry](../journal/entries/2026-08-13-bd-s1iex.1-intro-copy-master-and-translations.md)).
 
 ## Coverage & CI
 
