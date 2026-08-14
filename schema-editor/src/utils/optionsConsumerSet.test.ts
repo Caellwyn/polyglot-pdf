@@ -25,6 +25,13 @@ import { join, basename } from 'node:path';
 
 const SRC = join(__dirname, '..');
 
+// Line split that tolerates CRLF -- this repo is developed on Windows, and a
+// trailing \r would otherwise ride along on every matched line and break
+// fragment comparisons.
+function splitLines(text: string): string[] {
+  return text.split('\n').map(l => l.replace(/\r$/, ''));
+}
+
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -43,18 +50,70 @@ function walk(dir: string): string[] {
 // non-array value AND (via the callback's property read) on a null entry.
 // A bare `.length` / truthiness check is safe -- verified in node:
 //   ('not-a-list').length === 10, and (['a',null]).length === 2, neither throws.
-const ITERATION = /field\.options\s*(?:\?\?|\|\|)?\s*(?:\[\])?\s*\)?\s*\.\s*(map|filter|every|some|forEach|reduce|flatMap|sort|find)\b/;
+//
+// Matches ANY receiver, not just the literal `field` (fresh-eyes round 1): the
+// first cut anchored on `field.options` and was evaded three ways --
+// `trigger.options.map(...)` (a FormField under another name, which is how
+// ConditionBuilder.tsx escaped the net), `const o = field.options; o.map(...)`,
+// and `const {options} = field; options.map(...)`. Widening the receiver costs
+// some false positives on unrelated `.options` bags; those go in
+// SAFE_EXEMPTIONS with a reason, which is the trade this test wants -- a
+// missed consumer is silent, an over-match is loud.
+const ITERATION =
+  /(?:\b\w+\.)?\boptions\b\s*(?:\?\?|\|\|)?\s*(?:\[\])?\s*\)?\s*\??\.\s*(map|filter|every|some|forEach|reduce|flatMap|sort|find)\b/;
 
-// Reads that are provably safe, each with the reason it is exempt. Keyed by
-// `basename:line-content-fragment` so a MOVE does not silently re-exempt a
-// DIFFERENT read.
-const SAFE_EXEMPTIONS: Array<{ file: string; fragment: string; why: string }> = [
+// Reads that are provably safe, each with the reason it is exempt.
+//
+// An exemption must match EXACTLY ONE line in its file (enforced by the second
+// test below). The first cut only required >= 1 match, which meant a NEW unsafe
+// call that happened to share the fragment text -- `.map((opt, idx) => ...)` is
+// a common idiom -- would silently inherit an exemption written for a different
+// call's reachability argument (fresh-eyes round 1).
+const SAFE_EXEMPTIONS: Array<{
+  file: string; fragment: string; why: string; occurrences?: number;
+}> = [
   {
     file: 'fieldGrouping.ts',
     fragment: 'field.options.map((opt, idx)',
     why: 'ungroupField -- gated by canUngroup(), which returns false for any '
        + 'malformed options (it compares safeOptions() length against the raw '
        + 'array length). Unreachable with a bad shape.',
+  },
+  // The widened receiver pattern (any `<x>.options.<method>`) also matches
+  // LOCALS that were already normalized on the line above. Each of these is a
+  // `const options = <normalizer>(field)` binding, verified by reading the
+  // assignment -- the iteration is on the SAFE list, not on field.options.
+  {
+    file: 'validation.ts',
+    fragment: 'const unmapped = options.filter(o => !o?.pdf_field_name);',
+    why: 'checkFieldComplete -- `options` is safeOptionsPreservingArity(field) '
+       + 'assigned a few lines above; the ?. also covers the null slots it '
+       + 'deliberately preserves.',
+  },
+  {
+    file: 'reviewStatus.ts',
+    fragment: "return options.some(o => !(o && typeof o === 'object'",
+    why: 'hasUncoveredStructuralError (bd polyglot-pdf-93p8) -- `options` is '
+       + 'an Array.isArray-guarded local, and the callback type-checks each '
+       + 'entry inline.',
+  },
+  {
+    file: 'PreviewPane.tsx',
+    fragment: 'options.map(opt => (',
+    why: 'PreviewInput -- `options` is safeOptions(field), assigned once at the '
+       + 'top of the function and reused by the radio/checkbox/select renders.',
+    occurrences: 3,
+  },
+  {
+    file: 'ConditionBuilder.tsx',
+    fragment: 'current.filter((v: unknown) => options.some(o => o.value === v))',
+    why: 'coerceAtom -- `options` is safeOptions(trigger!) assigned above, '
+       + 'gated by isChoiceTrigger (bd polyglot-pdf-yb41u).',
+  },
+  {
+    file: 'ConditionBuilder.tsx',
+    fragment: 'next.value = options.some(o => o.value === atom.value)',
+    why: 'coerceAtom -- same safeOptions(trigger!) local as the entry above.',
   },
 ];
 
@@ -91,16 +150,29 @@ describe('every field.options consumer is guarded (bd polyglot-pdf-8bjdx)', () =
     ).toEqual([]);
   });
 
-  it('the exemption list itself is live -- each entry still matches real code', () => {
-    // A stale exemption is worse than none: it silently whitelists whatever
-    // moves into that filename+fragment later.
+  it('every exemption matches its file EXACTLY the expected number of times', () => {
+    // Two failure modes, both silent without this check:
+    //   STALE   -- the code moved/changed, so the exemption whitelists nothing
+    //              real but still sits in the list looking meaningful;
+    //   WIDENED -- a NEW call appeared sharing the fragment text, inheriting an
+    //              exemption written for a different call's reachability
+    //              argument. Pinning the COUNT catches that; `>= 1` did not.
     for (const e of SAFE_EXEMPTIONS) {
-      const hits = walk(SRC).filter(f => {
-        if (basename(f) !== e.file) return false;
-        return readFileSync(f, 'utf8').includes(e.fragment);
-      });
-      expect(hits.length, `stale exemption: ${e.file} no longer contains "${e.fragment}"`)
-        .toBeGreaterThan(0);
+      const expected = e.occurrences ?? 1;
+      let found = 0;
+      for (const f of walk(SRC)) {
+        if (basename(f) !== e.file) continue;
+        for (const line of splitLines(readFileSync(f, 'utf8'))) {
+          if (line.includes(e.fragment)) found += 1;
+        }
+      }
+      expect(
+        found,
+        `exemption for ${e.file} "${e.fragment}" matched ${found} line(s), `
+        + `expected exactly ${expected}. If a NEW call added that text, it does `
+        + `NOT inherit this exemption -- guard it, or give it its own entry `
+        + `with its own reason. If the code moved, update or remove the entry.`,
+      ).toBe(expected);
     }
   });
 });

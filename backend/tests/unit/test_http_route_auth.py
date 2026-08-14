@@ -194,5 +194,11 @@ def test_the_complete_require_auth_route_set_is_pinned():
 def test_spellback_requires_token(_auth_on):
     # The route this bead's doc fix was missing -- gated in code since it was
     # added, but never pinned, so nothing caught the docs falling behind.
-    resp = client.post("/api/tts/spellback", json={"text": "A1234"})
+    #
+    # A schema-VALID body (`value`, per SpellbackRequest) so the 401 is
+    # unambiguously require_auth and not a 422 -- same discipline as _FILL_BODY
+    # above. require_auth runs ahead of body validation, so a wrong-shaped body
+    # would still 401 here and the test would pass for the wrong reason.
+    resp = client.post("/api/tts/spellback",
+                       json={"value": "A1234", "language": "Spanish"})
     assert resp.status_code == 401

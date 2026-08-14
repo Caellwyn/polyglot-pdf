@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { checkFieldComplete, validateSchema } from './validation';
+import {
+  checkFieldComplete, safeOptions, safeOptionsPreservingArity, validateSchema,
+} from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
 // Minimal valid field; override per test. read_only/pdf_field_name are the
@@ -420,5 +422,56 @@ describe('malformed options degrade instead of throwing (bd polyglot-pdf-8bjdx)'
     } as unknown as Partial<FormField>);
     const status = checkFieldComplete(f);
     expect(status.errors.join(' ')).toContain('No PDF mapping');
+  });
+});
+
+// ============================================================================
+// The two index spaces must not diverge (bd polyglot-pdf-8bjdx, fresh-eyes r1)
+// ============================================================================
+//
+// safeOptions DROPS malformed entries; safeOptionsPreservingArity KEEPS them as
+// null placeholders. Mixing the two over one field inside a single component is
+// a silent correctness bug, not a crash: FieldEditor built its lint-finding
+// anchor map from the arity-preserving list (raw indices) while rendering rows
+// from the dropping list (compacted indices), so with options=[null, a, b] a
+// finding anchored to option 'a' (raw index 1) was looked up at 'b's row.
+//
+// These pin the PROPERTY that makes the two interchangeable-looking helpers
+// actually different, so the next person choosing between them sees it stated.
+describe('safeOptions vs safeOptionsPreservingArity index spaces', () => {
+  const field = {
+    options: [null, { label: 'A', value: 'a' }, { label: 'B', value: 'b' }],
+  };
+
+  it('preserving keeps RAW indices; dropping COMPACTS them', () => {
+    const preserving = safeOptionsPreservingArity(field);
+    const dropping = safeOptions(field);
+
+    expect(preserving.length).toBe(3);
+    expect(preserving[0]).toBeNull();
+    expect(preserving[1]?.value).toBe('a');
+
+    expect(dropping.length).toBe(2);
+    expect(dropping[0].value).toBe('a');   // 'a' moved from index 1 -> 0
+
+    // The divergence, stated as an assertion: the SAME option has different
+    // indices in the two views. Anything that indexes one must not be read
+    // with an index derived from the other.
+    expect(preserving.findIndex(o => o?.value === 'a'))
+      .not.toBe(dropping.findIndex(o => o.value === 'a'));
+  });
+
+  it('both agree exactly when every entry is well-formed', () => {
+    const clean = { options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }] };
+    expect(safeOptions(clean)).toEqual(safeOptionsPreservingArity(clean));
+  });
+
+  it('a real-option COUNT must come from safeOptions, not the raw length', () => {
+    // FieldEditor's atFloor guard ("a choice field needs >= 2 real options")
+    // read field.options.length, which counts the malformed entry: 3 > 2, so
+    // Remove stayed enabled and one click produced a single-option choice
+    // field the v2 backend rejects.
+    expect(field.options.length).toBe(3);        // the misleading raw count
+    expect(safeOptions(field).length).toBe(2);   // the count the guard needs
   });
 });

@@ -1455,18 +1455,24 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               <h4 className="text-sm font-semibold text-gray-900">Options</h4>
             </div>
 
-            {/* safeOptions, NOT arity-preserving (bd polyglot-pdf-8bjdx):
-                this block is a deeply interactive per-option EDITOR reading
-                many keys off each option. A malformed entry has none of them,
-                so rendering a null row would mean threading nullability
-                through every control for a row the author cannot meaningfully
-                edit anyway -- dropping it degrades to "the malformed entry is
-                not shown", while the field itself still renders. FieldEditor
-                shows only the ONE selected field, so unlike FieldList this
-                cannot hide other fields' rows. */}
+            {/* ARITY-PRESERVING, and malformed rows are SKIPPED rather than
+                compacted away (bd polyglot-pdf-8bjdx, fresh-eyes round 1).
+                `idx` here is not just a React key -- it indexes
+                anchored.byOption (built from optionValues above, which uses
+                safeOptionsPreservingArity) and it is the index every edit
+                handler below splices on. Rendering over the DROPPING variant
+                gave this block a second, compacted index space: with
+                options=[null, a, b], a finding anchored to raw index 1 (that
+                is, option 'a') was looked up at 'b's row, and an edit to 'a'
+                spliced position 0. One index space, raw, is the invariant --
+                a malformed entry renders nothing but still consumes its slot.
+                The write handlers deliberately keep safeOptions(): they
+                REBUILD options, and dropping the malformed entry there is the
+                repair, not a desync. */}
             {safeOptions(field).length > 0 ? (
               <div className="space-y-2">
-                {safeOptions(field).map((option, idx) => (
+                {safeOptionsPreservingArity(field).map((option, idx) => (
+                  option === null ? null : (
                   <div key={idx} className="space-y-1 border-l-2 border-gray-100 pl-2">
                     {/* Findings ABOUT this option render at its row
                         (sprint-18 C1): missing/duplicate/comma value, wrong
@@ -1561,9 +1567,18 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         // group unsaveable/unpromotable in one click. Structural
                         // splits go through Ungroup, not option-by-option Remove
                         // (Codex PR #310 round 3).
+                        // safeOptions().length, not the RAW length (bd
+                        // polyglot-pdf-8bjdx, fresh-eyes round 1): a malformed
+                        // entry inflates the raw count, so a field with only 2
+                        // real options read as 3 and left Remove enabled --
+                        // one click away from the single-option choice field
+                        // this floor exists to prevent, which the v2 backend
+                        // model rejects at the promotion gate. `.length` never
+                        // throws, so the crash-focused fix above did not cover
+                        // this and the source-scan guard cannot see it.
                         const atFloor =
                           field.type !== 'checkbox' &&
-                          (field.options?.length ?? 0) <= 2;
+                          safeOptions(field).length <= 2;
                         const blocked = referencedBy.length > 0 || atFloor;
                         const reason = referencedBy.length > 0
                           ? `Used by a condition on: ${referencedBy.join(', ')}. Retarget those first.`
@@ -1676,7 +1691,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                       </details>
                     )}
                   </div>
-                ))}
+                )))}
                 {(authorTier || field.type === 'select') && (
                   <button
                     className="btn btn-secondary w-full text-sm"
