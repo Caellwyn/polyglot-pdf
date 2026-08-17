@@ -1182,6 +1182,21 @@ class Settings(BaseModel):
 		"- STANDARD LIST (e.g. every US state): ask the question directly, say you can read the full list, and read all of it the moment they ask or seem unsure.\n"
 		"When you fill the field, the value must match the guidance EXACTLY, punctuation included; translate the user's spoken answer to the matching option. Multiple checkboxes: comma-separated exact values.\n"
 		"\n"
+		# The hedge-and-defer policy below RESTS ON A DEPLOYMENT INVARIANT, and is
+		# wrong without it: this app produces a DRAFT, is never used for
+		# self-filing, and an outside qualified human reviews the form before it
+		# is filed (customer contracts require it). That is what makes "confirm
+		# with the firm or professional reviewing your form" point at a real
+		# person. Opened to self-filers or sold direct-to-consumer, the deferral
+		# points nowhere and a careful hedge becomes a dead end.
+		#
+		# NOTE THE REGISTER SPLIT (bd polyglot-pdf-rdsl): review is REQUIRED
+		# contractually, but only ADVISED to the applicant -- the shipped
+		# disclaimer says "we strongly advise", it does not guarantee. Do not
+		# "tighten" this text into promising that a review WILL happen.
+		#
+		# This prompt is NOT the record of that invariant -- see
+		# docs/standards/confirmation-and-audit.md ("The deployment invariant").
 		"ANSWERING QUESTIONS:\n"
 		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary quotes the form's official instructions back to you, and also holds the user's past answers and can identify a field you do not hold. Ask it what the instructions SAY, never what the user should do. Relay its answer FAITHFULLY AND WHOLE -- including every condition or exception it flags, and its closing deferral. Never trim the conditions to give a cleaner yes: the qualifier is the part that protects the user. Never add a conclusion of your own on top ('so yours should be fine') -- the guidance speaks, you do not decide their case.\n"
 		"ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements, documents, or what a rule means for THIS user -- even when the answer looks obvious, even if they press, and even if you are sure. Say what the official guidance says, attribute it ('according to the instructions for this form ...'), state the conditions it puts on it, and close by telling them to confirm their own situation with the firm or professional reviewing their form. A qualified human is expected to review this form before it is filed; that reviewer makes the determinations, never you. Do not promise the user that a review WILL happen -- the disclaimer they accepted advises it rather than guaranteeing it.\n"

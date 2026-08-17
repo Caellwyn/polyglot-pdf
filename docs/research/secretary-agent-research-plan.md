@@ -26,10 +26,14 @@ own context; it **buzzes the secretary** with a prose question and gets back
 either the answer or a clarifying question ("did they mean their married name or
 their maiden name?").
 
-**Why this shape.** The measured cost reality (see
-[`../standards/logging-and-cost.md`](../standards/logging-and-cost.md)) is that on
-the production model (2.5), the **system instruction re-sent every turn is
-95-98% of the bill**. The cheapest possible principal carries ONLY the current
+**Why this shape.** The measured cost reality AT THE TIME THIS PLAN WAS WRITTEN
+was that on the production model (2.5), the **system instruction re-sent every
+turn is 95-98% of the bill**. *(That figure is now OBSOLETE -- compression plus
+the SI diet capped text-in, and AUDIO-IN now leads; see
+[`../standards/logging-and-cost.md`](../standards/logging-and-cost.md) for the
+current split. The plan's SHAPE still follows: a thinner principal is still
+cheaper, it is just no longer the overwhelming lever it was. Left otherwise
+intact as the record of the reasoning at the time.)* The cheapest possible principal carries ONLY the current
 question's full context plus the recent conversation -- never the whole form. But
 a principal that thin **cannot navigate**: it doesn't know other fields exist, so
 it can't go back to a previous answer or circle back to an unfilled one. The

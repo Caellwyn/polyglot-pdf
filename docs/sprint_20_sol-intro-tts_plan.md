@@ -47,9 +47,14 @@ honestly -- in that order.
    `{session-locale}-Chirp3-HD-{LIVE_VOICE_NAME}`, so a Spanish session gets
    `es-US-Chirp3-HD-Algieba` -- same speaker, right accent.
 
-**Not a cost saving.** Per `docs/standards/logging-and-cost.md`, per-turn
-system-instruction text is 95-98% of session cost and audio is negligible. Do this
-for the three reasons above.
+**Cost was NOT the motivation** -- do this for the three reasons above. (This
+plan originally cited the old "text-in is 95-98%, audio is negligible" invariant
+here. That figure is OBSOLETE: per `docs/standards/logging-and-cost.md`, AUDIO-IN
+is now the largest single cost line. Note this cuts the other way from how the
+sentence read -- moving speech off the Live model and onto deterministic Cloud TTS
+plausibly IS a cost win now, not a neutral change. Not re-argued here; flagged so
+the next reader does not inherit the stale premise. See bd
+`polyglot-pdf-n1y9h`, which owns re-checking exactly this premise.)
 
 **Prior art.** The deterministic spell-back clip (bd `22h1f` / `44ywm`) established
 the whole pattern: Cloud TTS, same voice persona, locale-aware, client-played, mic

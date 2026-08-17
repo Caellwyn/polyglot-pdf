@@ -2,32 +2,37 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-08-08 (shipped cut corrected to 31.7%; the 32.4% figure predated a later review round that added back a write-vs-read carve-out. Earlier: 2026-08-07 added the "Editing the SI: REWRITE the block" scar
-tissue -- contradictions break as hard as omissions, redundancy is paid every
-turn, and a substring harness cannot see either; measured during the v4 slimming
-work. Earlier: 2026-08-05 docs audit bd polyglot-pdf-2zk3: the ADDRESS CONSISTENCY
-section is corrected -- bead B1 (polyglot-pdf-jnjj.13) is CLOSED WON'T-DO after the G1
-gate came back NO-GO, so the in-SI prose stays permanently in both templates as the
-primary check, not pending removal). Continuous-DTI is the production default
-(`USE_DTI` defaults true, bd polyglot-pdf-7872); the legacy full-SI is the deprecated
-section-reset fallback (bd polyglot-pdf-55jg). The JIT manifest SI mode was removed
-(bd polyglot-pdf-en2j); the two surviving SI modes are DTI (shipped) and legacy
-full-SI (fallback). Both templates' CONSTRAINTS direct the model to briefly convey a
-field's Note / hint-carried context while asking (bd polyglot-pdf-bo4m); the per-turn
-`{next_field_hint}` string built by the frontend (`formatNextFieldHint`) appends
-`help.instructions` as "Context to briefly convey when asking: ...". See
+*Last updated: 2026-08-14 (bd polyglot-pdf-77j0d: the cost rationale pointer no
+longer asserts the obsolete "text-in is 95-98%" premise -- this epic plus
+compression capped text-in, so audio-in now leads).*
+
+Continuous-DTI is the production default (`USE_DTI` defaults true, bd
+polyglot-pdf-7872); the legacy full-SI is the deprecated section-reset fallback (bd
+polyglot-pdf-55jg). The JIT manifest SI mode was removed (bd polyglot-pdf-en2j); the
+two surviving SI modes are DTI (shipped) and legacy full-SI (fallback). The
+ADDRESS CONSISTENCY prose stays permanently in both templates as the primary check
+(bead B1 / polyglot-pdf-jnjj.13 is CLOSED WON'T-DO after the G1 gate came back
+NO-GO) -- it is not pending removal. Both templates' CONSTRAINTS direct the model to
+briefly convey a field's Note / hint-carried context while asking (bd
+polyglot-pdf-bo4m); the per-turn `{next_field_hint}` string built by the frontend
+(`formatNextFieldHint`) appends `help.instructions` as "Context to briefly convey
+when asking: ...". See
 [../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md).
 The legacy SI renders the canonical nested `help` block
 (`help.instructions`/`help.format_hint`) (bd polyglot-pdf-jnjj.23). Created as the F1
-foundation contract (bd polyglot-pdf-jnjj.2).*
+foundation contract (bd polyglot-pdf-jnjj.2).
 
 This is the interface the SI templates and their placeholder sets build against, so
 work touching the system instruction does not collide on the `config.py` templates.
 It pins: the SI template shapes, the surviving placeholder set, and the status of
 the ADDRESS-CONSISTENCY prose (permanent, not pending removal). The cost rationale
-(why the SI is the lever -- the
-measured "text-in is 95-98% of 2.5 cost, and it's the per-turn SI" invariant) lives
-in [logging-and-cost.md](logging-and-cost.md) (MANDATORY read before SI/cost work);
+(why SI size matters at all, and how much) lives in
+[logging-and-cost.md](logging-and-cost.md) (MANDATORY read before SI/cost work) --
+note that the invariant MOVED: the "text-in is 95-98% of 2.5 cost, and it's the
+per-turn SI" figure that motivated this epic is OBSOLETE. This epic plus context
+compression capped text-in, so AUDIO-IN now leads and SI size is no longer the
+single dominant lever. That is this work succeeding, not being invalidated -- but
+plan new cost work against the current split, not this epic's founding premise;
 the model-selection rule lives in [ai-models.md](ai-models.md); this doc owns the
 **SI shape** contract.
 

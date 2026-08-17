@@ -16,7 +16,7 @@ secretary is *for*, this one says which keys reach it.
 
 | Surface | Built by | Scope | Cost profile |
 |---------|----------|-------|--------------|
-| **Voice SI** (Live model) | `manifest_service.get_field_guidance` -> `ai_context.render_field_guidance` | the CURRENT field only (DTI) | per-turn text-in = **95-98% of session cost** ([`logging-and-cost.md`](logging-and-cost.md)) |
+| **Voice SI** (Live model) | `manifest_service.get_field_guidance` -> `ai_context.render_field_guidance` | the CURRENT field only (DTI) | re-billed EVERY turn; text-in is ~36-47% of session cost and the SI is the part this doc controls ([`logging-and-cost.md`](logging-and-cost.md)) |
 | **Secretary context** (text model) | `secretary_context.render_static_catalog` + `render_values_tail` | the WHOLE form + verbatim booklet | cheap model, implicit-cache prefix |
 
 The asymmetry is the point: the expensive realtime model gets one field; the
