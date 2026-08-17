@@ -6,13 +6,16 @@ producer/consumer lines, all handshake key citations, and the `full_schema`
 consumer chain -- one citation, the secretary-catalog renderer, was pointing
 at the wrong FILE, not just a wrong line) plus the adjacent "3. WS control
 messages" and "4. Backend <-> Gemini Live" blocks, all drifted off the same
-`websocket_routes.py` code motion the ws-protocol.md fix addressed. Sections 5
-("Fill round-trip") and 6 ("Confirmation audit trail") carry the same drift
-class and are tracked separately (bd polyglot-pdf-bxr3p) -- out of this bead's
-scope. Also current: the `PDFFillRequest` line range in section 5 does not
-straddle into `fill_pdf` and the dropped-key example there names
-`form_number`, the key that actually produces `form_id="unknown"` (a dropped
-`kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 + qxad. The
+`websocket_routes.py` code motion the ws-protocol.md fix addressed. The
+`SchemaFormState.fieldValues` producer citation that opens section 5 was fixed
+in the same pass (`schemaFormState.ts:27`, persisted `:248-263`) since it sits
+right at that block's boundary; the REST of section 5 ("Fill round-trip") and
+all of section 6 ("Confirmation audit trail") carry the same drift class and
+are tracked separately (bd polyglot-pdf-bxr3p) -- out of this bead's scope.
+Also current: the `PDFFillRequest` line range in section 5 does not straddle
+into `fill_pdf` and the dropped-key example there names `form_number`, the key
+that actually produces `form_id="unknown"` (a dropped `kit_id` degrades to
+`kit_id=None` instead) -- bd polyglot-pdf-a4v4 + qxad. The
 Surface contracts section is the code-derived cross-surface data-contract map
 for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
