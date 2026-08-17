@@ -742,6 +742,26 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
   });
 
+  it('asks from the compact STRIP publish button too, not just the card', async () => {
+    // The twin. My mutation testing initially reverted only the strip button
+    // and every test stayed green -- because publishDraftKit clicks the CARD.
+    // Each twin needs its own click, or one of the pair can lose the wiring
+    // silently. This repo's most repeated defect, and it nearly landed again.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    // No card grid: the compact strip is the default view.
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit"
+                            role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
   it('asks about older versions from the DRAFT publish path too', async () => {
     // The path that actually matters, and the one I missed: an author
     // publishing a DRAFT. Its button reads `isAuthor ? 'complete' :
