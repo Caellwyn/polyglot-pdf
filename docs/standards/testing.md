@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-14. See [the s1iex.4 journal entry](../journal/entries/2026-08-14-bd-s1iex.4-sol-animates-during-clips.md) for closeout details.*
+*Last updated: 2026-08-17. See [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -214,6 +214,19 @@ probe's default. Cost/behavior measurements (token curves, latency, tool-call
 compliance) additionally need realistic CONTENT — production-length system
 instructions and plausible answers — because the unevictable base (SI + tools)
 sets the floor the numbers sit on.
+
+**A stray CONTROL CHARACTER in a source file silently defeats code review.**
+A literal NUL (`0x00`) landed inside a template literal in
+`frontend/src/shared/introPlayer.ts` (bd `polyglot-pdf-s1iex.5`): it RENDERS
+as a space, `tsc` accepts it, and all 16 tests plus a five-mutation pass went
+green — because no test inspected the bytes. Its real cost is that **git then
+classifies the whole file as binary and `git diff` prints NOTHING for it**,
+locally and in the PR view, so every future edit to that file is invisible to
+review. Behavioral tests cannot catch this class. When a file is new and
+load-bearing, add a control-character scan over its source (see
+`introPlayer.test.ts`'s "source hygiene" block), and if `git diff` ever shows
+`Bin` for a text file, that is the tell —
+`node -e "console.log(require('fs').readFileSync(F).indexOf(0))"` locates it.
 
 **A test that READS SOURCE must resolve the path from the test file, not
 `process.cwd()`.** Worktree vitest runs are invoked from the MAIN checkout
