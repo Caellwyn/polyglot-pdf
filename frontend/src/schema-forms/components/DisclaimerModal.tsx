@@ -186,7 +186,7 @@ export const DISCLAIMER_TRANSLATIONS: Record<string, { title: string; p1: string
   },
 };
 
-export function DisclaimerModal({ isOpen, selectedLanguage, onListenAgain, onAgree }: DisclaimerModalProps) {
+export function DisclaimerModal({ isOpen, selectedLanguage, onListenAgain, onAgree, introParagraphs, clipState }: DisclaimerModalProps) {
   // Prevent ESC key from closing modal
   useEffect(() => {
     if (!isOpen) return;

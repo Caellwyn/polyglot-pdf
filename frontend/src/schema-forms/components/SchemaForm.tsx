@@ -10,7 +10,7 @@
  */
 import { useAuth } from "../../contexts/AuthContext";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { FormSchema, FormSection } from "../types/schema";
 import {
   SchemaFormStateManager,
@@ -49,6 +49,14 @@ export interface SchemaFormProps {
 
 export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
   const { user } = useAuth();
+  // Fresh-token accessor for Sol's intro clip, which is fetched BEFORE any
+  // WebSocket exists and so cannot borrow the connection's token plumbing
+  // (bd polyglot-pdf-s1iex.5). Same shape as the one handed to
+  // createConnectionManager below.
+  const getIntroToken = useCallback(
+    async () => (user ? await user.getIdToken() : undefined),
+    [user],
+  );
   const [state, setState] = useState<SchemaFormState>(() => {
     return SchemaFormStateManager.init(schema);
   });
@@ -897,6 +905,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             status={status}
             thinking={thinking}
             initialLanguage={initialLanguage}
+            getToken={getIntroToken}
           />
         ) : (
           <VoiceOverlay
@@ -907,6 +916,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             sharedStream={sharedStream}
             streamError={streamError}
             initialLanguage={initialLanguage}
+            getToken={getIntroToken}
           />
         )
       )}
