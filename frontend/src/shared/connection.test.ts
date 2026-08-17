@@ -51,6 +51,12 @@ vi.mock('./audioManager', () => ({
       isRecording: vi.fn(() => false),
       // Default: Gemini IS speaking, so a barge-in flush is expected.
       isSpeaking: vi.fn(() => true),
+      // Both signals (bd polyglot-pdf-uxc6s). isModelSpeaking is what the
+      // FLUSH / re-prompt sites read (model PCM scheduled, clip or not);
+      // isSpeaking is the clip-suppressed one the SUSPEND/RESUME pair reads.
+      // Each test sets the one its site under test actually consults.
+      isModelSpeaking: vi.fn(() => true),
+      isAnyAudioPlaying: vi.fn(() => true),
       flushAudioQueue: vi.fn(),
       resumePlayback: vi.fn(),
       resumeAudioContext: vi.fn(),
@@ -599,7 +605,10 @@ describe('Connection Manager (connection.ts)', () => {
 
     it('flushes the audio queue on VAD speech-start while Gemini is speaking', async () => {
       const manager = await connectedAutoMode()
-      audioManagerMock.isSpeaking.mockReturnValue(true)
+      // The FLUSH site reads isModelSpeaking (bd polyglot-pdf-uxc6s): a clip
+      // overlapping the model's PCM makes isSpeaking false while the model is
+      // still mid-utterance, which used to skip this flush entirely.
+      audioManagerMock.isModelSpeaking.mockReturnValue(true)
 
       manager.onVADSpeechStart()
       expect(audioManagerMock.flushAudioQueue).toHaveBeenCalled()
@@ -607,7 +616,7 @@ describe('Connection Manager (connection.ts)', () => {
 
     it('does NOT flush on speech-start when Gemini is silent', async () => {
       const manager = await connectedAutoMode()
-      audioManagerMock.isSpeaking.mockReturnValue(false)
+      audioManagerMock.isModelSpeaking.mockReturnValue(false)
 
       manager.onVADSpeechStart()
       expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
@@ -615,6 +624,9 @@ describe('Connection Manager (connection.ts)', () => {
 
     it('resumes playback on VAD speech-end once Gemini has stopped', async () => {
       const manager = await connectedAutoMode()
+      // DELIBERATELY isSpeaking: onVADSpeechEnd is the RESUME half of the
+      // deadlock pair and must stay the exact complement of the suspend sites
+      // (bd s1iex.4 / polyglot-pdf-uxc6s). Do not "fix" this to isModelSpeaking.
       audioManagerMock.isSpeaking.mockReturnValue(false)
 
       manager.onVADSpeechEnd()
@@ -626,7 +638,10 @@ describe('Connection Manager (connection.ts)', () => {
       const manager = createConnectionManager(testSchema, vi.fn(), 'English')
       await manager.connect()
       // PTT left at its default (ON): the VAD barge-in path is gated off.
+      // Set BOTH signals true so this passes because the PTT gate held, never
+      // because a signal happened to read false (bd polyglot-pdf-uxc6s).
       audioManagerMock.isSpeaking.mockReturnValue(true)
+      audioManagerMock.isModelSpeaking.mockReturnValue(true)
 
       manager.onVADSpeechStart()
       expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
@@ -650,8 +665,9 @@ describe('Connection Manager (connection.ts)', () => {
       await manager.connect()
       manager.pause()
       // Default mock has Gemini speaking; the re-prompt only fires into
-      // silence, so these tests start from a quiet session.
-      audioManagerMock.isSpeaking.mockReturnValue(false)
+      // silence, so these tests start from a quiet session. The guard reads
+      // isModelSpeaking (bd polyglot-pdf-uxc6s).
+      audioManagerMock.isModelSpeaking.mockReturnValue(false)
       return manager
     }
 
@@ -728,7 +744,7 @@ describe('Connection Manager (connection.ts)', () => {
 
       await manager.resume()
       // Gemini's audio came back on its own (e.g. a turn still streaming).
-      audioManagerMock.isSpeaking.mockReturnValue(true)
+      audioManagerMock.isModelSpeaking.mockReturnValue(true)
 
       vi.advanceTimersByTime(5000)
       expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()

@@ -94,6 +94,36 @@ export function getDevConfig(): DevConfig {
  * ```
  */
 /**
+ * Sol's scripted intro clip (sprint 20, bd polyglot-pdf-s1iex.5) -- the
+ * FRONTEND half of the epic's two-flag design.
+ *
+ * It cannot be a backend flag delivered over the WebSocket (the way
+ * `jit_mode_enabled` arrives in `session_ready`) because it decides whether
+ * the client connects BEFORE Agree at all -- a decision made before any
+ * connection exists. So this is a build-time flag, and it can SKEW against
+ * the backend's `INTRO_TTS_ENABLED` across the two-surface deploy. Deploy
+ * backend first, frontend second; the ON/OFF quadrant (modal renders, route
+ * 503s, no audio, Agree still connects, NO fallback to the removed
+ * `read_disclaimer`) is explicitly tested.
+ *
+ * Default OFF: the feature lands dark and the cutover is a deliberate flip
+ * (bd polyglot-pdf-s1iex.7).
+ */
+export function isIntroClipEnabled(): boolean {
+	if (import.meta.env.VITE_INTRO_CLIP_ENABLED === 'true') return true
+	try {
+		// Same window-or-localStorage idiom as the other dev overrides, so the
+		// flag survives the reload a manual test does. NOT localhost-gated:
+		// unlike the harness gate this controls no security-sensitive path --
+		// worst case a user opts into hearing the intro early.
+		if ((window as any).__VFF_INTRO_CLIP === true) return true
+		return window.localStorage.getItem('__VFF_INTRO_CLIP') === 'true'
+	} catch {
+		return false
+	}
+}
+
+/**
  * Cloud Run production WebSocket URL
  * Hardcoded because Firebase Hosting rewrites DO NOT work for WebSockets
  */
