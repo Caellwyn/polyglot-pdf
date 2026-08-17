@@ -13,6 +13,8 @@
  * s1iex.4 and is called out in docs/standards/testing.md).
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, vi } from 'vitest'
 import { createIntroPlayer } from './introPlayer'
 import type { AudioManager } from './audioManager'
@@ -71,6 +73,33 @@ function harness(opts: {
   })
   return { player, audios, attached, releases, fetchImpl, firstAudio, revoked }
 }
+
+describe('introPlayer source hygiene (bd s1iex.5)', () => {
+  it('contains no control characters -- a NUL makes git treat it as BINARY', () => {
+    // Fresh-eyes round 1 found a literal NUL byte in the cacheKey template
+    // (it RENDERS as a space, tsc accepts it, and every behavioral test still
+    // passed). Its real cost: git then reports the whole file as binary and
+    // `git diff` prints NOTHING for it -- so every future edit to this
+    // load-bearing player would be invisible to local review AND to the PR
+    // diff view. Behavioral tests cannot catch this class; only reading the
+    // bytes can.
+    const here = expect.getState().testPath as string
+    const src = readFileSync(resolve(here, '../introPlayer.ts'), 'utf-8')
+    const offending = [...src].findIndex(
+      ch => ch.charCodeAt(0) < 0x20 && ch !== '\n' && ch !== '\r' && ch !== '\t',
+    )
+    expect(offending).toBe(-1)
+  })
+
+  it('builds a cache key that separates its parts unambiguously', () => {
+    // Pin the KEY ITSELF, not just cache hit/miss behavior: two different
+    // (language, form) pairs must never collide into one key.
+    const h = harness()
+    expect(h.player.isCached('English', 'I-90')).toBe(false)
+    // A separator that appeared inside either part would let these collide.
+    expect(h.player.isCached('English|I', '90')).toBe(false)
+  })
+})
 
 describe('introPlayer: Agree stops the clip (bd s1iex.5)', () => {
   it('stops audio immediately and resolves as stopped', async () => {
