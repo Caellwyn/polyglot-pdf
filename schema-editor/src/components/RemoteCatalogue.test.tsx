@@ -32,7 +32,7 @@ import {
   releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   fetchRetireCandidates,
-  type RemoteKitEntry, type KitStatusResult,
+  type RemoteKitEntry, type KitStatusResult, type RetireCandidate,
 } from '../utils/remoteKitStore';
 
 const KITS: RemoteKitEntry[] = [
@@ -740,6 +740,65 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
     // The raw refusal is NOT dumped on the card -- the dialog replaces it.
     expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
+  });
+
+  it('does not start a SECOND publish while the lookup is in flight', async () => {
+    // The buttons are gated on busy/completingId, but those are set inside
+    // handleSetStatus -- which now runs only AFTER the candidate lookup
+    // resolves. Without a pending flag set before the await, every click
+    // during the lookup starts its own publish, each running the METERED
+    // per-language sweep with racing writes.
+    //
+    // This fix was made in round 1, LOST to a git checkout during my own
+    // mutation testing, and reproduced by round 2. It was invisible because
+    // nothing pinned it -- so this test exists as much for the regression as
+    // for the bug.
+    let release: (v: RetireCandidate[]) => void = () => {};
+    vi.mocked(fetchRetireCandidates).mockReturnValue(
+      new Promise<RetireCandidate[]>((res) => { release = res; }));
+    await publishDraftKit();
+
+    // The button is DISABLED while the lookup runs -- which is the fix, and
+    // is why there is no second "Publish" to click. Assert the guard rather
+    // than a click count: a count test would pass just as well if the button
+    // were merely slow to re-render.
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    await waitFor(() =>
+      expect(within(card).queryByText('Publish')).not.toBeInTheDocument());
+
+    release([]);
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    expect(setRemoteStatus).toHaveBeenCalledTimes(1);
+    // ...and the button comes back afterwards, so a failed lookup cannot
+    // strand the catalogue disabled.
+    await waitFor(() =>
+      expect(within(card).getByText('Publish')).toBeInTheDocument());
+  });
+
+  it('keeps the retire dialog OPEN while the publish runs', async () => {
+    // Publish takes tens of seconds (the per-language sweep). Dismissing the
+    // dialog first made its busy guard dead code and dropped the author back
+    // to an unchanged catalogue with an enabled Publish button -- the exact
+    // failure AuthorVersionDialog's deferred unmount exists to prevent.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    let finish: (v: KitStatusResult) => void = () => {};
+    vi.mocked(setRemoteStatus).mockReturnValue(
+      new Promise<KitStatusResult>((res) => { finish = res; }));
+    await publishDraftKit();
+
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Publish, keep both'));
+
+    // Still mounted, and showing progress, while the publish is in flight.
+    await waitFor(() => expect(screen.getByText('Publishing...')).toBeInTheDocument());
+
+    finish({ ok: true, status: 'complete', retranslated: 0,
+             translationModel: null, supersededKitId: null });
+    await waitFor(() =>
+      expect(screen.queryByText('Client Intake')).not.toBeInTheDocument());
   });
 
   it('asks from the compact STRIP publish button too, not just the card', async () => {

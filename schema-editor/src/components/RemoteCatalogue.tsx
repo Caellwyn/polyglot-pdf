@@ -389,10 +389,22 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     kit: RemoteKitEntry, authorVersion?: string,
   ) => {
     let candidates: RetireCandidate[] = [];
+    // Claim the kit BEFORE the await. On origin/dev the button called
+    // handleSetStatus directly, so setBusy ran synchronously in the click
+    // handler and the disabled= guard held. Routing through this async check
+    // opened a window where the buttons stay enabled across the whole lookup:
+    // three clicks produced three concurrent publishes, each running the
+    // METERED per-language translation sweep, with racing metadata and
+    // supersede writes (Opus fresh-eyes rounds 1 and 2 -- round 1 found it and
+    // my fix was lost to a git checkout during mutation testing; round 2
+    // reproduced it).
+    setCompletingId(kit.id);
     try {
       candidates = await fetchRetireCandidates(kit.id);
     } catch {
       candidates = [];
+    } finally {
+      setCompletingId(null);
     }
     if (candidates.length === 0) {
       await handleSetStatusRef.current?.(kit, 'complete', authorVersion);
@@ -1438,9 +1450,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           busy={completingId === retirePrompt.kit.id}
           onCancel={() => setRetirePrompt(null)}
           onPublish={(replaces) => {
+            // Stays MOUNTED through the publish, like AuthorVersionDialog just
+            // below. Dismissing first made `busy` permanently false, so the
+            // "Publishing..." label and the double-submit guard were
+            // unreachable -- and publish takes tens of seconds (the
+            // per-language sweep), so the author was dropped back to an
+            // unchanged catalogue with an enabled Publish button.
             const { kit, authorVersion } = retirePrompt;
-            setRetirePrompt(null);
-            void handleSetStatus(kit, 'complete', authorVersion, replaces);
+            void handleSetStatus(kit, 'complete', authorVersion, replaces)
+              .finally(() => setRetirePrompt(null));
           }}
         />
       )}
