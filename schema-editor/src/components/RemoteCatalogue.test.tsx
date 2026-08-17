@@ -14,6 +14,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     listRemoteKits: vi.fn(),
     loadRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
+    fetchRetireCandidates: vi.fn(),
     deleteRemoteKit: vi.fn(),
     takeKitLock: vi.fn(),
     releaseKitLock: vi.fn(),
@@ -30,6 +31,7 @@ import {
   deleteRemoteKit,
   releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
+  fetchRetireCandidates,
   type RemoteKitEntry, type KitStatusResult,
 } from '../utils/remoteKitStore';
 
@@ -50,6 +52,11 @@ const SCHEMA = {
 
 beforeEach(() => {
   vi.mocked(listRemoteKits).mockResolvedValue([...KITS]);
+  // Every publish now asks this first (bd polyglot-pdf-bdedm). Default to "no
+  // older versions" GLOBALLY, not per-describe: a bare vi.fn() resolves
+  // undefined, and the caller reads .length off it, so an unmocked default
+  // broke every publish test in the file.
+  vi.mocked(fetchRetireCandidates).mockResolvedValue([]);
   vi.mocked(loadRemoteSchema).mockResolvedValue(SCHEMA);
   // Default: a clean complete flip with no drift (bd polyglot-pdf-783r). Tests
   // that exercise the drift notice / refusal override this per-case.
@@ -733,6 +740,77 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
     // The raw refusal is NOT dumped on the card -- the dialog replaces it.
     expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
+  });
+
+  it('carries a ticked RETIREMENT through the version prompt', async () => {
+    // The firm-tier case this whole bead targets: a custom form has no
+    // government edition date, so publishing it needs BOTH dialogs -- pick the
+    // form to retire, then name a version. The retry re-called publish with
+    // only the version, so the author ticked a form, named a version, and got
+    // a publish with nothing retired and NO ERROR (Opus fresh-eyes round 1).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockResolvedValueOnce({
+        ok: true, status: 'complete', retranslated: 0,
+        translationModel: null, supersededKitId: 'old-kit',
+      });
+    await publishDraftKit();
+
+    // Tick the candidate and publish.
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+    fireEvent.click(screen.getByText('Publish and retire the old one'));
+
+    // The gate asks for a version...
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Version'), { target: { value: '2026-08-07' } });
+    fireEvent.click(screen.getByText('Save version & publish'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
+    // BOTH survive the retry. Asserting the whole options object, not just the
+    // version: the bug was an omission, and a partial assertion would miss it.
+    expect(vi.mocked(setRemoteStatus).mock.calls[1]).toEqual(
+      ['draft-kit', 'complete',
+       { authorVersion: '2026-08-07', replacesKitId: 'old-kit' }],
+    );
+  });
+
+  it('publishes with NO retirement when the author ticks nothing', async () => {
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    vi.mocked(setRemoteStatus).mockResolvedValueOnce({
+      ok: true, status: 'complete', retranslated: 0,
+      translationModel: null, supersededKitId: null,
+    });
+    await publishDraftKit();
+
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Publish, keep both'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    // The VALUE, not the key's presence: the options object legitimately
+    // carries `replacesKitId: undefined`, and setRemoteStatus omits the wire
+    // field for any falsy value -- so asserting the key's absence would fail
+    // while the shipped request is correct.
+    expect(vi.mocked(setRemoteStatus).mock.calls[0][2]?.replacesKitId).toBeUndefined();
+  });
+
+  it('shows NO extra step when nothing looks like the same form', async () => {
+    // The common case must not grow a dialog (the bead is explicit).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([]);
+    vi.mocked(setRemoteStatus).mockResolvedValueOnce({
+      ok: true, status: 'complete', retranslated: 0,
+      translationModel: null, supersededKitId: null,
+    });
+    await publishDraftKit();
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    expect(screen.queryByText(/looks like a newer version/)).not.toBeInTheDocument();
   });
 
   it('retries the SAME publish with the version attached', async () => {

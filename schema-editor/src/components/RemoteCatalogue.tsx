@@ -112,7 +112,17 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // null when no dialog is open. Set from the publish gate's REFUSAL, not from
   // listing data -- the catalogue deliberately does not read every kit's schema,
   // so the server is what knows a version is needed.
-  const [versionPrompt, setVersionPrompt] = React.useState<RemoteKitEntry | null>(null);
+  // Carries the ticked replacement THROUGH the version prompt (bd
+  // polyglot-pdf-bdedm). The publish gate validates replaces_kit_id BEFORE it
+  // asks for an author version, so a kit with a same-form candidate and no
+  // edition date -- precisely the firm-tier custom form this bead targets --
+  // takes both dialogs in turn. Re-calling the publish with only the version
+  // dropped the retirement silently: the author ticked a kit, named a version,
+  // and got a publish with nothing retired and no error (Opus fresh-eyes
+  // round 1).
+  const [versionPrompt, setVersionPrompt] = React.useState<
+    { kit: RemoteKitEntry; replaces?: string } | null
+  >(null);
   // The kit queued for permanent deletion (bd polyglot-pdf-6x1j), plus the
   // server's refusal when the guard says no. The refusal lives HERE rather
   // than in the page-level error line: a 409 explaining why this form cannot
@@ -461,7 +471,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // route emits -- the catalogue listing deliberately does not read every
       // kit's schema, so the SERVER is what knows a version is needed.
       if (detail.startsWith('AUTHOR_VERSION_REQUIRED:')) {
-        setVersionPrompt(kit);
+        setVersionPrompt({ kit, replaces: replacesKitId });
         return;
       }
       setError(detail);
@@ -935,9 +945,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                 ) : (
                   <button
                     className="btn-sm btn-primary text-xs"
-                    onClick={() => void handleSetStatus(
-                      kit, isAuthor ? 'complete' : 'submitted',
-                    )}
+                    // An AUTHOR publishing goes through the retire check; an
+                    // EDITOR is only submitting for review, which retires
+                    // nothing and must not be asked about it.
+                    onClick={() => void (isAuthor
+                      ? publishWithRetireCheck(kit)
+                      : handleSetStatus(kit, 'submitted'))}
                     disabled={busy || stripDirty || completingId !== null}
                     title={stripDirty
                       ? 'Save your changes first (Cmd+S) -- submitting now '
@@ -1261,9 +1274,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     ) : (
                       <button
                         className="btn-sm btn-primary text-xs"
-                        onClick={() => void handleSetStatus(
-                          kit, isAuthor ? 'complete' : 'submitted',
-                        )}
+                        // Twin of the strip button above -- both must move
+                        // together, which is this repo's most repeated defect.
+                        onClick={() => void (isAuthor
+                          ? publishWithRetireCheck(kit)
+                          : handleSetStatus(kit, 'submitted'))}
                         disabled={busy || openDirty || completingId !== null}
                         title={openDirty
                           ? 'Save your changes first (Cmd+S) -- submitting now '
@@ -1432,14 +1447,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
 
       {versionPrompt && (
         <AuthorVersionDialog
-          kitLabel={versionPrompt.label}
+          kitLabel={versionPrompt.kit.label}
           // versionInfoFromSchema's fallback chain ends in the literal
           // 'unknown', and this dialog only ever opens for a kit with NO
           // marker -- so passing the label straight through rendered
           // "Previous version: unknown" 100% of the time. Map it to null so
           // the line hides instead.
           previousVersion={(() => {
-            const label = progress[versionPrompt.id]?.version?.label;
+            const label = progress[versionPrompt.kit.id]?.version?.label;
             return label && label !== 'unknown' ? label : null;
           })()}
           // Stays mounted through the retry: the publish re-translates one
@@ -1447,10 +1462,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           // the dialog first left the author staring at an unchanged catalogue
           // with no progress and an inviting Mark complete button -- and made
           // the dialog's own busy/double-submit guard unreachable.
-          busy={completingId === versionPrompt.id}
+          busy={completingId === versionPrompt.kit.id}
           onCancel={() => setVersionPrompt(null)}
           onConfirm={(version) => {
-            void handleSetStatus(versionPrompt, 'complete', version)
+            // The 4th argument is what round 1 found missing: without it
+            // the ticked kit is silently not retired.
+            void handleSetStatus(
+              versionPrompt.kit, 'complete', version, versionPrompt.replaces)
               .finally(() => setVersionPrompt(null));
           }}
         />

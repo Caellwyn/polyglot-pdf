@@ -64,6 +64,14 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
     monkeypatch.setattr(
         ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok"))
+
+    # Same stub the lifecycle fixture uses: the publish gate refuses on
+    # translation coverage otherwise, and the metered per-language sweep is not
+    # what these tests are about.
+    async def _no_drift(_store, _kit_id, _schema, _schema_file):
+        return 0, None
+
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _no_drift)
     return TestClient(app), store, tmp_path
 
 
@@ -109,11 +117,12 @@ def test_a_DIFFERENT_form_number_is_not_suggested(client):
     assert _candidates(c, "w7-new").json()["candidates"] == []
 
 
-def test_a_similar_LABEL_is_suggested_when_numbers_are_absent(client):
-    """Label similarity is the fallback signal -- neither kit declares a
-    number, which is the state both real kits were in before this bead."""
+def test_an_IDENTICAL_label_is_suggested_when_numbers_are_absent(client):
+    """Label similarity is the fallback signal, and it is EXACT match only --
+    neither kit here declares a form number, which is the state both real kits
+    were in before this bead."""
     c, _store, root = client
-    _make_kit(root, "intake-new", status="draft", label="Client Intake Sheet",
+    _make_kit(root, "intake-new", status="draft", label="Client Intake",
               schema=_schema())
     _make_kit(root, "intake-old", status="complete", label="Client Intake",
               schema=_schema())
@@ -124,11 +133,39 @@ def test_a_similar_LABEL_is_suggested_when_numbers_are_absent(client):
     assert cands[0]["matchedOn"] == "label"
 
 
+# Real USCIS/IRS form families. Each pair is a BASE FORM and a genuinely
+# different variant -- several (I-130A, I-864A) are supplements filed ALONGSIDE
+# the base, so suggesting one to retire the other could break a live filing.
+# A containment-with-slack rule matched EVERY pair here, at every slack value
+# my earlier tests exercised (Opus fresh-eyes round 1).
+@pytest.mark.parametrize("base,variant", [
+    ("I-130", "I-130A"),
+    ("I-864", "I-864A"),
+    ("I-864", "I-864EZ"),
+    ("I-129", "I-129F"),
+    ("I-131", "I-131A"),
+    ("I-765", "I-765V"),
+    ("Form 1040", "Form 1040-X"),
+    ("Form 1099", "Form 1099-MISC"),
+    ("W-8BEN", "W-8BEN-E"),
+    ("Form 941", "Form 941-X"),
+])
+def test_a_SIBLING_form_is_never_suggested(client, base, variant):
+    """The failure this whole flow exists to prevent, by name."""
+    c, _store, root = client
+    _make_kit(root, "new-kit", status="draft", label=base, schema=_schema())
+    _make_kit(root, "live-kit", status="complete", label=variant, schema=_schema())
+
+    assert _candidates(c, "new-kit").json()["candidates"] == [], (
+        f"publishing {base!r} suggested retiring {variant!r}, a different form")
+
+
 @pytest.mark.parametrize("other_label", [
     "Employment History",          # nothing in common
     "Client Questionnaire",        # SHARES the first word -- a loose matcher bites
     "Clientele Survey",            # shares a prefix of the first word
     "Client Intake Addendum B",    # a genuinely different form, same family
+    "Client Intake Sheet",         # a RENAME -- and still not suggested; see below
 ])
 def test_an_unrelated_label_is_not_suggested(client, other_label):
     """Parametrized over the SHAPES a too-loose matcher would accept, not one
@@ -277,3 +314,59 @@ def test_listing_candidates_RETIRES_NOTHING(client):
     assert _candidates(c, "w7-new").status_code == 200
 
     assert _run(store.load_metadata("w7-old"))["status"] == "complete"
+
+
+# --- exit criterion 2, end to end -------------------------------------------
+
+
+def test_ticking_a_candidate_RETIRES_EXACTLY_that_kit(client):
+    """The bead's criterion 2, driven all the way through rather than assumed.
+
+    The suggestion route and the dialog were each tested in isolation, and
+    neither proved the thing that matters: that the id an author ticks reaches
+    the publish and retires THAT kit, leaving the new one as the only live
+    entry for the form, with the old one's files intact.
+    """
+    c, store, root = client
+    _make_kit(root, "w7-new", status="draft", label="W-7 2025",
+              schema=_schema(form_number="W-7", edition="01/2025"))
+    old = _make_kit(root, "w7-old", status="complete", label="W-7 2024",
+                    schema=_schema(form_number="W-7", edition="12/2024"))
+
+    # The author is offered it...
+    cands = _candidates(c, "w7-new").json()["candidates"]
+    assert [x["kitId"] for x in cands] == ["w7-old"]
+
+    # ...ticks it, and publishes.
+    resp = c.post("/api/editor/kits/w7-new/status",
+                  json={"status": "complete", "replaces_kit_id": "w7-old"},
+                  headers=AUTH)
+    assert resp.status_code == 200, resp.text
+
+    assert _run(store.load_metadata("w7-old"))["status"] == "unpublished"
+    assert _run(store.load_metadata("w7-new"))["status"] == "complete"
+    # Files intact -- retiring is not deleting.
+    assert (old / "schema.json").exists()
+    assert (old / "form.pdf").exists()
+    # ...and it is no longer offered as a candidate to anything.
+    _make_kit(root, "w7-third", status="draft", label="W-7 2026",
+              schema=_schema(form_number="W-7"))
+    later = _candidates(c, "w7-third").json()["candidates"]
+    assert [x["kitId"] for x in later] == ["w7-new"]
+
+
+def test_ticking_NOTHING_retires_nothing(client):
+    """The other half of criterion 2, and the common case: an author may just
+    be adding a form."""
+    c, store, root = client
+    _make_kit(root, "w7-new", status="draft", label="W-7 2025",
+              schema=_schema(form_number="W-7", edition="01/2025"))
+    _make_kit(root, "w7-old", status="complete", label="W-7 2024",
+              schema=_schema(form_number="W-7", edition="12/2024"))
+
+    resp = c.post("/api/editor/kits/w7-new/status",
+                  json={"status": "complete"}, headers=AUTH)
+    assert resp.status_code == 200, resp.text
+
+    assert _run(store.load_metadata("w7-old"))["status"] == "complete"
+    assert _run(store.load_metadata("w7-new"))["status"] == "complete"

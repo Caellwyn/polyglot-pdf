@@ -1251,37 +1251,37 @@ def _normalize_label(label: str) -> str:
     return "".join(ch for ch in label.lower() if ch.isalnum())
 
 
-# How much longer the containing label may be before the two stop looking like
-# one form. "Client Intake" vs "Client Intake Sheet" is a rename; "Client
-# Intake" vs "Client Intake Addendum B" is a DIFFERENT form in the same family,
-# and suggesting it asks an author to retire something live.
-_LABEL_SUFFIX_SLACK = 6
-
-
 def _labels_look_like_one_form(a: str, b: str) -> bool:
-    """A deliberately CONSERVATIVE label match.
+    """A deliberately CONSERVATIVE label match: EQUALITY after normalising.
 
-    Containment after normalising, both at least 3 characters, AND the extra
-    text no longer than _LABEL_SUFFIX_SLACK. Bare containment is too loose:
-    "Client Intake Addendum B" contains "Client Intake" and is a different
-    form. Anything looser still (token overlap, edit distance) starts matching
-    "Form A" to "Form B".
+    Containment is unsafe here, at any slack. Real form families differ by a
+    one- or two-character suffix, and those variants are DIFFERENT FORMS --
+    several are supplements filed ALONGSIDE their base form, so retiring one
+    breaks a live filing path:
 
-    The asymmetry is deliberate and worth stating: a MISSED suggestion costs an
-    author one manual retire, a WRONG one asks them to retire a live form that
-    may belong to another firm. When the signal is this weak, bias hard toward
-    silence -- the form_number path is the one that should carry most matches,
-    and this is the fallback for kits that declare no number.
+        I-130 / I-130A      I-864 / I-864A / I-864EZ
+        I-129 / I-129F      I-131 / I-131A
+        I-765 / I-765V      1040 / 1040-X
+        1099 / 1099-MISC    W-8BEN / W-8BEN-E
+        941 / 941-X
+
+    My first version allowed a short suffix, reasoning that "Client Intake"
+    vs "Client Intake Sheet" is a rename. It is -- but the rule could not tell
+    that from I-130 vs I-130A, and it admitted every pair above (Opus
+    fresh-eyes round 1). Slack of 5, 6, 7 or 8 all passed my tests, because
+    they only sampled LONG suffixes; the dimension was untested.
+
+    So: exact match only, and let the rename case cost an author one manual
+    retire. This rule is the FALLBACK anyway -- it fires only for kits that
+    declare no form_number, and the number is the signal that should carry
+    real matches. A missed suggestion costs a click; a wrong one asks an
+    author to retire a live form, possibly another firm's, possibly one a
+    pending filing depends on.
     """
     na, nb = _normalize_label(a), _normalize_label(b)
     if len(na) < 3 or len(nb) < 3:
         return False
-    if na == nb:
-        return True
-    shorter, longer = (na, nb) if len(na) < len(nb) else (nb, na)
-    if shorter not in longer:
-        return False
-    return len(longer) - len(shorter) <= _LABEL_SUFFIX_SLACK
+    return na == nb
 
 
 @router.get("/kits/{kit_id}/retire-candidates",
@@ -1335,7 +1335,14 @@ async def get_retire_candidates(
             continue
         try:
             other_meta = await store.load_metadata(other_id)
-        except FormKitStoreError:
+        except FormKitStoreError as exc:
+            # LOUD, not silent. Skipping quietly makes a storage blip
+            # indistinguishable from "no older versions", so the author gets a
+            # confident straight-through publish and two live kits for one form
+            # -- the state bd polyglot-pdf-6dz0 exists to prevent (Opus
+            # fresh-eyes round 1).
+            _log.warning("editor_retire_candidate_unreadable",
+                         kit_id=kit_id, candidate=other_id, error=str(exc))
             continue
         # LIVE only. A draft is not competing for the catalogue slot, and a
         # kit already unpublished has nothing left to retire.
