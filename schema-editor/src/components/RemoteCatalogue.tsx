@@ -3,12 +3,14 @@ import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
   onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
-  translateRemoteKitOptions,
+  translateRemoteKitOptions, fetchRetireCandidates,
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
+  type RetireCandidate,
 } from '../utils/remoteKitStore';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
 import { AuthorVersionDialog } from './AuthorVersionDialog';
+import { RetireCandidatesDialog } from './RetireCandidatesDialog';
 import { DeleteKitDialog } from './DeleteKitDialog';
 
 interface RemoteCatalogueProps {
@@ -349,8 +351,49 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     }
   }, [refresh, onAuthError]);
 
+  // publishWithRetireCheck is declared before handleSetStatus (it is what the
+  // buttons call), so it reaches the handler through a ref rather than forcing
+  // a reorder of the whole component.
+  const handleSetStatusRef = React.useRef<
+    ((kit: RemoteKitEntry, status: KitLifecycleStatus,
+      authorVersion?: string, replacesKitId?: string) => Promise<void>) | null
+  >(null);
+
+  // Set only while an author is being ASKED which older version to retire.
+  // Holds the pending publish so the answer can complete it.
+  const [retirePrompt, setRetirePrompt] = React.useState<
+    { kit: RemoteKitEntry; authorVersion?: string; candidates: RetireCandidate[] } | null
+  >(null);
+
+  /**
+   * Publish, ASKING FIRST if another live kit looks like the same form.
+   *
+   * Zero candidates -> straight through, no extra step (the common case; the
+   * bead is explicit that the normal publish must not grow a dialog).
+   *
+   * A FAILED lookup also goes straight through. The suggestion is a
+   * convenience; blocking a publish because we could not compute one would
+   * make an optional nicety load-bearing.
+   */
+  const publishWithRetireCheck = React.useCallback(async (
+    kit: RemoteKitEntry, authorVersion?: string,
+  ) => {
+    let candidates: RetireCandidate[] = [];
+    try {
+      candidates = await fetchRetireCandidates(kit.id);
+    } catch {
+      candidates = [];
+    }
+    if (candidates.length === 0) {
+      await handleSetStatusRef.current?.(kit, 'complete', authorVersion);
+      return;
+    }
+    setRetirePrompt({ kit, authorVersion, candidates });
+  }, []);
+
   const handleSetStatus = React.useCallback(async (
     kit: RemoteKitEntry, status: KitLifecycleStatus, authorVersion?: string,
+    replacesKitId?: string,
   ) => {
     setNotice(null);
     setBusy(true);
@@ -365,7 +408,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     if (mirrorsToStrip) onStatusRefusal?.(null);
     if (status === 'complete') setCompletingId(kit.id);
     try {
-      const result = await setRemoteStatus(kit.id, status, { authorVersion });
+      const result = await setRemoteStatus(kit.id, status, { authorVersion, replacesKitId });
       if (status === 'complete') {
         // result.retranslated counts translation ENTRIES baked (one per
         // location x language), not distinct drifted strings -- a label shared
@@ -448,6 +491,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       setCompletingId(null);
     }
   }, [refresh, onAuthError, onStatusRefusal, selectedKitId]);
+
+  handleSetStatusRef.current = handleSetStatus;
 
   // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
   // ANY selected kit (no open involved -- unlike the status actions, which
@@ -844,7 +889,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   // audit-referenced bytes editable again.
                   <button
                     className="btn-sm btn-primary text-xs"
-                    onClick={() => void handleSetStatus(kit, 'complete')}
+                    onClick={() => void publishWithRetireCheck(kit)}
                     disabled={busy || completingId !== null}
                     title="Publish this retired version again (runs the full publish gate)"
                   >
@@ -860,7 +905,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     <>
                       <button
                         className="btn-sm btn-primary text-xs"
-                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        onClick={() => void publishWithRetireCheck(kit)}
                         disabled={busy || completingId !== null}
                         title="Publish this form -- runs the full publish gate"
                       >
@@ -1170,7 +1215,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       // audit-referenced bytes editable again).
                       <button
                         className="btn-sm btn-primary text-xs"
-                        onClick={() => void handleSetStatus(kit, 'complete')}
+                        onClick={() => void publishWithRetireCheck(kit)}
                         disabled={busy || completingId !== null}
                         title="Publish this retired version again (runs the full publish gate)"
                       >
@@ -1186,7 +1231,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         <>
                           <button
                             className="btn-sm btn-primary text-xs"
-                            onClick={() => void handleSetStatus(kit, 'complete')}
+                            onClick={() => void publishWithRetireCheck(kit)}
                             disabled={busy || completingId !== null}
                             title="Publish this form -- runs the full publish gate"
                           >
@@ -1364,6 +1409,24 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           error={deleteError}
           onCancel={() => { setDeletePrompt(null); setDeleteError(null); }}
           onConfirm={() => { void handleDelete(deletePrompt); }}
+        />
+      )}
+
+      {/* Suggest-and-confirm, never auto-retire (maintainer decision
+          2026-08-07). Opens ONLY when the server found a live kit that looks
+          like the same form; zero candidates publishes straight through, so
+          the normal flow gains no step. */}
+      {retirePrompt && (
+        <RetireCandidatesDialog
+          kitLabel={retirePrompt.kit.label}
+          candidates={retirePrompt.candidates}
+          busy={completingId === retirePrompt.kit.id}
+          onCancel={() => setRetirePrompt(null)}
+          onPublish={(replaces) => {
+            const { kit, authorVersion } = retirePrompt;
+            setRetirePrompt(null);
+            void handleSetStatus(kit, 'complete', authorVersion, replaces);
+          }}
         />
       )}
 

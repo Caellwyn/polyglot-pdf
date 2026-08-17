@@ -1194,6 +1194,192 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
     return store_marker
 
 
+class RetireCandidate(BaseModel):
+    """One live kit that MIGHT be an older revision of the kit being published.
+
+    Every field here exists to let a human tell two same-numbered kits apart,
+    because the system cannot: form_number is explicitly NOT unique (a standard
+    W-7 and a firm's own W-7 variant share it -- see
+    docs/standards/confirmation-and-audit.md), and the label is free text an
+    author may rename. That is exactly why this is a SUGGESTION and a person
+    confirms (maintainer decision 2026-08-07).
+    """
+
+    kitId: str
+    label: str
+    # The form NUMBER ("W-7"), when its schema declares one.
+    formNumber: Optional[str] = None
+    # Whichever revision marker this kit actually carries, and which one it is,
+    # so the UI can say "edition 12/2024" rather than showing a bare string
+    # whose meaning it has to guess.
+    edition: Optional[str] = None
+    editionKind: Optional[str] = None  # "edition_date" | "author_version" | "published"
+    # Why this kit was suggested. Shown to the author: a label-similarity match
+    # deserves more suspicion than a form-number match.
+    matchedOn: str  # "form_number" | "label"
+
+
+class RetireCandidatesResponse(BaseModel):
+    candidates: list[RetireCandidate]
+
+
+def _identity_of_schema(schema: Optional[dict]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """(form_number, edition, edition_kind) from a kit's schema.
+
+    Mirrors resolve_edition_marker's PRECEDENCE (edition_date > author_version)
+    but not its fingerprint fallback: a sha256 shown to a human is noise, and
+    this value exists only to disambiguate two candidates on screen.
+    """
+    block = (schema or {}).get("form_metadata")
+    block = block if isinstance(block, dict) else {}
+
+    def _clean(v: object) -> Optional[str]:
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    number = _clean(block.get("form_number"))
+    edition = _clean(block.get("edition_date"))
+    if edition:
+        return number, edition, "edition_date"
+    version = _clean(block.get("author_version"))
+    if version:
+        return number, version, "author_version"
+    return number, None, None
+
+
+def _normalize_label(label: str) -> str:
+    """Lowercased alphanumerics only -- 'W-7 (ITIN Application)' -> 'w7itinapplication'."""
+    return "".join(ch for ch in label.lower() if ch.isalnum())
+
+
+# How much longer the containing label may be before the two stop looking like
+# one form. "Client Intake" vs "Client Intake Sheet" is a rename; "Client
+# Intake" vs "Client Intake Addendum B" is a DIFFERENT form in the same family,
+# and suggesting it asks an author to retire something live.
+_LABEL_SUFFIX_SLACK = 6
+
+
+def _labels_look_like_one_form(a: str, b: str) -> bool:
+    """A deliberately CONSERVATIVE label match.
+
+    Containment after normalising, both at least 3 characters, AND the extra
+    text no longer than _LABEL_SUFFIX_SLACK. Bare containment is too loose:
+    "Client Intake Addendum B" contains "Client Intake" and is a different
+    form. Anything looser still (token overlap, edit distance) starts matching
+    "Form A" to "Form B".
+
+    The asymmetry is deliberate and worth stating: a MISSED suggestion costs an
+    author one manual retire, a WRONG one asks them to retire a live form that
+    may belong to another firm. When the signal is this weak, bias hard toward
+    silence -- the form_number path is the one that should carry most matches,
+    and this is the fallback for kits that declare no number.
+    """
+    na, nb = _normalize_label(a), _normalize_label(b)
+    if len(na) < 3 or len(nb) < 3:
+        return False
+    if na == nb:
+        return True
+    shorter, longer = (na, nb) if len(na) < len(nb) else (nb, na)
+    if shorter not in longer:
+        return False
+    return len(longer) - len(shorter) <= _LABEL_SUFFIX_SLACK
+
+
+@router.get("/kits/{kit_id}/retire-candidates",
+            response_model=RetireCandidatesResponse)
+async def get_retire_candidates(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+) -> RetireCandidatesResponse:
+    """LIVE kits that plausibly serve the same form as this one.
+
+    Suggestion only -- nothing is retired here. The author ticks one on the
+    publish modal, which sends it as `replaces_kit_id` to the status route,
+    which is what actually retires it (bd polyglot-pdf-6dz0).
+
+    AUTHOR-ONLY, matching the publish it feeds: an editor cannot publish, so
+    offering them a retire list would be a control they cannot use -- and the
+    list itself is a statement about which kits exist.
+
+    Reads each live kit's schema, which the catalogue listing deliberately does
+    NOT do (one metadata read per kit keeps that path cheap). Confined to this
+    route so the cost lands only when an author is actually publishing.
+
+    A kit whose schema cannot be read is SKIPPED, not surfaced with unknowns: a
+    candidate you cannot describe is one the author cannot judge, and the whole
+    point is an informed confirmation.
+    """
+    store = get_form_kit_store()
+    _meta, _files = await _load_meta_or_404(store, kit_id)
+
+    schema_file, _pdf = _resolve_meta_names(_meta)
+    try:
+        own_schema = await store.load_schema(kit_id, schema_file)
+    except (FormKitNotFound, FormKitStoreError):
+        own_schema = None
+    own_number, _own_ed, _own_kind = _identity_of_schema(own_schema)
+    own_label = (_meta or {}).get("label")
+    own_label = own_label if isinstance(own_label, str) and own_label else kit_id
+
+    try:
+        files_by_kit = await store.list_kit_files()
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to list kits") from exc
+
+    candidates: list[RetireCandidate] = []
+    for other_id in sorted(files_by_kit):
+        if other_id == kit_id:
+            continue
+        try:
+            _safe_kit_id(other_id)
+        except HTTPException:
+            continue
+        try:
+            other_meta = await store.load_metadata(other_id)
+        except FormKitStoreError:
+            continue
+        # LIVE only. A draft is not competing for the catalogue slot, and a
+        # kit already unpublished has nothing left to retire.
+        if _status_of(other_meta) != "complete":
+            continue
+
+        other_label = (other_meta or {}).get("label")
+        other_label = other_label if isinstance(other_label, str) and other_label else other_id
+        other_schema_file, _p = _resolve_meta_names(other_meta)
+        try:
+            other_schema = await store.load_schema(other_id, other_schema_file)
+        except (FormKitNotFound, FormKitStoreError):
+            continue  # cannot describe it -> cannot ask a human to judge it
+        other_number, other_ed, other_kind = _identity_of_schema(other_schema)
+
+        # form_number FIRST, label similarity second (the bead's order): the
+        # number is a real declaration, the label is free text.
+        if own_number and other_number and own_number == other_number:
+            matched = "form_number"
+        elif _labels_look_like_one_form(own_label, other_label):
+            matched = "label"
+        else:
+            continue
+
+        if other_ed is None and other_kind is None:
+            # No edition and no author version: fall back to when it went live,
+            # so the author still has a date to tell two candidates apart.
+            published = (other_meta or {}).get("published_at")
+            if isinstance(published, str) and published.strip():
+                other_ed, other_kind = published.strip(), "published"
+
+        candidates.append(RetireCandidate(
+            kitId=other_id,
+            label=other_label,
+            formNumber=other_number,
+            edition=other_ed,
+            editionKind=other_kind,
+            matchedOn=matched,
+        ))
+
+    _log.info("editor_retire_candidates", kit_id=kit_id, count=len(candidates))
+    return RetireCandidatesResponse(candidates=candidates)
+
+
 @router.get("/kits/{kit_id}/schema")
 async def get_editor_kit_schema(
     kit_id: str,
