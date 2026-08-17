@@ -1447,3 +1447,75 @@ def test_schema_without_form_metadata_is_not_flagged():
     drown the exact-defect-list assertions those tests make.
     """
     assert _audit_rules(_schema([{"id": "a", "type": "text"}])) == []
+
+
+# ---------------------------------------------------------------------------
+# hidden + show_if is a CONTRADICTION, not a preference (bd polyglot-pdf-pfx1).
+# ---------------------------------------------------------------------------
+
+_SHOW_IF = {"field": "trigger", "operator": "equals", "value": "yes"}
+
+
+def _visibility_field(**kw):
+    f = {"id": "target", "type": "text"}
+    f.update(kw)
+    return f
+
+
+def test_hidden_with_show_if_trips_once():
+    """The gated state: always-hidden AND conditionally shown.
+
+    MAINTAINER DECISION 2026-08-04: "A field cannot be hidden and have a
+    condition to be shown. period." A warning was explicitly considered and
+    rejected, so this is an ERROR -- the promotion gate must refuse it.
+    """
+    findings = _lint_structural(_schema([
+        _visibility_field(hidden=True, show_if=dict(_SHOW_IF)),
+        {"id": "trigger", "type": "text"},
+    ]))
+    hits = [f for f in findings if f.rule == "hidden-with-show-if"]
+    assert len(hits) == 1, _rules(findings)
+    assert hits[0].severity == SEVERITY_ERROR, hits[0].severity
+    # The path anchors the finding at the property the editor must disable.
+    assert hits[0].path.endswith(".hidden"), hits[0].path
+
+
+def test_hidden_with_show_if_message_names_both_remedies():
+    """bd xfdb copy standard: say what happened, the real consequence, and
+    what to do. Both escape routes must be offered -- an author who reads only
+    'remove the condition' loses the conditional behavior they wanted.
+
+    Allowlist-style (memory: pin the sanctioned remedies, never ban a word):
+    banning 'contradict' would be one synonym from defeat.
+    """
+    findings = _lint_structural(_schema([
+        _visibility_field(hidden=True, show_if=dict(_SHOW_IF)),
+        {"id": "trigger", "type": "text"},
+    ]))
+    msg = next(f.message for f in findings if f.rule == "hidden-with-show-if")
+    assert "untick Hidden" in msg, msg          # remedy 1: keep the condition
+    assert "delete the condition" in msg, msg   # remedy 2: keep hidden
+    assert "IS shown to the applicant" in msg, msg  # the real consequence
+
+
+@pytest.mark.parametrize("kw", [
+    {},                                    # neither
+    {"hidden": True},                      # hidden only
+    {"show_if": dict(_SHOW_IF)},           # condition only
+    {"hidden": False, "show_if": dict(_SHOW_IF)},   # explicit hidden=False
+    {"hidden": True, "show_if": {}},       # empty condition reads as absent
+    {"hidden": True, "show_if": None},     # null condition reads as absent
+])
+def test_hidden_with_show_if_stays_quiet_on_every_legitimate_shape(kw):
+    """The false-positive half. Each of these is a LEGITIMATE authoring choice
+    and must not be flagged -- a gate that fires on a valid schema trains
+    authors to ignore it. The two falsy-condition cases matter because a
+    hand-edited kit can carry `show_if: {}` and the editor's own gate treats
+    that as absent; the two must agree or the editor would lock a checkbox
+    over a condition lint says does not exist.
+    """
+    findings = _lint_structural(_schema([
+        _visibility_field(**kw),
+        {"id": "trigger", "type": "text"},
+    ]))
+    assert "hidden-with-show-if" not in _rules(findings), _rules(findings)

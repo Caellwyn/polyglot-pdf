@@ -794,6 +794,24 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     instructions: [], details: [], conditions: [], field: [],
     byOption: new Map(),
   };
+  // Visibility coherence (bd polyglot-pdf-pfx1). A field may not be BOTH
+  // always-hidden and conditionally shown; these two drive the mutual gate on
+  // the Hidden checkbox and the "Shown when" card. Treat an EMPTY condition
+  // object as absent -- ConditionBuilder emits undefined on delete, but a
+  // hand-edited schema can carry {} and that must not lock the checkbox.
+  const hasShowIf = !!field.show_if
+    && !(typeof field.show_if === 'object'
+      && !Array.isArray(field.show_if)
+      && Object.keys(field.show_if as object).length === 0);
+
+  // The maintainer's "how will editors be reminded which hidden is active?"
+  // question: the effective behavior, readable without cross-referencing the
+  // Hidden checkbox against a condition card elsewhere in the panel. Not
+  // cross-referencing is exactly how the ambiguity went unnoticed.
+  const effectiveVisibility = field.hidden
+    ? (hasShowIf ? 'Conflict: hidden AND conditional' : 'Always hidden')
+    : (hasShowIf ? 'Shown when a condition matches' : 'Always shown');
+
   // safeOptionsPreservingArity (bd polyglot-pdf-8bjdx): a non-array or
   // null-bearing `options` threw out of this .map. Arity preserved because
   // the values are matched positionally against the option rows below.
@@ -1172,16 +1190,55 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               />
               <span className="text-sm text-gray-700">Read Only</span>
             </label>
-            <label className="flex items-center gap-2">
+            {/* GATE, not a warning (bd polyglot-pdf-pfx1, maintainer decision
+                2026-08-04): a field may not be BOTH always-hidden and
+                conditionally shown. A warning would still let the state reach a
+                saved kit, leaving every consumer to interpret it -- bd
+                polyglot-pdf-ubam had to fix SEVEN sites that each interpreted it
+                differently. Disabling the control makes it unauthorable.
+                Today the CONDITION silently wins in shouldShowField, so the
+                contradiction resolves in the RISKIER direction: a field marked
+                never-show APPEARS to the applicant when its condition matches. */}
+            <label
+              className={`flex items-center gap-2 ${hasShowIf ? 'opacity-50' : ''}`}
+              title={hasShowIf
+                ? 'Unavailable: this field has a "show when" condition. A field '
+                  + 'cannot be both always-hidden and conditionally shown. Delete '
+                  + 'the condition to make it always-hidden.'
+                : undefined}
+            >
               <input
                 type="checkbox"
                 checked={field.hidden || false}
+                disabled={hasShowIf}
                 onChange={(e) => updateField({ hidden: e.target.checked })}
                 className="rounded"
               />
               <span className="text-sm text-gray-700">Hidden</span>
             </label>
           </div>
+          {hasShowIf && (
+            <p className="text-xs text-gray-500">
+              Hidden is unavailable while this field has a "show when"
+              condition -- it is shown only when the condition matches. Delete
+              the condition to make it always hidden.
+            </p>
+          )}
+          {/* EFFECTIVE VISIBILITY (bd polyglot-pdf-pfx1). One computed label so
+              the real behavior is readable here, instead of inferred by
+              cross-referencing this checkbox against a condition card further
+              down the panel -- the cross-reference nobody made, which is how
+              the hidden/show_if ambiguity went unnoticed. */}
+          <p className="text-xs">
+            <span className="text-gray-500">Effective visibility: </span>
+            <span
+              className={field.hidden && hasShowIf
+                ? 'font-semibold text-red-600'
+                : 'font-medium text-gray-700'}
+            >
+              {effectiveVisibility}
+            </span>
+          </p>
         </div>
 
         {/* Help Text */}
@@ -1403,13 +1460,33 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             Conditional Logic
           </h4>
 
-          <ConditionBuilder
-            title="Shown when"
-            condition={field.show_if}
-            selfId={field.id}
-            schema={schema}
-            onChange={(next) => updateField({ show_if: next })}
-          />
+          {/* The other half of the pfx1 gate. The Hidden checkbox is disabled
+              while a condition exists; here the reverse -- an always-hidden
+              field cannot GAIN one. Rendering the explanation instead of the
+              builder keeps the two states mutually exclusive by construction
+              rather than by the author remembering. An existing condition is
+              still shown (never silently dropped) -- but a field cannot be in
+              that state via the editor, so this only renders for a schema that
+              arrived by another route, where lint already reports
+              hidden-with-show-if. */}
+          {field.hidden && !field.show_if ? (
+            <div className="panel p-3 bg-gray-50 border-dashed">
+              <h5 className="text-sm font-medium text-gray-700">Shown when</h5>
+              <p className="text-xs text-gray-500 mt-1">
+                Unavailable: this field is marked <strong>Hidden</strong>, so it
+                is never shown. Untick Hidden to show it only when a condition
+                matches.
+              </p>
+            </div>
+          ) : (
+            <ConditionBuilder
+              title="Shown when"
+              condition={field.show_if}
+              selfId={field.id}
+              schema={schema}
+              onChange={(next) => updateField({ show_if: next })}
+            />
+          )}
 
           <ConditionBuilder
             title="Required when"
