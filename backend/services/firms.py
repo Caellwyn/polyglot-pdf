@@ -159,8 +159,11 @@ def firms_store_status() -> str:
     READ-shaped (limit-1 stream), deliberately NOT the sink probe's
     write+delete: this path never needs write permission, and probing with a
     write would test the wrong grant. Returns "disabled", "ok", or
-    "error: <msg>". No cache: nothing calls this on a hot path today; the
-    bead that wires it to /health adds caching there if needed.
+    "error: <msg>". No cache: nothing calls this on a hot path today; bd
+    polyglot-pdf-vq5wd owns the /health wiring and MUST add the cache +
+    in-flight coalescing + wait_for bound first (/health is unauthenticated
+    -- the confirmation_sink_status probe pattern exists for exactly this,
+    bd polyglot-pdf-fzwp).
     """
     if not _firms_enabled():
         return "disabled"

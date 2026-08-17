@@ -80,7 +80,15 @@ is DEAD -- nothing may reference it (purge bead polyglot-pdf-je6iy filed).
   (deliberate fail-closed design, documented). Deferred: the
   technical_guide Surface-contracts entry for the firm contracts, to vccy
   with the first live consumer (noted on that bead). Outer review: Opus
-  cross-surface, recorded in the merge ping.
+  cross-surface, ONE round, clean -- blast radius verified (no untouched
+  consumers of the firms collection / env var / claims; deploy scripts
+  untouched as designed; rules block inert for Admin-SDK paths; the
+  script's init ordering not defeated by any transitive import). Its one
+  finding was low-severity and latent (firms_store_status has no owner for
+  its future /health wiring, which must add caching/coalescing per the
+  fzwp precedent) -- the reviewer filed bd polyglot-pdf-vq5wd for it, and
+  the probe docstring now names that bead (comment-only edit, clear
+  stands).
 
 ## Lessons
 
