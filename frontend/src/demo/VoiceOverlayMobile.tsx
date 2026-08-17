@@ -944,8 +944,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		connectionManager?.setPushToTalkHeld(true)
 
 		// BARGE-IN: Stop Gemini's audio if she's talking.
-		// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s): isSpeaking()
-		// reads false during a model-PCM + clip overlap, skipping this flush.
+		// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s). NOTE the
+		// overlap cannot actually occur AT THIS SITE today: setPushToTalkHeld
+		// above runs spellback.interruptForPtt() -> releaseClip() synchronously,
+		// so activeClipCount is already 0 by here and isSpeaking() would read
+		// the same. Pointed at the model signal anyway because the correctness
+		// argument must not rest on that ordering -- bd s1iex.5 adds a SECOND
+		// clip producer (the intro player) with no such pairing, and this site
+		// asks the barge-in question, whose answer a clip never changes.
 		if (audioManager?.isModelSpeaking()) {
 			audioManager.flushAudioQueue()
 		}

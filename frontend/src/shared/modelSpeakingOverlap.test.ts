@@ -137,6 +137,25 @@ describe('isModelSpeaking during a model+clip overlap (bd polyglot-pdf-uxc6s)', 
     expect(am.isAnyAudioPlaying()).toBe(false)
   })
 
+  it('destroy() clears the model signal -- no stranded source (bd wge8m/2z5ms)', async () => {
+    // cleanup() resets activeClipCount and geminiIsSpeaking; isModelSpeaking()
+    // reads a THIRD piece of state (the PCM source list) and was initially
+    // missed. A stranded entry survives teardown -- the sources are stopped and
+    // their context closed, so onended never fires to drain them -- and would
+    // permanently report the model as talking, suppressing the post-resume
+    // re-prompt guard for the life of the manager.
+    restore = installAudioContext()
+    const am = createAudioManager()
+
+    await am.playAudio(pcmFrame())
+    expect(am.isModelSpeaking()).toBe(true)
+
+    am.destroy()
+    expect(am.isModelSpeaking(), 'a destroyed manager is not speaking').toBe(false)
+    expect(am.isSpeaking()).toBe(false)
+    expect(am.isAnyAudioPlaying()).toBe(false)
+  })
+
   it('the three signals are genuinely DISTINCT, not aliases', async () => {
     // A refactor that collapses any two of these re-introduces either this
     // bug or the s1iex.4 deadlock. Pin that each pair differs on some input.

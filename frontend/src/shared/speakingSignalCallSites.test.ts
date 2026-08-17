@@ -148,6 +148,22 @@ function codeLinesAbs(abs: string): string[] {
   return splitCodeLines(readFileSync(abs, 'utf8'))
 }
 
+/**
+ * Resolve the anchor for the call site at line INDEX i.
+ *
+ * Index-based, not indexOf(text) (bd polyglot-pdf-wge8m): when a regression
+ * makes two sites byte-identical -- exactly what happens if the RESUME half is
+ * regressed to match the flush half -- indexOf returns the FIRST for both, so
+ * the resume site silently binds to the flush site's anchor and the accessor
+ * assertion passes on a real deadlock regression.
+ */
+function anchorAtIndex(lines: string[], i: number): string | undefined {
+  for (let j = i; j >= 0 && j > i - 12; j--) {
+    for (const a of ANCHORS) if (lines[j].includes(a)) return a
+  }
+  return undefined
+}
+
 function nearestAnchorAbs(abs: string, target: string): string | undefined {
   const lines = codeLinesAbs(abs)
   const idx = lines.indexOf(target)
@@ -217,7 +233,9 @@ describe('speaking-signal call sites are classified (bd polyglot-pdf-uxc6s)', ()
     // Walk every DISCOVERED consumer, so a new FILE cannot escape.
     for (const abs of discoverConsumers()) {
       const name = basename(abs)
-      for (const line of codeLinesAbs(abs)) {
+      const fileLines = codeLinesAbs(abs)
+      for (let li = 0; li < fileLines.length; li++) {
+        const line = fileLines[li]
         const m = CALL.exec(line)
         if (!m) continue
         const used = m[1]
@@ -225,7 +243,7 @@ describe('speaking-signal call sites are classified (bd polyglot-pdf-uxc6s)', ()
         const entry = CLASSIFIED.find(
           c => c.file === name
             && key.includes(c.fragment)
-            && (!c.anchor || nearestAnchorAbs(abs, line) === c.anchor),
+            && (!c.anchor || anchorAtIndex(fileLines, li) === c.anchor),
         )
         if (!entry) {
           unclassified.push(`${name}: ${line.trim().slice(0, 100)}`)

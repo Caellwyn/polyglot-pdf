@@ -967,6 +967,14 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		// with no such pairing, so make it structural rather than incidental.
 		activeClipCount = 0
 		geminiIsSpeaking = false
+		// ...and the MODEL-PCM source list, for the same structural reason (bd
+		// polyglot-pdf-uxc6s). isModelSpeaking() reads this array directly, so a
+		// stranded entry survives teardown and permanently reports the model as
+		// talking -- which would suppress the post-resume re-prompt guard for the
+		// life of the manager. The sources are already stopped and their context
+		// closed, so onended will never fire to drain them. Every speaking
+		// predicate is now reset here; keep it that way when adding another.
+		activeAudioSources.length = 0
 		notifyClipState()
 
 		// Drop the energy subscriber on teardown so a destroyed manager holds no
