@@ -1,21 +1,29 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-17 (bd polyglot-pdf-bxr3p: re-verified and corrected
-every remaining code citation in the Surface contracts section -- section 5
-("Fill round-trip") and section 6 ("Confirmation audit trail"), which carried
-the same drift class as sections 2-4 (bd polyglot-pdf-x82ii, same day):
-producer/consumer line numbers, the two-pass alias-resolution range, the
-`_load_kit_dump` def + its actual promotion-gate call site (7 call sites
-total, not the one the doc named), the confirm-field chain across
-`request_coordinator.py` / `webFormConnection.ts` / `callback_handler.py`, and
-the confirmation-event shape + all three log sinks in
-`confirmation_logger.py`. Every citation in this file now resolves to the
-code it names. Also current: the `PDFFillRequest` line range in section 5
-does not straddle into `fill_pdf` and the dropped-key example there names
-`form_number`, the key that actually produces `form_id="unknown"` (a dropped
-`kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 + qxad.
-The Surface contracts section is the code-derived cross-surface data-contract
-map for blast-radius review (bd polyglot-pdf-n18q).
+*Last updated: 2026-08-17 (bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
+code-line citation in the Surface contracts section now resolves to the code
+it names. x82ii fixed the "2. WS handshake" block (producer/consumer lines,
+all handshake key citations, and the `full_schema` consumer chain -- one
+citation, the secretary-catalog renderer, was pointing at the wrong FILE, not
+just a wrong line) plus the adjacent "3. WS control messages" and "4. Backend
+<-> Gemini Live" blocks, all drifted off the same `websocket_routes.py` code
+motion the ws-protocol.md fix addressed. bxr3p fixed the rest -- section 5
+("Fill round-trip": producer/consumer line numbers, the two-pass
+alias-resolution range, the `_load_kit_dump` def + its actual
+promotion-gate call site, one of 7 call sites, not the one the doc previously
+named) and section 6 ("Confirmation audit trail": the confirm-field chain
+across `request_coordinator.py` / `webFormConnection.ts` /
+`callback_handler.py`, and the confirmation-event shape + all three log sinks
+in `confirmation_logger.py`). Also current: the `PDFFillRequest` line range in
+section 5 does not straddle into `fill_pdf` and the dropped-key example there
+names `form_number`, the key that actually produces `form_id="unknown"` (a
+dropped `kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 +
+qxad. Same week, bd polyglot-pdf-lo88 added the `FIRMS_FIRESTORE_ENABLED` env
+row and the single-live-project correction -- see [the lo88 journal
+entry](journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for
+closeout details. The Surface contracts section is the code-derived
+cross-surface data-contract map for blast-radius review (bd
+polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -45,8 +53,9 @@ The agent may run `deploy-demo.sh` under the three-part gate (local-test-first +
 per-instance permission + post-deploy test-drive); see
 [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md).
 
-Two Firebase projects: demo and production (frontend picks the backend by the
-Cloud Run host it's built against). Backend config is env-driven via
+One live Firebase project: the demo, `polyglot-demo-aa709` (the former
+production project is dead and unreachable; reference purge tracked in bd
+`polyglot-pdf-je6iy`). Backend config is env-driven via
 `backend/config.py` (`Settings`); the load-bearing vars:
 
 | Env var | Default | Purpose |
@@ -63,6 +72,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
 | `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
+| `FIRMS_FIRESTORE_ENABLED` | `false` | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, feeding firm-scoped kit visibility. Reads FAIL CLOSED to `[]` when off/broken, so leaving it unset can never widen visibility. Not yet set in any deploy env -- that wiring ships with the consumer (bd vccy). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
