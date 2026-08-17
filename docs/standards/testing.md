@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-13. See [the s1iex.1 journal entry](../journal/entries/2026-08-13-bd-s1iex.1-intro-copy-master-and-translations.md) for closeout details.*
+*Last updated: 2026-08-14. See [the s1iex.4 journal entry](../journal/entries/2026-08-14-bd-s1iex.4-sol-animates-during-clips.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -214,6 +214,31 @@ probe's default. Cost/behavior measurements (token curves, latency, tool-call
 compliance) additionally need realistic CONTENT — production-length system
 instructions and plausible answers — because the unevictable base (SI + tools)
 sets the floor the numbers sit on.
+
+**A test that READS SOURCE must resolve the path from the test file, not
+`process.cwd()`.** Worktree vitest runs are invoked from the MAIN checkout
+here (the `node_modules` junction workaround), so a cwd-relative
+`readFileSync` audits **main's** copy: a set-pin for bd
+`polyglot-pdf-s1iex.4` counted 3 sites while the branch under review had 4,
+and would have passed against an unfixed branch. Use
+`expect.getState().testPath` (`import.meta.url` is a non-file URL under vite).
+
+**Suspect a NEW harness before you suspect the code — and never let a harness
+depend on tab focus.** A browser check for bd `polyglot-pdf-s1iex.4` reported
+`FAIL` (peak audio energy 0.00) against a correct implementation: it sampled
+inside `requestAnimationFrame`, which Chrome throttles to **zero in a
+background tab**. Re-measured on `setInterval`: 26.64. Same rule as the
+backend probe guidance below — check the measuring instrument first (see the
+[s1iex.4 journal entry](../journal/entries/2026-08-14-bd-s1iex.4-sol-animates-during-clips.md)).
+
+**A frozen fake clock can WEDGE vitest instead of failing it.** Any
+production loop that waits for a *sustained* condition (`spellbackPlayer`'s
+pre-clip drain-wait: quiet for N ms, measured with an injected `now()`) spins
+forever when a test pins `now: () => 0` — the worker never exits, nothing
+prints, and it mimics an environment/junction failure. Advance injected
+clocks. To bisect: run one pure-function `describe` alone (a clean exit
+isolates the culprit) and re-run an EXISTING neighbouring test as the control
+that proves the environment is fine.
 
 **A generative endpoint's output varies run to run — never accept a
 single-draw measurement at a decision boundary.** Chirp3-HD TTS re-generates

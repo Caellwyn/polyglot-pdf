@@ -300,6 +300,14 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
 
       const url = makeClipUrl(blob)
       const audio = createAudio(url)
+      // Route the clip through the playback graph so the avatar animates while
+      // it speaks (bd polyglot-pdf-s1iex.4). Before this, a clip played on a
+      // bare element bypassed the analyser AND never fired the vff* playback
+      // globals, so Sol sat IDLE through every spell-back -- the state machine
+      // was correct, it simply had no signal. Attaching AFTER the blob URL is
+      // set matters: a cross-origin src would taint the element and Web Audio
+      // would output silence.
+      const releaseClip = deps.getAudioManager()?.attachClipElement?.(audio)
       const playStart = now()
       const playbackCapMs = computePlaybackCapMs(value.length, now() - callStart)
       let stopWatchdog: () => void = () => {}
@@ -308,6 +316,10 @@ export function createSpellbackPlayer(deps: SpellbackPlayerDeps): SpellbackPlaye
         const settle = (o: 'delivered' | 'interrupted' | 'error') => {
           if (!settled) {
             settled = true
+            // Release on EVERY settle path (ended, error, watchdog, PTT
+            // interrupt, cancel), not just the happy one -- a leaked
+            // attachment would strand Sol in `speaking` forever.
+            releaseClip?.()
             resolve(o)
           }
         }

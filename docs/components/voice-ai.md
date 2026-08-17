@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-13 (bd polyglot-pdf-s1iex.3: LIVE_VOICE_NAME gained a THIRD consumer -- the intro-clip route reuses resolve_spellback_voice, at 0 dB rather than the per-voice gain). See [the s1iex.3 journal entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for closeout details.*
+*Last updated: 2026-08-14 (bd polyglot-pdf-s1iex.4: synthesized clips now share the playback graph -- see the Audio pipeline section for the attachClipElement seam and the isSpeaking / isAnyAudioPlaying / isClipPlaying split). See [the s1iex.4 journal entry](../journal/entries/2026-08-14-bd-s1iex.4-sol-animates-during-clips.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -75,6 +75,20 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   callback; the frontend (`connection.ts` → `audioManager`) plays them and detects
   end-of-playback via the audio source's `onended`, which drives the activity
   watchdog.
+- **Synthesized CLIPS (spell-back; Sol's intro from bd `s1iex.5`) share that
+  playback graph** (bd `polyglot-pdf-s1iex.4`). `audioManager.attachClipElement(el)`
+  splices the clip's `<audio>` element in via `createMediaElementSource` → the
+  same `getOutputAnalyser` node the model's PCM uses, so **one** energy source
+  feeds the avatar; it returns an idempotent release the caller invokes on
+  every settle path. The element MUST carry a **blob URL** — a cross-origin
+  `src` taints it and Web Audio then outputs silence with no error. Two
+  predicates, deliberately distinct: **`isSpeaking()` is MODEL-ONLY** (every
+  caller is turn-taking / barge-in logic asking "is Gemini mid-utterance?",
+  and counting a clip deadlocks the VAD suspend/resume pair), while
+  **`isAnyAudioPlaying()`** is the union the avatar's `getOutputEnergy` gate
+  wants. `isClipPlaying()` is the clip-only flag `deriveSolState` reads as
+  `clipPlaying`, which bypasses the live-session gate because a clip is
+  audible with **no** session (but still yields to `paused`/`offline`).
 - **Dev test injection:** `connection.ts` publishes a dev-gated
   `window.__VFF_TEST_INJECT` (only when `isTestHarnessEnabled()` — both
   `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` set) that pushes scripted PCM straight
