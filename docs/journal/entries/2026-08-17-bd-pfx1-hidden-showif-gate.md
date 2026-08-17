@@ -28,7 +28,7 @@ acceptance-agent-only field displayed to the applicant.
 
 The maintainer considered both and chose the gate. The reasoning holds up: a
 warning still lets the state reach a saved kit, and then every consumer has to
-interpret it. bd `ubam` had already paid that bill -- seven call sites, each
+interpret it. bd `ubam` had already paid that bill -- six call sites, each
 interpreting the same ambiguity differently.
 
 The tempting adjacent fix is to change the precedence so `hidden` wins. I
@@ -73,12 +73,25 @@ two implementations have to agree on "absent", so both are pinned.
 The two review layers found four defects in this diff. None were in the gate;
 all four were in what I WROTE ABOUT the gate.
 
-**I fabricated a number.** I wrote that bd `ubam` "had to fix SEVEN call
-sites" -- its title says six and its body enumerates 1-6. I repeated it in
-three files, one of them a tier-2 current-state doc. The argument did not need
-seven; six is already the point. This was reaching for a rhetorical
-strengthener on a factual claim I had not checked, in prose whose whole job is
-justifying a gate.
+**I propagated a number I never checked.** I wrote that bd `ubam` "had to fix
+SEVEN call sites" -- its bead title says six and its body enumerates 1-6. I
+repeated it in three files, one a tier-2 current-state doc.
+
+My first account of this called it fabrication. Checking further while fixing
+it, that was too harsh AND less useful: `ubam`'s OWN journal entry says
+"Seven call sites" twice. The number was almost certainly inherited from that
+entry rather than invented -- which makes it a more interesting failure than
+carelessness. The bead is the authoritative enumeration (it lists the sites
+1-6); the journal is a point-in-time narrative written before the set was
+finalized, and it was never corrected. I read the narrative, not the
+enumeration, and carried a superseded figure into a current-state doc.
+
+The lesson is sharper than "check your numbers": a tier-3 journal entry is a
+record of what a session BELIEVED, and quoting a count out of one into a
+tier-1/2 doc launders a snapshot into a standing claim. Cite the enumeration,
+not the story about it. (The two stale figures in `ubam`'s own entry are left
+as-is -- correcting a historical record would destroy exactly the evidence
+that explains this.)
 
 Then the set turned out to be five, not three. The inner review caught three,
 the outer review found a fourth on another surface, and only sweeping properly
