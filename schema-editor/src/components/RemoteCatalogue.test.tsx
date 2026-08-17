@@ -824,6 +824,27 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     expect(setRemoteStatus).not.toHaveBeenCalled();
   });
 
+  it('the STRIP republish button asks too (the twin)', async () => {
+    // Every publish control in this file exists twice -- compact strip and
+    // expanded card. Four separate times on this bead a mutation "survived"
+    // only because I had reverted the twin the test does not click. Each twin
+    // gets its own click.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'unpublished' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    // Strip only -- no card grid.
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="done-kit"
+                            role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish again'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('done-kit'));
+  });
+
   it('the SUBMITTED-kit publish path asks about older versions too', async () => {
     // An author publishing a kit an editor submitted -- the hqztg flow.
     vi.mocked(listRemoteKits).mockResolvedValue(
