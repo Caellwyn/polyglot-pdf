@@ -57,7 +57,7 @@ def get_allowed_kits(firm_id: str) -> list[str]:
 
     FAIL CLOSED: returns [] -- never None, never raises -- when the store is
     disabled, the firm is missing or not active, the stored allowed_kits is
-    not a list, or the read fails (logged loudly). A caller gating PRIVATE
+    not a list of strings, or the read fails (logged loudly). A caller gating PRIVATE
     kit visibility on this must treat [] as "this firm may see zero private
     kits" -- which is exactly what a fail-closed default requires.
     """
@@ -76,9 +76,14 @@ def get_allowed_kits(firm_id: str) -> list[str]:
         if doc.get("status") != FIRM_STATUS_ACTIVE:
             return []
         kits = doc.get("allowed_kits")
-        if not isinstance(kits, list):
+        # A list with ANY non-string entry is malformed: fail the whole doc
+        # closed rather than partially filtering (the docstring's contract --
+        # every failure branch resolves to [], nothing in between).
+        if not isinstance(kits, list) or not all(
+            isinstance(k, str) for k in kits
+        ):
             return []
-        return [k for k in kits if isinstance(k, str)]
+        return list(kits)
     except Exception as e:
         _log.error("firms_read_failed", firm_id=firm_id, error=str(e))
         return []

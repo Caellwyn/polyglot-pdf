@@ -144,7 +144,7 @@ def main(argv=None) -> int:
         help="staff account email to stamp firm_role=employee (repeatable)",
     )
     parser.add_argument(
-        "--status", default="active", choices=STATUS_CHOICES
+        "--status", default=STATUS_CHOICES[0], choices=STATUS_CHOICES
     )
     parser.add_argument(
         "--project",
@@ -177,7 +177,11 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
         return 2
-    duplicated = set(args.manager_email) & set(args.employee_email)
+    # casefold both sides: Firebase resolves emails case-insensitively, so
+    # Ada@x / ada@x are the SAME account and would clobber roles silently.
+    duplicated = {e.casefold() for e in args.manager_email} & {
+        e.casefold() for e in args.employee_email
+    }
     if duplicated:
         print(
             "email(s) listed under BOTH --manager-email and --employee-email: "
@@ -197,7 +201,6 @@ def main(argv=None) -> int:
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(options={"projectId": args.project})
-    os.environ["GOOGLE_CLOUD_PROJECT"] = args.project
 
     resolved = firebase_admin.get_app().project_id
     if resolved != args.project:
@@ -208,6 +211,9 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
         return 2
+    # Set only AFTER the assertion passes: the abort path must not leave the
+    # process env pointed at a project this run refused to write into.
+    os.environ["GOOGLE_CLOUD_PROJECT"] = args.project
 
     kits = [k.strip() for k in args.allowed_kits.split(",") if k.strip()]
     staff = [(e, ROLE_MANAGER) for e in args.manager_email] + [

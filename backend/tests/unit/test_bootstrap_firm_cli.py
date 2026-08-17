@@ -276,6 +276,43 @@ def test_email_in_both_role_flags_is_refused(wired, capsys):
     assert wired.upserts == []
 
 
+def test_omitted_status_upserts_service_active_constant(wired):
+    """--status omitted must write firms.FIRM_STATUS_ACTIVE into the firm
+    doc: the argparse default is a literal-drift hazard (round-2 fresh-eyes
+    mutation-proved default="bogus" left every test green while silently
+    fail-closing every new firm). Mutation: set the --status default to a
+    literal not equal to the service constant -- red."""
+    import backend.services.firms as firms
+
+    rc = bootstrap_firm.main(_argv())
+
+    assert rc == 0
+    assert len(wired.upserts) == 1
+    assert wired.upserts[0][0][4] == firms.FIRM_STATUS_ACTIVE
+
+
+def test_case_mismatched_dual_role_email_is_refused(wired, capsys):
+    """Firebase resolves emails case-insensitively, so Ada@x under
+    --manager-email and ada@x under --employee-email are the SAME account --
+    the duplicate-role refusal must casefold before intersecting. Mutation:
+    revert the casefolded sets to exact-string sets -- red."""
+    user = _FakeUser("uid-ada")
+    wired.auth.users["Ada@x.example"] = user
+    wired.auth.users["ada@x.example"] = user
+
+    rc = bootstrap_firm.main(
+        _argv(
+            "--manager-email", "Ada@x.example",
+            "--employee-email", "ada@x.example",
+        )
+    )
+
+    assert rc == 2
+    assert "BOTH" in capsys.readouterr().err
+    assert wired.auth.stamps == {}
+    assert wired.upserts == []
+
+
 def test_status_choices_match_service_constants():
     """The CLI's status choices are deliberate literals (a module-scope
     backend import would break main()'s init-ordering trick); this pin turns

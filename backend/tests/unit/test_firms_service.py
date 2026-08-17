@@ -116,20 +116,32 @@ def test_get_allowed_kits_is_inert_when_disabled(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "case", ["missing_firm", "suspended", "kits_not_a_list", "read_raises"]
+    "case",
+    [
+        "missing_firm",
+        "suspended",
+        "kits_not_a_list",
+        "kits_mixed_types",
+        "read_raises",
+    ],
 )
 def test_get_allowed_kits_fails_closed_to_empty_list(fake_db, monkeypatch, case):
     """Every failure branch resolves to [] -- a list, never None, never a
     raise (a None leaking into `kit_id in allowed` raises instead of
-    denying). Mutation per branch: delete that branch's guard in
-    get_allowed_kits (the not-exists early return, the status gate, the
-    isinstance check, the try/except) -- the corresponding parametrization
-    goes red."""
+    denying). A list with ANY non-string entry is malformed and fails the
+    WHOLE doc closed -- no partial filtering (round-2 fresh-eyes: the code
+    contradicted its own every-failure-to-[] docstring). Mutation per
+    branch: delete that branch's guard in get_allowed_kits (the not-exists
+    early return, the status gate, the isinstance/all check -- for
+    kits_mixed_types, revert it to a per-entry isinstance filter -- the
+    try/except) -- the corresponding parametrization goes red."""
     col = fake_db.collection(firms._FIRMS_COLLECTION)
     if case == "suspended":
         col.store["acme"] = _firm_doc(status="suspended")
     elif case == "kits_not_a_list":
         col.store["acme"] = _firm_doc(allowed_kits="w7")
+    elif case == "kits_mixed_types":
+        col.store["acme"] = _firm_doc(allowed_kits=["w7", 123, None])
     elif case == "read_raises":
         def _boom():
             raise RuntimeError("iam drift")
