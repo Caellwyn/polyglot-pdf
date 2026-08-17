@@ -834,6 +834,18 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		if (introEnabled) {
 			console.log('[VoiceOverlayMobile] Intro path - single connect on Agree (no interrupt, no restart)')
 			logDisclaimerAcceptance(state, selectedLanguage)
+			// Set the FILL language before connecting (bd polyglot-pdf-s1iex.6,
+			// fresh-eyes round 1). The legacy path set it as a side effect of
+			// switchToFirstSection -- the ONLY production caller that moved it off
+			// createConnectionManager's hardcoded 'English'. Skipping the restart
+			// therefore silently left fill_language="English" in the handshake, so
+			// a Spanish user would HEAR Spanish while every field's guidance said
+			// to write the values in English. changeFillLanguage stores it when
+			// not yet connected, so calling it here puts the right value INTO the
+			// handshake rather than correcting it afterwards.
+			if (selectedLanguage) {
+				await connectionManager?.changeFillLanguage(selectedLanguage)
+			}
 			try {
 				await handleConnect()
 			} catch (err) {

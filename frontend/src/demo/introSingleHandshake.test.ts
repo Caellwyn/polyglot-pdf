@@ -98,6 +98,31 @@ describe.each(OVERLAYS)('%s: one handshake on the intro path', (file) => {
     expect(beforeReturn).not.toContain('flushAudioQueue')
   })
 
+  it('sets the FILL language before the single connect', () => {
+    // Fresh-eyes round 1 caught this: the legacy path set fillLanguage as a
+    // SIDE EFFECT of switchToFirstSection -- the only production caller that
+    // moved it off createConnectionManager's hardcoded 'English'. Deleting the
+    // restart therefore shipped fill_language="English" in the handshake, so a
+    // Spanish user would HEAR Spanish while every field's guidance told the
+    // model to write the values in English. Silent, and invisible in audio.
+    //
+    // Order matters: it must be set BEFORE handleConnect() so the value rides
+    // the handshake rather than being corrected after the session starts.
+    const src = overlaySource(file)
+    const lines = src.split('\n')
+    const setLine = lines.findIndex(l => l.includes('changeFillLanguage(selectedLanguage)'))
+    expect(setLine).toBeGreaterThan(-1)
+
+    const introReturnLine = lines.findIndex(
+      l => l.includes('Intro path - single connect on Agree'))
+    // Inside the intro branch...
+    expect(setLine).toBeGreaterThan(introReturnLine)
+    // ...and BEFORE that branch's connect.
+    const connectAfter = lines.findIndex(
+      (l, i) => i > introReturnLine && l.trim() === 'await handleConnect()')
+    expect(connectAfter).toBeGreaterThan(setLine)
+  })
+
   it('PRESERVES the mount connect for the already-accepted (reload) branch', () => {
     // The one thing this bead must NOT break: a reload user never sees Agree,
     // so removing the mount connect wholesale would leave them with no

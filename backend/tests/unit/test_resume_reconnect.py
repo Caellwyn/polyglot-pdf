@@ -1,14 +1,21 @@
 """Tests for mid-section reconnect resume behavior (bd polyglot-pdf-vmxx).
 
 A reconnect handshake with resume:true must:
-  (a) use RESUME_INITIATING_MESSAGE (no greeting wording)
-  (b) NOT use the greeting INITIATING_MESSAGE
+  (a) use RESUME_INITIATING_MESSAGE (explicitly says "do not greet")
+  (b) NOT use the base INITIATING_MESSAGE
 
 A fresh handshake (resume absent or False) must:
-  (c) still use the normal INITIATING_MESSAGE with greeting wording
+  (c) still use the base INITIATING_MESSAGE
+
+NOTE (bd polyglot-pdf-s1iex.6): NEITHER template greets any more. Sol
+introduces himself by name in the scripted intro clip, so a model greeting
+landed seconds later as a second hello. The resume-vs-fresh DISTINCTION these
+tests exist to protect is unchanged -- only the discriminator moved: the base
+template states the section name, and the resume template explicitly says
+"do not greet" and skips the section re-introduction.
 
 Also verifies that the system instruction carries a RESUME override note
-when is_reconnect=True, suppressing the greet directive in the base template.
+when is_reconnect=True.
 """
 import pytest
 from unittest.mock import AsyncMock, patch
