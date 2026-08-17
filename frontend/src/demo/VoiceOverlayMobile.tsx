@@ -628,6 +628,18 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 	// Send disclaimer read request when connection is ready and disclaimer read is pending
 	useEffect(() => {
+		// INTRO PATH (bd polyglot-pdf-s1iex.5): Sol's scripted clip IS the
+		// disclaimer read, so the legacy model-read must not also fire -- two
+		// voices reading two different texts over each other. Guarded HERE, at
+		// the single choke point every pendingDisclaimerRead path flows
+		// through, rather than at each setPendingDisclaimerRead(true) site
+		// (there are three per overlay; guarding the sites is the miss the
+		// cross-surface review caught). Clear the flag so it cannot fire later.
+		if (introEnabled) {
+			if (pendingDisclaimerRead) setPendingDisclaimerRead(false)
+			return
+		}
+
 		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 
 		if (isConnected && pendingDisclaimerRead && connectionManager && selectedLanguage) {
@@ -643,7 +655,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
 			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
-	}, [status, pendingDisclaimerRead, connectionManager, selectedLanguage])
+	}, [introEnabled, status, pendingDisclaimerRead, connectionManager, selectedLanguage])
 
 	// FIX #2: SINGLE SOURCE OF TRUTH for VAD state management
 	// This replaces 3 separate code paths with one consolidated control flow
