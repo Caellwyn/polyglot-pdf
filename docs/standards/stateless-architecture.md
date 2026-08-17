@@ -1,12 +1,16 @@
 # Stateless architecture
 
-*Last updated: 2026-08-14 (bd polyglot-pdf-h5v7h: corrected the warm-reconnect
-frame claim -- the JIT/DTI builder, the production default, sends
-`initial_field_hint` on every connect, not only on a section switch; only the
-legacy builder omits it. The `section_id` half of the claim was already
-correct and is unchanged. Also current: the client-side two-writer
-`fieldValues` reconciliation (React UI + WebFormConnection,
-`reconcileFieldValues` in frontend/src/schema-forms/utils/fieldValue.ts, bd
+*Last updated: 2026-08-17 (re-verified against connection.ts's bd
+polyglot-pdf-s1iex.4 clip-playback change, `vffOnClipStateChange` -- a new
+window callback for Sol's avatar animation during synthesized clips, no
+effect on the handshake shape or state ownership this doc tracks. Current
+claims: bd polyglot-pdf-h5v7h corrected the warm-reconnect frame claim -- the
+JIT/DTI builder, the production default, sends `initial_field_hint` on every
+connect, not only on a section switch; only the legacy builder omits it. The
+`section_id` half of the claim was already correct and is unchanged. Also
+current: the client-side two-writer `fieldValues` reconciliation (React UI +
+WebFormConnection, `reconcileFieldValues` in
+frontend/src/schema-forms/utils/fieldValue.ts, bd
 polyglot-pdf-uw3w/3irc/qim7) -- a client-internal consistency mechanism that
 does not change the backend-statelessness invariant this doc tracks.)*
 
