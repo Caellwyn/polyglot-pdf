@@ -2,7 +2,15 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-08-13 (bd polyglot-pdf-s1iex.3: LIVE_VOICE_NAME gained a THIRD consumer -- the intro-clip route reuses resolve_spellback_voice, at 0 dB rather than the per-voice gain). See [the s1iex.3 journal entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for closeout details.*
+*Last updated: 2026-08-14 (bd polyglot-pdf-9sz5y: the `ask_secretary` bullet now
+names all three shipped uses -- past-answer recall, field identification for
+navigation, and official instruction text quoted back -- plus the
+hedge-and-defer relay contract, matching `backend/config.py`'s declaration.
+Also current: `LIVE_VOICE_NAME` has a THIRD consumer -- the intro-clip route
+reuses `resolve_spellback_voice`, at 0 dB rather than the per-voice gain (bd
+polyglot-pdf-s1iex.3). See [the s1iex.3 journal
+entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for that
+closeout's details.)*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -263,8 +271,19 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   section-reset fallback (bd polyglot-pdf-55jg).
 - `ask_secretary` -- a plain-language question routed to a cheap text-model
   helper that holds the whole form catalog + current answers and replies in
-  prose (bd polyglot-pdf-jnjj.45); the principal uses it instead of trying to
-  recall a past answer or another field itself.
+  prose (bd polyglot-pdf-jnjj.45). Three uses: (1) recall a past answer/value;
+  (2) IDENTIFY which field the user means when the principal needs to
+  navigate to a field it does not currently hold -- the response's `fields`
+  list carries the exact `field_id` + `spoken_name` to pass to
+  `switch_to_field`; (3) get the OFFICIAL INSTRUCTION TEXT quoted back when
+  the current field's reference text does not cover something (bd
+  polyglot-pdf-wsao.8). On an eligibility-shaped question ("do I qualify"),
+  the secretary answers FROM the official text, flags the conditions that
+  text puts on it, and defers the applicant's own situation to the firm or
+  professional reviewing the form -- it never concludes their case, and the
+  principal must relay all three parts rather than trim to a cleaner
+  yes/no (this is the scrivener-not-advisor boundary
+  `backend/tests/unit/test_secretary_scrivener_boundary.py` pins).
 - `skip_field` -- force-skip a required field the user cannot answer right now
   (bd polyglot-pdf-7yra), DISTINCT from not-applicable (which stays the
   `update_form_fields ""` path). Maps to the frontend `markFieldSkipped` (the

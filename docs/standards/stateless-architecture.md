@@ -1,15 +1,14 @@
 # Stateless architecture
 
-*Last updated: 2026-08-06 (post-merge freshness check against
-backend/services/form_filling_service.py +
-frontend/src/schema-forms/state/schemaFormState.ts: added a note on the
-client-side two-writer `fieldValues` reconciliation (React UI +
-WebFormConnection, `reconcileFieldValues` in
-frontend/src/schema-forms/utils/fieldValue.ts, bd polyglot-pdf-uw3w/3irc/qim7)
--- a client-internal consistency mechanism that does not change the
-backend-statelessness invariant this doc tracks; re-verified the
-`current_values` backend comments and `SchemaFormStateManager.clear()`
-behavior, no other drift found).*
+*Last updated: 2026-08-14 (bd polyglot-pdf-h5v7h: corrected the warm-reconnect
+frame claim -- the JIT/DTI builder, the production default, sends
+`initial_field_hint` on every connect, not only on a section switch; only the
+legacy builder omits it. The `section_id` half of the claim was already
+correct and is unchanged. Also current: the client-side two-writer
+`fieldValues` reconciliation (React UI + WebFormConnection,
+`reconcileFieldValues` in frontend/src/schema-forms/utils/fieldValue.ts, bd
+polyglot-pdf-uw3w/3irc/qim7) -- a client-internal consistency mechanism that
+does not change the backend-statelessness invariant this doc tracks.)*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 
@@ -88,11 +87,15 @@ the backend's working context **from the handshake** (`/ws/fill` in
    and `resume: boolean` (bd polyglot-pdf-vmxx: `true` on any reconnect after the
    first successful open -- the backend selects a no-greeting resume prompt; the
    stateless invariant holds, as `resume` is a hint, not persisted state).
-   The warm-reconnect frame (`getHandshakePayload`/`getJITHandshakePayload`, sent on
-   every connect) stops there; `section_id` and `initial_field_hint` ride the
-   section-switch paths instead — the explicit `startSection` handshake (top-level
-   keys) and the auto-advance `manual_section_switch` frame (nested under
-   `section_info`) — and the backend reads them whenever present.
+   The warm-reconnect frame also carries `initial_field_hint` on the JIT/DTI
+   builder (`getJITHandshakePayload`, the production default) -- computed and
+   sent on every connect, not only a section switch (bd polyglot-pdf-jnjj.9,
+   "gap D-hint"). The LEGACY builder (`getHandshakePayload`) omits it, same as
+   `section_id`, which neither builder sends on the warm-reconnect frame --
+   both instead ride the section-switch paths: the explicit `startSection`
+   handshake (top-level keys) and the auto-advance `manual_section_switch`
+   frame (nested under `section_info`) — and the backend reads them whenever
+   present.
 3. The backend extracts those fields, then `update_schema(schema, current_values,
    fill_language)` stores the **schema** and language on the in-memory service
    (`self._schema = schema`) -- but **explicitly not the values** (*"current_values
