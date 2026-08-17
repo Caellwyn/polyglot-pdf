@@ -233,6 +233,18 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// alreadyLive branch above: reconnect either way (to resume the
 			// session), but only surface the agree step when it was NOT accepted.
 			const alreadyAccepted = SchemaFormStateManager.load()?.disclaimerAccepted
+
+			// INTRO PATH (bd polyglot-pdf-s1iex.6): with the clip flag ON and the
+			// disclaimer NOT yet accepted, do NOT connect here -- Agree becomes the
+			// first and ONLY handshake. The alreadyAccepted branch still connects at
+			// mount: a reload user never sees Agree, so removing it wholesale would
+			// leave them with no session. Mirrors VoiceOverlay.tsx exactly.
+			if (introEnabled && !alreadyAccepted) {
+				console.log('[VoiceOverlayMobile] Intro clip enabled - deferring connect to Agree')
+				setShowDisclaimerModal(true)
+				return
+			}
+
 			// Trigger the same flow as handleInitialLanguageSelect
 			const triggerDisclaimerFlow = async () => {
 				try {
@@ -704,6 +716,15 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		setSelectedLanguage(language)
 		setShowLanguageModal(false)
 
+		// INTRO PATH (bd polyglot-pdf-s1iex.6): show the modal WITHOUT connecting.
+		// Second of the two connect-before-Agree sites; both must defer or the
+		// teardown seam survives. Mirrors VoiceOverlay.tsx.
+		if (introEnabled) {
+			console.log('[VoiceOverlayMobile] Intro clip enabled - showing modal without connecting')
+			setShowDisclaimerModal(true)
+			return
+		}
+
 		// Set pending flag so disclaimer will be read when connection is ready
 		setPendingDisclaimerRead(true)
 
@@ -754,6 +775,38 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}
 
+	// The disclaimer-acceptance record (the legal trail). Extracted so the intro
+	// path and the legacy path log IDENTICALLY (bd polyglot-pdf-s1iex.6);
+	// mirrors VoiceOverlay.tsx. Fire-and-forget: a logging failure must never
+	// block the user, and must not delay the connect they are waiting on.
+	const logDisclaimerAcceptance = (
+		state: ReturnType<typeof SchemaFormStateManager.load>,
+		language: string,
+	) => {
+		const backendUrl = getBackendHttpUrl()
+		fetch(`${backendUrl}/api/disclaimer-acceptance`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				form_session_id: state?.formSessionId || 'unknown',
+				language,
+				timestamp: Date.now(),
+				user_agent: navigator.userAgent,
+			}),
+		}).then(
+			(response) => {
+				if (response.ok) {
+					console.log('[VoiceOverlayMobile] [OK] Disclaimer acceptance logged to backend')
+				} else {
+					console.warn('[VoiceOverlayMobile] [warn] Backend logging returned non-OK status:', response.status)
+				}
+			},
+			(err) => {
+				console.error('[VoiceOverlayMobile] [X] Failed to log disclaimer acceptance to backend:', err)
+			},
+		)
+	}
+
 	const handleDisclaimerAgree = async () => {
 		console.log('[VoiceOverlayMobile] User agreed to disclaimer')
 
@@ -773,6 +826,22 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 
 		setShowDisclaimerModal(false)
+
+		// INTRO PATH (bd polyglot-pdf-s1iex.6): no Live session exists yet, so
+		// there is nothing to interrupt and nothing to tear down. Agree is the
+		// FIRST and ONLY connect -- the epic's one-handshake criterion. The
+		// acceptance POST runs alongside rather than gating the connect.
+		if (introEnabled) {
+			console.log('[VoiceOverlayMobile] Intro path - single connect on Agree (no interrupt, no restart)')
+			logDisclaimerAcceptance(state, selectedLanguage)
+			try {
+				await handleConnect()
+			} catch (err) {
+				console.error('[VoiceOverlayMobile] [X] Connect failed after Agree:', err)
+				setError(err instanceof Error ? err.message : 'Connection failed')
+			}
+			return
+		}
 
 		// Step 1: Send activity_start FIRST to stop backend from sending more audio
 		console.log('[VoiceOverlayMobile] [mic] Sending activity_start to interrupt Gemini')

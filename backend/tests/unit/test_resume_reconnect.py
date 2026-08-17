@@ -56,10 +56,26 @@ def test_resume_initiating_message_is_ascii_clean():
     )
 
 
-def test_initiating_message_still_has_greeting():
-    """Sanity: the normal INITIATING_MESSAGE retains its greet instruction."""
+def test_initiating_message_has_NO_greeting():
+    """The base template must NOT greet (bd polyglot-pdf-s1iex.6).
+
+    This assertion INVERTED. Sol now introduces himself by name in the
+    scripted intro clip, on every path where the disclaimer modal is shown,
+    so a "greet user warmly" here produced a SECOND greeting seconds after
+    the clip. The old test encoded the pre-clip product truth.
+
+    The resume-vs-fresh DISTINCTION this file exists to protect is unchanged
+    and still covered below: resume explicitly says "do not greet" and skips
+    the section re-introduction, fresh states the section and asks field 1.
+    """
     settings = Settings()
-    assert "greet" in settings.INITIATING_MESSAGE.lower()
+    assert "greet user warmly" not in settings.INITIATING_MESSAGE.lower(), (
+        "INITIATING_MESSAGE must not greet -- the intro clip already did"
+    )
+    # It must still open the section and drive field 1; a template that lost
+    # its job entirely would also pass the negative assertion above.
+    assert "{next_field_hint}" in settings.INITIATING_MESSAGE
+    assert "section name" in settings.INITIATING_MESSAGE.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +83,7 @@ def test_initiating_message_still_has_greeting():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_fresh_connect_uses_greeting_template():
+async def test_fresh_connect_uses_the_base_template():
     """A session with _is_resume_session=False must use INITIATING_MESSAGE."""
     settings = Settings()
     service = FormFillingService(live_ai=AsyncMock(), settings=settings)
@@ -84,8 +100,15 @@ async def test_fresh_connect_uses_greeting_template():
 
     assert len(captured) == 1
     sent = captured[0]
-    assert "greet" in sent.lower(), (
-        "Fresh connect must use INITIATING_MESSAGE (contains 'greet')"
+    # Identify the template by what only IT says (bd polyglot-pdf-s1iex.6:
+    # "greet" is gone from both templates now, so it can no longer be the
+    # discriminator). The base template states the section; resume explicitly
+    # refuses to.
+    assert "section name" in sent.lower(), (
+        "Fresh connect must use INITIATING_MESSAGE (states the section name)"
+    )
+    assert "do not greet" not in sent.lower(), (
+        "Fresh connect must NOT use RESUME_INITIATING_MESSAGE"
     )
 
 
