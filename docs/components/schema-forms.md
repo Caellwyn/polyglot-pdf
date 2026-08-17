@@ -306,8 +306,15 @@ field marked never-show is DISPLAYED once its condition matches. That reading
 is pinned (`utils/hiddenShowIfPrecedence.test.ts`, all four combinations) but
 is NOT relied on: the state is made unauthorable upstream instead, by the
 schema editor's mutual gate and schema-lint's `hidden-with-show-if` ERROR.
-Treat a kit carrying both as malformed rather than as an intentional
-instruction to this function.
+
+**But do NOT "simplify" the runtime toward that rule.** A kit is malformed at
+the AUTHORING gate; at RUNTIME the six `ubam` call sites must keep treating a
+satisfied-condition field as fully live -- it renders, it is required, and it
+must stay voice-reachable. Re-adding a `field.hidden ||` short-circuit anywhere
+(navigation, the completion check, the voice field list) would skip such a
+field and reintroduce exactly the false-completion + voice-unreachability bug
+bd `polyglot-pdf-ubam` closed across six sites. The gate stops the state being
+CREATED; it does not license the runtime to start ignoring it.
 `utils/validation.ts#isFieldRequired` evaluates the same legacy-or-composite
 shape on `field.require_if` (statically required OR a satisfied require_if;
 fail-open = not required). The editor preview mirrors both in

@@ -1187,12 +1187,22 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               />
               <span className="text-sm text-gray-700">Read Only</span>
             </label>
-            {/* This checkbox is the ONLY writer of `hidden` in the editor
-                (verified: grep for `hidden:` across schema-editor/src returns
-                this one site), and every `show_if` write in fieldGrouping is
-                SECTION-level -- and sections have no `hidden` flag. So gating
-                here has no bypass; there is no second path that could author
-                the forbidden combination on a field. */}
+            {/* NO BYPASS, for two independent reasons -- both re-verified,
+                because the first version of this comment got the second one
+                WRONG (outer review: it claimed fieldGrouping only writes
+                section-level show_if; there are six FIELD-level writes):
+                  1. This checkbox is the ONLY writer of `hidden` anywhere in
+                     schema-editor/src, so nothing else can set that half.
+                  2. Every field-level `show_if` write in fieldGrouping is
+                     precondition-guarded on the field ALREADY having a
+                     condition (`if (f.show_if && ...)` at the retarget, merge,
+                     kind-flip, restore and fallback-remap sites), so they
+                     REWRITE and never CREATE. The one unguarded write
+                     (mergeFields' `mergedField.show_if = primaryShowIf`) takes
+                     `hidden` and the condition from the SAME source field, so
+                     it cannot combine them from two.
+                A new write that creates a condition from nothing would break
+                reason 2 -- add it to the gate if you add one. */}
             {/* GATE, not a warning (bd polyglot-pdf-pfx1, maintainer decision
                 2026-08-04): a field may not be BOTH always-hidden and
                 conditionally shown. A warning would still let the state reach a
