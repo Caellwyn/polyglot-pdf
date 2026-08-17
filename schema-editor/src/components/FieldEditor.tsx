@@ -15,7 +15,9 @@ import {
 } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
-import { checkFieldComplete, safeOptions, safeOptionsPreservingArity } from '../utils/validation';
+import {
+  checkFieldComplete, hasCondition, safeOptions, safeOptionsPreservingArity,
+} from '../utils/validation';
 import { getReview, newFindingsSinceReview, withGuidanceAck, withReviewNote,
   withReviewStatus } from '../utils/reviewStatus';
 import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
@@ -795,14 +797,9 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     byOption: new Map(),
   };
   // Visibility coherence (bd polyglot-pdf-pfx1). A field may not be BOTH
-  // always-hidden and conditionally shown; these two drive the mutual gate on
-  // the Hidden checkbox and the "Shown when" card. Treat an EMPTY condition
-  // object as absent -- ConditionBuilder emits undefined on delete, but a
-  // hand-edited schema can carry {} and that must not lock the checkbox.
-  const hasShowIf = !!field.show_if
-    && !(typeof field.show_if === 'object'
-      && !Array.isArray(field.show_if)
-      && Object.keys(field.show_if as object).length === 0);
+  // always-hidden and conditionally shown; this drives the mutual gate on the
+  // Hidden checkbox and the "Shown when" card.
+  const hasShowIf = hasCondition(field.show_if);
 
   // The maintainer's "how will editors be reminded which hidden is active?"
   // question: the effective behavior, readable without cross-referencing the
@@ -1194,7 +1191,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 2026-08-04): a field may not be BOTH always-hidden and
                 conditionally shown. A warning would still let the state reach a
                 saved kit, leaving every consumer to interpret it -- bd
-                polyglot-pdf-ubam had to fix SEVEN sites that each interpreted it
+                polyglot-pdf-ubam had to fix SIX sites that each interpreted it
                 differently. Disabling the control makes it unauthorable.
                 Today the CONDITION silently wins in shouldShowField, so the
                 contradiction resolves in the RISKIER direction: a field marked

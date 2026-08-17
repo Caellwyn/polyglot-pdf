@@ -21,6 +21,10 @@ format) are gated on the version stamp.
 Rules (stable ids; one finding per violation site):
 - unknown-operator      ERROR   operator not in the v2 registry
 - value-arity           ERROR   value shape does not match the operator's arity
+- hidden-with-show-if   ERROR   a field is BOTH always-hidden and
+                                conditionally shown -- contradictory, and
+                                the condition currently wins at runtime
+                                (bd polyglot-pdf-pfx1)
 - option-value-missing  ERROR   an option has no/empty value
 - option-value-duplicate ERROR  two options of one field share a value
 - option-value-comma    ERROR   an option value contains a comma (breaks the
@@ -479,7 +483,7 @@ def _check_hidden_vs_show_if(
     hidden and have a condition to be shown. period." A warning was considered
     and rejected -- a warning still lets the contradictory state reach a saved
     kit, and every consumer then has to interpret it (bd polyglot-pdf-ubam had
-    to fix SEVEN call sites that each interpreted it differently).
+    to fix SIX call sites that each interpreted it differently).
 
     Today the CONDITION silently wins: shouldShowField returns
     evaluateConditionGroup(...) without consulting the hidden flag once a valid

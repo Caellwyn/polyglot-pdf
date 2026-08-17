@@ -452,7 +452,7 @@ condition and ignores `hidden`, so a field marked never-show is DISPLAYED to
 the applicant once its condition matches. On a legal form that can mean an
 acceptance-agent-only field shown to the person filing. Allowing the state and
 warning about it would leave every consumer to interpret it -- bd
-`polyglot-pdf-ubam` had to repair seven call sites that each interpreted it
+`polyglot-pdf-ubam` had to repair six call sites that each interpreted it
 differently.
 
 **ConditionalDisplay Object**:
