@@ -494,6 +494,12 @@ def _check_hidden_vs_show_if(
 
     ERROR, not WARNING: this is a promotion gate, and the whole point of the
     decision is that the state must not be authorable.
+
+    FIELDS ONLY, and that IS the complete set: FormSection carries show_if but
+    has NO hidden attribute (form_models.FormSection; the editor type says the
+    same and notes the editor never even authors a section show_if), so the
+    contradiction is structurally impossible one level up. Re-check this if a
+    section ever gains a hidden flag.
     """
     if not f.get("hidden"):
         return
