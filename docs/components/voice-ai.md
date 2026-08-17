@@ -86,9 +86,13 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   wrong one is SILENT in both directions, so check which question your site
   asks:
   **`isModelSpeaking()`** is true whenever the model's PCM is scheduled, clip
-  or no clip. Every BARGE-IN / flush site and the post-resume re-prompt guard
-  reads this one: they ask "would flushing stop the model mid-utterance?", and
-  a clip is irrelevant to that.
+  or no clip. Every flush site that is GATED on a speaking signal reads this
+  one, as does the post-resume re-prompt guard: they ask "would flushing stop
+  the model mid-utterance?", and a clip is irrelevant to that. (Several flush
+  sites are deliberately UNGATED -- both disclaimer-agree handlers, desktop's
+  PTT press, and `pause()` -- because there the flush is unconditional by
+  design. Desktop and mobile currently disagree about whether the PTT press
+  should be gated at all: bd `polyglot-pdf-2fyj7`.)
   **`isSpeaking()`** is the clip-SUPPRESSED variant
   (`geminiIsSpeaking && activeClipCount === 0`). ONLY the VAD suspend/resume
   pair reads it -- a clip lives inside the playback context, so counting one
