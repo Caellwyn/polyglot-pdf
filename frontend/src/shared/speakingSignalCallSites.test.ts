@@ -24,19 +24,50 @@
  * sites from source and fails when an unclassified one appears.
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
 import { describe, it, expect } from 'vitest'
 
 const SRC = resolve(__dirname, '..')
 
-// Files that legitimately consume a speaking signal.
+// The files that consume a speaking signal TODAY. This is the classification's
+// index, not its protection boundary -- `discoverConsumers()` below walks the
+// whole tree, so a consumer in a NEW file is caught rather than silently
+// escaping (fresh-eyes round 1: a hardcoded allowlist only guards edits INSIDE
+// already-listed files, which is the weaker half of what this test promises).
 const SCANNED = [
   'demo/VoiceOverlay.tsx',
   'demo/VoiceOverlayMobile.tsx',
   'shared/connection.ts',
   'shared/useGeminiSpeaking.ts',
 ]
+
+/** Every production .ts/.tsx under src/, tests and generated output excluded. */
+function allProductionFiles(dir = SRC, acc: string[] = []): string[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, e.name)
+    if (e.isDirectory()) {
+      if (e.name === 'node_modules' || e.name === '__fixtures__') continue
+      allProductionFiles(full, acc)
+    } else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) {
+      acc.push(full)
+    }
+  }
+  return acc
+}
+
+/**
+ * Files that reference a speaking accessor, discovered from source.
+ * audioManager.ts itself DEFINES them, so it is excluded from call-site duty.
+ */
+function discoverConsumers(): string[] {
+  return allProductionFiles()
+    .filter(f => basename(f) !== 'audioManager.ts')
+    // CALL-shaped, not a bare name match: a file merely MENTIONING the
+    // accessors in prose (a comment, a doc reference) is not a decision
+    // site. Reusing CALL keeps discovery and classification in agreement.
+    .filter(f => CALL.test(readFileSync(f, 'utf8')))
+}
 
 /**
  * The COMPLETE classification. Every isSpeaking() / isModelSpeaking() call in
@@ -112,8 +143,23 @@ const CLASSIFIED: Array<{
   },
 ]
 
-function codeLines(file: string): string[] {
-  return readFileSync(resolve(SRC, file), 'utf8')
+function codeLinesAbs(abs: string): string[] {
+  // Delegates to the same splitter codeLines() uses, so the two cannot drift.
+  return splitCodeLines(readFileSync(abs, 'utf8'))
+}
+
+function nearestAnchorAbs(abs: string, target: string): string | undefined {
+  const lines = codeLinesAbs(abs)
+  const idx = lines.indexOf(target)
+  if (idx < 0) return undefined
+  for (let i = idx; i >= 0 && i > idx - 12; i--) {
+    for (const a of ANCHORS) if (lines[i].includes(a)) return a
+  }
+  return undefined
+}
+
+function splitCodeLines(text: string): string[] {
+  return text
     .split('\n')
     .map(l => l.replace(/\r$/, ''))
     .filter(l => {
@@ -122,11 +168,20 @@ function codeLines(file: string): string[] {
     })
 }
 
+function codeLines(file: string): string[] {
+  return splitCodeLines(readFileSync(resolve(SRC, file), 'utf8'))
+}
+
 // ANY receiver, not just a variable literally named `audioManager` (my own
 // first cut missed `connectionManager?.getAudioManager()?.isSpeaking()`,
 // which is exactly the shape a new caller reaches for). Match the method
 // call itself and let the classification table sort out which site it is.
-const CALL = /\.\s*(isSpeaking|isModelSpeaking)\s*\(\s*\)/
+// Three shapes, because the first two cuts each missed one (fresh-eyes r1):
+//   .isSpeaking()            member call, incl. optional chaining and any
+//                            receiver (`getAudioManager()?.isSpeaking()`)
+//   ['isModelSpeaking']()    computed member
+//   isSpeaking()             a bare call from a destructured binding
+const CALL = /(?:\.\s*|\[\s*['"`]|)(isSpeaking|isModelSpeaking)(?:['"`]\s*\])?\s*\(\s*\)/
 
 // Match a site by its ACCESSOR-INDEPENDENT shape, so regressing the accessor
 // still MATCHES the entry and trips the accessor assertion (the informative
@@ -159,9 +214,10 @@ describe('speaking-signal call sites are classified (bd polyglot-pdf-uxc6s)', ()
   it('every call site appears in CLASSIFIED with the right accessor', () => {
     const unclassified: string[] = []
 
-    for (const rel of SCANNED) {
-      const name = basename(rel)
-      for (const line of codeLines(rel)) {
+    // Walk every DISCOVERED consumer, so a new FILE cannot escape.
+    for (const abs of discoverConsumers()) {
+      const name = basename(abs)
+      for (const line of codeLinesAbs(abs)) {
         const m = CALL.exec(line)
         if (!m) continue
         const used = m[1]
@@ -169,7 +225,7 @@ describe('speaking-signal call sites are classified (bd polyglot-pdf-uxc6s)', ()
         const entry = CLASSIFIED.find(
           c => c.file === name
             && key.includes(c.fragment)
-            && (!c.anchor || nearestAnchor(rel, line) === c.anchor),
+            && (!c.anchor || nearestAnchorAbs(abs, line) === c.anchor),
         )
         if (!entry) {
           unclassified.push(`${name}: ${line.trim().slice(0, 100)}`)
@@ -211,6 +267,21 @@ describe('speaking-signal call sites are classified (bd polyglot-pdf-uxc6s)', ()
         + `(${c.why}). Update or remove the entry.`,
       ).toBeGreaterThan(0)
     }
+  })
+
+  it('SCANNED still matches what discovery finds', () => {
+    // SCANNED is documentation, not protection -- but a stale index is
+    // misleading. If discovery finds a consumer file SCANNED does not list,
+    // the classification table above needs a look, not just this constant.
+    const found = discoverConsumers().map(f => basename(f)).sort()
+    const listed = SCANNED.map(f => basename(f)).sort()
+    expect(
+      found,
+      `discovery found consumer files that SCANNED does not list. Add them to `
+      + `SCANNED and classify their call sites in CLASSIFIED (or, if the file `
+      + `only MENTIONS the accessor names in prose, this is a false positive `
+      + `worth narrowing).`,
+    ).toEqual(listed)
   })
 
   it('both flush-side and suspend-side sites actually exist', () => {
