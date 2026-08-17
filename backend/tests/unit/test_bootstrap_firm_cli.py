@@ -326,6 +326,26 @@ def test_status_choices_match_service_constants():
     ]
 
 
+def test_firm_write_failure_exits_2_and_stamps_nobody(wired, monkeypatch, capsys):
+    """Exit code 2 means NOTHING was stamped: if the firm-doc write raises,
+    the staff loop must never run (a claim stamped for a firm whose doc
+    write failed would reference a nonexistent record). Mutation: make the
+    upsert except-branch fall through to stamping instead of returning 2 --
+    red."""
+    wired.auth.users["ada@x.example"] = _FakeUser("uid-ada")
+
+    def _raise(*a, **kw):
+        raise RuntimeError("firestore down")
+
+    monkeypatch.setattr("backend.services.firms.upsert_firm", _raise)
+
+    rc = bootstrap_firm.main(_argv("--manager-email", "ada@x.example"))
+
+    assert rc == 2
+    assert "firm write FAILED" in capsys.readouterr().err
+    assert wired.auth.stamps == {}
+
+
 def test_rerun_is_idempotent(wired):
     """Running the same invocation twice succeeds twice with the same end
     state (upsert_firm carries the real merge semantics, pinned in

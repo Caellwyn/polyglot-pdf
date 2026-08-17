@@ -109,6 +109,15 @@ def upsert_firm(
     overwrite the original creation time on every re-run. Full-replace of
     the known fields; there is deliberately no partial-update API.
     """
+    # The CLI's argparse choices= enforce this too, but this is the WRITE
+    # layer: a future non-CLI caller passing junk would otherwise store a
+    # status that silently fail-closes the firm (get_allowed_kits treats
+    # anything != active as inactive).
+    if status not in (FIRM_STATUS_ACTIVE, FIRM_STATUS_SUSPENDED):
+        raise ValueError(
+            f"status {status!r} is not one of "
+            f"({FIRM_STATUS_ACTIVE!r}, {FIRM_STATUS_SUSPENDED!r})"
+        )
     from firebase_admin import firestore
 
     from backend.services.auth import get_db

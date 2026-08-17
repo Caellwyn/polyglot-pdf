@@ -63,8 +63,24 @@ is DEAD -- nothing may reference it (purge bead polyglot-pdf-je6iy filed).
   get_firm leak, WS claims discard, rules deploy path, slug bound, dead
   project in auth.md, doc-home notes) -- all incorporated before
   implementation.
-- Closeout assess: recorded below after the loops ran (see the merge ping for
-  the same breakdown).
+- Closeout assess (fresh-eyes, sonnet-routed, 3 rounds): round 1 GAPS-FOUND
+  -- fullmatch slug validation (trailing-newline bypass, the _KIT_ID_RE/sbfk
+  bug class), dual-role email refusal, STATUS_CHOICES constant pin; all
+  fixed + mutation-verified. Round 2: rubric PASS but two residual gaps in
+  round 1's own fix classes -- the --status argparse DEFAULT was a fourth
+  untracked literal (mutation-proven invisible: default="bogus" left every
+  test green) and the dual-role check was case-sensitive while Firebase
+  email lookup is not -- plus strict whole-doc fail-closed on mixed-type
+  allowed_kits (the partial filter contradicted the docstring) and the
+  GOOGLE_CLOUD_PROJECT env assignment moved after the project assertion;
+  all fixed + mutation-verified. Round 3: NO-GAPS on the rubric; three
+  non-blocking findings folded in (comment path correction, an exit-2
+  nothing-stamped coverage test, upsert-layer status validation), each
+  mutation-verified. Refuted: the broad except in get_allowed_kits
+  (deliberate fail-closed design, documented). Deferred: the
+  technical_guide Surface-contracts entry for the firm contracts, to vccy
+  with the first live consumer (noted on that bead). Outer review: Opus
+  cross-surface, recorded in the merge ping.
 
 ## Lessons
 

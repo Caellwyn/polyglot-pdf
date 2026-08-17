@@ -62,7 +62,7 @@ if str(_REPO_ROOT) not in sys.path:
 DEAD_PROJECTS = {"polyglot-forms-919f2"}
 
 # _KIT_ID_RE's length bound (backend/routes/form_kit_routes.py) with
-# OPTION_SLUG_PATTERN's character class (backend/services/
+# OPTION_SLUG_PATTERN's character class (backend/models/
 # conditional_vocabulary.py). Lowercase-only on purpose: Firestore doc IDs
 # are case-sensitive, so Acme/acme would be two different firms -- an
 # operator error this rule makes impossible.

@@ -200,6 +200,16 @@ def test_upsert_rerun_omits_created_at_and_merges(fake_db):
     assert payload2["allowed_kits"] == ["w7", "i-90"]
 
 
+def test_upsert_rejects_unknown_status(fake_db):
+    """The write layer validates status against the closed set (the CLI's
+    argparse choices are a separate layer; a future non-CLI caller passing
+    junk would store a status that silently fail-closes the firm).
+    Mutation: remove the status guard in upsert_firm -- red."""
+    with pytest.raises(ValueError):
+        firms.upsert_firm("acme", "Acme", "a@x.example", [], status="bogus")
+    assert fake_db.collection(firms._FIRMS_COLLECTION).store == {}
+
+
 def test_upsert_is_ungated_by_the_env_var(monkeypatch):
     """upsert_firm is the operator path and must work with the read gate
     off (the script would otherwise silently no-op). Mutation: add a
