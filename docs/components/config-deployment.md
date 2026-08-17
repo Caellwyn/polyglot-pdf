@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-17. See [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-17. See [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the `FIRMS_FIRESTORE_ENABLED` bullet; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -129,6 +129,15 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `CONFIRMATION_RETENTION_DAYS` stamps an `expire_at` for a TTL policy;
   `CONFIRMATION_LOG_DIR` still points the local JSONL (dev). See
   [../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md).
+- **`FIRMS_FIRESTORE_ENABLED`** — enables the firms-store READ path
+  (`backend/services/firms.py`, bd `polyglot-pdf-lo88`): the `firms/{firm_id}`
+  Firestore collection holding firm profiles + allowed-kits for firm-scoped
+  kit visibility. Reads fail CLOSED (`[]`) when unset or broken, so leaving it
+  off can never widen visibility. **Deliberately NOT yet set in any deploy
+  env** — that wiring (the `deploy-all.sh` `BACKEND_ENV` line, the
+  `deploy-form-kit.sh` drop-list hint, and its pinning test) ships with the
+  consumer bead `polyglot-pdf-vccy`. Firm records are created by
+  `scripts/bootstrap_firm.py`; see [auth.md](auth.md) (Firm identity).
 - **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
   for the token-gated `/api/editor/*` surface the hosted schema editor uses
   (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:

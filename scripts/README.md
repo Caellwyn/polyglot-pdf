@@ -4,6 +4,23 @@ Quick helper scripts for development and testing.
 
 ---
 
+## 🏢 Firm Bootstrap (operator script)
+
+### `bootstrap_firm.py`
+
+Creates/updates a firm record (`firms/{firm_id}` in Firestore) and stamps the
+`firm_id` + `firm_role` custom claims on the firm's staff Firebase accounts
+(bd polyglot-pdf-lo88). The **script docstring** is the single source of truth
+for usage, `--dry-run`, and the exit-code contract; the runnable admin step is
+also documented in `docs/components/auth.md` ("Firm identity"). Requires an
+explicit `--project` (only `polyglot-demo-aa709` is live) and runs under your
+own gcloud ADC.
+
+Sibling operator scripts `read_confirmations.py` and `read_kit_revision.py`
+likewise document themselves in their module docstrings.
+
+---
+
 ## 🚀 Backend Launcher
 
 ### Windows
