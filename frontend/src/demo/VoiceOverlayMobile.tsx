@@ -430,6 +430,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
 		// This gives instant barge-in feel while we wait to confirm speech duration
 		const audioManager = connectionManager?.getAudioManager()
+		// DELIBERATELY isSpeaking(), NOT isModelSpeaking (bd polyglot-pdf-uxc6s):
+		// this is the SUSPEND half of the deadlock pair. A clip now lives INSIDE
+		// the playback context, so suspending while one plays would cut it
+		// mid-word and onVADSpeechEnd would never resume it. Clip-suppression
+		// is the correct behavior here.
 		if (audioManager && audioManager.isSpeaking()) {
 			audioManager.pauseAudioContext()
 			console.log('[VFF VAD Mobile] [mute] Tentative pause - waiting to confirm speech duration')
@@ -461,8 +466,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 					audioManager.setVADActive(true) // Opens gate, flushes 600ms pre-buffer to backend
 				}
 
-				// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
-				const geminiSpeaking = audioManager?.isSpeaking()
+				// Trigger FULL barge-in (flushes audio queue if Gemini speaking).
+				// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s): during a
+				// model-PCM + clip OVERLAP isSpeaking() reads false, so this flush
+				// was skipped while the model talked over the user.
+				const geminiSpeaking = audioManager?.isModelSpeaking()
 				if (geminiSpeaking && audioManager) {
 					console.log('[VFF VAD Mobile] [mute] Flushing Gemini audio queue (full barge-in)')
 					audioManager.flushAudioQueue()
@@ -935,8 +943,16 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// re-mute the user (bd polyglot-pdf-qt7w). Cleared on release/force-release.
 		connectionManager?.setPushToTalkHeld(true)
 
-		// BARGE-IN: Stop Gemini's audio if she's talking
-		if (audioManager?.isSpeaking()) {
+		// BARGE-IN: Stop Gemini's audio if she's talking.
+		// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s). NOTE the
+		// overlap cannot actually occur AT THIS SITE today: setPushToTalkHeld
+		// above runs spellback.interruptForPtt() -> releaseClip() synchronously,
+		// so activeClipCount is already 0 by here and isSpeaking() would read
+		// the same. Pointed at the model signal anyway because the correctness
+		// argument must not rest on that ordering -- bd s1iex.5 adds a SECOND
+		// clip producer (the intro player) with no such pairing, and this site
+		// asks the barge-in question, whose answer a clip never changes.
+		if (audioManager?.isModelSpeaking()) {
 			audioManager.flushAudioQueue()
 		}
 

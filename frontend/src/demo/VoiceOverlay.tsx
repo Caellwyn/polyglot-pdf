@@ -500,6 +500,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
 			// This gives instant barge-in feel while we wait to confirm speech duration
 			const audioManager = connectionManager?.getAudioManager()
+			// DELIBERATELY isSpeaking(), NOT isModelSpeaking (bd polyglot-pdf-uxc6s):
+			// this is the SUSPEND half of the deadlock pair. A clip now lives INSIDE
+			// the playback context, so suspending while one plays would cut it
+			// mid-word and onVADSpeechEnd would never resume it. Clip-suppression
+			// is the correct behavior here.
 			if (audioManager && audioManager.isSpeaking()) {
 				audioManager.pauseAudioContext()
 				console.log(`[VFF VAD] [mute] Tentative pause at t=${performance.now().toFixed(2)}ms - waiting to confirm speech duration`)
@@ -534,8 +539,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						console.log(`[VFF VAD] [door] Audio gate opened, pre-buffer flushed, live audio now flowing`)
 					}
 
-					// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
-					const geminiSpeaking = audioManager?.isSpeaking()
+					// Trigger FULL barge-in (flushes audio queue if Gemini speaking).
+					// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s): during a
+					// model-PCM + clip OVERLAP isSpeaking() reads false, so this flush
+					// was skipped while the model talked over the user.
+					const geminiSpeaking = audioManager?.isModelSpeaking()
 					if (geminiSpeaking && audioManager) {
 						console.log('[VFF VAD] [mute] Flushing Gemini audio queue (full barge-in)')
 						audioManager.flushAudioQueue()
