@@ -135,3 +135,41 @@ describe('the author can tell two candidates apart', () => {
     expect(screen.getByText(/clients stop seeing it/i)).toBeTruthy();
   });
 });
+
+describe('it is actually a modal', () => {
+  it('renders a real overlay, not phantom CSS class names', () => {
+    // My first version used `modal-backdrop`/`modal-card`, which exist in NO
+    // stylesheet -- so this rendered as an unstyled inline block with no
+    // overlay, no centring, no card. Every test passed because JSDOM applies
+    // no CSS (Opus fresh-eyes round 3).
+    //
+    // Asserting the utility classes the sibling dialogs use, because in a
+    // Tailwind project those ARE the styling -- a class that does not exist
+    // in the framework's output is indistinguishable from a typo at runtime.
+    open();
+    const backdrop = screen.getByRole('dialog');
+
+    expect(backdrop.className).toContain('fixed');
+    expect(backdrop.className).toContain('inset-0');
+    expect(backdrop.className).toContain('z-50');
+    // The dim: this is what physically covers the catalogue's Publish buttons.
+    expect(backdrop.className).toMatch(/bg-black\//);
+    expect(backdrop.className).not.toContain('modal-backdrop');
+  });
+
+  it('dismisses on a backdrop click, like its siblings', () => {
+    const { onCancel } = open();
+
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('does NOT dismiss while a publish is running', () => {
+    const { onCancel } = open({ busy: true });
+
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+});

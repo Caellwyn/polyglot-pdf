@@ -912,7 +912,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   <button
                     className="btn-sm btn-primary text-xs"
                     onClick={() => void publishWithRetireCheck(kit)}
-                    disabled={busy || completingId !== null}
+                    disabled={busy || completingId !== null || retirePrompt !== null}
                     title="Publish this retired version again (runs the full publish gate)"
                   >
                     {completingId === kit.id
@@ -928,7 +928,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       <button
                         className="btn-sm btn-primary text-xs"
                         onClick={() => void publishWithRetireCheck(kit)}
-                        disabled={busy || completingId !== null}
+                        disabled={busy || completingId !== null || retirePrompt !== null}
                         title="Publish this form -- runs the full publish gate"
                       >
                         {completingId === kit.id
@@ -938,7 +938,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       <button
                         className="btn-sm text-xs"
                         onClick={() => void handleSetStatus(kit, 'draft')}
-                        disabled={busy || completingId !== null}
+                        disabled={busy || completingId !== null || retirePrompt !== null}
                         title="Send this back to the editor for more work. Any version they entered is cleared, since it was never published."
                       >
                         Send back
@@ -948,7 +948,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     <button
                       className="btn-sm text-xs"
                       onClick={() => void handleSetStatus(kit, 'draft')}
-                      disabled={busy || completingId !== null}
+                      disabled={busy || completingId !== null || retirePrompt !== null}
                       title="Reopen your own submission to keep working on it"
                     >
                       Reopen
@@ -963,7 +963,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     onClick={() => void (isAuthor
                       ? publishWithRetireCheck(kit)
                       : handleSetStatus(kit, 'submitted'))}
-                    disabled={busy || stripDirty || completingId !== null}
+                    disabled={busy || stripDirty || completingId !== null || retirePrompt !== null}
                     title={stripDirty
                       ? 'Save your changes first (Cmd+S) -- submitting now '
                         + 'would send the last saved version, not your edits'
@@ -1241,7 +1241,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       <button
                         className="btn-sm btn-primary text-xs"
                         onClick={() => void publishWithRetireCheck(kit)}
-                        disabled={busy || completingId !== null}
+                        disabled={busy || completingId !== null || retirePrompt !== null}
                         title="Publish this retired version again (runs the full publish gate)"
                       >
                         {completingId === kit.id
@@ -1257,7 +1257,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           <button
                             className="btn-sm btn-primary text-xs"
                             onClick={() => void publishWithRetireCheck(kit)}
-                            disabled={busy || completingId !== null}
+                            disabled={busy || completingId !== null || retirePrompt !== null}
                             title="Publish this form -- runs the full publish gate"
                           >
                             {completingId === kit.id
@@ -1267,7 +1267,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                           <button
                             className="btn-sm text-xs"
                             onClick={() => void handleSetStatus(kit, 'draft')}
-                            disabled={busy || completingId !== null}
+                            disabled={busy || completingId !== null || retirePrompt !== null}
                             title="Send this back to the editor for more work. Any version they entered is cleared, since it was never published."
                           >
                             Send back
@@ -1277,7 +1277,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         <button
                           className="btn-sm text-xs"
                           onClick={() => void handleSetStatus(kit, 'draft')}
-                          disabled={busy || completingId !== null}
+                          disabled={busy || completingId !== null || retirePrompt !== null}
                           title="Reopen your own submission to keep working on it"
                         >
                           Reopen
@@ -1291,7 +1291,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         onClick={() => void (isAuthor
                           ? publishWithRetireCheck(kit)
                           : handleSetStatus(kit, 'submitted'))}
-                        disabled={busy || openDirty || completingId !== null}
+                        disabled={busy || openDirty || completingId !== null || retirePrompt !== null}
                         title={openDirty
                           ? 'Save your changes first (Cmd+S) -- submitting now '
                             + 'would send the last saved version, not your edits'

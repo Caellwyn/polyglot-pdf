@@ -388,3 +388,42 @@ def test_form_number_WINS_over_a_matching_label(client):
 
     assert [x["kitId"] for x in cands] == ["w7-old"]
     assert cands[0]["matchedOn"] == "form_number"
+
+
+@pytest.mark.parametrize("label", ["W-7", "W-2", "W-4", "W-9", "I-9"])
+def test_a_SHORT_form_label_still_matches(client, label):
+    """The commonest real labels in this domain are 2-3 characters normalised.
+
+    A 3-character floor silently killed all of them: two kits both labelled
+    "W-7" with no form_number produced NO candidate, so an author published a
+    second live W-7 believing there was no older version -- the state bd
+    polyglot-pdf-6dz0 exists to prevent (Opus fresh-eyes round 3).
+    """
+    c, _store, root = client
+    _make_kit(root, "new-kit", status="draft", label=label, schema=_schema())
+    _make_kit(root, "live-kit", status="complete", label=label, schema=_schema())
+
+    cands = _candidates(c, "new-kit").json()["candidates"]
+
+    assert [x["kitId"] for x in cands] == ["live-kit"], (
+        f"two kits both labelled {label!r} produced no suggestion")
+
+
+def test_a_DEGENERATE_one_character_label_does_not_match(client):
+    """What the floor is actually for. Two kits each labelled "X" are not
+    evidence of anything."""
+    c, _store, root = client
+    _make_kit(root, "new-kit", status="draft", label="X", schema=_schema())
+    _make_kit(root, "live-kit", status="complete", label="X", schema=_schema())
+
+    assert _candidates(c, "new-kit").json()["candidates"] == []
+
+
+def test_a_traversing_kit_id_is_refused_not_resolved(client):
+    """This route was the only one in the file that never validated its own
+    path parameter."""
+    c, _store, _root = client
+
+    resp = c.get("/api/editor/kits/..%2F..%2Fetc/retire-candidates", headers=AUTH)
+
+    assert resp.status_code in (400, 404), resp.text

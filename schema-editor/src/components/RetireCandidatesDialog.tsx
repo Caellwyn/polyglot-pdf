@@ -41,9 +41,22 @@ export function RetireCandidatesDialog({
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true"
-         aria-label="Retire an older version">
-      <div className="modal-card max-w-lg">
+    // The SAME classes DeleteKitDialog and AuthorVersionDialog use. My first
+    // version invented `modal-backdrop`/`modal-card`, which exist in no
+    // stylesheet -- so this rendered as an unstyled inline block with no
+    // overlay, no centring and no card. Every test passed because JSDOM
+    // applies no CSS at all (Opus fresh-eyes round 3).
+    //
+    // The overlay is not decoration: it is what stops the catalogue's Publish
+    // buttons being clickable while this destructive confirmation is open.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Retire an older version"
+      onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
+    >
+      <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
         <h2 className="text-base font-semibold">Publish "{kitLabel}"</h2>
 
         <p className="mt-2 text-sm text-slate-700">

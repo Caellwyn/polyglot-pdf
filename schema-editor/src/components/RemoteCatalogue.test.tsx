@@ -845,6 +845,40 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('done-kit'));
   });
 
+  it('the STRIP submitted-kit Publish asks too (the last unpinned twin)', async () => {
+    // The one publish site of six with no test: reverting it left 85/85 green.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, status: 'submitted' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit"
+                            role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+  });
+
+  it('disables the catalogue Publish buttons while the dialog is open', async () => {
+    // completingId clears before the prompt opens, so every Publish button was
+    // live behind the dialog -- and clicking one replaced the pending prompt,
+    // letting an author tick a candidate computed for a DIFFERENT kit. Only
+    // reachable because the dialog had no real overlay (round 3, findings 1+2).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    await publishDraftKit();
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    const publish = within(card).queryByText('Publish');
+    expect(publish === null || (publish.closest('button') as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
   it('the SUBMITTED-kit publish path asks about older versions too', async () => {
     // An author publishing a kit an editor submitted -- the hqztg flow.
     vi.mocked(listRemoteKits).mockResolvedValue(

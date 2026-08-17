@@ -1279,7 +1279,17 @@ def _labels_look_like_one_form(a: str, b: str) -> bool:
     pending filing depends on.
     """
     na, nb = _normalize_label(a), _normalize_label(b)
-    if len(na) < 3 or len(nb) < 3:
+    # The floor exists only to reject DEGENERATE labels (empty, or a single
+    # stray character), not real ones. At 3 it silently killed the commonest
+    # real form labels: "W-7" normalises to "w7", two characters -- as do W-2,
+    # W-4, W-9 and I-9. Two kits both labelled "W-7" with no form_number
+    # declared produced NO candidate, so an author published a second live W-7
+    # believing there was no older version: exactly the state bd
+    # polyglot-pdf-6dz0 exists to prevent (Opus fresh-eyes round 3).
+    #
+    # Exact match already carries the safety here; the floor only needs to stop
+    # a one-character label matching another one-character label.
+    if len(na) < 2 or len(nb) < 2:
         return False
     return na == nb
 
@@ -1308,6 +1318,12 @@ async def get_retire_candidates(
     candidate you cannot describe is one the author cannot judge, and the whole
     point is an informed confirmation.
     """
+    # Every sibling route in this file opens this way. Traversal is
+    # impractical today (the membership check in _load_meta_or_404 is what
+    # actually guards it), but this route was the one exception to a uniform
+    # invariant, and the guard is what makes that membership check safe to rely
+    # on (Opus fresh-eyes round 3).
+    kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     _meta, _files = await _load_meta_or_404(store, kit_id)
 
