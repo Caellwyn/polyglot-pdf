@@ -801,6 +801,46 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       expect(screen.queryByText('Client Intake')).not.toBeInTheDocument());
   });
 
+  it.each([
+    ['done-kit', 'Done Form', 'Revert to draft'],
+  ])('the REPUBLISH path asks about older versions too', async () => {
+    // A retired form returning to service is precisely when a same-form live
+    // kit exists, so this is the highest-value path -- and it was the one with
+    // no coverage: reverting its wiring left 80/80 green (Opus fresh-eyes
+    // round 2).
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'unpublished' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Done Form')).toBeInTheDocument());
+
+    const card = screen.getByText('Done Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Publish again'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('done-kit'));
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('the SUBMITTED-kit publish path asks about older versions too', async () => {
+    // An author publishing a kit an editor submitted -- the hqztg flow.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, status: 'submitted' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Publish'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+  });
+
   it('asks from the compact STRIP publish button too, not just the card', async () => {
     // The twin. My mutation testing initially reverted only the strip button
     // and every test stayed green -- because publishDraftKit clicks the CARD.

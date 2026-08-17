@@ -370,3 +370,21 @@ def test_ticking_NOTHING_retires_nothing(client):
 
     assert _run(store.load_metadata("w7-old"))["status"] == "complete"
     assert _run(store.load_metadata("w7-new"))["status"] == "complete"
+
+
+def test_form_number_WINS_over_a_matching_label(client):
+    """The documented precedence, pinned. No earlier fixture matched on BOTH,
+    so swapping the two branches left all 31 tests green -- and `matchedOn` is
+    what the dialog renders as "Same form number" vs "Similar name", the
+    author's cue for how much to trust the suggestion (Opus fresh-eyes round 2).
+    """
+    c, _store, root = client
+    _make_kit(root, "w7-new", status="draft", label="W-7 ITIN Application",
+              schema=_schema(form_number="W-7"))
+    _make_kit(root, "w7-old", status="complete", label="W-7 ITIN Application",
+              schema=_schema(form_number="W-7"))
+
+    cands = _candidates(c, "w7-new").json()["candidates"]
+
+    assert [x["kitId"] for x in cands] == ["w7-old"]
+    assert cands[0]["matchedOn"] == "form_number"
