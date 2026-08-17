@@ -17,6 +17,21 @@ export interface DisclaimerModalProps {
   selectedLanguage: string;
   onListenAgain: () => void;
   onAgree: () => void;
+  /**
+   * Sprint 20 (bd polyglot-pdf-s1iex.5): render the SCRIPTED intro text --
+   * the exact paragraphs the backend synthesizes for Sol's clip -- instead of
+   * the legacy p1/p2/p3 disclaimer. Passing this switches the modal to the
+   * one-source path; omitting it keeps today's behavior verbatim, which is
+   * what the frontend flag being OFF must look like.
+   */
+  introParagraphs?: string[];
+  /**
+   * Clip playback state, for the intro path only. 'loading' covers a COLD
+   * synthesis, measured at ~20s (bd s1iex.3) -- long enough that silence
+   * would read as broken. 'blocked' means autoplay was refused and the user
+   * must tap to hear it.
+   */
+  clipState?: 'idle' | 'loading' | 'playing' | 'blocked';
 }
 
 // Translation data for button text
@@ -223,23 +238,54 @@ export function DisclaimerModal({ isOpen, selectedLanguage, onListenAgain, onAgr
         </h2>
 
         <div className="disclaimer-modal-text">
-          <p>
-            {text.p1}
-          </p>
-          <p>
-            {text.p2}
-          </p>
-          <p>
-            {text.p3}
-          </p>
+          {introParagraphs
+            ? // ONE SOURCE (bd polyglot-pdf-s1iex.5): these are the exact
+              // paragraphs the backend joins and synthesizes, so what is read
+              // and what is heard cannot drift. The <h2> above is a heading,
+              // NOT script, and is deliberately not spoken.
+              introParagraphs.map((paragraph, i) => (
+                <p key={i}>{paragraph}</p>
+              ))
+            : (
+              <>
+                <p>
+                  {text.p1}
+                </p>
+                <p>
+                  {text.p2}
+                </p>
+                <p>
+                  {text.p3}
+                </p>
+              </>
+            )}
         </div>
 
         <div className="disclaimer-modal-buttons">
           <button
-            className="disclaimer-modal-button disclaimer-modal-button--secondary"
+            className={
+              'disclaimer-modal-button disclaimer-modal-button--secondary'
+              + (clipState === 'loading' ? ' disclaimer-modal-button--loading' : '')
+              // Autoplay was refused (a reload with the disclaimer unaccepted
+              // has no user gesture): draw attention to the control that will
+              // start the clip, rather than failing silently.
+              + (clipState === 'blocked' ? ' disclaimer-modal-button--attention' : '')
+            }
             onClick={onListenAgain}
             type="button"
+            // Disabled ONLY while the clip is being fetched: a cold synthesis
+            // takes ~20s (bd s1iex.3) and a second click would just queue
+            // another wait. During playback it stays live so the user can
+            // restart, and when autoplay was blocked it is the tap-to-play
+            // control -- which must never be disabled.
+            disabled={clipState === 'loading'}
+            aria-busy={clipState === 'loading'}
           >
+            {/* The label stays the language's own "Listen Again" in every
+                state -- adding "Loading..." / "Tap to play" strings would mean
+                18 new untranslated phrases, and an English word appearing in a
+                Hindi modal is worse than a quieter cue. State is conveyed by
+                the disabled/aria-busy attributes and the CSS class instead. */}
             {buttons.listenAgain}
           </button>
           <button
