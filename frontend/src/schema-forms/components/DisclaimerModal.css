@@ -114,6 +114,37 @@
   outline-offset: 2px;
 }
 
+/* Intro-clip states (bd polyglot-pdf-s1iex.5). The LABEL never changes -- it
+   stays the language's own "Listen Again" -- because adding English state
+   words to an 18-language modal is worse than a visual cue. */
+
+/* Fetching: a COLD synthesis measured ~20s (bd s1iex.3), long enough that no
+   feedback at all reads as broken. The button is disabled here (a second
+   click would only queue another wait), so it must still look deliberate
+   rather than dead. */
+.disclaimer-modal-button--loading {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+/* Autoplay refused (a reload with the disclaimer unaccepted carries no user
+   gesture). This is the control that will start the clip, so draw the eye to
+   it instead of failing silently. */
+.disclaimer-modal-button--attention {
+  background-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  animation: disclaimer-tap-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes disclaimer-tap-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.15); }
+}
+
+.disclaimer-modal-button--attention:hover {
+  background-color: #1d4ed8;
+}
+
 .disclaimer-modal-button--primary {
   background-color: #2563eb;
   color: white;
@@ -298,6 +329,12 @@
 
   .disclaimer-modal-button:active {
     transform: none;
+  }
+
+  /* The tap-to-play cue must still be VISIBLE without motion -- the static
+     ring above carries it (bd polyglot-pdf-s1iex.5). */
+  .disclaimer-modal-button--attention {
+    animation: none;
   }
 
   .selection-card {

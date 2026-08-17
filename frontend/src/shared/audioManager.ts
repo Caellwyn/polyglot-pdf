@@ -43,6 +43,13 @@ export interface AudioManager {
 	// The UNION: model PCM or a synthesized clip. What the avatar's energy
 	// gate and the playback watchdog want (bd polyglot-pdf-s1iex.4).
 	isAnyAudioPlaying: () => boolean
+	// True whenever the MODEL's PCM is scheduled, INCLUDING while a clip
+	// overlaps it (bd polyglot-pdf-uxc6s). This is what barge-in asks: "would
+	// flushing stop the model mid-utterance?" isSpeaking() cannot answer that
+	// during an overlap -- it subtracts clips from a flag that BOTH producers
+	// set, so a model+clip overlap reads identically to a clip alone (false).
+	// Derived from the model-PCM source list directly, so it never conflates.
+	isModelSpeaking: () => boolean
 	muteInput: () => void // Mute mic input (send silence - push-to-talk mode only)
 	unmuteInput: () => void // Unmute mic input (send real audio)
 	setSpellbackHold: (active: boolean) => void // bd 22h1f: hard mic gate while the deterministic spell-back clip plays (any mode)
@@ -960,6 +967,14 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		// with no such pairing, so make it structural rather than incidental.
 		activeClipCount = 0
 		geminiIsSpeaking = false
+		// ...and the MODEL-PCM source list, for the same structural reason (bd
+		// polyglot-pdf-uxc6s). isModelSpeaking() reads this array directly, so a
+		// stranded entry survives teardown and permanently reports the model as
+		// talking -- which would suppress the post-resume re-prompt guard for the
+		// life of the manager. The sources are already stopped and their context
+		// closed, so onended will never fire to drain them. Every speaking
+		// predicate is now reset here; keep it that way when adding another.
+		activeAudioSources.length = 0
 		notifyClipState()
 
 		// Drop the energy subscriber on teardown so a destroyed manager holds no
@@ -990,6 +1005,34 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 */
 	function isSpeaking(): boolean {
 		return geminiIsSpeaking && activeClipCount === 0
+	}
+
+	/**
+	 * Is the MODEL's own PCM scheduled right now -- EVEN IF a clip overlaps?
+	 *
+	 * The barge-in question (bd polyglot-pdf-uxc6s). isSpeaking() answers it
+	 * correctly in the common case but NOT during a model-PCM + clip overlap,
+	 * because `geminiIsSpeaking` is set true by BOTH producers: subtracting
+	 * `activeClipCount` cannot recover the model-only fact, so an overlap
+	 * (true, 1) is indistinguishable from a clip alone (true, 1) and both read
+	 * false. Every barge-in site then SKIPS its flush while the model is
+	 * genuinely talking over the user.
+	 *
+	 * The overlap is reachable and documented: spellbackPlayer's pre-clip
+	 * drain-wait is bounded at DRAIN_WAIT_CAP_MS and plays anyway on timeout.
+	 *
+	 * Reads `activeAudioSources` directly -- the model-PCM source list, pushed
+	 * only by the PCM scheduler and cleared by flushAudioQueue -- so it is
+	 * structurally incapable of counting a clip.
+	 *
+	 * NOT for the suspend/resume pair. `onVADSpeechStart` suspends the playback
+	 * context and `onVADSpeechEnd` only resumes it when the model is quiet; a
+	 * clip now lives INSIDE that context, so those three sites must keep
+	 * isSpeaking()'s clip-suppression or a clip suspends mid-word and never
+	 * resumes (the deadlock isSpeaking() exists to prevent).
+	 */
+	function isModelSpeaking(): boolean {
+		return activeAudioSources.length > 0
 	}
 
 	/**
@@ -1174,6 +1217,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		resumeAudioContext,
 		isRecording,
 		isSpeaking,
+		isModelSpeaking,
 		isAnyAudioPlaying,
 		muteInput,
 		unmuteInput,
