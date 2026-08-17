@@ -742,6 +742,44 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
   });
 
+  it('asks about older versions from the DRAFT publish path too', async () => {
+    // The path that actually matters, and the one I missed: an author
+    // publishing a DRAFT. Its button reads `isAuthor ? 'complete' :
+    // 'submitted'`, so a search for the literal `handleSetStatus(kit,
+    // 'complete')` skipped it -- the suggestion never fired on the primary
+    // publish route while every other test stayed green.
+    //
+    // Asserts the CALL, not just the dialog: reverting the wiring makes the
+    // check silently not happen, which is exactly what shipped.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    await publishDraftKit();
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+    expect(await screen.findByText('Client Intake')).toBeInTheDocument();
+    // ...and nothing is published until the author answers.
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('an EDITOR submitting a draft is never asked about retirement', async () => {
+    // Submitting retires nothing, so asking would be a question with no
+    // meaning -- and the route is author-only anyway.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Submit for review'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    expect(fetchRetireCandidates).not.toHaveBeenCalled();
+    expect(vi.mocked(setRemoteStatus).mock.calls[0][1]).toBe('submitted');
+  });
+
   it('carries a ticked RETIREMENT through the version prompt', async () => {
     // The firm-tier case this whole bead targets: a custom form has no
     // government edition date, so publishing it needs BOTH dialogs -- pick the
