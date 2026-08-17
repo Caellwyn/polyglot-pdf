@@ -68,6 +68,61 @@ absent, and if lint disagreed, the editor would lock the Hidden checkbox over
 a condition lint says does not exist -- with nothing on screen to delete. The
 two implementations have to agree on "absent", so both are pinned.
 
+## Three ways I was wrong about my own work
+
+The two review layers found four defects in this diff. None were in the gate;
+all four were in what I WROTE ABOUT the gate.
+
+**I fabricated a number.** I wrote that bd `ubam` "had to fix SEVEN call
+sites" -- its title says six and its body enumerates 1-6. I repeated it in
+three files, one of them a tier-2 current-state doc. The argument did not need
+seven; six is already the point. This was reaching for a rhetorical
+strengthener on a factual claim I had not checked, in prose whose whole job is
+justifying a gate.
+
+Then the set turned out to be five, not three. The inner review caught three,
+the outer review found a fourth on another surface, and only sweeping properly
+found a fifth in that same file. Fix-three, get-told-about-a-fourth,
+then-finally-enumerate is scar #7 in miniature, on a diff whose commit message
+already cited scar #7.
+
+**I attached a wrong reason to a right conclusion.** My comment claimed "every
+`show_if` write in fieldGrouping is SECTION-level". Six are field-level; my
+grep classified by nearby context and misread `updated.show_if` as a section
+write. The conclusion (no bypass) survives, but for a reason I had not
+established: five of six are precondition-guarded on the field already having
+a condition, and the sixth takes both keys from the same source field.
+
+A wrong reason under a right conclusion is worse than no reason, because the
+next reader stops checking. The comment now states the load-bearing reason and
+what would break it.
+
+**My doc could have led someone to undo a closed P1.** I wrote that a kit
+carrying both should be treated as "malformed rather than as an intentional
+instruction to this function". True at the authoring gate. As guidance to the
+RUNTIME it points the opposite way from bd `ubam`, which spent a P1
+harmonizing six sites onto "a satisfied-condition field renders, is required,
+and must stay voice-reachable". Someone tidying toward my sentence would
+re-add the `field.hidden ||` short-circuit and reintroduce both bugs `ubam`
+closed.
+
+The distinction the doc now draws explicitly: **the gate stops the state being
+CREATED; it does not license the runtime to start ignoring it.** Those are
+different claims about different lifecycle stages, and collapsing them is the
+whole failure mode.
+
+## The precedence call, endorsed
+
+I deliberately left `shouldShowField` byte-identical and asked both reviewers
+to argue the other side. The outer review agreed with the call and gave a
+stronger reason than mine: flipping to hidden-wins would not merely be a
+silent behavior swap, it would directly contradict the six live `ubam` sites
+and re-open a closed P1. The right defence-in-depth here was the documentation
+fix, not a precedence change.
+
+Worth keeping as a pattern: when a fix and an existing invariant seem to point
+opposite ways, the reconciliation usually belongs in prose, not in code.
+
 ## Process notes
 
 - Mutation-verified per branch rather than per file: flipping the precedence
