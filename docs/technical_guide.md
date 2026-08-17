@@ -1,14 +1,27 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-14 (bd polyglot-pdf-lo88: the `FIRMS_FIRESTORE_ENABLED`
-env row and the single-live-project correction -- see
+*Last updated: 2026-08-17 (bd polyglot-pdf-x82ii: re-verified and corrected
+every code citation in the Surface contracts "2. WS handshake" block (the
+producer/consumer lines, all handshake key citations, and the `full_schema`
+consumer chain -- one citation, the secretary-catalog renderer, was pointing
+at the wrong FILE, not just a wrong line) plus the adjacent "3. WS control
+messages" and "4. Backend <-> Gemini Live" blocks, all drifted off the same
+`websocket_routes.py` code motion the ws-protocol.md fix addressed. The
+`SchemaFormState.fieldValues` producer citation that opens section 5 was fixed
+in the same pass (`schemaFormState.ts:27`, persisted `:248-263`) since it sits
+right at that block's boundary; the REST of section 5 ("Fill round-trip") and
+all of section 6 ("Confirmation audit trail") carry the same drift class and
+are tracked separately (bd polyglot-pdf-bxr3p) -- out of this bead's scope.
+Also current: the `PDFFillRequest` line range in section 5 does not straddle
+into `fill_pdf` and the dropped-key example there names `form_number`, the key
+that actually produces `form_id="unknown"` (a dropped `kit_id` degrades to
+`kit_id=None` instead) -- bd polyglot-pdf-a4v4 + qxad. Same week, bd
+polyglot-pdf-lo88 added the `FIRMS_FIRESTORE_ENABLED` env row and the
+single-live-project correction -- see
 [the lo88 journal entry](journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md)
-for closeout details. Same day, bd polyglot-pdf-a4v4 + polyglot-pdf-qxad
-corrected two stale citations -- the `PDFFillRequest` line range no longer
-straddles into `fill_pdf`, and the dropped-key example names `form_number`, the
-key that actually produces `form_id="unknown"` (a dropped `kit_id` degrades to
-`kit_id=None` instead)). The Surface contracts section is the code-derived
-cross-surface data-contract map for blast-radius review (bd polyglot-pdf-n18q).
+for closeout details. The
+Surface contracts section is the code-derived cross-surface data-contract map
+for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -234,95 +247,105 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
-Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:929`)
-/ `getJITHandshakePayload` (DTI, :973), sent by `frontend/src/webFormConnection.ts:618`.
-Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:976`;
-handshake keys parsed :1044-1168).
+Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
+/ `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts:641`.
+Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:993`;
+handshake keys parsed :1061-1185).
 **No Pydantic model or TS interface pins this shape** -- every key is read with
 `.get()` and a default, so a renamed key silently degrades (e.g. a dropped
 `form_metadata.form_number` logs `form_id="unknown"` in the audit trail; a
 dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
 - Key keys: `type` (`handshake` vs `handshake_jit` switches the whole parse,
-  :1044), `manifest`/`first_field_schema`/`loaded_field_ids` (JIT, :1059-1061),
-  `current_values` (:1132), `fill_language`/`spoken_language` (:1133/:1141),
-  `kit_id`/`form_number`/`edition_date` (:1055/:1073/:1082 -- the audit-trail
-  identity), `resume` (:1168).
-- `full_schema` (sent at :953/:1028): type-checked `isinstance(dict)` only
-  (`websocket_routes.py:1152-1154`), cached in
-  `form_filling_service.py:289-290` (preserved across internal restarts), then
-  consumed by the secretary catalog (`form_filling_service.py:1619` ->
-  `secretary_context.py:246`), the edition fingerprint
-  (`form_filling_service.py:362-368`), the injection
-  budget (`form_filling_service.py:478-479`), and runtime translation overrides
-  (`form_filling_service.py:679` ->
+  :1061), `manifest`/`first_field_schema`/`loaded_field_ids` (JIT, :1076-1078),
+  `current_values` (:1149), `fill_language`/`spoken_language` (:1150/:1158),
+  `kit_id`/`form_number`/`edition_date` (:1072/:1090/:1099 -- the audit-trail
+  identity), `resume` (:1185).
+- `full_schema` (sent at `schemaFormState.ts:979`/`:1054`): type-checked
+  `isinstance(dict)` only (`websocket_routes.py:1169-1170`), cached in
+  `form_filling_service.py:296` (preserved across internal restarts), then read
+  by `handle_ask_secretary` (`form_filling_service.py:1612`, schema read at
+  `:1666`) and rendered into the secretary catalog by
+  `render_static_catalog(schema)` in `text_ai_gemini.py:302`, the edition fingerprint
+  (`resolve_edition_marker` call at `form_filling_service.py:396`), the injection
+  budget (`form_filling_service.py:513-514`), and runtime translation overrides
+  (`_maybe_start_option_translation` call at `form_filling_service.py:464` ->
   `option_translation.py`). *Breaks if malformed:* each consumer degrades
   independently and silently (secretary falls back to per-section schema, audit
   edition falls back to a fingerprint, translations revert to English).
 - The JIT `manifest.parts` key is the wire contract and its entries are
   SECTION-shaped (`frontend/src/schema-forms/utils/manifestUtils.ts:38-41`;
-  consumed at `websocket_routes.py:1093-1122`). Do not "fix" the name and do not
-  expect `FormPart` objects in it.
+  consumed at `websocket_routes.py:1110` (synthesized schema) and `:1139`
+  (session-start log line)). Do not "fix" the name and do not expect
+  `FormPart` objects in it.
 
 ### 3. WS control messages: client <-> backend (post-handshake)
 
-Client->server: one `if mtype == ...` switch at `websocket_routes.py:476-956`.
-Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:635-826`.
+Client->server: one `if mtype == ...` switch at `websocket_routes.py:476-965`.
+Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:659-854`.
 Message senders are object literals; a renamed `type` logs
 `unknown_control_message_type` (or falls to the TS `default`) and a renamed
 sub-key reads as absent. The request/response pairs ride
 `backend/services/request_coordinator.py` with a `request_id` round-trip:
-`get_form_state`/`form_state_response` (:172/:566),
-`get_next_field_hint`/`next_field_hint_response` (:237/:592),
-`confirm_field`/`confirm_field_response` (:314/:630),
-`skip_field`/`skip_field_response` (:390/:656),
-`switch_field`/`switch_field_response` (:454/:680),
+`get_form_state`/`form_state_response` (`request_form_state` :151 /
+`handle_form_state_response` :661),
+`get_next_field_hint`/`next_field_hint_response` (`request_next_field_hint`
+:214 / `handle_next_field_hint_response` :687),
+`confirm_field`/`confirm_field_response` (`request_confirm_field` :279 /
+`handle_confirm_field_response` :725),
+`skip_field`/`skip_field_response` (`request_skip_field` :364 /
+`handle_skip_field_response` :751),
+`switch_field`/`switch_field_response` (`request_switch_field` :427 /
+`handle_switch_field_response` :775),
 `spellback`/`spellback_response` (bd polyglot-pdf-22h1f; flag-gated, the ONE
 round-trip that deliberately holds the pending tool response for the client's
 blocking TTS clip playback, 90s cap). Client reply builders:
-`webFormConnection.ts:3169-3211` (confirm/skip), :2474 (switch),
-`sendSpellbackResponse` (spellback).
+`webFormConnection.ts:3197` (`sendConfirmFieldResponse`) / :3318
+(`sendSkipFieldResponse`), :2502 (`sendSwitchFieldResponse`), :3295
+(`sendSpellbackResponse`).
 
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
-  (`webFormConnection.ts:640-642`, expecting an `updates: Record<name, value>`
+  (`webFormConnection.ts:664-666`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:231`) with a different
+  (`backend/services/callback_handler.py:242`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
-  session language, it does not change it (`websocket_routes.py:692-723`).
+  session language, it does not change it (`websocket_routes.py:709` arm).
 - `validation_result` carries `conflicts` only; the Python-side `result_type`
-  label is deliberately never serialized (`websocket_routes.py:336-361`,
+  label is deliberately never serialized (`websocket_routes.py:337-367`,
   contract pinned in `standards/validation-delegation.md`).
-- The `session_ready` message's `native_vad` flag (`websocket_routes.py:1209-1229`)
+- The `session_ready` message's `native_vad` flag (`websocket_routes.py:1226-1245`)
   must agree with the backend's `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`frontend/src/shared/connection.ts:517-527`).
+  activity-signal behavior from it (`webFormConnection.ts:864,951` ->
+  `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
 
 ### 4. Backend <-> Gemini Live (tools + session config)
 
 Tool names + arg schemas have ONE source of truth:
-`Settings.TOOL_DECLARATIONS` (`backend/config.py:456-674`), deep-copied into the
-live config by `form_filling_service.py:219-229` (which drops `switch_section`
+`Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
+live config by `form_filling_service.py:222-228` (which drops `switch_section`
 in continuous mode -- the session ships 6 declarations, not 7 -- and appends
 the flag-gated `SPELLBACK_TOOL_DECLARATION` as a 7th only while
 `SPELLBACK_TOOL_ENABLED`, bd polyglot-pdf-22h1f) and declared to
-Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1645`;
-tools assembled at :1657). Gemini's tool
-calls come back through the adapter (`live_ai_gemini.py:2426-2612` and :2620+)
-into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:437`),
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
+tools assembled at :1752). Gemini's tool
+calls come back through the adapter (`self._on_tool_call(...)` call sites at
+`live_ai_gemini.py:2736` and `:2917`)
+into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:448`),
 which dispatches to the `form_filling_service` handlers that emit the Leg-A
 client messages above. The coupling table (tool -> handler -> client message):
 
-| Gemini tool (args) | Handler (`callback_handler.py`) | Client message |
+| Gemini tool (args) | Handler (`callback_handler.py`, dispatch branch) | Client message |
 |---|---|---|
-| `update_form_fields` (`field_id`, `value`) | :526 | `form_updated` |
-| `get_form_status` (`field_ids`) | :667 | `get_form_state` round-trip |
-| `confirm_field` (`field_id`, `confirmation_method`) | :859 | `confirm_field` round-trip |
-| `skip_field` (`field_id`) | :1117 | `skip_field` round-trip |
-| `switch_to_field` (`field`) | :1258 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
-| `ask_secretary` (`query`) | :729 | none -- answered server-side from the cached `full_schema` |
-| `switch_section` (deprecated; dropped in continuous mode) | :711 | internal session restart + `section_switched` |
+| `update_form_fields` (`field_id`, `value`) | :507 | `form_updated` |
+| `get_form_status` (`field_ids`) | :510 | `get_form_state` round-trip |
+| `confirm_field` (`field_id`, `confirmation_method`) | :522 | `confirm_field` round-trip |
+| `skip_field` (`field_id`) | :525 | `skip_field` round-trip |
+| `switch_to_field` (`field`) | :531 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
+| `ask_secretary` (`query`) | :534 | none -- answered server-side from the cached `full_schema` |
+| `switch_section` (deprecated; dropped in continuous mode) | :516 | internal session restart + `section_switched` |
 | `name_spellback` (no args; FLAG-GATED `SPELLBACK_TOOL_ENABLED`, declared only while on via `SPELLBACK_TOOL_DECLARATION`) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
@@ -330,13 +353,13 @@ guidance prose by `ai_context.render_field_guidance`
 (`backend/services/ai_context.py:79`); the contract there is between the SI
 templates and the prose, not key names. System instruction:
 `form_filling_service.build_form_context_message`
-(`form_filling_service.py:1167`) ->
+(`form_filling_service.py:1214`) ->
 `ai_context.build_form_context` (:444).
 
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
 
 Producer: client state `SchemaFormState.fieldValues`
-(`frontend/src/schema-forms/state/schemaFormState.ts:25`, persisted :250-270).
+(`frontend/src/schema-forms/state/schemaFormState.ts:27`, persisted :248-263).
 THREE call sites assemble the request -- download and print
 (`frontend/src/schema-forms/components/SchemaForm.tsx:602-638` and :640-670)
 plus the in-browser preview
