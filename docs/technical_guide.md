@@ -1,23 +1,21 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-17 (bd polyglot-pdf-x82ii: re-verified and corrected
-every code citation in the Surface contracts "2. WS handshake" block (the
-producer/consumer lines, all handshake key citations, and the `full_schema`
-consumer chain -- one citation, the secretary-catalog renderer, was pointing
-at the wrong FILE, not just a wrong line) plus the adjacent "3. WS control
-messages" and "4. Backend <-> Gemini Live" blocks, all drifted off the same
-`websocket_routes.py` code motion the ws-protocol.md fix addressed. The
-`SchemaFormState.fieldValues` producer citation that opens section 5 was fixed
-in the same pass (`schemaFormState.ts:27`, persisted `:248-263`) since it sits
-right at that block's boundary; the REST of section 5 ("Fill round-trip") and
-all of section 6 ("Confirmation audit trail") carry the same drift class and
-are tracked separately (bd polyglot-pdf-bxr3p) -- out of this bead's scope.
-Also current: the `PDFFillRequest` line range in section 5 does not straddle
-into `fill_pdf` and the dropped-key example there names `form_number`, the key
-that actually produces `form_id="unknown"` (a dropped `kit_id` degrades to
-`kit_id=None` instead) -- bd polyglot-pdf-a4v4 + qxad. The
-Surface contracts section is the code-derived cross-surface data-contract map
-for blast-radius review (bd polyglot-pdf-n18q).
+*Last updated: 2026-08-17 (bd polyglot-pdf-bxr3p: re-verified and corrected
+every remaining code citation in the Surface contracts section -- section 5
+("Fill round-trip") and section 6 ("Confirmation audit trail"), which carried
+the same drift class as sections 2-4 (bd polyglot-pdf-x82ii, same day):
+producer/consumer line numbers, the two-pass alias-resolution range, the
+`_load_kit_dump` def + its actual promotion-gate call site (7 call sites
+total, not the one the doc named), the confirm-field chain across
+`request_coordinator.py` / `webFormConnection.ts` / `callback_handler.py`, and
+the confirmation-event shape + all three log sinks in
+`confirmation_logger.py`. Every citation in this file now resolves to the
+code it names. Also current: the `PDFFillRequest` line range in section 5
+does not straddle into `fill_pdf` and the dropped-key example there names
+`form_number`, the key that actually produces `form_id="unknown"` (a dropped
+`kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 + qxad.
+The Surface contracts section is the code-derived cross-surface data-contract
+map for blast-radius review (bd polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -355,14 +353,14 @@ templates and the prose, not key names. System instruction:
 Producer: client state `SchemaFormState.fieldValues`
 (`frontend/src/schema-forms/state/schemaFormState.ts:27`, persisted :248-263).
 THREE call sites assemble the request -- download and print
-(`frontend/src/schema-forms/components/SchemaForm.tsx:602-638` and :640-670)
+(`frontend/src/schema-forms/components/SchemaForm.tsx:610-646` and :650-678)
 plus the in-browser preview
 (`frontend/src/pdf-view/FilledPreviewModal.tsx:62`, with its own unwrap loop
-:58-61). All run every value through `unwrapFieldValue`
-(`frontend/src/schema-forms/utils/fieldValue.ts:341`) --
+:57-60). All run every value through `unwrapFieldValue`
+(`frontend/src/schema-forms/utils/fieldValue.ts:369`) --
 **dropping `confirmed`/`skipped`/`steered` flags entirely** -- and POST
 `{kit_id, pdf_filename, field_values, form_schema}`
-(`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`). A payload-shape change
+(`frontend/src/schema-forms/utils/pdfFiller.ts:98-103`). A payload-shape change
 made against only one call site silently misses the other two.
 Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
 
@@ -371,21 +369,22 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
   store is consulted only for the PDF bytes (:68), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
   the editor/publish surface (`_load_kit_dump`,
-  `backend/routes/editor_kit_routes.py:396`, called from the lint routes
-  and the mark-complete promotion gate at :1571, feeding the pure-function
+  `backend/routes/editor_kit_routes.py:687`, with 7 call sites across the
+  lint routes; the mark-complete promotion gate's call is inside
+  `set_editor_kit_status` at :2451, feeding the pure-function
   checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (`pdf_fill_routes.py:92-134`); widget dispatch by
+  exact id always winning (`pdf_fill_routes.py:107-131`); widget dispatch by
   `field_type` (`pdf_fill_routes.py:409-681`):
   text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
   (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
-  direct `xref_set_key` writes (:459-495).
+  direct `xref_set_key` writes (:475-476, within the wider :459-495 branch).
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (`pdf_fill_routes.py:410-413`).
+  (`pdf_fill_routes.py:410-412`).
 - `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
@@ -393,18 +392,23 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
 ### 6. Confirmation audit trail
 
 The chain: Gemini `confirm_field` tool -> backend request
-(`request_coordinator.py:314-319`) -> client verifies it has a usable value and
-acks (`webFormConnection.ts:1896+`, reply built :3169-3190 -- `reason` is a fixed
-category token, never a field value) -> backend logs ONLY on a positive ack
-(the `recorded` guard at `callback_handler.py:933`; the `log_field_confirmation`
-call it protects at :967-975). Event shape (NO PII, no
-`value` key anywhere): `backend/utils/confirmation_logger.py:271-285` --
+(`request_coordinator.py:279`, `request_confirm_field`) -> client verifies it
+has a usable value and acks (`webFormConnection.ts:1924`,
+`handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse` at
+:3197 -- `reason` is a fixed category token, never a field value) -> backend
+logs ONLY on a positive ack (the `recorded` guard at
+`callback_handler.py:947`; the `log_field_confirmation` call it protects at
+:981-989). Event shape (NO PII, no `value` key anywhere):
+`backend/utils/confirmation_logger.py:335-347` --
 `{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
-field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL
-(:301-317, dies with the instance), Firestore `confirmation_events` (:88-119,
-gated by `CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
+field_name, confirmation_method}`. Sinks: structured log (:353-355), local
+JSONL (`_write_confirmation_to_file` :364-379, dies with the instance),
+Firestore `confirmation_events` (`_firestore_write` :88-117, gated by
+`CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
-handshake (`schemaFormState.ts:1049-1063`) -- see contract 2. The
+handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
+`:1088` (kit_id), `:1089` (edition_date), read at
+`websocket_routes.py:1090`/`:1072`/`:1099` respectively -- see contract 2. The
 `edition_date` COLUMN carries whichever revision marker won
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
