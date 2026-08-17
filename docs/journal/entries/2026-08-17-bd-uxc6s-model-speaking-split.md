@@ -93,6 +93,53 @@ plus the reason. Two `connection.ts` sites share a line shape and are
 disambiguated by the nearest preceding token rather than a line number, which
 would rot on the first edit above them.
 
+## The outer review found the doc I had falsified
+
+I enumerated the CODE consumers carefully -- eight sites, three categories,
+a test pinning the set. I never asked which DOC asserted the contract I was
+changing.
+
+`docs/components/voice-ai.md` said: "TWO predicates, deliberately distinct:
+`isSpeaking()` is MODEL-ONLY (every caller is turn-taking / barge-in logic)."
+Both halves were true on `origin/dev`; both were false the moment my diff
+landed. There are three predicates now, and NO barge-in caller reads
+`isSpeaking()` any more.
+
+That is the tier-2 doc an agent reads before touching the audio pipeline, so
+it was steering the next author toward the exact accessor my new guard exists
+to reject -- a guard and a doc pointing opposite directions, with the doc
+loaded first.
+
+Same lesson as bd `77j0d` the round before, arriving from a different angle:
+**"where does this claim live?" is a bigger question than "which code calls
+this function?"** There, the answer included bd memories. Here it included a
+surface doc. In both cases my enumeration was rigorous within the category I
+had chosen and blind to the category I had not.
+
+## Three more holes, all in things I had just built
+
+The same review filed three non-blocking findings, and the pattern in them is
+uncomfortable: each is a place where I fixed one instance of a class and left
+a sibling.
+
+- **The anchor collapse.** My set-pin guard resolved a site by
+  `lines.indexOf(text)` -- first match wins. Regressing the RESUME half to
+  match the flush half makes both `connection.ts` sites byte-identical, so
+  both bind to the first site's anchor and the PRIMARY assertion passes on a
+  genuine deadlock regression. The staleness test caught it, but its message
+  says "update or remove the entry" -- the wrong remedy, pointed at the table
+  instead of the bug. Now resolved by line index.
+- **`cleanup()` left `activeAudioSources` populated.** It resets
+  `activeClipCount` and `geminiIsSpeaking`; my accessor reads a THIRD piece of
+  state I never added there. The sources are stopped with their context
+  closed, so `onended` never fires to drain them -- a stranded entry reports
+  the model as talking for the manager's whole life.
+- **A comment of mine claimed an overlap that cannot occur at that site.**
+  Mobile's PTT press releases the clip synchronously before the check, so
+  `isSpeaking()` would have read the same there. The accessor choice is still
+  right for a reason that survives (`s1iex.5` adds a second clip producer),
+  but I had written down a justification that was false.
+
 ## Process notes
 
 - The overlap test drives REAL scheduled PCM alongside an attached clip. The
