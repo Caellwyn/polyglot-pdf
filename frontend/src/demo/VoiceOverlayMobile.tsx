@@ -22,7 +22,7 @@ import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
-import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
+import { useGeminiSpeaking, useClipPlaying } from '../shared/useGeminiSpeaking'
 
 interface VoiceOverlayMobileProps {
 	schema: FormSchema
@@ -1083,7 +1083,15 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 	// matters twice as much here (bd polyglot-pdf-2p4y).
 	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
 	const solSpeaking = useGeminiSpeaking(solAudioManager)
-	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// See the twin comment in VoiceOverlay.tsx: this is the CLIP-ONLY signal,
+	// not solSpeaking -- conflating them regresses the bd polyglot-pdf-bxng
+	// invariant during reconnects (bd polyglot-pdf-s1iex.4). Mobile matters
+	// most here: on the collapsed FAB, Sol is the ONLY status indicator.
+	const solClipPlaying = useClipPlaying(solAudioManager)
+	const solState = deriveSolState({
+		status, thinking, speaking: solSpeaking, micSending,
+		clipPlaying: solClipPlaying,
+	})
 	// Sol reads the AI's OUTPUT level for its speaking ray-breathing (the mic is
 	// silent while the assistant talks). Reads the ref rather than closing over
 	// the manager, since it is recreated across reconnects -- but caches the lookup

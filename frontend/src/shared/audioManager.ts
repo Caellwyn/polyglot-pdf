@@ -34,7 +34,15 @@ export interface AudioManager {
 	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
 	resumeAudioContext: () => void // Resume audio context (resume after false positive)
 	isRecording: () => boolean
-	isSpeaking: () => boolean // Is Gemini currently speaking?
+	// Is the MODEL's own audio playing? EXCLUDES synthesized clips (bd
+	// polyglot-pdf-s1iex.4) -- every caller is turn-taking/barge-in logic
+	// asking "is Gemini mid-utterance?", and counting a clip deadlocks the
+	// VAD suspend/resume pair. For "is any audio audible", see
+	// isAnyAudioPlaying below.
+	isSpeaking: () => boolean
+	// The UNION: model PCM or a synthesized clip. What the avatar's energy
+	// gate and the playback watchdog want (bd polyglot-pdf-s1iex.4).
+	isAnyAudioPlaying: () => boolean
 	muteInput: () => void // Mute mic input (send silence - push-to-talk mode only)
 	unmuteInput: () => void // Unmute mic input (send real audio)
 	setSpellbackHold: (active: boolean) => void // bd 22h1f: hard mic gate while the deterministic spell-back clip plays (any mode)
@@ -57,6 +65,21 @@ export interface AudioManager {
 	// loop) rather than a subscription, because the only consumer is an avatar
 	// that already animates per-frame.
 	getOutputEnergy: () => number
+	// Route an <audio> element's clip (spell-back, Sol's intro) through the SAME
+	// playback graph the model's PCM uses, so getOutputEnergy sees it and the
+	// avatar animates while a clip plays (bd polyglot-pdf-s1iex.4). Returns a
+	// release function: call it when the clip ends/errors/is cancelled. Safe to
+	// call when the Web Audio path is unavailable -- it degrades to
+	// element-only playback (audible, unanimated) rather than throwing.
+	// The caller still owns play()/pause(): this only taps the signal.
+	attachClipElement: (el: HTMLAudioElement) => () => void
+	// True while >=1 synthesized CLIP is routed and playing (bd
+	// polyglot-pdf-s1iex.4). DISTINCT from isSpeaking(), which is also true for
+	// the model's own PCM: the avatar needs the clip-only signal, because a
+	// clip is audible with no live session while a stale model-speaking flag
+	// during `reconnecting` must NOT animate Sol (the bd polyglot-pdf-bxng
+	// invariant).
+	isClipPlaying: () => boolean
 	destroy: () => void
 }
 
@@ -240,6 +263,110 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		}
 		// Same *100 scaling the capture worklet applies to its RMS.
 		return Math.min(100, Math.sqrt(sum / outputBuf.length) * 100)
+	}
+
+	/**
+	 * Clip elements already spliced into the playback graph (bd
+	 * polyglot-pdf-s1iex.4).
+	 *
+	 * WHY A MAP: `createMediaElementSource` may be called only ONCE per element
+	 * -- a second call on the same element throws InvalidStateError, and a
+	 * caught-and-ignored throw would leave the clip audible but unanimated.
+	 * Replaying the same element (Listen Again) must therefore reuse the node
+	 * built the first time.
+	 *
+	 * WHY IT MUST BE A BLOB URL, NOT THE CLOUD RUN URL: a media element whose
+	 * src is cross-origin without CORS is "tainted", and routing a tainted
+	 * element through Web Audio yields SILENCE (zeros) with no error -- killing
+	 * the audio AND the animation. Callers fetch the clip (they need the auth
+	 * header anyway) and pass an object-URL element.
+	 */
+	const clipSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>()
+	// How many clips are currently routed + playing. Ref-counted because the
+	// spell-back clip and the intro clip are different callers that must not
+	// clear each other's speaking state.
+	let activeClipCount = 0
+
+	function isClipPlaying(): boolean {
+		return activeClipCount > 0
+	}
+
+	// Immediate clip-state notification for the UI. The polled hook
+	// (useClipPlaying) is the safety net; this makes the transition sharp
+	// rather than up to one poll interval late at each edge. A plain global,
+	// matching the vff* convention already used on this path.
+	function notifyClipState(): void {
+		try {
+			window.vffOnClipStateChange?.(isClipPlaying())
+		} catch {
+			// A subscriber that throws must never break audio.
+		}
+	}
+
+	function attachClipElement(el: HTMLAudioElement): () => void {
+		// The clip plays with no Live session (Sol's intro runs BEFORE any
+		// connect), so the playback context may not exist yet. Build it here;
+		// the caller resumes it inside the user gesture.
+		if (!nodes.playbackContext) {
+			try {
+				nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
+				playbackTime = 0
+			} catch (err) {
+				// No Web Audio (unsupported/blocked/jsdom): let the element play
+				// on its own. Audible but unanimated beats silent.
+				console.warn('[AudioManager] [warn] clip attach: no AudioContext', err)
+				return () => {}
+			}
+		}
+		const ctx = nodes.playbackContext
+
+		let source = clipSources.get(el)
+		if (!source) {
+			try {
+				source = ctx.createMediaElementSource(el)
+				clipSources.set(el, source)
+			} catch (err) {
+				// Already-attached-elsewhere or unsupported: degrade to
+				// element-only playback rather than breaking the clip.
+				console.warn('[AudioManager] [warn] clip attach failed', err)
+				return () => {}
+			}
+		}
+		// Through the analyser (which is itself wired to ctx.destination), so the
+		// avatar reads the clip's real level -- the SAME single energy source the
+		// model's PCM uses, so deriveSolState needs no new input.
+		source.connect(getOutputAnalyser(ctx))
+
+		activeClipCount++
+		notifyClipState()
+		const wasNotSpeaking = !geminiIsSpeaking
+		geminiIsSpeaking = true
+		if (wasNotSpeaking && window.vffOnAudioPlaybackStart) {
+			window.vffOnAudioPlaybackStart()
+		}
+
+		let released = false
+		return () => {
+			// Idempotent: onended and an explicit cancel can both fire.
+			if (released) return
+			released = true
+			activeClipCount = Math.max(0, activeClipCount - 1)
+			notifyClipState()
+			// Only clear the speaking state if no other clip is playing AND the
+			// model is not mid-utterance -- playAudio owns that flag too, and a
+			// clip ending must not silence Sol during a model turn.
+			if (activeClipCount === 0 && activeAudioSources.length === 0) {
+				geminiIsSpeaking = false
+				if (window.vffOnAudioPlaybackEnd) {
+					window.vffOnAudioPlaybackEnd()
+				}
+			}
+			try {
+				source?.disconnect(getOutputAnalyser(ctx))
+			} catch {
+				// Context torn down under us -- nothing to release.
+			}
+		}
 	}
 
 	/**
@@ -631,8 +758,14 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					activeAudioSources.splice(index, 1)
 				}
 				
-				// Only mark as not speaking if no more active sources
-				if (activeAudioSources.length === 0) {
+				// Only mark as not speaking if no more active sources AND no
+				// synthesized clip is still audible (bd polyglot-pdf-s1iex.4):
+				// spellbackPlayer's drain-wait is BOUNDED (8s) and plays anyway
+				// on timeout, so a clip can legitimately overlap the tail of a
+				// model turn. Zeroing the flag here would flatten the avatar's
+				// amplitude for the rest of the clip (getOutputEnergy is gated
+				// on it) and fire a premature playback-end at the watchdog.
+				if (activeAudioSources.length === 0 && activeClipCount === 0) {
 					geminiIsSpeaking = false
 
 					// CRITICAL: Only notify activity watchdog when ALL chunks finished playing naturally
@@ -647,7 +780,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			}
 
 		} catch (error) {
-			geminiIsSpeaking = false
+			// A PCM failure must not silence a clip that is still playing
+			// (bd polyglot-pdf-s1iex.4 -- same shared-flag invariant as above).
+			if (activeClipCount === 0) {
+				geminiIsSpeaking = false
+			}
 			console.error('[VFF Audio] Playback failed:', error)
 		}
 	}
@@ -721,7 +858,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			playbackTime = nodes.playbackContext.currentTime
 		}
 
-		geminiIsSpeaking = false
+		// Draining the MODEL's queue says nothing about a synthesized clip: the
+		// clip is not in this queue at all, and in client-VAD mode a barge-in
+		// flush lands here while a spell-back clip is still audible (bd
+		// polyglot-pdf-s1iex.4). Its own release owns the transition.
+		if (activeClipCount === 0) {
+			geminiIsSpeaking = false
+		}
 	}
 
 	/**
@@ -808,6 +951,17 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		outputAnalyserCtx = null
 		outputBuf = null
 
+		// Clip attachments died with that context (bd polyglot-pdf-s1iex.4). A
+		// stranded count would be permanent: it now gates all four
+		// `geminiIsSpeaking = false` sites AND isSpeaking(), so Sol would
+		// freeze mid-animation and turn-taking would believe the model is
+		// forever silent. Today every destroy() caller happens to cancel the
+		// spell-back player first; bead s1iex.5 adds a second attach caller
+		// with no such pairing, so make it structural rather than incidental.
+		activeClipCount = 0
+		geminiIsSpeaking = false
+		notifyClipState()
+
 		// Drop the energy subscriber on teardown so a destroyed manager holds no
 		// reference into the overlay (bd polyglot-pdf-s3zv).
 		onEnergyCallback = null
@@ -823,9 +977,27 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
-	 * Check if Gemini is currently speaking
+	 * Is the MODEL's own audio playing right now?
+	 *
+	 * DELIBERATELY EXCLUDES synthesized clips (bd polyglot-pdf-s1iex.4). Its
+	 * eight callers are all turn-taking / barge-in / re-prompt logic asking
+	 * "is Gemini mid-utterance?", and two of them form a pair that DEADLOCKS
+	 * if a clip counts: `onVADSpeechStart` suspends the playback context when
+	 * this is true, and `onVADSpeechEnd` only resumes it when this is false --
+	 * a clip (now INSIDE that context) would suspend mid-word and never
+	 * resume. The avatar wants the union instead and asks for it explicitly
+	 * via isAnyAudioPlaying(); nothing else does.
 	 */
 	function isSpeaking(): boolean {
+		return geminiIsSpeaking && activeClipCount === 0
+	}
+
+	/**
+	 * Is ANY audio audible -- the model's PCM or a synthesized clip? The
+	 * avatar's energy gate (getOutputEnergy) and the playback-end watchdog
+	 * want this union; turn-taking logic wants isSpeaking() above.
+	 */
+	function isAnyAudioPlaying(): boolean {
 		return geminiIsSpeaking
 	}
 
@@ -1002,6 +1174,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		resumeAudioContext,
 		isRecording,
 		isSpeaking,
+		isAnyAudioPlaying,
 		muteInput,
 		unmuteInput,
 		setSpellbackHold,
@@ -1011,6 +1184,8 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setNativeVad,
 		setEnergyCallback,
 		getOutputEnergy,
+		attachClipElement,
+		isClipPlaying,
 		destroy,
 	}
 }

@@ -248,6 +248,89 @@ For an immigration-form app, a per-field record of "the user confirmed this fiel
 by this method, at this time" is the liability-protection trail: it shows each
 value was user-approved without ever storing the value itself.
 
+## The deployment invariant: DRAFT app, no self-filing, outside reviewer
+
+**This is project-level context, not a footnote.** Three parts, all load-bearing:
+
+1. **This app produces a DRAFT.** It is not a filing tool and does not submit
+   anything to any agency.
+2. **It is sold to a legal entity** that pre-prepares first drafts for its
+   clients. It is **never** used for self-filing.
+3. **An outside qualified human reviews the form before it is filed.** Customer
+   contracts require it. *That reviewer makes the legal determinations -- the app
+   never does.*
+
+### Shipped behavior that DEPENDS on this
+
+This is a deployment precondition, not an aspiration: real behavior is built on
+top of it, and would become wrong if it stopped holding.
+
+- **The hedge-and-defer answer policy** (bd `polyglot-pdf-rdsl`). The voice SI's
+  ANSWERING QUESTIONS block (`backend/config.py`) tells the model to answer an
+  eligibility-shaped question with official text plus its conditions, then close
+  by deferring to "the firm or professional reviewing their form." **If the
+  product were ever opened to self-filers, demoed to a prospect with no reviewing
+  staff, or sold direct-to-consumer, that deferral would point at a person who
+  does not exist** -- in every supported language -- and a careful hedge becomes a
+  dead end. Nothing in the codebase would object.
+- **The user-facing disclaimer** (`DisclaimerModal.tsx`) and its spoken
+  counterpart, which set the applicant's expectations about what the draft is.
+- **The certification-block position** -- what the app will and will not fill on
+  a preparer/interpreter certification.
+
+### The register distinction (do not collapse this)
+
+**The internal invariant and what the app TELLS the applicant are different
+statements, deliberately.**
+
+**What SHIPS today -- both user-facing surfaces are ADVISORY, and they are the
+same text.** The modal's `fullText` is what the Live model reads aloud
+(`VoiceOverlay.tsx` -> `readDisclaimer` -> the `read_disclaimer` WS message ->
+`websocket_routes.py`), so the spoken and written disclaimers do not differ:
+both say *"We strongly advise you to have a qualified professional check your
+final form before you submit it."* Neither asks the applicant to undertake
+anything.
+
+| Register | Status | Where | Wording |
+|---|---|---|---|
+| **Required** (internal) | live, contractual | customer contracts | review is an obligation on the customer; this is what makes the SI's deferral coherent |
+| **Advised** (we recommend) | **LIVE -- both surfaces** | `DisclaimerModal.tsx` `p2`/`fullText`, written AND read aloud | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
+| **Undertaken** (they agree) | **STAGED, NOT LIVE** | `intro_script.json` para 6, 18 languages | "you **agree to** review the completed document yourself and with a certified professional before filing" |
+
+**The Undertaken register is not reachable by any user today.** The intro clip
+has no frontend player (bd `polyglot-pdf-s1iex.5`, open -- `grep -rn "tts/intro"
+frontend/src` returns nothing), and `INTRO_TTS_ENABLED` defaults false, so
+`POST /api/tts/intro` 503s. `intro_script.json` and `intro_tts.py` both assert
+a HARD INVARIANT that "the modal renders exactly these paragraphs -- one
+source, no separate fullText"; **that invariant describes the intended end
+state, not shipped behavior.** Do not cite it as current.
+
+**Why this matters when s1iex.5 ships.** It changes the user-facing legal
+posture, not just the audio: today the applicant is ADVISED to obtain review;
+the staged script has them AGREE to obtain it, and the `[AGREE LABEL]` click
+would record that undertaking. Whether the written modal should adopt the same
+undertaking -- so the two surfaces stay in one register -- is a legal/product
+decision, tracked in bd `polyglot-pdf-nsb4y`; `intro_script.json` notes a
+counsel pass is still pending. Shipping the player without settling it is what
+would create a listened-vs-read split.
+
+**The SI sits at the ADVISORY register and must stay there**, whichever way
+that lands: *"Do not promise the user that a review WILL happen -- the
+disclaimer they accepted advises it rather than guaranteeing it."* Even once
+an applicant undertakes to obtain review, an undertaking by the user is not a
+guarantee by us, and the model cannot know whether it was honoured.
+Strengthening this text re-introduces the exact bd `rdsl` bug: the SI once
+PROMISED review ("Every form drafted here is reviewed...") where the disclaimer
+only advised it, and that survived the author, the tests, and two review rounds
+-- caught only because one reviewer read the disclaimer beside the prompt.
+
+### What would invalidate this
+
+Any move toward self-filing, direct-to-consumer sale, or a deployment without a
+contracted reviewing professional. Any of those requires revisiting the deferral
+language, the disclaimer, and the certification-block position **together** --
+they are one posture, not three independent choices.
+
 ## Audit-log hygiene
 
 The confirmation log directory is **not** committed to git, and tests redirect
@@ -255,8 +338,6 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-13 (bd polyglot-pdf-8x56: the shape-fingerprint tier's
-answerable-shape inputs widened to include validation rules, the `required`
-flag, and `pdf_field_name`, above -- the earlier "field ids + types + option
-values" description was accurate for the pre-8x56 fingerprint but is not the
-current-state doctrine this file is meant to hold).*
+*Last updated: 2026-08-14 (bd polyglot-pdf-rtyia: records the draft-app /
+no-self-filing / outside-reviewer deployment invariant and the advisory-vs-
+required register distinction).*

@@ -278,3 +278,84 @@ describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', ()
         });
     });
 });
+
+// ===========================================================================
+// The ADVISORY register is load-bearing (bd polyglot-pdf-rtyia)
+// ===========================================================================
+//
+// docs/standards/confirmation-and-audit.md ("The deployment invariant") pins
+// three registers and which are LIVE. Two facts about this file are what make
+// that table true, and neither was guarded:
+//
+//   1. fullText is what the LIVE MODEL READS ALOUD -- VoiceOverlay/
+//      VoiceOverlayMobile pass DISCLAIMER_TRANSLATIONS[lang].fullText to
+//      connectionManager.readDisclaimer(), which the backend relays verbatim
+//      to Gemini. It is not merely a screen-reader convenience.
+//   2. It ADVISES review; it must never UNDERTAKE it on the applicant's
+//      behalf. The staged intro script (backend/services/intro_script.json,
+//      unshipped -- bd s1iex.5) says "you agree to review ..."; that is a
+//      STRONGER register and adopting it here silently would change the
+//      user-facing legal posture without the counsel pass bd
+//      polyglot-pdf-nsb4y exists to get.
+//
+// The SI is deliberately pinned to the weaker register too ("Do not promise
+// the user that a review WILL happen"), and bd rdsl is the precedent: the SI
+// once PROMISED review where the disclaimer only advised it, and that survived
+// the author, the tests and two review rounds.
+describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia)', () => {
+    const languages = Object.keys(DISCLAIMER_TRANSLATIONS);
+
+    it('ships a disclaimer for every language, each with a spoken fullText', () => {
+        expect(languages.length).toBeGreaterThan(1);
+        for (const lang of languages) {
+            const t = DISCLAIMER_TRANSLATIONS[lang];
+            expect(t.fullText, `${lang}: no fullText`).toBeTruthy();
+            expect(t.fullText.length, `${lang}: fullText too short to be real`)
+                .toBeGreaterThan(200);
+        }
+    });
+
+    it.each(Object.keys(DISCLAIMER_TRANSLATIONS))(
+        '%s: the spoken fullText carries the RENDERED paragraphs',
+        (lang) => {
+            // The modal renders p1/p2/p3 but SPEAKS fullText -- two different
+            // strings. If they diverge, what the applicant hears is not what
+            // they read, and the doc's "same text on both surfaces" claim
+            // silently stops being true.
+            const t = DISCLAIMER_TRANSLATIONS[lang];
+            for (const key of ['p1', 'p2', 'p3'] as const) {
+                expect(
+                    t.fullText.includes(t[key]),
+                    `${lang}: ${key} is rendered on screen but is NOT inside `
+                    + `fullText, so the spoken and written disclaimers differ.`,
+                ).toBe(true);
+            }
+        },
+    );
+
+    it.each(Object.keys(DISCLAIMER_TRANSLATIONS))(
+        '%s: the disclaimer ADVISES review, it does not UNDERTAKE it',
+        (lang) => {
+            // English-anchored: the English source is not translated, so the
+            // undertaking phrasing is assertable verbatim. For the other
+            // languages this guards the specific regression of pasting the
+            // English undertaking in wholesale.
+            const t = DISCLAIMER_TRANSLATIONS[lang];
+            expect(
+                t.fullText.toLowerCase().includes('agree to review'),
+                `${lang}: the disclaimer now says the applicant AGREES to `
+                + `review. That is the STAGED intro-script register (bd `
+                + `s1iex.5), not the shipped advisory one. Changing the `
+                + `user-facing legal posture needs bd polyglot-pdf-nsb4y `
+                + `settled first -- see docs/standards/confirmation-and-audit.md.`,
+            ).toBe(false);
+        },
+    );
+
+    it('English advises review by a qualified professional', () => {
+        // The clause the SI's hedge-and-defer policy leans on.
+        const en = DISCLAIMER_TRANSLATIONS['English'].fullText.toLowerCase();
+        expect(en).toContain('strongly advise');
+        expect(en).toContain('qualified professional');
+    });
+});

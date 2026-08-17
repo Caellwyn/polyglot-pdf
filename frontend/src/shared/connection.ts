@@ -10,6 +10,11 @@ declare global {
 	interface Window {
 		vffOnAudioPlaybackEnd?: () => void
 		vffOnAudioPlaybackStart?: () => void  // Called when Gemini starts speaking (pause timer)
+		// Fired when a synthesized CLIP (spell-back, Sol's intro) starts or
+		// stops (bd polyglot-pdf-s1iex.4). Distinct from the two above, which
+		// also fire for the model's own PCM: only the clip-scoped signal may
+		// animate Sol without a live session.
+		vffOnClipStateChange?: (playing: boolean) => void
 		vffOnSectionChanged?: () => void  // Called when Gemini switches sections
 		// TEST-ONLY (bd polyglot-pdf-fa4x): fired whenever the backend agent_processing
 		// signal arrives, so the voice harness can assert the thinking indicator armed

@@ -43,6 +43,22 @@ export interface SolStateInputs {
 	 * audio, so a listening cue there would lie.
 	 */
 	micSending?: boolean
+	/**
+	 * A synthesized CLIP is audible right now (spell-back, or Sol's scripted
+	 * intro) -- bd polyglot-pdf-s1iex.4.
+	 *
+	 * Separate from `speaking` because it is NOT gated on a live session: the
+	 * intro clip plays with no Gemini session at all (the epic deletes the
+	 * pre-Agree connect), and a clip can also outlive a socket drop. The
+	 * stale-flag hazard the live gate exists to prevent does not apply here --
+	 * this flag is set and cleared by the audio element's own lifecycle
+	 * (attach -> ended/error/cancel), not by a backend message that can be
+	 * left armed by a dropped connection.
+	 *
+	 * It does NOT outrank `paused` or `offline`: a user who paused, or a
+	 * session that failed, must not see an animated Sol.
+	 */
+	clipPlaying?: boolean
 }
 
 /**
@@ -100,7 +116,10 @@ function isConnecting(s: string): boolean {
  *   2. offline  -- something is actually wrong; never dress it up as activity.
  *   3. speaking -- Gemini's audio is audible RIGHT NOW, so it beats `thinking`
  *                  (the backend can leave agent_processing armed into the first
- *                  audio frames) and beats `listening`.
+ *                  audio frames) and beats `listening`. A synthesized CLIP
+ *                  (`clipPlaying`) also lands here and is NOT gated on a live
+ *                  session -- Sol's intro clip speaks before any session
+ *                  exists (bd polyglot-pdf-s1iex.4).
  *   4. thinking -- turn taken, working, no audio yet.
  *   5. listening-- live session actually forwarding mic audio.
  *   6. connecting-- coming up or recovering: 'connecting', 'reconnecting',
@@ -118,6 +137,10 @@ export function deriveSolState(inputs: SolStateInputs): SolState {
 
 	if (s === 'paused') return 'paused'
 	if (isOffline(s)) return 'offline'
+
+	// A clip is real audible speech with no session behind it -- checked before
+	// the live gate, but AFTER paused/offline above (bd polyglot-pdf-s1iex.4).
+	if (inputs.clipPlaying) return 'speaking'
 
 	const live = isLiveSession(s)
 	if (live && inputs.speaking) return 'speaking'

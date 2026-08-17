@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  Manual verification harness for bd polyglot-pdf-s1iex.4 (Sol animates during
+  TTS clips). DEV-ONLY: served by the vite dev server, never bundled into a
+  route. Unit tests cannot prove this -- jsdom has no Web Audio, so the graph
+  wiring (createMediaElementSource -> analyser -> destination) and the resulting
+  non-zero getOutputEnergy are only observable in a real browser.
+
+  It drives the REAL audioManager against a locally-generated MP3-less tone
+  (an OfflineAudioContext-rendered WAV blob), so no backend, no auth and no
+  Gemini session are needed -- exactly the conditions Sol's intro clip will run
+  under.
+-->
+<html>
+<head><meta charset="utf-8"><title>clip animation check (bd s1iex.4)</title>
+<style>
+  body { font: 14px system-ui; margin: 24px; max-width: 720px; }
+  #log { white-space: pre-wrap; background: #111; color: #0f0; padding: 12px; border-radius: 6px; }
+  .bar { height: 18px; background: #2a6; width: 0; transition: width 60ms linear; }
+  button { font-size: 15px; padding: 8px 14px; }
+</style>
+</head>
+<body>
+  <h2>Sol clip-animation check (bd polyglot-pdf-s1iex.4)</h2>
+  <p>Click Play. PASS = energy goes non-zero while the tone plays, and the
+     playback globals fire start then end.</p>
+  <button id="go">Play test clip</button>
+  <div class="bar" id="bar"></div>
+  <div id="log"></div>
+<script type="module">
+import { createAudioManager } from '/src/shared/audioManager.ts'
+
+const log = (m) => { document.getElementById('log').textContent += m + '\n' }
+let startFired = 0, endFired = 0
+window.vffOnAudioPlaybackStart = () => { startFired++; log('vffOnAudioPlaybackStart fired') }
+window.vffOnAudioPlaybackEnd = () => { endFired++; log('vffOnAudioPlaybackEnd fired') }
+
+// A 3s 220Hz tone rendered to a WAV blob -- stands in for the Cloud TTS MP3
+// so this page needs no backend.
+function toneBlob(seconds = 3, freq = 220, rate = 24000) {
+  const n = seconds * rate
+  const buf = new Int16Array(n)
+  for (let i = 0; i < n; i++) buf[i] = Math.sin(2 * Math.PI * freq * i / rate) * 12000
+  const header = new ArrayBuffer(44), dv = new DataView(header)
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)) }
+  ws(0, 'RIFF'); dv.setUint32(4, 36 + buf.byteLength, true); ws(8, 'WAVEfmt ')
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true)
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true)
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true)
+  ws(36, 'data'); dv.setUint32(40, buf.byteLength, true)
+  return new Blob([header, buf], { type: 'audio/wav' })
+}
+
+document.getElementById('go').onclick = async () => {
+  const am = createAudioManager()
+  const url = URL.createObjectURL(toneBlob())
+  const audio = new Audio(url)
+  const release = am.attachClipElement(audio)
+  log('attached; playing...')
+  let peak = 0
+  // setInterval, NOT requestAnimationFrame: rAF is throttled to zero in a
+  // BACKGROUND tab, which made this harness report peak 0.00 and "FAIL" while
+  // the implementation was in fact fine (measured 2026-08-14). The real
+  // consumer is an avatar in a foreground tab, so rAF is right THERE; a
+  // verification harness must not depend on tab focus.
+  const sampler = setInterval(() => {
+    const e = am.getOutputEnergy()
+    peak = Math.max(peak, e)
+    document.getElementById('bar').style.width = Math.min(100, e * 3) + '%'
+  }, 50)
+  audio.onended = () => {
+    clearInterval(sampler)
+    release()
+    log('--- RESULT ---')
+    log('peak getOutputEnergy during clip: ' + peak.toFixed(2))
+    log('start fired: ' + startFired + ' | end fired: ' + endFired)
+    log((peak > 0 && startFired === 1 && endFired === 1)
+      ? 'PASS: the clip drove the analyser AND the playback globals'
+      : 'FAIL: Sol would not animate')
+  }
+  await audio.play()
+}
+</script>
+</body>
+</html>
