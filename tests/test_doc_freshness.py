@@ -217,6 +217,29 @@ class TestFreshnessScanCoversTier1:
         docs = freshness.find_docs()
         assert all("does_not_exist" not in str(d) for d in docs)
 
+    def test_doc_dirs_includes_doctrine(self):
+        # bd polyglot-pdf-riffn: docs/doctrine used to be entirely excluded
+        # from DOC_DIRS, so a chain violation there (review-flow.md's
+        # "Prior, same day" chain) was invisible to the convention scan even
+        # though CLAUDE.md/the closeout skill already treat docs/doctrine/*
+        # as tier 2. Pin the membership directly, not just via "the checker
+        # currently reports clean" (which a DOC_DIRS revert would not break
+        # on its own if no doctrine file happened to violate the regex).
+        assert "docs/doctrine" in freshness.DOC_DIRS
+
+    def test_find_docs_walks_doctrine_directory(self, tmp_path, monkeypatch):
+        # Integration-level companion to the assertion above: prove
+        # find_docs() actually WALKS docs/doctrine (not just that the string
+        # is in the list) by pointing REPO_ROOT at a synthetic tree.
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "TIER1_DOCS", [])
+        doctrine_dir = tmp_path / "docs" / "doctrine"
+        doctrine_dir.mkdir(parents=True)
+        doctrine_doc = doctrine_dir / "some-doctrine.md"
+        doctrine_doc.write_text("# X\n\n*Last updated: 2026-05-20.*\n", encoding="utf-8")
+        docs = freshness.find_docs()
+        assert doctrine_doc in docs
+
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
         # tier-1 doc that has a Tracks line gets flagged. We point a fake

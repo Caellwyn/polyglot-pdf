@@ -476,11 +476,12 @@ def check_doc_conventions(
 
     Returns a list of (doc_path, message) findings. The two patterns this
     detects are codified in CLAUDE.md "Doc maintenance rules":
-      1. `Previously:` followed by a date or `Sprint NN` -- anywhere in the
-         doc, not just the stamp. This bans both stamp chains AND
-         rationale-section prose that strings sprint events together
-         (`Previously: Sprint 47 used X approach.`). The journal entry is
-         the chronological record; the doc is current-state only.
+      1. `Previously:`/`Prior:`/`Prior,`/`Earlier:`/`Earlier,` followed by a
+         date, `Sprint NN`, "same day/week", or a bead-id reference --
+         anywhere in the doc, not just the stamp. This bans both stamp
+         chains AND rationale-section prose that strings sprint events
+         together (`Previously: Sprint 47 used X approach.`). The journal
+         entry is the chronological record; the doc is current-state only.
       2. `## Recent sprint history` / `## Update history` / `## Changelog` /
          `## Sprint history` headings -- same reason.
 
@@ -514,13 +515,18 @@ def check_doc_conventions(
             text = doc.read_text(encoding="utf-8")
         except OSError:
             continue
-        # Check 1: `Previously:` anywhere in the doc.
+        # Check 1: Previously:/Prior:/Earlier: (or the `,` variants) anywhere
+        # in the doc.
         for m in PREVIOUSLY_CHAIN_RE.finditer(text):
             # Find the line number (1-indexed) the match lands on.
             line_no = text.count("\n", 0, m.start()) + 1
+            # Name the ACTUAL matched keyword+separator (e.g. "Earlier,"), not
+            # a hardcoded "Previously:" -- a maintainer grepping for the
+            # string this message names must find the real violation.
+            matched_text = m.group(0).split(None, 1)[0]
             findings.append((
                 doc,
-                f"line {line_no}: 'Previously:' chain detected -- "
+                f"line {line_no}: {matched_text!r} chain detected -- "
                 "stamps must be one line; chronological history lives in dev_journal.md",
             ))
             break  # one finding per doc is enough; the human will read it all
@@ -548,7 +554,7 @@ def report_doc_conventions(*, quiet: bool = False) -> bool:
     findings = check_doc_conventions()
     if not findings:
         if not quiet:
-            print("\nDoc conventions: clean (no 'Previously:' chains, no history sections in tier-1/tier-2 docs).")
+            print("\nDoc conventions: clean (no 'Previously:'/'Prior:'/'Earlier:' chains, no history sections in tier-1/tier-2 docs).")
         return False
     print()
     print("[doc-conventions] current-state-only violations -- tier-1 and tier-2 docs")
