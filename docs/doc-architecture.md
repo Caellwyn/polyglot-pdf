@@ -1,6 +1,12 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3). This file documents the doc SYSTEM (current state). It is a meta-doc about that system, not a doc about the product: it sits outside the three product tiers below, is reached on demand via [`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no code path.*
+*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: corrected the current-state-only
+section's claim about the mechanical checker's regex coverage -- it now catches
+`Prior:`/`Earlier:` too, not just `Previously:`). This file documents the doc
+SYSTEM (current state). It is a meta-doc about that system, not a doc about the
+product: it sits outside the three product tiers below, is reached on demand via
+[`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no code
+path.*
 
 This project organizes its docs for **progressive discovery**: a small always-loaded core points at on-demand docs, so an agent (or human) loads only what the task needs and context stays lean. This file explains the system and the discipline that keeps it from rotting. It is the most transferable artifact in the claude-swarm-kit -- the structure below works for any codebase.
 
@@ -44,16 +50,20 @@ The checker is **warn-only** as a pre-commit hook and a **CI gate** via `tests/t
 
 Tier-1 and tier-2 docs describe CURRENT STATE ONLY:
 - No `Previously: <date>` chains on stamps -- and no synonym chains either
-  (`Prior:`, stacked prior-update summaries). The stamp is ONE line; the
-  mechanical checker's regex only catches the `Previously:` spelling, but the
-  rule covers the pattern, not the keyword (2026-08-05 audit: `Prior:` chains
-  had quietly accumulated on a dozen docs).
+  (`Prior:`, `Earlier:`, stacked prior-update summaries). The stamp is ONE
+  line; the mechanical checker's regex catches the `Previously:`/`Prior:`/
+  `Earlier:` spellings (plus their `,`-separated variants) followed by a
+  date, `Sprint NN`, "same day/week", or a bead-id reference, but the rule
+  covers the pattern, not the keyword set -- a synonym chain not yet in the
+  regex is still a violation to file (bd polyglot-pdf-6dn2n/riffn widened
+  the regex from `Previously:`-only after finding four docs whose
+  `Prior,`/`Earlier,`/`Earlier:` chains had passed it silently).
 - No `## Update history` / `## Recent sprint history` / `## Changelog` sections.
 - No "Sprint NN did X" narrative threaded through body prose.
 
 Chronological history lives in the **journal** (tier 3), which is append-only at the corpus level (write a new entry file; never edit an old one). The checker's regexes (`PREVIOUSLY_CHAIN_RE`, `HISTORY_HEADING_RE`) flag violations; the CI test fails on them. **Prune-on-bump:** when you update a stamp, replace the old content, don't append.
 
-**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them (they sit outside the scanned set: `TIER1_DOCS` + `docs/components/*` + `docs/standards/*`). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
+**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them (they sit outside the scanned set: `TIER1_DOCS` + `docs/components/*` + `docs/standards/*` + `docs/doctrine/*`). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
 
 ### 4. Trigger reads bake review into the work
 

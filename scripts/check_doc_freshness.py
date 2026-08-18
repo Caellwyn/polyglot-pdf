@@ -85,7 +85,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DOC_DIRS = ["docs/components", "docs/standards"]
+DOC_DIRS = ["docs/components", "docs/standards", "docs/doctrine"]
 TRACKS_RE = re.compile(r"\*\*Tracks:\*\*\s*(.+)$", re.MULTILINE)
 # Match *Last updated: YYYY-MM-DD ...* (anything after the date is fine —
 # some docs include a parenthetical sprint annotation).
@@ -93,18 +93,46 @@ LAST_UPDATED_RE = re.compile(
     r"^\*Last updated:\s*(\d{4})-(\d{2})-(\d{2})", re.MULTILINE
 )
 # Forbidden patterns on tier-1 + tier-2 docs (current-state only):
-# - `Previously:` followed by a YYYY-MM-DD or "Sprint NN" within ~30 chars,
-#   anywhere in the doc. This shape is the chronological-narrative pattern
-#   we want to ban (both stamp chains AND rationale-section prose that
-#   strings sprint events together). Bare references like "(do NOT chain
-#   `Previously:` prose)" or pedagogical mentions in CLAUDE.md itself are
-#   exempt because they don't have the date-or-sprint follow-up shape.
+# - `Previously:` / `Prior:` / `Prior,` / `Earlier:` / `Earlier,` followed
+#   (within a short lookahead) by a YYYY-MM-DD date, "Sprint NN", "same
+#   day"/"same week", or a bead-id reference (a backtick-quoted token, e.g.
+#   "bd `polyglot-pdf-x`", or a bare hyphenated token, e.g. "bd
+#   polyglot-pdf-x" -- bead ids always contain a hyphen, which is what lets
+#   this alternative avoid matching an ordinary word like "bd is the
+#   tracker"). This shape is the chronological-narrative pattern we want to
+#   ban (both stamp chains AND rationale-section prose that strings sprint
+#   events together) -- doc-architecture.md section 3 is explicit that the
+#   rule covers the PATTERN, not just the `Previously:` spelling, and four
+#   real docs shipped `Earlier:`/`Earlier,`/`Prior,` chains this regex missed
+#   before it was widened (bd polyglot-pdf-6dn2n/cqyke/f6wb6/riffn -- the
+#   found shapes were "Earlier, bd polyglot-pdf-6x1j: ..." and "Prior, same
+#   day (bd ...)", NOT followed by a literal date, which is why the date-only
+#   follow-up was widened to also cover a bead-id or same-day/week
+#   reference). Bare references like "(do NOT chain `Previously:` prose)" or
+#   pedagogical mentions in CLAUDE.md itself are exempt because they don't
+#   have this follow-up shape; ordinary prose use of "earlier"/"prior" (e.g.
+#   "an earlier version", "earlier same-week changes") is exempt because the
+#   word is never immediately followed by `:`/`,`.
+#   KNOWN ACCEPTED RISK (bd polyglot-pdf-gz7dv): "Prior:"/"Earlier:" directly
+#   followed by literal "same day"/"Sprint N" prose is indistinguishable from
+#   a real chain by local pattern matching alone -- e.g. "Prior: same day we
+#   shipped this" would still false-positive. Zero such occurrences exist in
+#   the current corpus; a future false positive is a one-line rephrase, not a
+#   blocker, so this risk is accepted rather than narrowed further (a tighter
+#   regex would also risk missing real chains of that exact shape).
 # - Section headers like `## Update history` / `## Recent sprint history` /
 #   `## Changelog` / `## Sprint history` (any heading level >= 2). Other
 #   "Sprint ..." headings (e.g. `## Sprint test retirement`) are NOT
 #   matched -- only the specific historical-narrative slugs.
 PREVIOUSLY_CHAIN_RE = re.compile(
-    r"\bPreviously:\s*(?:\d{4}-\d{2}-\d{2}|Sprint\s+\d)", re.IGNORECASE
+    r"\b(?:Previously|Prior|Earlier)[:,]\s*"
+    r"(?:\d{4}-\d{2}-\d{2}"
+    r"|Sprint\s+\d"
+    r"|same[\s-](?:day|week)"
+    r"|bd\s+`[\w-]+`"
+    r"|bd\s+[\w]+-[\w-]+"
+    r")",
+    re.IGNORECASE,
 )
 HISTORY_HEADING_RE = re.compile(
     r"^##+\s+(?:Recent\s+sprint\s+history|Update\s+history|Changelog|Sprint\s+history)\b",
@@ -256,9 +284,10 @@ def find_docs() -> list[Path]:
     """Return tier-1 + tier-2 docs to scan for freshness, sorted.
 
     Tier-1: TIER1_DOCS (CLAUDE.md, docs/INDEX.md, docs/technical_guide.md).
-    Tier-2: every `docs/components/*.md` + `docs/standards/*.md` (excluding
-    README.md). Docs without a `**Tracks:**` line are skipped downstream by
-    check_doc(); including them here is harmless.
+    Tier-2: every `docs/components/*.md` + `docs/standards/*.md` +
+    `docs/doctrine/*.md` (excluding README.md). Docs without a `**Tracks:**`
+    line are skipped downstream by check_doc(); including them here is
+    harmless.
     """
     docs = list(find_tier1_docs())
     for d in DOC_DIRS:
@@ -458,18 +487,20 @@ def check_doc_conventions(
 
     Returns a list of (doc_path, message) findings. The two patterns this
     detects are codified in CLAUDE.md "Doc maintenance rules":
-      1. `Previously:` followed by a date or `Sprint NN` -- anywhere in the
-         doc, not just the stamp. This bans both stamp chains AND
-         rationale-section prose that strings sprint events together
-         (`Previously: Sprint 47 used X approach.`). The journal entry is
-         the chronological record; the doc is current-state only.
+      1. `Previously:`/`Prior:`/`Prior,`/`Earlier:`/`Earlier,` followed by a
+         date, `Sprint NN`, "same day/week", or a bead-id reference --
+         anywhere in the doc, not just the stamp. This bans both stamp
+         chains AND rationale-section prose that strings sprint events
+         together (`Previously: Sprint 47 used X approach.`). The journal
+         entry is the chronological record; the doc is current-state only.
       2. `## Recent sprint history` / `## Update history` / `## Changelog` /
          `## Sprint history` headings -- same reason.
 
     The scan covers TIER1_DOCS (CLAUDE.md + docs/*.md top-level files) AND
-    every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md).
-    Tier-3 docs (docs/dev_journal.md, docs/journal/*, docs/archive/*) are
-    explicitly NOT scanned -- chronological history is the whole point there.
+    every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md +
+    docs/doctrine/*.md). Tier-3 docs (docs/dev_journal.md, docs/journal/*,
+    docs/archive/*) are explicitly NOT scanned -- chronological history is
+    the whole point there.
     """
     findings: list[tuple[Path, str]] = []
     # find_docs() already returns tier-1 (TIER1_DOCS) + tier-2 docs, but a
@@ -495,13 +526,18 @@ def check_doc_conventions(
             text = doc.read_text(encoding="utf-8")
         except OSError:
             continue
-        # Check 1: `Previously:` anywhere in the doc.
+        # Check 1: Previously:/Prior:/Earlier: (or the `,` variants) anywhere
+        # in the doc.
         for m in PREVIOUSLY_CHAIN_RE.finditer(text):
             # Find the line number (1-indexed) the match lands on.
             line_no = text.count("\n", 0, m.start()) + 1
+            # Name the ACTUAL matched keyword+separator (e.g. "Earlier,"), not
+            # a hardcoded "Previously:" -- a maintainer grepping for the
+            # string this message names must find the real violation.
+            matched_text = m.group(0).split(None, 1)[0]
             findings.append((
                 doc,
-                f"line {line_no}: 'Previously:' chain detected -- "
+                f"line {line_no}: {matched_text!r} chain detected -- "
                 "stamps must be one line; chronological history lives in dev_journal.md",
             ))
             break  # one finding per doc is enough; the human will read it all
@@ -529,7 +565,7 @@ def report_doc_conventions(*, quiet: bool = False) -> bool:
     findings = check_doc_conventions()
     if not findings:
         if not quiet:
-            print("\nDoc conventions: clean (no 'Previously:' chains, no history sections in tier-1/tier-2 docs).")
+            print("\nDoc conventions: clean (no 'Previously:'/'Prior:'/'Earlier:' chains, no history sections in tier-1/tier-2 docs).")
         return False
     print()
     print("[doc-conventions] current-state-only violations -- tier-1 and tier-2 docs")

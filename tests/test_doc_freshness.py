@@ -19,6 +19,8 @@ import importlib.util
 import pathlib
 import sys
 
+import pytest
+
 
 # Load the script as a module without running its CLI main(). The script
 # isn't on sys.path by default; this is the cleanest way to import a
@@ -214,6 +216,29 @@ class TestFreshnessScanCoversTier1:
         )
         docs = freshness.find_docs()
         assert all("does_not_exist" not in str(d) for d in docs)
+
+    def test_doc_dirs_includes_doctrine(self):
+        # bd polyglot-pdf-riffn: docs/doctrine used to be entirely excluded
+        # from DOC_DIRS, so a chain violation there (review-flow.md's
+        # "Prior, same day" chain) was invisible to the convention scan even
+        # though CLAUDE.md/the closeout skill already treat docs/doctrine/*
+        # as tier 2. Pin the membership directly, not just via "the checker
+        # currently reports clean" (which a DOC_DIRS revert would not break
+        # on its own if no doctrine file happened to violate the regex).
+        assert "docs/doctrine" in freshness.DOC_DIRS
+
+    def test_find_docs_walks_doctrine_directory(self, tmp_path, monkeypatch):
+        # Integration-level companion to the assertion above: prove
+        # find_docs() actually WALKS docs/doctrine (not just that the string
+        # is in the list) by pointing REPO_ROOT at a synthetic tree.
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "TIER1_DOCS", [])
+        doctrine_dir = tmp_path / "docs" / "doctrine"
+        doctrine_dir.mkdir(parents=True)
+        doctrine_doc = doctrine_dir / "some-doctrine.md"
+        doctrine_doc.write_text("# X\n\n*Last updated: 2026-05-20.*\n", encoding="utf-8")
+        docs = freshness.find_docs()
+        assert doctrine_doc in docs
 
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
@@ -566,6 +591,98 @@ class TestDocConventionsRegexes:
             "the legacy 'Previously:' chain pattern"
         ) is None
 
+    # bd polyglot-pdf-6dn2n/cqyke/f6wb6/riffn: the checker only caught the
+    # literal "Previously:" spelling; four real docs shipped "Earlier:" /
+    # "Earlier," / "Prior," chains that passed it silently. Pin every
+    # keyword x follow-up-shape combination separately (per-parametrization,
+    # not one representative case -- a mutation reddening some cases says
+    # nothing about the rest).
+    @pytest.mark.parametrize("keyword", ["Previously", "Prior", "Earlier"])
+    @pytest.mark.parametrize("sep", [":", ","])
+    @pytest.mark.parametrize(
+        "followup",
+        [
+            "2026-05-19 the thing happened",
+            "Sprint 66 PR 1 shipped",
+            "same day (bd `polyglot-pdf-ofh6`): more prose",
+            "same-week changes landed",
+            "bd polyglot-pdf-6x1j: guarded hard delete",
+            "bd `polyglot-pdf-2zk3` corrected the framing",
+        ],
+    )
+    def test_chain_keyword_x_followup_detected(self, keyword, sep, followup):
+        text = f"*Last updated: 2026-08-18. {keyword}{sep} {followup}.*"
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(text) is not None, (
+            f"missed chain shape: {keyword!r} + {sep!r} + {followup!r}"
+        )
+
+    @pytest.mark.parametrize("keyword", ["Previously", "Prior", "Earlier"])
+    def test_pedagogical_mention_of_each_keyword_NOT_flagged(self, keyword):
+        # Same carve-out as the canonical "Previously:" case, now proven for
+        # each newly-added keyword: a bare mention with no date/Sprint/bead-id/
+        # same-day follow-up must not self-flag.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            f"do NOT chain `{keyword}:` prose into the stamp line"
+        ) is None
+
+    def test_ordinary_prose_use_of_earlier_prior_NOT_flagged(self):
+        # "earlier"/"prior" appear constantly in ordinary prose (never glued
+        # to `:`/`,`) -- these must never trip the chain detector.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "earlier same-week changes are in their own entries"
+        ) is None
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "An earlier version of this doc described a different flow"
+        ) is None
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "prior art in this space suggests a simpler approach"
+        ) is None
+
+    # bd polyglot-pdf-gz7dv: the widened `bd[\s`]` alternative false-positived
+    # on ordinary prose that happens to contain the bare word "bd" right
+    # after the keyword+separator -- "earlier, bd is the tracker" is not a
+    # bead-id reference. Tightened to require the bead-id SHAPE (a
+    # backtick-quoted token, or a bare hyphenated token) rather than just the
+    # literal "bd". Pin both the fix and its accepted residual gap.
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "earlier, bd is the tracker",
+            "Prior, bd ready lists it",
+        ],
+    )
+    def test_bare_bd_word_NOT_flagged_as_bead_id(self, text):
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(text) is None, (
+            f"false-positived on ordinary prose containing the bare word "
+            f"'bd': {text!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Earlier, bd polyglot-pdf-6x1j: guarded hard delete",
+            "Prior, same day (bd `polyglot-pdf-ofh6`)",
+        ],
+    )
+    def test_real_bead_id_chain_still_detected_after_bd_tightening(self, text):
+        # The bd-tightening fix (above) must not also break detection of the
+        # real chain shapes it was widened to catch in the first place.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(text) is not None, (
+            f"bd-shape tightening broke detection of a real chain: {text!r}"
+        )
+
+    def test_same_day_sprint_residual_false_positive_documented(self):
+        # KNOWN ACCEPTED RISK (bd polyglot-pdf-gz7dv): "Prior:"/"Earlier:"
+        # immediately followed by literal "same day"/"Sprint N" prose is
+        # indistinguishable from a real chain by local pattern matching --
+        # this test documents the accepted gap rather than asserting a
+        # narrower behavior that doesn't exist. If this ever starts
+        # returning None, the regex changed; update this test deliberately,
+        # don't just delete it.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "prior: same day we shipped this"
+        ) is not None
+
     def test_update_history_heading_detected(self):
         for heading in (
             "## Update history",
@@ -615,6 +732,40 @@ class TestCheckDocConventionsOnTmpDocs:
         assert len(findings) == 1
         assert findings[0][0] == doc
         assert "Previously" in findings[0][1]
+
+    # bd polyglot-pdf-fpp6n: the finding message must name the ACTUAL matched
+    # keyword, not a hardcoded "Previously:" -- a maintainer greps the
+    # reported string to find the violation. Mutation-verified: reverting
+    # scripts/check_doc_freshness.py's message construction to the old
+    # hardcoded literal makes these fail (confirmed by hand before writing).
+    @pytest.mark.parametrize(
+        "chain_text,expected_keyword",
+        [
+            ("Prior: 2026-05-19 the thing shipped", "Prior:"),
+            ("Prior, same day (bd `polyglot-pdf-x`)", "Prior,"),
+            ("Earlier: 2026-05-19 docs audit", "Earlier:"),
+            ("Earlier, bd polyglot-pdf-x: guarded delete", "Earlier,"),
+        ],
+    )
+    def test_finding_message_names_actual_matched_keyword(
+        self, tmp_path, chain_text, expected_keyword
+    ):
+        doc = _make_doc(
+            tmp_path,
+            f"# Foo\n\n*Last updated: 2026-05-20. {chain_text}*\n\nbody\n",
+        )
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert len(findings) == 1
+        assert expected_keyword in findings[0][1], (
+            f"finding message {findings[0][1]!r} does not name the actual "
+            f"matched keyword {expected_keyword!r}"
+        )
+        # And it must NOT claim "Previously:" when that isn't what matched.
+        if expected_keyword != "Previously:":
+            assert "'Previously:'" not in findings[0][1], (
+                f"finding message wrongly hardcodes 'Previously:' for a "
+                f"{expected_keyword!r} match: {findings[0][1]!r}"
+            )
 
     def test_doc_with_history_section_flagged(self, tmp_path):
         doc = _make_doc(

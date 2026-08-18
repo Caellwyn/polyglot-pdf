@@ -2,7 +2,13 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-08 (the derived compression figures are RE-EXECUTED against the v4 SI (bd polyglot-pdf-6a79): floor 4289 -> window 4888 -> trigger 6388, still above the 5000 API bound so the clamp does not fire. Earlier: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: corrected the TRIGGER_MARGIN_TOKENS default to 1500 and re-executed the per-form derivation against the shipped config -- on today's SI the derived trigger clears the API minimum on its own, so the clamp/retune path does NOT fire; documented the two easily-missed derivation inputs (the session's filtered tool list, and `injection_budget_tokens`); shrank the session-resumption design to record its wont-do rejection (bd polyglot-pdf-l3a.3). Continuous-DTI remains the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, validated by the jnjj.25 cost gate + the G3 correctness gate; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified).
+*Last updated: 2026-08-08 (the derived compression figures are RE-EXECUTED
+against the v4 SI (bd polyglot-pdf-6a79): floor 4289 -> window 4888 ->
+trigger 6388, still above the 5000 API bound so the clamp does not fire.
+NOTE (bd polyglot-pdf-6dn2n): the date is intentionally left at 2026-08-08 --
+tracked code has moved since then, so this doc is genuinely STALE and needs
+a real re-derivation of these figures against current backend/config.py, not
+a bump; a prose-only stamp-chain prune must not clear that signal.)
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**

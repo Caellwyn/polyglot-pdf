@@ -2,7 +2,10 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-12 (bd polyglot-pdf-hqztg: a fourth status, `submitted`, and the per-transition role split -- editors submit, authors publish -- plus a role-scoped editing lock authors can always take back. Earlier, bd polyglot-pdf-6x1j: guarded hard delete, the only thing that removes an archive).*
+*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
+content change; a fourth status, `submitted`, and the per-transition role
+split -- editors submit, authors publish -- plus a role-scoped editing lock
+authors can always take back, bd polyglot-pdf-hqztg.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
