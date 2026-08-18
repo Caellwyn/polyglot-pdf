@@ -259,7 +259,11 @@ def test_an_unauthenticated_caller_gets_nothing(client):
 # --- restore respects the same locks a save does ----------------------------
 
 
-@pytest.mark.parametrize("status", ["complete", "unpublished"])
+# The FULL write-locked set, derived rather than retyped. Narrowing the route
+# guard to ("complete", "unpublished") -- dropping `submitted` -- left 204 tests
+# passing, and `submitted` is the one status whose whole point is that an author
+# reviews one thing and approves that same thing (Opus fresh-eyes round 2).
+@pytest.mark.parametrize("status", list(ekr._WRITE_LOCKED_STATUSES))
 def test_restore_is_REFUSED_on_a_write_locked_kit(client, status):
     """A published revision is what confirmation records name; reopening it
     goes through the explicit revert-to-draft, never a side door."""
@@ -428,3 +432,58 @@ def test_GCS_load_of_a_missing_snapshot_raises_NotFound():
 
     with pytest.raises(FormKitNotFound):
         _run(store.load_draft_snapshot("w7", "999"))
+
+
+# --- the guards that had no test --------------------------------------------
+
+
+def test_a_UNICODE_digit_directory_does_not_break_the_save(client):
+    """str.isdigit() is True for superscript/circled digits that int() then
+    REJECTS -- so a stray directory named "¹" crashed the sort with a
+    ValueError, escaped the OSError wrap, and 500'd the SAVE, losing the
+    editor's current work. The exact harm this feature exists to prevent,
+    triggered by a directory name (Opus fresh-eyes round 2).
+    """
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    (root / "w7" / "_drafts" / "¹").mkdir(parents=True)
+
+    resp = _save(c, "w7", _schema("B"))
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+def test_a_UNICODE_digit_snapshot_id_is_refused_by_the_route(client):
+    """The same mismatch at the route guard: isdigit() alone would let it
+    through to a store that cannot parse it."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    assert _restore(c, "w7", "¹").status_code == 400
+
+
+def test_an_unreadable_drafts_dir_does_not_block_the_SAVE(client):
+    """The best-effort contract, pinned. _snapshot_ids raising a raw OSError
+    would escape the route's `except FormKitStoreError` and 500 the save --
+    the round-1 fix for that had no test, so replacing the wrap with a bare
+    re-raise left 529 tests passing."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    # _drafts as a FILE, so iterdir() raises NotADirectoryError.
+    (root / "w7" / "_drafts").write_text("not a directory", encoding="utf-8")
+
+    resp = _save(c, "w7", _schema("B"))
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+def test_an_unreadable_drafts_dir_surfaces_on_the_LIST(client):
+    """The other half: the save must survive, but LISTING must not silently
+    report "no earlier versions" when it could not look."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    (root / "w7" / "_drafts").write_text("not a directory", encoding="utf-8")
+
+    assert _snapshots(c, "w7").status_code == 502

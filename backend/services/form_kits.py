@@ -688,8 +688,17 @@ class LocalFormKitStore(FormKitStore):
 		try:
 			if not root.exists():
 				return []
-			ids = [c.name for c in root.iterdir() if c.is_dir() and c.name.isdigit()]
-		except OSError as exc:
+			# isascii() AND isdigit(): str.isdigit() is True for superscript and
+			# circled digits that int() then REJECTS with ValueError -- which
+			# escaped the OSError wrap below and 500'd the save, losing the
+			# editor's current work. Exactly the harm this feature exists to
+			# prevent, from a directory name (Opus fresh-eyes round 2).
+			ids = [c.name for c in root.iterdir()
+				   if c.is_dir() and c.name.isascii() and c.name.isdigit()]
+		except (OSError, ValueError) as exc:
+			# ValueError too: the filter and the sort must never disagree, but
+			# if they ever do again this becomes a 502 on the LIST rather than
+			# a 500 on the SAVE.
 			raise FormKitStoreError(
 				f"Unable to list draft snapshots for {kit_id}: {exc}"
 			) from exc
@@ -1095,7 +1104,10 @@ class GCSFormKitStore(FormKitStore):
 			# established fake-bucket harness cannot drive this code at all.
 			for blob in self._client.list_blobs(self.bucket_name, prefix=prefix):
 				rest = blob.name[len(prefix):].split("/")
-				if len(rest) >= 2 and rest[0].isdigit():
+				# Same isascii() guard as the local store: the two must agree on
+				# what counts as a snapshot id, or "recovery works identically
+				# in both stores" is false.
+				if len(rest) >= 2 and rest[0].isascii() and rest[0].isdigit():
 					seen.add(rest[0])
 			# Numeric, not lexical: "10" must follow "9".
 			return sorted(seen, key=int)

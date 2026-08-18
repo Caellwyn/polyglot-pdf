@@ -1360,7 +1360,7 @@ async def restore_kit_draft_snapshot(
     goes through the explicit revert-to-draft, never a side door.
     """
     kit_id = _safe_kit_id(kit_id)
-    if not snapshot_id.isdigit():
+    if not (snapshot_id.isascii() and snapshot_id.isdigit()):
         # Snapshot ids are the store's own monotonic counter. Anything else is
         # a caller constructing a path, and it never reaches the store.
         raise HTTPException(status_code=400, detail="Invalid snapshot id")
