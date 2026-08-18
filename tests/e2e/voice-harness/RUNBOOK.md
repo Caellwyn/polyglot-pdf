@@ -106,8 +106,23 @@ i-90 form button. Use `el.click()` in JS (not `computer {ref}`):
 // (re-read; then on the form step)
 [...document.querySelectorAll('button')].find(b=>/i-90/i.test(b.innerText)).click();
 ```
-The form loads, voice auto-connects to :8001, and the disclaimer ("I Agree")
-appears. Confirm status is `connected` and `typeof window.__VFF_TEST_INJECT === 'object'`.
+The form loads and the disclaimer ("I Agree") appears.
+
+**Whether the voice auto-connects HERE depends on the intro-clip flag** (bd
+`polyglot-pdf-s1iex.7`):
+
+- **`VITE_INTRO_CLIP_ENABLED` off (today's default)** -- the app connects
+  BEFORE Agree, so confirm status is `connected` and
+  `typeof window.__VFF_TEST_INJECT === 'object'` at this point, then click
+  Agree.
+- **Flag on** -- there is NO session until Agree (Sol's clip plays against
+  nothing), so `__VFF_TEST_INJECT` does not exist yet. Click Agree FIRST, then
+  wait for the hook.
+
+Clicking Agree when the modal is up and waiting for the hook afterwards is
+correct under BOTH states -- which is exactly what the five drivers do via
+their `clickIfPresent` helper. Do not wait for the hook before clicking, or
+the flag-on path hangs until timeout.
 
 ### 4. Install the harness + pre-load fixtures
 

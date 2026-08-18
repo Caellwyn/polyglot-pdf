@@ -221,8 +221,12 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
               reason: resp.status === 503 ? 'intro_disabled' : `http_${resp.status}`,
             }
           }
+          // Defensive: the script version is SUPPLEMENTARY to playback -- an
+          // older backend that does not send the header, or a response shape
+          // without one, must never break the clip. Losing the version costs
+          // an audit detail; throwing here would cost the user their audio.
           lastScriptVersion =
-            resp.headers.get('X-Intro-Script-Version') ?? lastScriptVersion
+            resp.headers?.get?.('X-Intro-Script-Version') ?? lastScriptVersion
           blob = await resp.blob()
         } finally {
           stopFetchWatch()
