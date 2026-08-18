@@ -210,3 +210,66 @@ describe('every editionKind is labelled for what it IS', () => {
     expect(row.textContent).toContain('2026-05-05');
   });
 });
+
+describe('busy actually disables, it does not merely relabel', () => {
+  // handleSetStatus has NO reentrancy guard of its own, and this dialog stays
+  // mounted through the publish by design -- so these three `disabled={busy}`
+  // gates are the ONLY barrier against a second concurrent publish, each
+  // running the metered per-language translation sweep with racing metadata
+  // and supersede writes.
+  //
+  // All three survived deletion with 112 tests green. The existing
+  // "does NOT dismiss while a publish is running" test passes busy:true but
+  // asserts only the backdrop path -- coverage in appearance, none in fact
+  // (Opus fresh-eyes round 10).
+
+  it('disables PUBLISH while a publish is running', () => {
+    const { onPublish } = open({ busy: true });
+    const btn = screen.getByText('Publishing...').closest('button') as HTMLButtonElement;
+
+    expect(btn.disabled).toBe(true);
+    fireEvent.click(btn);
+
+    expect(onPublish).not.toHaveBeenCalled();
+  });
+
+  it('disables CANCEL while a publish is running', () => {
+    // Cancelling mid-publish would unmount the dialog while the request is in
+    // flight, leaving the author with no indication it is still running.
+    const { onCancel } = open({ busy: true });
+    const btn = screen.getByText('Cancel').closest('button') as HTMLButtonElement;
+
+    expect(btn.disabled).toBe(true);
+    fireEvent.click(btn);
+
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('disables the candidate radios while a publish is running', () => {
+    // Changing the selection mid-flight would leave the dialog showing a
+    // choice that differs from the one actually being published.
+    open({ busy: true });
+
+    const radios = screen.getAllByRole('radio') as HTMLInputElement[];
+    expect(radios.length).toBeGreaterThan(0);
+    for (const radio of radios) {
+      expect(radio.disabled).toBe(true);
+    }
+  });
+
+  it('leaves all three ENABLED when no publish is running', () => {
+    // The other direction: a busy gate that is always on is just a broken
+    // dialog, and would pass every assertion above.
+    const { onPublish } = open();
+
+    const publish = screen.getByText('Publish, keep both').closest('button') as HTMLButtonElement;
+    expect(publish.disabled).toBe(false);
+    expect((screen.getByText('Cancel').closest('button') as HTMLButtonElement).disabled)
+      .toBe(false);
+    for (const radio of screen.getAllByRole('radio') as HTMLInputElement[]) {
+      expect(radio.disabled).toBe(false);
+    }
+    fireEvent.click(publish);
+    expect(onPublish).toHaveBeenCalled();
+  });
+});
