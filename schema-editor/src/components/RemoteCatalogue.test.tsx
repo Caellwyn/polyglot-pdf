@@ -865,7 +865,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
   it.each([
     ['the compact strip', false],
     ['the expanded card grid', true],
-  ])('freezes EVERY status control in %s while the dialog is open', async (_name, expand) => {
+  ])('freezes the PUBLISH controls in %s while the dialog is open', async (_name, expand) => {
     // Not one button: the whole set, in BOTH views. Nine of the ten original
     // gates could be deleted with the suite green, because the only test
     // clicked a single card button -- the twin-shaped miss, now inside the fix
@@ -900,6 +900,42 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
         expect(btn.disabled).toBe(true);
       }
     }
+  });
+
+  it('freezes REVERT TO DRAFT and UNPUBLISH behind the dialog', async () => {
+    // The two most destructive controls, and the pair the parametrized test
+    // above cannot reach: a COMPLETE kit renders them instead of Publish, and
+    // the strip shows controls only for the SELECTED kit -- so in the strip
+    // there is no Publish left to open the dialog with. Deleting these two
+    // gates left the whole 1376-test suite green (Opus fresh-eyes round 5,
+    // catching the round-4 flaw repeated inside the round-4 fix).
+    //
+    // The card grid is where both coexist: draft-kit's Publish opens the
+    // dialog, done-kit's destructive pair must freeze.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'done-kit', label: 'Done Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={null} role="author" />);
+    // Scope to the CARD LIST: the labels also appear in the strip's <select>,
+    // so a bare getByText matches two elements.
+    const cards = await screen.findByRole('list');
+    await waitFor(() =>
+      expect(within(cards).getByText('Done Form')).toBeInTheDocument());
+
+    const draftCard = within(cards).getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(draftCard).getByText('Publish'));
+    await waitFor(() =>
+      expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
+
+    const liveCard = within(cards).getByText('Done Form').closest('li') as HTMLElement;
+    for (const label of ['Revert to draft', 'Unpublish']) {
+      const btn = within(liveCard).getByText(label).closest('button') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    }
+    // Clicking one must not fire a status change behind the open dialog.
+    fireEvent.click(within(liveCard).getByText('Unpublish'));
+    expect(setRemoteStatus).not.toHaveBeenCalled();
   });
 
   it('disables the catalogue Publish buttons while the dialog is open', async () => {
