@@ -332,9 +332,15 @@ async def test_restart_uses_resume_template_even_after_fresh_original_connect():
 
 
 @pytest.mark.asyncio
-async def test_non_restart_fresh_session_still_greets():
+async def test_non_restart_fresh_session_uses_the_base_template():
     """Sanity: a normal (non-restart) fresh-connect initiating message is
-    unchanged by bd polyglot-pdf-bhem -- it still uses the greeting template."""
+    unchanged by bd polyglot-pdf-bhem -- it still uses the BASE template.
+
+    Renamed + re-anchored in bd polyglot-pdf-s1iex.6: the base template no
+    longer greets (Sol's intro clip does), so "greet" can no longer identify
+    it. The section-name directive can -- RESUME_INITIATING_MESSAGE
+    deliberately refuses to re-introduce the section.
+    """
     service = _make_service_ready_for_restart()
     service._is_resume_session = False
 
@@ -348,8 +354,11 @@ async def test_non_restart_fresh_session_still_greets():
     await service.send_initiating_message("English", "First Name")
 
     assert len(sent) == 1
-    assert "greet" in sent[0].lower(), (
-        "a fresh non-restart session must still greet the user"
+    assert "section name" in sent[0].lower(), (
+        "a fresh non-restart session must use the base template"
+    )
+    assert "do not greet" not in sent[0].lower(), (
+        "a fresh non-restart session must NOT use the resume template"
     )
 
 

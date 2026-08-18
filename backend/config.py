@@ -1221,9 +1221,17 @@ class Settings(BaseModel):
 	# wording let the model read field 1 (no previous fields exist) as exempt from
 	# the read-back + 'Is that correct?' step, so it auto-confirmed field 1 without
 	# re-asking (bd polyglot-pdf-choa).
+	# NO GREETING (bd polyglot-pdf-s1iex.6). Sol introduces himself in the
+	# scripted intro clip -- by name, in the user's language -- so a second
+	# "greet user warmly" here lands seconds after that clip and reads as the
+	# assistant forgetting it already said hello. The clip greets on EVERY path
+	# the modal is shown, which is why this is unconditional rather than
+	# flag-gated. Accepted cost while the frontend flag is OFF, stated in the
+	# sprint-20 plan: returning users who skip both modals (accepted, same
+	# browser session) lose the Live greeting during the dark period.
 	INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
-		"Greet user warmly, state section name, immediately ask for {next_field_hint}. "
+		"State the section name, then immediately ask for {next_field_hint}. "
 		"If the field has options, read EVERY option aloud as you ask -- the user cannot see the form -- "
 		"unless the guidance marks the list as a standard list (then ask directly and offer to read "
 		"the full list) or the guidance marks the field as having TWO options (then ask ONE natural "

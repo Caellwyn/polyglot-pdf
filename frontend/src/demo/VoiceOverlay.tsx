@@ -293,6 +293,22 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// the initial language-selection handler: reconnect either way (to resume the session),
 			// but only surface the agree step when it has NOT been accepted.
 			const alreadyAccepted = SchemaFormStateManager.load()?.disclaimerAccepted
+
+			// INTRO PATH (bd polyglot-pdf-s1iex.6): with the clip flag ON and the
+			// disclaimer NOT yet accepted, do NOT connect here. Sol's clip needs no
+			// Live session, and Agree becomes the first and ONLY handshake -- which
+			// is what deletes the teardown/re-handshake seam.
+			//
+			// The `alreadyAccepted` branch STILL connects at mount, deliberately: a
+			// reload user never sees Agree, so removing the mount connect wholesale
+			// would leave them with no session at all (the plan calls this out
+			// explicitly).
+			if (introEnabled && !alreadyAccepted) {
+				console.log('[VoiceOverlay] Intro clip enabled - deferring connect to Agree')
+				setShowDisclaimerModal(true)
+				return
+			}
+
 			// Trigger the same flow as handleInitialLanguageSelect
 			const triggerDisclaimerFlow = async () => {
 				try {
@@ -1210,6 +1226,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		setSelectedLanguage(language)
 		setShowLanguageModal(false)
 
+		// INTRO PATH (bd polyglot-pdf-s1iex.6): show the modal WITHOUT connecting.
+		// Sol's clip plays against no Live session, and Agree makes the first and
+		// only handshake. This is the second of the two connect-before-Agree sites
+		// (the other is the mount effect); both must defer or the seam survives.
+		if (introEnabled) {
+			console.log('[VoiceOverlay] Intro clip enabled - showing modal without connecting')
+			setShowDisclaimerModal(true)
+			return
+		}
+
 		// First time - connect to Gemini, THEN show disclaimer modal
 		console.log('[VoiceOverlay] First language selection - connecting to Gemini...')
 		try {
@@ -1263,6 +1289,39 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}
 
 	// Handle "I Agree" button in disclaimer modal
+	// The disclaimer-acceptance record (the legal trail). Extracted so the intro
+	// path and the legacy path log IDENTICALLY -- a second inline copy is how the
+	// two drift (bd polyglot-pdf-s1iex.6). Fire-and-forget by design: a logging
+	// failure must never block the user, and on the intro path it must not delay
+	// the connect they are waiting on.
+	const logDisclaimerAcceptance = (
+		state: ReturnType<typeof SchemaFormStateManager.load>,
+		language: string,
+	) => {
+		const backendUrl = getBackendHttpUrl()
+		fetch(`${backendUrl}/api/disclaimer-acceptance`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				form_session_id: state?.formSessionId || 'unknown',
+				language,
+				timestamp: Date.now(),
+				user_agent: navigator.userAgent,
+			}),
+		}).then(
+			(response) => {
+				if (response.ok) {
+					console.log('[VoiceOverlay] [OK] Disclaimer acceptance logged to backend')
+				} else {
+					console.warn('[VoiceOverlay] [warn] Backend logging returned non-OK status:', response.status)
+				}
+			},
+			(err) => {
+				console.error('[VoiceOverlay] [X] Failed to log disclaimer acceptance to backend:', err)
+			},
+		)
+	}
+
 	const handleDisclaimerAgree = async () => {
 		console.log('[VoiceOverlay] User agreed to disclaimer')
 
@@ -1286,6 +1345,42 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Hide modal
 		setShowDisclaimerModal(false)
+
+		// INTRO PATH (bd polyglot-pdf-s1iex.6): there is NO Live session yet --
+		// Sol's clip played against nothing, and the whole interrupt sequence
+		// below (activity_start -> flush -> resumePlayback -> activity_end) plus
+		// switchToFirstSection's teardown/100ms-sleep/re-handshake exists ONLY to
+		// stop a model that was mid-disclaimer. With no session there is nothing
+		// to interrupt and nothing to tear down: Agree is the FIRST and ONLY
+		// connect, which is the epic's one-handshake criterion.
+		//
+		// The acceptance POST still runs (it is the legal record), but AFTER the
+		// connect starts rather than gating it -- a slow logging call must not
+		// delay the session the user is now waiting on.
+		if (introEnabled) {
+			// (the modal was already hidden above -- no second call needed)
+			console.log('[VoiceOverlay] Intro path - single connect on Agree (no interrupt, no restart)')
+			logDisclaimerAcceptance(state, selectedLanguage)
+			// Set the FILL language before connecting (bd polyglot-pdf-s1iex.6,
+			// fresh-eyes round 1). The legacy path set it as a side effect of
+			// switchToFirstSection -- the ONLY production caller that moved it off
+			// createConnectionManager's hardcoded 'English'. Skipping the restart
+			// therefore silently left fill_language="English" in the handshake, so
+			// a Spanish user would HEAR Spanish while every field's guidance said
+			// to write the values in English. changeFillLanguage stores it when
+			// not yet connected, so calling it here puts the right value INTO the
+			// handshake rather than correcting it afterwards.
+			if (selectedLanguage) {
+				await connectionManager?.changeFillLanguage(selectedLanguage)
+			}
+			try {
+				await handleConnect()
+			} catch (err) {
+				console.error('[VoiceOverlay] [X] Connect failed after Agree:', err)
+				setError(err instanceof Error ? err.message : 'Connection failed')
+			}
+			return
+		}
 
 		// Step 1: Send activity_start FIRST to stop backend from sending more audio.
 		// The user just agreed, so cut off any still-playing disclaimer read instead
