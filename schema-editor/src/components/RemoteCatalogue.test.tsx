@@ -905,7 +905,17 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     }
   });
 
-  it('freezes EVERY status control across ALL FOUR kit statuses', async () => {
+  // The STRIP renders controls for the SELECTED kit only, so its branch is
+  // decided by that kit's status -- one selection exercises ONE strip branch.
+  // Selecting a single kit is why the grid covered four statuses while the
+  // strip covered one, and why three strip gates survived four rounds of
+  // fixes (Opus fresh-eyes round 8). Parametrized over the selection.
+  it.each([
+    ['live-kit', 'complete'],
+    ['retired-kit', 'unpublished'],
+    ['review-kit', 'submitted'],
+    ['wip-kit', 'draft'],
+  ])('freezes EVERY status control with a %s (%s) kit selected', async (selectedId) => {
     // The root cause of four rounds of the same hole: the shared KITS fixture
     // has only `complete` and `draft` kits, so no `unpublished` or `submitted`
     // card ever renders -- and 8 of the 14 freeze gates live on exactly those
@@ -930,13 +940,16 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       { kitId: 'live-kit', label: 'Live Form', matchedOn: 'label' },
     ]);
     render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
-                            selectedKitId="live-kit" role="author" />);
+                            selectedKitId={selectedId} role="author" />);
     const cards = await screen.findByRole('list');
     await waitFor(() =>
       expect(within(cards).getByText('WIP Form')).toBeInTheDocument());
 
-    const wipCard = within(cards).getByText('WIP Form').closest('li') as HTMLElement;
-    fireEvent.click(within(wipCard).getByText('Publish'));
+    // Open from a DRAFT card that is not the selection, so the strip keeps
+    // rendering the selected kit's own controls behind the dialog.
+    const opener = selectedId === 'wip-kit' ? 'Review Form' : 'WIP Form';
+    const openerCard = within(cards).getByText(opener).closest('li') as HTMLElement;
+    fireEvent.click(within(openerCard).getByText('Publish'));
     await waitFor(() =>
       expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
 
@@ -946,6 +959,7 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     const LABELS = ['Publish', 'Publish again', 'Revert to draft',
                     'Unpublish', 'Send back', 'Reopen'];
     let checked = 0;
+    let stripChecked = 0;
     for (const label of LABELS) {
       const buttons = screen.queryAllByText(label)
         .map((e) => e.closest('button') as HTMLButtonElement | null)
@@ -954,12 +968,19 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       for (const btn of buttons) {
         expect(btn.disabled, `${label} was clickable behind the dialog`).toBe(true);
         checked += 1;
+        if (!cards.contains(btn)) stripChecked += 1;
       }
     }
-    // The census the earlier versions lacked. With all four statuses rendered
-    // in both the strip and the grid there are well over a dozen; if this ever
-    // collapses toward zero the test has gone vacuous again and says so.
-    expect(checked).toBeGreaterThanOrEqual(8);
+    // The census the earlier versions lacked. The number is deliberately the
+    // measured floor rather than an aspiration: an earlier comment here
+    // claimed "well over a dozen", which was false -- the strip contributes
+    // only the SELECTED kit's controls, so the real count is 8 and the
+    // threshold bound by equality alone (round 8). What makes this test bite
+    // is the parametrization over selections, not the size of this number.
+    expect(checked).toBeGreaterThanOrEqual(6);
+    // ...and at least one STRIP control was among them, or this has silently
+    // become a card-grid-only test again.
+    expect(stripChecked, 'no STRIP control was asserted on').toBeGreaterThan(0);
   });
 
   it('freezes the STRIP destructive pair behind the dialog', async () => {
