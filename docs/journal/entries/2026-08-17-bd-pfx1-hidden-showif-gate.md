@@ -28,7 +28,7 @@ acceptance-agent-only field displayed to the applicant.
 
 The maintainer considered both and chose the gate. The reasoning holds up: a
 warning still lets the state reach a saved kit, and then every consumer has to
-interpret it. bd `ubam` had already paid that bill -- six call sites, each
+interpret it. bd `ubam` had already paid that bill -- seven call sites, each
 interpreting the same ambiguity differently.
 
 The tempting adjacent fix is to change the precedence so `hidden` wins. I
@@ -73,31 +73,36 @@ two implementations have to agree on "absent", so both are pinned.
 The two review layers found four defects in this diff. None were in the gate;
 all four were in what I WROTE ABOUT the gate.
 
-**I propagated a number I never checked.** I wrote that bd `ubam` "had to fix
-SEVEN call sites" -- its bead title says six and its body enumerates 1-6. I
-repeated it in three files, one a tier-2 current-state doc.
+**I "corrected" a right number into a wrong one, twice over.** I wrote that
+bd `ubam` fixed SEVEN call sites, noticed its bead body enumerates 1-6,
+concluded I had inflated the figure, and swept SIX instances across five files
+to say six. The outer review reversed it: the live code carries **seven**
+distinct `shouldShowField ALONE` sites, and two of them --
+`resolveLivePin` and `suggestNavigationCandidates` -- never appear in the
+bead's list at all, while the bead's own item 6 is marked DEAD CODE.
 
-My first account of this called it fabrication. Checking further while fixing
-it, that was too harsh AND less useful: `ubam`'s OWN journal entry says
-"Seven call sites" twice. The number was almost certainly inherited from that
-entry rather than invented -- which makes it a more interesting failure than
-carelessness. The bead is the authoritative enumeration (it lists the sites
-1-6); the journal is a point-in-time narrative written before the set was
-finalized, and it was never corrected. I read the narrative, not the
-enumeration, and carried a superseded figure into a current-state doc.
+So the original number was right. The bead was the incomplete artifact, and I
+laundered its undercount into a tier-2 doc while congratulating myself for
+citing the authoritative source.
 
-The lesson is sharper than "check your numbers": a tier-3 journal entry is a
-record of what a session BELIEVED, and quoting a count out of one into a
-tier-1/2 doc launders a snapshot into a standing claim. Cite the enumeration,
-not the story about it. (The two stale figures in `ubam`'s own entry are left
-as-is -- correcting a historical record would destroy exactly the evidence
-that explains this.)
+Three lessons, in increasing order of usefulness:
 
-Then the set turned out to be five, not three. The inner review caught three,
-the outer review found a fourth on another surface, and only sweeping properly
-found a fifth in that same file. Fix-three, get-told-about-a-fourth,
-then-finally-enumerate is scar #7 in miniature, on a diff whose commit message
-already cited scar #7.
+1. My stated rule ("cite the enumeration, not the story about it") was right
+   in FORM and wrong in APPLICATION. The bead body *looked* like the
+   enumeration because it was numbered; the journal *looked* like narrative.
+   Numbering is not authority.
+2. The actual authority was neither. It was the CODE -- seven functions each
+   carrying a `bd polyglot-pdf-ubam` attribution comment, greppable in one
+   command. I reached for two secondhand accounts and never asked the
+   artifact they both describe.
+3. Correcting a number is a change like any other and deserves the same
+   evidence as a code change. I treated "fix the wrong figure" as janitorial,
+   swept six files on the strength of one document, and shipped a regression
+   into the doc I had just written to be authoritative.
+
+All six reverted. The count is seven, verified by
+`grep -rn "shouldShowField ALONE" frontend/src` (excluding tests) returning
+seven distinct functions across three files.
 
 **I attached a wrong reason to a right conclusion.** My comment claimed "every
 `show_if` write in fieldGrouping is SECTION-level". Six are field-level; my

@@ -483,7 +483,7 @@ def _check_hidden_vs_show_if(
     hidden and have a condition to be shown. period." A warning was considered
     and rejected -- a warning still lets the contradictory state reach a saved
     kit, and every consumer then has to interpret it (bd polyglot-pdf-ubam had
-    to fix SIX call sites that each interpreted it differently).
+    to fix SEVEN call sites that each interpreted it differently).
 
     Today the CONDITION silently wins: shouldShowField returns
     evaluateConditionGroup(...) without consulting the hidden flag once a valid

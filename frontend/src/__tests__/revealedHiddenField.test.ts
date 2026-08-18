@@ -5,7 +5,7 @@
  * WHY THIS SHAPE IS REAL: `shouldShowField` returns `!field.hidden` ONLY when a
  * field has no `show_if`. With a satisfied `show_if` it returns the condition's
  * result -- so `hidden: true` + satisfied condition RENDERS (FieldRenderer calls
- * shouldShowField alone) and is REQUIRED (isSectionValid). Six call sites had
+ * shouldShowField alone) and is REQUIRED (isSectionValid). Seven call sites had
  * independently re-derived visibility as `field.hidden || !shouldShowField(...)`,
  * which silently excluded exactly this shape and produced two user-visible bugs:
  *
@@ -67,7 +67,7 @@ const REVEALED_BUT_EMPTY = stateWith({
 });
 
 describe("dropping the extra `hidden` term changes EXACTLY one shape", () => {
-  // The safety proof for bd ubam: six call sites dropped a `field.hidden`
+  // The safety proof for bd ubam: seven call sites dropped a `field.hidden`
   // term, so the question that matters is "what ELSE moved?" The answer must be
   // nothing. Enumerate every hidden/show_if combination and assert the old gate
   // (`!(field.hidden || !shouldShowField(...))`) and the new one

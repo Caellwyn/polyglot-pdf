@@ -1193,21 +1193,31 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 section-level show_if; there are six FIELD-level writes):
                   1. This checkbox is the ONLY writer of `hidden` anywhere in
                      schema-editor/src, so nothing else can set that half.
-                  2. Every field-level `show_if` write in fieldGrouping is
-                     precondition-guarded on the field ALREADY having a
-                     condition (`if (f.show_if && ...)` at the retarget, merge,
-                     kind-flip, restore and fallback-remap sites), so they
-                     REWRITE and never CREATE. The one unguarded write
-                     (mergeFields' `mergedField.show_if = primaryShowIf`) takes
-                     `hidden` and the condition from the SAME source field, so
-                     it cannot combine them from two.
+                  2. No field-level `show_if` write in fieldGrouping can
+                     CREATE a condition on a field that had none. Three
+                     mechanisms, listed separately because a reader checking
+                     this will grep and must not be surprised:
+                       - FOUR sites guard directly on the target field
+                         (`if (f.show_if && ...)`): retarget, merge, kind-flip,
+                         fallback-remap. They rewrite what is already there.
+                       - The RESTORE site guards on the stash record
+                         (`if (r.show_if !== undefined)`), NOT on `f` -- so
+                         grepping for `f.show_if` there finds nothing. It is
+                         still safe: `record.show_if` is written at exactly one
+                         place (the merge site) inside that same
+                         `if (f.show_if && ...)`, so the stash can only return
+                         a condition the field previously held.
+                       - mergeFields' `mergedField.show_if = primaryShowIf` is
+                         unguarded, but takes `hidden` and the condition from
+                         the SAME source field, so it cannot combine them from
+                         two different ones.
                 A new write that creates a condition from nothing would break
                 reason 2 -- add it to the gate if you add one. */}
             {/* GATE, not a warning (bd polyglot-pdf-pfx1, maintainer decision
                 2026-08-04): a field may not be BOTH always-hidden and
                 conditionally shown. A warning would still let the state reach a
                 saved kit, leaving every consumer to interpret it -- bd
-                polyglot-pdf-ubam had to fix SIX sites that each interpreted it
+                polyglot-pdf-ubam had to fix SEVEN sites that each interpreted it
                 differently. Disabling the control makes it unauthorable.
                 Today the CONDITION silently wins in shouldShowField, so the
                 contradiction resolves in the RISKIER direction: a field marked
