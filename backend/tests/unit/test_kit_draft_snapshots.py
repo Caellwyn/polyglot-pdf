@@ -1,0 +1,343 @@
+"""Draft saves are recoverable (bd polyglot-pdf-y2l0p).
+
+MAINTAINER PRINCIPLE, 2026-08-08: "Editors should not ever be able to make
+destructive actions. Their work should always be recoverable."
+
+The gap this closes: PUT /schema is editor-gated and called put_schema
+directly. The write-lock refuses only a COMPLETE or UNPUBLISHED kit, so a
+published revision was protected and a DRAFT was overwritten in place with no
+copy anywhere. Editor A spends hours on a draft; editor B -- or A, from a stale
+tab -- saves over it, and the earlier contents are gone. The in-editor undo
+stack does not help: it is cleared on load, so it never survives a reload and
+never covered a cross-session overwrite.
+
+These tests drive the bead's three exit criteria: recover a schema after it is
+overwritten, prove the same behaviour in both stores, and prove draft snapshots
+never touch the revision archive's keyspace.
+"""
+import asyncio
+import json
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import backend.routes.editor_kit_routes as ekr
+from backend.services.form_kits import (
+    DRAFT_SNAPSHOT_LIMIT,
+    LocalFormKitStore,
+)
+
+from backend.tests.unit.test_editor_kit_routes import VALID_SCHEMA as _SCHEMA
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+def _schema(tag):
+    s = json.loads(json.dumps(_SCHEMA))
+    s["_tag"] = tag  # a marker so we can tell revisions apart
+    return s
+
+
+def _make_kit(root, kit_id, status="draft", schema=None):
+    kit = root / kit_id
+    kit.mkdir(parents=True, exist_ok=True)
+    (kit / "schema.json").write_text(
+        json.dumps(schema if schema is not None else _SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": status, "label": kit_id}), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7 test")
+    return kit
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    from backend.tests.unit.test_editor_kit_routes import _settings
+
+    app = FastAPI()
+    app.include_router(ekr.router)
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+    monkeypatch.setattr(
+        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok"))
+    return TestClient(app), store, tmp_path
+
+
+EDIT = {"X-Editor-Token": "edit-tok"}
+AUTH = {"X-Editor-Token": "auth-tok"}
+
+
+def _save(c, kit_id, schema, headers=EDIT):
+    return c.put(f"/api/editor/kits/{kit_id}/schema", json=schema, headers=headers)
+
+
+def _snapshots(c, kit_id, headers=EDIT):
+    return c.get(f"/api/editor/kits/{kit_id}/draft-snapshots", headers=headers)
+
+
+def _restore(c, kit_id, snap_id, headers=EDIT):
+    return c.post(
+        f"/api/editor/kits/{kit_id}/draft-snapshots/{snap_id}/restore", headers=headers)
+
+
+# --- exit criterion 1: the overwritten contents are still retrievable --------
+
+
+def test_an_overwritten_draft_is_RECOVERABLE(client):
+    """The bead's scenario, end to end: save A, save B over it, recover A."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    assert _save(c, "w7", _schema("B")).status_code == 200
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    assert len(snaps) == 1, "the overwritten draft was not snapshotted"
+
+    recovered = _run(store.load_draft_snapshot("w7", snaps[0]["id"]))
+    assert recovered["_tag"] == "A"
+
+
+def test_restoring_puts_the_earlier_work_BACK(client):
+    """A snapshot nobody can restore is not recovery."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    resp = _restore(c, "w7", snaps[0]["id"])
+
+    assert resp.status_code == 200, resp.text
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "A"
+
+
+def test_a_RESTORE_is_itself_undoable(client):
+    """Restoring overwrites current work, so it snapshots that work first --
+    which is what makes it safe to let an editor restore without an author."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))  # snapshot 1 holds A, live is B
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    resp = _restore(c, "w7", snaps[0]["id"])  # live becomes A again
+
+    replaced = resp.json()["snapshotOfReplaced"]
+    assert replaced, "restoring did not snapshot the work it replaced"
+    assert _run(store.load_draft_snapshot("w7", replaced))["_tag"] == "B"
+
+
+def test_the_FIRST_save_of_a_new_kit_snapshots_nothing(client):
+    """There is no prior work to protect, and an empty snapshot would just be
+    noise in the recovery list."""
+    c, _store, root = client
+    kit = root / "fresh"
+    kit.mkdir()
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "fresh"}), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7")
+
+    assert _save(c, "fresh", _schema("A")).status_code == 200
+
+    assert _snapshots(c, "fresh").json()["snapshots"] == []
+
+
+# --- the ring is bounded ----------------------------------------------------
+
+
+def test_the_ring_keeps_the_LAST_N_and_evicts_the_oldest(client):
+    """Maintainer decision 2026-08-18: keep the last 10 saves. Bounded, so a
+    busy kit cannot grow storage without limit."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("v0"))
+    for i in range(1, DRAFT_SNAPSHOT_LIMIT + 4):
+        _save(c, "w7", _schema(f"v{i}"))
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+
+    assert len(snaps) == DRAFT_SNAPSHOT_LIMIT
+
+
+def test_snapshots_are_listed_NEWEST_first(client):
+    """The order someone recovering work reads them in."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    _save(c, "w7", _schema("C"))
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+
+    # Two snapshots: A (from the B save) then B (from the C save). Newest
+    # first means B leads.
+    assert [_run(store.load_draft_snapshot("w7", s["id"]))["_tag"] for s in snaps] \
+        == ["B", "A"]
+
+
+def test_snapshot_ids_sort_NUMERICALLY_past_single_digits(client):
+    """"10" must follow "9", not sort beside "1" -- a lexical sort evicts the
+    wrong snapshot the moment the ring passes ten."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("v0"))
+    for i in range(1, 12):
+        _save(c, "w7", _schema(f"v{i}"))
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    ids = [int(s["id"]) for s in snaps]
+
+    assert ids == sorted(ids, reverse=True)
+    assert max(ids) == 11
+
+
+# --- exit criterion 3: the revision archive is untouched --------------------
+
+
+def test_draft_snapshots_NEVER_land_in_the_revision_archive(client):
+    """The archive is keyed on the revision marker a confirmation record names
+    (bd polyglot-pdf-w3zw/xzw5). A draft has no marker, and polluting that
+    keyspace would break retrieval by marker."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    before = _run(store.list_archived_markers("w7"))
+
+    for tag in ("B", "C", "D"):
+        _save(c, "w7", _schema(tag))
+
+    assert _run(store.list_archived_markers("w7")) == before == []
+    # ...and the snapshots live in their own directory.
+    assert (root / "w7" / "_drafts").exists()
+    assert not (root / "w7" / "_archive").exists()
+
+
+def test_snapshots_do_not_appear_as_KITS(client):
+    """The underscore prefix keeps them invisible to the catalogue, the same
+    way _archive is invisible."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    listed = _run(store.list_kit_files())
+
+    assert "_drafts" not in listed
+    assert set(listed) == {"w7"}
+
+
+# --- who may recover --------------------------------------------------------
+
+
+def test_an_EDITOR_can_list_and_restore_their_own_work(client):
+    """Maintainer decision 2026-08-18. Routing recovery through an author means
+    the person who lost the work cannot get it back themselves."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    snaps = _snapshots(c, "w7", headers=EDIT)
+    assert snaps.status_code == 200, snaps.text
+    assert _restore(c, "w7", snaps.json()["snapshots"][0]["id"],
+                    headers=EDIT).status_code == 200
+
+
+def test_an_AUTHOR_can_too(client):
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    snaps = _snapshots(c, "w7", headers=AUTH)
+    assert snaps.status_code == 200
+    assert _restore(c, "w7", snaps.json()["snapshots"][0]["id"],
+                    headers=AUTH).status_code == 200
+
+
+def test_an_unauthenticated_caller_gets_nothing(client):
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    assert c.get("/api/editor/kits/w7/draft-snapshots").status_code in (401, 403)
+
+
+# --- restore respects the same locks a save does ----------------------------
+
+
+@pytest.mark.parametrize("status", ["complete", "unpublished"])
+def test_restore_is_REFUSED_on_a_write_locked_kit(client, status):
+    """A published revision is what confirmation records name; reopening it
+    goes through the explicit revert-to-draft, never a side door."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    # Lock it AFTER the snapshot exists.
+    (root / "w7" / "metadata.json").write_text(
+        json.dumps({"status": status, "label": "w7"}), encoding="utf-8")
+
+    resp = _restore(c, "w7", snaps[0]["id"])
+
+    assert resp.status_code == 409, resp.text
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+def test_a_TRAVERSING_snapshot_id_is_refused(client):
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    # ".." never reaches the route -- the router resolves it as a path segment
+    # and 404s first, so asserting 400 there would be testing routing, not the
+    # guard. Values that DO arrive intact must be refused with 400.
+    for bad in ("1abc", "1/2", "-1", "1.5", ""):
+        resp = _restore(c, "w7", bad)
+        assert resp.status_code in (400, 404, 405), f"{bad!r} -> {resp.status_code}"
+    # The one that proves the guard itself, not the router: a well-formed
+    # segment that is simply not a snapshot id.
+    assert _restore(c, "w7", "1abc").status_code == 400
+
+
+def test_an_unknown_snapshot_404s(client):
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    assert _restore(c, "w7", "999").status_code == 404
+
+
+# --- the save must not be blocked by snapshot trouble -----------------------
+
+
+def test_a_snapshot_failure_does_NOT_block_the_save(client, monkeypatch):
+    """The editor's CURRENT work is what matters most. Refusing to save in
+    order to protect an older copy inverts the priority."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    from backend.services.form_kits import FormKitStoreError
+
+    async def _boom(*_a, **_kw):
+        raise FormKitStoreError("snapshot store down")
+
+    monkeypatch.setattr(store, "put_draft_snapshot", _boom)
+
+    assert _save(c, "w7", _schema("B")).status_code == 200
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+def test_a_failed_pre_restore_snapshot_REFUSES_the_restore(client, monkeypatch):
+    """The opposite call, and deliberately so: a restore knowingly destroys the
+    current draft, so failing to protect it first must stop the restore. A
+    recovery feature that loses work is worse than one that declines."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+
+    from backend.services.form_kits import FormKitStoreError
+
+    async def _boom(*_a, **_kw):
+        raise FormKitStoreError("snapshot store down")
+
+    monkeypatch.setattr(store, "put_draft_snapshot", _boom)
+
+    resp = _restore(c, "w7", snaps[0]["id"])
+
+    assert resp.status_code == 502, resp.text
+    assert "Nothing was changed" in resp.json()["detail"]
+    # The live schema is untouched.
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"

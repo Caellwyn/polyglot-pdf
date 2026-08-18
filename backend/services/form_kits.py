@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 import os
 import re
 import shutil
@@ -55,6 +56,33 @@ def safe_filename(name: Any, default: str) -> str:
 # stores, and the leading underscore is outside _KIT_ID_RE, so an archive dir
 # can never be mistaken for a kit.
 _ARCHIVE_DIR = "_archive"
+
+# DRAFT SNAPSHOTS (bd polyglot-pdf-y2l0p) live at <kit_id>/_DRAFTS_DIR/<n>/ and
+# are a DIFFERENT thing from the revision archive above, deliberately kept in a
+# separate namespace.
+#
+# The archive answers "produce the exact bytes a confirmation record names", so
+# it is keyed on the revision MARKER. A draft has no marker -- it was never
+# published and no record names it -- and writing one into _archive/ would
+# pollute the keyspace retrieval depends on (bd polyglot-pdf-xzw5 tightened
+# exactly that keying).
+#
+# This answers a different question: "an editor's labour must not be
+# destroyable by another editor" (maintainer principle, 2026-08-08). A bounded
+# ring of the last N saves, oldest evicted, keyed on a monotonic counter rather
+# than anything content-derived -- two saves of an identical schema are still
+# two distinct events in someone's working history.
+#
+# Same underscore prefix, so it inherits the archive's invisibility for free:
+# list_kit_files ignores anything deeper than <kit>/<file>, and the leading
+# underscore is outside _KIT_ID_RE so it can never be read as a kit.
+_DRAFTS_DIR = "_drafts"
+
+# Maintainer decision (2026-08-18): keep the last 10 saves per kit. Schemas are
+# small JSON, so ~10x one schema per kit is negligible, and 10 covers the
+# accident this exists for -- a stale tab or a second editor saving over
+# today's work -- without keeping history nobody will ever want.
+DRAFT_SNAPSHOT_LIMIT = 10
 
 # A revision marker is kit-CONTROLLED (an edition_date typed by an author, or a
 # computed `sha256:<12hex>`), and it becomes a PATH SEGMENT -- so it is
@@ -330,6 +358,22 @@ class FormKitStore:
 		own schema, so it matches what that revision's confirmation records
 		carry. Implementations encode it into a single safe path segment.
 		"""
+		raise NotImplementedError
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		"""Snapshot the CURRENT schema before an editor save overwrites it.
+
+		Returns the snapshot id. Implementations keep at most
+		DRAFT_SNAPSHOT_LIMIT per kit, evicting the oldest.
+		"""
+		raise NotImplementedError
+
+	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
+		"""Snapshot ids for this kit, NEWEST FIRST, as {"id", "savedAt"}."""
+		raise NotImplementedError
+
+	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		"""The snapshotted schema (FormKitNotFound if absent)."""
 		raise NotImplementedError
 
 	async def load_archived_revision(self, kit_id: str, marker: str) -> dict:
