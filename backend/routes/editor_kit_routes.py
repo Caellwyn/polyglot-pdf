@@ -2909,9 +2909,11 @@ async def set_editor_kit_status(
     # Precisely: this stamps EVERY complete-status POST, including an idempotent
     # complete->complete re-press with no schema edit, so it records "when this
     # kit was last published", NOT "when it last changed" (Opus review on 47r3;
-    # an earlier comment here overclaimed the latter). Inert today -- nothing
-    # reads it -- but epic polyglot-pdf-7jmy will, and its author-supplied
-    # version is the field that will carry edit intent.
+    # an earlier comment here overclaimed the latter). READ by
+    # get_retire_candidates as the last-resort revision marker shown to an
+    # author choosing which older version to retire, for a kit that declares
+    # neither an edition_date nor an author_version (bd polyglot-pdf-bdedm).
+    # The author-supplied version is still the field that carries edit intent.
     if body.status == "complete":
         next_meta["published_at"] = datetime.now(timezone.utc).isoformat()
         # Re-stamp readiness from the RELOADED schema this transition just
