@@ -36,7 +36,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts" / "run-schema-editor.sh"
 STORE = ROOT / "schema-editor" / "src" / "utils" / "remoteKitStore.ts"
-ROUTES = ROOT / "backend" / "routes" / "editor_kit_routes.py"
 
 # The four link names. Each appears in at least two files that must agree.
 BACKEND_ENV_VAR = "SCHEMA_AUTHOR_TOKEN"
@@ -176,28 +175,32 @@ def test_the_frontend_sends_the_header_the_backend_reads():
         f"{STORE.name} no longer sends the {HEADER} header."
     )
 
-    from backend.main import app
+    # Scoped to require_editor_role's OWN dependant, not to the whole app
+    # (fresh-eyes round 4). "Does ANY route bind X-Editor-Token?" is a weaker
+    # question than this docstring claims: an unrelated future route declaring
+    # the same header would satisfy it while THIS dependency was broken.
+    # Unexploitable today -- require_editor_role is the only Header() in the
+    # backend -- but the set would silently absorb a second one.
+    from fastapi.dependencies.utils import get_dependant
+    from backend.routes.editor_kit_routes import require_editor_role
 
+    dependant = get_dependant(path="/", call=require_editor_role)
     declared = set()
-    for route in app.routes:
-        dependant = getattr(route, "dependant", None)
-        if dependant is None:
-            continue
-        stack = [dependant]
-        while stack:
-            d = stack.pop()
-            for param in getattr(d, "header_params", []):
-                declared.add(str(param.alias).lower())
-            stack.extend(getattr(d, "dependencies", []))
+    stack = [dependant]
+    while stack:
+        d = stack.pop()
+        for param in getattr(d, "header_params", []):
+            declared.add(str(param.alias).lower())
+        stack.extend(getattr(d, "dependencies", []))
 
     assert HEADER.lower() in declared, (
-        f"No route in the app declares a {HEADER} header parameter (found: "
-        f"{sorted(declared)}). FastAPI binds the wire header from the "
-        f"parameter name or an explicit Header(alias=...); neither now yields "
-        f"{HEADER}, so the backend expects a different header than "
-        f"{STORE.name} sends. Every editor call 401s, and local mode degrades "
-        f"to a findings-free panel that reads as a clean schema rather than "
-        f"an auth failure."
+        f"require_editor_role no longer declares a {HEADER} header parameter "
+        f"(it declares: {sorted(declared) or 'none'}). FastAPI binds the wire "
+        f"header from the parameter name or an explicit Header(alias=...); "
+        f"neither now yields {HEADER}, so the backend expects a different "
+        f"header than {STORE.name} sends. Every editor call 401s, and local "
+        f"mode degrades to a findings-free panel that reads as a clean schema "
+        f"rather than an auth failure."
     )
 
 
