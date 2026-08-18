@@ -1060,6 +1060,101 @@ class GCSFormKitStore(FormKitStore):
 
 	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
 
+	# --- draft snapshots (bd polyglot-pdf-y2l0p) -----------------------------
+
+	async def _snapshot_ids(self, kit_id: str) -> list[str]:
+		"""Existing snapshot ids, OLDEST first. One listing, numeric sort."""
+		prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, "")
+
+		def _list() -> list[str]:
+			seen = set()
+			for blob in self._bucket.list_blobs(prefix=prefix):
+				rest = blob.name[len(prefix):].split("/")
+				if len(rest) >= 2 and rest[0].isdigit():
+					seen.add(rest[0])
+			# Numeric, not lexical: "10" must follow "9".
+			return sorted(seen, key=int)
+
+		try:
+			return await anyio.to_thread.run_sync(_list)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to list draft snapshots for {kit_id}: {exc}"
+			) from exc
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		existing = await self._snapshot_ids(kit_id)
+		next_id = str(int(existing[-1]) + 1) if existing else "1"
+		await self._upload_json(
+			self._build_blob_path(kit_id, _DRAFTS_DIR, next_id, "schema.json"), schema)
+		await self._upload_json(
+			self._build_blob_path(kit_id, _DRAFTS_DIR, next_id, "meta.json"),
+			{"id": next_id, "savedAt": datetime.now(timezone.utc).isoformat()})
+
+		for stale in (await self._snapshot_ids(kit_id))[:-DRAFT_SNAPSHOT_LIMIT]:
+			stale_prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, stale, "")
+
+			def _delete(pfx: str = stale_prefix) -> None:
+				for blob in self._bucket.list_blobs(prefix=pfx):
+					blob.delete()
+
+			try:
+				await anyio.to_thread.run_sync(_delete)
+			except Exception as exc:
+				# Never fatal: an un-evicted snapshot costs a little storage,
+				# failing the save would cost the editor their work.
+				_log.warning("draft_snapshot_evict_failed",
+							 kit_id=kit_id, snapshot=stale, error=str(exc))
+		return next_id
+
+	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
+		out: list[dict] = []
+		for sid in await self._snapshot_ids(kit_id):
+			blob_path = self._build_blob_path(kit_id, _DRAFTS_DIR, sid, "meta.json")
+
+			def _download(bp: str = blob_path) -> Optional[bytes]:
+				blob = self._bucket.blob(bp)
+				try:
+					return blob.download_as_bytes()
+				except self._not_found_exc:
+					return None
+
+			saved_at = None
+			try:
+				data = await anyio.to_thread.run_sync(_download)
+				if data is not None:
+					saved_at = json.loads(data.decode("utf-8")).get("savedAt")
+			except Exception:
+				saved_at = None  # unreadable stamp must not hide the snapshot
+			out.append({"id": sid, "savedAt": saved_at})
+		return list(reversed(out))
+
+	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		blob_path = self._build_blob_path(
+			kit_id, _DRAFTS_DIR, snapshot_id, "schema.json")
+
+		def _download() -> Optional[bytes]:
+			blob = self._bucket.blob(blob_path)
+			try:
+				return blob.download_as_bytes()
+			except self._not_found_exc:
+				return None
+
+		try:
+			data = await anyio.to_thread.run_sync(_download)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+		if data is None:
+			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
+		try:
+			return json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Unable to parse draft snapshot {snapshot_id} for {kit_id}"
+			) from exc
+
 	async def put_archived_revision(
 		self, kit_id: str, marker: str, schema: dict, metadata: Optional[dict] = None
 	) -> None:
