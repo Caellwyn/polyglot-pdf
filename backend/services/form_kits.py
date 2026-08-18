@@ -675,11 +675,24 @@ class LocalFormKitStore(FormKitStore):
 		return self._kit_dir(kit_id) / _DRAFTS_DIR
 
 	def _snapshot_ids(self, kit_id: str) -> list[str]:
-		"""Existing snapshot ids, OLDEST first, ignoring anything unparseable."""
+		"""Existing snapshot ids, OLDEST first, ignoring anything unparseable.
+
+		Filesystem trouble becomes FormKitStoreError, never a raw OSError: the
+		save path catches only FormKitStoreError, so an escaping OSError would
+		500 the save and LOSE THE EDITOR'S CURRENT WORK -- the opposite of this
+		feature's whole point, and a regression on a path that previously could
+		not fail (Opus fresh-eyes round 1, reproduced with _drafts present as a
+		file rather than a directory).
+		"""
 		root = self._drafts_dir(kit_id)
-		if not root.exists():
-			return []
-		ids = [c.name for c in root.iterdir() if c.is_dir() and c.name.isdigit()]
+		try:
+			if not root.exists():
+				return []
+			ids = [c.name for c in root.iterdir() if c.is_dir() and c.name.isdigit()]
+		except OSError as exc:
+			raise FormKitStoreError(
+				f"Unable to list draft snapshots for {kit_id}: {exc}"
+			) from exc
 		# Numeric, not lexical: "10" must follow "9", or eviction drops the
 		# wrong snapshot the moment the ring passes single digits.
 		return sorted(ids, key=int)
@@ -1064,7 +1077,15 @@ class GCSFormKitStore(FormKitStore):
 
 	async def _snapshot_ids(self, kit_id: str) -> list[str]:
 		"""Existing snapshot ids, OLDEST first. One listing, numeric sort."""
-		prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, "")
+		# TRAILING SLASH IS LOAD-BEARING, exactly as delete_kit documents below.
+		# _build_blob_path DROPS an empty part, so passing "" produced
+		# "<kit>/_drafts" with no slash -- every blob name then began with
+		# "<kit>/_drafts/", so rest[0] was "" rather than the id, no id ever
+		# parsed, and the whole GCS ring was INERT: next_id stayed "1" forever
+		# and listing returned nothing (Opus fresh-eyes round 1, executed
+		# against a fake bucket). The local store passed throughout, which is
+		# why the deployed mode is the one that has to be exercised.
+		prefix = self._build_blob_path(kit_id, _DRAFTS_DIR) + "/"
 
 		def _list() -> list[str]:
 			seen = set()
@@ -1092,7 +1113,11 @@ class GCSFormKitStore(FormKitStore):
 			{"id": next_id, "savedAt": datetime.now(timezone.utc).isoformat()})
 
 		for stale in (await self._snapshot_ids(kit_id))[:-DRAFT_SNAPSHOT_LIMIT]:
-			stale_prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, stale, "")
+			# Same slash, and here it is DESTRUCTIVE without it: "<kit>/_drafts/1"
+			# string-matches 10, 11, 12... so evicting snapshot 1 would delete
+			# most of the ring the moment it passes ten -- in a feature whose
+			# entire purpose is not losing work.
+			stale_prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, stale) + "/"
 
 			def _delete(pfx: str = stale_prefix) -> None:
 				for blob in self._bucket.list_blobs(prefix=pfx):
