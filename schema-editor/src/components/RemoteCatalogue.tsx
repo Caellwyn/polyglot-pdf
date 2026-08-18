@@ -948,6 +948,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     <button
                       className="btn-sm text-xs"
                       onClick={() => void handleSetStatus(kit, 'draft')}
+                      // The retirePrompt half is belt-and-braces and has NO
+                      // test, deliberately: Reopen renders only for an EDITOR,
+                      // and an editor never opens the retire dialog (their
+                      // publish routes to 'submitted', and the candidates
+                      // route is author-only). Unreachable, kept for
+                      // uniformity, noted so nobody hunts for a test that
+                      // cannot exist (Opus fresh-eyes round 8).
                       disabled={busy || completingId !== null || retirePrompt !== null}
                       title="Reopen your own submission to keep working on it"
                     >
@@ -1277,6 +1284,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         <button
                           className="btn-sm text-xs"
                           onClick={() => void handleSetStatus(kit, 'draft')}
+                          // Unreachable like its strip twin above: editor-only
+                          // control, and an editor never opens the dialog.
                           disabled={busy || completingId !== null || retirePrompt !== null}
                           title="Reopen your own submission to keep working on it"
                         >
