@@ -50,26 +50,36 @@ def _read(p: Path) -> str:
 
 
 def _code_only(text: str) -> str:
-    """Drop comment lines.
+    """Drop whole-line comments so an assertion cannot match PROSE.
 
-    A substring check over the WHOLE file matches prose as happily as code.
-    Measured: renaming the live read to VITE_EDITOR_TOKEN_V2 left this suite
-    green, because two doc comments in remoteKitStore.ts still spell the old
-    name -- the guard was reading the narrative instead of the artifact, which
-    is the exact failure it exists to catch.
+    WHY: a substring check over a whole file matches a doc comment as happily
+    as a live statement. Measured -- renaming the live read to
+    VITE_EDITOR_TOKEN_V2 left this suite green, because two JSDoc comments in
+    remoteKitStore.ts still spell the old name. The guard was reading the
+    narrative instead of the artifact, which is the exact failure it exists to
+    catch.
+
+    SCOPE, deliberately narrow: this handles WHOLE-LINE comments -- `//` lines,
+    and `/* ... */` blocks whose delimiters sit on their own lines (JSDoc
+    style, which is what the scanned files use). It is NOT a JS parser and
+    three cases are known-unhandled:
+      - `/* c */ realCode();`  the trailing code is dropped with the comment
+      - an unterminated `/*`   swallows the rest of the file
+      - `"*/"` in a string     reads as a block close
+    Each would DROP text, so the only risk is a false FAILURE (an assertion
+    not finding code that is really there) -- never a false pass hiding a
+    broken chain. That asymmetry is why a narrow helper is acceptable here
+    rather than a parser: this guard's job is refusing to be fooled by prose,
+    and over-stripping cannot fool it.
+
+    If a scanned file ever adopts inline block comments, prefer moving the
+    assertion to a real parse over widening these heuristics.
     """
     out = []
     in_block = False
     for line in text.split(chr(10)):
         t = line.strip()
         if in_block:
-            # Interior of a /* ... */ block. Tracked with STATE rather than by
-            # a leading-"*" test: a block whose continuation lines do not start
-            # with "*" is legal, and the leading-marker version let such a line
-            # through (fresh-eyes round 1). remoteKitStore.ts happens to use
-            # JSDoc style today, so this was latent -- but the whole job of
-            # this helper is telling code from prose, and it should not depend
-            # on which comment style a file happens to prefer.
             if "*/" in t:
                 in_block = False
             continue
@@ -144,23 +154,31 @@ def test_the_frontend_sends_the_header_the_backend_reads():
     assert f"'{HEADER}'" in ts or f'"{HEADER}"' in ts, (
         f"{STORE.name} no longer sends the {HEADER} header."
     )
-    # PIN THE PARAMETER, NOT THE PROSE. FastAPI derives the wire header from
-    # the parameter NAME (x_editor_token -> X-Editor-Token), so that identifier
-    # is the contract; the docstrings that also spell "X-Editor-Token" are not.
+    # PIN WHAT DETERMINES THE WIRE HEADER, which is EITHER of two spellings:
+    #   x_editor_token: Annotated[..., Header()]                  (name-derived)
+    #   x_whatever:     Annotated[..., Header(alias="X-Editor-Token")]  (explicit)
+    # FastAPI accepts both and both send X-Editor-Token, so both must pass.
     #
-    # The first cut asserted `HEADER.lower() in py.lower()` over the RAW file
-    # and was defeated by renaming the parameter while leaving the docstrings
-    # alone -- measured: the real header became X-Auth-Token and all 6 tests
-    # stayed green (fresh-eyes round 1). That is the SAME comment-vs-code hole
-    # already fixed on the TypeScript side; I had applied the fix to one
-    # language and not the other, while the docstring claimed both.
-    param = HEADER.lower().replace("-", "_")          # x-editor-token -> x_editor_token
-    assert re.search(rf"\b{re.escape(param)}\s*:", py), (
-        f"{ROUTES.name} no longer declares a `{param}` Header() parameter. "
-        f"FastAPI names the wire header from that identifier, so renaming it "
-        f"changes the header the backend expects while {STORE.name} keeps "
-        f"sending {HEADER} -- every editor call 401s, and local mode degrades "
-        f"to a findings-free panel that looks like a clean schema."
+    # Two failures, opposite directions, both measured (fresh-eyes rounds 1-2):
+    #  1. The first cut matched "x-editor-token" anywhere in the RAW file, so
+    #     the DOCSTRINGS satisfied it -- renaming the parameter changed the real
+    #     header and the test stayed green. Assert against prose, catch nothing.
+    #  2. The second cut pinned the parameter NAME only, so the alias refactor
+    #     above -- which keeps the wire header identical, verified 200 -- turned
+    #     it RED. A guard that fails on correct code teaches the next author to
+    #     distrust it, which is worse than the hole it was closing.
+    param = HEADER.lower().replace("-", "_")
+    name_derived = re.search(rf"\b{re.escape(param)}\s*:", py)
+    explicit_alias = re.search(
+        rf'Header\(\s*alias\s*=\s*["\']{re.escape(HEADER)}', py, re.I
+    )
+    assert name_derived or explicit_alias, (
+        f"{ROUTES.name} no longer derives the {HEADER} wire header. FastAPI "
+        f"takes it from either the parameter NAME ({param}) or an explicit "
+        f"Header(alias=...). Neither is present, so the backend now expects a "
+        f"different header than {STORE.name} sends -- every editor call 401s, "
+        f"and local mode degrades to a findings-free panel that reads as a "
+        f"clean schema rather than an auth failure."
     )
 
 
