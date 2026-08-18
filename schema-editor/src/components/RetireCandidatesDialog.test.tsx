@@ -257,6 +257,23 @@ describe('busy actually disables, it does not merely relabel', () => {
     }
   });
 
+  it('disables CLEAR SELECTION while a publish is running', () => {
+    // The fourth gate. Per-gate mutation found it: deleting all four together
+    // reddened three tests, which looked like full coverage -- only mutating
+    // each one alone showed this had none. Group mutations are exactly what
+    // hid the earlier gaps on this bead.
+    open({ busy: true });
+    // It renders only once something is selected, so select first.
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+
+    const btn = screen.queryByText('Clear selection')?.closest('button') as
+      HTMLButtonElement | undefined;
+    if (btn) expect(btn.disabled).toBe(true);
+    // If the control is not offered while busy at all, that is also correct --
+    // but one of the two must hold, and this asserts we did not simply forget.
+    expect(btn === undefined || btn.disabled).toBe(true);
+  });
+
   it('leaves all three ENABLED when no publish is running', () => {
     // The other direction: a busy gate that is always on is just a broken
     // dialog, and would pass every assertion above.
