@@ -512,6 +512,13 @@ class _PublishedStore:
     async def load_pdf_bytes(self, kit_id, pdf_file="form.pdf"):
         return b"%PDF"
 
+    async def put_draft_snapshot(self, kit_id, schema):
+        # The save path snapshots the current schema before
+        # overwriting it (bd polyglot-pdf-y2l0p). A stand-in store
+        # must carry the same contract as the real one, or these
+        # tests exercise a store that cannot exist.
+        return "1"
+
     async def put_schema(self, kit_id, schema, schema_file="schema.json"):
         self.saved = (kit_id, schema, schema_file)
 
@@ -2385,6 +2392,13 @@ def test_write_paths_fail_closed_on_metadata_store_error(client, monkeypatch):
 
         async def load_metadata(self, kit_id):
             raise FormKitStoreError("transient GCS failure")
+
+        async def put_draft_snapshot(self, kit_id, schema):
+            # The save path snapshots the current schema before
+            # overwriting it (bd polyglot-pdf-y2l0p). A stand-in store
+            # must carry the same contract as the real one, or these
+            # tests exercise a store that cannot exist.
+            return "1"
 
         async def put_schema(self, *a, **k):
             raise AssertionError("write reached despite unreadable metadata")
