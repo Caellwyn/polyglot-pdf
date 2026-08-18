@@ -902,6 +902,63 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     }
   });
 
+  it('freezes EVERY status control across ALL FOUR kit statuses', async () => {
+    // The root cause of four rounds of the same hole: the shared KITS fixture
+    // has only `complete` and `draft` kits, so no `unpublished` or `submitted`
+    // card ever renders -- and 8 of the 14 freeze gates live on exactly those
+    // two statuses. They were unreachable by any test, so each round's fix
+    // covered a different subset and the rest stayed deletable with the whole
+    // suite green (Opus fresh-eyes round 7).
+    //
+    // A local fixture rather than widening KITS, which 100+ other tests rely
+    // on. Every status is present, so every gate is reachable.
+    const ALL_STATUSES: RemoteKitEntry[] = [
+      { id: 'live-kit', label: 'Live Form', status: 'complete', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'retired-kit', label: 'Retired Form', status: 'unpublished', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'review-kit', label: 'Review Form', status: 'submitted', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'wip-kit', label: 'WIP Form', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    ];
+    vi.mocked(listRemoteKits).mockResolvedValue(ALL_STATUSES);
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'live-kit', label: 'Live Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId="live-kit" role="author" />);
+    const cards = await screen.findByRole('list');
+    await waitFor(() =>
+      expect(within(cards).getByText('WIP Form')).toBeInTheDocument());
+
+    const wipCard = within(cards).getByText('WIP Form').closest('li') as HTMLElement;
+    fireEvent.click(within(wipCard).getByText('Publish'));
+    await waitFor(() =>
+      expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
+
+    // EVERY status-changing control, wherever it renders. Each label carries
+    // its own existence assertion: a label matching zero elements is how the
+    // previous three versions of this test passed while checking nothing.
+    const LABELS = ['Publish', 'Publish again', 'Revert to draft',
+                    'Unpublish', 'Send back', 'Reopen'];
+    let checked = 0;
+    for (const label of LABELS) {
+      const buttons = screen.queryAllByText(label)
+        .map((e) => e.closest('button') as HTMLButtonElement | null)
+        .filter((b): b is HTMLButtonElement => !!b && !b.closest('[role="dialog"]'));
+      if (buttons.length === 0) continue;
+      for (const btn of buttons) {
+        expect(btn.disabled, `${label} was clickable behind the dialog`).toBe(true);
+        checked += 1;
+      }
+    }
+    // The census the earlier versions lacked. With all four statuses rendered
+    // in both the strip and the grid there are well over a dozen; if this ever
+    // collapses toward zero the test has gone vacuous again and says so.
+    expect(checked).toBeGreaterThanOrEqual(8);
+  });
+
   it('freezes the STRIP destructive pair behind the dialog', async () => {
     // The card grid is ADDITIVE, not a replacement -- the strip renders
     // unconditionally beneath it. So with a COMPLETE kit selected (its strip
