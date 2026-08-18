@@ -6,6 +6,30 @@ import { overlayBlockReason } from './pdfCoordinates';
 import { isToReviewSection } from './sectionOps';
 
 /**
+ * Does this field carry a REAL condition (bd polyglot-pdf-pfx1)?
+ *
+ * MUST agree with the backend's absent-set, which is literally
+ * `f.get("show_if") in (None, {}, [])` (schema_lint._check_hidden_vs_show_if).
+ * The two enforce the same rule from different sides: the editor DISABLES the
+ * Hidden checkbox while a condition exists, and lint REJECTS a kit carrying
+ * both. If they disagree about what "absent" means, the editor locks a
+ * checkbox over a condition lint says is not there -- and the author has
+ * nothing on screen to delete to unlock it.
+ *
+ * The first cut of this guarded {} but not [], so an empty ARRAY read as a
+ * present condition here and as absent there (fresh-eyes round 1). Both empty
+ * shapes are now absent, matching the backend exactly.
+ */
+export function hasCondition(condition: unknown): boolean {
+  if (condition === null || condition === undefined) return false;
+  if (Array.isArray(condition)) return condition.length > 0;
+  if (typeof condition === 'object') {
+    return Object.keys(condition as object).length > 0;
+  }
+  return !!condition;
+}
+
+/**
  * A field's options as a SAFELY ITERABLE array of option objects (bd
  * polyglot-pdf-8bjdx). THE one place malformed `options` is normalized --
  * reuse it rather than hand-rolling `field.options ?? []` at each call site,

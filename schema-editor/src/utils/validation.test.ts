@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  checkFieldComplete, safeOptions, safeOptionsPreservingArity, validateSchema,
+  checkFieldComplete, hasCondition, safeOptions, safeOptionsPreservingArity,
+  validateSchema,
 } from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
@@ -565,5 +566,46 @@ describe('legacy bare-string options are coerced, not dropped (bd polyglot-pdf-f
       type: 'select', pdf_field_name: undefined, options: ['A', 'B'],
     } as unknown as Partial<FormField>));
     expect(status.errors.join(' ')).toContain('No PDF mapping');
+  });
+});
+
+// ===========================================================================
+// hasCondition must agree with the backend's absent-set (bd polyglot-pdf-pfx1)
+// ===========================================================================
+//
+// The editor gate and schema-lint enforce the same rule from opposite sides:
+// the editor DISABLES the Hidden checkbox while a condition exists; lint
+// REJECTS a kit carrying both (hidden-with-show-if). They must agree on what
+// "absent" means, or the editor locks a checkbox over a condition lint says is
+// not there -- with nothing on screen for the author to delete to unlock it.
+//
+// The backend's absent-set is literally `f.get("show_if") in (None, {}, [])`
+// (schema_lint._check_hidden_vs_show_if). The first cut of hasCondition
+// guarded {} but NOT [], so an empty array read as present here and absent
+// there (fresh-eyes round 1). Every shape in the backend's tuple is pinned.
+describe('hasCondition parity with schema_lint (bd polyglot-pdf-pfx1)', () => {
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['{} (the backend absent-set)', {}],
+    ['[] (the backend absent-set)', []],
+  ])('%s reads as ABSENT', (_label, value) => {
+    expect(hasCondition(value)).toBe(false);
+  });
+
+  it.each([
+    ['a legacy atom', { field: 'x', operator: 'equals', value: 'y' }],
+    ['a composite group', { all_of: [{ field: 'x', operator: 'equals', value: 'y' }] }],
+    ['a non-empty array', [{ field: 'x', operator: 'equals', value: 'y' }]],
+  ])('%s reads as PRESENT', (_label, value) => {
+    expect(hasCondition(value)).toBe(true);
+  });
+
+  it('a composite with only EMPTY buckets still reads as present', () => {
+    // Deliberate: {all_of: []} is a real object an author built and can see in
+    // the condition card, so the Hidden checkbox should stay locked and the
+    // author should delete the card. The backend agrees -- its absent-set is
+    // exact identity against {} and [], and {all_of: []} is neither.
+    expect(hasCondition({ all_of: [] })).toBe(true);
   });
 });

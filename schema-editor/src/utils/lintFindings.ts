@@ -28,6 +28,7 @@ import type { LintFinding } from './remoteKitStore';
 // hover title. Unmapped ids fall back to the raw id (forward-compatible with new
 // rules the backend adds).
 export const RULE_LABELS: Record<string, string> = {
+  'hidden-with-show-if': 'Hidden AND conditionally shown',
   'unknown-operator': 'Unrecognized comparison',
   'value-arity': 'Wrong comparison value',
   'option-value-missing': 'Answer choice has no value',
@@ -96,6 +97,7 @@ export const RULE_LABELS: Record<string, string> = {
 // happened" / "why it matters" explanation). Keep every entry a single
 // imperative sentence.
 export const RULE_REMEDIES: Record<string, string> = {
+  'hidden-with-show-if': 'Pick one: untick Hidden to show it only when the condition matches, or delete the condition to never show it.',
   'unknown-operator': 'Change the comparison to one of the allowed types.',
   'value-arity': 'Fix the comparison value to match what this comparison type expects.',
   'option-value-missing': 'Set a stored value for this answer choice.',
