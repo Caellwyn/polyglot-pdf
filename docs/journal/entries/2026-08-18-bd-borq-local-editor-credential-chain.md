@@ -79,6 +79,40 @@ story, because the mutation I chose could not tell the difference.
 when a guard survives, ask whether the mutation was strong enough before
 concluding the guard is.
 
+## And a THIRD instance of the same hole, one language over
+
+The review found the comment-vs-code bug still open on the PYTHON side. I had
+fixed it in TypeScript and moved on -- while my docstring said "Two files, two
+languages, one string", claiming a symmetry that did not exist.
+
+FastAPI derives the wire header from the parameter NAME
+(`x_editor_token` -> `X-Editor-Token`), so that identifier is the contract.
+The docstrings also spell `X-Editor-Token`, and my assertion searched the raw
+file. Measured: renaming the parameter -- which changes the real header the
+backend expects -- left all six tests green.
+
+So the sequence across this one small test file was:
+
+1. assert against prose (TypeScript)      -> caught by my own mutation
+2. mutation too gentle to expose a prefix -> caught on re-mutation
+3. assert against prose (Python)          -> caught by the reviewer
+
+Three rounds, one root cause, three surfaces. I fixed each instance as I found
+it instead of asking, after the first, *where else does this shape live?* The
+answer was: every place the guard reads a file, which is four files in three
+languages. That question was cheap and I did not ask it.
+
+**The reviewer's mitigating finding is worth recording too**, because it
+changes what the defect actually was: the system did NOT silently degrade,
+because the pre-existing `test_editor_kit_routes.py` fails 152 tests on that
+mutation. Criterion 2's real bar -- fails loudly -- already held. What was
+wrong was my FILE's *claim* to pin that link.
+
+That is a specific kind of harm worth naming: **a guard that claims coverage
+it does not have is worse than an absent guard**, because it stops the next
+person from looking. An absent guard leaves a visible hole; a lying one closes
+the hole on paper.
+
 ## Process notes
 
 - The bead is RESCOPED, not closed-as-invalid. Criterion 1 was met by shipped
