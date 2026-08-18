@@ -240,6 +240,113 @@ class TestFreshnessScanCoversTier1:
         docs = freshness.find_docs()
         assert doctrine_doc in docs
 
+    # bd polyglot-pdf-3t190: three comment/docstring sites in
+    # scripts/check_doc_freshness.py hand-list DOC_DIRS' membership as prose
+    # ("docs/components/*.md / docs/standards/*.md") rather than deriving it,
+    # so adding docs/doctrine to DOC_DIRS (bd riffn) silently desynced them --
+    # the classic enumerate-the-set miss (CLAUDE.md scar #7): some sites were
+    # updated, three were not.
+    #
+    # bd polyglot-pdf-u3miz: the first cut of this pin used a whole-file
+    # `source.count(d) >= 2` threshold, which was VACUOUS -- the DOC_DIRS
+    # assignment itself plus two ALREADY-correct sites (find_docs() and
+    # check_doc_conventions() docstrings) satisfy count>=2 for every entry
+    # regardless of whether the three sites this bead actually fixes are
+    # stale. Guard the PROPERTY (each of these three specific prose blocks
+    # individually names every DOC_DIRS entry), not a proxy count that can
+    # be satisfied by unrelated text elsewhere in the file. Isolate each
+    # block by a stable anchor string near it, independent of exact line
+    # numbers so a later reflow doesn't false-fail this test.
+    # bd polyglot-pdf-uquqs: the second cut of this test bounded each site's
+    # window by the NEXT anchor in a shared file-order list, replacing a
+    # magic 400-char constant. That approach only works when anchors sit
+    # CLOSE together -- it broke for the module-docstring site, whose "next"
+    # anchor (the main() comment, deep in the file) is ~29,000 chars away,
+    # so the computed window swallowed several ALREADY-correct sites in
+    # between and passed vacuously even when the module docstring itself
+    # was stale. Guard the property directly instead: give each site an
+    # EXPLICIT (start_anchor, end_anchor) pair that brackets exactly its own
+    # paragraph/comment/string, independent of any other site's position.
+    # bd polyglot-pdf-ly00c: two more DOC_DIRS prose sites (find_docs() and
+    # check_doc_conventions()'s own docstrings) were correct but unpinned --
+    # the bd u3miz test-file comment even named them as "ALREADY-correct",
+    # yet they were never added here. Pin the whole set, not the subset that
+    # happened to motivate the first fix.
+    _SITE_ANCHORS = [
+        (
+            "This script does two warn-only checks in one pass:",
+            "2. **Sprint-archive protocol.**",
+            "module docstring",
+        ),
+        (
+            "find_docs() returns tier-1",
+            "docs = find_docs()",
+            "main() find_docs() comment",
+        ),
+        (
+            "No docs to check (no tier-1 docs on disk",
+            "return 0",
+            "empty-corpus print",
+        ),
+        (
+            "Return tier-1 + tier-2 docs to scan for freshness, sorted.",
+            "docs = list(find_tier1_docs())",
+            "find_docs() docstring",
+        ),
+        (
+            "Scan tier-1 + tier-2 docs for forbidden current-state-only violations.",
+            "findings: list[tuple[Path, str]] = []",
+            "check_doc_conventions() docstring",
+        ),
+    ]
+
+    @pytest.mark.parametrize("start_anchor,end_anchor,block_name", _SITE_ANCHORS)
+    def test_each_doc_dirs_prose_site_names_every_entry(
+        self, start_anchor, end_anchor, block_name
+    ):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find(start_anchor)
+        assert idx != -1, (
+            f"start anchor {start_anchor!r} for the {block_name!r} prose "
+            f"block not found -- the site may have been reworded; update "
+            f"this test's anchor deliberately, don't just delete it."
+        )
+        end_idx = source.find(end_anchor, idx + len(start_anchor))
+        assert end_idx != -1, (
+            f"end anchor {end_anchor!r} for the {block_name!r} prose block "
+            f"not found after its start -- the site may have been "
+            f"reworded; update this test's anchor deliberately."
+        )
+        # A tight, EXPLICIT boundary for exactly this site's own paragraph --
+        # cannot swallow a sibling site regardless of how any block (this
+        # one or another) is reworded, because the end anchor is specific to
+        # THIS site, not derived from another site's position.
+        window = source[idx:end_idx]
+        for d in freshness.DOC_DIRS:
+            assert d in window, (
+                f"the {block_name!r} prose block does not mention DOC_DIRS "
+                f"entry {d!r} -- this is the exact desync bd 3t190 was filed "
+                f"against (some sites were updated, this one was not)."
+            )
+
+    # bd polyglot-pdf-6j0dj: a FOURTH stale enumeration site (missed by
+    # 3t190's own set-enumeration -- CLAUDE.md scar #7 recurring one level
+    # in). Rephrased to a generic "any DOC_DIRS subdirectory" claim rather
+    # than hand-listing members again, so it cannot desync the same way a
+    # fifth DOC_DIRS addition would otherwise silently miss it. Pin that it
+    # stays generic (does not regress to a hand-listed two-directory form).
+    def test_is_sprint_plan_docstring_refers_to_doc_dirs_generically(self):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find("def is_sprint_plan")
+        assert idx != -1, "is_sprint_plan def not found -- was it renamed?"
+        window = source[idx: idx + 1200]
+        assert "DOC_DIRS" in window, (
+            "is_sprint_plan's docstring no longer refers to DOC_DIRS "
+            "generically -- if it now hand-lists directory names again, "
+            "restore the generic phrasing or extend "
+            "test_each_doc_dirs_prose_site_names_every_entry to cover it."
+        )
+
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
         # tier-1 doc that has a Tracks line gets flagged. We point a fake
@@ -834,9 +941,11 @@ class TestCheckDocConventionsOnTmpDocs:
         assert freshness.is_sprint_plan(pathlib.Path("docs/sprint_1_harness_plan.md"))
         assert freshness.is_sprint_plan(pathlib.Path("docs/archive/sprint_3_voice_plan.md"))
         # location boundary: a sprint_-named doc NOT at docs/ root or archive/ is
-        # NOT a plan (must still be convention-scanned).
+        # NOT a plan (must still be convention-scanned). Covers all THREE
+        # DOC_DIRS members (bd polyglot-pdf-to61i) -- doctrine was missing.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/components/sprint_vad.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("docs/standards/sprint_conventions.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/doctrine/sprint_planning.md"))
         # non-sprint names are never plans.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/technical_guide.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("CLAUDE.md"))

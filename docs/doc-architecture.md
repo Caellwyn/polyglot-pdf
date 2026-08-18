@@ -1,12 +1,16 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: corrected the current-state-only
-section's claim about the mechanical checker's regex coverage -- it now catches
-`Prior:`/`Earlier:` too, not just `Previously:`). This file documents the doc
-SYSTEM (current state). It is a meta-doc about that system, not a doc about the
-product: it sits outside the three product tiers below, is reached on demand via
-[`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no code
-path.*
+*Last updated: 2026-08-18 (bd polyglot-pdf-lmcgz: the tier-2 row and the
+`**Tracks:**` section now name `docs/doctrine/*.md` alongside components and
+standards, matching `scripts/check_doc_freshness.py`'s DOC_DIRS and this
+file's own line naming the scanned set elsewhere. Also current: the
+current-state-only section's claim about the mechanical checker's regex
+coverage -- it now catches `Prior:`/`Earlier:` too, not just `Previously:`
+(bd polyglot-pdf-6dn2n).) This file documents the doc SYSTEM (current
+state). It is a meta-doc about that system, not a doc about the product: it
+sits outside the three product tiers below, is reached on demand via
+[`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no
+code path.*
 
 This project organizes its docs for **progressive discovery**: a small always-loaded core points at on-demand docs, so an agent (or human) loads only what the task needs and context stays lean. This file explains the system and the discipline that keeps it from rotting. It is the most transferable artifact in the claude-swarm-kit -- the structure below works for any codebase.
 
@@ -15,7 +19,7 @@ This project organizes its docs for **progressive discovery**: a small always-lo
 | Tier | What | Loaded |
 |------|------|--------|
 | **1 -- Always loaded** | `CLAUDE.md` (top-level rules + doc map) and `docs/INDEX.md` (the canonical map). | Auto, every session. Keep these LEAN -- they point, they don't duplicate. |
-| **2 -- Easily reached** | `docs/components/<surface>.md` (one per user-facing surface or subsystem), `docs/standards/*.md` (cross-cutting rules: testing, security, performance, conventions, review), `docs/technical_guide.md` (system-wide routes/endpoints/gotchas), and the **active sprint plans** `docs/sprint_<N>_<slug>_plan.md` (each sprint's maintainer-approved scope-of-record). | On demand, when that surface or concern is in scope. A "trigger read" in CLAUDE.md tells the agent when. Reach a plan via the "Active sprint plans" row in [`INDEX.md`](INDEX.md) or the owning epic's `plan:` metadata. |
+| **2 -- Easily reached** | `docs/components/<surface>.md` (one per user-facing surface or subsystem), `docs/standards/*.md` (cross-cutting rules: testing, security, performance, conventions, review), `docs/doctrine/*.md` (process/workflow rules: planning, review-flow, promotion tiers), `docs/technical_guide.md` (system-wide routes/endpoints/gotchas), and the **active sprint plans** `docs/sprint_<N>_<slug>_plan.md` (each sprint's maintainer-approved scope-of-record). | On demand, when that surface or concern is in scope. A "trigger read" in CLAUDE.md tells the agent when. Reach a plan via the "Active sprint plans" row in [`INDEX.md`](INDEX.md) or the owning epic's `plan:` metadata. |
 | **3 -- Indexed / historical** | `docs/journal/entries/*.md` (one file per sprint/bead, YAML-frontmatter tagged), `docs/journal/TAGS.md` (the controlled tag vocabulary = the per-feature index), `docs/archive/` (completed plans). | On demand, when investigating "why was this built this way?" or "when did X change?" |
 
 **The key move:** tier 1 stays small and stable; everything else is reached only when relevant. The agent never loads the whole corpus -- it loads CLAUDE.md + INDEX.md, then follows pointers. This is what keeps a large doc set from bloating every session's context.
@@ -26,7 +30,7 @@ Without active defense, tier-2/tier-3 docs drift out of sync with the code and b
 
 ### 1. `**Tracks:**` lines map docs to code
 
-Every `docs/components/*.md` and `docs/standards/*.md` declares, near the top, a line like:
+Every `docs/components/*.md`, `docs/standards/*.md`, and `docs/doctrine/*.md` may declare, near the top, a line like:
 
 ```
 **Tracks:** `src/auth/**/*.py`, `src/routes/login.py`
@@ -77,7 +81,7 @@ When a journal lesson **generalizes** (applies anywhere), promote a one-liner up
 
 ## Setting this up in a new project
 
-1. Keep the directory skeleton this template ships: `docs/INDEX.md`, `docs/components/`, `docs/standards/`, `docs/journal/entries/`, `docs/journal/TAGS.md`, `docs/archive/`, `docs/technical_guide.md`.
+1. Keep the directory skeleton this template ships: `docs/INDEX.md`, `docs/components/`, `docs/standards/`, `docs/doctrine/`, `docs/journal/entries/`, `docs/journal/TAGS.md`, `docs/archive/`, `docs/technical_guide.md`.
 2. Give each component/standard doc a `**Tracks:**` line and a `*Last updated:*` stamp.
 3. List your tier-1 docs in `scripts/check_doc_freshness.py`'s `TIER1_DOCS`.
 4. Wire `check_doc_freshness.py` as a pre-commit hook + run `tests/test_doc_freshness.py` in CI.

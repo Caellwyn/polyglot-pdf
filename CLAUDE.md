@@ -50,7 +50,7 @@ This file (CLAUDE.md) is auto-loaded every session. Everything else is on-demand
 | Tier | Where | Load when |
 |------|-------|-----------|
 | **1 -- Always loaded** | This file + [`docs/INDEX.md`](docs/INDEX.md) | Auto |
-| **2 -- Easily reached** | [`docs/components/<surface>.md`](docs/components/) (per surface) + [`docs/standards/*.md`](docs/standards/) (cross-cutting rules) + [`docs/technical_guide.md`](docs/technical_guide.md) | When that surface or concern is in scope |
+| **2 -- Easily reached** | [`docs/components/<surface>.md`](docs/components/) (per surface) + [`docs/standards/*.md`](docs/standards/) (cross-cutting rules) + [`docs/doctrine/*.md`](docs/doctrine/) (process/workflow rules) + [`docs/technical_guide.md`](docs/technical_guide.md) | When that surface or concern is in scope |
 | **3 -- Indexed / on-demand** | [`docs/journal/entries/`](docs/journal/entries/) (per-file, frontmatter-tagged) + [`docs/journal/TAGS.md`](docs/journal/TAGS.md) | When investigating "why was this built this way?" |
 
 **Trigger reads:** Before changing code in a surface, read the matching
