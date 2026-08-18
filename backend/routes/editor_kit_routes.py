@@ -1501,6 +1501,35 @@ async def save_editor_kit_schema(
     # from server to editor, so the next save is the notification.
     _require_edit_lock(meta, role)
     schema_file, _pdf = _resolve_meta_names(meta)
+
+    # SNAPSHOT THE CURRENT SCHEMA FIRST (bd polyglot-pdf-y2l0p). Maintainer
+    # principle, 2026-08-08: "Editors should not ever be able to make
+    # destructive actions. Their work should always be recoverable."
+    #
+    # put_schema overwrites in place, and the write-lock above refuses only a
+    # COMPLETE or UNPUBLISHED kit -- so a published revision was protected and
+    # a DRAFT was not. Editor A's hours of work vanished when editor B (or A,
+    # from a stale tab) saved over it, with no copy anywhere: the in-editor
+    # undo stack is cleared on load, so it never survived a reload and never
+    # covered a cross-session overwrite.
+    #
+    # BEST-EFFORT, deliberately. A snapshot failure must not block the save:
+    # the editor's CURRENT work is what matters most, and refusing to save in
+    # order to protect an older copy inverts the priority. Logged loudly
+    # instead -- the same posture as the revision archive.
+    try:
+        existing = await store.load_schema(kit_id, schema_file)
+    except (FormKitNotFound, FormKitStoreError):
+        existing = None  # nothing to protect yet (first save of a new kit)
+    if existing is not None:
+        try:
+            snapshot_id = await store.put_draft_snapshot(kit_id, existing)
+            _log.info("editor_draft_snapshotted",
+                      kit_id=kit_id, snapshot=snapshot_id, role=role)
+        except FormKitStoreError as exc:
+            _log.warning("editor_draft_snapshot_failed",
+                         kit_id=kit_id, error=str(exc))
+
     try:
         await store.put_schema(kit_id, schema, schema_file)
     except FormKitStoreError as exc:
