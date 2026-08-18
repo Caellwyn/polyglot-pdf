@@ -669,6 +669,77 @@ class LocalFormKitStore(FormKitStore):
 		except OSError as exc:
 			raise FormKitStoreError(f"Unable to list form kits: {exc}") from exc
 
+	# --- draft snapshots (bd polyglot-pdf-y2l0p) -----------------------------
+
+	def _drafts_dir(self, kit_id: str) -> Path:
+		return self._kit_dir(kit_id) / _DRAFTS_DIR
+
+	def _snapshot_ids(self, kit_id: str) -> list[str]:
+		"""Existing snapshot ids, OLDEST first, ignoring anything unparseable."""
+		root = self._drafts_dir(kit_id)
+		if not root.exists():
+			return []
+		ids = [c.name for c in root.iterdir() if c.is_dir() and c.name.isdigit()]
+		# Numeric, not lexical: "10" must follow "9", or eviction drops the
+		# wrong snapshot the moment the ring passes single digits.
+		return sorted(ids, key=int)
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		existing = self._snapshot_ids(kit_id)
+		next_id = str(int(existing[-1]) + 1) if existing else "1"
+		target = self._drafts_dir(kit_id) / next_id
+		# The atomic temp+replace writer the archive uses: a concurrent read
+		# must never see half a schema.
+		await self._write_json(target / "schema.json", schema)
+		await self._write_json(target / "meta.json", {
+			"id": next_id,
+			"savedAt": datetime.now(timezone.utc).isoformat(),
+		})
+
+		# Evict AFTER the write: a failure here leaves too MANY snapshots
+		# rather than too few, the safe direction when the point is not losing
+		# work.
+		for stale in self._snapshot_ids(kit_id)[:-DRAFT_SNAPSHOT_LIMIT]:
+			try:
+				await anyio.to_thread.run_sync(
+					lambda d=self._drafts_dir(kit_id) / stale:
+						shutil.rmtree(d, ignore_errors=True))
+			except OSError as exc:  # pragma: no cover - defensive
+				_log.warning("draft_snapshot_evict_failed",
+							 kit_id=kit_id, snapshot=stale, error=str(exc))
+		return next_id
+
+	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
+		out: list[dict] = []
+		for sid in self._snapshot_ids(kit_id):
+			meta_path = self._drafts_dir(kit_id) / sid / "meta.json"
+			saved_at = None
+			if meta_path.exists():
+				try:
+					raw = await anyio.to_thread.run_sync(
+						lambda p=meta_path: p.read_text(encoding="utf-8"))
+					saved_at = json.loads(raw).get("savedAt")
+				except (OSError, json.JSONDecodeError):
+					# An unreadable stamp must not hide the snapshot itself --
+					# the schema is what someone is trying to recover.
+					saved_at = None
+			out.append({"id": sid, "savedAt": saved_at})
+		# NEWEST first: the order someone recovering work reads them in.
+		return list(reversed(out))
+
+	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		path = self._drafts_dir(kit_id) / snapshot_id / "schema.json"
+		if not path.exists():
+			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
+		try:
+			raw = await anyio.to_thread.run_sync(
+				lambda: path.read_text(encoding="utf-8"))
+			return json.loads(raw)
+		except (OSError, json.JSONDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Unable to read draft snapshot {snapshot_id} for {kit_id}"
+			) from exc
+
 	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
 
 	def _archive_dir(self, kit_id: str, marker: str) -> Path:
