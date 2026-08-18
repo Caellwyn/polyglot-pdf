@@ -883,7 +883,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     <button
                       className="btn-sm btn-secondary text-xs"
                       onClick={() => void handleSetStatus(kit, 'draft')}
-                      disabled={busy}
+                      disabled={busy || retirePrompt !== null}
                       title="Revert to draft to edit it (archives the published version first, and removes it from the next deploy)"
                     >
                       Revert to draft
@@ -891,7 +891,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     <button
                       className="btn-sm btn-secondary text-xs"
                       onClick={() => void handleSetStatus(kit, 'unpublished')}
-                      disabled={busy}
+                      disabled={busy || retirePrompt !== null}
                       title="Retire this version: clients stop seeing it, the files stay, and it cannot be edited -- earlier confirmations point at it. Publish again to restore."
                     >
                       Unpublish
@@ -1212,7 +1212,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         <button
                           className="btn-sm btn-secondary text-xs"
                           onClick={() => void handleSetStatus(kit, 'draft')}
-                          disabled={busy}
+                          disabled={busy || retirePrompt !== null}
                           title="Revert to draft to edit it (archives the published version first, and removes it from the next deploy)"
                         >
                           Revert to draft
@@ -1220,7 +1220,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         <button
                           className="btn-sm btn-secondary text-xs"
                           onClick={() => void handleSetStatus(kit, 'unpublished')}
-                          disabled={busy}
+                          disabled={busy || retirePrompt !== null}
                           title="Retire this version: clients stop seeing it, the files stay, and it cannot be edited -- earlier confirmations point at it. Publish again to restore."
                         >
                           Unpublish

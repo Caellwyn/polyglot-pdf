@@ -862,6 +862,46 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
   });
 
+  it.each([
+    ['the compact strip', false],
+    ['the expanded card grid', true],
+  ])('freezes EVERY status control in %s while the dialog is open', async (_name, expand) => {
+    // Not one button: the whole set, in BOTH views. Nine of the ten original
+    // gates could be deleted with the suite green, because the only test
+    // clicked a single card button -- the twin-shaped miss, now inside the fix
+    // for the twin-shaped miss (Opus fresh-eyes round 4).
+    //
+    // Enumerates by role and asserts on the rendered set, so a NEW status
+    // control added later is covered without anyone remembering to add a case.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'complete' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'done-kit', label: 'Done Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded={expand} onOpenKit={() => {}}
+                            selectedKitId="draft-kit" role="author" />);
+    // Wait on a control that exists in BOTH views: the strip renders kits as
+    // <select> options (not text) and the toggle's label flips with the view,
+    // so either would be a view-dependent anchor.
+    await waitFor(() =>
+      expect(screen.getAllByText('Publish').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Publish')[0]);
+    await waitFor(() => expect(screen.getByText('Done Form')).toBeInTheDocument());
+
+    // Every control that CHANGES a kit's status must be inert behind the
+    // dialog -- otherwise the candidate list goes stale under the author, or
+    // two publishes race, each running the metered per-language sweep.
+    for (const label of ['Publish', 'Publish again', 'Revert to draft', 'Unpublish']) {
+      for (const el of screen.queryAllByText(label)) {
+        const btn = el.closest('button') as HTMLButtonElement | null;
+        // Buttons INSIDE the dialog are the point of the dialog; skip them.
+        if (!btn || btn.closest('[role="dialog"]')) continue;
+        expect(btn.disabled).toBe(true);
+      }
+    }
+  });
+
   it('disables the catalogue Publish buttons while the dialog is open', async () => {
     // completingId clears before the prompt opens, so every Publish button was
     // live behind the dialog -- and clicking one replaced the pending prompt,
