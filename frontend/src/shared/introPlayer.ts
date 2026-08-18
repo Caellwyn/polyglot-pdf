@@ -123,9 +123,16 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
   // (language, formNumber) -> object URL. Cached so Listen Again replays with
   // no network round trip -- and provably the SAME bytes the user just heard.
   const clipUrls = new Map<string, string>()
-  // Set from the response header; the backend owns the hash so the two cannot
-  // drift into recording a version it never synthesized.
-  let lastScriptVersion: string | undefined
+  // (language|form) -> the version the backend reported for THAT clip. Keyed
+  // rather than a single last-write variable (fresh-eyes round 1): a replay of
+  // an already-cached clip performs no fetch, so a single variable would keep
+  // reporting whatever language was fetched LAST -- and the acceptance record
+  // would name text the user did not hear. Unreachable through today's UI
+  // (language is pinned per mount), but the accessor's contract should not
+  // depend on that staying true.
+  const scriptVersions = new Map<string, string>()
+  // The key whose clip was played most recently -- what scriptVersion() reports.
+  let lastPlayedKey: string | undefined
   const cacheKey = (language: string, formNumber: string) =>
     `${language}|${formNumber}`
 
@@ -159,6 +166,8 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
     stop()
     for (const url of clipUrls.values()) revokeClipUrl(url)
     clipUrls.clear()
+    scriptVersions.clear()
+    lastPlayedKey = undefined
   }
 
   async function fetchToken(): Promise<string | undefined> {
@@ -225,8 +234,8 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
           // older backend that does not send the header, or a response shape
           // without one, must never break the clip. Losing the version costs
           // an audit detail; throwing here would cost the user their audio.
-          lastScriptVersion =
-            resp.headers?.get?.('X-Intro-Script-Version') ?? lastScriptVersion
+          const reported = resp.headers?.get?.('X-Intro-Script-Version')
+          if (reported) scriptVersions.set(key, reported)
           blob = await resp.blob()
         } finally {
           stopFetchWatch()
@@ -239,6 +248,7 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
       clipUrls.set(key, url)
     }
 
+    lastPlayedKey = key
     let audio: HTMLAudioElement
     try {
       audio = createAudio(url)
@@ -298,6 +308,7 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
 
   return {
     play, stop, isPlaying, isCached, dispose,
-    scriptVersion: () => lastScriptVersion,
+    scriptVersion: () =>
+      lastPlayedKey === undefined ? undefined : scriptVersions.get(lastPlayedKey),
   }
 }

@@ -132,7 +132,15 @@ async function clickIfPresent(page, pattern, label) {
   //  - intro clip ON: NO session exists until Agree, so the hook does not
   //    exist yet and waiting for it first would hang until timeout.
   // Clicking when present, then waiting, is correct under both.
-  await clickIfPresent(page, /I Agree/, 'disclaimer I Agree (pre-hook)');
+  // BILINGUAL on purpose: this session's agree button is TRANSLATED
+  // ("Prinimayu", not "I Agree") -- the English literal already timed out and
+  // crashed a run once, which is why RU_AGREE exists below. An English-only
+  // pre-click would silently match nothing here and leave the flag-ON path
+  // hanging on the inject-hook wait (bd polyglot-pdf-s1iex.7, fresh-eyes
+  // round 1). Escaped to keep this source ASCII (scar #6).
+  await clickIfPresent(
+    page, new RegExp('\u041f\u0440\u0438\u043d\u0438\u043c\u0430\u044e' + '|I Agree'),
+    'disclaimer agree (ru, pre-hook)');
 
   await page.waitForFunction(
     () => typeof window.__VFF_TEST_INJECT === 'object' && window.__VFF_TEST_INJECT !== null,

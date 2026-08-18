@@ -252,6 +252,52 @@ describe('introPlayer: script version for the audit record (bd s1iex.7)', () => 
     expect(h.player.scriptVersion()).toBe('deadbeefcafe0001')
   })
 
+  it('reports the version of the clip being REPLAYED, not the last fetched', async () => {
+    // Fresh-eyes round 1: a single last-write variable would report whatever
+    // language was fetched LAST, so replaying an already-cached clip (no
+    // fetch) would record a version for text the user did not hear. Keyed per
+    // (language, form) instead. Unreachable via today's UI -- language is
+    // pinned per mount -- but the accessor's contract must not depend on that.
+    const versions: Record<string, string> = {
+      English: 'aaaaaaaaaaaaaaaa', Spanish: 'bbbbbbbbbbbbbbbb',
+    }
+    const audios: FakeAudio[] = []
+    let announce: (a: FakeAudio) => void = () => {}
+    let nextAudio = new Promise<FakeAudio>(r => { announce = r })
+    let lang = 'English'
+    const player = createIntroPlayer({
+      getAudioManager: () => ({ attachClipElement: () => () => {} } as unknown as AudioManager),
+      getHttpBase: () => 'http://backend',
+      fetchImpl: vi.fn(async () => ({
+        ok: true, status: 200,
+        headers: { get: () => versions[lang] },
+        blob: async () => ({ size: 1 } as Blob),
+      } as unknown as Response)) as unknown as typeof fetch,
+      createAudio: () => {
+        const a = new FakeAudio(); audios.push(a); announce(a)
+        return a as unknown as HTMLAudioElement
+      },
+      makeClipUrl: () => `blob:${lang}`,
+      revokeClipUrl: () => {},
+      watchdog: () => () => {},
+    })
+    const drive = async (language: string) => {
+      lang = language
+      nextAudio = new Promise<FakeAudio>(r => { announce = r })
+      const playing = player.play(language, 'I-90')
+      ;(await nextAudio).onended!()
+      await playing
+    }
+    await drive('English')
+    expect(player.scriptVersion()).toBe('aaaaaaaaaaaaaaaa')
+    await drive('Spanish')
+    expect(player.scriptVersion()).toBe('bbbbbbbbbbbbbbbb')
+    // Replay English from CACHE -- no fetch happens, so a last-write variable
+    // would still say Spanish.
+    await drive('English')
+    expect(player.scriptVersion()).toBe('aaaaaaaaaaaaaaaa')
+  })
+
   it('survives a response with NO headers rather than breaking the clip', async () => {
     // The version is SUPPLEMENTARY to playback: an older backend, or any
     // response shape without headers, must cost an audit detail and not the

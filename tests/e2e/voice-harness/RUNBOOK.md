@@ -124,6 +124,13 @@ correct under BOTH states -- which is exactly what the five drivers do via
 their `clickIfPresent` helper. Do not wait for the hook before clicking, or
 the flag-on path hangs until timeout.
 
+**Match the TRANSLATED label.** The agree button is per-language
+(`DisclaimerModal.BUTTON_TRANSLATIONS`), so a Russian session shows
+"Prinimayu", not "I Agree" -- the two RU drivers pass a bilingual pattern for
+exactly this reason (an English-only match silently hits nothing and leaves
+the flag-on path hanging). Any new driver in a non-English session must do the
+same.
+
 ### 4. Install the harness + pre-load fixtures
 
 Inject the FULL body of `tests/e2e/voice-harness/harness.js` (it self-installs
