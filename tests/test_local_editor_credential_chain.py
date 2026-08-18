@@ -148,37 +148,56 @@ def test_the_frontend_reads_the_env_var_the_launcher_sets():
 
 
 def test_the_frontend_sends_the_header_the_backend_reads():
-    """Link 4. Two files, two languages, one string."""
+    """Link 4, asked of the FRAMEWORK rather than of the source text.
+
+    Two files, two languages, one wire header. The TypeScript side is a string
+    literal, so it must be read from source. The Python side is NOT -- FastAPI
+    computes the real answer and will tell us, so ask it.
+
+    THREE WRONG VERSIONS PRECEDED THIS, every one measured:
+      1. `"x-editor-token" in py.lower()` over the raw file. The DOCSTRINGS
+         satisfied it, so renaming the parameter changed the real header while
+         the test stayed green. Asserted against prose; caught nothing.
+      2. A word-bounded search for the parameter NAME. That rejected
+         `Header(alias="X-Editor-Token")` on a renamed parameter -- a valid
+         refactor whose wire header is unchanged (verified 200). A guard that
+         reddens on correct code teaches the next author to bypass it.
+      3. Name OR literal alias. Still rejected `Header(alias=_HDR)` where the
+         alias comes from a constant -- also valid, also verified 200.
+
+    Each failed for the same reason: it pattern-matched SOURCE TEXT for
+    something the framework already knows. Walking the dependant graph is
+    immune to all three, because it reports the header the app actually binds
+    however it was spelled -- and a comment naming the old header cannot fool
+    it, because comments are not in the graph.
+    """
     ts = _code_only(_read(STORE))
-    py = _read(ROUTES)
     assert f"'{HEADER}'" in ts or f'"{HEADER}"' in ts, (
         f"{STORE.name} no longer sends the {HEADER} header."
     )
-    # PIN WHAT DETERMINES THE WIRE HEADER, which is EITHER of two spellings:
-    #   x_editor_token: Annotated[..., Header()]                  (name-derived)
-    #   x_whatever:     Annotated[..., Header(alias="X-Editor-Token")]  (explicit)
-    # FastAPI accepts both and both send X-Editor-Token, so both must pass.
-    #
-    # Two failures, opposite directions, both measured (fresh-eyes rounds 1-2):
-    #  1. The first cut matched "x-editor-token" anywhere in the RAW file, so
-    #     the DOCSTRINGS satisfied it -- renaming the parameter changed the real
-    #     header and the test stayed green. Assert against prose, catch nothing.
-    #  2. The second cut pinned the parameter NAME only, so the alias refactor
-    #     above -- which keeps the wire header identical, verified 200 -- turned
-    #     it RED. A guard that fails on correct code teaches the next author to
-    #     distrust it, which is worse than the hole it was closing.
-    param = HEADER.lower().replace("-", "_")
-    name_derived = re.search(rf"\b{re.escape(param)}\s*:", py)
-    explicit_alias = re.search(
-        rf'Header\(\s*alias\s*=\s*["\']{re.escape(HEADER)}', py, re.I
-    )
-    assert name_derived or explicit_alias, (
-        f"{ROUTES.name} no longer derives the {HEADER} wire header. FastAPI "
-        f"takes it from either the parameter NAME ({param}) or an explicit "
-        f"Header(alias=...). Neither is present, so the backend now expects a "
-        f"different header than {STORE.name} sends -- every editor call 401s, "
-        f"and local mode degrades to a findings-free panel that reads as a "
-        f"clean schema rather than an auth failure."
+
+    from backend.main import app
+
+    declared = set()
+    for route in app.routes:
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        stack = [dependant]
+        while stack:
+            d = stack.pop()
+            for param in getattr(d, "header_params", []):
+                declared.add(str(param.alias).lower())
+            stack.extend(getattr(d, "dependencies", []))
+
+    assert HEADER.lower() in declared, (
+        f"No route in the app declares a {HEADER} header parameter (found: "
+        f"{sorted(declared)}). FastAPI binds the wire header from the "
+        f"parameter name or an explicit Header(alias=...); neither now yields "
+        f"{HEADER}, so the backend expects a different header than "
+        f"{STORE.name} sends. Every editor call 401s, and local mode degrades "
+        f"to a findings-free panel that reads as a clean schema rather than "
+        f"an auth failure."
     )
 
 
