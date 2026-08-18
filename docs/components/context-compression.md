@@ -2,10 +2,13 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
-content change; the derived compression figures are RE-EXECUTED against the
-v4 SI (bd polyglot-pdf-6a79): floor 4289 -> window 4888 -> trigger 6388,
-still above the 5000 API bound so the clamp does not fire.
+*Last updated: 2026-08-08 (the derived compression figures are RE-EXECUTED
+against the v4 SI (bd polyglot-pdf-6a79): floor 4289 -> window 4888 ->
+trigger 6388, still above the 5000 API bound so the clamp does not fire.
+NOTE (bd polyglot-pdf-6dn2n): the date is intentionally left at 2026-08-08 --
+tracked code has moved since then, so this doc is genuinely STALE and needs
+a real re-derivation of these figures against current backend/config.py, not
+a bump; a prose-only stamp-chain prune must not clear that signal.)
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**

@@ -95,21 +95,31 @@ LAST_UPDATED_RE = re.compile(
 # Forbidden patterns on tier-1 + tier-2 docs (current-state only):
 # - `Previously:` / `Prior:` / `Prior,` / `Earlier:` / `Earlier,` followed
 #   (within a short lookahead) by a YYYY-MM-DD date, "Sprint NN", "same
-#   day"/"same week", or a bead-id reference ("bd `...`" / "bd ..."). This
-#   shape is the chronological-narrative pattern we want to ban (both stamp
-#   chains AND rationale-section prose that strings sprint events together) --
-#   doc-architecture.md section 3 is explicit that the rule covers the
-#   PATTERN, not just the `Previously:` spelling, and four real docs shipped
-#   `Earlier:`/`Earlier,`/`Prior,` chains this regex missed before it was
-#   widened (bd polyglot-pdf-6dn2n/cqyke/f6wb6/riffn -- the found shapes were
-#   "Earlier, bd polyglot-pdf-6x1j: ..." and "Prior, same day (bd ...)", NOT
-#   followed by a literal date, which is why the date-only follow-up was
-#   widened to also cover a bead-id or same-day/week reference). Bare
-#   references like "(do NOT chain `Previously:` prose)" or pedagogical
-#   mentions in CLAUDE.md itself are exempt because they don't have this
-#   follow-up shape; ordinary prose use of "earlier"/"prior" (e.g. "an earlier
-#   version", "earlier same-week changes") is exempt because the word is never
-#   immediately followed by `:`/`,`.
+#   day"/"same week", or a bead-id reference (a backtick-quoted token, e.g.
+#   "bd `polyglot-pdf-x`", or a bare hyphenated token, e.g. "bd
+#   polyglot-pdf-x" -- bead ids always contain a hyphen, which is what lets
+#   this alternative avoid matching an ordinary word like "bd is the
+#   tracker"). This shape is the chronological-narrative pattern we want to
+#   ban (both stamp chains AND rationale-section prose that strings sprint
+#   events together) -- doc-architecture.md section 3 is explicit that the
+#   rule covers the PATTERN, not just the `Previously:` spelling, and four
+#   real docs shipped `Earlier:`/`Earlier,`/`Prior,` chains this regex missed
+#   before it was widened (bd polyglot-pdf-6dn2n/cqyke/f6wb6/riffn -- the
+#   found shapes were "Earlier, bd polyglot-pdf-6x1j: ..." and "Prior, same
+#   day (bd ...)", NOT followed by a literal date, which is why the date-only
+#   follow-up was widened to also cover a bead-id or same-day/week
+#   reference). Bare references like "(do NOT chain `Previously:` prose)" or
+#   pedagogical mentions in CLAUDE.md itself are exempt because they don't
+#   have this follow-up shape; ordinary prose use of "earlier"/"prior" (e.g.
+#   "an earlier version", "earlier same-week changes") is exempt because the
+#   word is never immediately followed by `:`/`,`.
+#   KNOWN ACCEPTED RISK (bd polyglot-pdf-gz7dv): "Prior:"/"Earlier:" directly
+#   followed by literal "same day"/"Sprint N" prose is indistinguishable from
+#   a real chain by local pattern matching alone -- e.g. "Prior: same day we
+#   shipped this" would still false-positive. Zero such occurrences exist in
+#   the current corpus; a future false positive is a one-line rephrase, not a
+#   blocker, so this risk is accepted rather than narrowed further (a tighter
+#   regex would also risk missing real chains of that exact shape).
 # - Section headers like `## Update history` / `## Recent sprint history` /
 #   `## Changelog` / `## Sprint history` (any heading level >= 2). Other
 #   "Sprint ..." headings (e.g. `## Sprint test retirement`) are NOT
@@ -119,7 +129,8 @@ PREVIOUSLY_CHAIN_RE = re.compile(
     r"(?:\d{4}-\d{2}-\d{2}"
     r"|Sprint\s+\d"
     r"|same[\s-](?:day|week)"
-    r"|bd[\s`]"
+    r"|bd\s+`[\w-]+`"
+    r"|bd\s+[\w]+-[\w-]+"
     r")",
     re.IGNORECASE,
 )

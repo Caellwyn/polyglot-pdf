@@ -2,10 +2,12 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
-content change; the `/ws/fill` text clients are process-cached and shared
-across sessions -- stateless, so sharing is safe -- while `get_live_ai` stays
-per-connection.)*
+*Last updated: 2026-08-08 (the `/ws/fill` text clients are process-cached and
+shared across sessions -- stateless, so sharing is safe -- while
+`get_live_ai` stays per-connection. NOTE (bd polyglot-pdf-6dn2n): the date is
+intentionally left at 2026-08-08 -- tracked code has moved since then, so
+this doc is genuinely STALE and needs a real content re-verification, not a
+bump; a prose-only stamp-chain prune must not clear that signal.)*
 
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,

@@ -638,6 +638,51 @@ class TestDocConventionsRegexes:
             "prior art in this space suggests a simpler approach"
         ) is None
 
+    # bd polyglot-pdf-gz7dv: the widened `bd[\s`]` alternative false-positived
+    # on ordinary prose that happens to contain the bare word "bd" right
+    # after the keyword+separator -- "earlier, bd is the tracker" is not a
+    # bead-id reference. Tightened to require the bead-id SHAPE (a
+    # backtick-quoted token, or a bare hyphenated token) rather than just the
+    # literal "bd". Pin both the fix and its accepted residual gap.
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "earlier, bd is the tracker",
+            "Prior, bd ready lists it",
+        ],
+    )
+    def test_bare_bd_word_NOT_flagged_as_bead_id(self, text):
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(text) is None, (
+            f"false-positived on ordinary prose containing the bare word "
+            f"'bd': {text!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Earlier, bd polyglot-pdf-6x1j: guarded hard delete",
+            "Prior, same day (bd `polyglot-pdf-ofh6`)",
+        ],
+    )
+    def test_real_bead_id_chain_still_detected_after_bd_tightening(self, text):
+        # The bd-tightening fix (above) must not also break detection of the
+        # real chain shapes it was widened to catch in the first place.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(text) is not None, (
+            f"bd-shape tightening broke detection of a real chain: {text!r}"
+        )
+
+    def test_same_day_sprint_residual_false_positive_documented(self):
+        # KNOWN ACCEPTED RISK (bd polyglot-pdf-gz7dv): "Prior:"/"Earlier:"
+        # immediately followed by literal "same day"/"Sprint N" prose is
+        # indistinguishable from a real chain by local pattern matching --
+        # this test documents the accepted gap rather than asserting a
+        # narrower behavior that doesn't exist. If this ever starts
+        # returning None, the regex changed; update this test deliberately,
+        # don't just delete it.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "prior: same day we shipped this"
+        ) is not None
+
     def test_update_history_heading_detected(self):
         for heading in (
             "## Update history",
@@ -687,6 +732,40 @@ class TestCheckDocConventionsOnTmpDocs:
         assert len(findings) == 1
         assert findings[0][0] == doc
         assert "Previously" in findings[0][1]
+
+    # bd polyglot-pdf-fpp6n: the finding message must name the ACTUAL matched
+    # keyword, not a hardcoded "Previously:" -- a maintainer greps the
+    # reported string to find the violation. Mutation-verified: reverting
+    # scripts/check_doc_freshness.py's message construction to the old
+    # hardcoded literal makes these fail (confirmed by hand before writing).
+    @pytest.mark.parametrize(
+        "chain_text,expected_keyword",
+        [
+            ("Prior: 2026-05-19 the thing shipped", "Prior:"),
+            ("Prior, same day (bd `polyglot-pdf-x`)", "Prior,"),
+            ("Earlier: 2026-05-19 docs audit", "Earlier:"),
+            ("Earlier, bd polyglot-pdf-x: guarded delete", "Earlier,"),
+        ],
+    )
+    def test_finding_message_names_actual_matched_keyword(
+        self, tmp_path, chain_text, expected_keyword
+    ):
+        doc = _make_doc(
+            tmp_path,
+            f"# Foo\n\n*Last updated: 2026-05-20. {chain_text}*\n\nbody\n",
+        )
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert len(findings) == 1
+        assert expected_keyword in findings[0][1], (
+            f"finding message {findings[0][1]!r} does not name the actual "
+            f"matched keyword {expected_keyword!r}"
+        )
+        # And it must NOT claim "Previously:" when that isn't what matched.
+        if expected_keyword != "Previously:":
+            assert "'Previously:'" not in findings[0][1], (
+                f"finding message wrongly hardcodes 'Previously:' for a "
+                f"{expected_keyword!r} match: {findings[0][1]!r}"
+            )
 
     def test_doc_with_history_section_flagged(self, tmp_path):
         doc = _make_doc(
