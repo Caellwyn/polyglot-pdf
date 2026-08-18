@@ -1329,6 +1329,10 @@ async def list_kit_draft_snapshots(
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
+    # 404 for a kit that does not exist, rather than an empty list: "you have
+    # no earlier versions" and "that form does not exist" are different
+    # answers, and conflating them is the false-negative direction in a
+    # recovery feature (Opus fresh-eyes round 4).
     await _load_meta_or_404(store, kit_id)
     try:
         snapshots = await store.list_draft_snapshots(kit_id)

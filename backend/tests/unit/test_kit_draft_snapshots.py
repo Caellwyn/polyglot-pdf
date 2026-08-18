@@ -585,28 +585,121 @@ def test_GCS_skips_a_unicode_digit_blob_instead_of_going_blind():
     assert _run(store.put_draft_snapshot("w7", {"_tag": "A"})) == "1"
 
 
-def test_GCS_restore_works_end_to_end():
-    """Criterion 2 says "the same RESTORE exercised against both store
-    implementations". The other GCS tests drive only the store primitives, so
-    the deployed store's restore path had zero coverage -- the same shape as
-    the round-1 miss this file's header warns about."""
+@pytest.fixture()
+def gcs_client(monkeypatch):
+    """The REAL routes over the GCS store -- the one that ships.
+
+    The earlier version of the end-to-end test hand-replicated the route's
+    sequence (snapshot, overwrite, snapshot, restore) against the store
+    primitives. That attests to the STORE, not to the RESTORE, so a route-level
+    regression that only bites GCS could not redden it -- precisely the round-1
+    miss shape, where the local suite stayed green while the GCS ring was
+    inert. Criterion 2 says "the same RESTORE exercised against BOTH store
+    implementations", so drive the routes (Opus fresh-eyes round 4).
+    """
+    from backend.tests.unit.test_editor_kit_routes import _settings
+
+    app = FastAPI()
+    app.include_router(ekr.router)
     registry = {}
     store = _gcs_store(registry)
-    _run(store.put_schema("w7", _schema("A")))
-    _run(store.put_metadata("w7", {"status": "draft", "label": "w7"}))
-    registry["form-kits/w7/form.pdf"] = {"data": "%PDF"}
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+    monkeypatch.setattr(
+        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok"))
+    return TestClient(app), store, registry
 
-    # Save B over A, the way the route does: snapshot first, then overwrite.
-    current = _run(store.load_schema("w7", "schema.json"))
-    snap_id = _run(store.put_draft_snapshot("w7", current))
-    _run(store.put_schema("w7", _schema("B")))
 
-    # ...then restore, again as the route does.
-    restored = _run(store.load_draft_snapshot("w7", snap_id))
-    _run(store.put_draft_snapshot("w7", _run(store.load_schema("w7", "schema.json"))))
-    _run(store.put_schema("w7", restored))
+def _seed_gcs_kit(store, registry, kit_id="w7", schema=None):
+    _run(store.put_schema(kit_id, schema if schema is not None else _schema("A")))
+    _run(store.put_metadata(kit_id, {"status": "draft", "label": kit_id}))
+    registry[f"form-kits/{kit_id}/form.pdf"] = {"data": "%PDF-1.7"}
 
+
+def test_GCS_restore_works_end_to_end_THROUGH_THE_ROUTES(gcs_client):
+    """Criterion 2, driven the way an editor actually drives it."""
+    c, store, registry = gcs_client
+    _seed_gcs_kit(store, registry, schema=_schema("A"))
+
+    assert _save(c, "w7", _schema("B")).status_code == 200
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    assert len(snaps) == 1, "the overwritten draft was not snapshotted in GCS"
+
+    resp = _restore(c, "w7", snaps[0]["id"])
+
+    assert resp.status_code == 200, resp.text
     assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "A"
-    # Both the pre-save and pre-restore snapshots survive, newest first.
-    snaps = _run(store.list_draft_snapshots("w7"))
-    assert [_run(store.load_draft_snapshot("w7", x["id"]))["_tag"] for x in snaps]         == ["B", "A"]
+    # The restore protected the work it replaced, in GCS too.
+    assert _run(store.load_draft_snapshot(
+        "w7", resp.json()["snapshotOfReplaced"]))["_tag"] == "B"
+
+
+def test_GCS_restore_honours_a_kit_s_OWN_schema_filename(gcs_client):
+    """The silent-false-success from round 3, pinned on the deployed store."""
+    c, store, registry = gcs_client
+    _run(store.put_schema("i90", _schema("A"), "i90.json"))
+    _run(store.put_metadata(
+        "i90", {"status": "draft", "label": "i90", "schema": "i90.json"}))
+    registry["form-kits/i90/form.pdf"] = {"data": "%PDF"}
+
+    assert _save(c, "i90", _schema("B")).status_code == 200
+    snaps = _snapshots(c, "i90").json()["snapshots"]
+    assert _restore(c, "i90", snaps[0]["id"]).status_code == 200
+
+    assert _run(store.load_schema("i90", "i90.json"))["_tag"] == "A"
+
+
+def test_GCS_restore_is_REFUSED_on_a_write_locked_kit(gcs_client):
+    """The write-lock, on the store that ships."""
+    c, store, registry = gcs_client
+    _seed_gcs_kit(store, registry, schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    _run(store.put_metadata("w7", {"status": "complete", "label": "w7"}))
+
+    assert _restore(c, "w7", snaps[0]["id"]).status_code == 409
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+# --- the last unpinned guards -----------------------------------------------
+
+
+def test_listing_an_UNKNOWN_kit_is_404_not_an_empty_list(client):
+    """"You have no earlier versions" and "that form does not exist" are
+    different answers. Deleting the existence check left all 35 tests green
+    while turning the 404 into 200 {"snapshots": []} -- the false-negative
+    direction in a recovery feature (Opus fresh-eyes round 4)."""
+    c, _store, _root = client
+
+    assert _snapshots(c, "nosuchkit").status_code == 404
+
+
+def test_a_CORRUPT_stamp_does_not_hide_the_snapshot(client):
+    """meta.json holding valid JSON that is not an OBJECT has no .get, and the
+    AttributeError escaped to a 500 on the LIST route -- unreachable recovery
+    from a one-byte corruption in a metadata file, while GCS returned 200 with
+    a null stamp. The code contradicted its own comment."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    (root / "w7" / "_drafts" / "1" / "meta.json").write_text(
+        json.dumps(["corrupt"]), encoding="utf-8")
+
+    resp = _snapshots(c, "w7")
+
+    assert resp.status_code == 200, resp.text
+    snaps = resp.json()["snapshots"]
+    assert len(snaps) == 1, "a corrupt stamp hid the snapshot itself"
+    assert snaps[0]["savedAt"] is None
+
+
+def test_a_NON_UTF8_snapshot_fails_as_a_STORAGE_fault_not_a_crash(client):
+    """UnicodeDecodeError is a ValueError, not an OSError, so it escaped the
+    wrap and 500'd the restore while the GCS twin raised FormKitStoreError ->
+    502. Every sibling reader in the class already caught it."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    (root / "w7" / "_drafts" / "1" / "schema.json").write_bytes(bytes([0xff, 0xfe, 0x00]) + b"bad")
+
+    assert _restore(c, "w7", "1").status_code == 502

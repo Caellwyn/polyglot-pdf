@@ -741,9 +741,17 @@ class LocalFormKitStore(FormKitStore):
 					raw = await anyio.to_thread.run_sync(
 						lambda p=meta_path: p.read_text(encoding="utf-8"))
 					saved_at = json.loads(raw).get("savedAt")
-				except (OSError, json.JSONDecodeError):
+				except (OSError, json.JSONDecodeError, UnicodeDecodeError,
+						AttributeError):
 					# An unreadable stamp must not hide the snapshot itself --
 					# the schema is what someone is trying to recover.
+					#
+					# AttributeError: valid JSON that is not an OBJECT (a list,
+					# a bare string) has no .get, and that escaped to a 500 on
+					# the LIST route -- unreachable recovery from a one-byte
+					# corruption in a metadata file, while GCS returned 200
+					# with a null stamp. UnicodeDecodeError: non-UTF-8 bytes,
+					# which every sibling in this class already catches.
 					saved_at = None
 			out.append({"id": sid, "savedAt": saved_at})
 		# NEWEST first: the order someone recovering work reads them in.
@@ -757,7 +765,12 @@ class LocalFormKitStore(FormKitStore):
 			raw = await anyio.to_thread.run_sync(
 				lambda: path.read_text(encoding="utf-8"))
 			return json.loads(raw)
-		except (OSError, json.JSONDecodeError) as exc:
+		except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+			# UnicodeDecodeError is a ValueError, NOT an OSError, so it escaped
+			# this wrap and 500'd the RESTORE route while the GCS twin raised
+			# FormKitStoreError -> 502. Every other reader in this class
+			# already catches it; these two draft-snapshot methods were the
+			# only omissions in the file.
 			raise FormKitStoreError(
 				f"Unable to read draft snapshot {snapshot_id} for {kit_id}"
 			) from exc
