@@ -341,3 +341,90 @@ def test_a_failed_pre_restore_snapshot_REFUSES_the_restore(client, monkeypatch):
     assert "Nothing was changed" in resp.json()["detail"]
     # The live schema is untouched.
     assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+# --- exit criterion 2: the SAME behaviour in GCS ----------------------------
+#
+# Written after the local-only version of this file passed while the GCS ring
+# was INERT: _build_blob_path drops an empty part, so the listing prefix lost
+# its trailing slash, no snapshot id ever parsed, and every save overwrote
+# snapshot 1 while listing returned nothing. In the deployed mode the feature
+# kept no history at all (Opus fresh-eyes round 1).
+#
+# Criterion 2 asks for recovery "in GCS and local-folder mode". A test that
+# only drives the local store cannot answer it, and the store that ships is the
+# one that was broken.
+
+from backend.tests.unit.test_editor_kit_routes import _gcs_store
+
+
+def test_GCS_snapshots_get_distinct_ids(client_unused=None):
+    """The bug in one assertion: ids must advance, not stay at 1."""
+    registry = {}
+    store = _gcs_store(registry)
+
+    ids = [_run(store.put_draft_snapshot("w7", {"_tag": f"v{i}"})) for i in range(3)]
+
+    assert ids == ["1", "2", "3"], f"ids did not advance: {ids}"
+
+
+def test_GCS_recovers_an_overwritten_draft():
+    """Criterion 1's scenario, driven against the store that ships."""
+    registry = {}
+    store = _gcs_store(registry)
+    _run(store.put_draft_snapshot("w7", {"_tag": "A"}))
+    _run(store.put_draft_snapshot("w7", {"_tag": "B"}))
+
+    snaps = _run(store.list_draft_snapshots("w7"))
+
+    assert [s["id"] for s in snaps] == ["2", "1"], "newest-first listing broken"
+    assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "A"
+    assert _run(store.load_draft_snapshot("w7", "2"))["_tag"] == "B"
+
+
+def test_GCS_lists_nothing_for_a_kit_with_no_snapshots():
+    registry = {}
+    store = _gcs_store(registry)
+
+    assert _run(store.list_draft_snapshots("w7")) == []
+
+
+def test_GCS_evicts_only_the_OLDEST_not_its_prefix_matches():
+    """The destructive half of the same bug: without a trailing slash the
+    eviction prefix '<kit>/_drafts/1' string-matches 10, 11, 12... so evicting
+    snapshot 1 would delete most of the ring the moment it passed ten."""
+    registry = {}
+    store = _gcs_store(registry)
+    for i in range(DRAFT_SNAPSHOT_LIMIT + 2):
+        _run(store.put_draft_snapshot("w7", {"_tag": f"v{i}"}))
+
+    snaps = _run(store.list_draft_snapshots("w7"))
+    ids = sorted(int(s["id"]) for s in snaps)
+
+    assert len(snaps) == DRAFT_SNAPSHOT_LIMIT
+    # A contiguous run ending at the newest: 3..12 for a limit of 10 after 12
+    # saves. A prefix over-match would punch holes (10, 11, 12 gone).
+    assert ids == list(range(ids[0], ids[0] + DRAFT_SNAPSHOT_LIMIT)), ids
+    assert max(ids) == DRAFT_SNAPSHOT_LIMIT + 2
+
+
+def test_GCS_snapshots_land_outside_the_revision_archive():
+    """Criterion 3, in the store that ships."""
+    registry = {}
+    store = _gcs_store(registry)
+    _run(store.put_draft_snapshot("w7", {"_tag": "A"}))
+
+    keys = list(registry)
+
+    assert any("/_drafts/" in k for k in keys)
+    assert not any("/_archive/" in k for k in keys)
+
+
+def test_GCS_load_of_a_missing_snapshot_raises_NotFound():
+    from backend.services.form_kits import FormKitNotFound
+
+    registry = {}
+    store = _gcs_store(registry)
+
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_draft_snapshot("w7", "999"))

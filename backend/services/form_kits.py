@@ -1089,7 +1089,11 @@ class GCSFormKitStore(FormKitStore):
 
 		def _list() -> list[str]:
 			seen = set()
-			for blob in self._bucket.list_blobs(prefix=prefix):
+			# self._client.list_blobs(bucket_name, ...), the form every sibling
+			# listing here uses -- self._bucket.list_blobs exists on the real
+			# client too, but diverging from the house pattern means the
+			# established fake-bucket harness cannot drive this code at all.
+			for blob in self._client.list_blobs(self.bucket_name, prefix=prefix):
 				rest = blob.name[len(prefix):].split("/")
 				if len(rest) >= 2 and rest[0].isdigit():
 					seen.add(rest[0])
@@ -1120,7 +1124,7 @@ class GCSFormKitStore(FormKitStore):
 			stale_prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, stale) + "/"
 
 			def _delete(pfx: str = stale_prefix) -> None:
-				for blob in self._bucket.list_blobs(prefix=pfx):
+				for blob in self._client.list_blobs(self.bucket_name, prefix=pfx):
 					blob.delete()
 
 			try:
