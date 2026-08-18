@@ -1294,6 +1294,134 @@ def _labels_look_like_one_form(a: str, b: str) -> bool:
     return na == nb
 
 
+class DraftSnapshot(BaseModel):
+    """One recoverable prior state of a kit's draft schema."""
+
+    id: str
+    savedAt: Optional[str] = None
+
+
+class DraftSnapshotsResponse(BaseModel):
+    snapshots: list[DraftSnapshot]
+
+
+class RestoreSnapshotResponse(BaseModel):
+    ok: bool
+    kitId: str
+    restoredFrom: str
+    # The snapshot taken of the work being replaced, so a restore is itself
+    # undoable -- see the route docstring.
+    snapshotOfReplaced: Optional[str] = None
+
+
+@router.get("/kits/{kit_id}/draft-snapshots",
+            response_model=DraftSnapshotsResponse)
+async def list_kit_draft_snapshots(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> DraftSnapshotsResponse:
+    """Prior saved states of this kit's draft, newest first.
+
+    EDITOR-accessible, deliberately (maintainer decision 2026-08-18). The
+    principle this serves is that an editor's work must be recoverable -- and
+    routing recovery through an author means the person who lost the work
+    cannot get it back themselves, which is most of the value gone.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    await _load_meta_or_404(store, kit_id)
+    try:
+        snapshots = await store.list_draft_snapshots(kit_id)
+    except FormKitStoreError as exc:
+        _log.error("draft_snapshots_list_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to list earlier versions") from exc
+    _log.info("draft_snapshots_listed", kit_id=kit_id, count=len(snapshots), role=role)
+    return DraftSnapshotsResponse(
+        snapshots=[DraftSnapshot(**s) for s in snapshots])
+
+
+@router.post("/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore",
+             response_model=RestoreSnapshotResponse)
+async def restore_kit_draft_snapshot(
+    kit_id: str,
+    snapshot_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> RestoreSnapshotResponse:
+    """Put a snapshot's schema back as the live draft.
+
+    A restore is itself a WRITE over someone's current work, so it snapshots
+    what it replaces FIRST -- restoring the wrong version is then one more
+    restore away, not a second loss. That is what makes it safe to let an
+    editor do this without waiting for an author.
+
+    Refused on a write-locked kit for the same reason a save is: a complete or
+    unpublished revision is what confirmation records name, and reopening one
+    goes through the explicit revert-to-draft, never a side door.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    if not snapshot_id.isdigit():
+        # Snapshot ids are the store's own monotonic counter. Anything else is
+        # a caller constructing a path, and it never reaches the store.
+        raise HTTPException(status_code=400, detail="Invalid snapshot id")
+
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    if _is_write_locked(meta):
+        raise HTTPException(status_code=409, detail=_lock_reason(meta))
+    _require_edit_lock(meta, role)
+
+    try:
+        restored = await store.load_draft_snapshot(kit_id, snapshot_id)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No earlier version {snapshot_id} for this form",
+        ) from exc
+    except FormKitStoreError as exc:
+        _log.error("draft_snapshot_read_failed",
+                   kit_id=kit_id, snapshot=snapshot_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to read that earlier version") from exc
+
+    schema_file, _pdf = _resolve_meta_names(meta)
+
+    # Snapshot the CURRENT work before replacing it. Unlike the save path this
+    # is NOT best-effort: a restore knowingly destroys the current draft, so
+    # refusing when we cannot protect it first is the honest failure. A
+    # recovery feature that loses work is worse than one that declines.
+    replaced_id: Optional[str] = None
+    try:
+        current = await store.load_schema(kit_id, schema_file)
+    except (FormKitNotFound, FormKitStoreError):
+        current = None
+    if current is not None:
+        try:
+            replaced_id = await store.put_draft_snapshot(kit_id, current)
+        except FormKitStoreError as exc:
+            _log.error("draft_snapshot_pre_restore_failed",
+                       kit_id=kit_id, error=str(exc))
+            raise HTTPException(
+                status_code=502,
+                detail=("Could not save your current work before restoring, so "
+                        "the restore was refused. Nothing was changed."),
+            ) from exc
+
+    try:
+        await store.put_schema(kit_id, restored, schema_file)
+    except FormKitStoreError as exc:
+        _log.error("draft_snapshot_restore_failed",
+                   kit_id=kit_id, snapshot=snapshot_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to restore that earlier version") from exc
+
+    _log.info("draft_snapshot_restored", kit_id=kit_id, snapshot=snapshot_id,
+              replaced_snapshot=replaced_id, role=role)
+    return RestoreSnapshotResponse(
+        ok=True, kitId=kit_id, restoredFrom=snapshot_id,
+        snapshotOfReplaced=replaced_id)
+
+
 @router.get("/kits/{kit_id}/retire-candidates",
             response_model=RetireCandidatesResponse)
 async def get_retire_candidates(
