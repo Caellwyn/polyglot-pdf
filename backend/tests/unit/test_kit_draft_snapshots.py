@@ -17,6 +17,7 @@ never touch the revision archive's keyspace.
 """
 import asyncio
 import json
+from datetime import datetime
 
 import pytest
 from fastapi import FastAPI
@@ -219,6 +220,11 @@ def test_snapshots_do_not_appear_as_KITS(client):
 
     assert "_drafts" not in listed
     assert set(listed) == {"w7"}
+    # The assertion that actually binds: _drafts is nested INSIDE w7, so it
+    # could never be a top-level key -- the two lines above are true no matter
+    # what. The property the docstring claims is enforced by list_kit_files'
+    # is_file() filter, so assert on w7's own FILE LIST (Opus round 3).
+    assert "_drafts" not in listed["w7"]
 
 
 # --- who may recover --------------------------------------------------------
@@ -487,3 +493,120 @@ def test_an_unreadable_drafts_dir_surfaces_on_the_LIST(client):
     (root / "w7" / "_drafts").write_text("not a directory", encoding="utf-8")
 
     assert _snapshots(c, "w7").status_code == 502
+
+
+# --- the guards that had no test (Opus fresh-eyes round 3) -------------------
+
+
+def test_restore_honours_a_kit_s_OWN_schema_filename(client):
+    """A kit may name its own schema file (bd polyglot-pdf-snpi). Hardcoding
+    "schema.json" in the restore route left every test green while producing a
+    SILENT FALSE SUCCESS: HTTP 200, the real file still holding the overwritten
+    work, and a stray schema.json written beside it. The editor is told their
+    work came back when it did not."""
+    c, store, root = client
+    kit = root / "i90"
+    kit.mkdir()
+    (kit / "i90.json").write_text(json.dumps(_schema("A")), encoding="utf-8")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "i90", "schema": "i90.json"}),
+        encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.7")
+
+    assert _save(c, "i90", _schema("B")).status_code == 200
+    snaps = _snapshots(c, "i90").json()["snapshots"]
+    assert _restore(c, "i90", snaps[0]["id"]).status_code == 200
+
+    assert _run(store.load_schema("i90", "i90.json"))["_tag"] == "A"
+    # ...and nothing was written under the conventional name.
+    assert not (kit / "schema.json").exists()
+
+
+def test_restore_honours_the_EDITING_LOCK(client):
+    """An author who took the kit back is mid-review; a restore from under them
+    means they approve something they never saw. The guard was reachable and
+    correct but entirely unpinned -- deleting the call left all 29 tests
+    passing, and its own docstring records this guard being missed on a sibling
+    route twice before."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    # An AUTHOR takes the kit for review.
+    (root / "w7" / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "w7",
+                    "editing_lock": {"role": "author"}}), encoding="utf-8")
+
+    resp = _restore(c, "w7", snaps[0]["id"], headers=EDIT)
+
+    assert resp.status_code == 409, resp.text
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+def test_savedAt_is_a_real_timestamp_not_null(client):
+    """The only field distinguishing snapshots in a recovery UI -- the ids are
+    bare counters. Four separate mutations (forcing None in each store, and
+    skipping the meta.json write in each) all survived."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+
+    stamp = snaps[0]["savedAt"]
+    assert stamp, "savedAt was null -- a recovery list of bare counters"
+    parsed = datetime.fromisoformat(stamp)
+    assert parsed.tzinfo is not None, "savedAt must carry a timezone"
+
+
+def test_GCS_savedAt_is_a_real_timestamp_too():
+    """The store that ships, held to the same contract."""
+    registry = {}
+    store = _gcs_store(registry)
+    _run(store.put_draft_snapshot("w7", {"_tag": "A"}))
+
+    snaps = _run(store.list_draft_snapshots("w7"))
+
+    assert snaps[0]["savedAt"]
+    assert datetime.fromisoformat(snaps[0]["savedAt"]).tzinfo is not None
+
+
+def test_GCS_skips_a_unicode_digit_blob_instead_of_going_blind():
+    """Round 2 added the isascii guard to all three sites but pinned only the
+    local store and the route. On the GCS side the failure is quieter and
+    worse: _snapshot_ids wraps bare Exception, so a unicode-digit blob turns
+    every call into FormKitStoreError -- which the save path SWALLOWS as
+    best-effort, so the deployed ring silently stops snapshotting entirely."""
+    registry = {"form-kits/w7/_drafts/¹/schema.json": {"data": "{}"}}
+    store = _gcs_store(registry)
+
+    assert _run(store._snapshot_ids("w7")) == []
+    # ...and snapshotting still works rather than erroring out.
+    assert _run(store.put_draft_snapshot("w7", {"_tag": "A"})) == "1"
+
+
+def test_GCS_restore_works_end_to_end():
+    """Criterion 2 says "the same RESTORE exercised against both store
+    implementations". The other GCS tests drive only the store primitives, so
+    the deployed store's restore path had zero coverage -- the same shape as
+    the round-1 miss this file's header warns about."""
+    registry = {}
+    store = _gcs_store(registry)
+    _run(store.put_schema("w7", _schema("A")))
+    _run(store.put_metadata("w7", {"status": "draft", "label": "w7"}))
+    registry["form-kits/w7/form.pdf"] = {"data": "%PDF"}
+
+    # Save B over A, the way the route does: snapshot first, then overwrite.
+    current = _run(store.load_schema("w7", "schema.json"))
+    snap_id = _run(store.put_draft_snapshot("w7", current))
+    _run(store.put_schema("w7", _schema("B")))
+
+    # ...then restore, again as the route does.
+    restored = _run(store.load_draft_snapshot("w7", snap_id))
+    _run(store.put_draft_snapshot("w7", _run(store.load_schema("w7", "schema.json"))))
+    _run(store.put_schema("w7", restored))
+
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "A"
+    # Both the pre-save and pre-restore snapshots survive, newest first.
+    snaps = _run(store.list_draft_snapshots("w7"))
+    assert [_run(store.load_draft_snapshot("w7", x["id"]))["_tag"] for x in snaps]         == ["B", "A"]
