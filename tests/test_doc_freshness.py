@@ -245,18 +245,61 @@ class TestFreshnessScanCoversTier1:
     # ("docs/components/*.md / docs/standards/*.md") rather than deriving it,
     # so adding docs/doctrine to DOC_DIRS (bd riffn) silently desynced them --
     # the classic enumerate-the-set miss (CLAUDE.md scar #7): some sites were
-    # updated, three were not. Derive the expectation FROM DOC_DIRS so a
-    # future addition fails this test instead of leaving another stale site.
-    def test_every_doc_dirs_entry_named_in_the_script_source(self):
+    # updated, three were not.
+    #
+    # bd polyglot-pdf-u3miz: the first cut of this pin used a whole-file
+    # `source.count(d) >= 2` threshold, which was VACUOUS -- the DOC_DIRS
+    # assignment itself plus two ALREADY-correct sites (find_docs() and
+    # check_doc_conventions() docstrings) satisfy count>=2 for every entry
+    # regardless of whether the three sites this bead actually fixes are
+    # stale. Guard the PROPERTY (each of these three specific prose blocks
+    # individually names every DOC_DIRS entry), not a proxy count that can
+    # be satisfied by unrelated text elsewhere in the file. Isolate each
+    # block by a stable anchor string near it, independent of exact line
+    # numbers so a later reflow doesn't false-fail this test.
+    @pytest.mark.parametrize(
+        "anchor,block_name",
+        [
+            ("This script does two warn-only checks in one pass:", "module docstring"),
+            ("The freshness loop below must", "main() find_docs() comment"),
+            ("No docs to check (no tier-1 docs on disk", "empty-corpus print"),
+        ],
+    )
+    def test_each_doc_dirs_prose_site_names_every_entry(self, anchor, block_name):
         source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find(anchor)
+        assert idx != -1, (
+            f"anchor {anchor!r} for the {block_name!r} prose block not found "
+            f"-- the site may have been reworded; update this test's anchor "
+            f"deliberately, don't just delete it."
+        )
+        # A generous window around the anchor -- enough to cover the whole
+        # paragraph/comment block without spilling into unrelated code.
+        window = source[idx: idx + 400]
         for d in freshness.DOC_DIRS:
-            assert source.count(d) >= 2, (
-                f"{d!r} (a DOC_DIRS entry) appears fewer than 2 times in "
-                f"check_doc_freshness.py's own source -- every DOC_DIRS "
-                f"member must be named at least in the module docstring AND "
-                f"the DOC_DIRS assignment itself; a future addition that "
-                f"skips updating the surrounding prose will fail this test."
+            assert d in window, (
+                f"the {block_name!r} prose block does not mention DOC_DIRS "
+                f"entry {d!r} -- this is the exact desync bd 3t190 was filed "
+                f"against (some sites were updated, this one was not)."
             )
+
+    # bd polyglot-pdf-6j0dj: a FOURTH stale enumeration site (missed by
+    # 3t190's own set-enumeration -- CLAUDE.md scar #7 recurring one level
+    # in). Rephrased to a generic "any DOC_DIRS subdirectory" claim rather
+    # than hand-listing members again, so it cannot desync the same way a
+    # fifth DOC_DIRS addition would otherwise silently miss it. Pin that it
+    # stays generic (does not regress to a hand-listed two-directory form).
+    def test_is_sprint_plan_docstring_refers_to_doc_dirs_generically(self):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find("def is_sprint_plan")
+        assert idx != -1, "is_sprint_plan def not found -- was it renamed?"
+        window = source[idx: idx + 1200]
+        assert "DOC_DIRS" in window, (
+            "is_sprint_plan's docstring no longer refers to DOC_DIRS "
+            "generically -- if it now hand-lists directory names again, "
+            "restore the generic phrasing or extend "
+            "test_each_doc_dirs_prose_site_names_every_entry to cover it."
+        )
 
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
