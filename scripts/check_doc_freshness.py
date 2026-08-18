@@ -448,8 +448,9 @@ def is_sprint_plan(path: Path) -> bool:
     tier-2 doc that happens to start with ``sprint_``. A
     ``docs/components/sprint_vad.md`` is a normal current-state component doc and
     must still be convention-scanned -- so we require the file to sit directly in
-    ``docs/`` or ``docs/archive/``, not in any DOC_DIRS subdirectory
-    (``components/`` / ``standards/`` / ``doctrine/``)."""
+    ``docs/`` or ``docs/archive/``, not in any DOC_DIRS subdirectory. (Deliberately
+    NOT hand-listing DOC_DIRS' members here -- see bd polyglot-pdf-jfq16: a
+    parenthetical member-list is exactly the shape that keeps desyncing.)"""
     if not (path.name.startswith("sprint_") and path.name.endswith(".md")):
         return False
     parent = path.parent.name

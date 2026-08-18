@@ -941,9 +941,11 @@ class TestCheckDocConventionsOnTmpDocs:
         assert freshness.is_sprint_plan(pathlib.Path("docs/sprint_1_harness_plan.md"))
         assert freshness.is_sprint_plan(pathlib.Path("docs/archive/sprint_3_voice_plan.md"))
         # location boundary: a sprint_-named doc NOT at docs/ root or archive/ is
-        # NOT a plan (must still be convention-scanned).
+        # NOT a plan (must still be convention-scanned). Covers all THREE
+        # DOC_DIRS members (bd polyglot-pdf-to61i) -- doctrine was missing.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/components/sprint_vad.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("docs/standards/sprint_conventions.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/doctrine/sprint_planning.md"))
         # non-sprint names are never plans.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/technical_guide.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("CLAUDE.md"))
