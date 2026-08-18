@@ -902,6 +902,50 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     }
   });
 
+  it('freezes the STRIP destructive pair behind the dialog', async () => {
+    // The card grid is ADDITIVE, not a replacement -- the strip renders
+    // unconditionally beneath it. So with a COMPLETE kit selected (its strip
+    // shows Revert to draft + Unpublish) and the grid expanded, a DIFFERENT
+    // draft card's Publish opens the dialog and the strip pair sits right
+    // behind it, clickable.
+    //
+    // My round-5 test asserted this was unreachable and covered only the card
+    // grid, so deleting the two STRIP gates left all 103 tests green while a
+    // click genuinely fired setRemoteStatus behind the open dialog -- retiring
+    // a live form while the author is being asked which live form to retire.
+    // Third consecutive round this twin-shaped hole survived its own fix
+    // (Opus fresh-eyes round 6).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'done-kit', label: 'Done Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId="done-kit" role="author" />);
+    const cards = await screen.findByRole('list');
+    await waitFor(() =>
+      expect(within(cards).getByText('Draft Form')).toBeInTheDocument());
+
+    const draftCard = within(cards).getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(draftCard).getByText('Publish'));
+    await waitFor(() =>
+      expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
+
+    for (const label of ['Revert to draft', 'Unpublish']) {
+      const stripBtn = screen.getAllByText(label)
+        .map((e) => e.closest('button') as HTMLButtonElement)
+        .find((b) => b && !b.closest('[role="dialog"]') && !cards.contains(b));
+      // The EXISTENCE assertion is the point: a `find` returning undefined is
+      // exactly how the last two versions of this test went vacuous.
+      expect(stripBtn, `no STRIP ${label} button rendered`).toBeTruthy();
+      expect(stripBtn!.disabled).toBe(true);
+    }
+
+    const stripUnpublish = screen.getAllByText('Unpublish')
+      .map((e) => e.closest('button') as HTMLButtonElement)
+      .find((b) => b && !b.closest('[role="dialog"]') && !cards.contains(b));
+    fireEvent.click(stripUnpublish!);
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
   it('freezes REVERT TO DRAFT and UNPUBLISH behind the dialog', async () => {
     // The two most destructive controls, and the pair the parametrized test
     // above cannot reach: a COMPLETE kit renders them instead of Publish, and
