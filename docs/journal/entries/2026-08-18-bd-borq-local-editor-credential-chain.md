@@ -113,6 +113,61 @@ it does not have is worse than an absent guard**, because it stops the next
 person from looking. An absent guard leaves a visible hole; a lying one closes
 the hole on paper.
 
+## Four versions of one assertion, and the lesson underneath them
+
+The Python-side header check went through four versions. Every wrong one was
+found by mutation, never by reading:
+
+| # | assertion | defeated by |
+|---|---|---|
+| 1 | `"x-editor-token" in py.lower()` on raw text | the DOCSTRINGS satisfied it -- renaming the parameter changed the real header, test stayed green |
+| 2 | word-bounded parameter NAME | rejected `Header(alias="X-Editor-Token")` -- a VALID refactor, verified 200 |
+| 3 | name OR literal alias | rejected `Header(alias=_HDR)` from a constant -- also valid, also 200 |
+| 4 | walk FastAPI's dependant graph | nothing yet |
+
+Versions 1-3 all failed the same way, and it took three tries to see it: each
+**pattern-matched SOURCE TEXT for something the framework computes.** Every
+patch bought one more spelling and left the next one open, because the target
+was never really "does this text appear" -- it was "which header does the app
+bind?"
+
+FastAPI answers that directly:
+
+```python
+for route in app.routes:
+    for param in route.dependant.header_params:
+        declared.add(param.alias.lower())
+```
+
+That is immune to all three defeats at once, and to ones I had not thought of:
+comments are not in the graph, and neither are string literals or constants.
+It also cannot over-constrain, because it asks about behavior rather than
+spelling -- version 2 and 3's failure mode is structurally impossible.
+
+**The transferable rule: when a guard needs three patches to cover three
+spellings, the spelling is not the thing to assert.** Ask the system that owns
+the answer. Text-matching is a fallback for when nothing owns it -- which is
+why the TypeScript half of this same test still reads source: a string literal
+in a fetch call has no framework to interrogate.
+
+A pass-3 review independently reached the same conclusion, having reproduced
+version 3's hole with a stale comment (`# renamed from x_editor_token:`) that
+satisfied the regex while the real header was `X-Wrong-Header`. Verified that
+exact probe fails against the graph version, along with the constant-alias
+case it flagged but could not test.
+
+## The tree is shared while a reviewer runs
+
+Two process facts, both learned the hard way in this round:
+
+- A **false negative**: one mutation "passed" only because the review subagent
+  was mid-mutation on the same file. Re-run on a settled tree, it failed
+  correctly. A test result taken while another agent is editing the same file
+  is not evidence.
+- The reviewer's cleanup **reverted my uncommitted edit** along with its own
+  mutation. Uncommitted work is not safe in a tree another agent is restoring.
+  Commit promptly, or expect to redo it.
+
 ## Process notes
 
 - The bead is RESCOPED, not closed-as-invalid. Criterion 1 was met by shipped
