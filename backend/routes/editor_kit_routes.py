@@ -1376,7 +1376,18 @@ async def get_retire_candidates(
 
         # form_number FIRST, label similarity second (the bead's order): the
         # number is a real declaration, the label is free text.
-        if own_number and other_number and own_number == other_number:
+        if own_number and other_number:
+            # BOTH declare a number, so the declaration DECIDES -- in either
+            # direction. Falling through to the label on a mismatch let the
+            # weakest signal (free text an author can rename) override the
+            # strongest one (an extracted declaration): with production data,
+            # where every real kit declares a number, I-130 suggested retiring
+            # I-130A whenever their labels happened to match. That is the
+            # supplement-filed-alongside-its-base case, and the exact harm
+            # auto-retire was rejected over -- arriving through the fallback
+            # instead of the primary path (Opus fresh-eyes round 4).
+            if own_number != other_number:
+                continue
             matched = "form_number"
         elif _labels_look_like_one_form(own_label, other_label):
             matched = "label"

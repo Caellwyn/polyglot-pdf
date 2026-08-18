@@ -107,14 +107,22 @@ def test_a_live_kit_with_the_SAME_form_number_is_suggested(client):
 
 
 def test_a_DIFFERENT_form_number_is_not_suggested(client):
-    """The whole risk this flow manages is retiring the wrong form."""
+    """A declared mismatch DECIDES, even when the labels are identical.
+
+    The earlier version of this test gave the two kits different labels, so the
+    empty result came from the LABEL branch failing -- the number mismatch was
+    never what rejected it. It was the only named guard for this behaviour and
+    it guarded nothing, which is how the fall-through survived three review
+    rounds (Opus fresh-eyes round 4).
+    """
     c, _store, root = client
-    _make_kit(root, "w7-new", status="draft", label="W-7",
+    _make_kit(root, "w7-new", status="draft", label="Tax Form",
               schema=_schema(form_number="W-7"))
-    _make_kit(root, "i90", status="complete", label="I-90",
+    _make_kit(root, "i90", status="complete", label="Tax Form",
               schema=_schema(form_number="I-90"))
 
-    assert _candidates(c, "w7-new").json()["candidates"] == []
+    assert _candidates(c, "w7-new").json()["candidates"] == [], (
+        "a matching label overrode two DIFFERENT declared form numbers")
 
 
 def test_an_IDENTICAL_label_is_suggested_when_numbers_are_absent(client):
@@ -151,13 +159,48 @@ def test_an_IDENTICAL_label_is_suggested_when_numbers_are_absent(client):
     ("Form 941", "Form 941-X"),
 ])
 def test_a_SIBLING_form_is_never_suggested(client, base, variant):
-    """The failure this whole flow exists to prevent, by name."""
+    """The failure this whole flow exists to prevent, by name -- via the LABEL
+    path, where neither kit declares a number."""
     c, _store, root = client
     _make_kit(root, "new-kit", status="draft", label=base, schema=_schema())
     _make_kit(root, "live-kit", status="complete", label=variant, schema=_schema())
 
     assert _candidates(c, "new-kit").json()["candidates"] == [], (
         f"publishing {base!r} suggested retiring {variant!r}, a different form")
+
+
+@pytest.mark.parametrize("base,variant", [
+    ("I-130", "I-130A"),
+    ("I-864", "I-864A"),
+    ("I-864", "I-864EZ"),
+    ("I-129", "I-129F"),
+    ("I-131", "I-131A"),
+    ("I-765", "I-765V"),
+    ("Form 1040", "Form 1040-X"),
+    ("Form 1099", "Form 1099-MISC"),
+    ("W-8BEN", "W-8BEN-E"),
+    ("Form 941", "Form 941-X"),
+])
+def test_a_SIBLING_form_is_never_suggested_WITH_declared_numbers(client, base, variant):
+    """The same pairs, with the numbers real kits actually carry AND an
+    identical label.
+
+    This is the production shape -- f1040, i-90 and w7 all declare a
+    form_number -- and it was entirely unguarded: the label parametrization
+    above passes `_schema()` with no number on either kit, so it only ever
+    exercised the label branch. With numbers declared, a differing number used
+    to fall THROUGH to the label, and an identical label then suggested
+    retiring the sibling (Opus fresh-eyes round 4, reproduced).
+    """
+    c, _store, root = client
+    _make_kit(root, "new-kit", status="draft", label="Immigration Packet",
+              schema=_schema(form_number=base))
+    _make_kit(root, "live-kit", status="complete", label="Immigration Packet",
+              schema=_schema(form_number=variant))
+
+    assert _candidates(c, "new-kit").json()["candidates"] == [], (
+        f"{base!r} suggested retiring {variant!r} -- the declared numbers "
+        "differ, and a matching label must not override that")
 
 
 @pytest.mark.parametrize("other_label", [
