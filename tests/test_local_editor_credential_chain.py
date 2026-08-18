@@ -59,9 +59,27 @@ def _code_only(text: str) -> str:
     is the exact failure it exists to catch.
     """
     out = []
+    in_block = False
     for line in text.split(chr(10)):
         t = line.strip()
-        if t.startswith("//") or t.startswith("*") or t.startswith("/*"):
+        if in_block:
+            # Interior of a /* ... */ block. Tracked with STATE rather than by
+            # a leading-"*" test: a block whose continuation lines do not start
+            # with "*" is legal, and the leading-marker version let such a line
+            # through (fresh-eyes round 1). remoteKitStore.ts happens to use
+            # JSDoc style today, so this was latent -- but the whole job of
+            # this helper is telling code from prose, and it should not depend
+            # on which comment style a file happens to prefer.
+            if "*/" in t:
+                in_block = False
+            continue
+        if t.startswith("//"):
+            continue
+        if t.startswith("/*"):
+            if "*/" not in t:
+                in_block = True
+            continue
+        if t.startswith("*"):
             continue
         out.append(line)
     return chr(10).join(out)
@@ -126,9 +144,23 @@ def test_the_frontend_sends_the_header_the_backend_reads():
     assert f"'{HEADER}'" in ts or f'"{HEADER}"' in ts, (
         f"{STORE.name} no longer sends the {HEADER} header."
     )
-    assert HEADER.lower() in py.lower(), (
-        f"{ROUTES.name} no longer names {HEADER}; the header the editor sends "
-        f"and the one the backend reads have diverged."
+    # PIN THE PARAMETER, NOT THE PROSE. FastAPI derives the wire header from
+    # the parameter NAME (x_editor_token -> X-Editor-Token), so that identifier
+    # is the contract; the docstrings that also spell "X-Editor-Token" are not.
+    #
+    # The first cut asserted `HEADER.lower() in py.lower()` over the RAW file
+    # and was defeated by renaming the parameter while leaving the docstrings
+    # alone -- measured: the real header became X-Auth-Token and all 6 tests
+    # stayed green (fresh-eyes round 1). That is the SAME comment-vs-code hole
+    # already fixed on the TypeScript side; I had applied the fix to one
+    # language and not the other, while the docstring claimed both.
+    param = HEADER.lower().replace("-", "_")          # x-editor-token -> x_editor_token
+    assert re.search(rf"\b{re.escape(param)}\s*:", py), (
+        f"{ROUTES.name} no longer declares a `{param}` Header() parameter. "
+        f"FastAPI names the wire header from that identifier, so renaming it "
+        f"changes the header the backend expects while {STORE.name} keeps "
+        f"sending {HEADER} -- every editor call 401s, and local mode degrades "
+        f"to a findings-free panel that looks like a clean schema."
     )
 
 
