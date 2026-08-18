@@ -91,6 +91,14 @@ export interface IntroPlayer {
   isPlaying: () => boolean
   /** Whether a clip for this key is already cached (Listen Again is instant). */
   isCached: (language: string, formNumber: string) => boolean
+  /**
+   * The hash of the exact script text the backend synthesized, taken from the
+   * response's X-Intro-Script-Version header (bd polyglot-pdf-s1iex.7). The
+   * acceptance record echoes this so the audit trail names WHICH text the user
+   * agreed to. Undefined before any successful fetch, or if the header is
+   * missing (an older backend, or CORS not exposing it).
+   */
+  scriptVersion: () => string | undefined
   /** Release cached blobs + object URLs. For unmount. */
   dispose: () => void
 }
@@ -115,6 +123,9 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
   // (language, formNumber) -> object URL. Cached so Listen Again replays with
   // no network round trip -- and provably the SAME bytes the user just heard.
   const clipUrls = new Map<string, string>()
+  // Set from the response header; the backend owns the hash so the two cannot
+  // drift into recording a version it never synthesized.
+  let lastScriptVersion: string | undefined
   const cacheKey = (language: string, formNumber: string) =>
     `${language}|${formNumber}`
 
@@ -210,6 +221,8 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
               reason: resp.status === 503 ? 'intro_disabled' : `http_${resp.status}`,
             }
           }
+          lastScriptVersion =
+            resp.headers.get('X-Intro-Script-Version') ?? lastScriptVersion
           blob = await resp.blob()
         } finally {
           stopFetchWatch()
@@ -279,5 +292,8 @@ export function createIntroPlayer(deps: IntroPlayerDeps): IntroPlayer {
     })
   }
 
-  return { play, stop, isPlaying, isCached, dispose }
+  return {
+    play, stop, isPlaying, isCached, dispose,
+    scriptVersion: () => lastScriptVersion,
+  }
 }

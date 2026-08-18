@@ -77,6 +77,27 @@ async function clickButton(page, re, label) {
   log(`clicked ${label}`);
 }
 
+/**
+ * Click a button only if it is already on screen (bd polyglot-pdf-s1iex.7).
+ *
+ * Unlike clickButton this does NOT wait or fail when the control is absent --
+ * the disclaimer modal's presence at this point depends on the intro-clip
+ * flag, and the driver must work under both states.
+ */
+async function clickIfPresent(page, pattern, label) {
+  const button = page.getByRole('button', { name: pattern }).first();
+  try {
+    if (await button.isVisible({ timeout: 2000 })) {
+      await button.click();
+      log(`clicked ${label}`);
+      return true;
+    }
+  } catch {
+    // Not present yet -- the caller's wait handles the other ordering.
+  }
+  return false;
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -102,6 +123,16 @@ async function clickButton(page, re, label) {
   // The button shows the native name, so match that too, not just "Russian".
   await clickButton(page, /Russkiy|Russian/, 'Russian');
   await clickButton(page, /W-7/, 'W-7 form');
+
+  // Agree FIRST if the disclaimer modal is already up (bd polyglot-pdf-s1iex.7).
+  // ORDER IS FLAG-DEPENDENT, so this handles BOTH states rather than swapping:
+  //  - intro clip OFF (today): the app connects before Agree, so
+  //    __VFF_TEST_INJECT already exists and this click is simply early --
+  //    harmless, the modal is up either way.
+  //  - intro clip ON: NO session exists until Agree, so the hook does not
+  //    exist yet and waiting for it first would hang until timeout.
+  // Clicking when present, then waiting, is correct under both.
+  await clickIfPresent(page, /I Agree/, 'disclaimer I Agree (pre-hook)');
 
   await page.waitForFunction(
     () => typeof window.__VFF_TEST_INJECT === 'object' && window.__VFF_TEST_INJECT !== null,
