@@ -19,6 +19,8 @@ import importlib.util
 import pathlib
 import sys
 
+import pytest
+
 
 # Load the script as a module without running its CLI main(). The script
 # isn't on sys.path by default; this is the cleanest way to import a
@@ -564,6 +566,53 @@ class TestDocConventionsRegexes:
         ) is None
         assert freshness.PREVIOUSLY_CHAIN_RE.search(
             "the legacy 'Previously:' chain pattern"
+        ) is None
+
+    # bd polyglot-pdf-6dn2n/cqyke/f6wb6/riffn: the checker only caught the
+    # literal "Previously:" spelling; four real docs shipped "Earlier:" /
+    # "Earlier," / "Prior," chains that passed it silently. Pin every
+    # keyword x follow-up-shape combination separately (per-parametrization,
+    # not one representative case -- a mutation reddening some cases says
+    # nothing about the rest).
+    @pytest.mark.parametrize("keyword", ["Previously", "Prior", "Earlier"])
+    @pytest.mark.parametrize("sep", [":", ","])
+    @pytest.mark.parametrize(
+        "followup",
+        [
+            "2026-05-19 the thing happened",
+            "Sprint 66 PR 1 shipped",
+            "same day (bd `polyglot-pdf-ofh6`): more prose",
+            "same-week changes landed",
+            "bd polyglot-pdf-6x1j: guarded hard delete",
+            "bd `polyglot-pdf-2zk3` corrected the framing",
+        ],
+    )
+    def test_chain_keyword_x_followup_detected(self, keyword, sep, followup):
+        text = f"*Last updated: 2026-08-18. {keyword}{sep} {followup}.*"
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(text) is not None, (
+            f"missed chain shape: {keyword!r} + {sep!r} + {followup!r}"
+        )
+
+    @pytest.mark.parametrize("keyword", ["Previously", "Prior", "Earlier"])
+    def test_pedagogical_mention_of_each_keyword_NOT_flagged(self, keyword):
+        # Same carve-out as the canonical "Previously:" case, now proven for
+        # each newly-added keyword: a bare mention with no date/Sprint/bead-id/
+        # same-day follow-up must not self-flag.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            f"do NOT chain `{keyword}:` prose into the stamp line"
+        ) is None
+
+    def test_ordinary_prose_use_of_earlier_prior_NOT_flagged(self):
+        # "earlier"/"prior" appear constantly in ordinary prose (never glued
+        # to `:`/`,`) -- these must never trip the chain detector.
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "earlier same-week changes are in their own entries"
+        ) is None
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "An earlier version of this doc described a different flow"
+        ) is None
+        assert freshness.PREVIOUSLY_CHAIN_RE.search(
+            "prior art in this space suggests a simpler approach"
         ) is None
 
     def test_update_history_heading_detected(self):

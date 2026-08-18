@@ -2,7 +2,10 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-08-08 (bd polyglot-pdf-4hnyq: the `/ws/fill` text clients are process-cached and shared across sessions -- stateless, so sharing is safe -- while `get_live_ai` stays per-connection; corrected both "fresh per connection" wiring notes. Earlier: 2026-08-06 docs audit bd polyglot-pdf-2zk3: corrected the B-pillar "replaces the SI prose" framing to defense-in-depth per the 2026-06-17 RESCOPE; fixed the stale `ITextAI.ask()` signature to its real `tuple[str, list[dict], bool]` return; fixed stale line pointers (confirm handler, ADDRESS CONSISTENCY block); corrected the bd polyglot-pdf-89mt citation; and added a note on `CONTINUOUS_SESSION=true` as the production default and which validation path it selects).*
+*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
+content change; the `/ws/fill` text clients are process-cached and shared
+across sessions -- stateless, so sharing is safe -- while `get_live_ai` stays
+per-connection.)*
 
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,

@@ -85,7 +85,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DOC_DIRS = ["docs/components", "docs/standards"]
+DOC_DIRS = ["docs/components", "docs/standards", "docs/doctrine"]
 TRACKS_RE = re.compile(r"\*\*Tracks:\*\*\s*(.+)$", re.MULTILINE)
 # Match *Last updated: YYYY-MM-DD ...* (anything after the date is fine —
 # some docs include a parenthetical sprint annotation).
@@ -93,18 +93,35 @@ LAST_UPDATED_RE = re.compile(
     r"^\*Last updated:\s*(\d{4})-(\d{2})-(\d{2})", re.MULTILINE
 )
 # Forbidden patterns on tier-1 + tier-2 docs (current-state only):
-# - `Previously:` followed by a YYYY-MM-DD or "Sprint NN" within ~30 chars,
-#   anywhere in the doc. This shape is the chronological-narrative pattern
-#   we want to ban (both stamp chains AND rationale-section prose that
-#   strings sprint events together). Bare references like "(do NOT chain
-#   `Previously:` prose)" or pedagogical mentions in CLAUDE.md itself are
-#   exempt because they don't have the date-or-sprint follow-up shape.
+# - `Previously:` / `Prior:` / `Prior,` / `Earlier:` / `Earlier,` followed
+#   (within a short lookahead) by a YYYY-MM-DD date, "Sprint NN", "same
+#   day"/"same week", or a bead-id reference ("bd `...`" / "bd ..."). This
+#   shape is the chronological-narrative pattern we want to ban (both stamp
+#   chains AND rationale-section prose that strings sprint events together) --
+#   doc-architecture.md section 3 is explicit that the rule covers the
+#   PATTERN, not just the `Previously:` spelling, and four real docs shipped
+#   `Earlier:`/`Earlier,`/`Prior,` chains this regex missed before it was
+#   widened (bd polyglot-pdf-6dn2n/cqyke/f6wb6/riffn -- the found shapes were
+#   "Earlier, bd polyglot-pdf-6x1j: ..." and "Prior, same day (bd ...)", NOT
+#   followed by a literal date, which is why the date-only follow-up was
+#   widened to also cover a bead-id or same-day/week reference). Bare
+#   references like "(do NOT chain `Previously:` prose)" or pedagogical
+#   mentions in CLAUDE.md itself are exempt because they don't have this
+#   follow-up shape; ordinary prose use of "earlier"/"prior" (e.g. "an earlier
+#   version", "earlier same-week changes") is exempt because the word is never
+#   immediately followed by `:`/`,`.
 # - Section headers like `## Update history` / `## Recent sprint history` /
 #   `## Changelog` / `## Sprint history` (any heading level >= 2). Other
 #   "Sprint ..." headings (e.g. `## Sprint test retirement`) are NOT
 #   matched -- only the specific historical-narrative slugs.
 PREVIOUSLY_CHAIN_RE = re.compile(
-    r"\bPreviously:\s*(?:\d{4}-\d{2}-\d{2}|Sprint\s+\d)", re.IGNORECASE
+    r"\b(?:Previously|Prior|Earlier)[:,]\s*"
+    r"(?:\d{4}-\d{2}-\d{2}"
+    r"|Sprint\s+\d"
+    r"|same[\s-](?:day|week)"
+    r"|bd[\s`]"
+    r")",
+    re.IGNORECASE,
 )
 HISTORY_HEADING_RE = re.compile(
     r"^##+\s+(?:Recent\s+sprint\s+history|Update\s+history|Changelog|Sprint\s+history)\b",
@@ -256,9 +273,10 @@ def find_docs() -> list[Path]:
     """Return tier-1 + tier-2 docs to scan for freshness, sorted.
 
     Tier-1: TIER1_DOCS (CLAUDE.md, docs/INDEX.md, docs/technical_guide.md).
-    Tier-2: every `docs/components/*.md` + `docs/standards/*.md` (excluding
-    README.md). Docs without a `**Tracks:**` line are skipped downstream by
-    check_doc(); including them here is harmless.
+    Tier-2: every `docs/components/*.md` + `docs/standards/*.md` +
+    `docs/doctrine/*.md` (excluding README.md). Docs without a `**Tracks:**`
+    line are skipped downstream by check_doc(); including them here is
+    harmless.
     """
     docs = list(find_tier1_docs())
     for d in DOC_DIRS:
@@ -467,9 +485,10 @@ def check_doc_conventions(
          `## Sprint history` headings -- same reason.
 
     The scan covers TIER1_DOCS (CLAUDE.md + docs/*.md top-level files) AND
-    every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md).
-    Tier-3 docs (docs/dev_journal.md, docs/journal/*, docs/archive/*) are
-    explicitly NOT scanned -- chronological history is the whole point there.
+    every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md +
+    docs/doctrine/*.md). Tier-3 docs (docs/dev_journal.md, docs/journal/*,
+    docs/archive/*) are explicitly NOT scanned -- chronological history is
+    the whole point there.
     """
     findings: list[tuple[Path, str]] = []
     # find_docs() already returns tier-1 (TIER1_DOCS) + tier-2 docs, but a
