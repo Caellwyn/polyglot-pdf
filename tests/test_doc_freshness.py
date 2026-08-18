@@ -257,40 +257,71 @@ class TestFreshnessScanCoversTier1:
     # be satisfied by unrelated text elsewhere in the file. Isolate each
     # block by a stable anchor string near it, independent of exact line
     # numbers so a later reflow doesn't false-fail this test.
-    # bd polyglot-pdf-uquqs: the first cut of this test bounded each site's
-    # window by a magic 400-char constant. That is a proxy, not the property
-    # -- if a prose block is ever REWORDED SHORTER (while also going stale),
-    # the fixed-size window can slide past the block's own end and pick up
-    # DOC_DIRS mentions from a NEIGHBORING site instead, silently re-creating
-    # the exact vacuity bd zbvkt fixed. Bound each window by the NEXT
-    # anchor's start (or end-of-file for the last one) instead, so a window
-    # can never structurally contain a sibling site's text regardless of how
-    # any one block is reworded.
-    _ANCHORS_IN_FILE_ORDER = [
-        ("This script does two warn-only checks in one pass:", "module docstring"),
-        ("find_docs() returns tier-1", "main() find_docs() comment"),
-        ("No docs to check (no tier-1 docs on disk", "empty-corpus print"),
+    # bd polyglot-pdf-uquqs: the second cut of this test bounded each site's
+    # window by the NEXT anchor in a shared file-order list, replacing a
+    # magic 400-char constant. That approach only works when anchors sit
+    # CLOSE together -- it broke for the module-docstring site, whose "next"
+    # anchor (the main() comment, deep in the file) is ~29,000 chars away,
+    # so the computed window swallowed several ALREADY-correct sites in
+    # between and passed vacuously even when the module docstring itself
+    # was stale. Guard the property directly instead: give each site an
+    # EXPLICIT (start_anchor, end_anchor) pair that brackets exactly its own
+    # paragraph/comment/string, independent of any other site's position.
+    # bd polyglot-pdf-ly00c: two more DOC_DIRS prose sites (find_docs() and
+    # check_doc_conventions()'s own docstrings) were correct but unpinned --
+    # the bd u3miz test-file comment even named them as "ALREADY-correct",
+    # yet they were never added here. Pin the whole set, not the subset that
+    # happened to motivate the first fix.
+    _SITE_ANCHORS = [
+        (
+            "This script does two warn-only checks in one pass:",
+            "2. **Sprint-archive protocol.**",
+            "module docstring",
+        ),
+        (
+            "find_docs() returns tier-1",
+            "docs = find_docs()",
+            "main() find_docs() comment",
+        ),
+        (
+            "No docs to check (no tier-1 docs on disk",
+            "return 0",
+            "empty-corpus print",
+        ),
+        (
+            "Return tier-1 + tier-2 docs to scan for freshness, sorted.",
+            "docs = list(find_tier1_docs())",
+            "find_docs() docstring",
+        ),
+        (
+            "Scan tier-1 + tier-2 docs for forbidden current-state-only violations.",
+            "findings: list[tuple[Path, str]] = []",
+            "check_doc_conventions() docstring",
+        ),
     ]
 
-    @pytest.mark.parametrize("anchor,block_name", _ANCHORS_IN_FILE_ORDER)
-    def test_each_doc_dirs_prose_site_names_every_entry(self, anchor, block_name):
+    @pytest.mark.parametrize("start_anchor,end_anchor,block_name", _SITE_ANCHORS)
+    def test_each_doc_dirs_prose_site_names_every_entry(
+        self, start_anchor, end_anchor, block_name
+    ):
         source = SCRIPT_PATH.read_text(encoding="utf-8")
-        idx = source.find(anchor)
+        idx = source.find(start_anchor)
         assert idx != -1, (
-            f"anchor {anchor!r} for the {block_name!r} prose block not found "
-            f"-- the site may have been reworded; update this test's anchor "
-            f"deliberately, don't just delete it."
+            f"start anchor {start_anchor!r} for the {block_name!r} prose "
+            f"block not found -- the site may have been reworded; update "
+            f"this test's anchor deliberately, don't just delete it."
         )
-        # Bound the window by the NEXT anchor in file order (not this one),
-        # so it can never swallow a sibling site's text no matter how short
-        # or long this block is reworded to be. The last site's window runs
-        # to end-of-file.
-        other_anchors_after = [
-            source.find(a) for a, _ in self._ANCHORS_IN_FILE_ORDER
-            if a != anchor and source.find(a) > idx
-        ]
-        window_end = min(other_anchors_after) if other_anchors_after else len(source)
-        window = source[idx:window_end]
+        end_idx = source.find(end_anchor, idx + len(start_anchor))
+        assert end_idx != -1, (
+            f"end anchor {end_anchor!r} for the {block_name!r} prose block "
+            f"not found after its start -- the site may have been "
+            f"reworded; update this test's anchor deliberately."
+        )
+        # A tight, EXPLICIT boundary for exactly this site's own paragraph --
+        # cannot swallow a sibling site regardless of how any block (this
+        # one or another) is reworded, because the end anchor is specific to
+        # THIS site, not derived from another site's position.
+        window = source[idx:end_idx]
         for d in freshness.DOC_DIRS:
             assert d in window, (
                 f"the {block_name!r} prose block does not mention DOC_DIRS "
