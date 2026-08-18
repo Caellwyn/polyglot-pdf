@@ -988,6 +988,22 @@ export class SchemaFormStateManager {
       // backend needs the language BEFORE Gemini connects -- the later
       // change_spoken_language message arrives too late for that.
       spoken_language: state.selectedLanguage ?? null,
+      // kit_id rides the LEGACY payload too (bd polyglot-pdf-s1iex.6). It is the
+      // UNIQUE kit key -- two kits can share a form_number, and only kit_id
+      // tells them apart in the confirmation audit trail -- and it is
+      // deliberately NOT a form_metadata key, so the backend has no fallback:
+      // whatever the handshake omits is simply absent from every record.
+      //
+      // This branch runs whenever jitModeEnabled is still false -- which is the
+      // case for a FRESH tab's first handshake, since the flag is only set from
+      // the backend's session_ready. (A soft reload within the state's 1h reuse
+      // window restores a persisted jitModeEnabled=true and takes the JIT
+      // branch instead; setting kit_id at the SOURCE covers both, which is why
+      // the fix lives here rather than on the intro path.) The omission used to
+      // be harmless because a second, JIT handshake always followed; with the
+      // intro path's single connect it is the only one, so it silently dropped
+      // kit_id from the audit trail (Opus cross-surface review).
+      kit_id: loadOnboardingState().formId ?? null,
       resume,
     };
   }

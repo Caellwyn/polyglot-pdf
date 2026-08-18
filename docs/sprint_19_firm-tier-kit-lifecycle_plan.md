@@ -41,13 +41,15 @@ stable across revisions, so firm allowlists never churn on republish.
   overwrite-in-place destructively.
 - Hard-delete guard: REFUSE (not warn) when confirmation records exist for the
   kit; offer unpublish instead.
-- Firm identity now = firm_id custom claim on staff Firebase accounts, stamped
-  by an admin bootstrap step. The per-firm API key (for the firm's console to
-  request magic links from our mint endpoint -- we sign, the firm never holds
-  a signing key) ships with the deferred magic-link bead.
+- Firm identity now = firm_id + firm_role (manager | employee) custom claims
+  on staff Firebase accounts, stamped by an admin bootstrap step (firm_role
+  added by the 2026-08-14 addendum below). The per-firm API key (for the
+  firm's console to request magic links from our mint endpoint -- we sign,
+  the firm never holds a signing key) ships with the deferred magic-link bead.
 - Client tier stays account-less; firm identity identifies FIRMS, never
-  clients. Magic links carry {firm_id, kit_id, jti, exp} and deliberately no
-  client identifier.
+  clients. Magic links carry {firm_id, kit_id, jti, exp, employee_id} --
+  employee_id is the ORIGINATING STAFF uid, required for session telemetry
+  (2026-08-14 addendum) -- and deliberately no client identifier.
 - Same-kit republish always archives + replaces (no checkbox); the "replace
   current" control appears only when publishing a different kit directory that
   supersedes a live kit for the same form, and unpublishes the old kit
@@ -141,8 +143,8 @@ stable across revisions, so firm allowlists never churn on republish.
   contact), `allowed_kits: [kit_id]`, status, created_at; usage rollups
   later; token_hash deferred to the magic-link bead. Admin-SDK-only access
   with an explicit default-deny block in firestore.rules. Bootstrap via an
-  admin script: create the firm record, stamp the firm_id custom claim on the
-  firm's staff accounts (keyed by their emails).
+  admin script: create the firm record, stamp the firm_id + firm_role custom
+  claims on the firm's staff accounts (keyed by their emails).
 - **Kit visibility -- two orthogonal axes.** Lifecycle status (7jmy) x
   visibility. Kit metadata gains `visibility: "public" | "private"` +
   `owner_firm_id` (set at onboard/publish; existing kits default public). A
@@ -289,3 +291,36 @@ author-version/guarded-delete (shared confirmation_logger.py).
 - Kiosk device enrollment (deployment plan, separate track).
 - Data migration of existing kits' metadata (existing kits default
   visibility=public; absence of the key means public).
+
+## Addendum -- maintainer requirements 2026-08-14 (four access levels + session telemetry)
+
+Stated by the maintainer during the lo88 plan review; these EXTEND the
+2026-08-05 approval (the original "custom claim only" contrasted with a
+firm-held API key, not with roles). Also recorded in epic polyglot-pdf-02ye's
+notes and in the affected beads' notes (xwlt, z6bk9, ugm6).
+
+**Four access levels:**
+
+1. **App-level admin** -- the maintainer; full control. Operator scripts +
+   GCP/Firebase console; no claim needed until something app-side gates on it.
+2. **Firm-level management** -- manage the firm's form store, its users, its
+   subscriptions. (Subscriptions is the first mention of billing anywhere in
+   the product; no bead exists and it needs its own design conversation.)
+3. **Employee level** -- select a form, enter a client's email address, send
+   the client a link. NO field answers visible at this level.
+4. **Firm client level** -- one form, one fill session, via the link;
+   complete and save locally. No account. The interim of a staff member
+   handing a signed-in machine to a client is ruled out by the maintainer,
+   so the firm tier is not client-usable until magic links ship.
+
+**Session telemetry:** every session logged by the backend must include the
+firm id, the form id, and the id of the ORIGINATING EMPLOYEE. For staff
+sessions that is the authenticated uid; for link sessions the signed token
+carries employee_id. The employee id identifies the staff SENDER, never the
+client -- the no-client-identifier invariant above is unchanged.
+
+**Where it lands:** lo88 stamps firm_role (manager | employee) alongside
+firm_id; enforcement ships with the actions it gates (z6bk9: retire becomes
+manager-gated; ugm6: employee link-sending, token gains employee_id, and link
+delivery by email is a new provisioning decision to escalate when that bead
+is planned); xwlt: the telemetry fields.

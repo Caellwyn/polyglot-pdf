@@ -1,16 +1,17 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-08-13. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-08-14. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
 **verifies the Firebase ID token** on the WebSocket handshake via the Firebase Admin
 SDK and never holds a session (see
 [../standards/stateless-architecture.md](../standards/stateless-architecture.md)).
-The two Firebase projects (demo `polyglot-demo-aa709`, prod `polyglot-forms-919f2`)
-and the `VFF_DISABLE_AUTH` dev bypass are in
+The only live Firebase project is the demo, `polyglot-demo-aa709` (the former
+prod project is dead and unreachable — purge tracked in bd `polyglot-pdf-je6iy`);
+the `VFF_DISABLE_AUTH` dev bypass is in
 [config-deployment.md](config-deployment.md).
 
 ## Frontend (Firebase Auth)
@@ -137,6 +138,54 @@ blank-template bytes ship publicly in the frontend bundle regardless; gating it
 would protect nothing not already public. The non-gate is pinned by test so a
 blanket-auth sweep is a deliberate decision, not an accident.
 
+## Firm identity (`firms/{firm_id}` + custom claims)
+
+The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
+`polyglot-pdf-02ye`; four-level access model in the
+[sprint-19 plan's 2026-08-14 addendum](../sprint_19_firm-tier-kit-lifecycle_plan.md)).
+
+- **Datastore** — Firestore collection **`firms/{firm_id}`** (doc ID =
+  operator-chosen slug): `name`, `contact_email`, `allowed_kits: [kit_id]`,
+  `status: "active" | "suspended"`, `created_at`/`updated_at`. Accessed ONLY via
+  the Admin SDK through `backend/services/firms.py`; `firestore.rules` carries
+  an explicit `firms/**` client deny block as defense in depth (the Admin SDK
+  bypasses rules, so the block grants nothing — it forecloses any future
+  client-SDK path).
+- **Read contract — FAIL CLOSED.** `firms.get_allowed_kits(firm_id)` returns
+  `[]` on every failure branch (store disabled via `FIRMS_FIRESTORE_ENABLED`,
+  missing firm, non-active status, malformed doc, read error) — the deliberate
+  inverse of the confirmation sink's fail-open writes, because a broken firms
+  store must never widen private-kit visibility (consumer: bd
+  `polyglot-pdf-vccy`). `firms_store_status()` is the read-shaped health probe
+  for diagnosing exactly that fail-closed silence.
+- **Staff identity** — `firm_id` + `firm_role` (`manager` | `employee`) custom
+  claims on the staff member's normal Firebase account, stamped by the admin
+  bootstrap script below. The claims ride the existing ID-token verification
+  (`require_auth` / the WS `?token=` gate); nothing reads them yet — bd
+  `polyglot-pdf-vccy` (visibility) and bd `polyglot-pdf-xwlt` (telemetry) are
+  the consumers. A stamped claim appears in decoded tokens only on the next
+  token refresh (up to ~1h; force via sign-out/in or `getIdToken(true)`).
+
+**The admin step** (creates/updates the firm record and stamps staff claims;
+full usage, `--dry-run`, and the exit-code contract live in the script
+docstring):
+
+```bash
+backend/.venv/Scripts/python.exe scripts/bootstrap_firm.py acme-legal \
+    --name "Acme Legal Aid" --contact intake@acme-legal.example \
+    --allowed-kits w7,i-90 \
+    --manager-email ada@acme-legal.example \
+    --employee-email bo@acme-legal.example \
+    --project polyglot-demo-aa709
+```
+
+Rules for `firms/**` reach the live project only via a frontend/full deploy or
+an explicit
+`firebase deploy --only firestore:rules --project polyglot-demo-aa709` — a
+backend-only deploy does NOT ship rules. Manual verify of the deny: from a
+signed-in browser console, a client-SDK `getDoc(doc(db, "firms", "x"))` must
+return `permission-denied`.
+
 ## Testing
 
 The WS auth gate is covered indirectly: the integration tests patch
@@ -148,6 +197,12 @@ fill-pdf/form-kits/schema, the deliberate NON-gate on the kit-PDF GET, and the
 `VFF_DISABLE_AUTH` bypass, and `backend/tests/unit/test_auth_bypass_guard.py`
 pins the deployed fail-closed guard on that bypass (both layers separately: the
 `Settings` startup refusal and `verify_token`'s inert-on-`K_SERVICE` branch).
+The firm-identity layer is covered by
+`backend/tests/unit/test_firms_service.py` (fail-closed reads, upsert
+idempotency), `backend/tests/unit/test_bootstrap_firm_cli.py` (claims merge,
+role stamping, wrong-project abort, dead-project refusal), and
+`backend/tests/unit/test_firestore_rules_text.py` (the `firms/**` deny block's
+presence in the shipped rules file).
 `frontend/src/contexts/AuthContext.test.tsx` covers
 `AuthContext` (the authorized_emails allowlist gate, sign-in/out/reset delegation,
 the loading lifecycle, and the test-harness bypass) and `ProtectedRoute` (both gate

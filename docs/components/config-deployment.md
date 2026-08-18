@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-13. See [the s1iex.3 journal entry](../journal/entries/2026-08-13-bd-s1iex.3-intro-tts-route.md) for the intro-TTS route, [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-08-17. See [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the `FIRMS_FIRESTORE_ENABLED` bullet; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -52,7 +52,22 @@ which bypasses the cache).
 | `CONTINUOUS_SESSION` | `true` | Runs the whole form as one Gemini Live session bounded by context-window compression, instead of resetting the session per section (code default flipped to `true` alongside `USE_DTI` by bd `polyglot-pdf-7872`). Requires `USE_DTI`: if `CONTINUOUS_SESSION` is on and `USE_DTI` is off, `Settings` forces `USE_DTI` on and logs a warning rather than serve the inconsistent combination. `false` -> the legacy per-section-reset flow (used as the measurement-harness baseline). See [context-compression.md](context-compression.md). |
 | `DISABLE_GEMINI_VAD` | `false` (env-overridable) | `false` → native mode (Gemini's automatic VAD detects turns); `true` → manual mode (the client drives turn-taking with `activity_start/end`). See [voice-and-vad.md](../standards/voice-and-vad.md). |
 | `SPELLBACK_TOOL_ENABLED` | `false` | Deterministic spell-back verification clip (bd 22h1f/44ywm): declares the `name_spellback` tool, appends the DTI spell-back addendum to the SI, and un-503s `POST /api/tts/spellback`. See [voice-ai.md](voice-ai.md) and the routes table in [../technical_guide.md](../technical_guide.md). |
-| `INTRO_TTS_ENABLED` | `false` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3): un-503s `POST /api/tts/intro`. The BACKEND half of the epic's two-flag design -- the frontend lifecycle flag is separate and build-time, and the two can skew across the two-surface deploy (skew matrix in `docs/sprint_20_sol-intro-tts_plan.md`; deploy backend first, frontend second). |
+| `INTRO_TTS_ENABLED` | `false` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3): un-503s `POST /api/tts/intro`. The BACKEND half of the epic's two-flag design -- the frontend flag is `VITE_INTRO_CLIP_ENABLED` (below), and the two can skew across the two-surface deploy (skew matrix in `docs/sprint_20_sol-intro-tts_plan.md`; deploy backend first, frontend second). |
+
+**Frontend build-time flag (not a `Settings` field).**
+`VITE_INTRO_CLIP_ENABLED` (default off; `frontend/src/shared/config.ts`
+`isIntroClipEnabled()`, bd `polyglot-pdf-s1iex.5`) is the CLIENT half of that
+pair. It cannot be a backend flag delivered in `session_ready` the way
+`jit_mode_enabled` is, because it decides whether the client connects
+**before Agree at all** -- a decision made before any connection exists. ON,
+the disclaimer modal renders the canonical scripted paragraphs and plays the
+synthesized clip; OFF is today's behavior verbatim (the legacy `p1/p2/p3`
+text and the model-read `read_disclaimer`). A window/localStorage override
+(`__VFF_INTRO_CLIP`) exists for manual testing; unlike `isTestHarnessEnabled`
+it is **not** localhost-gated, because it gates no security-sensitive path.
+The ON/OFF skew quadrant (modal renders, route 503s, no audio, Agree still
+connects, and NO fallback to `read_disclaimer`) is pinned by
+`frontend/src/demo/introFlagQuadrant.test.ts`.
 
 ## Form-kit storage (`FORM_KITS_MODE`)
 
@@ -114,6 +129,15 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `CONFIRMATION_RETENTION_DAYS` stamps an `expire_at` for a TTL policy;
   `CONFIRMATION_LOG_DIR` still points the local JSONL (dev). See
   [../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md).
+- **`FIRMS_FIRESTORE_ENABLED`** — enables the firms-store READ path
+  (`backend/services/firms.py`, bd `polyglot-pdf-lo88`): the `firms/{firm_id}`
+  Firestore collection holding firm profiles + allowed-kits for firm-scoped
+  kit visibility. Reads fail CLOSED (`[]`) when unset or broken, so leaving it
+  off can never widen visibility. **Deliberately NOT yet set in any deploy
+  env** — that wiring (the `deploy-all.sh` `BACKEND_ENV` line, the
+  `deploy-form-kit.sh` drop-list hint, and its pinning test) ships with the
+  consumer bead `polyglot-pdf-vccy`. Firm records are created by
+  `scripts/bootstrap_firm.py`; see [auth.md](auth.md) (Firm identity).
 - **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
   for the token-gated `/api/editor/*` surface the hosted schema editor uses
   (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:

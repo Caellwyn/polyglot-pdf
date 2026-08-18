@@ -839,7 +839,10 @@ export function createConnectionManager(
 				resumeRepromptTimer = null
 				if (paused) return
 				if (!connection || !connection.isSocketOpen()) return
-				if (audioManager?.isSpeaking()) return
+				// isModelSpeaking (bd polyglot-pdf-uxc6s): this guard exists to avoid
+				// re-prompting over the model. isSpeaking() reads false during a
+				// model+clip overlap, so the recovery prompt could fire mid-utterance.
+				if (audioManager?.isModelSpeaking()) return
 				if (pushToTalkHeld) return
 				console.log('[VFF Connection] Post-resume re-prompt: asking Gemini to re-ask the current field')
 				connection.sendRecoveryPrompt(1)
@@ -1258,7 +1261,10 @@ export function createConnectionManager(
 				connection.sendActivityStart()
 			}
 
-			const geminiSpeaking = audioManager.isSpeaking()
+			// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s): an overlap
+			// of model PCM with a synthesized clip reads FALSE on isSpeaking(),
+			// which skipped this flush while the model was mid-utterance.
+			const geminiSpeaking = audioManager.isModelSpeaking()
 
 			// BARGE-IN: If Gemini is currently talking, flush audio queue for instant UX
 			if (geminiSpeaking) {
@@ -1283,6 +1289,10 @@ export function createConnectionManager(
 			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
 			if (pushToTalkMode) return
 
+			// DELIBERATELY isSpeaking(), NOT isModelSpeaking (bd polyglot-pdf-uxc6s):
+			// this is the RESUME half of the deadlock pair. It must stay the exact
+			// complement of the suspend sites -- resuming on a model-only signal
+			// while a clip still plays would leave the context suspended mid-clip.
 			const geminiSpeaking = audioManager.isSpeaking()
 
 			// Resume audio playback if Gemini stopped (allow Gemini to respond)

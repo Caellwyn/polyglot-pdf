@@ -413,8 +413,10 @@ async def test_initiating_message_carries_field1_guidance_in_dti():
     # The SPOKEN directive still strips the raw "(field_id: ...)" parenthetical so
     # Gemini does not read the id aloud (bd dx7); only the guidance block carries it.
     assert "(field_id:" not in msg
-    # Fresh connect still greets.
-    assert "greet" in msg.lower()
+    # Fresh connect uses the BASE template. Identified by the section-name
+    # directive, not by "greet" -- the greeting was removed in bd
+    # polyglot-pdf-s1iex.6 because Sol's intro clip already greets by name.
+    assert "section name" in msg.lower()
 
 
 @pytest.mark.asyncio
@@ -431,7 +433,7 @@ async def test_initiating_message_no_guidance_in_non_dti():
     msg = captured[0]
     assert "p1_line1_aliennumber" not in msg
     assert "ID:" not in msg
-    assert "greet" in msg.lower()  # still the normal greeting template
+    assert "section name" in msg.lower()  # still the normal (base) template
 
 
 @pytest.mark.asyncio

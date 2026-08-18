@@ -31,6 +31,10 @@ import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState } from '../shared/solState'
 import { useGeminiSpeaking, useClipPlaying } from '../shared/useGeminiSpeaking'
+import { isIntroClipEnabled } from '../shared/config'
+import { createIntroPlayer, type IntroPlayer } from '../shared/introPlayer'
+import { renderIntroParagraphs } from '../shared/introScript'
+import { BUTTON_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
 
 interface VoiceOverlayProps {
 	schema: FormSchema
@@ -52,9 +56,17 @@ interface VoiceOverlayProps {
 	streamError?: string | null
 	/** Pre-selected language from onboarding (skips language selection modal) */
 	initialLanguage?: string
+	/**
+	 * Auth token accessor for Sol's intro clip (bd polyglot-pdf-s1iex.5). The
+	 * clip is fetched BEFORE any WebSocket exists, so it cannot borrow the
+	 * connection's token plumbing; SchemaForm already builds this from the
+	 * Firebase user for the manager, and passes the same function down here
+	 * rather than a second auth path being invented in the overlay.
+	 */
+	getToken?: () => Promise<string | undefined>
 }
 
-export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, thinking: sharedThinking, sharedStream, streamError, initialLanguage }: VoiceOverlayProps) {
+export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, thinking: sharedThinking, sharedStream, streamError, initialLanguage, getToken }: VoiceOverlayProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager>(sharedConnectionManager)
 	const connectionManagerRef = useRef<ConnectionManager>(sharedConnectionManager)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
@@ -100,10 +112,81 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const energyRef = useRef({ energy: 0, sending: false, lastFrameAt: 0 })
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')
+
+	// --- Sol's scripted intro clip (bd polyglot-pdf-s1iex.5) -----------------
+	// Flag-gated and read ONCE per mount: a flag that flipped mid-session would
+	// otherwise strand the modal between two text sources.
+	const introEnabled = useMemo(() => isIntroClipEnabled(), [])
+	const [introClipState, setIntroClipState] =
+		useState<'idle' | 'loading' | 'playing' | 'blocked'>('idle')
+	// The player owns a blob cache, so it must outlive re-renders. It lives HERE
+	// rather than in the ConnectionManager because the clip plays before any
+	// connection exists.
+	const introPlayerRef = useRef<IntroPlayer | null>(null)
+	if (introEnabled && !introPlayerRef.current) {
+		introPlayerRef.current = createIntroPlayer({
+			getAudioManager: () => sharedConnectionManager?.getAudioManager?.() ?? null,
+			getHttpBase: getBackendHttpUrl,
+			getToken,
+			onFetchStart: () => setIntroClipState('loading'),
+		})
+	}
+	// The bounded form KEY the intro route validates against its own table --
+	// never caller text (the keyed-route contract, bd s1iex.3).
+	const introFormNumber = schema.form_metadata?.form_number || ''
+
+	const playIntroClip = React.useCallback(async () => {
+		const player = introPlayerRef.current
+		if (!player || !selectedLanguage || !introFormNumber) return
+		// A cache hit starts instantly; a cold fetch shows 'loading' until
+		// onFetchStart -> playback flips it. Either way the state is honest
+		// about whether audio is audible YET.
+		setIntroClipState(player.isCached(selectedLanguage, introFormNumber)
+			? 'playing' : 'loading')
+		const started = player.play(selectedLanguage, introFormNumber)
+		// Once the fetch resolves and play() is called, the player reports
+		// isPlaying(); reflect that so the button leaves its disabled state.
+		const flip = setInterval(() => {
+			if (player.isPlaying()) {
+				setIntroClipState('playing')
+				clearInterval(flip)
+			}
+		}, 200)
+		const result = await started
+		clearInterval(flip)
+		if (result.status === 'blocked') {
+			// Autoplay refused -- the modal offers the button as tap-to-play.
+			setIntroClipState('blocked')
+		} else if (result.status !== 'stopped') {
+			setIntroClipState('idle')
+		}
+		// 'stopped' means Agree/teardown took over; that path owns the state.
+	}, [selectedLanguage, introFormNumber])
+
+	// Release cached blobs on unmount.
+	useEffect(() => () => { introPlayerRef.current?.dispose() }, [])
+
 	// Panel UI copy in the session language (bd polyglot-pdf-ibxz); English fallback.
 	const overlayText = getOverlayStrings(selectedLanguage)
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
-	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)  // Track if disclaimer modal is showing
+	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
+	// Start the clip when the modal becomes visible -- ONE trigger for all
+	// three sites that open it (first language pick, a desktop<->mobile flip
+	// onto a live session, and a soft-refresh resume), so a new open site
+	// cannot forget to start the audio. The ref guard fires it once per
+	// opening rather than on every re-render.
+	const introStartedRef = useRef(false)
+	useEffect(() => {
+		if (!introEnabled) return
+		if (!showDisclaimerModal) {
+			introStartedRef.current = false
+			return
+		}
+		if (introStartedRef.current) return
+		if (!selectedLanguage || !introFormNumber) return
+		introStartedRef.current = true
+		void playIntroClip()
+	}, [introEnabled, showDisclaimerModal, selectedLanguage, introFormNumber, playIntroClip])  // Track if disclaimer modal is showing
 	// User dismissed the connection-timeout modal without reconnecting (bd
 	// polyglot-pdf-jf6w.2). Reset whenever status leaves reconnect_failed so a
 	// later terminal drop re-shows the modal.
@@ -210,6 +293,22 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// the initial language-selection handler: reconnect either way (to resume the session),
 			// but only surface the agree step when it has NOT been accepted.
 			const alreadyAccepted = SchemaFormStateManager.load()?.disclaimerAccepted
+
+			// INTRO PATH (bd polyglot-pdf-s1iex.6): with the clip flag ON and the
+			// disclaimer NOT yet accepted, do NOT connect here. Sol's clip needs no
+			// Live session, and Agree becomes the first and ONLY handshake -- which
+			// is what deletes the teardown/re-handshake seam.
+			//
+			// The `alreadyAccepted` branch STILL connects at mount, deliberately: a
+			// reload user never sees Agree, so removing the mount connect wholesale
+			// would leave them with no session at all (the plan calls this out
+			// explicitly).
+			if (introEnabled && !alreadyAccepted) {
+				console.log('[VoiceOverlay] Intro clip enabled - deferring connect to Agree')
+				setShowDisclaimerModal(true)
+				return
+			}
+
 			// Trigger the same flow as handleInitialLanguageSelect
 			const triggerDisclaimerFlow = async () => {
 				try {
@@ -500,6 +599,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
 			// This gives instant barge-in feel while we wait to confirm speech duration
 			const audioManager = connectionManager?.getAudioManager()
+			// DELIBERATELY isSpeaking(), NOT isModelSpeaking (bd polyglot-pdf-uxc6s):
+			// this is the SUSPEND half of the deadlock pair. A clip now lives INSIDE
+			// the playback context, so suspending while one plays would cut it
+			// mid-word and onVADSpeechEnd would never resume it. Clip-suppression
+			// is the correct behavior here.
 			if (audioManager && audioManager.isSpeaking()) {
 				audioManager.pauseAudioContext()
 				console.log(`[VFF VAD] [mute] Tentative pause at t=${performance.now().toFixed(2)}ms - waiting to confirm speech duration`)
@@ -534,8 +638,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						console.log(`[VFF VAD] [door] Audio gate opened, pre-buffer flushed, live audio now flowing`)
 					}
 
-					// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
-					const geminiSpeaking = audioManager?.isSpeaking()
+					// Trigger FULL barge-in (flushes audio queue if Gemini speaking).
+					// isModelSpeaking, not isSpeaking (bd polyglot-pdf-uxc6s): during a
+					// model-PCM + clip OVERLAP isSpeaking() reads false, so this flush
+					// was skipped while the model talked over the user.
+					const geminiSpeaking = audioManager?.isModelSpeaking()
 					if (geminiSpeaking && audioManager) {
 						console.log('[VFF VAD] [mute] Flushing Gemini audio queue (full barge-in)')
 						audioManager.flushAudioQueue()
@@ -633,6 +740,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// Send disclaimer read request when connection is ready and disclaimer read is pending
 	useEffect(() => {
+		// INTRO PATH (bd polyglot-pdf-s1iex.5): Sol's scripted clip IS the
+		// disclaimer read, so the legacy model-read must not also fire -- two
+		// voices reading two different texts over each other. Guarded HERE, at
+		// the single choke point every pendingDisclaimerRead path flows
+		// through, rather than at each setPendingDisclaimerRead(true) site
+		// (there are three per overlay; guarding the sites is the miss the
+		// cross-surface review caught). Clear the flag so it cannot fire later.
+		if (introEnabled) {
+			if (pendingDisclaimerRead) setPendingDisclaimerRead(false)
+			return
+		}
+
 		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 
 		if (isConnected && pendingDisclaimerRead && connectionManager && selectedLanguage) {
@@ -645,7 +764,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
 			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
-	}, [status, pendingDisclaimerRead, connectionManager, selectedLanguage])
+	}, [introEnabled, status, pendingDisclaimerRead, connectionManager, selectedLanguage])
 
 	// FIX #2: SINGLE SOURCE OF TRUTH for VAD state management
 	// This replaces 3 separate code paths with one consolidated control flow
@@ -1107,6 +1226,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		setSelectedLanguage(language)
 		setShowLanguageModal(false)
 
+		// INTRO PATH (bd polyglot-pdf-s1iex.6): show the modal WITHOUT connecting.
+		// Sol's clip plays against no Live session, and Agree makes the first and
+		// only handshake. This is the second of the two connect-before-Agree sites
+		// (the other is the mount effect); both must defer or the seam survives.
+		if (introEnabled) {
+			console.log('[VoiceOverlay] Intro clip enabled - showing modal without connecting')
+			setShowDisclaimerModal(true)
+			return
+		}
+
 		// First time - connect to Gemini, THEN show disclaimer modal
 		console.log('[VoiceOverlay] First language selection - connecting to Gemini...')
 		try {
@@ -1140,6 +1269,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// Handle "Listen Again" button in disclaimer modal
 	const handleDisclaimerListenAgain = () => {
+		// INTRO PATH (bd polyglot-pdf-s1iex.5): replay the CACHED blob --
+		// instant, no network round trip, and provably the same audio the user
+		// just heard. This is also the tap-to-play control when autoplay was
+		// refused, so it must work from a plain click with no session.
+		if (introEnabled) {
+			console.log('[VoiceOverlay] Replaying intro clip')
+			void playIntroClip()
+			return
+		}
+
 		if (!connectionManager || !selectedLanguage) return
 
 		console.log('[VoiceOverlay] User requested disclaimer re-read')
@@ -1150,8 +1289,50 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}
 
 	// Handle "I Agree" button in disclaimer modal
+	// The disclaimer-acceptance record (the legal trail). Extracted so the intro
+	// path and the legacy path log IDENTICALLY -- a second inline copy is how the
+	// two drift (bd polyglot-pdf-s1iex.6). Fire-and-forget by design: a logging
+	// failure must never block the user, and on the intro path it must not delay
+	// the connect they are waiting on.
+	const logDisclaimerAcceptance = (
+		state: ReturnType<typeof SchemaFormStateManager.load>,
+		language: string,
+	) => {
+		const backendUrl = getBackendHttpUrl()
+		fetch(`${backendUrl}/api/disclaimer-acceptance`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				form_session_id: state?.formSessionId || 'unknown',
+				language,
+				timestamp: Date.now(),
+				user_agent: navigator.userAgent,
+			}),
+		}).then(
+			(response) => {
+				if (response.ok) {
+					console.log('[VoiceOverlay] [OK] Disclaimer acceptance logged to backend')
+				} else {
+					console.warn('[VoiceOverlay] [warn] Backend logging returned non-OK status:', response.status)
+				}
+			},
+			(err) => {
+				console.error('[VoiceOverlay] [X] Failed to log disclaimer acceptance to backend:', err)
+			},
+		)
+	}
+
 	const handleDisclaimerAgree = async () => {
 		console.log('[VoiceOverlay] User agreed to disclaimer')
+
+		// FIRST, before any await: stop Sol's intro clip (bd
+		// polyglot-pdf-s1iex.5). The maintainer's decision is that Agree is
+		// IMMEDIATE -- a clip still talking over the form's first question is
+		// the bd zq9l defect this preserves against. stop() also poisons an
+		// in-flight fetch, so a cold synthesis landing late cannot start
+		// playing into a dismissed modal.
+		introPlayerRef.current?.stop()
+		setIntroClipState('idle')
 
 		// Update state with disclaimer acceptance
 		const state = SchemaFormStateManager.load()
@@ -1164,6 +1345,42 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Hide modal
 		setShowDisclaimerModal(false)
+
+		// INTRO PATH (bd polyglot-pdf-s1iex.6): there is NO Live session yet --
+		// Sol's clip played against nothing, and the whole interrupt sequence
+		// below (activity_start -> flush -> resumePlayback -> activity_end) plus
+		// switchToFirstSection's teardown/100ms-sleep/re-handshake exists ONLY to
+		// stop a model that was mid-disclaimer. With no session there is nothing
+		// to interrupt and nothing to tear down: Agree is the FIRST and ONLY
+		// connect, which is the epic's one-handshake criterion.
+		//
+		// The acceptance POST still runs (it is the legal record), but AFTER the
+		// connect starts rather than gating it -- a slow logging call must not
+		// delay the session the user is now waiting on.
+		if (introEnabled) {
+			// (the modal was already hidden above -- no second call needed)
+			console.log('[VoiceOverlay] Intro path - single connect on Agree (no interrupt, no restart)')
+			logDisclaimerAcceptance(state, selectedLanguage)
+			// Set the FILL language before connecting (bd polyglot-pdf-s1iex.6,
+			// fresh-eyes round 1). The legacy path set it as a side effect of
+			// switchToFirstSection -- the ONLY production caller that moved it off
+			// createConnectionManager's hardcoded 'English'. Skipping the restart
+			// therefore silently left fill_language="English" in the handshake, so
+			// a Spanish user would HEAR Spanish while every field's guidance said
+			// to write the values in English. changeFillLanguage stores it when
+			// not yet connected, so calling it here puts the right value INTO the
+			// handshake rather than correcting it afterwards.
+			if (selectedLanguage) {
+				await connectionManager?.changeFillLanguage(selectedLanguage)
+			}
+			try {
+				await handleConnect()
+			} catch (err) {
+				console.error('[VoiceOverlay] [X] Connect failed after Agree:', err)
+				setError(err instanceof Error ? err.message : 'Connection failed')
+			}
+			return
+		}
 
 		// Step 1: Send activity_start FIRST to stop backend from sending more audio.
 		// The user just agreed, so cut off any still-playing disclaimer read instead
@@ -2351,6 +2568,17 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				selectedLanguage={selectedLanguage}
 				onListenAgain={handleDisclaimerListenAgain}
 				onAgree={handleDisclaimerAgree}
+				// ONE SOURCE (bd polyglot-pdf-s1iex.5): the modal renders the
+				// exact paragraphs the backend synthesizes. Omitted when the
+				// flag is off, which keeps today's p1/p2/p3 text verbatim.
+				introParagraphs={introEnabled && selectedLanguage
+					? renderIntroParagraphs(
+						selectedLanguage,
+						introFormNumber,
+						(BUTTON_TRANSLATIONS[selectedLanguage] || BUTTON_TRANSLATIONS['English']).agree,
+					)
+					: undefined}
+				clipState={introEnabled ? introClipState : undefined}
 			/>
 
 			{/* Connection-timeout modal - shown on terminal reconnect failure (bd

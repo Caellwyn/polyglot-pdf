@@ -1,11 +1,29 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-17 (bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-a4v4 + polyglot-pdf-qxad: two stale
-citations corrected -- the `PDFFillRequest` line range no longer straddles into
-`fill_pdf`, and the dropped-key example names `form_number`, the key that
-actually produces `form_id="unknown"` (a dropped `kit_id` degrades to
-`kit_id=None` instead)). The Surface contracts section is the code-derived
-cross-surface data-contract map for blast-radius review (bd polyglot-pdf-n18q).
+*Last updated: 2026-08-17 (bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
+code-line citation in the Surface contracts section now resolves to the code
+it names. x82ii fixed the "2. WS handshake" block (producer/consumer lines,
+all handshake key citations, and the `full_schema` consumer chain -- one
+citation, the secretary-catalog renderer, was pointing at the wrong FILE, not
+just a wrong line) plus the adjacent "3. WS control messages" and "4. Backend
+<-> Gemini Live" blocks, all drifted off the same `websocket_routes.py` code
+motion the ws-protocol.md fix addressed. bxr3p fixed the rest -- section 5
+("Fill round-trip": producer/consumer line numbers, the two-pass
+alias-resolution range, the `_load_kit_dump` def + its actual
+promotion-gate call site, one of 7 call sites, not the one the doc previously
+named) and section 6 ("Confirmation audit trail": the confirm-field chain
+across `request_coordinator.py` / `webFormConnection.ts` /
+`callback_handler.py`, and the confirmation-event shape + all three log sinks
+in `confirmation_logger.py`). Also current: the `PDFFillRequest` line range in
+section 5 does not straddle into `fill_pdf` and the dropped-key example there
+names `form_number`, the key that actually produces `form_id="unknown"` (a
+dropped `kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 +
+qxad. Same week, bd polyglot-pdf-lo88 added the `FIRMS_FIRESTORE_ENABLED` env
+row and the single-live-project correction -- see [the lo88 journal
+entry](journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for
+closeout details. The Surface contracts section is the code-derived
+cross-surface data-contract map for blast-radius review (bd
+polyglot-pdf-n18q).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
 section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
@@ -35,8 +53,9 @@ The agent may run `deploy-demo.sh` under the three-part gate (local-test-first +
 per-instance permission + post-deploy test-drive); see
 [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md).
 
-Two Firebase projects: demo and production (frontend picks the backend by the
-Cloud Run host it's built against). Backend config is env-driven via
+One live Firebase project: the demo, `polyglot-demo-aa709` (the former
+production project is dead and unreachable; reference purge tracked in bd
+`polyglot-pdf-je6iy`). Backend config is env-driven via
 `backend/config.py` (`Settings`); the load-bearing vars:
 
 | Env var | Default | Purpose |
@@ -53,6 +72,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
 | `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
+| `FIRMS_FIRESTORE_ENABLED` | `false` | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, feeding firm-scoped kit visibility. Reads FAIL CLOSED to `[]` when off/broken, so leaving it unset can never widen visibility. Not yet set in any deploy env -- that wiring ships with the consumer (bd vccy). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
@@ -230,95 +250,105 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
-Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:929`)
-/ `getJITHandshakePayload` (DTI, :973), sent by `frontend/src/webFormConnection.ts:618`.
-Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:976`;
-handshake keys parsed :1044-1168).
+Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
+/ `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts:641`.
+Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:993`;
+handshake keys parsed :1061-1185).
 **No Pydantic model or TS interface pins this shape** -- every key is read with
 `.get()` and a default, so a renamed key silently degrades (e.g. a dropped
 `form_metadata.form_number` logs `form_id="unknown"` in the audit trail; a
 dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
 - Key keys: `type` (`handshake` vs `handshake_jit` switches the whole parse,
-  :1044), `manifest`/`first_field_schema`/`loaded_field_ids` (JIT, :1059-1061),
-  `current_values` (:1132), `fill_language`/`spoken_language` (:1133/:1141),
-  `kit_id`/`form_number`/`edition_date` (:1055/:1073/:1082 -- the audit-trail
-  identity), `resume` (:1168).
-- `full_schema` (sent at :953/:1028): type-checked `isinstance(dict)` only
-  (`websocket_routes.py:1152-1154`), cached in
-  `form_filling_service.py:289-290` (preserved across internal restarts), then
-  consumed by the secretary catalog (`form_filling_service.py:1619` ->
-  `secretary_context.py:246`), the edition fingerprint
-  (`form_filling_service.py:362-368`), the injection
-  budget (`form_filling_service.py:478-479`), and runtime translation overrides
-  (`form_filling_service.py:679` ->
+  :1061), `manifest`/`first_field_schema`/`loaded_field_ids` (JIT, :1076-1078),
+  `current_values` (:1149), `fill_language`/`spoken_language` (:1150/:1158),
+  `kit_id`/`form_number`/`edition_date` (:1072/:1090/:1099 -- the audit-trail
+  identity), `resume` (:1185).
+- `full_schema` (sent at `schemaFormState.ts:979`/`:1054`): type-checked
+  `isinstance(dict)` only (`websocket_routes.py:1169-1170`), cached in
+  `form_filling_service.py:296` (preserved across internal restarts), then read
+  by `handle_ask_secretary` (`form_filling_service.py:1612`, schema read at
+  `:1666`) and rendered into the secretary catalog by
+  `render_static_catalog(schema)` in `text_ai_gemini.py:302`, the edition fingerprint
+  (`resolve_edition_marker` call at `form_filling_service.py:396`), the injection
+  budget (`form_filling_service.py:513-514`), and runtime translation overrides
+  (`_maybe_start_option_translation` call at `form_filling_service.py:464` ->
   `option_translation.py`). *Breaks if malformed:* each consumer degrades
   independently and silently (secretary falls back to per-section schema, audit
   edition falls back to a fingerprint, translations revert to English).
 - The JIT `manifest.parts` key is the wire contract and its entries are
   SECTION-shaped (`frontend/src/schema-forms/utils/manifestUtils.ts:38-41`;
-  consumed at `websocket_routes.py:1093-1122`). Do not "fix" the name and do not
-  expect `FormPart` objects in it.
+  consumed at `websocket_routes.py:1110` (synthesized schema) and `:1139`
+  (session-start log line)). Do not "fix" the name and do not expect
+  `FormPart` objects in it.
 
 ### 3. WS control messages: client <-> backend (post-handshake)
 
-Client->server: one `if mtype == ...` switch at `websocket_routes.py:476-956`.
-Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:635-826`.
+Client->server: one `if mtype == ...` switch at `websocket_routes.py:476-965`.
+Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:659-854`.
 Message senders are object literals; a renamed `type` logs
 `unknown_control_message_type` (or falls to the TS `default`) and a renamed
 sub-key reads as absent. The request/response pairs ride
 `backend/services/request_coordinator.py` with a `request_id` round-trip:
-`get_form_state`/`form_state_response` (:172/:566),
-`get_next_field_hint`/`next_field_hint_response` (:237/:592),
-`confirm_field`/`confirm_field_response` (:314/:630),
-`skip_field`/`skip_field_response` (:390/:656),
-`switch_field`/`switch_field_response` (:454/:680),
+`get_form_state`/`form_state_response` (`request_form_state` :151 /
+`handle_form_state_response` :661),
+`get_next_field_hint`/`next_field_hint_response` (`request_next_field_hint`
+:214 / `handle_next_field_hint_response` :687),
+`confirm_field`/`confirm_field_response` (`request_confirm_field` :279 /
+`handle_confirm_field_response` :725),
+`skip_field`/`skip_field_response` (`request_skip_field` :364 /
+`handle_skip_field_response` :751),
+`switch_field`/`switch_field_response` (`request_switch_field` :427 /
+`handle_switch_field_response` :775),
 `spellback`/`spellback_response` (bd polyglot-pdf-22h1f; flag-gated, the ONE
 round-trip that deliberately holds the pending tool response for the client's
 blocking TTS clip playback, 90s cap). Client reply builders:
-`webFormConnection.ts:3169-3211` (confirm/skip), :2474 (switch),
-`sendSpellbackResponse` (spellback).
+`webFormConnection.ts:3197` (`sendConfirmFieldResponse`) / :3318
+(`sendSkipFieldResponse`), :2502 (`sendSwitchFieldResponse`), :3295
+(`sendSpellbackResponse`).
 
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
-  (`webFormConnection.ts:640-642`, expecting an `updates: Record<name, value>`
+  (`webFormConnection.ts:664-666`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:231`) with a different
+  (`backend/services/callback_handler.py:242`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
-  session language, it does not change it (`websocket_routes.py:692-723`).
+  session language, it does not change it (`websocket_routes.py:709` arm).
 - `validation_result` carries `conflicts` only; the Python-side `result_type`
-  label is deliberately never serialized (`websocket_routes.py:336-361`,
+  label is deliberately never serialized (`websocket_routes.py:337-367`,
   contract pinned in `standards/validation-delegation.md`).
-- The `session_ready` message's `native_vad` flag (`websocket_routes.py:1209-1229`)
+- The `session_ready` message's `native_vad` flag (`websocket_routes.py:1226-1245`)
   must agree with the backend's `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`frontend/src/shared/connection.ts:517-527`).
+  activity-signal behavior from it (`webFormConnection.ts:864,951` ->
+  `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
 
 ### 4. Backend <-> Gemini Live (tools + session config)
 
 Tool names + arg schemas have ONE source of truth:
-`Settings.TOOL_DECLARATIONS` (`backend/config.py:456-674`), deep-copied into the
-live config by `form_filling_service.py:219-229` (which drops `switch_section`
+`Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
+live config by `form_filling_service.py:222-228` (which drops `switch_section`
 in continuous mode -- the session ships 6 declarations, not 7 -- and appends
 the flag-gated `SPELLBACK_TOOL_DECLARATION` as a 7th only while
 `SPELLBACK_TOOL_ENABLED`, bd polyglot-pdf-22h1f) and declared to
-Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1645`;
-tools assembled at :1657). Gemini's tool
-calls come back through the adapter (`live_ai_gemini.py:2426-2612` and :2620+)
-into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:437`),
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
+tools assembled at :1752). Gemini's tool
+calls come back through the adapter (`self._on_tool_call(...)` call sites at
+`live_ai_gemini.py:2736` and `:2917`)
+into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:448`),
 which dispatches to the `form_filling_service` handlers that emit the Leg-A
 client messages above. The coupling table (tool -> handler -> client message):
 
-| Gemini tool (args) | Handler (`callback_handler.py`) | Client message |
+| Gemini tool (args) | Handler (`callback_handler.py`, dispatch branch) | Client message |
 |---|---|---|
-| `update_form_fields` (`field_id`, `value`) | :526 | `form_updated` |
-| `get_form_status` (`field_ids`) | :667 | `get_form_state` round-trip |
-| `confirm_field` (`field_id`, `confirmation_method`) | :859 | `confirm_field` round-trip |
-| `skip_field` (`field_id`) | :1117 | `skip_field` round-trip |
-| `switch_to_field` (`field`) | :1258 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
-| `ask_secretary` (`query`) | :729 | none -- answered server-side from the cached `full_schema` |
-| `switch_section` (deprecated; dropped in continuous mode) | :711 | internal session restart + `section_switched` |
+| `update_form_fields` (`field_id`, `value`) | :507 | `form_updated` |
+| `get_form_status` (`field_ids`) | :510 | `get_form_state` round-trip |
+| `confirm_field` (`field_id`, `confirmation_method`) | :522 | `confirm_field` round-trip |
+| `skip_field` (`field_id`) | :525 | `skip_field` round-trip |
+| `switch_to_field` (`field`) | :531 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
+| `ask_secretary` (`query`) | :534 | none -- answered server-side from the cached `full_schema` |
+| `switch_section` (deprecated; dropped in continuous mode) | :516 | internal session restart + `section_switched` |
 | `name_spellback` (no args; FLAG-GATED `SPELLBACK_TOOL_ENABLED`, declared only while on via `SPELLBACK_TOOL_DECLARATION`) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
@@ -326,22 +356,22 @@ guidance prose by `ai_context.render_field_guidance`
 (`backend/services/ai_context.py:79`); the contract there is between the SI
 templates and the prose, not key names. System instruction:
 `form_filling_service.build_form_context_message`
-(`form_filling_service.py:1167`) ->
+(`form_filling_service.py:1214`) ->
 `ai_context.build_form_context` (:444).
 
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
 
 Producer: client state `SchemaFormState.fieldValues`
-(`frontend/src/schema-forms/state/schemaFormState.ts:25`, persisted :250-270).
+(`frontend/src/schema-forms/state/schemaFormState.ts:27`, persisted :248-263).
 THREE call sites assemble the request -- download and print
-(`frontend/src/schema-forms/components/SchemaForm.tsx:602-638` and :640-670)
+(`frontend/src/schema-forms/components/SchemaForm.tsx:610-646` and :650-678)
 plus the in-browser preview
 (`frontend/src/pdf-view/FilledPreviewModal.tsx:62`, with its own unwrap loop
-:58-61). All run every value through `unwrapFieldValue`
-(`frontend/src/schema-forms/utils/fieldValue.ts:341`) --
+:57-60). All run every value through `unwrapFieldValue`
+(`frontend/src/schema-forms/utils/fieldValue.ts:369`) --
 **dropping `confirmed`/`skipped`/`steered` flags entirely** -- and POST
 `{kit_id, pdf_filename, field_values, form_schema}`
-(`frontend/src/schema-forms/utils/pdfFiller.ts:98-129`). A payload-shape change
+(`frontend/src/schema-forms/utils/pdfFiller.ts:98-103`). A payload-shape change
 made against only one call site silently misses the other two.
 Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
 
@@ -350,21 +380,22 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
   store is consulted only for the PDF bytes (:68), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
   the editor/publish surface (`_load_kit_dump`,
-  `backend/routes/editor_kit_routes.py:396`, called from the lint routes
-  and the mark-complete promotion gate at :1571, feeding the pure-function
+  `backend/routes/editor_kit_routes.py:687`, with 7 call sites across the
+  lint routes; the mark-complete promotion gate's call is inside
+  `set_editor_kit_status` at :2451, feeding the pure-function
   checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (`pdf_fill_routes.py:92-134`); widget dispatch by
+  exact id always winning (`pdf_fill_routes.py:107-131`); widget dispatch by
   `field_type` (`pdf_fill_routes.py:409-681`):
   text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
   (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
-  direct `xref_set_key` writes (:459-495).
+  direct `xref_set_key` writes (:475-476, within the wider :459-495 branch).
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (`pdf_fill_routes.py:410-413`).
+  (`pdf_fill_routes.py:410-412`).
 - `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
@@ -372,18 +403,23 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
 ### 6. Confirmation audit trail
 
 The chain: Gemini `confirm_field` tool -> backend request
-(`request_coordinator.py:314-319`) -> client verifies it has a usable value and
-acks (`webFormConnection.ts:1896+`, reply built :3169-3190 -- `reason` is a fixed
-category token, never a field value) -> backend logs ONLY on a positive ack
-(the `recorded` guard at `callback_handler.py:933`; the `log_field_confirmation`
-call it protects at :967-975). Event shape (NO PII, no
-`value` key anywhere): `backend/utils/confirmation_logger.py:271-285` --
+(`request_coordinator.py:279`, `request_confirm_field`) -> client verifies it
+has a usable value and acks (`webFormConnection.ts:1924`,
+`handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse` at
+:3197 -- `reason` is a fixed category token, never a field value) -> backend
+logs ONLY on a positive ack (the `recorded` guard at
+`callback_handler.py:947`; the `log_field_confirmation` call it protects at
+:981-989). Event shape (NO PII, no `value` key anywhere):
+`backend/utils/confirmation_logger.py:335-347` --
 `{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
-field_name, confirmation_method}`. Sinks: structured log (:290-293), local JSONL
-(:301-317, dies with the instance), Firestore `confirmation_events` (:88-119,
-gated by `CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
+field_name, confirmation_method}`. Sinks: structured log (:353-355), local
+JSONL (`_write_confirmation_to_file` :364-379, dies with the instance),
+Firestore `confirmation_events` (`_firestore_write` :88-117, gated by
+`CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
-handshake (`schemaFormState.ts:1049-1063`) -- see contract 2. The
+handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
+`:1088` (kit_id), `:1089` (edition_date), read at
+`websocket_routes.py:1090`/`:1072`/`:1099` respectively -- see contract 2. The
 `edition_date` COLUMN carries whichever revision marker won
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
