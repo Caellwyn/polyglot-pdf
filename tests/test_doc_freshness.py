@@ -261,7 +261,7 @@ class TestFreshnessScanCoversTier1:
         "anchor,block_name",
         [
             ("This script does two warn-only checks in one pass:", "module docstring"),
-            ("The freshness loop below must", "main() find_docs() comment"),
+            ("find_docs() returns tier-1", "main() find_docs() comment"),
             ("No docs to check (no tier-1 docs on disk", "empty-corpus print"),
         ],
     )
