@@ -104,6 +104,18 @@ All six reverted. The count is seven, verified by
 `grep -rn "shouldShowField ALONE" frontend/src` (excluding tests) returning
 seven distinct functions across three files.
 
+**And the revert was itself an incomplete set** -- a fourth pass found two
+more "six sites" in `components/schema-forms.md`, in the paragraph I wrote
+*during* the erroneous sweep, so reverting the six edits never touched them.
+Three rounds on one number: wrong sweep, reverted sweep, then the instances
+the revert could not see because they postdated it.
+
+That is the sharpest version of scar #7 in this whole entry. Reverting a
+change is not the same as restoring the invariant: a revert only undoes the
+edits it made, while the WRONG BELIEF that motivated them may have leaked
+into work done alongside. After reverting, re-run the enumeration that proved
+the revert necessary -- do not assume the revert restored the world.
+
 **I attached a wrong reason to a right conclusion.** My comment claimed "every
 `show_if` write in fieldGrouping is SECTION-level". Six are field-level; my
 grep classified by nearby context and misread `updated.show_if` as a section
