@@ -1,12 +1,9 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-lmcgz: the tier-2 row and the
-`**Tracks:**` section now name `docs/doctrine/*.md` alongside components and
-standards, matching `scripts/check_doc_freshness.py`'s DOC_DIRS and this
-file's own line naming the scanned set elsewhere. Also current: the
-current-state-only section's claim about the mechanical checker's regex
-coverage -- it now catches `Prior:`/`Earlier:` too, not just `Previously:`
-(bd polyglot-pdf-6dn2n).) This file documents the doc SYSTEM (current
+*Last updated: 2026-08-18 (bd polyglot-pdf-r8d9r: this file is now covered by
+the mechanical convention scan via `CONVENTION_ONLY_DOCS`, so a stacked or
+chained stamp here is caught by CI going forward.) This file documents the doc
+SYSTEM (current
 state). It is a meta-doc about that system, not a doc about the product: it
 sits outside the three product tiers below, is reached on demand via
 [`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no
@@ -67,7 +64,7 @@ Tier-1 and tier-2 docs describe CURRENT STATE ONLY:
 
 Chronological history lives in the **journal** (tier 3), which is append-only at the corpus level (write a new entry file; never edit an old one). The checker's regexes (`PREVIOUSLY_CHAIN_RE`, `HISTORY_HEADING_RE`) flag violations; the CI test fails on them. **Prune-on-bump:** when you update a stamp, replace the old content, don't append.
 
-**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them (they sit outside the scanned set: `TIER1_DOCS` + `docs/components/*` + `docs/standards/*` + `docs/doctrine/*`). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
+**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them: plans live at `docs/` root, which sits outside the directory globs the scanned set is built from, and `is_sprint_plan()` is a belt-and-braces skip on top of that so the exemption holds even if a plan is ever force-added to the scanned set by a future hand (see `is_sprint_plan()`'s docstring in `scripts/check_doc_freshness.py` for the exact mechanism -- deliberately not hand-listing the scanned set's membership here, to avoid this sentence itself drifting out of sync the way DOC_DIRS' hand-listed prose sites once did; bd polyglot-pdf-jfq16). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
 
 ### 4. Trigger reads bake review into the work
 

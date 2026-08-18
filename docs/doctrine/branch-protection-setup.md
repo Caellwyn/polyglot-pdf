@@ -1,6 +1,9 @@
 # Branch-protection setup: the GitHub rulesets
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: claims re-verified against code, no drift found).*
+*Last updated: 2026-08-18 (bd polyglot-pdf-wx7j: the two review-flow mentions
+described the outer review as unconditionally Opus-5; reworded to name the
+three-way fork -- Opus for a source diff, Haiku docs-reviewer for docs-only,
+none for trivial.)*
 
 How `main` and `dev` are protected on `Caellwyn/polyglot-pdf`. This is the
 GitHub side of the [promotion-tiers](promotion-tiers.md) flow. Ported from
@@ -39,12 +42,14 @@ Effective rules, verified via `gh api repos/.../rules/branches/dev`:
 
 Human approval is **not** required (count 0), and there is no ruleset-level
 review gate — the review gate is procedural (the
-[review-flow](review-flow.md): loop the Opus-5 outer review to clean, then apply
-the auto-merge-vs-ping rule — a routine low-risk PR that reviewed CLEAN with green
-checks is merged autonomously via `gh pr merge`, while a consequence-bearing PR
-is pinged to the maintainer, whose merge it remains; see CLAUDE.md "Auto-merge
-vs. maintainer merge", bd polyglot-pdf-16pj). The CI status checks are the only
-mechanical merge blocker. This matches [review-flow.md](review-flow.md).
+[review-flow](review-flow.md): loop the one outer adversarial pass to clean —
+Opus for a source diff, Haiku for docs-only, none for a trivial diff — then
+apply the auto-merge-vs-ping rule — a routine low-risk PR cleared by the Opus
+pass specifically with green checks is merged autonomously via `gh pr merge`,
+while a consequence-bearing PR (or one only Haiku-cleared) is pinged to the
+maintainer, whose merge it remains; see CLAUDE.md "Auto-merge vs. maintainer
+merge", bd polyglot-pdf-16pj). The CI status checks are the only mechanical
+merge blocker. This matches [review-flow.md](review-flow.md).
 
 ## Recreate / inspect
 
@@ -68,7 +73,9 @@ To recreate from scratch, POST the JSON in the journal entry to
 There is **no external model reviewer** anymore. The repo previously used GitHub
 Copilot, then OpenAI Codex, as an automated PR reviewer; both are retired (the
 maintainer's Codex subscription ended 2026-07-08). Review is now entirely
-Claude-based -- an Opus-5 outer review run as orchestrator-driven subagents (see
+Claude-based -- a fresh-eyes inner loop plus one outer adversarial pass (Opus
+for a source diff, Haiku for docs-only, none for trivial), run as
+orchestrator-driven subagents (see
 [`review-flow.md`](review-flow.md)) -- so no bot reads `.github/copilot-instructions.md`
 or the "If you are reviewing a PR" section of [`AGENTS.md`](../../AGENTS.md); those
 files are kept only as inert history. There is nothing to configure at the
