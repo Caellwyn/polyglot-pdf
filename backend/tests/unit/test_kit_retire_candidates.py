@@ -467,6 +467,14 @@ def test_a_traversing_kit_id_is_refused_not_resolved(client):
     path parameter."""
     c, _store, _root = client
 
-    resp = c.get("/api/editor/kits/..%2F..%2Fetc/retire-candidates", headers=AUTH)
+    # A value that reaches the route AS ONE SEGMENT and still fails the id
+    # rule. My first version used ..%2F..%2Fetc, which the router decodes into
+    # separate path segments, so the route never saw a traversing kit_id at all
+    # and the 404 came from routing -- not from the guard.
+    resp = c.get("/api/editor/kits/bad..id/retire-candidates", headers=AUTH)
 
-    assert resp.status_code in (400, 404), resp.text
+    # 400, specifically. Accepting 404 as well made this pass with the guard
+    # DELETED, since an unknown id misses the membership check and 404s either
+    # way -- so the one named guard for _safe_kit_id could not tell
+    # guard-present from guard-absent (Opus fresh-eyes round 7).
+    assert resp.status_code == 400, resp.text

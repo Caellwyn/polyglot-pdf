@@ -871,8 +871,11 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
     // clicked a single card button -- the twin-shaped miss, now inside the fix
     // for the twin-shaped miss (Opus fresh-eyes round 4).
     //
-    // Enumerates by role and asserts on the rendered set, so a NEW status
-    // control added later is covered without anyone remembering to add a case.
+    // Hand-lists four labels -- it does NOT auto-cover a control added later,
+    // and an earlier version of this comment claimed it did, which is exactly
+    // the kind of promise that stops the next author adding a case. The
+    // all-four-statuses test above is the one with a census assertion; this
+    // one is the per-view check.
     vi.mocked(listRemoteKits).mockResolvedValue(
       KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'complete' } : k)));
     vi.mocked(fetchRetireCandidates).mockResolvedValue([
