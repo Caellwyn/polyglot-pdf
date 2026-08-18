@@ -9,7 +9,9 @@ detail, so the two agent-context files can't drift apart.
 > **External code review is RETIRED (2026-07-08).** This repo no longer uses any
 > external model reviewer -- the maintainer's OpenAI Codex subscription ended, and
 > Codex had already succeeded GitHub Copilot. Review is now entirely Claude-based
-> (a fresh-eyes inner loop + an Opus-5 outer review; see
+> (a fresh-eyes inner loop + one outer adversarial pass -- Opus cross-surface
+> review for a source diff, the Haiku docs-reviewer for a docs-only diff, none
+> for a trivial diff; see
 > [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). The
 > ["If you are reviewing a PR" section](#if-you-are-reviewing-a-pr) at the bottom
 > is kept only as inert history for the retired Codex reviewer -- no bot reads it

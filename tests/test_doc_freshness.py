@@ -347,6 +347,56 @@ class TestFreshnessScanCoversTier1:
             "test_each_doc_dirs_prose_site_names_every_entry to cover it."
         )
 
+    # bd polyglot-pdf-r8d9r: docs/doc-architecture.md -- the file that
+    # DEFINES the current-state-only rule -- was exempt from the convention
+    # scan that enforces it (not in TIER1_DOCS, not under DOC_DIRS). It
+    # can't simply join TIER1_DOCS: its own body quotes real `**Tracks:**`
+    # example syntax to explain the convention, which TRACKS_RE would
+    # misparse as a genuine declaration and try to freshness-check
+    # nonexistent globs. CONVENTION_ONLY_DOCS covers it for the convention
+    # scan specifically, without subjecting it to the freshness-staleness
+    # half.
+    def test_doc_architecture_is_in_convention_only_docs(self):
+        assert "docs/doc-architecture.md" in freshness.CONVENTION_ONLY_DOCS
+
+    def test_doc_architecture_is_convention_scanned(self, tmp_path, monkeypatch):
+        # Integration-level: a REAL chain violation (the canonical
+        # "Previously: <date>" shape, no incidental keyword collisions) in
+        # THIS file must be caught by check_doc_conventions() -- not merely
+        # present in a list somewhere. Point REPO_ROOT at a synthetic tree so
+        # this doesn't require mutating the real repo file.
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "TIER1_DOCS", [])
+        monkeypatch.setattr(freshness, "DOC_DIRS", [])
+        doc_dir = tmp_path / "docs"
+        doc_dir.mkdir()
+        stacked_stamp_doc = doc_dir / "doc-architecture.md"
+        stacked_stamp_doc.write_text(
+            "# Doc architecture\n\n"
+            "*Last updated: 2026-08-18. Previously: 2026-08-17 a different "
+            "fix landed.*\n\nbody\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            freshness, "CONVENTION_ONLY_DOCS", ["docs/doc-architecture.md"]
+        )
+        findings = freshness.check_doc_conventions(repo_root=tmp_path)
+        assert findings, (
+            "docs/doc-architecture.md was NOT convention-scanned -- a "
+            "chain-shaped stamp in it should have been caught and was not "
+            "(the exact regression bd r8d9r was filed against)."
+        )
+        # Negative control: the SAME setup with CONVENTION_ONLY_DOCS emptied
+        # must find NOTHING -- proving the finding above came from being in
+        # that list, not from some other scan path picking the file up.
+        monkeypatch.setattr(freshness, "CONVENTION_ONLY_DOCS", [])
+        findings_without_coverage = freshness.check_doc_conventions(repo_root=tmp_path)
+        assert findings_without_coverage == [], (
+            "check_doc_conventions() found the doc even with "
+            "CONVENTION_ONLY_DOCS emptied -- the positive assertion above "
+            "is not actually testing CONVENTION_ONLY_DOCS coverage."
+        )
+
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
         # tier-1 doc that has a Tracks line gets flagged. We point a fake

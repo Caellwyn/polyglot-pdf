@@ -1,6 +1,8 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> demo
 
-*Last updated: 2026-07-04.*
+*Last updated: 2026-08-18 (bd polyglot-pdf-d2bm: the tier diagram's PR-review
+line named only the Opus outer pass; now names both the Opus cross-surface arm
+and the Haiku docs-reviewer arm).*
 
 How code promotes from a working branch to the running demo. **This project has
 NO active production environment** -- the demo remote is the live, outward-facing
@@ -12,7 +14,8 @@ applied here. Deploys here are LOCAL/MANUAL via shell scripts, not branch-trigge
 
 ```
 worktree (feature branch)        one bead's work; where the agent commits
-        |  PR (reviewed: fresh-eyes inner + Opus-5 outer, both Claude, looped to clean)
+        |  PR (reviewed: fresh-eyes inner + one outer pass -- Opus for source,
+        |      Haiku docs-reviewer for docs-only, none for trivial; looped to clean)
         v
 dev                              integration branch + PR base; auto-merge if routine/low-risk & clean, else maintainer merges
         |  deploy-demo.sh (front + backend; gated -- see below)

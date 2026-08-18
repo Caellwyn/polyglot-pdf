@@ -149,6 +149,18 @@ TIER1_DOCS = [
     "docs/INDEX.md",
     "docs/technical_guide.md",
 ]
+# doc-architecture.md is deliberately NOT in TIER1_DOCS: it's a meta-doc
+# whose own body quotes REAL `**Tracks:**` example syntax to explain the
+# convention (see its "1. `**Tracks:**` lines map docs to code" section) --
+# TRACKS_RE would match that illustrative example and try to freshness-check
+# nonexistent globs like "src/auth/**/*.py". But it IS the file that DEFINES
+# the current-state-only rule, so it must still be covered by the CONVENTION
+# scan (no Previously:/Prior:/Earlier: chains, no history sections) even
+# though it skips the freshness-staleness half. It was exempt from BOTH
+# checks before this line (bd polyglot-pdf-r8d9r).
+CONVENTION_ONLY_DOCS = [
+    "docs/doc-architecture.md",
+]
 
 # --- Sprint-archive check constants ---
 INDEX_MD = REPO_ROOT / "docs" / "INDEX.md"
@@ -498,19 +510,24 @@ def check_doc_conventions(
       2. `## Recent sprint history` / `## Update history` / `## Changelog` /
          `## Sprint history` headings -- same reason.
 
-    The scan covers TIER1_DOCS (CLAUDE.md + docs/*.md top-level files) AND
-    every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md +
-    docs/doctrine/*.md). Tier-3 docs (docs/dev_journal.md, docs/journal/*,
-    docs/archive/*) are explicitly NOT scanned -- chronological history is
-    the whole point there.
+    The scan covers TIER1_DOCS (CLAUDE.md + docs/*.md top-level files),
+    CONVENTION_ONLY_DOCS (meta-docs whose body quotes real `**Tracks:**`
+    syntax as an example, so they opt out of the freshness-staleness half
+    but must still be convention-scanned -- currently just
+    docs/doc-architecture.md), AND every doc under DOC_DIRS
+    (docs/components/*.md + docs/standards/*.md + docs/doctrine/*.md).
+    Tier-3 docs (docs/dev_journal.md, docs/journal/*, docs/archive/*) are
+    explicitly NOT scanned -- chronological history is the whole point
+    there.
     """
     findings: list[tuple[Path, str]] = []
     # find_docs() already returns tier-1 (TIER1_DOCS) + tier-2 docs, but a
     # caller may pass an explicit `docs` list (e.g. tests) that omits tier-1.
-    # Union the explicit tier-1 list in either way, then dedupe so a doc
-    # isn't scanned twice.
+    # Union the explicit tier-1 + convention-only lists in either way, then
+    # dedupe so a doc isn't scanned twice.
     targets: list[Path] = [
-        p for rel in TIER1_DOCS if (p := repo_root / rel).is_file()
+        p for rel in TIER1_DOCS + CONVENTION_ONLY_DOCS
+        if (p := repo_root / rel).is_file()
     ]
     if docs is None:
         docs = find_docs()
