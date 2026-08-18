@@ -173,3 +173,40 @@ describe('it is actually a modal', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 });
+
+describe('every editionKind is labelled for what it IS', () => {
+  // The whole justification for editionKind is that the UI can say "Edition
+  // 12/2024" rather than a bare string the author has to interpret. Two of the
+  // three branches had a named test; `published` had none -- deleting its
+  // prefix, or relabelling it "Edition", left all 108 tests green.
+  //
+  // That is the branch for a kit with NO government edition date and no author
+  // version: the firm-tier custom form this bead targets. Calling its publish
+  // TIMESTAMP an "Edition" would tell an author a government edition exists,
+  // on the one screen where misreading a candidate retires a live form
+  // (Opus fresh-eyes round 9).
+  it.each([
+    ['edition_date', '12/2024', /Edition\s*12\/2024/, /Version|Published/],
+    ['author_version', '2026-01-01', /Version\s*2026-01-01/, /Edition|Published/],
+    ['published', '2026-02-03T10:00:00Z', /Published\s*2026-02-03/, /Edition|Version/],
+  ])('labels %s as its own kind, not another', (kind, edition, expected, forbidden) => {
+    open({ candidates: [{ kitId: 'k1', label: 'Firm Intake',
+                          edition, editionKind: kind, matchedOn: 'label' }] });
+
+    const row = screen.getByText('Firm Intake').closest('label') as HTMLElement;
+    expect(within(row).getByText(expected)).toBeTruthy();
+    // ...and is NOT labelled as one of the other two kinds.
+    expect(row.textContent).not.toMatch(forbidden);
+  });
+
+  it('shows the marker even when the kind is unrecognised', () => {
+    // Forward compatibility: a kind this build does not know still renders the
+    // value rather than swallowing it, so the author sees SOMETHING to judge.
+    open({ candidates: [{ kitId: 'k1', label: 'Firm Intake',
+                          edition: '2026-05-05', editionKind: 'future_kind',
+                          matchedOn: 'label' }] });
+
+    const row = screen.getByText('Firm Intake').closest('label') as HTMLElement;
+    expect(row.textContent).toContain('2026-05-05');
+  });
+});
