@@ -31,17 +31,22 @@ import { shouldShowField } from './validation';
 import type { FormField } from '../types/schema';
 
 function field(overrides: Partial<FormField> = {}): FormField {
+  // NOTE the shape: this is the VOICE frontend's FormField
+  // (frontend/src/schema-forms/types/schema.ts), which has `name` +
+  // `spoken_name` and NO `label` -- `label` belongs to the schema-EDITOR's
+  // separate FormField type. Passing one to the other typechecks locally under
+  // vitest (which does not type-check) and fails CI's `tsc -p tsconfig.json`.
   return {
     id: 'target',
     name: 'Target',
+    spoken_name: 'target',
     type: 'text',
-    label: 'Target',
     section_id: 's1',
     ...overrides,
   } as FormField;
 }
 
-const TRIGGER = field({ id: 'trigger', label: 'Trigger' });
+const TRIGGER = field({ id: 'trigger', name: 'Trigger', spoken_name: 'trigger' });
 const SHOW_IF = { field: 'trigger', operator: 'equals', value: 'yes' } as const;
 
 describe('shouldShowField: hidden x show_if (bd polyglot-pdf-pfx1)', () => {
