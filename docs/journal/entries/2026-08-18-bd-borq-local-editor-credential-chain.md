@@ -156,6 +156,35 @@ satisfied the regex while the real header was `X-Wrong-Header`. Verified that
 exact probe fails against the graph version, along with the constant-alias
 case it flagged but could not test.
 
+## The pattern I could not see from inside: my prose kept outrunning my code
+
+Four review rounds on a test-only diff. The code was defensible every time.
+What kept failing was the sentence describing it:
+
+| I wrote | What the code did |
+|---|---|
+| "Two files, two languages, one string" | stripped comments on ONE of them |
+| "should not depend on which comment style a file prefers" | three styles unhandled |
+| "pins the FastAPI PARAMETER" | matched the docstring too |
+| asked about "this dependency" | asked about the whole app |
+
+Every one is the same shape: **a claim slightly wider than the implementation.**
+Not one was a lie I would have caught by rereading, because each felt true when
+written -- I described what I MEANT the code to do.
+
+That is the specific harm worth carrying forward. A missing guard leaves a
+visible hole; a guard whose docstring overclaims closes the hole *on paper* and
+stops the next reader looking. The overclaiming sentence is more dangerous than
+the gap it describes, because it is what survives into the next person's
+understanding.
+
+Concretely, the habit that would have caught all four: after writing the
+sentence, read it back as a STRANGER'S SPECIFICATION and ask what test would
+falsify it. "Two languages" -> is there an assertion per language? "Style
+independent" -> which styles did I try? "This dependency" -> does the code
+name that dependency, or a set containing it? Each takes seconds and each
+would have failed.
+
 ## The tree is shared while a reviewer runs
 
 Two process facts, both learned the hard way in this round:
