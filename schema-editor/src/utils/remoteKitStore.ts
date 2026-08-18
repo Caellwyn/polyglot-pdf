@@ -519,6 +519,38 @@ export interface KitLockResult {
   preempted: boolean;
 }
 
+/** A live kit that MIGHT be an older revision of the one being published. */
+export interface RetireCandidate {
+  kitId: string;
+  label: string;
+  formNumber?: string | null;
+  edition?: string | null;
+  /** "edition_date" | "author_version" | "published" -- what `edition` IS, so
+   * the UI can label it rather than showing a bare string. */
+  editionKind?: string | null;
+  /** "form_number" | "label" -- why this was suggested. A label match deserves
+   * more suspicion than a declared form number. */
+  matchedOn: string;
+}
+
+/**
+ * Live kits that plausibly serve the same form as this one (bd
+ * polyglot-pdf-bdedm).
+ *
+ * A SUGGESTION. Nothing is retired by asking: the author ticks one and it
+ * rides the publish as `replaces_kit_id`. Author-only, like the publish it
+ * feeds.
+ */
+export async function fetchRetireCandidates(kitId: string): Promise<RetireCandidate[]> {
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/retire-candidates`);
+  if (!res.ok) {
+    throw new Error(await errorDetail(res, 'Could not check for older versions'));
+  }
+  const body = (await res.json()) as { candidates?: RetireCandidate[] };
+  return body.candidates ?? [];
+}
+
 /** Take a kit for editing. An author can always take one back from an editor;
  * the reverse 409s. */
 export async function takeKitLock(kitId: string): Promise<KitLockResult> {

@@ -1194,6 +1194,226 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
     return store_marker
 
 
+class RetireCandidate(BaseModel):
+    """One live kit that MIGHT be an older revision of the kit being published.
+
+    Every field here exists to let a human tell two same-numbered kits apart,
+    because the system cannot: form_number is explicitly NOT unique (a standard
+    W-7 and a firm's own W-7 variant share it -- see
+    docs/standards/confirmation-and-audit.md), and the label is free text an
+    author may rename. That is exactly why this is a SUGGESTION and a person
+    confirms (maintainer decision 2026-08-07).
+    """
+
+    kitId: str
+    label: str
+    # The form NUMBER ("W-7"), when its schema declares one.
+    formNumber: Optional[str] = None
+    # Whichever revision marker this kit actually carries, and which one it is,
+    # so the UI can say "edition 12/2024" rather than showing a bare string
+    # whose meaning it has to guess.
+    edition: Optional[str] = None
+    editionKind: Optional[str] = None  # "edition_date" | "author_version" | "published"
+    # Why this kit was suggested. Shown to the author: a label-similarity match
+    # deserves more suspicion than a form-number match.
+    matchedOn: str  # "form_number" | "label"
+
+
+class RetireCandidatesResponse(BaseModel):
+    candidates: list[RetireCandidate]
+
+
+def _identity_of_schema(schema: Optional[dict]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """(form_number, edition, edition_kind) from a kit's schema.
+
+    Mirrors resolve_edition_marker's PRECEDENCE (edition_date > author_version)
+    but not its fingerprint fallback: a sha256 shown to a human is noise, and
+    this value exists only to disambiguate two candidates on screen.
+    """
+    block = (schema or {}).get("form_metadata")
+    block = block if isinstance(block, dict) else {}
+
+    def _clean(v: object) -> Optional[str]:
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    number = _clean(block.get("form_number"))
+    edition = _clean(block.get("edition_date"))
+    if edition:
+        return number, edition, "edition_date"
+    version = _clean(block.get("author_version"))
+    if version:
+        return number, version, "author_version"
+    return number, None, None
+
+
+def _normalize_label(label: str) -> str:
+    """Lowercased alphanumerics only -- 'W-7 (ITIN Application)' -> 'w7itinapplication'."""
+    return "".join(ch for ch in label.lower() if ch.isalnum())
+
+
+def _labels_look_like_one_form(a: str, b: str) -> bool:
+    """A deliberately CONSERVATIVE label match: EQUALITY after normalising.
+
+    Containment is unsafe here, at any slack. Real form families differ by a
+    one- or two-character suffix, and those variants are DIFFERENT FORMS --
+    several are supplements filed ALONGSIDE their base form, so retiring one
+    breaks a live filing path:
+
+        I-130 / I-130A      I-864 / I-864A / I-864EZ
+        I-129 / I-129F      I-131 / I-131A
+        I-765 / I-765V      1040 / 1040-X
+        1099 / 1099-MISC    W-8BEN / W-8BEN-E
+        941 / 941-X
+
+    My first version allowed a short suffix, reasoning that "Client Intake"
+    vs "Client Intake Sheet" is a rename. It is -- but the rule could not tell
+    that from I-130 vs I-130A, and it admitted every pair above (Opus
+    fresh-eyes round 1). Slack of 5, 6, 7 or 8 all passed my tests, because
+    they only sampled LONG suffixes; the dimension was untested.
+
+    So: exact match only, and let the rename case cost an author one manual
+    retire. This rule is the FALLBACK anyway -- it fires only for kits that
+    declare no form_number, and the number is the signal that should carry
+    real matches. A missed suggestion costs a click; a wrong one asks an
+    author to retire a live form, possibly another firm's, possibly one a
+    pending filing depends on.
+    """
+    na, nb = _normalize_label(a), _normalize_label(b)
+    # The floor exists only to reject DEGENERATE labels (empty, or a single
+    # stray character), not real ones. At 3 it silently killed the commonest
+    # real form labels: "W-7" normalises to "w7", two characters -- as do W-2,
+    # W-4, W-9 and I-9. Two kits both labelled "W-7" with no form_number
+    # declared produced NO candidate, so an author published a second live W-7
+    # believing there was no older version: exactly the state bd
+    # polyglot-pdf-6dz0 exists to prevent (Opus fresh-eyes round 3).
+    #
+    # Exact match already carries the safety here; the floor only needs to stop
+    # a one-character label matching another one-character label.
+    if len(na) < 2 or len(nb) < 2:
+        return False
+    return na == nb
+
+
+@router.get("/kits/{kit_id}/retire-candidates",
+            response_model=RetireCandidatesResponse)
+async def get_retire_candidates(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+) -> RetireCandidatesResponse:
+    """LIVE kits that plausibly serve the same form as this one.
+
+    Suggestion only -- nothing is retired here. The author ticks one on the
+    publish modal, which sends it as `replaces_kit_id` to the status route,
+    which is what actually retires it (bd polyglot-pdf-6dz0).
+
+    AUTHOR-ONLY, matching the publish it feeds: an editor cannot publish, so
+    offering them a retire list would be a control they cannot use -- and the
+    list itself is a statement about which kits exist.
+
+    Reads each live kit's schema, which the catalogue listing deliberately does
+    NOT do (one metadata read per kit keeps that path cheap). Confined to this
+    route so the cost lands only when an author is actually publishing.
+
+    A kit whose schema cannot be read is SKIPPED, not surfaced with unknowns: a
+    candidate you cannot describe is one the author cannot judge, and the whole
+    point is an informed confirmation.
+    """
+    # Every sibling route in this file opens this way. Traversal is
+    # impractical today (the membership check in _load_meta_or_404 is what
+    # actually guards it), but this route was the one exception to a uniform
+    # invariant, and the guard is what makes that membership check safe to rely
+    # on (Opus fresh-eyes round 3).
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    _meta, _files = await _load_meta_or_404(store, kit_id)
+
+    schema_file, _pdf = _resolve_meta_names(_meta)
+    try:
+        own_schema = await store.load_schema(kit_id, schema_file)
+    except (FormKitNotFound, FormKitStoreError):
+        own_schema = None
+    own_number, _own_ed, _own_kind = _identity_of_schema(own_schema)
+    own_label = (_meta or {}).get("label")
+    own_label = own_label if isinstance(own_label, str) and own_label else kit_id
+
+    try:
+        files_by_kit = await store.list_kit_files()
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to list kits") from exc
+
+    candidates: list[RetireCandidate] = []
+    for other_id in sorted(files_by_kit):
+        if other_id == kit_id:
+            continue
+        try:
+            _safe_kit_id(other_id)
+        except HTTPException:
+            continue
+        try:
+            other_meta = await store.load_metadata(other_id)
+        except FormKitStoreError as exc:
+            # LOUD, not silent. Skipping quietly makes a storage blip
+            # indistinguishable from "no older versions", so the author gets a
+            # confident straight-through publish and two live kits for one form
+            # -- the state bd polyglot-pdf-6dz0 exists to prevent (Opus
+            # fresh-eyes round 1).
+            _log.warning("editor_retire_candidate_unreadable",
+                         kit_id=kit_id, candidate=other_id, error=str(exc))
+            continue
+        # LIVE only. A draft is not competing for the catalogue slot, and a
+        # kit already unpublished has nothing left to retire.
+        if _status_of(other_meta) != "complete":
+            continue
+
+        other_label = (other_meta or {}).get("label")
+        other_label = other_label if isinstance(other_label, str) and other_label else other_id
+        other_schema_file, _p = _resolve_meta_names(other_meta)
+        try:
+            other_schema = await store.load_schema(other_id, other_schema_file)
+        except (FormKitNotFound, FormKitStoreError):
+            continue  # cannot describe it -> cannot ask a human to judge it
+        other_number, other_ed, other_kind = _identity_of_schema(other_schema)
+
+        # form_number FIRST, label similarity second (the bead's order): the
+        # number is a real declaration, the label is free text.
+        if own_number and other_number:
+            # BOTH declare a number, so the declaration DECIDES -- in either
+            # direction. Falling through to the label on a mismatch let the
+            # weakest signal (free text an author can rename) override the
+            # strongest one (an extracted declaration): with production data,
+            # where every real kit declares a number, I-130 suggested retiring
+            # I-130A whenever their labels happened to match. That is the
+            # supplement-filed-alongside-its-base case, and the exact harm
+            # auto-retire was rejected over -- arriving through the fallback
+            # instead of the primary path (Opus fresh-eyes round 4).
+            if own_number != other_number:
+                continue
+            matched = "form_number"
+        elif _labels_look_like_one_form(own_label, other_label):
+            matched = "label"
+        else:
+            continue
+
+        if other_ed is None and other_kind is None:
+            # No edition and no author version: fall back to when it went live,
+            # so the author still has a date to tell two candidates apart.
+            published = (other_meta or {}).get("published_at")
+            if isinstance(published, str) and published.strip():
+                other_ed, other_kind = published.strip(), "published"
+
+        candidates.append(RetireCandidate(
+            kitId=other_id,
+            label=other_label,
+            formNumber=other_number,
+            edition=other_ed,
+            editionKind=other_kind,
+            matchedOn=matched,
+        ))
+
+    _log.info("editor_retire_candidates", kit_id=kit_id, count=len(candidates))
+    return RetireCandidatesResponse(candidates=candidates)
+
+
 @router.get("/kits/{kit_id}/schema")
 async def get_editor_kit_schema(
     kit_id: str,
@@ -2689,9 +2909,11 @@ async def set_editor_kit_status(
     # Precisely: this stamps EVERY complete-status POST, including an idempotent
     # complete->complete re-press with no schema edit, so it records "when this
     # kit was last published", NOT "when it last changed" (Opus review on 47r3;
-    # an earlier comment here overclaimed the latter). Inert today -- nothing
-    # reads it -- but epic polyglot-pdf-7jmy will, and its author-supplied
-    # version is the field that will carry edit intent.
+    # an earlier comment here overclaimed the latter). READ by
+    # get_retire_candidates as the last-resort revision marker shown to an
+    # author choosing which older version to retire, for a kit that declares
+    # neither an edition_date nor an author_version (bd polyglot-pdf-bdedm).
+    # The author-supplied version is still the field that carries edit intent.
     if body.status == "complete":
         next_meta["published_at"] = datetime.now(timezone.utc).isoformat()
         # Re-stamp readiness from the RELOADED schema this transition just

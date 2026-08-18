@@ -14,6 +14,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     listRemoteKits: vi.fn(),
     loadRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
+    fetchRetireCandidates: vi.fn(),
     deleteRemoteKit: vi.fn(),
     takeKitLock: vi.fn(),
     releaseKitLock: vi.fn(),
@@ -30,7 +31,8 @@ import {
   deleteRemoteKit,
   releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
-  type RemoteKitEntry, type KitStatusResult,
+  fetchRetireCandidates,
+  type RemoteKitEntry, type KitStatusResult, type RetireCandidate,
 } from '../utils/remoteKitStore';
 
 const KITS: RemoteKitEntry[] = [
@@ -50,6 +52,11 @@ const SCHEMA = {
 
 beforeEach(() => {
   vi.mocked(listRemoteKits).mockResolvedValue([...KITS]);
+  // Every publish now asks this first (bd polyglot-pdf-bdedm). Default to "no
+  // older versions" GLOBALLY, not per-describe: a bare vi.fn() resolves
+  // undefined, and the caller reads .length off it, so an unmocked default
+  // broke every publish test in the file.
+  vi.mocked(fetchRetireCandidates).mockResolvedValue([]);
   vi.mocked(loadRemoteSchema).mockResolvedValue(SCHEMA);
   // Default: a clean complete flip with no drift (bd polyglot-pdf-783r). Tests
   // that exercise the drift notice / refusal override this per-case.
@@ -733,6 +740,490 @@ describe('author version prompt on publish (bd polyglot-pdf-xzw5)', () => {
       expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
     // The raw refusal is NOT dumped on the card -- the dialog replaces it.
     expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
+  });
+
+  it('does not start a SECOND publish while the lookup is in flight', async () => {
+    // The buttons are gated on busy/completingId, but those are set inside
+    // handleSetStatus -- which now runs only AFTER the candidate lookup
+    // resolves. Without a pending flag set before the await, every click
+    // during the lookup starts its own publish, each running the METERED
+    // per-language sweep with racing writes.
+    //
+    // This fix was made in round 1, LOST to a git checkout during my own
+    // mutation testing, and reproduced by round 2. It was invisible because
+    // nothing pinned it -- so this test exists as much for the regression as
+    // for the bug.
+    let release: (v: RetireCandidate[]) => void = () => {};
+    vi.mocked(fetchRetireCandidates).mockReturnValue(
+      new Promise<RetireCandidate[]>((res) => { release = res; }));
+    await publishDraftKit();
+
+    // The button is DISABLED while the lookup runs -- which is the fix, and
+    // is why there is no second "Publish" to click. Assert the guard rather
+    // than a click count: a count test would pass just as well if the button
+    // were merely slow to re-render.
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    await waitFor(() =>
+      expect(within(card).queryByText('Publish')).not.toBeInTheDocument());
+
+    release([]);
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    expect(setRemoteStatus).toHaveBeenCalledTimes(1);
+    // ...and the button comes back afterwards, so a failed lookup cannot
+    // strand the catalogue disabled.
+    await waitFor(() =>
+      expect(within(card).getByText('Publish')).toBeInTheDocument());
+  });
+
+  it('keeps the retire dialog OPEN while the publish runs', async () => {
+    // Publish takes tens of seconds (the per-language sweep). Dismissing the
+    // dialog first made its busy guard dead code and dropped the author back
+    // to an unchanged catalogue with an enabled Publish button -- the exact
+    // failure AuthorVersionDialog's deferred unmount exists to prevent.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    let finish: (v: KitStatusResult) => void = () => {};
+    vi.mocked(setRemoteStatus).mockReturnValue(
+      new Promise<KitStatusResult>((res) => { finish = res; }));
+    await publishDraftKit();
+
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Publish, keep both'));
+
+    // Still mounted, and showing progress, while the publish is in flight.
+    await waitFor(() => expect(screen.getByText('Publishing...')).toBeInTheDocument());
+
+    finish({ ok: true, status: 'complete', retranslated: 0,
+             translationModel: null, supersededKitId: null });
+    await waitFor(() =>
+      expect(screen.queryByText('Client Intake')).not.toBeInTheDocument());
+  });
+
+  it.each([
+    ['done-kit', 'Done Form', 'Revert to draft'],
+  ])('the REPUBLISH path asks about older versions too', async () => {
+    // A retired form returning to service is precisely when a same-form live
+    // kit exists, so this is the highest-value path -- and it was the one with
+    // no coverage: reverting its wiring left 80/80 green (Opus fresh-eyes
+    // round 2).
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'unpublished' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Done Form')).toBeInTheDocument());
+
+    const card = screen.getByText('Done Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Publish again'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('done-kit'));
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('the STRIP republish button asks too (the twin)', async () => {
+    // Every publish control in this file exists twice -- compact strip and
+    // expanded card. Four separate times on this bead a mutation "survived"
+    // only because I had reverted the twin the test does not click. Each twin
+    // gets its own click.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'unpublished' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    // Strip only -- no card grid.
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="done-kit"
+                            role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish again'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('done-kit'));
+  });
+
+  it('the STRIP submitted-kit Publish asks too (the last unpinned twin)', async () => {
+    // The one publish site of six with no test: reverting it left 85/85 green.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, status: 'submitted' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit"
+                            role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+  });
+
+  it.each([
+    ['the compact strip', false],
+    ['the expanded card grid', true],
+  ])('freezes the PUBLISH controls in %s while the dialog is open', async (_name, expand) => {
+    // Not one button: the whole set, in BOTH views. Nine of the ten original
+    // gates could be deleted with the suite green, because the only test
+    // clicked a single card button -- the twin-shaped miss, now inside the fix
+    // for the twin-shaped miss (Opus fresh-eyes round 4).
+    //
+    // Hand-lists four labels -- it does NOT auto-cover a control added later,
+    // and an earlier version of this comment claimed it did, which is exactly
+    // the kind of promise that stops the next author adding a case. The
+    // all-four-statuses test above is the one with a census assertion; this
+    // one is the per-view check.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'done-kit' ? { ...k, status: 'complete' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'done-kit', label: 'Done Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded={expand} onOpenKit={() => {}}
+                            selectedKitId="draft-kit" role="author" />);
+    // Wait on a control that exists in BOTH views: the strip renders kits as
+    // <select> options (not text) and the toggle's label flips with the view,
+    // so either would be a view-dependent anchor.
+    await waitFor(() =>
+      expect(screen.getAllByText('Publish').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Publish')[0]);
+    await waitFor(() => expect(screen.getByText('Done Form')).toBeInTheDocument());
+
+    // Every control that CHANGES a kit's status must be inert behind the
+    // dialog -- otherwise the candidate list goes stale under the author, or
+    // two publishes race, each running the metered per-language sweep.
+    for (const label of ['Publish', 'Publish again', 'Revert to draft', 'Unpublish']) {
+      for (const el of screen.queryAllByText(label)) {
+        const btn = el.closest('button') as HTMLButtonElement | null;
+        // Buttons INSIDE the dialog are the point of the dialog; skip them.
+        if (!btn || btn.closest('[role="dialog"]')) continue;
+        expect(btn.disabled).toBe(true);
+      }
+    }
+  });
+
+  // The STRIP renders controls for the SELECTED kit only, so its branch is
+  // decided by that kit's status -- one selection exercises ONE strip branch.
+  // Selecting a single kit is why the grid covered four statuses while the
+  // strip covered one, and why three strip gates survived four rounds of
+  // fixes (Opus fresh-eyes round 8). Parametrized over the selection.
+  it.each([
+    ['live-kit', 'complete'],
+    ['retired-kit', 'unpublished'],
+    ['review-kit', 'submitted'],
+    ['wip-kit', 'draft'],
+  ])('freezes EVERY status control with a %s (%s) kit selected', async (selectedId) => {
+    // The root cause of four rounds of the same hole: the shared KITS fixture
+    // has only `complete` and `draft` kits, so no `unpublished` or `submitted`
+    // card ever renders -- and 8 of the 14 freeze gates live on exactly those
+    // two statuses. They were unreachable by any test, so each round's fix
+    // covered a different subset and the rest stayed deletable with the whole
+    // suite green (Opus fresh-eyes round 7).
+    //
+    // A local fixture rather than widening KITS, which 100+ other tests rely
+    // on. Every status is present, so every gate is reachable.
+    const ALL_STATUSES: RemoteKitEntry[] = [
+      { id: 'live-kit', label: 'Live Form', status: 'complete', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'retired-kit', label: 'Retired Form', status: 'unpublished', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'review-kit', label: 'Review Form', status: 'submitted', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'wip-kit', label: 'WIP Form', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    ];
+    vi.mocked(listRemoteKits).mockResolvedValue(ALL_STATUSES);
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'live-kit', label: 'Live Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={selectedId} role="author" />);
+    const cards = await screen.findByRole('list');
+    await waitFor(() =>
+      expect(within(cards).getByText('WIP Form')).toBeInTheDocument());
+
+    // Open from a DRAFT card that is not the selection, so the strip keeps
+    // rendering the selected kit's own controls behind the dialog.
+    const opener = selectedId === 'wip-kit' ? 'Review Form' : 'WIP Form';
+    const openerCard = within(cards).getByText(opener).closest('li') as HTMLElement;
+    fireEvent.click(within(openerCard).getByText('Publish'));
+    await waitFor(() =>
+      expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
+
+    // EVERY status-changing control, wherever it renders. Each label carries
+    // its own existence assertion: a label matching zero elements is how the
+    // previous three versions of this test passed while checking nothing.
+    const LABELS = ['Publish', 'Publish again', 'Revert to draft',
+                    'Unpublish', 'Send back', 'Reopen'];
+    let checked = 0;
+    let stripChecked = 0;
+    for (const label of LABELS) {
+      const buttons = screen.queryAllByText(label)
+        .map((e) => e.closest('button') as HTMLButtonElement | null)
+        .filter((b): b is HTMLButtonElement => !!b && !b.closest('[role="dialog"]'));
+      if (buttons.length === 0) continue;
+      for (const btn of buttons) {
+        expect(btn.disabled, `${label} was clickable behind the dialog`).toBe(true);
+        checked += 1;
+        if (!cards.contains(btn)) stripChecked += 1;
+      }
+    }
+    // The census the earlier versions lacked. The number is deliberately the
+    // measured floor rather than an aspiration: an earlier comment here
+    // claimed "well over a dozen", which was false -- the strip contributes
+    // only the SELECTED kit's controls, so the real count is 8 and the
+    // threshold bound by equality alone (round 8). What makes this test bite
+    // is the parametrization over selections, not the size of this number.
+    expect(checked).toBeGreaterThanOrEqual(6);
+    // ...and at least one STRIP control was among them, or this has silently
+    // become a card-grid-only test again.
+    expect(stripChecked, 'no STRIP control was asserted on').toBeGreaterThan(0);
+  });
+
+  it('freezes the STRIP destructive pair behind the dialog', async () => {
+    // The card grid is ADDITIVE, not a replacement -- the strip renders
+    // unconditionally beneath it. So with a COMPLETE kit selected (its strip
+    // shows Revert to draft + Unpublish) and the grid expanded, a DIFFERENT
+    // draft card's Publish opens the dialog and the strip pair sits right
+    // behind it, clickable.
+    //
+    // My round-5 test asserted this was unreachable and covered only the card
+    // grid, so deleting the two STRIP gates left all 103 tests green while a
+    // click genuinely fired setRemoteStatus behind the open dialog -- retiring
+    // a live form while the author is being asked which live form to retire.
+    // Third consecutive round this twin-shaped hole survived its own fix
+    // (Opus fresh-eyes round 6).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'done-kit', label: 'Done Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId="done-kit" role="author" />);
+    const cards = await screen.findByRole('list');
+    await waitFor(() =>
+      expect(within(cards).getByText('Draft Form')).toBeInTheDocument());
+
+    const draftCard = within(cards).getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(draftCard).getByText('Publish'));
+    await waitFor(() =>
+      expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
+
+    for (const label of ['Revert to draft', 'Unpublish']) {
+      const stripBtn = screen.getAllByText(label)
+        .map((e) => e.closest('button') as HTMLButtonElement)
+        .find((b) => b && !b.closest('[role="dialog"]') && !cards.contains(b));
+      // The EXISTENCE assertion is the point: a `find` returning undefined is
+      // exactly how the last two versions of this test went vacuous.
+      expect(stripBtn, `no STRIP ${label} button rendered`).toBeTruthy();
+      expect(stripBtn!.disabled).toBe(true);
+    }
+
+    const stripUnpublish = screen.getAllByText('Unpublish')
+      .map((e) => e.closest('button') as HTMLButtonElement)
+      .find((b) => b && !b.closest('[role="dialog"]') && !cards.contains(b));
+    fireEvent.click(stripUnpublish!);
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('freezes REVERT TO DRAFT and UNPUBLISH behind the dialog', async () => {
+    // The two most destructive controls, and the pair the parametrized test
+    // above cannot reach: a COMPLETE kit renders them instead of Publish, and
+    // the strip shows controls only for the SELECTED kit -- so in the strip
+    // there is no Publish left to open the dialog with. Deleting these two
+    // gates left the whole 1376-test suite green (Opus fresh-eyes round 5,
+    // catching the round-4 flaw repeated inside the round-4 fix).
+    //
+    // The card grid is where both coexist: draft-kit's Publish opens the
+    // dialog, done-kit's destructive pair must freeze.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'done-kit', label: 'Done Form', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={null} role="author" />);
+    // Scope to the CARD LIST: the labels also appear in the strip's <select>,
+    // so a bare getByText matches two elements.
+    const cards = await screen.findByRole('list');
+    await waitFor(() =>
+      expect(within(cards).getByText('Done Form')).toBeInTheDocument());
+
+    const draftCard = within(cards).getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(draftCard).getByText('Publish'));
+    await waitFor(() =>
+      expect(screen.getByText(/looks like a newer version/)).toBeInTheDocument());
+
+    const liveCard = within(cards).getByText('Done Form').closest('li') as HTMLElement;
+    for (const label of ['Revert to draft', 'Unpublish']) {
+      const btn = within(liveCard).getByText(label).closest('button') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    }
+    // Clicking one must not fire a status change behind the open dialog.
+    fireEvent.click(within(liveCard).getByText('Unpublish'));
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('disables the catalogue Publish buttons while the dialog is open', async () => {
+    // completingId clears before the prompt opens, so every Publish button was
+    // live behind the dialog -- and clicking one replaced the pending prompt,
+    // letting an author tick a candidate computed for a DIFFERENT kit. Only
+    // reachable because the dialog had no real overlay (round 3, findings 1+2).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    await publishDraftKit();
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    const publish = within(card).queryByText('Publish');
+    expect(publish === null || (publish.closest('button') as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
+  it('the SUBMITTED-kit publish path asks about older versions too', async () => {
+    // An author publishing a kit an editor submitted -- the hqztg flow.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      KITS.map((k) => (k.id === 'draft-kit' ? { ...k, status: 'submitted' } : k)));
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'other-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}}
+                            selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Publish'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+  });
+
+  it('asks from the compact STRIP publish button too, not just the card', async () => {
+    // The twin. My mutation testing initially reverted only the strip button
+    // and every test stayed green -- because publishDraftKit clicks the CARD.
+    // Each twin needs its own click, or one of the pair can lose the wiring
+    // silently. This repo's most repeated defect, and it nearly landed again.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    // No card grid: the compact strip is the default view.
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit"
+                            role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('asks about older versions from the DRAFT publish path too', async () => {
+    // The path that actually matters, and the one I missed: an author
+    // publishing a DRAFT. Its button reads `isAuthor ? 'complete' :
+    // 'submitted'`, so a search for the literal `handleSetStatus(kit,
+    // 'complete')` skipped it -- the suggestion never fired on the primary
+    // publish route while every other test stayed green.
+    //
+    // Asserts the CALL, not just the dialog: reverting the wiring makes the
+    // check silently not happen, which is exactly what shipped.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    await publishDraftKit();
+
+    await waitFor(() => expect(fetchRetireCandidates).toHaveBeenCalledWith('draft-kit'));
+    expect(await screen.findByText('Client Intake')).toBeInTheDocument();
+    // ...and nothing is published until the author answers.
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('an EDITOR submitting a draft is never asked about retirement', async () => {
+    // Submitting retires nothing, so asking would be a question with no
+    // meaning -- and the route is author-only anyway.
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    const card = screen.getByText('Draft Form').closest('li') as HTMLElement;
+    fireEvent.click(within(card).getByText('Submit for review'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    expect(fetchRetireCandidates).not.toHaveBeenCalled();
+    expect(vi.mocked(setRemoteStatus).mock.calls[0][1]).toBe('submitted');
+  });
+
+  it('carries a ticked RETIREMENT through the version prompt', async () => {
+    // The firm-tier case this whole bead targets: a custom form has no
+    // government edition date, so publishing it needs BOTH dialogs -- pick the
+    // form to retire, then name a version. The retry re-called publish with
+    // only the version, so the author ticked a form, named a version, and got
+    // a publish with nothing retired and NO ERROR (Opus fresh-eyes round 1).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    vi.mocked(setRemoteStatus)
+      .mockRejectedValueOnce(new Error(REFUSAL))
+      .mockResolvedValueOnce({
+        ok: true, status: 'complete', retranslated: 0,
+        translationModel: null, supersededKitId: 'old-kit',
+      });
+    await publishDraftKit();
+
+    // Tick the candidate and publish.
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+    fireEvent.click(screen.getByText('Publish and retire the old one'));
+
+    // The gate asks for a version...
+    await waitFor(() =>
+      expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Version'), { target: { value: '2026-08-07' } });
+    fireEvent.click(screen.getByText('Save version & publish'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalledTimes(2));
+    // BOTH survive the retry. Asserting the whole options object, not just the
+    // version: the bug was an omission, and a partial assertion would miss it.
+    expect(vi.mocked(setRemoteStatus).mock.calls[1]).toEqual(
+      ['draft-kit', 'complete',
+       { authorVersion: '2026-08-07', replacesKitId: 'old-kit' }],
+    );
+  });
+
+  it('publishes with NO retirement when the author ticks nothing', async () => {
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([
+      { kitId: 'old-kit', label: 'Client Intake', matchedOn: 'label' },
+    ]);
+    vi.mocked(setRemoteStatus).mockResolvedValueOnce({
+      ok: true, status: 'complete', retranslated: 0,
+      translationModel: null, supersededKitId: null,
+    });
+    await publishDraftKit();
+
+    await waitFor(() => expect(screen.getByText('Client Intake')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Publish, keep both'));
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    // The VALUE, not the key's presence: the options object legitimately
+    // carries `replacesKitId: undefined`, and setRemoteStatus omits the wire
+    // field for any falsy value -- so asserting the key's absence would fail
+    // while the shipped request is correct.
+    expect(vi.mocked(setRemoteStatus).mock.calls[0][2]?.replacesKitId).toBeUndefined();
+  });
+
+  it('shows NO extra step when nothing looks like the same form', async () => {
+    // The common case must not grow a dialog (the bead is explicit).
+    vi.mocked(fetchRetireCandidates).mockResolvedValue([]);
+    vi.mocked(setRemoteStatus).mockResolvedValueOnce({
+      ok: true, status: 'complete', retranslated: 0,
+      translationModel: null, supersededKitId: null,
+    });
+    await publishDraftKit();
+
+    await waitFor(() => expect(setRemoteStatus).toHaveBeenCalled());
+    expect(screen.queryByText(/looks like a newer version/)).not.toBeInTheDocument();
   });
 
   it('retries the SAME publish with the version attached', async () => {
