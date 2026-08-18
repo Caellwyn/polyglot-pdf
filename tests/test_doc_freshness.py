@@ -240,6 +240,24 @@ class TestFreshnessScanCoversTier1:
         docs = freshness.find_docs()
         assert doctrine_doc in docs
 
+    # bd polyglot-pdf-3t190: three comment/docstring sites in
+    # scripts/check_doc_freshness.py hand-list DOC_DIRS' membership as prose
+    # ("docs/components/*.md / docs/standards/*.md") rather than deriving it,
+    # so adding docs/doctrine to DOC_DIRS (bd riffn) silently desynced them --
+    # the classic enumerate-the-set miss (CLAUDE.md scar #7): some sites were
+    # updated, three were not. Derive the expectation FROM DOC_DIRS so a
+    # future addition fails this test instead of leaving another stale site.
+    def test_every_doc_dirs_entry_named_in_the_script_source(self):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        for d in freshness.DOC_DIRS:
+            assert source.count(d) >= 2, (
+                f"{d!r} (a DOC_DIRS entry) appears fewer than 2 times in "
+                f"check_doc_freshness.py's own source -- every DOC_DIRS "
+                f"member must be named at least in the module docstring AND "
+                f"the DOC_DIRS assignment itself; a future addition that "
+                f"skips updating the surrounding prose will fail this test."
+            )
+
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
         # tier-1 doc that has a Tracks line gets flagged. We point a fake

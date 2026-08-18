@@ -4,8 +4,8 @@ This script does two warn-only checks in one pass:
 
 1. **Doc freshness.** Each tier-1 doc (TIER1_DOCS: CLAUDE.md, docs/INDEX.md,
    docs/technical_guide.md) and each `docs/components/*.md` /
-   `docs/standards/*.md` may declare a `**Tracks:**` line listing
-   space- or comma-separated paths or globs of code it owns, plus a
+   `docs/standards/*.md` / `docs/doctrine/*.md` may declare a `**Tracks:**`
+   line listing space- or comma-separated paths or globs of code it owns, plus a
    `*Last updated: YYYY-MM-DD*` line near the top. Compares the doc's
    **claimed** "last updated" date (parsed from the `*Last updated:*`
    line) to each tracked file's last commit timestamp; flags docs whose
@@ -639,13 +639,14 @@ def main() -> int:
 
     only_staged = staged_files() if args.staged else None
     # find_docs() returns tier-1 (TIER1_DOCS) + tier-2 (docs/components,
-    # docs/standards) docs. The freshness loop below must cover tier-1 too —
-    # technical_guide.md's **Tracks:** line was previously unenforced because
-    # this loop only iterated the (then DOC_DIRS-only) result.
+    # docs/standards, docs/doctrine) docs. The freshness loop below must
+    # cover tier-1 too — technical_guide.md's **Tracks:** line was previously
+    # unenforced because this loop only iterated the (then DOC_DIRS-only)
+    # result.
     docs = find_docs()
     if not docs:
         print("No docs to check (no tier-1 docs on disk; "
-              "docs/components/ + docs/standards/ are empty).")
+              "docs/components/, docs/standards/, docs/doctrine/ are empty).")
         return 0
 
     any_stale = False
