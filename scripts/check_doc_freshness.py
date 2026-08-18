@@ -149,11 +149,13 @@ TIER1_DOCS = [
     "docs/INDEX.md",
     "docs/technical_guide.md",
 ]
-# doc-architecture.md is deliberately NOT in TIER1_DOCS: it's a meta-doc
-# whose own body quotes REAL `**Tracks:**` example syntax to explain the
-# convention (see its "1. `**Tracks:**` lines map docs to code" section) --
-# TRACKS_RE would match that illustrative example and try to freshness-check
-# nonexistent globs like "src/auth/**/*.py". But it IS the file that DEFINES
+# doc-architecture.md is deliberately NOT in TIER1_DOCS: TRACKS_RE.search()
+# takes the FIRST `**Tracks:**` mention in the file, which is its own intro
+# prose ("...carries no `**Tracks:**` line because it owns no code path"),
+# NOT the fenced **Tracks:** example syntax further down (that's the third
+# match and is never reached) -- either way, parse_tracks() would try to
+# freshness-check the trailing prose words as if they were globs (e.g.
+# "line", "because", "it", "owns", "no"). But it IS the file that DEFINES
 # the current-state-only rule, so it must still be covered by the CONVENTION
 # scan (no Previously:/Prior:/Earlier: chains, no history sections) even
 # though it skips the freshness-staleness half. It was exempt from BOTH
@@ -510,12 +512,14 @@ def check_doc_conventions(
       2. `## Recent sprint history` / `## Update history` / `## Changelog` /
          `## Sprint history` headings -- same reason.
 
-    The scan covers TIER1_DOCS (CLAUDE.md + docs/*.md top-level files),
-    CONVENTION_ONLY_DOCS (meta-docs whose body quotes real `**Tracks:**`
-    syntax as an example, so they opt out of the freshness-staleness half
-    but must still be convention-scanned -- currently just
-    docs/doc-architecture.md), AND every doc under DOC_DIRS
-    (docs/components/*.md + docs/standards/*.md + docs/doctrine/*.md).
+    The scan covers TIER1_DOCS (the specific files it names -- CLAUDE.md,
+    docs/INDEX.md, docs/technical_guide.md -- NOT every docs/*.md top-level
+    file), CONVENTION_ONLY_DOCS (meta-docs that would otherwise misparse
+    under TRACKS_RE -- see that constant's comment for the exact reason --
+    so they opt out of the freshness-staleness half but must still be
+    convention-scanned -- currently just docs/doc-architecture.md), AND
+    every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md +
+    docs/doctrine/*.md).
     Tier-3 docs (docs/dev_journal.md, docs/journal/*, docs/archive/*) are
     explicitly NOT scanned -- chronological history is the whole point
     there.
