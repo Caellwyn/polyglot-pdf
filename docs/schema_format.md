@@ -431,6 +431,30 @@ shipped values include `"draft"`), not a revision marker.
 
 ### 7. Conditional Logic
 
+**A field may NOT be both `hidden: true` and carry a `show_if`.** They
+contradict each other: one says never show this, the other says show it when a
+condition matches. Pick one --
+
+| You want | Set |
+|---|---|
+| never shown to anyone | `hidden: true`, no `show_if` |
+| shown only in some cases | `show_if`, and leave `hidden` off |
+| always shown | neither |
+
+This is enforced, not advisory (maintainer decision 2026-08-04, bd
+`polyglot-pdf-pfx1`): the schema editor disables each control while the other
+is set, and schema-lint rejects a kit carrying both with rule
+`hidden-with-show-if` -- an ERROR, so such a kit cannot be published.
+
+*Why it is a hard gate.* If both are set, the runtime resolves the
+contradiction in the RISKIER direction: `shouldShowField` consults the
+condition and ignores `hidden`, so a field marked never-show is DISPLAYED to
+the applicant once its condition matches. On a legal form that can mean an
+acceptance-agent-only field shown to the person filing. Allowing the state and
+warning about it would leave every consumer to interpret it -- bd
+`polyglot-pdf-ubam` had to repair seven call sites that each interpreted it
+differently.
+
 **ConditionalDisplay Object**:
 
 ```json
