@@ -257,14 +257,22 @@ class TestFreshnessScanCoversTier1:
     # be satisfied by unrelated text elsewhere in the file. Isolate each
     # block by a stable anchor string near it, independent of exact line
     # numbers so a later reflow doesn't false-fail this test.
-    @pytest.mark.parametrize(
-        "anchor,block_name",
-        [
-            ("This script does two warn-only checks in one pass:", "module docstring"),
-            ("find_docs() returns tier-1", "main() find_docs() comment"),
-            ("No docs to check (no tier-1 docs on disk", "empty-corpus print"),
-        ],
-    )
+    # bd polyglot-pdf-uquqs: the first cut of this test bounded each site's
+    # window by a magic 400-char constant. That is a proxy, not the property
+    # -- if a prose block is ever REWORDED SHORTER (while also going stale),
+    # the fixed-size window can slide past the block's own end and pick up
+    # DOC_DIRS mentions from a NEIGHBORING site instead, silently re-creating
+    # the exact vacuity bd zbvkt fixed. Bound each window by the NEXT
+    # anchor's start (or end-of-file for the last one) instead, so a window
+    # can never structurally contain a sibling site's text regardless of how
+    # any one block is reworded.
+    _ANCHORS_IN_FILE_ORDER = [
+        ("This script does two warn-only checks in one pass:", "module docstring"),
+        ("find_docs() returns tier-1", "main() find_docs() comment"),
+        ("No docs to check (no tier-1 docs on disk", "empty-corpus print"),
+    ]
+
+    @pytest.mark.parametrize("anchor,block_name", _ANCHORS_IN_FILE_ORDER)
     def test_each_doc_dirs_prose_site_names_every_entry(self, anchor, block_name):
         source = SCRIPT_PATH.read_text(encoding="utf-8")
         idx = source.find(anchor)
@@ -273,9 +281,16 @@ class TestFreshnessScanCoversTier1:
             f"-- the site may have been reworded; update this test's anchor "
             f"deliberately, don't just delete it."
         )
-        # A generous window around the anchor -- enough to cover the whole
-        # paragraph/comment block without spilling into unrelated code.
-        window = source[idx: idx + 400]
+        # Bound the window by the NEXT anchor in file order (not this one),
+        # so it can never swallow a sibling site's text no matter how short
+        # or long this block is reworded to be. The last site's window runs
+        # to end-of-file.
+        other_anchors_after = [
+            source.find(a) for a, _ in self._ANCHORS_IN_FILE_ORDER
+            if a != anchor and source.find(a) > idx
+        ]
+        window_end = min(other_anchors_after) if other_anchors_after else len(source)
+        window = source[idx:window_end]
         for d in freshness.DOC_DIRS:
             assert d in window, (
                 f"the {block_name!r} prose block does not mention DOC_DIRS "

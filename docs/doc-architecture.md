@@ -81,7 +81,7 @@ When a journal lesson **generalizes** (applies anywhere), promote a one-liner up
 
 ## Setting this up in a new project
 
-1. Keep the directory skeleton this template ships: `docs/INDEX.md`, `docs/components/`, `docs/standards/`, `docs/journal/entries/`, `docs/journal/TAGS.md`, `docs/archive/`, `docs/technical_guide.md`.
+1. Keep the directory skeleton this template ships: `docs/INDEX.md`, `docs/components/`, `docs/standards/`, `docs/doctrine/`, `docs/journal/entries/`, `docs/journal/TAGS.md`, `docs/archive/`, `docs/technical_guide.md`.
 2. Give each component/standard doc a `**Tracks:**` line and a `*Last updated:*` stamp.
 3. List your tier-1 docs in `scripts/check_doc_freshness.py`'s `TIER1_DOCS`.
 4. Wire `check_doc_freshness.py` as a pre-commit hook + run `tests/test_doc_freshness.py` in CI.
