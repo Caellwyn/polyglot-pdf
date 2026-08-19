@@ -93,6 +93,24 @@ while keeping a private kit fully USABLE for its own firm.
 
 ## Lessons
 
+- `pytest ... | tail -N` in a backgrounded run MASKS the exit code (the
+  pipeline exits with tail's 0) AND discards the failure names -- two
+  "full suite green" verdicts here were actually 10-failed runs, caught
+  only by reading the COUNTS line. Never pipe a verdict-bearing test run;
+  read counts, never exit codes alone (both directions of the scar).
+- A bare MagicMock store double AUTO-CREATES whatever attribute new code
+  reaches for -- here twice in one fixture: a non-awaitable load_metadata
+  (TypeError) and a truthy enforce_complete_on_public_reads (armed the
+  publish gate against None metadata). When production code grows a new
+  store touchpoint, every MagicMock double needs that attribute pinned
+  explicitly.
+- A rebase DROPS merge commits -- including any conflict RESOLUTION and any
+  ride-along edits committed with them. After closeout_finish's mandatory
+  pull --rebase on a branch that had merged dev, re-verify every piece of
+  content the merge commit carried (this branch lost the combined doc
+  stamp, a test-fixture fix, and these lessons to exactly that; all
+  re-applied post-rebase and re-verified by suite).
+
 - The write-overlap guard's first live catch worked exactly as designed:
   vccy and the in-flight y2l0p both declared form_kits.py, the engine
   refused the pick, and waiting for the claim release cost two hours instead

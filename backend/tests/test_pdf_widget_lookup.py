@@ -91,6 +91,10 @@ def mock_store(monkeypatch):
     # a real async loader returning None (= no metadata -> public kit), the
     # same contract the real stores honor for absence.
     store.load_metadata = AsyncMock(return_value=None)
+    # Same MagicMock trap, second attribute: an auto-created truthy
+    # enforce_complete_on_public_reads would arm the publish gate against
+    # the None metadata above and 404 every fill. Local-mode semantics.
+    store.enforce_complete_on_public_reads = False
     monkeypatch.setattr(pdf_routes, "get_form_kit_store", lambda: store)
 
     def set_pdf(pdf_bytes: bytes):
