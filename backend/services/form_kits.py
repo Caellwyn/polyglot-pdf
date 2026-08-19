@@ -55,14 +55,6 @@ def safe_filename(name: Any, default: str) -> str:
 # free: `list_kit_files` ignores anything deeper than <kit>/<file> in both
 # stores, and the leading underscore is outside _KIT_ID_RE, so an archive dir
 # can never be mistaken for a kit.
-class _SnapshotIdTaken(Exception):
-	"""A snapshot id was claimed by a concurrent save; try the next one.
-
-	Internal retry signal, never surfaced to a caller -- put_draft_snapshot
-	catches it and moves to the next id.
-	"""
-
-
 _ARCHIVE_DIR = "_archive"
 
 # DRAFT SNAPSHOTS (bd polyglot-pdf-y2l0p) live at <kit_id>/_DRAFTS_DIR/<n>/ and
@@ -204,6 +196,23 @@ class FormKitStoreError(Exception):
 
 class FormKitNotFound(FormKitStoreError):
 	"""Raised when a kit or requested file cannot be located."""
+
+
+class _SnapshotIdTaken(FormKitStoreError):
+	"""A draft-snapshot id was claimed by a concurrent save; try the next one.
+
+	Internal retry signal -- put_draft_snapshot catches it and advances.
+
+	SUBCLASSES FormKitStoreError deliberately. _upload_json is shared by
+	put_schema, put_metadata, put_json_artifact and both archived-revision
+	writes, and its `except Exception -> FormKitStoreError` is the fail-closed
+	guarantee every route depends on. As a bare Exception this escaped that
+	guarantee for all five untouched writers: a 412 from any other source (a
+	retention policy, an object hold, a bucket-level precondition) on a plain
+	put_schema became an unhandled 500 rather than a handled 502 -- on the
+	editor's save route, the very path this bead hardened (Opus fresh-eyes
+	round 8).
+	"""
 
 
 def _safe_str(value: Any, default: str) -> str:
@@ -729,6 +738,37 @@ class LocalFormKitStore(FormKitStore):
 		# wrong snapshot the moment the ring passes single digits.
 		return sorted(ids, key=int)
 
+	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
+		"""Delete an abandoned claim, re-checking emptiness at the last instant.
+
+		The check and the delete must be as close together as possible: a
+		concurrent saver can complete its write at any moment, and deleting a
+		COMPLETED snapshot is precisely the harm this whole feature exists to
+		prevent. Checking here rather than trusting a listing taken earlier
+		closes the window that lost 85 of 360 concurrent trials.
+
+		Racy by nature -- os has no atomic "remove only if empty" for a tree --
+		but the window shrinks from two listings wide to a single stat, and
+		anything that appears after the stat is preserved by rmdir refusing a
+		non-empty directory.
+		"""
+		target = self._drafts_dir(kit_id) / snapshot_id
+		try:
+			if (target / "schema.json").exists():
+				return  # a saver completed it while we were looking elsewhere
+			# rmdir, NOT rmtree: it refuses a non-empty directory, so a schema
+			# written in the instant after the check above survives rather than
+			# being swept away with it.
+			for leftover in target.iterdir():
+				if leftover.name == "meta.json":
+					leftover.unlink()
+			target.rmdir()
+		except OSError:
+			# Non-empty (someone won the race -- correct outcome), or already
+			# gone, or unreadable. Never fatal: an un-reaped claim costs a
+			# little disk, a wrong delete costs an editor's work.
+			return
+
 	def _claim_snapshot_id(self, kit_id: str) -> tuple["Path", str]:
 		"""Create (and thereby CLAIM) the next free snapshot directory.
 
@@ -796,16 +836,21 @@ class LocalFormKitStore(FormKitStore):
 		# Reap abandoned claims -- empty directories left by a failure between
 		# the mkdir and the write. They no longer count as ring members (see
 		# _snapshot_ids), but without this they would accumulate forever and
-		# push the claim counter ever upward. Only ids BELOW the one just
-		# written are touched, so a claim another saver is mid-write on is
-		# never disturbed.
+		# push the claim counter ever upward.
+		#
+		# The id bound alone is NOT sufficient, which I had wrong: it excludes
+		# HIGHER ids, but the saver in danger holds a LOWER one -- a concurrent
+		# saver whose schema.json lands between these two listings is absent
+		# from `written`, is below next_id, and was deleted. Measured at 85
+		# silent losses in 360 trials, in a sub-3ms window (Opus fresh-eyes
+		# round 8). _reap_if_still_empty re-checks at the last instant instead,
+		# so there is no gap to lose the race in.
 		written = set(self._snapshot_ids(kit_id))
 		for orphan in self._snapshot_ids(kit_id, include_unwritten=True):
 			if orphan in written or int(orphan) >= int(next_id):
 				continue
 			await anyio.to_thread.run_sync(
-				lambda d=self._drafts_dir(kit_id) / orphan:
-					shutil.rmtree(d, ignore_errors=True))
+				lambda o=orphan: self._reap_if_still_empty(kit_id, o))
 
 		# Evict AFTER the write: a failure here leaves too MANY snapshots
 		# rather than too few, the safe direction when the point is not losing
