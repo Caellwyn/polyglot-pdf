@@ -771,3 +771,74 @@ def test_GCS_ignores_a_FOLDER_MARKER_blob():
 
     assert _run(store._snapshot_ids("w7")) == []
     assert _run(store.put_draft_snapshot("w7", {"_tag": "A"})) == "1"
+
+
+# --- concurrency: the bead's CENTRAL case -----------------------------------
+#
+# "Editor B -- or A, from a stale tab -- saves over it" is TWO SAVES AT ONCE.
+# The id was computed from a listing and then written to, a TOCTOU: both savers
+# read the same last id, both picked the same next one, and the second write
+# destroyed the first's snapshot. Measured before the fix: 4 concurrent saves
+# returned ids ['1','1','1','1'] locally and ['3','3','3','3'] on GCS, with ONE
+# snapshot surviving out of four. The protection was silently absent in exactly
+# the situation it was built for (Opus fresh-eyes round 6).
+
+
+def test_CONCURRENT_snapshots_do_not_destroy_each_other(client):
+    """Local store: every concurrent save keeps its own snapshot."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    async def _six():
+        return await asyncio.gather(*[
+            store.put_draft_snapshot("w7", {"_tag": f"v{i}"}) for i in range(6)])
+
+    ids = _run(_six())
+
+    assert len(set(ids)) == 6, f"ids collided: {sorted(ids)}"
+    snaps = _run(store.list_draft_snapshots("w7"))
+    assert len(snaps) == 6, f"snapshots destroyed: {len(snaps)} of 6"
+    # ...and every schema is still individually loadable.
+    tags = {_run(store.load_draft_snapshot("w7", i))["_tag"] for i in ids}
+    assert tags == {f"v{i}" for i in range(6)}
+
+
+def test_GCS_CONCURRENT_snapshots_do_not_destroy_each_other():
+    """The store that ships, via if_generation_match=0 (compare-and-swap)."""
+    registry = {}
+    store = _gcs_store(registry)
+
+    async def _six():
+        return await asyncio.gather(*[
+            store.put_draft_snapshot("w7", {"_tag": f"v{i}"}) for i in range(6)])
+
+    ids = _run(_six())
+
+    assert len(set(ids)) == 6, f"ids collided: {sorted(ids)}"
+    snaps = _run(store.list_draft_snapshots("w7"))
+    assert len(snaps) == 6, f"snapshots destroyed: {len(snaps)} of 6"
+    tags = {_run(store.load_draft_snapshot("w7", i))["_tag"] for i in ids}
+    assert tags == {f"v{i}" for i in range(6)}
+
+
+def test_CONCURRENT_saves_through_the_ROUTE_each_keep_a_snapshot(client):
+    """The same property at the HTTP layer, which is where editors meet it."""
+    import threading
+
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("base"))
+
+    results = []
+    def _save_one(n):
+        results.append(_save(c, "w7", _schema(f"v{n}")).status_code)
+
+    threads = [threading.Thread(target=_save_one, args=(n,)) for n in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results == [200] * 4, results
+    # Four saves over an existing draft: four snapshots of prior states.
+    snaps = _run(store.list_draft_snapshots("w7"))
+    assert len(snaps) == 4, f"concurrent saves collapsed to {len(snaps)} snapshots"

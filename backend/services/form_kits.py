@@ -55,6 +55,14 @@ def safe_filename(name: Any, default: str) -> str:
 # free: `list_kit_files` ignores anything deeper than <kit>/<file> in both
 # stores, and the leading underscore is outside _KIT_ID_RE, so an archive dir
 # can never be mistaken for a kit.
+class _SnapshotIdTaken(Exception):
+	"""A snapshot id was claimed by a concurrent save; try the next one.
+
+	Internal retry signal, never surfaced to a caller -- put_draft_snapshot
+	catches it and moves to the next id.
+	"""
+
+
 _ARCHIVE_DIR = "_archive"
 
 # DRAFT SNAPSHOTS (bd polyglot-pdf-y2l0p) live at <kit_id>/_DRAFTS_DIR/<n>/ and
@@ -713,7 +721,17 @@ class LocalFormKitStore(FormKitStore):
 		that picked the same id gets FileExistsError and moves on to the next.
 		"""
 		root = self._drafts_dir(kit_id)
-		root.mkdir(parents=True, exist_ok=True)
+		try:
+			root.mkdir(parents=True, exist_ok=True)
+		except OSError as exc:
+			# _drafts present as a FILE (or otherwise uncreatable) raises
+			# FileExistsError even under exist_ok. That must stay a
+			# FormKitStoreError so the SAVE path's best-effort guard swallows
+			# it -- letting it escape would 500 the save and lose the editor's
+			# current work, the regression round 4 closed.
+			raise FormKitStoreError(
+				f"Unable to create the draft snapshot directory for {kit_id}: {exc}"
+			) from exc
 		existing = self._snapshot_ids(kit_id)
 		candidate = int(existing[-1]) + 1 if existing else 1
 		# Bounded: the ring holds DRAFT_SNAPSHOT_LIMIT, so even a burst of
@@ -935,13 +953,17 @@ class GCSFormKitStore(FormKitStore):
 
 	def __init__(self, bucket_name: str, prefix: Optional[str] = None):
 		from google.cloud import storage
-		from google.cloud.exceptions import NotFound
+		from google.cloud.exceptions import NotFound, PreconditionFailed
 
 		self.bucket_name = bucket_name
 		self.prefix = (prefix or "").strip("/")
 		self._client = storage.Client()
 		self._bucket = self._client.bucket(bucket_name)
 		self._not_found_exc = NotFound
+		# What GCS raises for a failed if_generation_match=0 -- i.e. "another
+		# save already claimed this snapshot id". Held as an attribute so the
+		# test fake can substitute its own.
+		self._precondition_exc = PreconditionFailed
 		_log.info(
 			"form_kits.gcs_store",
 			bucket=self.bucket_name,
@@ -1087,20 +1109,33 @@ class GCSFormKitStore(FormKitStore):
 				f"Invalid artifact for {kit_id}/{filename}: {exc}"
 			) from exc
 
-	async def _upload_json(self, blob_path: str, data: dict) -> None:
+	async def _upload_json(self, blob_path: str, data: dict,
+						   if_generation_match: Optional[int] = None) -> None:
 		"""Upload a JSON blob with no-cache so a re-pull after a save is never
-		stale (the editor's save->reload round trip)."""
+		stale (the editor's save->reload round trip).
+
+		if_generation_match=0 uploads ONLY if the object does not already
+		exist, raising _SnapshotIdTaken when it does -- the compare-and-swap
+		that makes concurrent snapshot-id claims safe.
+		"""
 
 		def _upload() -> None:
 			blob = self._bucket.blob(blob_path)
 			blob.cache_control = "no-cache"
+			kwargs = {}
+			if if_generation_match is not None:
+				kwargs["if_generation_match"] = if_generation_match
 			blob.upload_from_string(
 				json.dumps(data, indent=2, ensure_ascii=False) + "\n",
 				content_type="application/json",
+				**kwargs,
 			)
 
 		try:
 			await anyio.to_thread.run_sync(_upload)
+		except self._precondition_exc as exc:
+			# A taken id is a RETRY SIGNAL, not a store failure.
+			raise _SnapshotIdTaken(str(exc)) from exc
 		except Exception as exc:  # google API errors are env-specific; fail closed
 			raise FormKitStoreError(
 				f"Unable to write gs://{self.bucket_name}/{blob_path}: {exc}"
@@ -1176,10 +1211,33 @@ class GCSFormKitStore(FormKitStore):
 			) from exc
 
 	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		# CLAIM the id, same TOCTOU as the local store: computing next_id from
+		# a listing and then uploading to it lets two concurrent saves pick the
+		# same id, and the second upload destroys the first's snapshot.
+		# Measured at 4 concurrent saves: ids ['3','3','3','3'], three prior
+		# states destroyed (Opus fresh-eyes round 6).
+		#
+		# if_generation_match=0 is GCS's compare-and-swap -- "only if this
+		# object does not exist". The loser takes the next id.
 		existing = await self._snapshot_ids(kit_id)
-		next_id = str(int(existing[-1]) + 1) if existing else "1"
-		await self._upload_json(
-			self._build_blob_path(kit_id, _DRAFTS_DIR, next_id, "schema.json"), schema)
+		candidate = int(existing[-1]) + 1 if existing else 1
+		next_id = None
+		# Bounded: the ring holds DRAFT_SNAPSHOT_LIMIT, so even a burst of
+		# simultaneous savers cannot walk far before finding a free id.
+		for _ in range(DRAFT_SNAPSHOT_LIMIT + 64):
+			claim = str(candidate)
+			try:
+				await self._upload_json(
+					self._build_blob_path(kit_id, _DRAFTS_DIR, claim, "schema.json"),
+					schema, if_generation_match=0)
+			except _SnapshotIdTaken:
+				candidate += 1
+				continue
+			next_id = claim
+			break
+		if next_id is None:
+			raise FormKitStoreError(
+				f"Unable to claim a draft snapshot id for {kit_id}")
 		await self._upload_json(
 			self._build_blob_path(kit_id, _DRAFTS_DIR, next_id, "meta.json"),
 			{"id": next_id, "savedAt": datetime.now(timezone.utc).isoformat()})
