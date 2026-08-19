@@ -43,18 +43,27 @@ data or live web docs.
 - **Compounding cost is the dominant lever.** Every turn re-bills the entire
   accumulated context window; native audio accrues ~25 tokens/sec. Context-window
   compression / size limits are the first-class fix (see epic `polyglot-pdf-l3a`).
-- **DEAD END: `contextWindowCompression` is an unreleased/unsupported STUB on
-  native-audio Live models -- do not pursue it.** (Verified 2026-06-04, bd
-  `polyglot-pdf-l3a.1`.) The SDK type exists ahead of the server implementation: the
-  config serializes, the server ACCEPTS it (no rejection, triggers 200-4096), but it
-  NEVER evicts -- prompt tokens compound past the trigger exactly as with compression
-  off, on both `gemini-3.1-flash-live-preview` and
-  `gemini-2.5-flash-native-audio-preview-12-2025`, identically under `v1alpha`/`v1beta`.
-  No cascade Live model is reachable on our key (all `1008`); the docs' compression
-  example uses a cascade model. The cost lever the `l3a` epic was premised on is **not
-  available** for our model family. Keep `CONTEXT_COMPRESSION_ENABLED=False`; do not
-  re-investigate unless Google announces native-audio support. Diagnostics under epic
-  `polyglot-pdf-l3a`.
+- **HISTORICAL DEAD END, OVERTURNED -- `contextWindowCompression` now works and
+  ships ENABLED by default.** The entry below was true on 2026-06-04 (bd
+  `polyglot-pdf-l3a.1`): the SDK type existed ahead of the server implementation, the
+  config serialized and was accepted but never evicted. A subsequent SDK version
+  bump (1.38.0) shipped real native-audio eviction, confirmed by re-measurement
+  (3/3 twenty-turn runs, multiple evictions each, 54-74% below the unbounded
+  baseline). Compression is production behavior today:
+  `CONTEXT_COMPRESSION_ENABLED` defaults `true` (`backend/config.py`), and
+  `docs/standards/logging-and-cost.md`'s cost invariant explicitly depends on
+  compression being ON. Full current-state details, the probe trap that made
+  early re-measurement attempts look dead again, and the eviction data:
+  [`docs/components/context-compression.md`](../components/context-compression.md).
+  The original dead-end finding, kept for probe methodology (what a false-negative
+  compression trace looks like):
+  - The SDK type existed ahead of the server implementation: the config
+    serialized, the server ACCEPTED it (no rejection, triggers 200-4096), but it
+    NEVER evicted -- prompt tokens compounded past the trigger exactly as with
+    compression off, on both `gemini-3.1-flash-live-preview` and
+    `gemini-2.5-flash-native-audio-preview-12-2025`, identically under
+    `v1alpha`/`v1beta`. No cascade Live model was reachable on our key (all
+    `1008`); the docs' compression example uses a cascade model.
 - **An SDK type's EXISTENCE is not evidence the feature is IMPLEMENTED.** This is the
   real lesson from the compression dead end above -- *not* "docs lie." Honest trace: the
   vendored docs here were CORRECT (they named compression as the long-session cost lever,
