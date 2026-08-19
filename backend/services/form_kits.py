@@ -706,10 +706,49 @@ class LocalFormKitStore(FormKitStore):
 		# wrong snapshot the moment the ring passes single digits.
 		return sorted(ids, key=int)
 
-	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+	def _claim_snapshot_id(self, kit_id: str) -> tuple["Path", str]:
+		"""Create (and thereby CLAIM) the next free snapshot directory.
+
+		Returns (directory, id). The mkdir is the lock: a concurrent caller
+		that picked the same id gets FileExistsError and moves on to the next.
+		"""
+		root = self._drafts_dir(kit_id)
+		root.mkdir(parents=True, exist_ok=True)
 		existing = self._snapshot_ids(kit_id)
-		next_id = str(int(existing[-1]) + 1) if existing else "1"
-		target = self._drafts_dir(kit_id) / next_id
+		candidate = int(existing[-1]) + 1 if existing else 1
+		# Bounded: the ring holds DRAFT_SNAPSHOT_LIMIT, so even a burst of
+		# simultaneous savers cannot walk far before finding a free id.
+		for _ in range(DRAFT_SNAPSHOT_LIMIT + 64):
+			target = root / str(candidate)
+			try:
+				target.mkdir()
+				return target, str(candidate)
+			except FileExistsError:
+				candidate += 1
+			except OSError as exc:
+				raise FormKitStoreError(
+					f"Unable to claim a draft snapshot id for {kit_id}: {exc}"
+				) from exc
+		raise FormKitStoreError(
+			f"Unable to claim a draft snapshot id for {kit_id}")
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		# CLAIM the id with an atomic mkdir rather than trusting the listing.
+		# Computing next_id from a listing and then writing to it is a TOCTOU:
+		# two concurrent saves both read the same last id, both pick the same
+		# next one, and the second write silently destroys the first's
+		# snapshot. Measured at 4 concurrent saves: ids ['1','1','1','1'], one
+		# snapshot surviving out of four.
+		#
+		# That is the bead's CENTRAL case, not an edge one -- "editor B, or A
+		# from a stale tab, saves over it" is two saves at once -- so the
+		# protection was silently absent exactly when it was needed (Opus
+		# fresh-eyes round 6).
+		#
+		# os.mkdir is atomic on both POSIX and Windows: whoever creates the
+		# directory owns the id, and the loser retries with the next one.
+		target, next_id = await anyio.to_thread.run_sync(
+			lambda: self._claim_snapshot_id(kit_id))
 		# The atomic temp+replace writer the archive uses: a concurrent read
 		# must never see half a schema.
 		await self._write_json(target / "schema.json", schema)
