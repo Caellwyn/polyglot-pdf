@@ -297,10 +297,15 @@ anything.
 | **Advised** (we recommend) | **LIVE -- both surfaces** | `DisclaimerModal.tsx` `p2`/`fullText`, written AND read aloud | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
 | **Undertaken** (they agree) | **STAGED, NOT LIVE** | `intro_script.json` para 6, 18 languages | "you **agree to** review the completed document yourself and with a certified professional before filing" |
 
-**The Undertaken register is not reachable by any user today.** The intro clip
-has no frontend player (bd `polyglot-pdf-s1iex.5`, open -- `grep -rn "tts/intro"
-frontend/src` returns nothing), and `INTRO_TTS_ENABLED` defaults false, so
-`POST /api/tts/intro` 503s. `intro_script.json` and `intro_tts.py` both assert
+**The Undertaken register is not reachable by any user on the DEFAULT
+deployment.** The frontend player shipped (bd `polyglot-pdf-s1iex.5`, closed --
+`frontend/src/shared/introPlayer.ts` POSTs to `/api/tts/intro`, and
+`DisclaimerModal`'s `introParagraphs` prop renders the intro script when the
+frontend flag is on), but both gating flags default OFF: `INTRO_TTS_ENABLED`
+(backend) defaults false, so `POST /api/tts/intro` 503s, and
+`VITE_INTRO_CLIP_ENABLED` (frontend) defaults false, so the modal never
+requests the clip in the first place. `intro_script.json` and `intro_tts.py`
+both assert
 a HARD INVARIANT that "the modal renders exactly these paragraphs -- one
 source, no separate fullText"; **that invariant describes the intended end
 state, not shipped behavior.** Do not cite it as current.
@@ -338,6 +343,7 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-14 (bd polyglot-pdf-rtyia: records the draft-app /
-no-self-filing / outside-reviewer deployment invariant and the advisory-vs-
-required register distinction).*
+*Last updated: 2026-08-19 (bd polyglot-pdf-1dt9b: the Undertaken-register
+reachability claim was stale -- the frontend intro-clip player shipped in bd
+s1iex.5, so the real gate is now both flags defaulting off, not "no player
+exists").*
