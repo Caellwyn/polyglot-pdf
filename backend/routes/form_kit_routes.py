@@ -206,7 +206,7 @@ class FormKitManifestResponse(BaseModel):
 
 
 @router.get("/form-kits", response_model=FormKitManifestResponse)
-async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifestResponse:
+async def list_form_kits(user: dict = Depends(require_auth)) -> FormKitManifestResponse:
     """
     List available form kits.
 
@@ -261,7 +261,7 @@ async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifest
                 visible.append((form, False))
                 continue
             if firm_allowed is None:
-                firm_allowed = await _firm_allowed_kits(_user)
+                firm_allowed = await _firm_allowed_kits(user)
             if form["id"] in firm_allowed:
                 visible.append((form, True))
 
@@ -305,7 +305,7 @@ async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifest
 
 
 @router.get("/form-kits/{kit_id}/schema")
-async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) -> JSONResponse:
+async def get_form_kit_schema(kit_id: str, user: dict = Depends(require_auth)) -> JSONResponse:
     """Return a single kit's schema JSON, streamed from the store.
 
     Works in both local and gcs mode. `Cache-Control: no-store` so a re-pull
@@ -313,7 +313,10 @@ async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) 
     The schema filename is resolved from the manifest (custom filenames per
     bd polyglot-pdf-snpi are honored), falling back to the conventional
     `schema.json`.
-    Auth-gated (bd polyglot-pdf-z2is); VFF_DISABLE_AUTH bypasses for local dev.
+    Auth-gated (bd polyglot-pdf-z2is); VFF_DISABLE_AUTH bypasses for local
+    dev. Firm-scoped (bd polyglot-pdf-vccy): a PRIVATE kit 404s unless the
+    caller's firm_id claim resolves to an allowlist containing it -- same
+    invisibility contract as the pdf route below.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
@@ -321,7 +324,7 @@ async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) 
         schema_file, _ = await _resolve_kit_filenames(store, kit_id)
         meta = await _load_live_metadata(store, kit_id)
         _require_published(store, kit_id, meta)
-        await _require_visible(kit_id, meta, _user)
+        await _require_visible(kit_id, meta, user)
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
