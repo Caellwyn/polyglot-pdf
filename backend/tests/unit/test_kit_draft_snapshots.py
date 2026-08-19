@@ -924,3 +924,80 @@ def test_a_CLAIM_skips_an_id_another_saver_already_holds(client):
     new_id = _run(store.put_draft_snapshot("w7", {"_tag": "concurrent"}))
 
     assert new_id != "1", "the claim handed out an id another saver held"
+
+
+def test_the_REAPER_never_deletes_a_snapshot_someone_just_COMPLETED(client):
+    """The reaper is the one operation here that DELETES, so its blast radius
+    needs a test of its own.
+
+    My first version bounded it by id -- skip anything >= the id just written
+    -- and the comment claimed a concurrent saver was "never disturbed". Wrong
+    side: the saver in danger holds a LOWER id. One whose schema.json landed
+    between the two listings was absent from `written`, below next_id, and got
+    deleted. Measured at 85 silent losses in 360 trials in a sub-3ms window
+    (Opus fresh-eyes round 8).
+
+    This lands the concurrent write INSIDE that window deterministically,
+    rather than hoping to hit a millisecond race.
+    """
+    import backend.services.form_kits as fk
+
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "1").mkdir()  # another saver has CLAIMED id 1, not yet written
+
+    real = fk.LocalFormKitStore._snapshot_ids
+    state = {"n": 0}
+
+    def hooked(self, kit_id, include_unwritten=False):
+        out = real(self, kit_id, include_unwritten)
+        state["n"] += 1
+        # Immediately after the reaper takes its `written` listing, the other
+        # saver completes -- the exact gap the id bound cannot cover.
+        if state["n"] == 2:
+            (drafts / "1" / "schema.json").write_text(
+                json.dumps(_schema("THEIR_WORK")), encoding="utf-8")
+        return out
+
+    fk.LocalFormKitStore._snapshot_ids = hooked
+    try:
+        _run(store.put_draft_snapshot("w7", _schema("mine")))
+    finally:
+        fk.LocalFormKitStore._snapshot_ids = real
+
+    assert (drafts / "1" / "schema.json").exists(),         "the reaper deleted a snapshot another saver had just completed"
+    assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "THEIR_WORK"
+
+
+def test_a_precondition_failure_on_an_ORDINARY_write_stays_fail_closed():
+    """_SnapshotIdTaken subclasses FormKitStoreError.
+
+    _upload_json is shared by put_schema, put_metadata, put_json_artifact and
+    both archived-revision writes, and its `except Exception ->
+    FormKitStoreError` is the fail-closed guarantee the routes depend on. As a
+    bare Exception the new retry signal escaped that guarantee for all five
+    untouched writers: a 412 from any other source (a retention policy, an
+    object hold) on a plain put_schema became an unhandled 500 rather than a
+    handled 502 -- on the editor's save route (Opus fresh-eyes round 8).
+    """
+    from backend.tests.unit.test_editor_kit_routes import (
+        _FakePreconditionFailed, _gcs_store)
+
+    registry = {}
+    store = _gcs_store(registry)
+
+    class _AlwaysRefuses:
+        def blob(self, name):
+            class _B:
+                cache_control = None
+                def upload_from_string(self, *a, **k):
+                    raise _FakePreconditionFailed("object hold")
+            return _B()
+
+    store._bucket = _AlwaysRefuses()
+
+    # An ORDINARY write, nothing to do with draft snapshots.
+    with pytest.raises(FormKitStoreError):
+        _run(store.put_schema("w7", _schema("A")))
