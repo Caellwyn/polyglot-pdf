@@ -1178,14 +1178,26 @@ def test_the_reaper_SPARES_a_higher_in_flight_claim(client):
     _make_kit(root, "w7", schema=_schema("live"))
     drafts = root / "w7" / "_drafts"
     drafts.mkdir(parents=True, exist_ok=True)
-    (drafts / "8").mkdir()          # a HIGHER claim, in flight
 
-    # A saver whose own id is LOWER runs its reap pass.
-    written = set(store._snapshot_ids("w7"))
-    for orphan in store._snapshot_ids("w7", include_unwritten=True):
-        if orphan in written or int(orphan) >= int("3"):
-            continue
-        store._reap_if_still_empty("w7", orphan)
+    # Drive the REAL put_draft_snapshot, not a hand-rolled copy of its reap
+    # loop -- a reimplementation cannot catch the guard being deleted, which is
+    # how my first version of this test passed under the mutation.
+    #
+    # The shape: a saver takes a LOW id, and a HIGHER claim appears in flight
+    # before its reap pass runs.
+    real_claim = type(store)._claim_snapshot_id
+
+    def claim_then_race(self, kit_id):
+        target, low_id = real_claim(self, kit_id)
+        # Another saver claims a much higher id and is still writing it.
+        (drafts / "8").mkdir(exist_ok=True)
+        return target, low_id
+
+    type(store)._claim_snapshot_id = claim_then_race
+    try:
+        _run(store.put_draft_snapshot("w7", _schema("mine")))
+    finally:
+        type(store)._claim_snapshot_id = real_claim
 
     assert (drafts / "8").exists(), (
         "the reaper deleted a higher in-flight claim -- its writer's "
