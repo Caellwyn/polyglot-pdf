@@ -85,11 +85,13 @@ def test_form_kit_schema_requires_token(_auth_on):
 
 
 def test_form_kit_pdf_is_deliberately_public(_auth_on, monkeypatch):
-    """The blank-template PDF GET must NOT be auth-gated (see route docstring:
-    no frontend consumer loads this route -- the viewer fetches the static
-    Hosting copy -- and the same public-form bytes ship in the static bundle
-    regardless, so gating protects nothing). Pinned so a future blanket-auth
-    sweep is a deliberate decision, not an accident.
+    """The PDF GET must NOT be auth-gated FOR PUBLIC KITS (updated
+    DELIBERATELY by bd polyglot-pdf-vccy, which added the private-kit gate:
+    the route now parses an OPTIONAL bearer token and 404s private kits for
+    non-members -- see the firm-visibility tests below -- while a public
+    kit's blank-template bytes ship in the static Hosting bundle regardless,
+    so gating the public read still protects nothing). Pinned so a future
+    blanket-auth sweep is a deliberate decision, not an accident.
 
     With auth forced on and no token, the route must still reach the store
     (404 from the double), never 401.
@@ -126,6 +128,186 @@ def test_require_auth_missing_header_is_401(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(require_auth(None))
     assert exc.value.status_code == 401
+
+
+# --------------------------------------------------------------------------
+# Firm-scoped kit visibility (bd polyglot-pdf-vccy).
+#
+# One public + one private kit. Identity comes from a patched verify_token
+# (tok-a -> firm-a staff, tok-b -> firm-b staff, tok-legacy -> no firm claim);
+# the firm allowlist comes from a patched get_allowed_kits (firm-a may see
+# priv-kit). The manifest entries carry NO visibility key on purpose: the
+# LIVE metadata is the visibility source (the GCS index.json is deploy-time
+# stale), so these tests also pin that metadata beats the manifest.
+# --------------------------------------------------------------------------
+
+from backend.services.form_kits import normalize_manifest  # noqa: E402
+
+_TOKENS = {
+    "tok-a": {"uid": "staff-a", "firm_id": "firm-a", "firm_role": "manager"},
+    "tok-b": {"uid": "staff-b", "firm_id": "firm-b", "firm_role": "employee"},
+    "tok-legacy": {"uid": "legacy-user"},
+}
+
+
+class _TwoKitStore:
+    """One public + one private kit; live metadata is the visibility source."""
+
+    def __init__(self):
+        self.meta = {
+            "pub-kit": {"status": "complete"},
+            "priv-kit": {
+                "status": "complete",
+                "visibility": "private",
+                "owner_firm_id": "firm-a",
+            },
+        }
+
+    async def load_manifest(self, manifest_file: str = "index.json") -> dict:
+        return normalize_manifest({
+            "forms": [
+                {"id": "pub-kit", "label": "Public Kit"},
+                {"id": "priv-kit", "label": "Private Kit", "pdfFile": "intake.pdf"},
+            ]
+        })
+
+    async def load_metadata(self, kit_id: str):
+        return self.meta.get(kit_id)
+
+    async def load_schema(self, kit_id: str, schema_file: str = "schema.json"):
+        return {"kit": kit_id}
+
+    async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:
+        return b"%PDF-" + kit_id.encode("ascii")
+
+
+@pytest.fixture
+def _firm_world(_auth_on, monkeypatch):
+    """Wire the two-kit store, the token->claims map, and the firm allowlist."""
+
+    def _fake_verify(token: str) -> dict:
+        claims = _TOKENS.get(token)
+        if claims is None:
+            raise HTTPException(status_code=401, detail="bad token")
+        return dict(claims)
+
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _TwoKitStore())
+    # require_auth (list/schema routes) resolves verify_token inside the auth
+    # module; the pdf route uses the copy imported into form_kit_routes.
+    monkeypatch.setattr("backend.services.auth.verify_token", _fake_verify)
+    monkeypatch.setattr(fkr, "verify_token", _fake_verify)
+    monkeypatch.setattr(
+        fkr, "get_allowed_kits",
+        lambda firm_id: {"firm-a": ["priv-kit"]}.get(firm_id, []),
+    )
+
+
+def _list_ids(resp) -> list:
+    return [f["id"] for f in resp.json()["forms"]]
+
+
+@pytest.mark.parametrize("token", ["tok-b", "tok-legacy"])
+def test_private_kit_absent_from_list_for_other_firms_and_legacy(_firm_world, token):
+    """Catalogue invisibility (epic 02ye rubric #2, list surface). Mutation:
+    drop the visibility filter in list_form_kits -- red."""
+    resp = client.get(
+        "/api/form-kits", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200
+    assert _list_ids(resp) == ["pub-kit"]
+
+
+def test_private_kit_listed_for_own_firm_with_backend_paths(_firm_world):
+    """Firm-A sees its private kit, whose paths are REWRITTEN to the
+    authenticated backend routes (the static bundle excludes private kits),
+    while the public kit keeps its static paths, and BOTH entries carry
+    explicit schema_file/pdf_file (the fill path posts the real filename).
+    Mutations: drop the rewrite branch -- the path asserts go red; drop the
+    schema_file/pdf_file population -- the filename asserts go red."""
+    resp = client.get(
+        "/api/form-kits", headers={"Authorization": "Bearer tok-a"}
+    )
+    assert resp.status_code == 200
+    forms = {f["id"]: f for f in resp.json()["forms"]}
+    assert set(forms) == {"pub-kit", "priv-kit"}
+    assert forms["priv-kit"]["schema_path"] == "/api/form-kits/priv-kit/schema"
+    assert forms["priv-kit"]["pdf_path"] == "/api/form-kits/priv-kit/pdf"
+    assert forms["priv-kit"]["pdf_file"] == "intake.pdf"
+    assert forms["pub-kit"]["schema_path"] == "/form-kits/pub-kit/schema.json"
+    assert forms["pub-kit"]["pdf_path"] == "/form-kits/pub-kit/form.pdf"
+    assert forms["pub-kit"]["schema_file"] == "schema.json"
+
+
+@pytest.mark.parametrize("token", ["tok-b", "tok-legacy"])
+def test_private_schema_is_404_for_other_firms_and_legacy(_firm_world, token):
+    """Schema-read invisibility: 404 (existence is the secret), never 403.
+    Mutation: drop the _require_visible call in get_form_kit_schema -- red."""
+    resp = client.get(
+        "/api/form-kits/priv-kit/schema",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_private_schema_loads_for_own_firm(_firm_world):
+    """The usability half of rubric #2: firm-A actually READS its kit."""
+    resp = client.get(
+        "/api/form-kits/priv-kit/schema",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"kit": "priv-kit"}
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"Authorization": "Bearer not-a-real-token"},
+        {"Authorization": "Bearer tok-b"},
+        {"Authorization": "Bearer tok-legacy"},
+    ],
+    ids=["anonymous", "invalid-token", "firm-b", "legacy"],
+)
+def test_private_pdf_is_404_for_everyone_but_the_firm(_firm_world, headers):
+    """PDF invisibility, incl. the anonymous + garbage-token paths the public
+    route shape makes possible (invalid degrades to anonymous -> 404, not
+    401 -- existence is the secret). Mutation: drop the _require_visible call
+    in get_form_kit_pdf -- red."""
+    resp = client.get("/api/form-kits/priv-kit/pdf", headers=headers)
+    assert resp.status_code == 404
+
+
+def test_private_pdf_loads_for_own_firm(_firm_world):
+    resp = client.get(
+        "/api/form-kits/priv-kit/pdf",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-priv-kit"
+
+
+def test_public_pdf_full_success_path_stays_tokenless(_firm_world):
+    """Stronger than the 404 pin above: a PUBLIC kit's pdf serves BYTES with
+    no token at all, end to end. Mutation: add a blanket auth dependency to
+    the pdf route -- red."""
+    resp = client.get("/api/form-kits/pub-kit/pdf")
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-pub-kit"
+
+
+def test_empty_allowlist_hides_private_even_for_claimed_firm(_firm_world, monkeypatch):
+    """FAIL-CLOSED pin: a firms store answering [] (disabled, broken, firm
+    suspended) hides the private kit even from a caller whose token CLAIMS
+    the owning firm -- an outage narrows visibility, never widens it.
+    Mutation: treat an empty allowlist as allow-all in _require_visible
+    (`if allowed and kit_id not in allowed`) -- red."""
+    monkeypatch.setattr(fkr, "get_allowed_kits", lambda firm_id: [])
+    for path in ("/api/form-kits/priv-kit/schema", "/api/form-kits/priv-kit/pdf"):
+        resp = client.get(path, headers={"Authorization": "Bearer tok-a"})
+        assert resp.status_code == 404, path
+    resp = client.get("/api/form-kits", headers={"Authorization": "Bearer tok-a"})
+    assert _list_ids(resp) == ["pub-kit"]
 
 
 # --------------------------------------------------------------------------
