@@ -1397,8 +1397,26 @@ async def restore_kit_draft_snapshot(
     replaced_id: Optional[str] = None
     try:
         current = await store.load_schema(kit_id, schema_file)
-    except (FormKitNotFound, FormKitStoreError):
+    except FormKitNotFound:
+        # No schema yet -- there is genuinely nothing to protect.
         current = None
+    except FormKitStoreError as exc:
+        # NOT the same thing: the work IS there and we could not read it.
+        # Collapsing these two into `current = None` skipped the pre-restore
+        # snapshot and fell straight through to put_schema, permanently
+        # destroying bytes that were never copied anywhere -- and returning
+        # 200. A transient GCS 503 during a restore was enough to lose an
+        # editor's current draft while telling them it worked.
+        #
+        # The write side below already refuses on failure; this is the read
+        # side of the same guarantee (Opus fresh-eyes round 5).
+        _log.error("draft_snapshot_pre_restore_read_failed",
+                   kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502,
+            detail=("Could not read your current work before restoring, so "
+                    "the restore was refused. Nothing was changed."),
+        ) from exc
     if current is not None:
         try:
             replaced_id = await store.put_draft_snapshot(kit_id, current)

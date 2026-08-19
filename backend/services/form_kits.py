@@ -1120,6 +1120,10 @@ class GCSFormKitStore(FormKitStore):
 				# Same isascii() guard as the local store: the two must agree on
 				# what counts as a snapshot id, or "recovery works identically
 				# in both stores" is false.
+				# len(rest) >= 2 excludes a FOLDER-MARKER blob named exactly
+				# "<kit>/_drafts/7" (GCS consoles and gsutil create these):
+				# without it that registers as snapshot 7, jumping the counter
+				# and showing a phantom entry that 404s on restore.
 				if len(rest) >= 2 and rest[0].isascii() and rest[0].isdigit():
 					seen.add(rest[0])
 			# Numeric, not lexical: "10" must follow "9".

@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 import backend.routes.editor_kit_routes as ekr
 from backend.services.form_kits import (
     DRAFT_SNAPSHOT_LIMIT,
+    FormKitStoreError,
     LocalFormKitStore,
 )
 
@@ -703,3 +704,70 @@ def test_a_NON_UTF8_snapshot_fails_as_a_STORAGE_fault_not_a_crash(client):
     (root / "w7" / "_drafts" / "1" / "schema.json").write_bytes(bytes([0xff, 0xfe, 0x00]) + b"bad")
 
     assert _restore(c, "w7", "1").status_code == 502
+
+
+def test_an_UNREADABLE_current_draft_REFUSES_the_restore(client):
+    """The read side of the pre-restore guarantee.
+
+    FormKitNotFound means "nothing to protect"; FormKitStoreError means "the
+    work IS there and I could not read it". Collapsing them skipped the
+    pre-restore snapshot and fell through to put_schema, permanently destroying
+    bytes that were never copied anywhere -- and returning 200. The write side
+    was already guarded; this is the same guarantee on the read side (Opus
+    fresh-eyes round 5).
+    """
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+
+    # The live schema is present but unreadable.
+    original = (root / "w7" / "schema.json").read_bytes()
+    (root / "w7" / "schema.json").write_text("{ truncated", encoding="utf-8")
+
+    resp = _restore(c, "w7", snaps[0]["id"])
+
+    assert resp.status_code == 502, resp.text
+    # ...and NOTHING was changed: the unreadable bytes are still there.
+    assert (root / "w7" / "schema.json").read_text(encoding="utf-8") == "{ truncated"
+    assert original  # the fixture really did write a schema first
+
+
+def test_a_TRANSIENT_store_error_REFUSES_the_restore(client, monkeypatch):
+    """The realistic trigger: a GCS 503 or a permissions blip. load_schema
+    wraps those as FormKitStoreError, and a restore must refuse rather than
+    overwrite work it could not copy."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+
+    real_load = store.load_schema
+    calls = {"n": 0}
+
+    async def _flaky(kit_id, schema_file="schema.json"):
+        calls["n"] += 1
+        # Fail only the pre-restore read, not the snapshot read before it.
+        if calls["n"] > 0 and schema_file == "schema.json":
+            raise FormKitStoreError("503 backend error")
+        return await real_load(kit_id, schema_file)
+
+    monkeypatch.setattr(store, "load_schema", _flaky)
+
+    resp = _restore(c, "w7", snaps[0]["id"])
+
+    assert resp.status_code == 502, resp.text
+    monkeypatch.undo()
+    # The live draft is untouched -- still B, not the restored A.
+    assert _run(store.load_schema("w7", "schema.json"))["_tag"] == "B"
+
+
+def test_GCS_ignores_a_FOLDER_MARKER_blob():
+    """GCS consoles and gsutil create placeholder objects named exactly
+    "<kit>/_drafts/7". Without the depth guard that registers as snapshot 7,
+    jumping the id counter and listing a phantom entry that 404s on restore."""
+    registry = {"form-kits/w7/_drafts/7": {"data": ""}}
+    store = _gcs_store(registry)
+
+    assert _run(store._snapshot_ids("w7")) == []
+    assert _run(store.put_draft_snapshot("w7", {"_tag": "A"})) == "1"
