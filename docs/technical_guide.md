@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-vccy: firm-scoped kit visibility -- the four form-kit/fill route rows, the `FIRMS_FIRESTORE_ENABLED` env row, and the new Surface contracts entry 7 -- see [the vccy journal entry](journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for closeout details. Same day, bd polyglot-pdf-y2l0p: the two draft-snapshot routes -- every editor save now copies the current schema into a bounded ring of the last 10 before overwriting, and an editor can list and restore their own overwritten work. Previously bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
+*Last updated: 2026-08-19 (bd polyglot-pdf-kkos: the static bundle now ships only complete AND public kits, so Surface contracts entry 7's rewrite paragraph is a shipped security boundary -- see [the kkos journal entry](journal/entries/2026-08-19-bd-kkos-static-bundle-scoping.md). 2026-08-18, bd polyglot-pdf-vccy: firm-scoped kit visibility -- the four form-kit/fill route rows, the `FIRMS_FIRESTORE_ENABLED` env row, and the new Surface contracts entry 7 -- see [the vccy journal entry](journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for closeout details. Same day, bd polyglot-pdf-y2l0p: the two draft-snapshot routes -- every editor save now copies the current schema into a bounded ring of the last 10 before overwriting, and an editor can list and restore their own overwritten work. Previously bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
 code-line citation in the Surface contracts section now resolves to the code
 it names. x82ii fixed the "2. WS handshake" block (producer/consumer lines,
 all handshake key citations, and the `full_schema` consumer chain -- one
@@ -463,12 +463,13 @@ tokens, not the client tier):
   than 401.
 - **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:193`)
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
-  backend routes (`/api/form-kits/<id>/schema|pdf`). This is a serving-seam
-  requirement, NOT yet a security boundary: the static-bundle EXCLUSION of
-  private kits is PENDING bd kkos (exposure tracked as bd
-  polyglot-pdf-17opi) -- until kkos lands, a private kit's schema + blank
-  pdf still ship world-readable in the Hosting bundle, so no firm may be
-  granted a private kit before then. Consumers: `SchemaFormDemo`'s schema fetch
+  backend routes (`/api/form-kits/<id>/schema|pdf`) because the static
+  Hosting bundle excludes private kits (bd kkos:
+  `kitPublishFilter.isPubliclyServable` ships only complete AND
+  demonstrably-public -- absence or the exact string `"public"`;
+  deliberately stricter than the routes' anything-but-"private" coercion,
+  because this surface's failure is an irreversible public leak).
+  Consumers: `SchemaFormDemo`'s schema fetch
   and `usePDFDocument`'s pdf fetch resolve `/api/` paths against the backend
   base and attach the Bearer token (`usePDFDocument.ts:60` fetch-to-blob;
   `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on

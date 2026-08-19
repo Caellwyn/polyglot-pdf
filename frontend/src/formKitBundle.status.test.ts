@@ -22,9 +22,9 @@ import { describe, expect, it, beforeAll } from "vitest";
 
 // Run this file ALONE. Each test here spawns a real tsx subprocess, and that
 // CPU contention makes a timing-sensitive render elsewhere in the suite miss
-// its window -- SchemaForm.previewEdit.test.tsx (bd polyglot-pdf-cfl28) is an
-// intermittent flake on its own, and these subprocesses turn it into a
-// reliable failure. The flake is worth fixing on its own merits; making the
+// its window -- schema-forms/components/SchemaForm.previewEdit.test.tsx
+// (bd polyglot-pdf-cfl28) is an intermittent flake on its own, and these
+// subprocesses turn it into a reliable failure. The flake is worth fixing on its own merits; making the
 // whole suite red from a NEIGHBOURING file is this file's problem to avoid.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

@@ -192,17 +192,14 @@ async def list_form_kits(user: dict = Depends(require_auth)) -> FormKitManifestR
         for form, is_private in visible:
             if is_private:
                 # Rewrite private kits' paths to the authenticated backend
-                # routes. This is a SERVING-SEAM requirement, not a security
-                # boundary: the static-bundle EXCLUSION of private kits is
-                # PENDING bd kkos (tracked with the exposure bead
-                # polyglot-pdf-17opi) -- until kkos lands, a private kit's
-                # static bytes still ship world-readable in the Hosting
-                # bundle, so do not grant any firm a private kit before
-                # then. This route is THE per-request rewrite site: it
-                # already holds the caller's decoded claims (sprint-19 plan;
-                # normalize_manifest is a firm-agnostic store-boundary
-                # validator and must not do this). The viewer attaches its
-                # Bearer token on /api/ paths.
+                # routes: the static Hosting bundle excludes private kits
+                # (bd polyglot-pdf-kkos -- kitPublishFilter.isPubliclyServable
+                # ships only complete AND public), so their baked static
+                # paths would 404. This route is THE per-request rewrite
+                # site: it already holds the caller's decoded claims
+                # (sprint-19 plan; normalize_manifest is a firm-agnostic
+                # store-boundary validator and must not do this). The viewer
+                # attaches its Bearer token on /api/ paths.
                 schema_path = f"/api/form-kits/{form['id']}/schema"
                 pdf_path = f"/api/form-kits/{form['id']}/pdf"
             else:
