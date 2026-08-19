@@ -849,13 +849,25 @@ class LocalFormKitStore(FormKitStore):
 		# _snapshot_ids), but without this they would accumulate forever and
 		# push the claim counter ever upward.
 		#
-		# The id bound alone is NOT sufficient, which I had wrong: it excludes
-		# HIGHER ids, but the saver in danger holds a LOWER one -- a concurrent
-		# saver whose schema.json lands between these two listings is absent
-		# from `written`, is below next_id, and was deleted. Measured at 85
-		# silent losses in 360 trials, in a sub-3ms window (Opus fresh-eyes
-		# round 8). _reap_if_still_empty re-checks at the last instant instead,
-		# so there is no gap to lose the race in.
+		# TWO SEPARATE PROTECTIONS, for OPPOSITE cases. Both are load-bearing:
+		#
+		#   * `int(orphan) >= int(next_id)` protects HIGHER in-flight claims.
+		#     A saver that claimed 3 while the max was 2 can still be running
+		#     when others have raced to 8, so (orphan=8, next_id=3) is a real
+		#     shape -- measured firing 5 times in 60 concurrent trials. Without
+		#     the bound the reaper rmdir's that claim out from under its
+		#     writer, whose _write_json then dies: 4 failed snapshot writes in
+		#     120 trials, versus 0 with it.
+		#
+		#   * _reap_if_still_empty's last-instant re-check protects LOWER ids,
+		#     where a concurrent saver's schema.json lands between these two
+		#     listings -- 85 silent losses in 360 trials before it existed
+		#     (round 8).
+		#
+		# An earlier version of this comment said the bound was insufficient
+		# and implied it was dead weight; I then argued in round 11 that it
+		# never fires at all. Both were wrong, and a comment calling a working
+		# guard dead is how it gets deleted (Opus fresh-eyes round 12).
 		written = set(self._snapshot_ids(kit_id))
 		for orphan in self._snapshot_ids(kit_id, include_unwritten=True):
 			if orphan in written or int(orphan) >= int(next_id):

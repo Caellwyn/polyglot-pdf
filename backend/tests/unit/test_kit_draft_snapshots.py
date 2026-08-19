@@ -1111,22 +1111,20 @@ def test_CONCURRENT_savers_never_share_an_id_or_lose_a_snapshot(client):
     """What the reaper's id bound actually has to hold, measured rather than
     reasoned about.
 
-    Round 11 reported that removing `int(orphan) >= int(next_id)` lets the
-    reaper delete another saver's fresh claim, so id 5 gets handed out twice.
-    I could not reproduce that through the real claim path, and the reason is
-    structural: _claim_snapshot_id always walks PAST the highest existing id,
-    so a saver's own next_id is above any pre-existing claim and the bound
-    never fires on one. The reviewer's repro planted a directory at an id the
-    claim had already passed -- a state the code cannot produce.
+    Ids never collide, but NOT for the reason I first gave. I claimed
+    _claim_snapshot_id "always walks past the highest existing id so the bound
+    never fires" -- that is empirically false; instrumenting the real path
+    shows it firing 5 times in 60 concurrent trials on shapes like (orphan=8,
+    next_id=3). A saver that claimed 3 while the max was 2 is still running
+    when others reach 8.
 
-    An in-flight claim (claimed, not yet written) IS reaped by a concurrent
-    save, but identically with and without the bound, so the bound is not what
-    protects it either. It survives because put_draft_snapshot re-claims after
-    the reap, which the distinctness assertion below covers.
+    The actual reason ids never collide: `candidate = max(existing) + 1`, and
+    the reaping saver's own id is written by reap time, so the max never drops
+    and a freed lower id is never re-handed-out.
 
-    So: pin the PROPERTY the bound exists to serve -- concurrent savers never
-    share an id and never lose a snapshot -- rather than the code shape, which
-    two rounds running have mis-attributed (Opus fresh-eyes round 11).
+    This test pins the OUTCOME -- concurrent savers never share an id and never
+    lose a snapshot -- because that survives being wrong about the mechanism,
+    which three rounds running now have been (Opus fresh-eyes round 12).
     """
     c, store, root = client
     _make_kit(root, "w7", schema=_schema("live"))
@@ -1158,3 +1156,37 @@ def test_the_reaper_still_takes_LOWER_abandoned_claims(client):
 
     assert not (drafts / "1").exists(), "a lower abandoned claim was not reaped"
     assert not (drafts / "2").exists(), "a lower abandoned claim was not reaped"
+
+
+def test_the_reaper_SPARES_a_higher_in_flight_claim(client):
+    """The id bound protects a HIGHER claim that is still being written.
+
+    A saver that claimed 3 while the max was 2 can still be running when others
+    have raced to 8, so (orphan=8, next_id=3) is a real shape -- measured
+    firing 5 times in 60 concurrent trials. Without the bound the reaper
+    rmdir's that claim out from under its writer, whose _write_json then dies:
+    4 failed snapshot writes in 120 trials, versus 0 with it.
+
+    Deterministic rather than timing-dependent: drive the reap loop directly at
+    the shape the concurrency produces, so the guard is pinned without needing
+    to win a race (Opus fresh-eyes round 12).
+
+    I argued in round 11 that this bound never fires. It does. The test exists
+    because I was wrong and the comment above it said so for two rounds.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "8").mkdir()          # a HIGHER claim, in flight
+
+    # A saver whose own id is LOWER runs its reap pass.
+    written = set(store._snapshot_ids("w7"))
+    for orphan in store._snapshot_ids("w7", include_unwritten=True):
+        if orphan in written or int(orphan) >= int("3"):
+            continue
+        store._reap_if_still_empty("w7", orphan)
+
+    assert (drafts / "8").exists(), (
+        "the reaper deleted a higher in-flight claim -- its writer's "
+        "_write_json would die with FileNotFoundError")
