@@ -748,8 +748,10 @@ def test_a_TRANSIENT_store_error_REFUSES_the_restore(client, monkeypatch):
 
     async def _flaky(kit_id, schema_file="schema.json"):
         calls["n"] += 1
-        # Fail only the pre-restore read, not the snapshot read before it.
-        if calls["n"] > 0 and schema_file == "schema.json":
+        # The schema_file check is what discriminates -- an earlier version
+        # also tested calls["n"] > 0, which is always true because the counter
+        # is incremented directly above it (Opus fresh-eyes round 10).
+        if schema_file == "schema.json":
             raise FormKitStoreError("503 backend error")
         return await real_load(kit_id, schema_file)
 
@@ -1040,7 +1042,11 @@ def test_the_reaper_SKIPS_a_directory_that_now_holds_a_schema(client):
             (drafts / "1" / "schema.json").write_text(
                 json.dumps(_schema("THEIR_WORK")), encoding="utf-8")
             (drafts / "1" / "meta.json").write_text(
-                json.dumps({"id": "1"}), encoding="utf-8")
+                # A REAL stamp, as put_draft_snapshot writes one: the
+                # assertion below is that the reaper does not strip it, so the
+                # fixture must have one to strip.
+                json.dumps({"id": "1", "savedAt": "2026-08-18T12:00:00+00:00"}),
+                encoding="utf-8")
         return out
 
     type(store)._snapshot_ids = hooked
@@ -1051,10 +1057,17 @@ def test_the_reaper_SKIPS_a_directory_that_now_holds_a_schema(client):
 
     assert (drafts / "1" / "schema.json").exists(),         "a completed snapshot was reaped"
     assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "THEIR_WORK"
-    # NOTE: removing the schema.json early-return does NOT redden this, and
-    # that is correct -- it is an optimization, not a guard. rmdir refusing a
-    # non-empty directory is what actually saves the snapshot, and
-    # test_the_reaper_leaves_an_IN_FLIGHT_temp_write_alone pins that.
+    # THE ASSERTION THAT MAKES THIS BIND. The unlink runs BEFORE rmdir is
+    # reached, so without the schema.json early return a completed snapshot
+    # keeps its schema but loses its STAMP -- savedAt goes null, and that is
+    # the only field distinguishing entries in a recovery list of bare
+    # counters. My earlier version asked only "does the schema survive?", so
+    # it passed under that mutation and I wrongly concluded the guard was an
+    # optimization (Opus fresh-eyes round 10).
+    assert (drafts / "1" / "meta.json").exists(),         "the reaper stripped a completed snapshot's stamp"
+    listed = _snapshots(c, "w7").json()["snapshots"]
+    stamp = next(x["savedAt"] for x in listed if x["id"] == "1")
+    assert stamp, "savedAt went null -- the stamp was destroyed"
 
 
 def test_the_reaper_leaves_an_IN_FLIGHT_temp_write_alone(client):

@@ -741,31 +741,38 @@ class LocalFormKitStore(FormKitStore):
 	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
 		"""Delete an abandoned claim, without ever removing real work.
 
-		The SAFETY comes from rmdir, not from any check: rmdir refuses a
-		non-empty directory, so a concurrent saver's file -- whether a finished
-		schema.json or an in-flight .schema.json.<pid>.<hex>.tmp -- makes the
-		delete fail rather than destroy it. That is why only meta.json is ever
-		unlinked: unlinking anything else could empty the directory out from
-		under a saver mid-write, and rmdir would then succeed.
+		THREE guards, each load-bearing for a DIFFERENT file. None is
+		redundant, and I got that wrong once already:
+
+		1. The schema.json early return protects a COMPLETED snapshot's
+		   meta.json. The unlink below runs BEFORE rmdir is ever reached, so
+		   without this return a finished snapshot loses its stamp and its
+		   savedAt goes null -- the only field distinguishing entries in a
+		   recovery list of bare counters. I previously called this an
+		   optimization on the strength of a test asking "does the SCHEMA
+		   survive?". It does, and that was the wrong question: the victim is
+		   the metadata, and the victim's owner is the concurrent saver this
+		   feature exists to protect (Opus fresh-eyes round 10).
+		2. Unlinking ONLY meta.json protects a saver mid-write, whose
+		   directory holds just .schema.json.<pid>.<hex>.tmp. Removing that
+		   would let rmdir succeed and kill the write.
+		3. rmdir rather than rmtree protects a schema.json that appears after
+		   the check in guard 1: rmdir refuses a non-empty directory.
 
 		Trusting a listing taken earlier is what lost 85 of 360 concurrent
 		trials (round 8): by the time the delete ran, the listing was stale.
-
-		The schema.json early-return below is an OPTIMIZATION, not a guard --
-		verified by removing it, after which a completed snapshot still
-		survives because rmdir refuses. It skips the pointless iterdir/rmdir
-		on the common already-completed case (Opus fresh-eyes round 9).
 		"""
 		target = self._drafts_dir(kit_id) / snapshot_id
 		try:
 			if (target / "schema.json").exists():
-				return  # already completed -- nothing to reap, skip the work
-			# ONLY meta.json: see the docstring. Anything else could empty the
-			# directory under a saver mid-write.
+				# GUARD 1 -- completed. Returning protects its meta.json from
+				# the unlink below.
+				return
+			# GUARD 2 -- only meta.json, never a mid-write temp file.
 			for leftover in target.iterdir():
 				if leftover.name == "meta.json":
 					leftover.unlink()
-			# rmdir, NOT rmtree -- this is the actual guarantee.
+			# GUARD 3 -- rmdir, NOT rmtree.
 			target.rmdir()
 		except OSError:
 			# Non-empty (someone won the race -- correct outcome), or already
