@@ -463,8 +463,12 @@ tokens, not the client tier):
   than 401.
 - **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:196`)
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
-  backend routes (`/api/form-kits/<id>/schema|pdf`) because the static bundle
-  excludes private kits (bd kkos). Consumers: `SchemaFormDemo`'s schema fetch
+  backend routes (`/api/form-kits/<id>/schema|pdf`). This is a serving-seam
+  requirement, NOT yet a security boundary: the static-bundle EXCLUSION of
+  private kits is PENDING bd kkos (exposure tracked as bd
+  polyglot-pdf-17opi) -- until kkos lands, a private kit's schema + blank
+  pdf still ship world-readable in the Hosting bundle, so no firm may be
+  granted a private kit before then. Consumers: `SchemaFormDemo`'s schema fetch
   and `usePDFDocument`'s pdf fetch resolve `/api/` paths against the backend
   base and attach the Bearer token (`usePDFDocument.ts:60` fetch-to-blob;
   `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on

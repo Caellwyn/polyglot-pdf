@@ -234,7 +234,7 @@ def test_private_kit_absent_from_list_for_other_firms_and_legacy(_firm_world, to
 
 def test_private_kit_listed_for_own_firm_with_backend_paths(_firm_world):
     """Firm-A sees its private kit, whose paths are REWRITTEN to the
-    authenticated backend routes (the static bundle excludes private kits),
+    authenticated backend routes (the static-bundle exclusion is bd kkos),
     while the public kit keeps its static paths, and BOTH entries carry
     explicit schema_file/pdf_file (the fill path posts the real filename).
     Mutations: drop the rewrite branch -- the path asserts go red; drop the

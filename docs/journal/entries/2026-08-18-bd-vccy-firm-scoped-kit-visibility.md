@@ -76,6 +76,18 @@ while keeping a private kit fully USABLE for its own firm.
   fifth read site fails CI instead of shipping ungated. Scar #7 in its
   purest form: the first three gates were correct -- they just were not the
   whole set, and only the reviewer whose JOB is the blast radius saw it.
+- Outer round 2 (Opus): two more findings. HIGH -- this diff's own comment +
+  technical_guide entry asserted "the static bundle excludes private kits"
+  as shipped fact, but that exclusion is bd kkos (still open), and this PR
+  wires the feature flag on; both statements reworded to PENDING-kkos with
+  an explicit no-private-kits-before-kkos operational bar, and the reviewer
+  filed the exposure as bd polyglot-pdf-17opi (P1, blocked by kkos). The
+  static filter itself deliberately stays in kkos -- next bead, unblocked by
+  this PR's merge. LOW -- the list route's manifest-entry visibility
+  fallback answered the question differently than the single-kit gates when
+  live metadata was absent; the list now calls the SAME
+  kit_gates.kit_visibility verdict (live metadata is the only source,
+  everywhere).
 - Closeout assess: recorded in the merge ping after the loops ran.
 
 ## Lessons
