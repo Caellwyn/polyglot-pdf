@@ -136,6 +136,32 @@ ensure_bucket() {
     fi
 }
 
+# Collect a kit's PUBLISHABLE children into the array named by $1, skipping any
+# _-prefixed directory (bd polyglot-pdf-06u5o).
+#
+# "$kit_dir"/* used to be passed straight to the upload, and the `case $kit_id in
+# _*)` guard above it filters only the TOP-LEVEL kit id -- not children inside a
+# kit. So _archive/ (superseded revisions, bd w3zw) and _drafts/ (up to 10 draft
+# snapshots per kit, bd y2l0p) both rode every deploy into the bucket. Nothing
+# clears either ring on the status transition, so a kit carried them through
+# promotion.
+#
+# NOT an --exclude flag: `gcloud storage cp` has no such flag (only `rsync`
+# does), so that spelling would fail at deploy time. cp takes [SOURCE ...], so
+# enumerating is the supported shape.
+collect_publishable_kit_files() {
+    local -n _out=$1
+    local dir=$2
+    local entry base
+    _out=()
+    for entry in "$dir"/*; do
+        [ -e "$entry" ] || continue
+        base=$(basename "$entry")
+        case "$base" in _*) continue ;; esac
+        _out+=("$entry")
+    done
+}
+
 # Upload a single form kit
 upload_kit() {
     local kit_id="$1"
@@ -159,8 +185,14 @@ upload_kit() {
 
     log_info "Uploading form kit: $kit_id"
 
-    # Upload all files in the kit directory
-    gcloud storage cp -r "$kit_dir/*" "gs://$BUCKET_NAME/$PREFIX/$kit_id/"
+    # Upload the kit's publishable files -- NOT "$kit_dir/*", which swept
+    # _archive/ and _drafts/ into the bucket too (bd polyglot-pdf-06u5o).
+    collect_publishable_kit_files kit_files "$kit_dir"
+    if [ ${#kit_files[@]} -eq 0 ]; then
+        log_warn "Skipping $kit_id - no publishable files"
+        return 0
+    fi
+    gcloud storage cp -r "${kit_files[@]}" "gs://$BUCKET_NAME/$PREFIX/$kit_id/"
 
     log_info "Uploaded $kit_id successfully"
 }

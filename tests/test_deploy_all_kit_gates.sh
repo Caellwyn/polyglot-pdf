@@ -153,6 +153,156 @@ assert_no_bypass "deploy-production.sh" "$SCRIPT_DIR/../deploy-production.sh"
 assert_gated "deploy-all.sh" "$SCRIPT_DIR/../deploy-all.sh"
 assert_gated "scripts/deploy-form-kit.sh" "$SCRIPT_DIR/../scripts/deploy-form-kit.sh"
 
+# --- collect_publishable_kit_files: underscore dirs never reach the bucket ---
+#
+# bd polyglot-pdf-06u5o. The upload was `cp -r "$kit_dir"/*`, and the
+# `case "$kit_id" in _*)` guard above it filters only the TOP-LEVEL kit id, not
+# children INSIDE a kit -- so _archive/ (superseded revisions, bd w3zw) and
+# _drafts/ (up to 10 draft snapshots per kit, bd y2l0p) both rode every deploy
+# into the bucket. Nothing clears either ring on the status transition.
+#
+# Note this pins the GENERAL underscore rule, not just _drafts: mutating the
+# skip to `_drafts)` alone leaves _archive leaking and MUST redden here.
+
+# NESTED under $TMP, and deliberately NO second trap: bash keeps ONE EXIT
+# handler per shell, so `trap ... EXIT` here would have REPLACED the $TMP
+# cleanup registered above and leaked that directory on every run.
+KIT_ROOT="$TMP/kits"
+mkdir -p "$KIT_ROOT"
+
+mkdir -p "$KIT_ROOT/w7/_drafts/1" "$KIT_ROOT/w7/_archive/v1" "$KIT_ROOT/w7/sub"
+touch "$KIT_ROOT/w7/schema.json" "$KIT_ROOT/w7/form.pdf" "$KIT_ROOT/w7/metadata.json"
+touch "$KIT_ROOT/w7/_drafts/1/schema.json" "$KIT_ROOT/w7/_archive/v1/schema.json"
+touch "$KIT_ROOT/w7/sub/nested.txt"
+
+collect_publishable_kit_files _collected "$KIT_ROOT/w7"
+_names=$(printf '%s
+' "${_collected[@]}" | xargs -n1 basename | sort | tr '
+' ' ')
+
+assert_excluded() {
+    local what=$1
+    if printf '%s
+' "${_collected[@]}" | grep -q "/$what\$"; then
+        echo "FAIL  publishable: $what was collected for upload"
+        FAIL=$((FAIL + 1))
+    else
+        echo "PASS  publishable: $what excluded from upload"
+        PASS=$((PASS + 1))
+    fi
+}
+
+assert_included() {
+    local what=$1
+    if printf '%s
+' "${_collected[@]}" | grep -q "/$what\$"; then
+        echo "PASS  publishable: $what included"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  publishable: $what MISSING (collected: $_names)"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+assert_excluded "_drafts"
+assert_excluded "_archive"
+# Real content must survive the filter -- an over-broad rule that uploaded
+# nothing would pass the two assertions above.
+assert_included "schema.json"
+assert_included "form.pdf"
+assert_included "metadata.json"
+assert_included "sub"
+
+# A kit with no publishable children yields an EMPTY array, not the literal
+# glob string -- both callers check ${#kit_files[@]} before uploading.
+mkdir -p "$KIT_ROOT/onlyunderscore/_drafts"
+collect_publishable_kit_files _empty "$KIT_ROOT/onlyunderscore"
+if [ "${#_empty[@]}" -eq 0 ]; then
+    echo "PASS  publishable: underscore-only kit collects nothing"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  publishable: underscore-only kit collected ${#_empty[@]} entries"
+    FAIL=$((FAIL + 1))
+fi
+
+# deploy-form-kit.sh carries its OWN copy of the helper (the scripts are
+# independently invocable, so it cannot source deploy-all.sh). Grepping its call
+# site proves the CALL, not the FILTER, so extract and RUN that copy.
+#
+# THREE load-bearing details, each of which cost a green-but-broken run:
+#   * unset -f -- the harness sourced deploy-all.sh above, so the same function
+#     is already defined in this subshell. Without the unset, `eval` is an
+#     optional OVERRIDE, not a binding: if the sed matches nothing the test
+#     silently exercises deploy-all.sh's copy and passes while THIS file leaks.
+#     Measured: a brace-style reformat + a narrowed filter shipped an _archive
+#     leak at 26/26 green.
+#   * the empty-source check -- fail loudly when the function moves or is
+#     reformatted, rather than skipping in silence.
+#   * `|| exit 1` on the eval -- a syntax error inside the extracted body wrote
+#     to stderr and still went green.
+_dfk_src=$(sed -n '/^collect_publishable_kit_files()[[:space:]]*{\?$/,/^}/p'     "$SCRIPT_DIR/../scripts/deploy-form-kit.sh")
+if [ -z "$_dfk_src" ]; then
+    echo "FAIL  publishable: could not extract deploy-form-kit.sh's helper (moved or reformatted?)"
+    FAIL=$((FAIL + 1))
+fi
+if (
+    unset -f collect_publishable_kit_files
+    eval "$_dfk_src" || exit 1
+    collect_publishable_kit_files _dfk "$KIT_ROOT/w7"
+    printf '%s
+' "${_dfk[@]}" > "$KIT_ROOT/dfk_out.txt"
+); then
+    if [ ! -s "$KIT_ROOT/dfk_out.txt" ]; then
+        echo "FAIL  publishable: deploy-form-kit.sh's own helper collected nothing"
+        FAIL=$((FAIL + 1))
+    elif grep -qE '/_(drafts|archive)$' "$KIT_ROOT/dfk_out.txt"; then
+        echo "FAIL  publishable: deploy-form-kit.sh's own helper collected an _ dir"
+        FAIL=$((FAIL + 1))
+    else
+        echo "PASS  publishable: deploy-form-kit.sh's own helper excludes _ dirs"
+        PASS=$((PASS + 1))
+    fi
+    if grep -qE '/schema\.json$' "$KIT_ROOT/dfk_out.txt"; then
+        echo "PASS  publishable: deploy-form-kit.sh's own helper keeps real files"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  publishable: deploy-form-kit.sh's own helper dropped real files"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "FAIL  publishable: deploy-form-kit.sh's helper failed to load"
+    FAIL=$((FAIL + 1))
+fi
+
+# Both upload sites must go through the helper rather than a raw glob.
+for _f in "$SCRIPT_DIR/../deploy-all.sh" "$SCRIPT_DIR/../scripts/deploy-form-kit.sh"; do
+    _label=$(basename "$_f")
+    # Match any raw-glob upload of the kit dir, not two incidental spellings:
+    # ${kit_dir} (brace form) and --recursive (long flag) both reintroduce the
+    # leak, and a regex pinned to one shape would stay green (bd
+    # polyglot-pdf-j8fe5). Keyed on "cp <flag> <kit_dir-in-any-form>/*".
+    if grep -Eq 'gcloud storage cp (-r|--recursive) "?\$\{?kit_dir\}?/?"?/?\*' "$_f"; then
+        echo "FAIL  publishable: $_label still uploads a raw \$kit_dir glob"
+        FAIL=$((FAIL + 1))
+    else
+        echo "PASS  publishable: $_label uploads an enumerated file list"
+        PASS=$((PASS + 1))
+    fi
+done
+
+# The harness must register exactly ONE EXIT trap. bash keeps one handler per
+# shell, so a second `trap ... EXIT` silently REPLACES the first and orphans
+# whatever the first was cleaning -- which is exactly what a second trap added
+# here did, leaking $TMP on every run until it was caught in review.
+_traps=$(grep -cE '^[[:space:]]*trap( --)? .* (EXIT|0)[[:space:]]*$' "$0")
+if [ "$_traps" -eq 1 ]; then
+    echo "PASS  cleanup: exactly one EXIT trap registered"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  cleanup: $_traps EXIT traps -- a later one silently replaces the first"
+    FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "----------------------------------------"
 echo "kit-gate tests: $PASS passed, $FAIL failed"
