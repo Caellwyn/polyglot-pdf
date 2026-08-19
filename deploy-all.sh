@@ -252,7 +252,12 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # liability confirmation trail to Firestore. Cloud Run's filesystem is
     # ephemeral tmpfs, so the file-only trail did NOT survive deployment --
     # every deployed env needs the durable sink. Metadata only, never values.
-    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true"
+    # FIRMS_FIRESTORE_ENABLED (bd polyglot-pdf-vccy): enable the firms-store
+    # READ path so firm staff see their firm's PRIVATE kits. Reads fail
+    # CLOSED ([]), so the flag can only ever narrow what an outage shows.
+    # (deploy-production.sh also sources this block, but that channel is dead
+    # -- the former prod project is unreachable, purge bd polyglot-pdf-je6iy.)
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the

@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-08-14. See [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-08-18. See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -131,12 +131,17 @@ audio, so each is paid work as well as a user-data path). The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
-`GET /api/form-kits/{kit_id}/pdf` is **deliberately ungated** — no frontend
-consumer loads that route today (the manifest's `pdfPath` is always the static
-Hosting path, so the viewer fetches the static copy), and the same
-blank-template bytes ship publicly in the frontend bundle regardless; gating it
-would protect nothing not already public. The non-gate is pinned by test so a
-blanket-auth sweep is a deliberate decision, not an accident.
+`GET /api/form-kits/{kit_id}/pdf` is **ungated for PUBLIC kits only** (bd
+`polyglot-pdf-vccy` scoped the former blanket non-gate): a public kit's
+blank-template bytes ship in the static Hosting bundle regardless, so gating
+that read protects nothing — but the route now parses an OPTIONAL bearer token
+and 404s a PRIVATE kit for anyone whose `firm_id` claim does not resolve to an
+allowlist containing it (invisibility, not 401: the kit's existence is the
+secret; an invalid token degrades to anonymous). The catalogue list and the
+schema read enforce the same firm filter via `require_auth` claims. The
+public non-gate and the private gate matrix are both pinned by test so a
+blanket-auth sweep — or a widening — is a deliberate decision, not an
+accident.
 
 ## Firm identity (`firms/{firm_id}` + custom claims)
 
@@ -161,9 +166,11 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
 - **Staff identity** — `firm_id` + `firm_role` (`manager` | `employee`) custom
   claims on the staff member's normal Firebase account, stamped by the admin
   bootstrap script below. The claims ride the existing ID-token verification
-  (`require_auth` / the WS `?token=` gate); nothing reads them yet — bd
-  `polyglot-pdf-vccy` (visibility) and bd `polyglot-pdf-xwlt` (telemetry) are
-  the consumers. A stamped claim appears in decoded tokens only on the next
+  (`require_auth` / the WS `?token=` gate). **`firm_id` is consumed** by the
+  form-kit routes' firm-scoped visibility filter
+  (`backend/routes/form_kit_routes.py`, bd `polyglot-pdf-vccy`); `firm_role`
+  and the telemetry threading (bd `polyglot-pdf-xwlt`) are still future
+  consumers. A stamped claim appears in decoded tokens only on the next
   token refresh (up to ~1h; force via sign-out/in or `getIdToken(true)`).
 
 **The admin step** (creates/updates the firm record and stamps staff claims;
@@ -193,7 +200,8 @@ The WS auth gate is covered indirectly: the integration tests patch
 (`backend/tests/integration/test_websocket_ephemeral.py`) so the handshake tests run
 without a live token. The HTTP gate is covered directly:
 `backend/tests/unit/test_http_route_auth.py` pins the 401s on
-fill-pdf/form-kits/schema, the deliberate NON-gate on the kit-PDF GET, and the
+fill-pdf/form-kits/schema, the public-kit NON-gate on the kit-PDF GET plus the
+private-kit firm-visibility matrix (bd vccy), and the
 `VFF_DISABLE_AUTH` bypass, and `backend/tests/unit/test_auth_bypass_guard.py`
 pins the deployed fail-closed guard on that bypass (both layers separately: the
 `Settings` startup refusal and `verify_token`'s inert-on-`K_SERVICE` branch).
