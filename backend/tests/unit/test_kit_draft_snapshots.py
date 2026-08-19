@@ -1051,6 +1051,10 @@ def test_the_reaper_SKIPS_a_directory_that_now_holds_a_schema(client):
 
     assert (drafts / "1" / "schema.json").exists(),         "a completed snapshot was reaped"
     assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "THEIR_WORK"
+    # NOTE: removing the schema.json early-return does NOT redden this, and
+    # that is correct -- it is an optimization, not a guard. rmdir refusing a
+    # non-empty directory is what actually saves the snapshot, and
+    # test_the_reaper_leaves_an_IN_FLIGHT_temp_write_alone pins that.
 
 
 def test_the_reaper_leaves_an_IN_FLIGHT_temp_write_alone(client):

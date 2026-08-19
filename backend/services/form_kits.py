@@ -739,29 +739,33 @@ class LocalFormKitStore(FormKitStore):
 		return sorted(ids, key=int)
 
 	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
-		"""Delete an abandoned claim, re-checking emptiness at the last instant.
+		"""Delete an abandoned claim, without ever removing real work.
 
-		The check and the delete must be as close together as possible: a
-		concurrent saver can complete its write at any moment, and deleting a
-		COMPLETED snapshot is precisely the harm this whole feature exists to
-		prevent. Checking here rather than trusting a listing taken earlier
-		closes the window that lost 85 of 360 concurrent trials.
+		The SAFETY comes from rmdir, not from any check: rmdir refuses a
+		non-empty directory, so a concurrent saver's file -- whether a finished
+		schema.json or an in-flight .schema.json.<pid>.<hex>.tmp -- makes the
+		delete fail rather than destroy it. That is why only meta.json is ever
+		unlinked: unlinking anything else could empty the directory out from
+		under a saver mid-write, and rmdir would then succeed.
 
-		Racy by nature -- os has no atomic "remove only if empty" for a tree --
-		but the window shrinks from two listings wide to a single stat, and
-		anything that appears after the stat is preserved by rmdir refusing a
-		non-empty directory.
+		Trusting a listing taken earlier is what lost 85 of 360 concurrent
+		trials (round 8): by the time the delete ran, the listing was stale.
+
+		The schema.json early-return below is an OPTIMIZATION, not a guard --
+		verified by removing it, after which a completed snapshot still
+		survives because rmdir refuses. It skips the pointless iterdir/rmdir
+		on the common already-completed case (Opus fresh-eyes round 9).
 		"""
 		target = self._drafts_dir(kit_id) / snapshot_id
 		try:
 			if (target / "schema.json").exists():
-				return  # a saver completed it while we were looking elsewhere
-			# rmdir, NOT rmtree: it refuses a non-empty directory, so a schema
-			# written in the instant after the check above survives rather than
-			# being swept away with it.
+				return  # already completed -- nothing to reap, skip the work
+			# ONLY meta.json: see the docstring. Anything else could empty the
+			# directory under a saver mid-write.
 			for leftover in target.iterdir():
 				if leftover.name == "meta.json":
 					leftover.unlink()
+			# rmdir, NOT rmtree -- this is the actual guarantee.
 			target.rmdir()
 		except OSError:
 			# Non-empty (someone won the race -- correct outcome), or already
