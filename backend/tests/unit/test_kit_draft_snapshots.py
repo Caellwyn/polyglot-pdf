@@ -901,9 +901,18 @@ def test_an_abandoned_claim_is_REAPED(client):
     assert not (drafts / "99").exists() or         (drafts / "99" / "schema.json").exists()
 
 
-def test_a_CLAIM_still_blocks_a_concurrent_saver(client):
-    """The claim must see every directory including unwritten ones, or two
-    savers get the same id -- the round-6 regression."""
+def test_a_CLAIM_skips_an_id_another_saver_already_holds(client):
+    """An unwritten directory is still a held id, and mkdir refuses it.
+
+    NOTE ON WHAT THIS DOES *NOT* PROVE: I first named this
+    "...still_blocks_a_concurrent_saver" and asserted it pinned the
+    include_unwritten flag. It does not -- removing that flag leaves this test
+    passing, because the atomic mkdir refuses the taken id anyway and the loop
+    walks on. The flag earns its keep in the REAPER (which must distinguish an
+    abandoned claim from a live one), not in collision safety, and
+    test_an_abandoned_claim_is_REAPED is what pins it. Renamed rather than left
+    claiming more than it shows.
+    """
     c, store, root = client
     _make_kit(root, "w7", schema=_schema("A"))
 
