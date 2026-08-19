@@ -69,7 +69,15 @@ export function usePDFDocument(pdfUrl: string | null): PDFDocumentState {
         if (!resp.ok) {
           throw new Error(`Failed to load PDF (${resp.status})`);
         }
-        objectUrl = URL.createObjectURL(await resp.blob());
+        const blobUrl = URL.createObjectURL(await resp.blob());
+        if (cancelled) {
+          // Cleanup already ran while the fetch was in flight and saw
+          // objectUrl === null, so revoke HERE or the blob (a whole PDF of
+          // bytes) leaks for the tab's lifetime (vccy fresh-eyes round 1).
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        objectUrl = blobUrl;
         src = objectUrl;
       }
       if (cancelled) {

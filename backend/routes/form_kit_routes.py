@@ -136,9 +136,11 @@ async def _kit_visibility(store, kit_id: str) -> str:
     are not migrated (absence of the key means public, sprint-19 plan), and
     anything except the exact string "private" is public, so a typo can
     neither hide a public kit nor expose a private one as some third state.
-    A metadata store error propagates (502 upstream), same as
-    _require_published -- unreadable metadata must not serve a maybe-private
-    kit.
+    An unreadable-metadata FormKitStoreError propagates (502 upstream), same
+    as _require_published -- unreadable metadata must not serve a
+    maybe-private kit. (A FormKitNotFound raised by a NONSTANDARD loader --
+    the real stores return None for absence, never raise -- lands in the
+    route's except handler as the same 404 denial.)
     """
     loader = getattr(store, "load_metadata", None)
     if loader is None:
