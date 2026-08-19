@@ -842,3 +842,76 @@ def test_CONCURRENT_saves_through_the_ROUTE_each_keep_a_snapshot(client):
     # Four saves over an existing draft: four snapshots of prior states.
     snaps = _run(store.list_draft_snapshots("w7"))
     assert len(snaps) == 4, f"concurrent saves collapsed to {len(snaps)} snapshots"
+
+
+# --- claimed-but-unwritten ids ----------------------------------------------
+#
+# The claim creates the directory as its lock, so any failure between the mkdir
+# and the write -- full disk, killed worker, recycled Cloud Run instance --
+# leaves an empty one behind. Counting those as ring members meant abandoned
+# claims EVICTED REAL WORK: measured at 10 listed entries with 1 actually
+# restorable, the three genuine snapshots deleted to make room for empty
+# directories (Opus fresh-eyes round 7).
+
+
+def test_ABANDONED_claims_do_not_evict_real_work(client):
+    """The measured harm, pinned."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("v0"))
+    for i in range(3):
+        _save(c, "w7", _schema(f"real{i}"))
+
+    # Ten crashes between claim and write.
+    drafts = root / "w7" / "_drafts"
+    highest = max(int(d.name) for d in drafts.iterdir() if d.name.isdigit())
+    for n in range(highest + 1, highest + 11):
+        (drafts / str(n)).mkdir()
+
+    _save(c, "w7", _schema("after"))
+
+    snaps = _snapshots(c, "w7").json()["snapshots"]
+    restorable = 0
+    for snap in snaps:
+        try:
+            _run(store.load_draft_snapshot("w7", snap["id"]))
+            restorable += 1
+        except Exception:
+            pass
+
+    assert restorable == len(snaps), (
+        f"{len(snaps)} listed but only {restorable} restorable -- phantoms are "
+        "in the recovery list")
+    # The real work survived rather than being evicted by empty directories.
+    tags = {_run(store.load_draft_snapshot("w7", x["id"]))["_tag"] for x in snaps}
+    assert {"real0", "real1", "real2"} <= tags, tags
+
+
+def test_an_abandoned_claim_is_REAPED(client):
+    """Otherwise they accumulate forever and push the counter ever upward."""
+    c, _store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+    _save(c, "w7", _schema("B"))
+
+    drafts = root / "w7" / "_drafts"
+    (drafts / "99").mkdir()
+    # A save whose claim lands ABOVE the orphan reaps it.
+    for _ in range(3):
+        _save(c, "w7", _schema("more"))
+
+    assert not (drafts / "99").exists() or         (drafts / "99" / "schema.json").exists()
+
+
+def test_a_CLAIM_still_blocks_a_concurrent_saver(client):
+    """The claim must see every directory including unwritten ones, or two
+    savers get the same id -- the round-6 regression."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    # An in-flight claim nobody has written yet.
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "1").mkdir()
+
+    new_id = _run(store.put_draft_snapshot("w7", {"_tag": "concurrent"}))
+
+    assert new_id != "1", "the claim handed out an id another saver held"

@@ -682,8 +682,22 @@ class LocalFormKitStore(FormKitStore):
 	def _drafts_dir(self, kit_id: str) -> Path:
 		return self._kit_dir(kit_id) / _DRAFTS_DIR
 
-	def _snapshot_ids(self, kit_id: str) -> list[str]:
+	def _snapshot_ids(self, kit_id: str,
+					  include_unwritten: bool = False) -> list[str]:
 		"""Existing snapshot ids, OLDEST first, ignoring anything unparseable.
+
+		A directory with no schema.json is a CLAIMED-BUT-UNWRITTEN id: the
+		claim creates the directory as its lock, so any failure between the
+		mkdir and the write (full disk, killed worker, recycled instance)
+		leaves an empty one behind. Those are excluded by default, because
+		counting them as ring members meant abandoned claims EVICTED REAL WORK
+		-- measured at 10 listed entries with 1 actually restorable, the three
+		genuine snapshots deleted to make room for empty directories (Opus
+		fresh-eyes round 7). The GCS twin already excluded this shape; the
+		local store did not.
+
+		include_unwritten=True is for the CLAIM path only, which must see every
+		directory or it would hand out an id another saver already holds.
 
 		Filesystem trouble becomes FormKitStoreError, never a raw OSError: the
 		save path catches only FormKitStoreError, so an escaping OSError would
@@ -702,7 +716,8 @@ class LocalFormKitStore(FormKitStore):
 			# editor's current work. Exactly the harm this feature exists to
 			# prevent, from a directory name (Opus fresh-eyes round 2).
 			ids = [c.name for c in root.iterdir()
-				   if c.is_dir() and c.name.isascii() and c.name.isdigit()]
+				   if c.is_dir() and c.name.isascii() and c.name.isdigit()
+				   and (include_unwritten or (c / "schema.json").exists())]
 		except (OSError, ValueError) as exc:
 			# ValueError too: the filter and the sort must never disagree, but
 			# if they ever do again this becomes a 502 on the LIST rather than
@@ -732,7 +747,10 @@ class LocalFormKitStore(FormKitStore):
 			raise FormKitStoreError(
 				f"Unable to create the draft snapshot directory for {kit_id}: {exc}"
 			) from exc
-		existing = self._snapshot_ids(kit_id)
+		# include_unwritten: the claim must see EVERY directory, including ones
+		# another saver has claimed but not yet written, or it would hand out
+		# an id already held.
+		existing = self._snapshot_ids(kit_id, include_unwritten=True)
 		candidate = int(existing[-1]) + 1 if existing else 1
 		# Bounded: the ring holds DRAFT_SNAPSHOT_LIMIT, so even a burst of
 		# simultaneous savers cannot walk far before finding a free id.
@@ -774,6 +792,20 @@ class LocalFormKitStore(FormKitStore):
 			"id": next_id,
 			"savedAt": datetime.now(timezone.utc).isoformat(),
 		})
+
+		# Reap abandoned claims -- empty directories left by a failure between
+		# the mkdir and the write. They no longer count as ring members (see
+		# _snapshot_ids), but without this they would accumulate forever and
+		# push the claim counter ever upward. Only ids BELOW the one just
+		# written are touched, so a claim another saver is mid-write on is
+		# never disturbed.
+		written = set(self._snapshot_ids(kit_id))
+		for orphan in self._snapshot_ids(kit_id, include_unwritten=True):
+			if orphan in written or int(orphan) >= int(next_id):
+				continue
+			await anyio.to_thread.run_sync(
+				lambda d=self._drafts_dir(kit_id) / orphan:
+					shutil.rmtree(d, ignore_errors=True))
 
 		# Evict AFTER the write: a failure here leaves too MANY snapshots
 		# rather than too few, the safe direction when the point is not losing
