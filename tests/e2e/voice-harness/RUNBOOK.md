@@ -131,6 +131,17 @@ exactly this reason (an English-only match silently hits nothing and leaves
 the flag-on path hanging). Any new driver in a non-English session must do the
 same.
 
+Click Agree here -- bilingual, so it works in an English OR Russian session
+(add the label for any other language you drive):
+
+```js
+[...document.querySelectorAll('button')]
+  .find(b=>/Принимаю|I Agree/i.test(b.innerText)).click();
+```
+
+This is the ONLY Agree click in this procedure -- step 5 below is a
+placeholder, not a second click.
+
 ### 4. Install the harness + pre-load fixtures
 
 Inject the FULL body of `tests/e2e/voice-harness/harness.js` (it self-installs
@@ -146,13 +157,18 @@ Promise.all([
 ]).then(([d,y,d2]) => { window.__vffDigits = d; window.__vffYes = y; window.__vffDigits2 = d2; window.__vffReady = true; });
 ```
 
-### 5. Agree to the disclaimer
+### 5. Agree to the disclaimer -- ALREADY DONE in step 3
 
-```js
-[...document.querySelectorAll('button')].find(b=>/I Agree/i.test(b.innerText)).click();
-```
-This calls `switchToFirstSection` -> restarts Gemini for field 1 on the same
-connection (the hook stays valid; `isNativeVad()` still resolves).
+Nothing to click here. Step 3 dismisses the modal, so a second click would
+find no button and throw (`.find(...)` returns undefined) -- and an
+English-only selector would miss a translated label anyway. This step is kept
+as a numbered placeholder so the step numbering below stays stable.
+
+What that step-3 click did, on the **flag-OFF** path: it calls
+`switchToFirstSection` -> restarts Gemini for field 1 on the same connection
+(the hook stays valid; `isNativeVad()` still resolves). With the intro clip
+flag ON there is no session yet at that point, so Agree CONNECTS instead and
+`switchToFirstSection` is never reached.
 
 ### 6. Run the cycle (outcome-gated)
 
