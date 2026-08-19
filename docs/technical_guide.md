@@ -96,7 +96,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 |--------|------|-------------|
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
-| POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is). `components/pdf-filling.md` |
+| POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is) + **firm-scoped** (bd vy6id: the body's caller-supplied `kit_id` runs the same visibility gate as the kit reads -- a private kit 404s for non-members). `components/pdf-filling.md` |
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). `standards/confirmation-and-audit.md` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304; 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
@@ -431,29 +431,37 @@ succeed on screen (by design -- never log a confirmation that didn't happen).
 ### 7. Firm-scoped kit visibility (bd polyglot-pdf-vccy)
 
 Four coupled contracts make a PRIVATE kit invisible outside its firm yet fully
-usable inside it:
+usable inside it. The gates live in **`backend/services/kit_gates.py`**,
+shared by EVERY client-tier kit read -- the set is exactly four sites (the
+catalogue list, the schema GET, the pdf GET, and `POST /api/fill-pdf`'s kit
+read; bd polyglot-pdf-vy6id caught the fourth ungated), and
+`test_http_route_auth.py::test_every_client_tier_kit_read_is_visibility_gated`
+pins the SET so a fifth read site fails CI instead of shipping ungated
+(`/api/editor/*` is deliberately outside it -- contractor tooling behind role
+tokens, not the client tier):
 
 - **Kit metadata keys** `visibility: "public" | "private"` + `owner_firm_id`
   (snake_case in `metadata.json`; absence = public, anything but the exact
   string `"private"` coerces public). Producer: the kit's `metadata.json`
-  (hand-authored / future publish UI). Consumers: the route gate reads LIVE
-  metadata -- ONE `_load_live_metadata` read per single-kit request feeds
-  both the publish and visibility gates (`form_kit_routes.py:91`; visibility
-  coercion `_kit_visibility` `:148`; the manifest copy is deploy-time stale
-  in GCS) -- and the store passes normalized `visibility` / `ownerFirmId`
-  through both manifest paths (`form_kits.py:226` normalize, `:516` local
-  synthesis). `owner_firm_id` is bookkeeping for the firm write path
-  (bd z6bk9), NOT the read gate.
+  (hand-authored / future publish UI). Consumers: the gates read LIVE
+  metadata -- ONE `load_live_metadata` read per request feeds both the
+  publish and visibility gates (`kit_gates.py:28`; visibility coercion
+  `kit_visibility` `:84`; the manifest copy is deploy-time stale in GCS) --
+  and the store passes normalized `visibility` / `ownerFirmId` through both
+  manifest paths (`form_kits.py:226` normalize, `:516` local synthesis).
+  `owner_firm_id` is bookkeeping for the firm write path (bd z6bk9), NOT the
+  read gate.
 - **The firm allowlist**: `firms/{firm_id}.allowed_kits` (producer:
   `scripts/bootstrap_firm.py`) -> `firms.get_allowed_kits`
   (`backend/services/firms.py:55`, fail-closed `[]`) -> resolved per request
-  off the `firm_id` ID-token claim (`form_kit_routes.py:131`,
-  `_firm_allowed_kits`; run off the event loop) -> enforced by
-  `_require_visible` (`:163`, 404 = invisibility) on the schema + pdf reads
-  and by the list filter inside `list_form_kits` (`:209`). The pdf route
-  parses its bearer token OPTIONALLY (`:336`); an invalid token degrades to
-  anonymous rather than 401.
-- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:278`)
+  off the `firm_id` ID-token claim (`kit_gates.py:67`, `firm_allowed_kits`;
+  run off the event loop) -> enforced by `require_visible` (`:99`, 404 =
+  invisibility) on the schema + pdf + fill reads
+  (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
+  (`form_kit_routes.py:127`). The pdf route parses its bearer token
+  OPTIONALLY (`:257`); an invalid token degrades to anonymous rather
+  than 401.
+- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:196`)
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
   backend routes (`/api/form-kits/<id>/schema|pdf`) because the static bundle
   excludes private kits (bd kkos). Consumers: `SchemaFormDemo`'s schema fetch
@@ -462,7 +470,7 @@ usable inside it:
   `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on
   Hosting via the rewrite but not against the Vite dev server).
 - **Explicit filenames** `schema_file`/`pdf_file` on `FormKitInfo`
-  (`form_kit_routes.py:199`): under rewritten paths the URL's last segment is
+  (`form_kit_routes.py:117`): under rewritten paths the URL's last segment is
   a literal route word, so the client must STOP deriving filenames by URL
   split. Consumers: `SchemaFormDemo.tsx:114`/`:116` (manifest mapping) and
   `fillPDF`'s explicit `pdfFile` param (`pdfFiller.ts:117` -- the fill POST's

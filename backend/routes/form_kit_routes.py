@@ -18,11 +18,17 @@ from pydantic import BaseModel
 import structlog
 
 from backend.services.auth import require_auth, verify_token
-from backend.services.firms import get_allowed_kits
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
     get_form_kit_store,
+)
+from backend.services.kit_gates import (
+    firm_allowed_kits as _firm_allowed_kits,
+    kit_visibility as _kit_visibility,  # noqa: F401 (re-exported for tests/docs symmetry)
+    load_live_metadata as _load_live_metadata,
+    require_published as _require_published,
+    require_visible as _require_visible,
 )
 
 _log = structlog.get_logger().bind(module="form_kit_routes")
@@ -86,94 +92,6 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
             return form["schemaFile"], form["pdfFile"]
     # Manifest loaded but this kit is not in it -> not served (404, not fallback).
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
-
-
-async def _load_live_metadata(store, kit_id: str) -> Optional[dict]:
-    """ONE live metadata read feeding BOTH single-kit gates (publish +
-    visibility) -- each gate loading independently doubled the GCS read per
-    schema/pdf request (vccy fresh-eyes round 2). Returns None when the store
-    has no loader (legacy test doubles) or the loader returns a non-dict; an
-    unreadable-metadata FormKitStoreError propagates (502 fail-closed), and a
-    FormKitNotFound from a NONSTANDARD loader (the real stores return None
-    for absence, never raise) lands in the route's except handler as the
-    same 404 denial.
-    """
-    loader = getattr(store, "load_metadata", None)
-    if loader is None:
-        return None
-    meta = await loader(kit_id)  # FormKitStoreError propagates -> fail closed
-    return meta if isinstance(meta, dict) else None
-
-
-def _require_published(store, kit_id: str, meta: Optional[dict]) -> None:
-    """Refuse to serve a kit whose LIVE metadata status is not "complete", on
-    stores that enforce it (GCS -- the editor-writable shared store).
-
-    The deploy-time manifest gate stopped being sufficient when the store
-    became WRITABLE (bd 92qe.1): a contractor reverting a published kit to
-    draft (to polish it) must unpublish it IMMEDIATELY, otherwise their
-    work-in-progress saves would keep streaming to voice users through the
-    still-listed manifest entry (Codex P1, PR #279). Local mode is ungated by
-    design (the flag is False), and legacy test doubles without load_metadata
-    are treated as ungated. Under the flag, MISSING metadata fails closed
-    (every legitimately deployed/onboarded kit carries metadata.json). The
-    metadata itself comes pre-loaded from _load_live_metadata (one read
-    serves this gate AND the visibility gate).
-    """
-    if not getattr(store, "enforce_complete_on_public_reads", False):
-        return
-    if getattr(store, "load_metadata", None) is None:
-        return
-    if not isinstance(meta, dict) or meta.get("status") != "complete":
-        raise FormKitNotFound(f"Kit not published: {kit_id}")
-
-
-async def _firm_allowed_kits(user: Optional[dict]) -> frozenset:
-    """Resolve the caller's firm-allowed kit ids from the firm_id claim.
-
-    Fail-closed at every step (bd polyglot-pdf-vccy): no user, no firm_id
-    claim, or a disabled/broken firms store all resolve to an EMPTY set --
-    public kits only. get_allowed_kits itself never raises and never returns
-    None (backend/services/firms.py), and its Firestore read is sync (Admin
-    SDK), so it runs off the event loop.
-    """
-    # isinstance, not truthiness: a DIRECT call (tests) can leave the Depends()
-    # default object in the user parameter, which is truthy but not a dict.
-    firm_id = user.get("firm_id") if isinstance(user, dict) else None
-    if not isinstance(firm_id, str) or not firm_id:
-        return frozenset()
-    return frozenset(await asyncio.to_thread(get_allowed_kits, firm_id))
-
-
-def _kit_visibility(meta: Optional[dict]) -> str:
-    """Return the kit's visibility ("public" | "private") from LIVE metadata.
-
-    Absence of metadata or the key means PUBLIC -- existing kits are not
-    migrated (absence of the key means public, sprint-19 plan), and anything
-    except the exact string "private" is public, so a typo can neither hide
-    a public kit nor expose a private one as some third state. The metadata
-    comes pre-loaded from _load_live_metadata (whose docstring carries the
-    fail-closed error contract).
-    """
-    if not isinstance(meta, dict):
-        return "public"
-    return "private" if meta.get("visibility") == "private" else "public"
-
-
-async def _require_visible(kit_id: str, meta: Optional[dict], user: Optional[dict]) -> None:
-    """Refuse (404) a PRIVATE kit unless the caller's firm allowlist has it.
-
-    404 -- not 401/403 -- deliberately: a private kit must not reveal its
-    EXISTENCE to another firm or a legacy authed user (epic 02ye rubric #2:
-    invisible on every surface). Access = kit_id in the firm's allowed_kits;
-    owner_firm_id is bookkeeping for the write path (bd z6bk9), not the read
-    gate.
-    """
-    if _kit_visibility(meta) != "private":
-        return
-    allowed = await _firm_allowed_kits(user)
-    if kit_id not in allowed:
-        raise FormKitNotFound(f"Kit not visible: {kit_id}")
 
 
 class FormKitInfo(BaseModel):

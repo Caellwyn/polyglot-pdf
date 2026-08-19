@@ -63,6 +63,19 @@ while keeping a private kit fully USABLE for its own firm.
   notes, and Surface contracts entry 7 records the four coupled contracts
   (metadata keys, allowlist chain, path rewrite, explicit filenames) -- the
   entry lo88 deferred until a live consumer existed.
+- THE OUTER REVIEW'S CATCH (bd polyglot-pdf-vy6id, P1, closed by this PR):
+  the Opus cross-surface pass enumerated the client-tier kit-read SET --
+  exactly four sites -- and found the fourth ungated: POST /api/fill-pdf
+  takes a caller-supplied kit_id, and with empty field_values its 200
+  response is the kit's blank template verbatim, handing any authed user
+  the private bytes the pdf GET 404s. Fix: the gates moved to
+  backend/services/kit_gates.py (shared, not a route-to-route import), the
+  fill route runs them, and the SET is pinned mechanically
+  (test_every_client_tier_kit_read_is_visibility_gated derives the read
+  sites from the shipped route sources and asserts each is gated), so a
+  fifth read site fails CI instead of shipping ungated. Scar #7 in its
+  purest form: the first three gates were correct -- they just were not the
+  whole set, and only the reviewer whose JOB is the blast radius saw it.
 - Closeout assess: recorded in the merge ping after the loops ran.
 
 ## Lessons

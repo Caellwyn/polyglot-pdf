@@ -178,6 +178,15 @@ class _TwoKitStore:
         return {"kit": kit_id}
 
     async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:
+        if pdf_filename == "REAL":
+            # A minimal VALID pdf, for the fill route (fitz must open it).
+            import fitz
+
+            doc = fitz.open()
+            doc.new_page()
+            data = doc.tobytes()
+            doc.close()
+            return data
         return b"%PDF-" + kit_id.encode("ascii")
 
 
@@ -192,12 +201,18 @@ def _firm_world(_auth_on, monkeypatch):
         return dict(claims)
 
     monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _TwoKitStore())
-    # require_auth (list/schema routes) resolves verify_token inside the auth
-    # module; the pdf route uses the copy imported into form_kit_routes.
+    monkeypatch.setattr(
+        "backend.routes.pdf_fill_routes.get_form_kit_store",
+        lambda: _TwoKitStore(),
+    )
+    # require_auth (list/schema/fill routes) resolves verify_token inside the
+    # auth module; the pdf route uses the copy imported into form_kit_routes.
     monkeypatch.setattr("backend.services.auth.verify_token", _fake_verify)
     monkeypatch.setattr(fkr, "verify_token", _fake_verify)
+    # The gates live in backend/services/kit_gates.py (shared by ALL four
+    # client-tier read sites, bd vy6id) -- patch the allowlist THERE.
     monkeypatch.setattr(
-        fkr, "get_allowed_kits",
+        "backend.services.kit_gates.get_allowed_kits",
         lambda firm_id: {"firm-a": ["priv-kit"]}.get(firm_id, []),
     )
 
@@ -296,6 +311,90 @@ def test_public_pdf_full_success_path_stays_tokenless(_firm_world):
     assert resp.content == b"%PDF-pub-kit"
 
 
+_FILL_PRIV_BODY = {
+    "kit_id": "priv-kit",
+    "pdf_filename": "REAL",
+    "field_values": {},
+    "form_schema": {"fields": []},
+}
+
+
+@pytest.mark.parametrize("token", ["tok-b", "tok-legacy"])
+def test_fill_pdf_is_404_for_other_firms_and_legacy_on_private_kit(_firm_world, token):
+    """THE FOURTH DOOR (bd polyglot-pdf-vy6id, Opus cross-surface catch on
+    vccy): POST /api/fill-pdf takes a caller-supplied kit_id, and with an
+    empty field_values its response is the kit's blank template verbatim --
+    so an ungated fill route hands any authed user exactly the private bytes
+    the pdf GET now 404s. Mutation: drop the require_visible call in
+    fill_pdf -- red."""
+    resp = client.post(
+        "/api/fill-pdf",
+        json=_FILL_PRIV_BODY,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_fill_pdf_loads_private_kit_for_own_firm(_firm_world):
+    """The usability half: firm-A actually FILLS its private kit (empty
+    values on a minimal valid pdf -> 200 with pdf bytes)."""
+    resp = client.post(
+        "/api/fill-pdf",
+        json=_FILL_PRIV_BODY,
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert resp.content.startswith(b"%PDF")
+
+
+def test_every_client_tier_kit_read_is_visibility_gated():
+    """THE SET PIN (bd polyglot-pdf-vy6id). The Opus cross-surface review
+    caught the fill route ungated precisely because the set of client-tier
+    kit-read sites was never enumerated -- the gate landed on three of four.
+    This test derives the set from the SHIPPED route sources: every
+    non-editor route function that reads kit bytes/schema must call the
+    kit_gates visibility gate, and the set itself must match the expected
+    list, so a FIFTH read site fails HERE instead of shipping ungated.
+    Mutations: remove a require_visible call from any gated function -- red;
+    add a new load_pdf_bytes/load_schema call site outside the list -- red."""
+    import re as _re
+    from pathlib import Path as _Path
+
+    routes_dir = _Path(fkr.__file__).resolve().parent
+    expected = {
+        ("form_kit_routes.py", "get_form_kit_schema"),
+        ("form_kit_routes.py", "get_form_kit_pdf"),
+        ("pdf_fill_routes.py", "fill_pdf"),
+    }
+    read_re = _re.compile(r"\.load_pdf_bytes\(|\.load_schema\(")
+    func_split = _re.compile(r"^(?:async )?def (\w+)", _re.MULTILINE)
+    found = set()
+    ungated = []
+    for path in sorted(routes_dir.glob("*.py")):
+        if path.name.startswith("editor_"):
+            continue  # contractor tooling behind role tokens, not client tier
+        src = path.read_text(encoding="utf-8")
+        marks = [(m.start(), m.group(1)) for m in func_split.finditer(src)]
+        for i, (start, name) in enumerate(marks):
+            end = marks[i + 1][0] if i + 1 < len(marks) else len(src)
+            # Comment lines can NAME a read (e.g. FormKitInfo's field note
+            # citing store.load_pdf_bytes) without performing one.
+            body = "\n".join(
+                line for line in src[start:end].splitlines()
+                if not line.strip().startswith("#")
+            )
+            if not read_re.search(body):
+                continue
+            found.add((path.name, name))
+            if "require_visible" not in body:
+                ungated.append((path.name, name))
+    assert found == expected, (
+        f"client-tier kit-read set changed: {sorted(found)} -- a new read "
+        "site must be gated AND added here deliberately"
+    )
+    assert not ungated, f"kit reads without the visibility gate: {ungated}"
+
+
 def test_single_kit_routes_read_metadata_exactly_once(_firm_world, monkeypatch):
     """ONE live metadata read serves BOTH single-kit gates (publish +
     visibility): each gate loading independently doubled the GCS read per
@@ -331,7 +430,9 @@ def test_empty_allowlist_hides_private_even_for_claimed_firm(_firm_world, monkey
     the owning firm -- an outage narrows visibility, never widens it.
     Mutation: treat an empty allowlist as allow-all in _require_visible
     (`if allowed and kit_id not in allowed`) -- red."""
-    monkeypatch.setattr(fkr, "get_allowed_kits", lambda firm_id: [])
+    monkeypatch.setattr(
+        "backend.services.kit_gates.get_allowed_kits", lambda firm_id: []
+    )
     for path in ("/api/form-kits/priv-kit/schema", "/api/form-kits/priv-kit/pdf"):
         resp = client.get(path, headers={"Authorization": "Bearer tok-a"})
         assert resp.status_code == 404, path

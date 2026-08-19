@@ -35,8 +35,12 @@ is [../standards/stateless-architecture.md](../standards/stateless-architecture.
    (Backend HTTP base: env override → `VITE_BACKEND_HTTP_URL` →
    current origin via Firebase rewrite → `localhost:8000` dev fallback.
    Manifest `/api/` asset paths resolve via `resolveKitAssetUrl` -- same base.)
-3. The backend (`backend/routes/pdf_fill_routes.py`) loads the blank PDF from the
-   form-kit store, fills it, and returns `application/pdf` bytes.
+3. The backend (`backend/routes/pdf_fill_routes.py`) runs the shared
+   client-tier kit gates (`backend/services/kit_gates.py`: publish status +
+   firm visibility -- the body's caller-supplied `kit_id` made this the
+   fourth gated read, bd polyglot-pdf-vy6id; a private kit 404s for
+   non-members), then loads the blank PDF from the form-kit store, fills it,
+   and returns `application/pdf` bytes.
 4. The client wraps the bytes in a Blob: `downloadPDF` (anchor download) or
    `printPDF` (opens a new window → `print()`; falls back to download if the popup
    is blocked — the tablet print path).

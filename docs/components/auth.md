@@ -1,6 +1,6 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
 *Last updated: 2026-08-18. See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
@@ -137,11 +137,15 @@ blank-template bytes ship in the static Hosting bundle regardless, so gating
 that read protects nothing — but the route now parses an OPTIONAL bearer token
 and 404s a PRIVATE kit for anyone whose `firm_id` claim does not resolve to an
 allowlist containing it (invisibility, not 401: the kit's existence is the
-secret; an invalid token degrades to anonymous). The catalogue list and the
-schema read enforce the same firm filter via `require_auth` claims. The
-public non-gate and the private gate matrix are both pinned by test so a
-blanket-auth sweep — or a widening — is a deliberate decision, not an
-accident.
+secret; an invalid token degrades to anonymous). The catalogue list, the
+schema read, AND the fill route's caller-supplied `kit_id` (bd
+`polyglot-pdf-vy6id` — the fill read is the fourth client-tier door) enforce
+the same firm filter, all through the shared gates in
+`backend/services/kit_gates.py`. The public non-gate, the private gate
+matrix, and the gated-read SET itself (every client-tier
+`load_pdf_bytes`/`load_schema` site must run the gate) are pinned by test so
+a blanket-auth sweep — a widening — or a FIFTH ungated read site is a
+deliberate decision, not an accident.
 
 ## Firm identity (`firms/{firm_id}` + custom claims)
 
