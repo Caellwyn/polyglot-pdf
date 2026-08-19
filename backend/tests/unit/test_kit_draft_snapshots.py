@@ -1105,3 +1105,56 @@ def test_the_reaper_DOES_still_reap(client):
 
     assert not (drafts / "1").exists(), "an abandoned claim was not reaped"
     assert not (drafts / "2").exists(), "a stamp-only claim was not reaped"
+
+
+def test_CONCURRENT_savers_never_share_an_id_or_lose_a_snapshot(client):
+    """What the reaper's id bound actually has to hold, measured rather than
+    reasoned about.
+
+    Round 11 reported that removing `int(orphan) >= int(next_id)` lets the
+    reaper delete another saver's fresh claim, so id 5 gets handed out twice.
+    I could not reproduce that through the real claim path, and the reason is
+    structural: _claim_snapshot_id always walks PAST the highest existing id,
+    so a saver's own next_id is above any pre-existing claim and the bound
+    never fires on one. The reviewer's repro planted a directory at an id the
+    claim had already passed -- a state the code cannot produce.
+
+    An in-flight claim (claimed, not yet written) IS reaped by a concurrent
+    save, but identically with and without the bound, so the bound is not what
+    protects it either. It survives because put_draft_snapshot re-claims after
+    the reap, which the distinctness assertion below covers.
+
+    So: pin the PROPERTY the bound exists to serve -- concurrent savers never
+    share an id and never lose a snapshot -- rather than the code shape, which
+    two rounds running have mis-attributed (Opus fresh-eyes round 11).
+    """
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+
+    async def _eight():
+        return await asyncio.gather(*[
+            store.put_draft_snapshot("w7", {"_tag": f"v{i}"}) for i in range(8)])
+
+    ids = _run(_eight())
+
+    assert len(set(ids)) == 8, f"two savers shared an id: {sorted(ids, key=int)}"
+    snaps = _run(store.list_draft_snapshots("w7"))
+    assert len(snaps) == 8, f"{len(snaps)} of 8 snapshots survived"
+    tags = {_run(store.load_draft_snapshot("w7", i))["_tag"] for i in ids}
+    assert tags == {f"v{i}" for i in range(8)}, "a schema was overwritten"
+
+
+def test_the_reaper_still_takes_LOWER_abandoned_claims(client):
+    """The bound must not become 'never reap anything': ids below the one just
+    written are genuinely abandoned and have to go, or they accumulate."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "1").mkdir()
+    (drafts / "2").mkdir()
+
+    _run(store.put_draft_snapshot("w7", _schema("mine")))
+
+    assert not (drafts / "1").exists(), "a lower abandoned claim was not reaped"
+    assert not (drafts / "2").exists(), "a lower abandoned claim was not reaped"
