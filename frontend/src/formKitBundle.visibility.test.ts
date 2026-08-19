@@ -18,6 +18,12 @@
  * deliberately stricter than the backend routes' anything-but-"private"
  * coercion, because this surface's failure direction is an irreversible
  * public leak, not a reversible service break (see kitPublishFilter.ts).
+ *
+ * Run this file ALONE, for the same reason formKitBundle.status.test.ts
+ * documents: the build here spawns a real tsx subprocess, and that CPU
+ * contention turns SchemaForm.previewEdit.test.tsx (bd polyglot-pdf-cfl28,
+ * under schema-forms/components/) from an intermittent flake into a
+ * reliable failure.
  */
 import { describe, expect, it, beforeAll } from "vitest";
 
