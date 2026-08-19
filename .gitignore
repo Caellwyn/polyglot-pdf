@@ -101,6 +101,14 @@ form-kits/*/*instr*.pdf
 # acroform rule above: an unanchored _archive/ would swallow unrelated dirs.
 form-kits/*/_archive/
 
+# Draft-save snapshots (bd polyglot-pdf-y2l0p). Same reasoning as _archive
+# above, and the same round trip: the local store's default root IS this
+# git-tracked tree (backend/config.py FORM_KITS_LOCAL_ROOT), so in local mode
+# every editor save writes a snapshot straight into the working copy -- up to
+# 10 per kit, of drafts nobody intended to version. ANCHORED to form-kits/ for
+# the same reason.
+form-kits/*/_drafts/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
