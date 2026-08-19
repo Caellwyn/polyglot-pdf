@@ -34,8 +34,9 @@ while keeping a private kit fully USABLE for its own firm.
   end to end (both pinned; test_form_kit_pdf_is_deliberately_public updated
   DELIBERATELY per the bead).
 - The private-kit serving seam: list_form_kits rewrites a private kit's
-  schema_path/pdf_path to the authenticated backend routes (the static
-  bundle excludes private kits, bd kkos), FormKitInfo gains explicit
+  schema_path/pdf_path to the authenticated backend routes (the
+  static-bundle exclusion is PENDING bd kkos -- exposure tracked as bd
+  polyglot-pdf-17opi), FormKitInfo gains explicit
   schema_file/pdf_file, and the frontend stops URL-splitting filenames
   (SchemaFormDemo mapping; fillPDF's new pdfFile param threaded as a prop
   through SchemaForm and FilledPreviewModal). usePDFDocument does the

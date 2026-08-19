@@ -459,9 +459,9 @@ tokens, not the client tier):
   invisibility) on the schema + pdf + fill reads
   (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
   (`form_kit_routes.py:127`). The pdf route parses its bearer token
-  OPTIONALLY (`:257`); an invalid token degrades to anonymous rather
+  OPTIONALLY (`:293`); an invalid token degrades to anonymous rather
   than 401.
-- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:196`)
+- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:193`)
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
   backend routes (`/api/form-kits/<id>/schema|pdf`). This is a serving-seam
   requirement, NOT yet a security boundary: the static-bundle EXCLUSION of
