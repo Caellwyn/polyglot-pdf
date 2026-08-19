@@ -88,7 +88,24 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
 
 
-async def _require_published(store, kit_id: str) -> None:
+async def _load_live_metadata(store, kit_id: str) -> Optional[dict]:
+    """ONE live metadata read feeding BOTH single-kit gates (publish +
+    visibility) -- each gate loading independently doubled the GCS read per
+    schema/pdf request (vccy fresh-eyes round 2). Returns None when the store
+    has no loader (legacy test doubles) or the loader returns a non-dict; an
+    unreadable-metadata FormKitStoreError propagates (502 fail-closed), and a
+    FormKitNotFound from a NONSTANDARD loader (the real stores return None
+    for absence, never raise) lands in the route's except handler as the
+    same 404 denial.
+    """
+    loader = getattr(store, "load_metadata", None)
+    if loader is None:
+        return None
+    meta = await loader(kit_id)  # FormKitStoreError propagates -> fail closed
+    return meta if isinstance(meta, dict) else None
+
+
+def _require_published(store, kit_id: str, meta: Optional[dict]) -> None:
     """Refuse to serve a kit whose LIVE metadata status is not "complete", on
     stores that enforce it (GCS -- the editor-writable shared store).
 
@@ -99,15 +116,14 @@ async def _require_published(store, kit_id: str) -> None:
     still-listed manifest entry (Codex P1, PR #279). Local mode is ungated by
     design (the flag is False), and legacy test doubles without load_metadata
     are treated as ungated. Under the flag, MISSING metadata fails closed
-    (every legitimately deployed/onboarded kit carries metadata.json), and an
-    unreadable metadata store error propagates (502) rather than serving.
+    (every legitimately deployed/onboarded kit carries metadata.json). The
+    metadata itself comes pre-loaded from _load_live_metadata (one read
+    serves this gate AND the visibility gate).
     """
     if not getattr(store, "enforce_complete_on_public_reads", False):
         return
-    loader = getattr(store, "load_metadata", None)
-    if loader is None:
+    if getattr(store, "load_metadata", None) is None:
         return
-    meta = await loader(kit_id)  # FormKitStoreError propagates -> 502 fail-closed
     if not isinstance(meta, dict) or meta.get("status") != "complete":
         raise FormKitNotFound(f"Kit not published: {kit_id}")
 
@@ -129,29 +145,22 @@ async def _firm_allowed_kits(user: Optional[dict]) -> frozenset:
     return frozenset(await asyncio.to_thread(get_allowed_kits, firm_id))
 
 
-async def _kit_visibility(store, kit_id: str) -> str:
+def _kit_visibility(meta: Optional[dict]) -> str:
     """Return the kit's visibility ("public" | "private") from LIVE metadata.
 
-    Absence of metadata, the key, or the loader means PUBLIC -- existing kits
-    are not migrated (absence of the key means public, sprint-19 plan), and
-    anything except the exact string "private" is public, so a typo can
-    neither hide a public kit nor expose a private one as some third state.
-    An unreadable-metadata FormKitStoreError propagates (502 upstream), same
-    as _require_published -- unreadable metadata must not serve a
-    maybe-private kit. (A FormKitNotFound raised by a NONSTANDARD loader --
-    the real stores return None for absence, never raise -- lands in the
-    route's except handler as the same 404 denial.)
+    Absence of metadata or the key means PUBLIC -- existing kits are not
+    migrated (absence of the key means public, sprint-19 plan), and anything
+    except the exact string "private" is public, so a typo can neither hide
+    a public kit nor expose a private one as some third state. The metadata
+    comes pre-loaded from _load_live_metadata (whose docstring carries the
+    fail-closed error contract).
     """
-    loader = getattr(store, "load_metadata", None)
-    if loader is None:
-        return "public"
-    meta = await loader(kit_id)  # FormKitStoreError propagates -> fail closed
     if not isinstance(meta, dict):
         return "public"
     return "private" if meta.get("visibility") == "private" else "public"
 
 
-async def _require_visible(store, kit_id: str, user: Optional[dict]) -> None:
+async def _require_visible(kit_id: str, meta: Optional[dict], user: Optional[dict]) -> None:
     """Refuse (404) a PRIVATE kit unless the caller's firm allowlist has it.
 
     404 -- not 401/403 -- deliberately: a private kit must not reveal its
@@ -160,7 +169,7 @@ async def _require_visible(store, kit_id: str, user: Optional[dict]) -> None:
     owner_firm_id is bookkeeping for the write path (bd z6bk9), not the read
     gate.
     """
-    if await _kit_visibility(store, kit_id) != "private":
+    if _kit_visibility(meta) != "private":
         return
     allowed = await _firm_allowed_kits(user)
     if kit_id not in allowed:
@@ -310,8 +319,9 @@ async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) 
     store = get_form_kit_store()
     try:
         schema_file, _ = await _resolve_kit_filenames(store, kit_id)
-        await _require_published(store, kit_id)
-        await _require_visible(store, kit_id, _user)
+        meta = await _load_live_metadata(store, kit_id)
+        _require_published(store, kit_id, meta)
+        await _require_visible(kit_id, meta, _user)
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
@@ -356,8 +366,9 @@ async def get_form_kit_pdf(
             user = None
     try:
         _, pdf_file = await _resolve_kit_filenames(store, kit_id)
-        await _require_published(store, kit_id)
-        await _require_visible(store, kit_id, user)
+        meta = await _load_live_metadata(store, kit_id)
+        _require_published(store, kit_id, meta)
+        await _require_visible(kit_id, meta, user)
         data = await store.load_pdf_bytes(kit_id, pdf_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"PDF not found for kit {kit_id}") from exc

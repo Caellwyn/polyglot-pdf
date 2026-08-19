@@ -296,6 +296,35 @@ def test_public_pdf_full_success_path_stays_tokenless(_firm_world):
     assert resp.content == b"%PDF-pub-kit"
 
 
+def test_single_kit_routes_read_metadata_exactly_once(_firm_world, monkeypatch):
+    """ONE live metadata read serves BOTH single-kit gates (publish +
+    visibility): each gate loading independently doubled the GCS read per
+    schema/pdf request (vccy fresh-eyes round 2). Mutation: add a second
+    _load_live_metadata call to either route -- red."""
+    store = _TwoKitStore()
+    calls = []
+    orig = store.load_metadata
+
+    async def counting(kit_id):
+        calls.append(kit_id)
+        return await orig(kit_id)
+
+    store.load_metadata = counting
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    resp = client.get(
+        "/api/form-kits/priv-kit/schema",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert calls == ["priv-kit"]
+
+    calls.clear()
+    resp = client.get("/api/form-kits/pub-kit/pdf")
+    assert resp.status_code == 200
+    assert calls == ["pub-kit"]
+
+
 def test_empty_allowlist_hides_private_even_for_claimed_firm(_firm_world, monkeypatch):
     """FAIL-CLOSED pin: a firms store answering [] (disabled, broken, firm
     suspended) hides the private kit even from a caller whose token CLAIMS
