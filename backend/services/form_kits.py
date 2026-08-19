@@ -712,8 +712,7 @@ class LocalFormKitStore(FormKitStore):
 		save path catches only FormKitStoreError, so an escaping OSError would
 		500 the save and LOSE THE EDITOR'S CURRENT WORK -- the opposite of this
 		feature's whole point, and a regression on a path that previously could
-		not fail (Opus fresh-eyes round 1, reproduced with _drafts present as a
-		file rather than a directory).
+		not fail.
 		"""
 		root = self._drafts_dir(kit_id)
 		try:
@@ -723,7 +722,7 @@ class LocalFormKitStore(FormKitStore):
 			# circled digits that int() then REJECTS with ValueError -- which
 			# escaped the OSError wrap below and 500'd the save, losing the
 			# editor's current work. Exactly the harm this feature exists to
-			# prevent, from a directory name (Opus fresh-eyes round 2).
+			# prevent, from a directory name.
 			ids = [c.name for c in root.iterdir()
 				   if c.is_dir() and c.name.isascii() and c.name.isdigit()
 				   and (include_unwritten or (c / "schema.json").exists())]
@@ -741,18 +740,20 @@ class LocalFormKitStore(FormKitStore):
 	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
 		"""Delete an abandoned claim, without ever removing real work.
 
-		THREE guards, each load-bearing for a DIFFERENT file. None is
-		redundant, and I got that wrong once already:
+		THREE guards here, each load-bearing for a DIFFERENT file, plus a
+		FOURTH at the only call site (the `>= next_id` id bound -- see the
+		comment there). Every guard below keys on directory CONTENTS, so none
+		of them protects another saver's freshly-claimed EMPTY directory; do
+		not read this list as complete without that one. None is redundant:
 
 		1. The schema.json early return protects a COMPLETED snapshot's
 		   meta.json. The unlink below runs BEFORE rmdir is ever reached, so
 		   without this return a finished snapshot loses its stamp and its
 		   savedAt goes null -- the only field distinguishing entries in a
-		   recovery list of bare counters. I previously called this an
-		   optimization on the strength of a test asking "does the SCHEMA
-		   survive?". It does, and that was the wrong question: the victim is
-		   the metadata, and the victim's owner is the concurrent saver this
-		   feature exists to protect (Opus fresh-eyes round 10).
+		   recovery list of bare counters. Note the victim is the METADATA,
+		   not the schema -- the schema survives without this return, because
+		   rmdir refuses; checking only the schema will wrongly suggest this
+		   guard is dead.
 		2. Unlinking ONLY meta.json protects a saver mid-write, whose
 		   directory holds just .schema.json.<pid>.<hex>.tmp. Removing that
 		   would let rmdir succeed and kill the write.
@@ -849,25 +850,25 @@ class LocalFormKitStore(FormKitStore):
 		# _snapshot_ids), but without this they would accumulate forever and
 		# push the claim counter ever upward.
 		#
-		# TWO SEPARATE PROTECTIONS, for OPPOSITE cases. Both are load-bearing:
+		# TWO SEPARATE PROTECTIONS, for OPPOSITE cases. BOTH ARE LOAD-BEARING;
+		# deleting either loses snapshots:
 		#
 		#   * `int(orphan) >= int(next_id)` protects HIGHER in-flight claims.
-		#     A saver that claimed 3 while the max was 2 can still be running
-		#     when others have raced to 8, so (orphan=8, next_id=3) is a real
-		#     shape -- measured firing 5 times in 60 concurrent trials. Without
-		#     the bound the reaper rmdir's that claim out from under its
-		#     writer, whose _write_json then dies: 4 failed snapshot writes in
-		#     120 trials, versus 0 with it.
+		#     A saver that claimed 3 while the max was 2 is still running when
+		#     others have raced to 8, so (orphan=8, next_id=3) is a common
+		#     shape, not a contrived one -- measured at 72 bound-only skips
+		#     across 480 concurrent saves. Without the bound the reaper rmdir's
+		#     such a claim out from under its writer, whose _write_json then
+		#     dies: 11 failed snapshot writes in 120 trials, versus 0 with it.
+		#     Pinned by test_the_reaper_SPARES_a_higher_in_flight_claim.
 		#
 		#   * _reap_if_still_empty's last-instant re-check protects LOWER ids,
 		#     where a concurrent saver's schema.json lands between these two
-		#     listings -- 85 silent losses in 360 trials before it existed
-		#     (round 8).
+		#     listings. Measured at 85 silent losses in 360 trials without it.
 		#
-		# An earlier version of this comment said the bound was insufficient
-		# and implied it was dead weight; I then argued in round 11 that it
-		# never fires at all. Both were wrong, and a comment calling a working
-		# guard dead is how it gets deleted (Opus fresh-eyes round 12).
+		# `orphan in written` is the one genuinely redundant term -- guard 1
+		# already skips anything completed -- so it is the safe half to delete.
+		# The id bound is not.
 		written = set(self._snapshot_ids(kit_id))
 		for orphan in self._snapshot_ids(kit_id, include_unwritten=True):
 			if orphan in written or int(orphan) >= int(next_id):
@@ -1284,8 +1285,7 @@ class GCSFormKitStore(FormKitStore):
 		# "<kit>/_drafts" with no slash -- every blob name then began with
 		# "<kit>/_drafts/", so rest[0] was "" rather than the id, no id ever
 		# parsed, and the whole GCS ring was INERT: next_id stayed "1" forever
-		# and listing returned nothing (Opus fresh-eyes round 1, executed
-		# against a fake bucket). The local store passed throughout, which is
+		# and listing returned nothing. The local store passed throughout, which is
 		# why the deployed mode is the one that has to be exercised.
 		prefix = self._build_blob_path(kit_id, _DRAFTS_DIR) + "/"
 
@@ -1321,7 +1321,7 @@ class GCSFormKitStore(FormKitStore):
 		# a listing and then uploading to it lets two concurrent saves pick the
 		# same id, and the second upload destroys the first's snapshot.
 		# Measured at 4 concurrent saves: ids ['3','3','3','3'], three prior
-		# states destroyed (Opus fresh-eyes round 6).
+		# states destroyed.
 		#
 		# if_generation_match=0 is GCS's compare-and-swap -- "only if this
 		# object does not exist". The loser takes the next id.

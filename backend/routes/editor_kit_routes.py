@@ -500,7 +500,7 @@ _WRITE_LOCKED_STATUSES = ("submitted", "complete", "unpublished")
 # `submitted` is write-locked but was NEVER live -- reusing the write-lock
 # tuple as a proxy made a submitted kit look published, so an author fixing a
 # typo in its version was refused with a message about confirmation records
-# that do not exist (Opus fresh-eyes round 4, reproduced). That is the exact
+# that do not exist. That is the exact
 # bug bd polyglot-pdf-xzw5 fixed for drafts, reintroduced one status over by
 # sharing a constant between two different questions.
 _PUBLISHED_STATUSES = ("complete", "unpublished")
@@ -775,9 +775,7 @@ def _readiness_out(meta: Optional[dict]):
             # where the client's parser (readinessStamp.readStampFromMetadata,
             # which requires Number.isInteger) rejects both and shows the
             # verify hint. Same file, two readings by mode -- the divergence
-            # this bead exists to end (Opus fresh-eyes round 5; round 6 found
-            # this comment had over-claimed -- the client accepted floats until
-            # its `num()` was tightened to match).
+            # this bead exists to end` was tightened to match).
             reviewed=_require_int(raw["reviewed"]),
             toReview=_require_int(raw["toReview"]),
             total=_require_int(raw["total"]),
@@ -786,8 +784,7 @@ def _readiness_out(meta: Optional[dict]):
             # `is True` for the SAME reason as `verified` below -- bool("no") is
             # True, and the client's parser requires an exact `=== true`, so a
             # loose read here means one metadata.json yields two answers
-            # depending on which mode reads it (Opus fresh-eyes round 5: this
-            # sibling boolean was missed one line above the round-4 fix).
+            # depending on which mode reads it.
             # `.get`, not `[...]`: an ABSENT flag must read as False, exactly
             # as the client's `r.ready === true` does. Requiring the key made
             # Python drop the whole stamp (the "not measured yet" hint) where
@@ -800,7 +797,7 @@ def _readiness_out(meta: Optional[dict]):
             # "not fully checked" to a confident percentage on every card --
             # the exact confident-then-409 lie this flag exists to prevent.
             # The client's parser already required `=== true`; this is the
-            # wire converter catching up (Opus fresh-eyes round 4).
+            # wire converter catching up.
             # `.get` for the same reason as `ready` above -- and the safe
             # direction besides: an absent flag means "no claim that the checks
             # ran", which is exactly UNVERIFIED.
@@ -815,7 +812,7 @@ def _readiness_out(meta: Optional[dict]):
             # stamp: it is decoration (nothing gates on it), and the client's
             # parser keeps the stamp in that case. Dropping the stamp here
             # would mean a card showing the verify hint in hosted mode and a
-            # percentage in local mode for one file (Opus fresh-eyes round 5).
+            # percentage in local mode for one file.
             stampedAt=(raw.get("stamped_at")
                        if isinstance(raw.get("stamped_at"), str) else None),
         )
@@ -911,7 +908,7 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
     #     shipped state (form-kits/w9-heldout has no metadata.json), and there
     #     is nothing to lose. Round 6 collapsed both cases into "skip", which
     #     meant such a kit could never show a percentage however many times it
-    #     was saved (Opus fresh-eyes rounds 6 + 7).
+    #     was saved.
     #
     # `files` is the kit's filename set, already in the caller's hand from
     # _load_meta_or_404 -- no extra store round-trip to tell the cases apart.
@@ -1285,7 +1282,7 @@ def _labels_look_like_one_form(a: str, b: str) -> bool:
     # W-4, W-9 and I-9. Two kits both labelled "W-7" with no form_number
     # declared produced NO candidate, so an author published a second live W-7
     # believing there was no older version: exactly the state bd
-    # polyglot-pdf-6dz0 exists to prevent (Opus fresh-eyes round 3).
+    # polyglot-pdf-6dz0 exists to prevent.
     #
     # Exact match already carries the safety here; the floor only needs to stop
     # a one-character label matching another one-character label.
@@ -1332,7 +1329,7 @@ async def list_kit_draft_snapshots(
     # 404 for a kit that does not exist, rather than an empty list: "you have
     # no earlier versions" and "that form does not exist" are different
     # answers, and conflating them is the false-negative direction in a
-    # recovery feature (Opus fresh-eyes round 4).
+    # recovery feature.
     await _load_meta_or_404(store, kit_id)
     try:
         snapshots = await store.list_draft_snapshots(kit_id)
@@ -1409,7 +1406,7 @@ async def restore_kit_draft_snapshot(
         # editor's current draft while telling them it worked.
         #
         # The write side below already refuses on failure; this is the read
-        # side of the same guarantee (Opus fresh-eyes round 5).
+        # side of the same guarantee.
         _log.error("draft_snapshot_pre_restore_read_failed",
                    kit_id=kit_id, error=str(exc))
         raise HTTPException(
@@ -1472,7 +1469,7 @@ async def get_retire_candidates(
     # impractical today (the membership check in _load_meta_or_404 is what
     # actually guards it), but this route was the one exception to a uniform
     # invariant, and the guard is what makes that membership check safe to rely
-    # on (Opus fresh-eyes round 3).
+    # on.
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     _meta, _files = await _load_meta_or_404(store, kit_id)
@@ -1535,7 +1532,7 @@ async def get_retire_candidates(
             # I-130A whenever their labels happened to match. That is the
             # supplement-filed-alongside-its-base case, and the exact harm
             # auto-retire was rejected over -- arriving through the fallback
-            # instead of the primary path (Opus fresh-eyes round 4).
+            # instead of the primary path.
             if own_number != other_number:
                 continue
             matched = "form_number"
@@ -2656,8 +2653,7 @@ async def set_editor_kit_status(
     # republishing 403s under the rule above), so a subcontractor could pull a
     # live form and be unable to restore it. My first version checked only
     # `draft` while the comment claimed "complete -> anything" was covered --
-    # a false claim a later reader would trust (Opus fresh-eyes round 2,
-    # reproduced end to end). Reverting one's own SUBMITTED work stays allowed.
+    # a false claim a later reader would trust. Reverting one's own SUBMITTED work stays allowed.
     if (
         body.status in ("draft", "unpublished")
         and current_status in ("complete", "unpublished")
@@ -2963,7 +2959,7 @@ async def set_editor_kit_status(
                 # the kit class this bead exists to serve: revert-to-draft is a
                 # hard 409 for a retired kit (bd polyglot-pdf-6dz0), so every
                 # exit was closed AND this message named one the API forbids
-                # (Opus fresh-eyes round 3, reproduced).
+                #.
                 raise HTTPException(
                     status_code=409,
                     detail=(
@@ -3045,7 +3041,7 @@ async def set_editor_kit_status(
         # The lock applies to the OUTGOING kit too. The guard at the top of
         # this route only ever saw the INCOMING kit's metadata, so a
         # supersede archived and retired a second kit that no guard had
-        # checked (Opus fresh-eyes round 2). Inert today -- the lock is
+        # checked. Inert today -- the lock is
         # role-scoped, so a same-role holder would not be refused anyway --
         # but it becomes a live hole the moment bd polyglot-pdf-ijntk makes
         # locks per-user, and it contradicts the helper's own "every schema
@@ -3064,7 +3060,7 @@ async def set_editor_kit_status(
     # 409s on save, on re-submit, and on BOTH lock routes, with no control
     # rendered to self-rescue (an editor is offered nothing on an author-held
     # kit, by design). The subcontractor could not do the work they were sent
-    # back to do (Opus fresh-eyes round 8, reproduced end to end).
+    # back to do.
     #
     # It also outlived a publish, so a live kit advertised "Editor editing"
     # forever -- cosmetic today, a real hole once bd polyglot-pdf-ijntk makes

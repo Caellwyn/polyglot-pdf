@@ -447,14 +447,14 @@ def test_GCS_load_of_a_missing_snapshot_raises_NotFound():
 
 def test_a_UNICODE_digit_directory_does_not_break_the_save(client):
     """str.isdigit() is True for superscript/circled digits that int() then
-    REJECTS -- so a stray directory named "¹" crashed the sort with a
+    REJECTS -- so a stray directory named "\u00b9" crashed the sort with a
     ValueError, escaped the OSError wrap, and 500'd the SAVE, losing the
     editor's current work. The exact harm this feature exists to prevent,
     triggered by a directory name (Opus fresh-eyes round 2).
     """
     c, store, root = client
     _make_kit(root, "w7", schema=_schema("A"))
-    (root / "w7" / "_drafts" / "¹").mkdir(parents=True)
+    (root / "w7" / "_drafts" / "\u00b9").mkdir(parents=True)
 
     resp = _save(c, "w7", _schema("B"))
 
@@ -468,7 +468,7 @@ def test_a_UNICODE_digit_snapshot_id_is_refused_by_the_route(client):
     c, _store, root = client
     _make_kit(root, "w7", schema=_schema("A"))
 
-    assert _restore(c, "w7", "¹").status_code == 400
+    assert _restore(c, "w7", "\u00b9").status_code == 400
 
 
 def test_an_unreadable_drafts_dir_does_not_block_the_SAVE(client):
@@ -579,7 +579,7 @@ def test_GCS_skips_a_unicode_digit_blob_instead_of_going_blind():
     worse: _snapshot_ids wraps bare Exception, so a unicode-digit blob turns
     every call into FormKitStoreError -- which the save path SWALLOWS as
     best-effort, so the deployed ring silently stops snapshotting entirely."""
-    registry = {"form-kits/w7/_drafts/¹/schema.json": {"data": "{}"}}
+    registry = {"form-kits/w7/_drafts/\u00b9/schema.json": {"data": "{}"}}
     store = _gcs_store(registry)
 
     assert _run(store._snapshot_ids("w7")) == []
