@@ -16,6 +16,11 @@ import fitz  # PyMuPDF
 import structlog
 
 from backend.services.auth import require_auth
+from backend.services.kit_gates import (
+	load_live_metadata,
+	require_published,
+	require_visible,
+)
 from backend.services.form_kits import (
 	FormKitNotFound,
 	FormKitStoreError,
@@ -42,13 +47,20 @@ class PDFFillRequest(BaseModel):
 
 
 @router.post("/fill-pdf")
-async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth)) -> Response:
+async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) -> Response:
 	"""Fill a PDF form with provided values using PyMuPDF.
 
 	Auth-gated (bd polyglot-pdf-z2is): the request body carries user-entered
 	field values (PII/PHI in transit), so this must not be an open endpoint on a
 	service deployed --allow-unauthenticated. VFF_DISABLE_AUTH=true (local dev /
 	voice harness) bypasses inside require_auth.
+
+	Firm-scoped (bd polyglot-pdf-vy6id, the Opus cross-surface catch on bd
+	vccy): this is the FOURTH client-tier kit read -- the caller supplies
+	kit_id in the body, and without the visibility gate a POST with a private
+	kit_id and empty field_values returned the private kit's blank template
+	to any authed user, defeating the invisibility the three form_kit_routes
+	reads enforce. Same gates, same 404 denial (existence is the secret).
 	"""
 
 	store = get_form_kit_store()
@@ -65,6 +77,9 @@ async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth))
 		_log.info("pdf_fill_sample_field_ids", kit=request.kit_id, sample_field_ids=sample_field_ids)
 
 	try:
+		meta = await load_live_metadata(store, request.kit_id)
+		require_published(store, request.kit_id, meta)
+		await require_visible(request.kit_id, meta, user)
 		pdf_bytes = await store.load_pdf_bytes(request.kit_id, request.pdf_filename)
 	except FormKitNotFound as exc:
 		_log.error("kit_pdf_not_found", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))

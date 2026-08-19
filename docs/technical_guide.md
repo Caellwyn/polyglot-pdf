@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-y2l0p: the two draft-snapshot routes -- every editor save now copies the current schema into a bounded ring of the last 10 before overwriting, and an editor can list and restore their own overwritten work. Previously bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
+*Last updated: 2026-08-18 (bd polyglot-pdf-vccy: firm-scoped kit visibility -- the four form-kit/fill route rows, the `FIRMS_FIRESTORE_ENABLED` env row, and the new Surface contracts entry 7 -- see [the vccy journal entry](journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for closeout details. Same day, bd polyglot-pdf-y2l0p: the two draft-snapshot routes -- every editor save now copies the current schema into a bounded ring of the last 10 before overwriting, and an editor can list and restore their own overwritten work. Previously bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
 code-line citation in the Surface contracts section now resolves to the code
 it names. x82ii fixed the "2. WS handshake" block (producer/consumer lines,
 all handshake key citations, and the `full_schema` consumer chain -- one
@@ -72,7 +72,7 @@ production project is dead and unreachable; reference purge tracked in bd
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
 | `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
-| `FIRMS_FIRESTORE_ENABLED` | `false` | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, feeding firm-scoped kit visibility. Reads FAIL CLOSED to `[]` when off/broken, so leaving it unset can never widen visibility. Not yet set in any deploy env -- that wiring ships with the consumer (bd vccy). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
+| `FIRMS_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, consumed by the form-kit routes' firm-scoped visibility filter (bd vccy). Reads FAIL CLOSED to `[]` when off/broken, so an outage hides private kits rather than exposing them. Set in `deploy-all.sh`'s `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list hint enumerates it (pinned by `tests/test_deploy_form_kit_hints.py`). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
@@ -96,13 +96,13 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 |--------|------|-------------|
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
-| POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is). `components/pdf-filling.md` |
+| POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is) + **firm-scoped** (bd vy6id: the body's caller-supplied `kit_id` runs the same visibility gate as the kit reads -- a private kit 404s for non-members). `components/pdf-filling.md` |
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). `standards/confirmation-and-audit.md` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304; 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
-| GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is). `components/pdf-filling.md` |
-| GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is). |
-| GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Deliberately public** (no frontend consumer loads this route -- the viewer fetches the STATIC `/form-kits/...` copy; the same public-form bytes ship in the static bundle regardless -- bd z2is). |
+| GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy): PRIVATE kits appear only for callers whose `firm_id` claim resolves to an allowlist containing them, with paths rewritten to the authenticated backend routes. `components/pdf-filling.md` |
+| GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
+| GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Token-gated (`X-Editor-Token`); the whole `/api/editor/*` surface is 503 when no token is configured. `components/pdf-filling.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |
@@ -110,8 +110,6 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | POST | `/api/editor/lint`, `/api/editor/kits/{kit_id}/lint` | Lint the POSTED (possibly-unsaved) schema over the single Python ruleset (`backend/services/schema_lint.py`). The kit-scoped form additionally loads the kit's persisted `acroform.json` dump -- the SAME inputs as the `/status` promotion gate -- so the editor strip sees the dump-gated widget-claim rules live (sprint-18 C1, bd o7y9); the dumpless form remains for schemas with no kit identity. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/status` | Set `draft` \| `submitted` \| `complete` \| `unpublished`. **THE ROLE DEPENDS ON THE TRANSITION, not the route** (bd polyglot-pdf-hqztg): an EDITOR may `draft -> submitted` ("I believe this is ready") and reopen their own submission, but publishing (`-> complete`) and reaching back into a LIVE kit (`complete -> draft`) are AUTHOR-ONLY -- editors are subcontractors, so marking a form ready must not release it. `submitted` is write-locked like complete, or an author would review one version and publish another; the editor reopens it deliberately via Revert to draft, which CLEARS any author version (a submitted kit was never live, so no confirmation record names it). Promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). `unpublished` retires a superseded revision: hidden like a draft but WRITE-LOCKED like complete, and never revertible to draft (bd polyglot-pdf-6dz0). Optional `replaces_kit_id` retires another live kit for the same form as part of this publish, archiving it first. A kit whose schema has no `form_metadata.edition_date` must supply `author_version` to publish -- the refusal is a 422 prefixed `AUTHOR_VERSION_REQUIRED:`, which the editor keys on to open its version dialog; the value is normalized server-side and IMMUTABLE once published (bd polyglot-pdf-xzw5). Token-gated. |
 | GET | `/api/editor/kits/{kit_id}/retire-candidates` | Live kits that plausibly serve the SAME FORM as this one, so the publish modal can ask which older version to retire (bd polyglot-pdf-bdedm). A SUGGESTION -- it retires nothing; the author ticks one and it rides the publish as `replaces_kit_id`. AUTHOR-ONLY, matching the publish it feeds. Matches on `form_number` first (a declared mismatch DECIDES -- it never falls through to the label, or an identical label would override two different numbers and offer I-130A when publishing I-130), then EXACT normalised label equality. Deliberately conservative: real form families differ by a one-character suffix and several variants are supplements filed ALONGSIDE their base, so a missed suggestion costs one manual retire while a wrong one asks an author to retire a live form. Each candidate carries kit id, label, form number and whichever revision marker it actually has (`edition_date` > `author_version` > `published_at`), plus WHY it matched, so a human can tell two same-numbered kits apart. Reads one schema per live kit -- confined to this route so the cost lands only when an author is publishing, never on a catalogue render. Token-gated. |
-| GET | `/api/editor/kits/{kit_id}/draft-snapshots` | Prior saved states of this kit's draft, NEWEST FIRST, as `{snapshots:[{id, savedAt}]}` (bd polyglot-pdf-y2l0p). EDITOR-accessible, deliberately: routing recovery through an author means the person who lost the work cannot get it back themselves, which is most of the value gone. 404 for an unknown kit rather than an empty list -- "you have no earlier versions" and "that form does not exist" are different answers. Token-gated. |
-| POST | `/api/editor/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore` | Put a snapshot's schema back as the live draft (bd polyglot-pdf-y2l0p). Snapshots the work it REPLACES first and returns that id as `snapshotOfReplaced`, so an unwanted restore is one more restore away rather than a second loss -- and that pre-restore snapshot is NOT best-effort: if it cannot be taken, the restore is refused with "Nothing was changed." Refused on a write-locked kit and under another role's edit lock, same as a save. Snapshot ids are ASCII decimal only. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/lock` | Take a kit for editing (bd polyglot-pdf-hqztg). An AUTHOR can always take a lock back from an editor; the reverse 409s. That preemption IS the stale-lock release -- there is no timer, because a clock that steals from someone actively working is worse than a human deciding to take it. ROLE-scoped, not user-scoped: the editor API has only two shared tokens, so two editors sharing one still collide with each other (bd polyglot-pdf-ijntk lifts that). Same-role contention is allowed rather than pretended about. Returns `{ok, kitId, heldBy, preempted}`. Token-gated. |
 | DELETE | `/api/editor/kits/{kit_id}/lock` | Release a kit. An author may release anyone's lock; an editor cannot evict an author -- that is the stale-lock escape when someone closes their laptop. Token-gated. |
 | DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
@@ -429,3 +427,57 @@ fingerprint (bd polyglot-pdf-xzw5) -- so the name is narrower than the values
 it holds. *Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).
+
+### 7. Firm-scoped kit visibility (bd polyglot-pdf-vccy)
+
+Four coupled contracts make a PRIVATE kit invisible outside its firm yet fully
+usable inside it. The gates live in **`backend/services/kit_gates.py`**,
+shared by EVERY client-tier kit read -- the set is exactly four sites (the
+catalogue list, the schema GET, the pdf GET, and `POST /api/fill-pdf`'s kit
+read; bd polyglot-pdf-vy6id caught the fourth ungated), and
+`test_http_route_auth.py::test_every_client_tier_kit_read_is_visibility_gated`
+pins the SET so a fifth read site fails CI instead of shipping ungated
+(`/api/editor/*` is deliberately outside it -- contractor tooling behind role
+tokens, not the client tier):
+
+- **Kit metadata keys** `visibility: "public" | "private"` + `owner_firm_id`
+  (snake_case in `metadata.json`; absence = public, anything but the exact
+  string `"private"` coerces public). Producer: the kit's `metadata.json`
+  (hand-authored / future publish UI). Consumers: the gates read LIVE
+  metadata -- ONE `load_live_metadata` read per request feeds both the
+  publish and visibility gates (`kit_gates.py:28`; visibility coercion
+  `kit_visibility` `:84`; the manifest copy is deploy-time stale in GCS) --
+  and the store passes normalized `visibility` / `ownerFirmId` through both
+  manifest paths (`form_kits.py:226` normalize, `:516` local synthesis).
+  `owner_firm_id` is bookkeeping for the firm write path (bd z6bk9), NOT the
+  read gate.
+- **The firm allowlist**: `firms/{firm_id}.allowed_kits` (producer:
+  `scripts/bootstrap_firm.py`) -> `firms.get_allowed_kits`
+  (`backend/services/firms.py:55`, fail-closed `[]`) -> resolved per request
+  off the `firm_id` ID-token claim (`kit_gates.py:67`, `firm_allowed_kits`;
+  run off the event loop) -> enforced by `require_visible` (`:99`, 404 =
+  invisibility) on the schema + pdf + fill reads
+  (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
+  (`form_kit_routes.py:127`). The pdf route parses its bearer token
+  OPTIONALLY (`:293`); an invalid token degrades to anonymous rather
+  than 401.
+- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:193`)
+  rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
+  backend routes (`/api/form-kits/<id>/schema|pdf`). This is a serving-seam
+  requirement, NOT yet a security boundary: the static-bundle EXCLUSION of
+  private kits is PENDING bd kkos (exposure tracked as bd
+  polyglot-pdf-17opi) -- until kkos lands, a private kit's schema + blank
+  pdf still ship world-readable in the Hosting bundle, so no firm may be
+  granted a private kit before then. Consumers: `SchemaFormDemo`'s schema fetch
+  and `usePDFDocument`'s pdf fetch resolve `/api/` paths against the backend
+  base and attach the Bearer token (`usePDFDocument.ts:60` fetch-to-blob;
+  `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on
+  Hosting via the rewrite but not against the Vite dev server).
+- **Explicit filenames** `schema_file`/`pdf_file` on `FormKitInfo`
+  (`form_kit_routes.py:117`): under rewritten paths the URL's last segment is
+  a literal route word, so the client must STOP deriving filenames by URL
+  split. Consumers: `SchemaFormDemo.tsx:114`/`:116` (manifest mapping) and
+  `fillPDF`'s explicit `pdfFile` param (`pdfFiller.ts:117` -- the fill POST's
+  `pdf_filename` feeds `store.load_pdf_bytes`, contract 5). Breaking either
+  half strands a private kit's fill/download while every public-kit test
+  stays green.

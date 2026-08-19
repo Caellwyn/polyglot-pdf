@@ -55,6 +55,23 @@ def test_the_env_var_hint_uses_update_not_set():
         assert "--set-env-vars" not in line
 
 
+def test_the_drop_list_warning_names_every_deploy_env_var():
+    """The warning that explains WHY --set-env-vars is destructive enumerates
+    by name the vars it would silently drop. That enumeration must track the
+    deploy env (bd polyglot-pdf-vccy added FIRMS_FIRESTORE_ENABLED to
+    deploy-all.sh's BACKEND_ENV -- a drop of it silently hides every firm's
+    private kits). Mutation: remove FIRMS_FIRESTORE_ENABLED from the hint's
+    drop list -- red."""
+    text = _hint_text()
+    for var in (
+        "CONFIRMATION_FIRESTORE_ENABLED",
+        "FIRMS_FIRESTORE_ENABLED",
+        "GOOGLE_CLOUD_PROJECT",
+        "VERTEXAI",
+    ):
+        assert var in text, f"drop-list warning no longer names {var}"
+
+
 def test_the_verify_hint_does_not_suggest_a_tokenless_curl():
     text = _hint_text()
     # The old hint literally embedded this exact tokenless curl -- if it

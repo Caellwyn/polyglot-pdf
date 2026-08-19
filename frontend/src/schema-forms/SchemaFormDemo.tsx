@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { SchemaForm } from "./components/SchemaForm";
 import type { FormSchema } from "./types/schema";
 import type { FormKitDescriptor, FormKitManifest } from "./types/formKit";
-import { getBackendHttpUrl } from "./utils/pdfFiller";
+import { getBackendHttpUrl, resolveKitAssetUrl } from "./utils/pdfFiller";
 import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -102,13 +102,18 @@ export function SchemaFormDemo() {
               forms: data.forms.map((f: any) => {
                 const schemaPath: string = f.schema_path || `/form-kits/${f.id}/schema.json`;
                 const pdfPath: string = f.pdf_path || `/form-kits/${f.id}/form.pdf`;
+                // Prefer the backend's EXPLICIT filenames (bd polyglot-pdf-vccy):
+                // a PRIVATE kit's paths are the backend routes .../schema and
+                // .../pdf, so URL-splitting would yield the literal route word
+                // and 404 the fill. The split remains only as the fallback for
+                // an older backend that omits the fields.
                 return {
                   id: f.id,
                   label: f.label,
                   description: f.description,
-                  schemaFile: schemaPath.split("/").pop() || "schema.json",
+                  schemaFile: f.schema_file || schemaPath.split("/").pop() || "schema.json",
                   schemaPath,
-                  pdfFile: pdfPath.split("/").pop() || "form.pdf",
+                  pdfFile: f.pdf_file || pdfPath.split("/").pop() || "form.pdf",
                   pdfPath,
                 };
               }),
@@ -159,10 +164,13 @@ export function SchemaFormDemo() {
         setSchemaLoading(true);
         setSchemaError(null);
         // schemaPath is usually a static Hosting path (header ignored), but a
-        // manifest may carry an /api/form-kits/{id}/schema path, which is
-        // auth-gated (bd polyglot-pdf-z2is) -- attach the token either way.
+        // PRIVATE kit's manifest carries the auth-gated backend route
+        // /api/form-kits/{id}/schema (bd polyglot-pdf-vccy) -- attach the
+        // token either way, and resolve /api/ paths against the backend base
+        // (a relative /api/ fetch works on Hosting via the rewrite but not
+        // against the Vite dev server).
         const token = user ? await user.getIdToken() : undefined;
-        const response = await fetch(form.schemaPath, {
+        const response = await fetch(resolveKitAssetUrl(form.schemaPath), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
@@ -314,6 +322,7 @@ export function SchemaFormDemo() {
           schema={schema}
           kitId={selectedForm.id}
           pdfUrl={selectedForm.pdfPath}
+          pdfFile={selectedForm.pdfFile}
           onSubmit={handleSubmit}
           onSectionChange={handleSectionChange}
           initialLanguage={selectedLanguage ?? undefined}

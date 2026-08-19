@@ -47,6 +47,20 @@ export function getBackendHttpUrl(): string {
 }
 
 /**
+ * Resolve a manifest asset path to a fetchable URL.
+ *
+ * PRIVATE kits' manifest paths are the authenticated backend routes
+ * (/api/form-kits/{id}/schema|pdf -- bd polyglot-pdf-vccy). A relative fetch
+ * of those works on Firebase Hosting (the /api/** rewrite) but NOT against
+ * the Vite dev server, so backend-route paths resolve against the backend
+ * base. Static Hosting paths, blob: URLs, and absolute URLs pass through
+ * untouched.
+ */
+export function resolveKitAssetUrl(path: string): string {
+  return path.startsWith('/api/') ? `${getBackendHttpUrl()}${path}` : path;
+}
+
+/**
  * Fill a PDF form with field values from schema form state
  *
  * Calls backend /api/fill-pdf endpoint which uses PyMuPDF to handle XFA forms.
@@ -73,7 +87,13 @@ export async function fillPDF(
   // Fresh-token callback (mirrors the WS connection's getToken, bd wq0):
   // /api/fill-pdf is auth-gated (bd polyglot-pdf-z2is). Optional so local-dev
   // callers against a VFF_DISABLE_AUTH backend keep working without one.
-  getToken?: () => Promise<string | undefined>
+  getToken?: () => Promise<string | undefined>,
+  // The kit's REAL pdf filename from the manifest (bd polyglot-pdf-vccy).
+  // For a PRIVATE kit pdfUrl is the backend route .../pdf, whose last URL
+  // segment is the literal "pdf" -- deriving the filename from the URL would
+  // 404 the fill. Callers should always pass this; the URL-split below is
+  // the legacy fallback only.
+  pdfFile?: string
 ): Promise<Uint8Array> {
   if (!pdfUrl) {
     throw new Error("PDF URL is required to fill the form");
@@ -92,8 +112,9 @@ export async function fillPDF(
   });
   console.log('[pdfFiller] === END RADIO/CHECKBOX VALUES ===');
 
-  // Extract PDF filename from URL
-  const pdfFilename = pdfUrl.split('/').pop() || 'form.pdf';
+  // Explicit manifest filename first; URL-split is the legacy fallback (it
+  // breaks on backend-route paths -- see the pdfFile param note above).
+  const pdfFilename = pdfFile || pdfUrl.split('/').pop() || 'form.pdf';
 
   const requestPayload = {
     kit_id: kitId,

@@ -46,8 +46,9 @@ def _firms_enabled() -> bool:
     """Env-resolved per call (mirrors confirmation_logger._firestore_enabled)
     so tests and deploys control it without an import-order dance.
 
-    Deploy wiring of FIRMS_FIRESTORE_ENABLED lands with the consumer bead
-    (vccy), not here -- see the site enumeration in the lo88 plan.
+    FIRMS_FIRESTORE_ENABLED is set true in deploy-all.sh's BACKEND_ENV
+    (bd polyglot-pdf-vccy, the consumer); the deploy-form-kit.sh drop-list
+    hint names it, pinned by tests/test_deploy_form_kit_hints.py.
     """
     return os.getenv("FIRMS_FIRESTORE_ENABLED", "false").lower() == "true"
 
