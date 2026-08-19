@@ -1,6 +1,10 @@
 # Schema-key visibility matrix -- which model sees what
 
-*Last updated: 2026-08-13 (bd polyglot-pdf-kbkd: VoiceOverlay.tsx's progress-counter sites migrated onto getProgressCounts; VoiceOverlayMobile.tsx's inventory line deliberately left unmigrated).*
+**Tracks:** backend/services/ai_context.py backend/services/manifest_service.py backend/services/secretary_context.py backend/services/form_filling_service.py frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/state/hiddenFieldCounting.test.ts
+
+*Last updated: 2026-08-18 (bd polyglot-pdf-teizj: added a tracked-source
+declaration above -- this doc had none, so `check_doc_freshness.py` silently
+skipped it instead of ever reporting OK/STALE).*
 
 Two models read the form and they must read **different** things. This doc is the
 single answer to "if I add a key to a form-kit schema, who sees it?"
