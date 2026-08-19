@@ -12,16 +12,23 @@ storage PATHS, but no host route backs them -- bd polyglot-pdf-sbfk).
 import asyncio
 import re
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import structlog
 
-from backend.services.auth import require_auth
+from backend.services.auth import require_auth, verify_token
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
     get_form_kit_store,
+)
+from backend.services.kit_gates import (
+    firm_allowed_kits as _firm_allowed_kits,
+    kit_visibility as _kit_visibility,  # noqa: F401 (re-exported for tests/docs symmetry)
+    load_live_metadata as _load_live_metadata,
+    require_published as _require_published,
+    require_visible as _require_visible,
 )
 
 _log = structlog.get_logger().bind(module="form_kit_routes")
@@ -87,30 +94,6 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
 
 
-async def _require_published(store, kit_id: str) -> None:
-    """Refuse to serve a kit whose LIVE metadata status is not "complete", on
-    stores that enforce it (GCS -- the editor-writable shared store).
-
-    The deploy-time manifest gate stopped being sufficient when the store
-    became WRITABLE (bd 92qe.1): a contractor reverting a published kit to
-    draft (to polish it) must unpublish it IMMEDIATELY, otherwise their
-    work-in-progress saves would keep streaming to voice users through the
-    still-listed manifest entry (Codex P1, PR #279). Local mode is ungated by
-    design (the flag is False), and legacy test doubles without load_metadata
-    are treated as ungated. Under the flag, MISSING metadata fails closed
-    (every legitimately deployed/onboarded kit carries metadata.json), and an
-    unreadable metadata store error propagates (502) rather than serving.
-    """
-    if not getattr(store, "enforce_complete_on_public_reads", False):
-        return
-    loader = getattr(store, "load_metadata", None)
-    if loader is None:
-        return
-    meta = await loader(kit_id)  # FormKitStoreError propagates -> 502 fail-closed
-    if not isinstance(meta, dict) or meta.get("status") != "complete":
-        raise FormKitNotFound(f"Kit not published: {kit_id}")
-
-
 class FormKitInfo(BaseModel):
     """Public metadata about a form kit (no schema content).
 
@@ -126,6 +109,13 @@ class FormKitInfo(BaseModel):
     description: Optional[str] = None
     schema_path: Optional[str] = None
     pdf_path: Optional[str] = None
+    # Explicit filenames (bd polyglot-pdf-vccy): the client must NOT derive
+    # these by splitting the URLs above -- for a PRIVATE kit the paths are the
+    # authenticated backend routes (".../schema", ".../pdf"), whose last
+    # segment is a literal route word, and /api/fill-pdf needs the kit's REAL
+    # pdf filename (store.load_pdf_bytes(kit_id, filename)).
+    schema_file: Optional[str] = None
+    pdf_file: Optional[str] = None
 
 
 class FormKitManifestResponse(BaseModel):
@@ -134,7 +124,7 @@ class FormKitManifestResponse(BaseModel):
 
 
 @router.get("/form-kits", response_model=FormKitManifestResponse)
-async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifestResponse:
+async def list_form_kits(user: dict = Depends(require_auth)) -> FormKitManifestResponse:
     """
     List available form kits.
 
@@ -154,30 +144,78 @@ async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifest
         # paths (a custom schema filename loads -- bd polyglot-pdf-snpi).
         entries = manifest["forms"]
 
+        # ONE live-metadata gather per listed kit, feeding BOTH filters below.
+        # Visibility must come from LIVE metadata when the store can supply it
+        # (the GCS index.json is baked at deploy time and can be stale); the
+        # normalized manifest entry is the fallback for stores without a
+        # metadata loader (test doubles).
+        loader = getattr(store, "load_metadata", None)
+        if loader is not None:
+            metas = await asyncio.gather(*(loader(form["id"]) for form in entries))
+        else:
+            metas = [None] * len(entries)
+
         # On stores enforcing live-status reads (GCS), drop entries whose kit is
         # no longer complete -- a contractor reverting a published kit to draft
         # must ALSO vanish from this list, or the voice app would offer a form
-        # whose schema read now 404s (the single-kit gate below). One concurrent
-        # metadata read per listed kit; fine at catalogue scale.
+        # whose schema read now 404s (the single-kit gate below).
         if getattr(store, "enforce_complete_on_public_reads", False):
-            metas = await asyncio.gather(
-                *(store.load_metadata(form["id"]) for form in entries)
-            )
-            entries = [
-                form for form, meta in zip(entries, metas)
+            kept = [
+                (form, meta) for form, meta in zip(entries, metas)
                 if isinstance(meta, dict) and meta.get("status") == "complete"
             ]
+        else:
+            kept = list(zip(entries, metas))
 
-        forms = [
-            FormKitInfo(
-                id=form["id"],
-                label=form["label"],
-                description=form["description"],
-                schema_path=form["schemaPath"],
-                pdf_path=form["pdfPath"],
+        # Firm-scoped visibility (bd polyglot-pdf-vccy): a requester sees kits
+        # that are (public OR kit_id in their firm's allowed_kits). The firm
+        # allowlist is resolved LAZILY -- an all-public catalogue never pays
+        # the Firestore read.
+        firm_allowed = None
+        visible = []
+        for form, meta in kept:
+            # SAME verdict function as the single-kit/fill gates
+            # (kit_gates.kit_visibility) -- Opus r2 caught the asymmetry: a
+            # manifest-entry fallback here answered the visibility question
+            # differently than the gates when live metadata was absent. Live
+            # metadata is the ONLY source; a store with no loader lists
+            # everything public, exactly as its single-kit reads serve it.
+            if _kit_visibility(meta) != "private":
+                visible.append((form, False))
+                continue
+            if firm_allowed is None:
+                firm_allowed = await _firm_allowed_kits(user)
+            if form["id"] in firm_allowed:
+                visible.append((form, True))
+
+        forms = []
+        for form, is_private in visible:
+            if is_private:
+                # Rewrite private kits' paths to the authenticated backend
+                # routes: the static Hosting bundle excludes private kits
+                # (bd polyglot-pdf-kkos -- kitPublishFilter.isPubliclyServable
+                # ships only complete AND public), so their baked static
+                # paths would 404. This route is THE per-request rewrite
+                # site: it already holds the caller's decoded claims
+                # (sprint-19 plan; normalize_manifest is a firm-agnostic
+                # store-boundary validator and must not do this). The viewer
+                # attaches its Bearer token on /api/ paths.
+                schema_path = f"/api/form-kits/{form['id']}/schema"
+                pdf_path = f"/api/form-kits/{form['id']}/pdf"
+            else:
+                schema_path = form["schemaPath"]
+                pdf_path = form["pdfPath"]
+            forms.append(
+                FormKitInfo(
+                    id=form["id"],
+                    label=form["label"],
+                    description=form["description"],
+                    schema_path=schema_path,
+                    pdf_path=pdf_path,
+                    schema_file=form.get("schemaFile"),
+                    pdf_file=form.get("pdfFile"),
+                )
             )
-            for form in entries
-        ]
 
         _log.info("form_kits_list_success", count=len(forms))
         return FormKitManifestResponse(forms=forms)
@@ -192,7 +230,7 @@ async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifest
 
 
 @router.get("/form-kits/{kit_id}/schema")
-async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) -> JSONResponse:
+async def get_form_kit_schema(kit_id: str, user: dict = Depends(require_auth)) -> JSONResponse:
     """Return a single kit's schema JSON, streamed from the store.
 
     Works in both local and gcs mode. `Cache-Control: no-store` so a re-pull
@@ -200,13 +238,18 @@ async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) 
     The schema filename is resolved from the manifest (custom filenames per
     bd polyglot-pdf-snpi are honored), falling back to the conventional
     `schema.json`.
-    Auth-gated (bd polyglot-pdf-z2is); VFF_DISABLE_AUTH bypasses for local dev.
+    Auth-gated (bd polyglot-pdf-z2is); VFF_DISABLE_AUTH bypasses for local
+    dev. Firm-scoped (bd polyglot-pdf-vccy): a PRIVATE kit 404s unless the
+    caller's firm_id claim resolves to an allowlist containing it -- same
+    invisibility contract as the pdf route below.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     try:
         schema_file, _ = await _resolve_kit_filenames(store, kit_id)
-        await _require_published(store, kit_id)
+        meta = await _load_live_metadata(store, kit_id)
+        _require_published(store, kit_id, meta)
+        await _require_visible(kit_id, meta, user)
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
@@ -218,28 +261,42 @@ async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) 
 
 
 @router.get("/form-kits/{kit_id}/pdf")
-async def get_form_kit_pdf(kit_id: str) -> Response:
+async def get_form_kit_pdf(
+    kit_id: str, authorization: Optional[str] = Header(None)
+) -> Response:
     """Return a single kit's PDF bytes, streamed from the store.
 
     Works in both local and gcs mode. The PDF filename is resolved from the
     manifest (custom filenames are honored), falling back to `form.pdf`.
 
-    DELIBERATELY unauthenticated (bd polyglot-pdf-z2is; rationale corrected in
-    review round 3): NO frontend consumer loads this route today -- the
-    manifest's pdfPath is always the static Hosting path
-    /form-kits/<id>/<file> (see form_kits.py normalize_manifest), so the
-    viewer fetches the STATIC copy, and the same blank-template bytes ship
-    publicly in the frontend bundle regardless. The route exists as the
-    store-backed read for gcs mode (bd sbfk). Gating it would protect nothing
-    that is not already public via Hosting. Revisit when kits become
-    firm-scoped (private kits must gate BOTH this route and the static
-    bundle, and the viewer would need header-carrying fetches).
+    PUBLIC kits: deliberately unauthenticated (bd polyglot-pdf-z2is) -- a
+    public kit's blank-template bytes ship publicly in the Hosting bundle
+    regardless, so gating this read would protect nothing. PRIVATE kits
+    (bd polyglot-pdf-vccy -- the "revisit when kits become firm-scoped" this
+    comment used to promise): the auth header is parsed OPTIONALLY; a valid
+    Firebase ID token whose firm_id claim resolves to an allowlist containing
+    this kit passes, anything else -- no header, an invalid token, the wrong
+    firm -- 404s exactly like a nonexistent kit (invisibility, not 401: the
+    kit's existence is the secret). The viewer sends the Bearer header on
+    /api/ pdf paths (usePDFDocument's header-carrying fetch).
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
+    # Optional auth: resolve a user if a plausible Bearer token is present;
+    # an invalid one degrades to anonymous (NOT 401 -- see docstring).
+    user: Optional[dict] = None
+    # isinstance, not truthiness: a DIRECT call (tests) leaves the Header()
+    # default object in the parameter, which is truthy but not a str.
+    if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+        try:
+            user = verify_token(authorization[7:].strip())
+        except HTTPException:
+            user = None
     try:
         _, pdf_file = await _resolve_kit_filenames(store, kit_id)
-        await _require_published(store, kit_id)
+        meta = await _load_live_metadata(store, kit_id)
+        _require_published(store, kit_id, meta)
+        await _require_visible(kit_id, meta, user)
         data = await store.load_pdf_bytes(kit_id, pdf_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"PDF not found for kit {kit_id}") from exc

@@ -41,13 +41,17 @@ export interface SchemaFormProps {
   schema: FormSchema;
   kitId: string;
   pdfUrl?: string; // URL to original PDF for filling (optional)
+  /** The kit's REAL pdf filename from the manifest (bd polyglot-pdf-vccy).
+   * For a PRIVATE kit, pdfUrl is the backend route .../pdf -- deriving the
+   * filename from that URL yields the literal "pdf" and 404s the fill. */
+  pdfFile?: string;
   onSubmit?: (fieldValues: Record<string, any>) => void;
   onSectionChange?: (sectionId: string) => void;
   /** Pre-selected language from onboarding (skips language selection modal in VoiceOverlay) */
   initialLanguage?: string;
 }
 
-export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
+export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
   const { user } = useAuth();
   // Fresh-token accessor for Sol's intro clip, which is fetched BEFORE any
   // WebSocket exists and so cannot borrow the connection's token plumbing
@@ -631,6 +635,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (user ? await user.getIdToken() : undefined),
+        pdfFile,
       );
 
       // Generate filename from form metadata
@@ -667,6 +672,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (user ? await user.getIdToken() : undefined),
+        pdfFile,
       );
 
       // Open print dialog
@@ -885,6 +891,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             <FilledPreviewModal
               kitId={kitId}
               pdfUrl={pdfUrl}
+              pdfFile={pdfFile}
               schema={state.schema}
               fieldValues={state.fieldValues}
               onClose={() => setShowPDFPreview(false)}

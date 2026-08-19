@@ -101,6 +101,32 @@ kit_schema_file() {
     echo "${name:-schema.json}"
 }
 
+# Collect a kit's PUBLISHABLE children into the array named by $1, skipping any
+# _-prefixed directory (bd polyglot-pdf-06u5o).
+#
+# "$kit_dir"/* used to be passed straight to the upload, and the `case $kit_id in
+# _*)` guard above it filters only the TOP-LEVEL kit id -- not children inside a
+# kit. So _archive/ (superseded revisions, bd w3zw) and _drafts/ (up to 10 draft
+# snapshots per kit, bd y2l0p) both rode every deploy into the bucket. Nothing
+# clears either ring on the status transition, so a kit carried them through
+# promotion.
+#
+# NOT an --exclude flag: `gcloud storage cp` has no such flag (only `rsync`
+# does), so that spelling would fail at deploy time. cp takes [SOURCE ...], so
+# enumerating is the supported shape.
+collect_publishable_kit_files() {
+    local -n _out=$1
+    local dir=$2
+    local entry base
+    _out=()
+    for entry in "$dir"/*; do
+        [ -e "$entry" ] || continue
+        base=$(basename "$entry")
+        case "$base" in _*) continue ;; esac
+        _out+=("$entry")
+    done
+}
+
 # When this file is SOURCED (not executed directly), stop here -- expose only the
 # helper functions above and run none of the deploy flow below. This lets a test
 # harness source the script to exercise kit_is_complete / kit_schema_file in
@@ -252,7 +278,12 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # liability confirmation trail to Firestore. Cloud Run's filesystem is
     # ephemeral tmpfs, so the file-only trail did NOT survive deployment --
     # every deployed env needs the durable sink. Metadata only, never values.
-    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true"
+    # FIRMS_FIRESTORE_ENABLED (bd polyglot-pdf-vccy): enable the firms-store
+    # READ path so firm staff see their firm's PRIVATE kits. Reads fail
+    # CLOSED ([]), so the flag can only ever narrow what an outage shows.
+    # (deploy-production.sh also sources this block, but that channel is dead
+    # -- the former prod project is unreachable, purge bd polyglot-pdf-je6iy.)
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the
@@ -340,7 +371,12 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
         fi
 
         log_info "  Uploading $kit_id..."
-        gcloud storage cp -r "$kit_dir"/* "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/$kit_id/" --project "$POLYGLOT_PROJECT_NAME"
+        collect_publishable_kit_files kit_files "$kit_dir"
+        if [ ${#kit_files[@]} -eq 0 ]; then
+            log_warn "Skipping $kit_id - no publishable files"
+            continue
+        fi
+        gcloud storage cp -r "${kit_files[@]}" "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/$kit_id/" --project "$POLYGLOT_PROJECT_NAME"
     done
     
     # Generate and upload manifest

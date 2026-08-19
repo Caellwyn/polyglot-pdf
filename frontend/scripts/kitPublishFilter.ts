@@ -38,15 +38,35 @@
 /** The one status whose kits the voice app serves to clients. */
 export const PUBLISHED_STATUS = "complete";
 
+/** The one visibility value (beyond an absent key) the PUBLIC bundle ships. */
+export const PUBLIC_VISIBILITY = "public";
+
 export interface KitStatusCarrier {
   status?: unknown;
+  visibility?: unknown;
 }
 
 /**
- * True only when this kit's metadata proves it is published.
+ * True only when this kit's metadata proves it is published AND public.
  *
  * `null`/`undefined` metadata means unreadable or absent -- both withhold.
+ *
+ * VISIBILITY (bd polyglot-pdf-kkos, closing the bd polyglot-pdf-17opi
+ * exposure): a firm's PRIVATE kit must never enter the world-readable
+ * Hosting bundle. The key ABSENT means public (existing kits are not
+ * migrated -- sprint-19 plan), and the exact string "public" means public;
+ * ANY other value withholds. This is a DELIBERATE divergence from the
+ * backend routes' coercion (there, anything except exact "private" serves
+ * as public): the fail directions differ by surface. A route wrongly
+ * hiding a public kit is a visible, reversible service break; this bundle
+ * wrongly shipping a mistyped private kit ("prvate", "Private") is the
+ * silent, irreversible leak the firm tier exists to prevent -- the same
+ * fail-closed doctrine as the status half above.
  */
 export function isPubliclyServable(metadata: KitStatusCarrier | null | undefined): boolean {
-  return metadata?.status === PUBLISHED_STATUS;
+  if (metadata?.status !== PUBLISHED_STATUS) {
+    return false;
+  }
+  const visibility = metadata.visibility;
+  return visibility === undefined || visibility === PUBLIC_VISIBILITY;
 }

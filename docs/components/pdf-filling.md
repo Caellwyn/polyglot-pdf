@@ -2,7 +2,11 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
+*Last updated: 2026-08-18 (bd polyglot-pdf-vccy: `fillPDF` carries the
+manifest's explicit `pdf_filename` + `/api/` asset-path resolution for
+private kits -- see
+[the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md).
+Same day, bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
 content change; a fourth status, `submitted`, and the per-transition role
 split -- editors submit, authors publish -- plus a role-scoped editing lock
 authors can always take back, bd polyglot-pdf-hqztg.)*
@@ -17,16 +21,26 @@ is [../standards/stateless-architecture.md](../standards/stateless-architecture.
 
 1. `SchemaForm` (Download/Print buttons) **unwraps** each `FieldValue` →
    `unwrapFieldValue` (a raw wrapper breaks fill) and calls `fillPDF(kitId, pdfUrl,
-   values, schema)` in `frontend/src/schema-forms/utils/pdfFiller.ts`.
+   values, schema, getToken, pdfFile)` in `frontend/src/schema-forms/utils/pdfFiller.ts`.
 2. `fillPDF` POSTs to **`/api/fill-pdf`** with `{kit_id, pdf_filename, field_values,
    form_schema}` and an `Authorization: Bearer <idToken>` header via its optional
    `getToken` callback -- the route is auth-gated (bd polyglot-pdf-z2is; the body
-   carries user-entered values). Callers inside the authed app thread
+   carries user-entered values). `pdf_filename` is the manifest's explicit
+   `pdfFile` (threaded as a prop from `SchemaFormDemo`, bd polyglot-pdf-vccy) --
+   a PRIVATE kit's `pdfUrl` is the backend route `.../pdf`, so the old
+   URL-tail derivation would post the literal "pdf" and 404 the store read;
+   the URL split survives only as the fallback for a missing `pdfFile`.
+   Callers inside the authed app thread
    `user.getIdToken()`; local dev against a `VFF_DISABLE_AUTH` backend may omit it.
    (Backend HTTP base: env override → `VITE_BACKEND_HTTP_URL` →
-   current origin via Firebase rewrite → `localhost:8000` dev fallback.)
-3. The backend (`backend/routes/pdf_fill_routes.py`) loads the blank PDF from the
-   form-kit store, fills it, and returns `application/pdf` bytes.
+   current origin via Firebase rewrite → `localhost:8000` dev fallback.
+   Manifest `/api/` asset paths resolve via `resolveKitAssetUrl` -- same base.)
+3. The backend (`backend/routes/pdf_fill_routes.py`) runs the shared
+   client-tier kit gates (`backend/services/kit_gates.py`: publish status +
+   firm visibility -- the body's caller-supplied `kit_id` made this the
+   fourth gated read, bd polyglot-pdf-vy6id; a private kit 404s for
+   non-members), then loads the blank PDF from the form-kit store, fills it,
+   and returns `application/pdf` bytes.
 4. The client wraps the bytes in a Blob: `downloadPDF` (anchor download) or
    `printPDF` (opens a new window → `print()`; falls back to download if the popup
    is blocked — the tablet print path).

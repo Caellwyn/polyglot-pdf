@@ -262,6 +262,14 @@ def normalize_manifest(raw: Any) -> dict:
 			"schemaPath": _safe_str(entry.get("schemaPath"), f"/form-kits/{kit_id}/{schema_file}"),
 			"pdfFile": pdf_file,
 			"pdfPath": _safe_str(entry.get("pdfPath"), f"/form-kits/{kit_id}/{pdf_file}"),
+			# Firm scoping (bd polyglot-pdf-vccy): anything except the exact
+			# string "private" normalizes to "public" -- absence of the key
+			# means public, and a malformed value must not accidentally hide
+			# (or worse, expose) a kit on a typo. ownerFirmId is informational
+			# here; the ROUTE gate reads live metadata (the manifest copy can
+			# be deploy-time stale in GCS mode).
+			"visibility": "private" if entry.get("visibility") == "private" else "public",
+			"ownerFirmId": _safe_str(entry.get("ownerFirmId"), "") or None,
 		})
 	return {"forms": forms}
 
@@ -562,6 +570,12 @@ class LocalFormKitStore(FormKitStore):
 				"schemaPath": f"/form-kits/{kit_id}/{schema_file}",
 				"pdfFile": pdf_file,
 				"pdfPath": f"/form-kits/{kit_id}/{pdf_file}",
+				# metadata.json carries visibility/owner_firm_id (snake_case);
+				# manifest entries use the camelCase key like every other key
+				# here. normalize_manifest re-applies the private-or-public
+				# coercion on the way out.
+				"visibility": meta.get("visibility"),
+				"ownerFirmId": meta.get("owner_firm_id"),
 			})
 
 		_log.info("form_kits.local_manifest_generated", count=len(forms))

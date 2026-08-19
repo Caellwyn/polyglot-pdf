@@ -23,6 +23,9 @@ import './pdf-view.css';
 export interface FilledPreviewModalProps {
   kitId: string;
   pdfUrl: string;
+  /** The kit's REAL pdf filename from the manifest (bd polyglot-pdf-vccy) --
+   * required for the fill call when pdfUrl is a backend route path. */
+  pdfFile?: string;
   schema: FormSchema;
   /** Wrapped FieldValue map straight from SchemaFormState (unwrapped here). */
   fieldValues: Record<string, any>;
@@ -36,6 +39,7 @@ const SCALE_STEP = 0.25;
 export default function FilledPreviewModal({
   kitId,
   pdfUrl,
+  pdfFile,
   schema,
   fieldValues,
   onClose,
@@ -60,7 +64,8 @@ export default function FilledPreviewModal({
     }
 
     fillPDF(kitId, pdfUrl, unwrapped, schema,
-      async () => (user ? await user.getIdToken() : undefined))
+      async () => (user ? await user.getIdToken() : undefined),
+      pdfFile)
       .then((bytes) => {
         if (cancelled) return;
         // Re-wrap so the Uint8Array is a plain-ArrayBuffer BlobPart (see the
