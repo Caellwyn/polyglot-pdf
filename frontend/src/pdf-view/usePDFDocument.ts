@@ -8,6 +8,8 @@
 import { useState, useEffect } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { getPDFLib } from './pdfWorker';
+import { useAuth } from '../contexts/AuthContext';
+import { resolveKitAssetUrl } from '../schema-forms/utils/pdfFiller';
 
 export interface PDFDocumentState {
   document: PDFDocumentProxy | null;
@@ -27,6 +29,7 @@ export function usePDFDocument(pdfUrl: string | null): PDFDocumentState {
   const [numPages, setNumPages] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     // Reset state when URL changes
@@ -43,51 +46,75 @@ export function usePDFDocument(pdfUrl: string | null): PDFDocumentState {
 
     const pdfjsLib = getPDFLib();
 
-    // Load the PDF document
-    const loadingTask = pdfjsLib.getDocument(pdfUrl);
-
     // Per-run flag: React 18 StrictMode mounts/unmounts effects twice in dev, so
     // a stale run can resolve after its cleanup ran. Without this guard the
     // superseded run sets state on a destroyed task (surfacing as a spurious
     // "Worker was destroyed" error) and races the live run.
     let cancelled = false;
     let loadedDoc: PDFDocumentProxy | null = null;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    let objectUrl: string | null = null;
 
-    loadingTask.promise
-      .then((pdfDoc) => {
-        loadedDoc = pdfDoc;
-        if (cancelled) {
-          // This run was superseded; tear down the doc we just loaded.
-          pdfDoc.destroy();
-          return;
+    (async () => {
+      let src = pdfUrl;
+      if (pdfUrl.startsWith('/api/')) {
+        // A PRIVATE kit's manifest path is the authenticated backend route
+        // (bd polyglot-pdf-vccy). pdfjs getDocument cannot attach headers,
+        // so fetch the bytes with the Bearer token and hand pdfjs a blob URL
+        // (the same form FilledPreviewModal uses for filled bytes).
+        const token = user ? await user.getIdToken() : undefined;
+        const resp = await fetch(resolveKitAssetUrl(pdfUrl), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!resp.ok) {
+          throw new Error(`Failed to load PDF (${resp.status})`);
         }
-        setDocument(pdfDoc);
-        setNumPages(pdfDoc.numPages);
-        setIsLoading(false);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled || err?.name === 'RenderingCancelledException') {
-          return;
-        }
-        console.error('Failed to load PDF:', err);
-        setError(err.message || 'Failed to load PDF');
-        setIsLoading(false);
-        setDocument(null);
-        setNumPages(0);
-      });
+        objectUrl = URL.createObjectURL(await resp.blob());
+        src = objectUrl;
+      }
+      if (cancelled) {
+        return;
+      }
+      loadingTask = pdfjsLib.getDocument(src);
+      const pdfDoc = await loadingTask.promise;
+      loadedDoc = pdfDoc;
+      if (cancelled) {
+        // This run was superseded; tear down the doc we just loaded.
+        pdfDoc.destroy();
+        return;
+      }
+      setDocument(pdfDoc);
+      setNumPages(pdfDoc.numPages);
+      setIsLoading(false);
+      setError(null);
+    })().catch((err) => {
+      if (cancelled || err?.name === 'RenderingCancelledException') {
+        return;
+      }
+      console.error('Failed to load PDF:', err);
+      setError(err.message || 'Failed to load PDF');
+      setIsLoading(false);
+      setDocument(null);
+      setNumPages(0);
+    });
 
     // Cleanup: destroy the document/loading task when the URL changes or the
     // component unmounts. Track the loaded doc locally (the `document` state in
-    // the closure is stale -- always null at cleanup time).
+    // the closure is stale -- always null at cleanup time). The blob URL (only
+    // set for backend-route fetches) is revoked here too.
     return () => {
       cancelled = true;
-      loadingTask.destroy();
+      if (loadingTask) {
+        loadingTask.destroy();
+      }
       if (loadedDoc) {
         loadedDoc.destroy();
       }
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-  }, [pdfUrl]);
+  }, [pdfUrl, user]);
 
   return {
     document,
