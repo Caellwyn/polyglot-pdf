@@ -7,14 +7,18 @@ schema read paths had all drifted; also fixed the adjacent `form_kits.py`
 `put_schema` citations in the same paragraph while re-verifying it. Same day,
 bd polyglot-pdf-vf48u: the translate-options route row's "409 on complete
 kits" wording widened to name the write-locked set (complete OR unpublished),
-matching the `/status` row's phrasing.). The Surface contracts section is the
-code-derived cross-surface data-contract map for blast-radius review (bd
-polyglot-pdf-n18q). Continuous-DTI is the production default (`USE_DTI` /
-`CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd
-polyglot-pdf-7872; section-reset is the deprecated fallback, bd
-polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel
-model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md)
-and [components/config-deployment.md](components/config-deployment.md).*
+matching the `/status` row's phrasing. Also same day, bd polyglot-pdf-kkos:
+the static bundle now ships only complete AND public kits, so Surface
+contracts entry 7's rewrite paragraph is a shipped security boundary -- see
+[the kkos journal entry](journal/entries/2026-08-19-bd-kkos-static-bundle-scoping.md).).
+The Surface contracts section is the code-derived cross-surface data-contract
+map for blast-radius review (bd polyglot-pdf-n18q). Continuous-DTI is the
+production default (`USE_DTI` / `CONTINUOUS_SESSION` /
+`CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
+section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide
+lists the deploy flow + env vars; per-channel model/auth config detail lives
+in [standards/ai-models.md](standards/ai-models.md) and
+[components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
 
@@ -171,7 +175,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
   (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
   `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
   dict unvalidated (`get_form_kit_schema`,
-  `backend/routes/form_kit_routes.py:235-256`; `get_editor_kit_schema`,
+  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema`,
   `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
   draft kit reaching the voice path carries whatever shape it has -- e.g. a
   field without `pdf_field_name` is silently never written to the output PDF.
@@ -452,12 +456,13 @@ tokens, not the client tier):
   than 401.
 - **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:193`)
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
-  backend routes (`/api/form-kits/<id>/schema|pdf`). This is a serving-seam
-  requirement, NOT yet a security boundary: the static-bundle EXCLUSION of
-  private kits is PENDING bd kkos (exposure tracked as bd
-  polyglot-pdf-17opi) -- until kkos lands, a private kit's schema + blank
-  pdf still ship world-readable in the Hosting bundle, so no firm may be
-  granted a private kit before then. Consumers: `SchemaFormDemo`'s schema fetch
+  backend routes (`/api/form-kits/<id>/schema|pdf`) because the static
+  Hosting bundle excludes private kits (bd kkos:
+  `kitPublishFilter.isPubliclyServable` ships only complete AND
+  demonstrably-public -- absence or the exact string `"public"`;
+  deliberately stricter than the routes' anything-but-"private" coercion,
+  because this surface's failure is an irreversible public leak).
+  Consumers: `SchemaFormDemo`'s schema fetch
   and `usePDFDocument`'s pdf fetch resolve `/api/` paths against the backend
   base and attach the Bearer token (`usePDFDocument.ts:60` fetch-to-blob;
   `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on
