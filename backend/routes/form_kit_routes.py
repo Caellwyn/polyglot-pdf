@@ -309,3 +309,113 @@ async def get_form_kit_pdf(
         media_type="application/pdf",
         headers={"Cache-Control": "no-store"},
     )
+
+
+# A revision marker in a URL is an ENCODED marker (form_kits.encode_marker):
+# charset [A-Za-z0-9._-], length <= 128, dot-runs collapsed -- so a legitimate
+# marker never contains ".." or a separator. Validate to exactly that contract
+# before the value becomes a path segment (same discipline as _safe_kit_id).
+_MARKER_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def _safe_marker(marker: str) -> str:
+    if ".." in marker or not _MARKER_SEGMENT_RE.fullmatch(marker):
+        raise HTTPException(status_code=400, detail="Invalid revision marker")
+    return marker
+
+
+class ArchivedRevisionInfo(BaseModel):
+    """One superseded revision of a kit (bd polyglot-pdf-qfyxr).
+
+    marker is the ENCODED archive marker (the path segment under
+    <kit>/_archive/); published_at is the archived metadata snapshot's stamp,
+    None when the snapshot predates the stamp or is missing.
+    """
+    marker: str
+    published_at: Optional[str] = None
+
+
+class KitArchiveResponse(BaseModel):
+    revisions: List[ArchivedRevisionInfo]
+
+
+@router.get("/form-kits/{kit_id}/archive", response_model=KitArchiveResponse)
+async def list_kit_archive(
+    kit_id: str, user: dict = Depends(require_auth)
+) -> KitArchiveResponse:
+    """A kit's superseded revisions, NEWEST FIRST (bd polyglot-pdf-qfyxr).
+
+    The firm-facing half of the archived-versions navigation (maintainer
+    requirement 2026-08-06: history is organized by form, then
+    chronologically). Same gates as the schema read -- publish + firm
+    visibility -- so a caller sees a kit's HISTORY exactly when they may see
+    the kit; a private kit's archive 404s for non-members like the kit
+    itself (existence is the secret). Sorted newest-first by the archived
+    snapshot's published_at (ISO strings sort chronologically); revisions
+    whose snapshot lacks the stamp sort last.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    try:
+        meta = await _load_live_metadata(store, kit_id)
+        _require_published(store, kit_id, meta)
+        await _require_visible(kit_id, meta, user)
+        markers = await store.list_archived_markers(kit_id)
+        snapshots = await asyncio.gather(
+            *(store.load_archived_metadata_or_none(kit_id, m) for m in markers)
+        )
+    except FormKitNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
+    except FormKitStoreError as exc:
+        _log.error("kit_archive_list_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(status_code=502, detail="Unable to list archived revisions") from exc
+
+    revisions = []
+    for marker, snapshot in zip(markers, snapshots):
+        stamp = (snapshot or {}).get("published_at")
+        revisions.append(
+            ArchivedRevisionInfo(
+                marker=marker,
+                published_at=stamp if isinstance(stamp, str) else None,
+            )
+        )
+    # (has stamp, stamp) descending: stamped revisions newest-first, then the
+    # stampless tail -- False sorts after True under reverse=True.
+    revisions.sort(
+        key=lambda r: (r.published_at is not None, r.published_at or ""),
+        reverse=True,
+    )
+    return KitArchiveResponse(revisions=revisions)
+
+
+@router.get("/form-kits/{kit_id}/archive/{marker}/schema")
+async def get_archived_kit_schema(
+    kit_id: str, marker: str, user: dict = Depends(require_auth)
+) -> JSONResponse:
+    """An archived revision's schema, READ-ONLY (bd polyglot-pdf-qfyxr).
+
+    Same gates as the live schema read (publish + firm visibility on the
+    OWNING kit). The response is the superseded schema bytes the audit trail
+    references -- never served as a fillable form; the client renders it in
+    the read-only revision view.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    marker = _safe_marker(marker)
+    store = get_form_kit_store()
+    try:
+        meta = await _load_live_metadata(store, kit_id)
+        _require_published(store, kit_id, meta)
+        await _require_visible(kit_id, meta, user)
+        schema = await store.load_archived_revision(kit_id, marker)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Archived revision not found for kit {kit_id}",
+        ) from exc
+    except FormKitStoreError as exc:
+        _log.error(
+            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error=str(exc)
+        )
+        raise HTTPException(status_code=502, detail="Unable to load archived revision") from exc
+
+    return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})

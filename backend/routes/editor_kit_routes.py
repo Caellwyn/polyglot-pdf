@@ -1345,6 +1345,106 @@ async def list_kit_draft_snapshots(
         snapshots=[DraftSnapshot(**s) for s in snapshots])
 
 
+class ArchivedRevisionEntry(BaseModel):
+    """One superseded revision (bd polyglot-pdf-qfyxr): the ENCODED archive
+    marker (the path segment under <kit>/_archive/) plus the archived
+    metadata snapshot's published_at (None when the snapshot predates the
+    stamp or is missing)."""
+    marker: str
+    published_at: Optional[str] = None
+
+
+class ArchivedRevisionsResponse(BaseModel):
+    revisions: list[ArchivedRevisionEntry]
+
+
+# An encoded revision marker's contract (form_kits.encode_marker): charset
+# [A-Za-z0-9._-], <= 128 chars, dot-runs collapsed -- so a legitimate marker
+# never contains ".." or a separator. Same validation the client-facing
+# archive routes apply (form_kit_routes._safe_marker).
+_ARCHIVE_MARKER_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def _safe_archive_marker(marker: str) -> str:
+    if ".." in marker or not _ARCHIVE_MARKER_RE.fullmatch(marker):
+        raise HTTPException(status_code=400, detail="Invalid revision marker")
+    return marker
+
+
+@router.get("/kits/{kit_id}/archive", response_model=ArchivedRevisionsResponse)
+async def list_kit_archive(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> ArchivedRevisionsResponse:
+    """This kit's superseded revisions, NEWEST FIRST (bd polyglot-pdf-qfyxr).
+
+    EDITOR-accessible: the archive is read-only history (the bytes old
+    confirmation records name), so reading it risks nothing an editor could
+    corrupt -- same reasoning as draft snapshots above. Sorted newest-first
+    by the archived snapshot's published_at; stampless revisions sort last.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    # 404 for a kit that does not exist rather than an empty list -- "no
+    # archived versions" and "no such form" are different answers (the
+    # draft-snapshots lesson, Opus fresh-eyes round 4 there).
+    await _load_meta_or_404(store, kit_id)
+    try:
+        markers = await store.list_archived_markers(kit_id)
+        snapshots = await asyncio.gather(
+            *(store.load_archived_metadata_or_none(kit_id, m) for m in markers)
+        )
+    except FormKitStoreError as exc:
+        _log.error("kit_archive_list_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to list archived revisions") from exc
+    revisions = []
+    for marker, snapshot in zip(markers, snapshots):
+        stamp = (snapshot or {}).get("published_at")
+        revisions.append(ArchivedRevisionEntry(
+            marker=marker,
+            published_at=stamp if isinstance(stamp, str) else None,
+        ))
+    revisions.sort(
+        key=lambda r: (r.published_at is not None, r.published_at or ""),
+        reverse=True,
+    )
+    _log.info("kit_archive_listed", kit_id=kit_id, count=len(revisions), role=role)
+    return ArchivedRevisionsResponse(revisions=revisions)
+
+
+@router.get("/kits/{kit_id}/archive/{marker}/schema")
+async def get_archived_kit_schema(
+    kit_id: str,
+    marker: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> JSONResponse:
+    """An archived revision's schema, READ-ONLY (bd polyglot-pdf-qfyxr).
+
+    There is deliberately no write counterpart: a superseded revision is what
+    the audit trail references, and editing it would corrupt those bytes --
+    the exact corruption the unpublished write-lock exists to prevent.
+    Returning to an old revision goes through the normal draft/publish flow,
+    never through the archive.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    marker = _safe_archive_marker(marker)
+    store = get_form_kit_store()
+    await _load_meta_or_404(store, kit_id)
+    try:
+        schema = await store.load_archived_revision(kit_id, marker)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Archived revision not found for kit {kit_id}") from exc
+    except FormKitStoreError as exc:
+        _log.error(
+            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to load archived revision") from exc
+    return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})
+
+
 @router.post("/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore",
              response_model=RestoreSnapshotResponse)
 async def restore_kit_draft_snapshot(
