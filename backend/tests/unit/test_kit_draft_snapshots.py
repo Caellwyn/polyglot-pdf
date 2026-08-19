@@ -1014,37 +1014,43 @@ def test_a_precondition_failure_on_an_ORDINARY_write_stays_fail_closed():
 # and reopens the round-8 data loss (Opus fresh-eyes round 9).
 
 
-def test_the_reaper_uses_RMDIR_so_a_last_instant_schema_survives(client):
-    """The INNER window: the write lands after the emptiness check but before
-    the delete. Only rmdir's refusal to remove a non-empty directory saves it;
-    rmtree would take the schema with it."""
-    import backend.services.form_kits as fk
+def test_the_reaper_SKIPS_a_directory_that_now_holds_a_schema(client):
+    """Guard 1, the emptiness re-check.
 
+    Pinned WITHOUT hooking the check itself: an earlier version of this test
+    monkeypatched Path.exists to fire mid-check, which could never catch the
+    deletion of that very call -- with the early return gone there is no
+    .exists() left to hook, so the test passed by construction. Instead: put a
+    completed snapshot where the reaper's stale listing says an orphan is, and
+    assert it survives. That binds whichever guard stops it (Opus round 9).
+    """
     c, store, root = client
     _make_kit(root, "w7", schema=_schema("live"))
     drafts = root / "w7" / "_drafts"
     drafts.mkdir(parents=True, exist_ok=True)
     (drafts / "1").mkdir()
+    # Between the reaper's listing and its delete, another saver finishes.
+    real_ids = type(store)._snapshot_ids
+    state = {"n": 0}
 
-    real_exists = pathlib.Path.exists
-    state = {"armed": True}
-
-    def hooked(self, *a, **k):
-        out = real_exists(self, *a, **k)
-        # The instant the reaper asks "is 1/schema.json there?" and hears no,
-        # the other saver writes it.
-        if state["armed"] and self.name == "schema.json" and "1" in self.parts                 and not out:
-            state["armed"] = False
-            self.write_text(json.dumps(_schema("THEIR_WORK")), encoding="utf-8")
+    def hooked(self, kit_id, include_unwritten=False):
+        out = real_ids(self, kit_id, include_unwritten)
+        state["n"] += 1
+        if state["n"] == 2:
+            (drafts / "1" / "schema.json").write_text(
+                json.dumps(_schema("THEIR_WORK")), encoding="utf-8")
+            (drafts / "1" / "meta.json").write_text(
+                json.dumps({"id": "1"}), encoding="utf-8")
         return out
 
-    pathlib.Path.exists = hooked
+    type(store)._snapshot_ids = hooked
     try:
         _run(store.put_draft_snapshot("w7", _schema("mine")))
     finally:
-        pathlib.Path.exists = real_exists
+        type(store)._snapshot_ids = real_ids
 
-    assert (drafts / "1" / "schema.json").exists(),         "rmtree semantics: a schema written in the last instant was destroyed"
+    assert (drafts / "1" / "schema.json").exists(),         "a completed snapshot was reaped"
+    assert _run(store.load_draft_snapshot("w7", "1"))["_tag"] == "THEIR_WORK"
 
 
 def test_the_reaper_leaves_an_IN_FLIGHT_temp_write_alone(client):
