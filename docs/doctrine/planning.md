@@ -1,6 +1,8 @@
 # Planning doctrine: SPEAR, exit rubrics, and model tiering
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: cite guarded auto-merge bead 16pj which shipped the doctrine, not h2r.3 which is traceability).*
+*Last updated: 2026-08-18 (bd polyglot-pdf-qia8: the model-tiering table's
+outer-review row named only the Opus pass; now names the three-way fork and
+places the Haiku docs-reviewer arm in the Search + mechanical tier).*
 
 How a feature gets scoped, planned, executed, assessed, and resolved here. This
 doc is the conceptual home; three skills are its mechanical encodings --
@@ -135,9 +137,9 @@ volume work. Expensive models **never bug-hunt or grep.**
 
 | Tier | Models | Where |
 |------|--------|-------|
-| **Decision gates** | Fable / Opus | **Plan** (scope, rubric, MECE decomposition, the How-pushback), **Assess** (the orchestrator's pre-PR rubric scorecard + gap/nit triage), the **outer cross-surface review** (ONE looped Opus pass -- tracing changed contracts into untouched consumers), **escalation + Resolve judgment** (the orchestrator's judgment calls, incl. the merge decision -- auto-merge or ping). |
+| **Decision gates** | Fable / Opus | **Plan** (scope, rubric, MECE decomposition, the How-pushback), **Assess** (the orchestrator's pre-PR rubric scorecard + gap/nit triage), the **outer cross-surface review for a SOURCE diff** (ONE looped Opus pass -- tracing changed contracts into untouched consumers), **escalation + Resolve judgment** (the orchestrator's judgment calls, incl. the merge decision -- auto-merge or ping). |
 | **Execution** | Sonnet | Building a bead's changes; the **inner** fresh-eyes assessor pass (rubric scoring + local in-diff bug hunt + enumerating changed contracts). |
-| **Search + mechanical** | Haiku / Explore | Codebase ground-truth fan-out, file location, the inner assessor on small diffs (<= ~80 changed lines, routed by `pick_review_model.py`), mechanical glue (the `closeout-runner` tail). |
+| **Search + mechanical** | Haiku / Explore | Codebase ground-truth fan-out, file location, the inner assessor on small diffs (<= ~80 changed lines, routed by `pick_review_model.py`), the **outer review for a DOCS-ONLY diff** (the `docs-reviewer` agent -- prose review, no contract trace; a trivial diff gets no outer pass at all), mechanical glue (the `closeout-runner` tail). |
 
 The orchestrator **never greps** -- it delegates search to Explore/Haiku and
 keeps the conclusion, not the file dumps. Spending Opus tokens on a `grep` is the

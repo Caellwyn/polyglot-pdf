@@ -4,8 +4,8 @@ This script does two warn-only checks in one pass:
 
 1. **Doc freshness.** Each tier-1 doc (TIER1_DOCS: CLAUDE.md, docs/INDEX.md,
    docs/technical_guide.md) and each `docs/components/*.md` /
-   `docs/standards/*.md` may declare a `**Tracks:**` line listing
-   space- or comma-separated paths or globs of code it owns, plus a
+   `docs/standards/*.md` / `docs/doctrine/*.md` may declare a `**Tracks:**`
+   line listing space- or comma-separated paths or globs of code it owns, plus a
    `*Last updated: YYYY-MM-DD*` line near the top. Compares the doc's
    **claimed** "last updated" date (parsed from the `*Last updated:*`
    line) to each tracked file's last commit timestamp; flags docs whose
@@ -148,6 +148,20 @@ TIER1_DOCS = [
     "CLAUDE.md",
     "docs/INDEX.md",
     "docs/technical_guide.md",
+]
+# doc-architecture.md is deliberately NOT in TIER1_DOCS: TRACKS_RE.search()
+# takes the FIRST `**Tracks:**` mention in the file, which is its own intro
+# prose ("...carries no `**Tracks:**` line because it owns no code path"),
+# NOT the fenced **Tracks:** example syntax further down (that's the third
+# match and is never reached) -- either way, parse_tracks() would try to
+# freshness-check the trailing prose words as if they were globs (e.g.
+# "line", "because", "it", "owns", "no"). But it IS the file that DEFINES
+# the current-state-only rule, so it must still be covered by the CONVENTION
+# scan (no Previously:/Prior:/Earlier: chains, no history sections) even
+# though it skips the freshness-staleness half. It was exempt from BOTH
+# checks before this line (bd polyglot-pdf-r8d9r).
+CONVENTION_ONLY_DOCS = [
+    "docs/doc-architecture.md",
 ]
 
 # --- Sprint-archive check constants ---
@@ -448,7 +462,9 @@ def is_sprint_plan(path: Path) -> bool:
     tier-2 doc that happens to start with ``sprint_``. A
     ``docs/components/sprint_vad.md`` is a normal current-state component doc and
     must still be convention-scanned -- so we require the file to sit directly in
-    ``docs/`` or ``docs/archive/``, not in ``components/`` / ``standards/``."""
+    ``docs/`` or ``docs/archive/``, not in any DOC_DIRS subdirectory. (Deliberately
+    NOT hand-listing DOC_DIRS' members here -- see bd polyglot-pdf-jfq16: a
+    parenthetical member-list is exactly the shape that keeps desyncing.)"""
     if not (path.name.startswith("sprint_") and path.name.endswith(".md")):
         return False
     parent = path.parent.name
@@ -496,19 +512,26 @@ def check_doc_conventions(
       2. `## Recent sprint history` / `## Update history` / `## Changelog` /
          `## Sprint history` headings -- same reason.
 
-    The scan covers TIER1_DOCS (CLAUDE.md + docs/*.md top-level files) AND
+    The scan covers TIER1_DOCS (the specific files it names -- CLAUDE.md,
+    docs/INDEX.md, docs/technical_guide.md -- NOT every docs/*.md top-level
+    file), CONVENTION_ONLY_DOCS (meta-docs that would otherwise misparse
+    under TRACKS_RE -- see that constant's comment for the exact reason --
+    so they opt out of the freshness-staleness half but must still be
+    convention-scanned -- currently just docs/doc-architecture.md), AND
     every doc under DOC_DIRS (docs/components/*.md + docs/standards/*.md +
-    docs/doctrine/*.md). Tier-3 docs (docs/dev_journal.md, docs/journal/*,
-    docs/archive/*) are explicitly NOT scanned -- chronological history is
-    the whole point there.
+    docs/doctrine/*.md).
+    Tier-3 docs (docs/dev_journal.md, docs/journal/*, docs/archive/*) are
+    explicitly NOT scanned -- chronological history is the whole point
+    there.
     """
     findings: list[tuple[Path, str]] = []
     # find_docs() already returns tier-1 (TIER1_DOCS) + tier-2 docs, but a
     # caller may pass an explicit `docs` list (e.g. tests) that omits tier-1.
-    # Union the explicit tier-1 list in either way, then dedupe so a doc
-    # isn't scanned twice.
+    # Union the explicit tier-1 + convention-only lists in either way, then
+    # dedupe so a doc isn't scanned twice.
     targets: list[Path] = [
-        p for rel in TIER1_DOCS if (p := repo_root / rel).is_file()
+        p for rel in TIER1_DOCS + CONVENTION_ONLY_DOCS
+        if (p := repo_root / rel).is_file()
     ]
     if docs is None:
         docs = find_docs()
@@ -639,13 +662,14 @@ def main() -> int:
 
     only_staged = staged_files() if args.staged else None
     # find_docs() returns tier-1 (TIER1_DOCS) + tier-2 (docs/components,
-    # docs/standards) docs. The freshness loop below must cover tier-1 too —
-    # technical_guide.md's **Tracks:** line was previously unenforced because
-    # this loop only iterated the (then DOC_DIRS-only) result.
+    # docs/standards, docs/doctrine) docs. The freshness loop below must
+    # cover tier-1 too — technical_guide.md's **Tracks:** line was previously
+    # unenforced because this loop only iterated the (then DOC_DIRS-only)
+    # result.
     docs = find_docs()
     if not docs:
         print("No docs to check (no tier-1 docs on disk; "
-              "docs/components/ + docs/standards/ are empty).")
+              "docs/components/, docs/standards/, docs/doctrine/ are empty).")
         return 0
 
     any_stale = False

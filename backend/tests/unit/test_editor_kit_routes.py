@@ -322,7 +322,15 @@ class _FakeBlob:
         self._registry = registry
         self.cache_control = None
 
-    def upload_from_string(self, data, content_type=None):
+    def upload_from_string(self, data, content_type=None,
+                           if_generation_match=None):
+        # if_generation_match=0 means "only if this object does not exist"
+        # (GCS's compare-and-swap). Modelled here because the draft-snapshot
+        # ring RELIES on it to claim ids under concurrent saves -- a fake that
+        # ignored the precondition would report those tests passing while the
+        # real bucket rejected the write (bd polyglot-pdf-y2l0p).
+        if if_generation_match == 0 and self.name in self._registry:
+            raise _FakePreconditionFailed(self.name)
         self._registry[self.name] = {
             "data": data,
             "content_type": content_type,
@@ -340,6 +348,10 @@ class _FakeNotFound(Exception):
     pass
 
 
+class _FakePreconditionFailed(Exception):
+    """Stands in for google.cloud.exceptions.PreconditionFailed."""
+
+
 class _FakeBucket:
     def __init__(self, registry):
         self._registry = registry
@@ -354,6 +366,7 @@ def _gcs_store(registry, prefix="form-kits"):
     store.prefix = prefix
     store._bucket = _FakeBucket(registry)
     store._not_found_exc = _FakeNotFound
+    store._precondition_exc = _FakePreconditionFailed
     def _listed(bucket_name, prefix):
         # Listed blobs carry a working .delete() so destructive paths can be
         # driven here (bd polyglot-pdf-6x1j -- delete_kit was the only impl
@@ -511,6 +524,13 @@ class _PublishedStore:
 
     async def load_pdf_bytes(self, kit_id, pdf_file="form.pdf"):
         return b"%PDF"
+
+    async def put_draft_snapshot(self, kit_id, schema):
+        # The save path snapshots the current schema before
+        # overwriting it (bd polyglot-pdf-y2l0p). A stand-in store
+        # must carry the same contract as the real one, or these
+        # tests exercise a store that cannot exist.
+        return "1"
 
     async def put_schema(self, kit_id, schema, schema_file="schema.json"):
         self.saved = (kit_id, schema, schema_file)
@@ -2385,6 +2405,13 @@ def test_write_paths_fail_closed_on_metadata_store_error(client, monkeypatch):
 
         async def load_metadata(self, kit_id):
             raise FormKitStoreError("transient GCS failure")
+
+        async def put_draft_snapshot(self, kit_id, schema):
+            # The save path snapshots the current schema before
+            # overwriting it (bd polyglot-pdf-y2l0p). A stand-in store
+            # must carry the same contract as the real one, or these
+            # tests exercise a store that cannot exist.
+            return "1"
 
         async def put_schema(self, *a, **k):
             raise AssertionError("write reached despite unreadable metadata")

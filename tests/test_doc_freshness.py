@@ -240,6 +240,236 @@ class TestFreshnessScanCoversTier1:
         docs = freshness.find_docs()
         assert doctrine_doc in docs
 
+    # bd polyglot-pdf-3t190: three comment/docstring sites in
+    # scripts/check_doc_freshness.py hand-list DOC_DIRS' membership as prose
+    # ("docs/components/*.md / docs/standards/*.md") rather than deriving it,
+    # so adding docs/doctrine to DOC_DIRS (bd riffn) silently desynced them --
+    # the classic enumerate-the-set miss (CLAUDE.md scar #7): some sites were
+    # updated, three were not.
+    #
+    # bd polyglot-pdf-u3miz: the first cut of this pin used a whole-file
+    # `source.count(d) >= 2` threshold, which was VACUOUS -- the DOC_DIRS
+    # assignment itself plus two ALREADY-correct sites (find_docs() and
+    # check_doc_conventions() docstrings) satisfy count>=2 for every entry
+    # regardless of whether the three sites this bead actually fixes are
+    # stale. Guard the PROPERTY (each of these three specific prose blocks
+    # individually names every DOC_DIRS entry), not a proxy count that can
+    # be satisfied by unrelated text elsewhere in the file. Isolate each
+    # block by a stable anchor string near it, independent of exact line
+    # numbers so a later reflow doesn't false-fail this test.
+    # bd polyglot-pdf-uquqs: the second cut of this test bounded each site's
+    # window by the NEXT anchor in a shared file-order list, replacing a
+    # magic 400-char constant. That approach only works when anchors sit
+    # CLOSE together -- it broke for the module-docstring site, whose "next"
+    # anchor (the main() comment, deep in the file) is ~29,000 chars away,
+    # so the computed window swallowed several ALREADY-correct sites in
+    # between and passed vacuously even when the module docstring itself
+    # was stale. Guard the property directly instead: give each site an
+    # EXPLICIT (start_anchor, end_anchor) pair that brackets exactly its own
+    # paragraph/comment/string, independent of any other site's position.
+    # bd polyglot-pdf-ly00c: two more DOC_DIRS prose sites (find_docs() and
+    # check_doc_conventions()'s own docstrings) were correct but unpinned --
+    # the bd u3miz test-file comment even named them as "ALREADY-correct",
+    # yet they were never added here. Pin the whole set, not the subset that
+    # happened to motivate the first fix.
+    _SITE_ANCHORS = [
+        (
+            "This script does two warn-only checks in one pass:",
+            "2. **Sprint-archive protocol.**",
+            "module docstring",
+        ),
+        (
+            "find_docs() returns tier-1",
+            "docs = find_docs()",
+            "main() find_docs() comment",
+        ),
+        (
+            "No docs to check (no tier-1 docs on disk",
+            "return 0",
+            "empty-corpus print",
+        ),
+        (
+            "Return tier-1 + tier-2 docs to scan for freshness, sorted.",
+            "docs = list(find_tier1_docs())",
+            "find_docs() docstring",
+        ),
+        (
+            "Scan tier-1 + tier-2 docs for forbidden current-state-only violations.",
+            "findings: list[tuple[Path, str]] = []",
+            "check_doc_conventions() docstring",
+        ),
+    ]
+
+    @pytest.mark.parametrize("start_anchor,end_anchor,block_name", _SITE_ANCHORS)
+    def test_each_doc_dirs_prose_site_names_every_entry(
+        self, start_anchor, end_anchor, block_name
+    ):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find(start_anchor)
+        assert idx != -1, (
+            f"start anchor {start_anchor!r} for the {block_name!r} prose "
+            f"block not found -- the site may have been reworded; update "
+            f"this test's anchor deliberately, don't just delete it."
+        )
+        end_idx = source.find(end_anchor, idx + len(start_anchor))
+        assert end_idx != -1, (
+            f"end anchor {end_anchor!r} for the {block_name!r} prose block "
+            f"not found after its start -- the site may have been "
+            f"reworded; update this test's anchor deliberately."
+        )
+        # A tight, EXPLICIT boundary for exactly this site's own paragraph --
+        # cannot swallow a sibling site regardless of how any block (this
+        # one or another) is reworded, because the end anchor is specific to
+        # THIS site, not derived from another site's position.
+        window = source[idx:end_idx]
+        for d in freshness.DOC_DIRS:
+            assert d in window, (
+                f"the {block_name!r} prose block does not mention DOC_DIRS "
+                f"entry {d!r} -- this is the exact desync bd 3t190 was filed "
+                f"against (some sites were updated, this one was not)."
+            )
+
+    # bd polyglot-pdf-6j0dj: a FOURTH stale enumeration site (missed by
+    # 3t190's own set-enumeration -- CLAUDE.md scar #7 recurring one level
+    # in). Rephrased to a generic "any DOC_DIRS subdirectory" claim rather
+    # than hand-listing members again, so it cannot desync the same way a
+    # fifth DOC_DIRS addition would otherwise silently miss it. Pin that it
+    # stays generic (does not regress to a hand-listed two-directory form).
+    def test_is_sprint_plan_docstring_refers_to_doc_dirs_generically(self):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find("def is_sprint_plan")
+        assert idx != -1, "is_sprint_plan def not found -- was it renamed?"
+        window = source[idx: idx + 1200]
+        assert "DOC_DIRS" in window, (
+            "is_sprint_plan's docstring no longer refers to DOC_DIRS "
+            "generically -- if it now hand-lists directory names again, "
+            "restore the generic phrasing or extend "
+            "test_each_doc_dirs_prose_site_names_every_entry to cover it."
+        )
+
+    # bd polyglot-pdf-lm2oq: CONVENTION_ONLY_DOCS (added by bd r8d9r) is a
+    # SECOND membership list feeding check_doc_conventions()'s target union,
+    # alongside TIER1_DOCS and DOC_DIRS -- but unlike DOC_DIRS it had no
+    # prose pin, which is exactly the unpinned-enumeration shape bd 3t190
+    # burned six review rounds on. Pin the two sites that enumerate the
+    # CONVENTION-SCANNED set specifically (not the freshness-only set, which
+    # DOC_DIRS' _SITE_ANCHORS above already covers): check_doc_conventions()'s
+    # own docstring, and docs/doc-architecture.md's "Sprint plans are exempt"
+    # paragraph (the one enumeration site outside the script).
+    def test_check_doc_conventions_docstring_names_convention_only_docs(self):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        idx = source.find(
+            "Scan tier-1 + tier-2 docs for forbidden current-state-only violations."
+        )
+        assert idx != -1, "check_doc_conventions() docstring anchor not found"
+        end_idx = source.find("findings: list[tuple[Path, str]] = []", idx)
+        assert end_idx != -1
+        window = source[idx:end_idx]
+        assert "CONVENTION_ONLY_DOCS" in window, (
+            "check_doc_conventions()'s docstring enumerates its scanned set "
+            "but no longer names CONVENTION_ONLY_DOCS -- this is the exact "
+            "desync shape CONVENTION_ONLY_DOCS was never pinned against "
+            "(bd polyglot-pdf-lm2oq)."
+        )
+
+    def test_doc_architecture_sprint_plan_paragraph_names_the_exemption_mechanism(
+        self,
+    ):
+        # doc-architecture.md deliberately does NOT hand-list the scanned
+        # set's membership (bd polyglot-pdf-jfq16's lesson, applied
+        # preemptively) -- so this doesn't assert "CONVENTION_ONLY_DOCS"
+        # appears verbatim. It asserts the paragraph still points at the
+        # SOURCE OF TRUTH (is_sprint_plan()'s docstring in the script)
+        # rather than re-stating a membership list that could desync again.
+        doc_path = (
+            pathlib.Path(__file__).resolve().parent.parent
+            / "docs" / "doc-architecture.md"
+        )
+        text = doc_path.read_text(encoding="utf-8")
+        idx = text.find("Sprint plans are exempt from this rule.")
+        assert idx != -1, "the 'Sprint plans are exempt' paragraph moved or was reworded"
+        end_idx = text.find("\n\n", idx)
+        window = text[idx:end_idx if end_idx != -1 else idx + 1500]
+        assert "is_sprint_plan()" in window and "check_doc_freshness.py" in window, (
+            "the 'Sprint plans are exempt' paragraph no longer points at "
+            "is_sprint_plan()'s docstring in scripts/check_doc_freshness.py "
+            "as the source of truth for the scanned-set membership -- if it "
+            "now hand-lists members again, that's the desync shape "
+            "bd polyglot-pdf-lm2oq / jfq16 exist to prevent."
+        )
+
+    # bd polyglot-pdf-09e35: check_doc_conventions()'s docstring used to
+    # claim the tier-1 scan covers "docs/*.md top-level files" -- wrong,
+    # TIER1_DOCS is exactly the three named entries below, and several real
+    # docs/*.md top-level files (doc-architecture.md, schema_format.md,
+    # branch-protection-setup.md, beads-setup.md,
+    # archive_completed_plans.md) are NOT in it. Pin the actual membership
+    # directly so a future docstring claim can't silently drift from it
+    # again -- criterion 2 of the bead requires this exact pin, not just a
+    # mention-of-a-different-list check (which is what lm2oq's tests above
+    # cover; that's a distinct claim).
+    def test_tier1_docs_is_exactly_the_three_named_entries(self):
+        assert freshness.TIER1_DOCS == [
+            "CLAUDE.md",
+            "docs/INDEX.md",
+            "docs/technical_guide.md",
+        ], (
+            "TIER1_DOCS membership changed -- if this is a deliberate "
+            "addition/removal, update this pin AND re-check every prose "
+            "site that describes TIER1_DOCS's scope (bd polyglot-pdf-09e35) "
+            "for staleness, don't just widen this assertion."
+        )
+
+    # bd polyglot-pdf-r8d9r: docs/doc-architecture.md -- the file that
+    # DEFINES the current-state-only rule -- was exempt from the convention
+    # scan that enforces it (not in TIER1_DOCS, not under DOC_DIRS). It
+    # can't simply join TIER1_DOCS: TRACKS_RE.search() takes the file's
+    # FIRST `**Tracks:**` mention -- its own intro prose, not the fenced
+    # **Tracks:** example further down -- and would misparse that prose as
+    # a genuine declaration, trying to freshness-check nonexistent globs.
+    # CONVENTION_ONLY_DOCS covers it for the convention scan specifically,
+    # without subjecting it to the freshness-staleness half.
+    def test_doc_architecture_is_in_convention_only_docs(self):
+        assert "docs/doc-architecture.md" in freshness.CONVENTION_ONLY_DOCS
+
+    def test_doc_architecture_is_convention_scanned(self, tmp_path, monkeypatch):
+        # Integration-level: a REAL chain violation (the canonical
+        # "Previously: <date>" shape, no incidental keyword collisions) in
+        # THIS file must be caught by check_doc_conventions() -- not merely
+        # present in a list somewhere. Point REPO_ROOT at a synthetic tree so
+        # this doesn't require mutating the real repo file.
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "TIER1_DOCS", [])
+        monkeypatch.setattr(freshness, "DOC_DIRS", [])
+        doc_dir = tmp_path / "docs"
+        doc_dir.mkdir()
+        stacked_stamp_doc = doc_dir / "doc-architecture.md"
+        stacked_stamp_doc.write_text(
+            "# Doc architecture\n\n"
+            "*Last updated: 2026-08-18. Previously: 2026-08-17 a different "
+            "fix landed.*\n\nbody\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            freshness, "CONVENTION_ONLY_DOCS", ["docs/doc-architecture.md"]
+        )
+        findings = freshness.check_doc_conventions(repo_root=tmp_path)
+        assert findings, (
+            "docs/doc-architecture.md was NOT convention-scanned -- a "
+            "chain-shaped stamp in it should have been caught and was not "
+            "(the exact regression bd r8d9r was filed against)."
+        )
+        # Negative control: the SAME setup with CONVENTION_ONLY_DOCS emptied
+        # must find NOTHING -- proving the finding above came from being in
+        # that list, not from some other scan path picking the file up.
+        monkeypatch.setattr(freshness, "CONVENTION_ONLY_DOCS", [])
+        findings_without_coverage = freshness.check_doc_conventions(repo_root=tmp_path)
+        assert findings_without_coverage == [], (
+            "check_doc_conventions() found the doc even with "
+            "CONVENTION_ONLY_DOCS emptied -- the positive assertion above "
+            "is not actually testing CONVENTION_ONLY_DOCS coverage."
+        )
+
     def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
         # Acceptance test from the bead: an intentionally-stale stamp on a
         # tier-1 doc that has a Tracks line gets flagged. We point a fake
@@ -834,9 +1064,11 @@ class TestCheckDocConventionsOnTmpDocs:
         assert freshness.is_sprint_plan(pathlib.Path("docs/sprint_1_harness_plan.md"))
         assert freshness.is_sprint_plan(pathlib.Path("docs/archive/sprint_3_voice_plan.md"))
         # location boundary: a sprint_-named doc NOT at docs/ root or archive/ is
-        # NOT a plan (must still be convention-scanned).
+        # NOT a plan (must still be convention-scanned). Covers all THREE
+        # DOC_DIRS members (bd polyglot-pdf-to61i) -- doctrine was missing.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/components/sprint_vad.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("docs/standards/sprint_conventions.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/doctrine/sprint_planning.md"))
         # non-sprint names are never plans.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/technical_guide.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("CLAUDE.md"))
@@ -864,3 +1096,51 @@ class TestCurrentRepoIsCleanOfChainsAndHistorySections:
                 "dev_journal.md. See CLAUDE.md 'Doc maintenance rules'.\n\n"
                 "Violations:\n" + "\n".join(lines)
             )
+
+
+class TestEveryTier2DocHasTracksOrIsExempt:
+    """CI gate: a docs/standards/*.md or docs/components/*.md file with no
+    ``**Tracks:**`` line is SILENTLY skipped by the freshness-staleness half
+    of the scan (parse_tracks() returns [] -> "no dependencies" -> never
+    flagged STALE) -- not reported, just invisibly never-checked. That's the
+    opposite of the doc-freshness system's whole point: a doc going stale
+    unnoticed. bd polyglot-pdf-teizj found docs/standards/schema-key-visibility.md
+    in exactly this state (real tracked source files cited throughout its
+    prose, but no **Tracks:** line to make the checker see them).
+
+    Pin the SET, not the instance: every doc under DOC_DIRS's two content
+    subdirectories (docs/standards, docs/components -- docs/doctrine docs are
+    process/workflow docs and are not expected to track source code the same
+    way) must carry a **Tracks:** line UNLESS it's on the explicit exemption
+    list below. A new doc added without one, and without being deliberately
+    added to the exemption list, fails this test instead of silently opting
+    out.
+    """
+
+    # Index/README pages have no tracked source of their own -- they point at
+    # other docs, not code. Adding a doc here must be a deliberate choice,
+    # same discipline as CONVENTION_ONLY_DOCS / TIER1_DOCS.
+    EXEMPT_FROM_TRACKS_LINE = {
+        "docs/standards/README.md",
+        "docs/components/README.md",
+    }
+
+    def test_every_standards_and_components_doc_has_tracks_or_is_exempt(self):
+        missing = []
+        for rel_dir in ("docs/standards", "docs/components"):
+            for path in sorted((freshness.REPO_ROOT / rel_dir).glob("*.md")):
+                rel = path.relative_to(freshness.REPO_ROOT).as_posix()
+                if rel in self.EXEMPT_FROM_TRACKS_LINE:
+                    continue
+                text = path.read_text(encoding="utf-8")
+                if not freshness.TRACKS_RE.search(text):
+                    missing.append(rel)
+        assert not missing, (
+            "the following docs/standards or docs/components docs have no "
+            "**Tracks:** line, so check_doc_freshness.py silently skips "
+            "them instead of ever reporting OK/STALE -- either add a "
+            "**Tracks:** line naming the source it documents, or add the "
+            "path to TestEveryTier2DocHasTracksOrIsExempt.EXEMPT_FROM_TRACKS_LINE "
+            "as a deliberate choice (bd polyglot-pdf-teizj):\n  "
+            + "\n  ".join(missing)
+        )

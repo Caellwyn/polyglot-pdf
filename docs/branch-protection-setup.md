@@ -1,6 +1,9 @@
 # Branch-protection setup (one-time, agent-executable)
 
-*Last updated: 2026-08-05 (docs audit bd polyglot-pdf-2zk3: timestamp stale; file last modified 2026-07-28 with Opus-5 reviewer references).*
+*Last updated: 2026-08-18 (bd polyglot-pdf-wx7j: the two review-flow mentions
+described the outer review as unconditionally Opus-5; reworded to name the
+three-way fork -- Opus for a source diff, Haiku docs-reviewer for docs-only,
+none for trivial.)*
 
 This configures the GitHub rulesets the swarm workflow depends on. Run it once
 per repo. An agent can execute it via the `gh` CLI (shown) or the GitHub MCP if
@@ -59,8 +62,9 @@ gh api repos/<OWNER>/<REPO> --jq .allow_auto_merge    # expect: false
 This ruleset requires PRs into `dev` and blocks deletion / force-pushes.
 
 **Code review is NOT configured here, and there is NO external reviewer.** Review
-is entirely Claude-based -- a fresh-eyes inner loop plus an Opus-5 outer review,
-run as orchestrator-driven subagents by the closeout skill, not any GitHub app or
+is entirely Claude-based -- a fresh-eyes inner loop plus ONE outer adversarial pass
+(Opus for a source diff, Haiku for docs-only, none for trivial), run as
+orchestrator-driven subagents by the closeout skill, not any GitHub app or
 ruleset rule. The former `copilot_code_review` ruleset rule (and its successor, the
 OpenAI Codex GitHub app) are both retired (bd `polyglot-pdf-hrn.8`/`hrn.9` for the
 Copilot->Codex cutover; the maintainer's Codex subscription then ended
@@ -144,11 +148,12 @@ You should see the "To Dev" ruleset `active` with `pull_request`, `deletion`, an
 
 ## Notes
 
-- **Code review is Claude-based and procedural, not a ruleset.** The fresh-eyes +
-  Opus-5 outer review runs in the closeout skill; there is nothing to configure
-  in a branch ruleset for it, and no external reviewer (Copilot and Codex both
-  retired -- bd `polyglot-pdf-hrn.8`/`hrn.9`; Codex ended 2026-07-08). Do not add a
-  `copilot_code_review` rule.
+- **Code review is Claude-based and procedural, not a ruleset.** The fresh-eyes
+  inner loop plus the one outer adversarial pass (Opus for a source diff, Haiku
+  for docs-only, none for trivial) run in the closeout skill; there is nothing
+  to configure in a branch ruleset for it, and no external reviewer (Copilot and
+  Codex both retired -- bd `polyglot-pdf-hrn.8`/`hrn.9`; Codex ended
+  2026-07-08). Do not add a `copilot_code_review` rule.
 - **GitHub MCP path:** if a GitHub MCP server is connected, it can create these
   rulesets too -- pass the same JSON bodies. Do not assume the MCP exists; the
   `gh` CLI is the portable path.

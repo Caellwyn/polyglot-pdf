@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 import os
 import re
 import shutil
@@ -55,6 +56,33 @@ def safe_filename(name: Any, default: str) -> str:
 # stores, and the leading underscore is outside _KIT_ID_RE, so an archive dir
 # can never be mistaken for a kit.
 _ARCHIVE_DIR = "_archive"
+
+# DRAFT SNAPSHOTS (bd polyglot-pdf-y2l0p) live at <kit_id>/_DRAFTS_DIR/<n>/ and
+# are a DIFFERENT thing from the revision archive above, deliberately kept in a
+# separate namespace.
+#
+# The archive answers "produce the exact bytes a confirmation record names", so
+# it is keyed on the revision MARKER. A draft has no marker -- it was never
+# published and no record names it -- and writing one into _archive/ would
+# pollute the keyspace retrieval depends on (bd polyglot-pdf-xzw5 tightened
+# exactly that keying).
+#
+# This answers a different question: "an editor's labour must not be
+# destroyable by another editor" (maintainer principle, 2026-08-08). A bounded
+# ring of the last N saves, oldest evicted, keyed on a monotonic counter rather
+# than anything content-derived -- two saves of an identical schema are still
+# two distinct events in someone's working history.
+#
+# Same underscore prefix, so it inherits the archive's invisibility for free:
+# list_kit_files ignores anything deeper than <kit>/<file>, and the leading
+# underscore is outside _KIT_ID_RE so it can never be read as a kit.
+_DRAFTS_DIR = "_drafts"
+
+# Maintainer decision (2026-08-18): keep the last 10 saves per kit. Schemas are
+# small JSON, so ~10x one schema per kit is negligible, and 10 covers the
+# accident this exists for -- a stale tab or a second editor saving over
+# today's work -- without keeping history nobody will ever want.
+DRAFT_SNAPSHOT_LIMIT = 10
 
 # A revision marker is kit-CONTROLLED (an edition_date typed by an author, or a
 # computed `sha256:<12hex>`), and it becomes a PATH SEGMENT -- so it is
@@ -168,6 +196,23 @@ class FormKitStoreError(Exception):
 
 class FormKitNotFound(FormKitStoreError):
 	"""Raised when a kit or requested file cannot be located."""
+
+
+class _SnapshotIdTaken(FormKitStoreError):
+	"""A draft-snapshot id was claimed by a concurrent save; try the next one.
+
+	Internal retry signal -- put_draft_snapshot catches it and advances.
+
+	SUBCLASSES FormKitStoreError deliberately. _upload_json is shared by
+	put_schema, put_metadata, put_json_artifact and both archived-revision
+	writes, and its `except Exception -> FormKitStoreError` is the fail-closed
+	guarantee every route depends on. As a bare Exception this escaped that
+	guarantee for all five untouched writers: a 412 from any other source (a
+	retention policy, an object hold, a bucket-level precondition) on a plain
+	put_schema became an unhandled 500 rather than a handled 502 -- on the
+	editor's save route, the very path this bead hardened (Opus fresh-eyes
+	round 8).
+	"""
 
 
 def _safe_str(value: Any, default: str) -> str:
@@ -330,6 +375,22 @@ class FormKitStore:
 		own schema, so it matches what that revision's confirmation records
 		carry. Implementations encode it into a single safe path segment.
 		"""
+		raise NotImplementedError
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		"""Snapshot the CURRENT schema before an editor save overwrites it.
+
+		Returns the snapshot id. Implementations keep at most
+		DRAFT_SNAPSHOT_LIMIT per kit, evicting the oldest.
+		"""
+		raise NotImplementedError
+
+	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
+		"""Snapshot ids for this kit, NEWEST FIRST, as {"id", "savedAt"}."""
+		raise NotImplementedError
+
+	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		"""The snapshotted schema (FormKitNotFound if absent)."""
 		raise NotImplementedError
 
 	async def load_archived_revision(self, kit_id: str, marker: str) -> dict:
@@ -625,6 +686,253 @@ class LocalFormKitStore(FormKitStore):
 		except OSError as exc:
 			raise FormKitStoreError(f"Unable to list form kits: {exc}") from exc
 
+	# --- draft snapshots (bd polyglot-pdf-y2l0p) -----------------------------
+
+	def _drafts_dir(self, kit_id: str) -> Path:
+		return self._kit_dir(kit_id) / _DRAFTS_DIR
+
+	def _snapshot_ids(self, kit_id: str,
+					  include_unwritten: bool = False) -> list[str]:
+		"""Existing snapshot ids, OLDEST first, ignoring anything unparseable.
+
+		A directory with no schema.json is a CLAIMED-BUT-UNWRITTEN id: the
+		claim creates the directory as its lock, so any failure between the
+		mkdir and the write (full disk, killed worker, recycled instance)
+		leaves an empty one behind. Those are excluded by default, because
+		counting them as ring members meant abandoned claims EVICTED REAL WORK
+		-- measured at 10 listed entries with 1 actually restorable, the three
+		genuine snapshots deleted to make room for empty directories (Opus
+		fresh-eyes round 7). The GCS twin already excluded this shape; the
+		local store did not.
+
+		include_unwritten=True is for the CLAIM path only, which must see every
+		directory or it would hand out an id another saver already holds.
+
+		Filesystem trouble becomes FormKitStoreError, never a raw OSError: the
+		save path catches only FormKitStoreError, so an escaping OSError would
+		500 the save and LOSE THE EDITOR'S CURRENT WORK -- the opposite of this
+		feature's whole point, and a regression on a path that previously could
+		not fail.
+		"""
+		root = self._drafts_dir(kit_id)
+		try:
+			if not root.exists():
+				return []
+			# isascii() AND isdigit(): str.isdigit() is True for superscript and
+			# circled digits that int() then REJECTS with ValueError -- which
+			# escaped the OSError wrap below and 500'd the save, losing the
+			# editor's current work. Exactly the harm this feature exists to
+			# prevent, from a directory name.
+			ids = [c.name for c in root.iterdir()
+				   if c.is_dir() and c.name.isascii() and c.name.isdigit()
+				   and (include_unwritten or (c / "schema.json").exists())]
+		except (OSError, ValueError) as exc:
+			# ValueError too: the filter and the sort must never disagree, but
+			# if they ever do again this becomes a 502 on the LIST rather than
+			# a 500 on the SAVE.
+			raise FormKitStoreError(
+				f"Unable to list draft snapshots for {kit_id}: {exc}"
+			) from exc
+		# Numeric, not lexical: "10" must follow "9", or eviction drops the
+		# wrong snapshot the moment the ring passes single digits.
+		return sorted(ids, key=int)
+
+	def _reap_if_still_empty(self, kit_id: str, snapshot_id: str) -> None:
+		"""Delete an abandoned claim, without ever removing real work.
+
+		THREE guards here, each load-bearing for a DIFFERENT file, plus a
+		FOURTH at the only call site (the `>= next_id` id bound -- see the
+		comment there). Every guard below keys on directory CONTENTS, so none
+		of them protects another saver's freshly-claimed EMPTY directory; do
+		not read this list as complete without that one. None is redundant:
+
+		1. The schema.json early return protects a COMPLETED snapshot's
+		   meta.json. The unlink below runs BEFORE rmdir is ever reached, so
+		   without this return a finished snapshot loses its stamp and its
+		   savedAt goes null -- the only field distinguishing entries in a
+		   recovery list of bare counters. Note the victim is the METADATA,
+		   not the schema -- the schema survives without this return, because
+		   rmdir refuses; checking only the schema will wrongly suggest this
+		   guard is dead.
+		2. Unlinking ONLY meta.json protects a saver mid-write, whose
+		   directory holds just .schema.json.<pid>.<hex>.tmp. Removing that
+		   would let rmdir succeed and kill the write.
+		3. rmdir rather than rmtree protects a schema.json that appears after
+		   the check in guard 1: rmdir refuses a non-empty directory.
+
+		Trusting a listing taken earlier is what lost 85 of 360 concurrent
+		trials (round 8): by the time the delete ran, the listing was stale.
+		"""
+		target = self._drafts_dir(kit_id) / snapshot_id
+		try:
+			if (target / "schema.json").exists():
+				# GUARD 1 -- completed. Returning protects its meta.json from
+				# the unlink below.
+				return
+			# GUARD 2 -- only meta.json, never a mid-write temp file.
+			for leftover in target.iterdir():
+				if leftover.name == "meta.json":
+					leftover.unlink()
+			# GUARD 3 -- rmdir, NOT rmtree.
+			target.rmdir()
+		except OSError:
+			# Non-empty (someone won the race -- correct outcome), or already
+			# gone, or unreadable. Never fatal: an un-reaped claim costs a
+			# little disk, a wrong delete costs an editor's work.
+			return
+
+	def _claim_snapshot_id(self, kit_id: str) -> tuple["Path", str]:
+		"""Create (and thereby CLAIM) the next free snapshot directory.
+
+		Returns (directory, id). The mkdir is the lock: a concurrent caller
+		that picked the same id gets FileExistsError and moves on to the next.
+		"""
+		root = self._drafts_dir(kit_id)
+		try:
+			root.mkdir(parents=True, exist_ok=True)
+		except OSError as exc:
+			# _drafts present as a FILE (or otherwise uncreatable) raises
+			# FileExistsError even under exist_ok. That must stay a
+			# FormKitStoreError so the SAVE path's best-effort guard swallows
+			# it -- letting it escape would 500 the save and lose the editor's
+			# current work, the regression round 4 closed.
+			raise FormKitStoreError(
+				f"Unable to create the draft snapshot directory for {kit_id}: {exc}"
+			) from exc
+		# include_unwritten: the claim must see EVERY directory, including ones
+		# another saver has claimed but not yet written, or it would hand out
+		# an id already held.
+		existing = self._snapshot_ids(kit_id, include_unwritten=True)
+		candidate = int(existing[-1]) + 1 if existing else 1
+		# Bounded: the ring holds DRAFT_SNAPSHOT_LIMIT, so even a burst of
+		# simultaneous savers cannot walk far before finding a free id.
+		for _ in range(DRAFT_SNAPSHOT_LIMIT + 64):
+			target = root / str(candidate)
+			try:
+				target.mkdir()
+				return target, str(candidate)
+			except FileExistsError:
+				candidate += 1
+			except OSError as exc:
+				raise FormKitStoreError(
+					f"Unable to claim a draft snapshot id for {kit_id}: {exc}"
+				) from exc
+		raise FormKitStoreError(
+			f"Unable to claim a draft snapshot id for {kit_id}")
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		# CLAIM the id with an atomic mkdir rather than trusting the listing.
+		# Computing next_id from a listing and then writing to it is a TOCTOU:
+		# two concurrent saves both read the same last id, both pick the same
+		# next one, and the second write silently destroys the first's
+		# snapshot. Measured at 4 concurrent saves: ids ['1','1','1','1'], one
+		# snapshot surviving out of four.
+		#
+		# That is the bead's CENTRAL case, not an edge one -- "editor B, or A
+		# from a stale tab, saves over it" is two saves at once -- so the
+		# protection was silently absent exactly when it was needed (Opus
+		# fresh-eyes round 6).
+		#
+		# os.mkdir is atomic on both POSIX and Windows: whoever creates the
+		# directory owns the id, and the loser retries with the next one.
+		target, next_id = await anyio.to_thread.run_sync(
+			lambda: self._claim_snapshot_id(kit_id))
+		# The atomic temp+replace writer the archive uses: a concurrent read
+		# must never see half a schema.
+		await self._write_json(target / "schema.json", schema)
+		await self._write_json(target / "meta.json", {
+			"id": next_id,
+			"savedAt": datetime.now(timezone.utc).isoformat(),
+		})
+
+		# Reap abandoned claims -- empty directories left by a failure between
+		# the mkdir and the write. They no longer count as ring members (see
+		# _snapshot_ids), but without this they would accumulate forever and
+		# push the claim counter ever upward.
+		#
+		# TWO SEPARATE PROTECTIONS, for OPPOSITE cases. BOTH ARE LOAD-BEARING;
+		# deleting either loses snapshots:
+		#
+		#   * `int(orphan) >= int(next_id)` protects HIGHER in-flight claims.
+		#     A saver that claimed 3 while the max was 2 is still running when
+		#     others have raced to 8, so (orphan=8, next_id=3) is a common
+		#     shape, not a contrived one -- measured at 72 bound-only skips
+		#     across 480 concurrent saves. Without the bound the reaper rmdir's
+		#     such a claim out from under its writer, whose _write_json then
+		#     dies: 11 failed snapshot writes in 120 trials, versus 0 with it.
+		#     Pinned by test_the_reaper_SPARES_a_higher_in_flight_claim.
+		#
+		#   * _reap_if_still_empty's last-instant re-check protects LOWER ids,
+		#     where a concurrent saver's schema.json lands between these two
+		#     listings. Measured at 85 silent losses in 360 trials without it.
+		#
+		# `orphan in written` is the one genuinely redundant term -- guard 1
+		# already skips anything completed -- so it is the safe half to delete.
+		# The id bound is not.
+		written = set(self._snapshot_ids(kit_id))
+		for orphan in self._snapshot_ids(kit_id, include_unwritten=True):
+			if orphan in written or int(orphan) >= int(next_id):
+				continue
+			await anyio.to_thread.run_sync(
+				lambda o=orphan: self._reap_if_still_empty(kit_id, o))
+
+		# Evict AFTER the write: a failure here leaves too MANY snapshots
+		# rather than too few, the safe direction when the point is not losing
+		# work.
+		for stale in self._snapshot_ids(kit_id)[:-DRAFT_SNAPSHOT_LIMIT]:
+			try:
+				await anyio.to_thread.run_sync(
+					lambda d=self._drafts_dir(kit_id) / stale:
+						shutil.rmtree(d, ignore_errors=True))
+			except OSError as exc:  # pragma: no cover - defensive
+				_log.warning("draft_snapshot_evict_failed",
+							 kit_id=kit_id, snapshot=stale, error=str(exc))
+		return next_id
+
+	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
+		out: list[dict] = []
+		for sid in self._snapshot_ids(kit_id):
+			meta_path = self._drafts_dir(kit_id) / sid / "meta.json"
+			saved_at = None
+			if meta_path.exists():
+				try:
+					raw = await anyio.to_thread.run_sync(
+						lambda p=meta_path: p.read_text(encoding="utf-8"))
+					saved_at = json.loads(raw).get("savedAt")
+				except (OSError, json.JSONDecodeError, UnicodeDecodeError,
+						AttributeError):
+					# An unreadable stamp must not hide the snapshot itself --
+					# the schema is what someone is trying to recover.
+					#
+					# AttributeError: valid JSON that is not an OBJECT (a list,
+					# a bare string) has no .get, and that escaped to a 500 on
+					# the LIST route -- unreachable recovery from a one-byte
+					# corruption in a metadata file, while GCS returned 200
+					# with a null stamp. UnicodeDecodeError: non-UTF-8 bytes,
+					# which every sibling in this class already catches.
+					saved_at = None
+			out.append({"id": sid, "savedAt": saved_at})
+		# NEWEST first: the order someone recovering work reads them in.
+		return list(reversed(out))
+
+	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		path = self._drafts_dir(kit_id) / snapshot_id / "schema.json"
+		if not path.exists():
+			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
+		try:
+			raw = await anyio.to_thread.run_sync(
+				lambda: path.read_text(encoding="utf-8"))
+			return json.loads(raw)
+		except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+			# UnicodeDecodeError is a ValueError, NOT an OSError, so it escaped
+			# this wrap and 500'd the RESTORE route while the GCS twin raised
+			# FormKitStoreError -> 502. Every other reader in this class
+			# already catches it; these two draft-snapshot methods were the
+			# only omissions in the file.
+			raise FormKitStoreError(
+				f"Unable to read draft snapshot {snapshot_id} for {kit_id}"
+			) from exc
+
 	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
 
 	def _archive_dir(self, kit_id: str, marker: str) -> Path:
@@ -746,13 +1054,17 @@ class GCSFormKitStore(FormKitStore):
 
 	def __init__(self, bucket_name: str, prefix: Optional[str] = None):
 		from google.cloud import storage
-		from google.cloud.exceptions import NotFound
+		from google.cloud.exceptions import NotFound, PreconditionFailed
 
 		self.bucket_name = bucket_name
 		self.prefix = (prefix or "").strip("/")
 		self._client = storage.Client()
 		self._bucket = self._client.bucket(bucket_name)
 		self._not_found_exc = NotFound
+		# What GCS raises for a failed if_generation_match=0 -- i.e. "another
+		# save already claimed this snapshot id". Held as an attribute so the
+		# test fake can substitute its own.
+		self._precondition_exc = PreconditionFailed
 		_log.info(
 			"form_kits.gcs_store",
 			bucket=self.bucket_name,
@@ -898,20 +1210,39 @@ class GCSFormKitStore(FormKitStore):
 				f"Invalid artifact for {kit_id}/{filename}: {exc}"
 			) from exc
 
-	async def _upload_json(self, blob_path: str, data: dict) -> None:
+	async def _upload_json(self, blob_path: str, data: dict,
+						   if_generation_match: Optional[int] = None) -> None:
 		"""Upload a JSON blob with no-cache so a re-pull after a save is never
-		stale (the editor's save->reload round trip)."""
+		stale (the editor's save->reload round trip).
+
+		if_generation_match=0 uploads ONLY if the object does not already
+		exist, raising _SnapshotIdTaken when it does -- the compare-and-swap
+		that makes concurrent snapshot-id claims safe.
+		"""
 
 		def _upload() -> None:
 			blob = self._bucket.blob(blob_path)
 			blob.cache_control = "no-cache"
+			kwargs = {}
+			if if_generation_match is not None:
+				kwargs["if_generation_match"] = if_generation_match
 			blob.upload_from_string(
 				json.dumps(data, indent=2, ensure_ascii=False) + "\n",
 				content_type="application/json",
+				**kwargs,
 			)
 
+		# getattr, not self._precondition_exc: a store built without going
+		# through __init__ (the ABC's own __new__-based test doubles do this)
+		# would otherwise raise AttributeError from the except CLAUSE itself,
+		# masking the real storage error it was meant to classify. Falling back
+		# to a never-raised sentinel keeps the fail-closed path intact.
+		precondition_exc = getattr(self, "_precondition_exc", _SnapshotIdTaken)
 		try:
 			await anyio.to_thread.run_sync(_upload)
+		except precondition_exc as exc:
+			# A taken id is a RETRY SIGNAL, not a store failure.
+			raise _SnapshotIdTaken(str(exc)) from exc
 		except Exception as exc:  # google API errors are env-specific; fail closed
 			raise FormKitStoreError(
 				f"Unable to write gs://{self.bucket_name}/{blob_path}: {exc}"
@@ -944,6 +1275,146 @@ class GCSFormKitStore(FormKitStore):
 			) from exc
 
 	# --- revision archive (bd polyglot-pdf-w3zw) -----------------------------
+
+	# --- draft snapshots (bd polyglot-pdf-y2l0p) -----------------------------
+
+	async def _snapshot_ids(self, kit_id: str) -> list[str]:
+		"""Existing snapshot ids, OLDEST first. One listing, numeric sort."""
+		# TRAILING SLASH IS LOAD-BEARING, exactly as delete_kit documents below.
+		# _build_blob_path DROPS an empty part, so passing "" produced
+		# "<kit>/_drafts" with no slash -- every blob name then began with
+		# "<kit>/_drafts/", so rest[0] was "" rather than the id, no id ever
+		# parsed, and the whole GCS ring was INERT: next_id stayed "1" forever
+		# and listing returned nothing. The local store passed throughout, which is
+		# why the deployed mode is the one that has to be exercised.
+		prefix = self._build_blob_path(kit_id, _DRAFTS_DIR) + "/"
+
+		def _list() -> list[str]:
+			seen = set()
+			# self._client.list_blobs(bucket_name, ...), the form every sibling
+			# listing here uses -- self._bucket.list_blobs exists on the real
+			# client too, but diverging from the house pattern means the
+			# established fake-bucket harness cannot drive this code at all.
+			for blob in self._client.list_blobs(self.bucket_name, prefix=prefix):
+				rest = blob.name[len(prefix):].split("/")
+				# Same isascii() guard as the local store: the two must agree on
+				# what counts as a snapshot id, or "recovery works identically
+				# in both stores" is false.
+				# len(rest) >= 2 excludes a FOLDER-MARKER blob named exactly
+				# "<kit>/_drafts/7" (GCS consoles and gsutil create these):
+				# without it that registers as snapshot 7, jumping the counter
+				# and showing a phantom entry that 404s on restore.
+				if len(rest) >= 2 and rest[0].isascii() and rest[0].isdigit():
+					seen.add(rest[0])
+			# Numeric, not lexical: "10" must follow "9".
+			return sorted(seen, key=int)
+
+		try:
+			return await anyio.to_thread.run_sync(_list)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to list draft snapshots for {kit_id}: {exc}"
+			) from exc
+
+	async def put_draft_snapshot(self, kit_id: str, schema: dict) -> str:
+		# CLAIM the id, same TOCTOU as the local store: computing next_id from
+		# a listing and then uploading to it lets two concurrent saves pick the
+		# same id, and the second upload destroys the first's snapshot.
+		# Measured at 4 concurrent saves: ids ['3','3','3','3'], three prior
+		# states destroyed.
+		#
+		# if_generation_match=0 is GCS's compare-and-swap -- "only if this
+		# object does not exist". The loser takes the next id.
+		existing = await self._snapshot_ids(kit_id)
+		candidate = int(existing[-1]) + 1 if existing else 1
+		next_id = None
+		# Bounded: the ring holds DRAFT_SNAPSHOT_LIMIT, so even a burst of
+		# simultaneous savers cannot walk far before finding a free id.
+		for _ in range(DRAFT_SNAPSHOT_LIMIT + 64):
+			claim = str(candidate)
+			try:
+				await self._upload_json(
+					self._build_blob_path(kit_id, _DRAFTS_DIR, claim, "schema.json"),
+					schema, if_generation_match=0)
+			except _SnapshotIdTaken:
+				candidate += 1
+				continue
+			next_id = claim
+			break
+		if next_id is None:
+			raise FormKitStoreError(
+				f"Unable to claim a draft snapshot id for {kit_id}")
+		await self._upload_json(
+			self._build_blob_path(kit_id, _DRAFTS_DIR, next_id, "meta.json"),
+			{"id": next_id, "savedAt": datetime.now(timezone.utc).isoformat()})
+
+		for stale in (await self._snapshot_ids(kit_id))[:-DRAFT_SNAPSHOT_LIMIT]:
+			# Same slash, and here it is DESTRUCTIVE without it: "<kit>/_drafts/1"
+			# string-matches 10, 11, 12... so evicting snapshot 1 would delete
+			# most of the ring the moment it passes ten -- in a feature whose
+			# entire purpose is not losing work.
+			stale_prefix = self._build_blob_path(kit_id, _DRAFTS_DIR, stale) + "/"
+
+			def _delete(pfx: str = stale_prefix) -> None:
+				for blob in self._client.list_blobs(self.bucket_name, prefix=pfx):
+					blob.delete()
+
+			try:
+				await anyio.to_thread.run_sync(_delete)
+			except Exception as exc:
+				# Never fatal: an un-evicted snapshot costs a little storage,
+				# failing the save would cost the editor their work.
+				_log.warning("draft_snapshot_evict_failed",
+							 kit_id=kit_id, snapshot=stale, error=str(exc))
+		return next_id
+
+	async def list_draft_snapshots(self, kit_id: str) -> list[dict]:
+		out: list[dict] = []
+		for sid in await self._snapshot_ids(kit_id):
+			blob_path = self._build_blob_path(kit_id, _DRAFTS_DIR, sid, "meta.json")
+
+			def _download(bp: str = blob_path) -> Optional[bytes]:
+				blob = self._bucket.blob(bp)
+				try:
+					return blob.download_as_bytes()
+				except self._not_found_exc:
+					return None
+
+			saved_at = None
+			try:
+				data = await anyio.to_thread.run_sync(_download)
+				if data is not None:
+					saved_at = json.loads(data.decode("utf-8")).get("savedAt")
+			except Exception:
+				saved_at = None  # unreadable stamp must not hide the snapshot
+			out.append({"id": sid, "savedAt": saved_at})
+		return list(reversed(out))
+
+	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		blob_path = self._build_blob_path(
+			kit_id, _DRAFTS_DIR, snapshot_id, "schema.json")
+
+		def _download() -> Optional[bytes]:
+			blob = self._bucket.blob(blob_path)
+			try:
+				return blob.download_as_bytes()
+			except self._not_found_exc:
+				return None
+
+		try:
+			data = await anyio.to_thread.run_sync(_download)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+		if data is None:
+			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
+		try:
+			return json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Unable to parse draft snapshot {snapshot_id} for {kit_id}"
+			) from exc
 
 	async def put_archived_revision(
 		self, kit_id: str, marker: str, schema: dict, metadata: Optional[dict] = None
