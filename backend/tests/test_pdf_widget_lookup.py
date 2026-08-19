@@ -85,6 +85,12 @@ def mock_store(monkeypatch):
     """
     store = MagicMock(name="form_kit_store")
     store.load_pdf_bytes = AsyncMock()
+    # The fill route now runs the client-tier kit gates (bd polyglot-pdf-
+    # vy6id), whose metadata read awaits store.load_metadata. A bare
+    # MagicMock AUTO-CREATES that attribute as a non-awaitable mock; make it
+    # a real async loader returning None (= no metadata -> public kit), the
+    # same contract the real stores honor for absence.
+    store.load_metadata = AsyncMock(return_value=None)
     monkeypatch.setattr(pdf_routes, "get_form_kit_store", lambda: store)
 
     def set_pdf(pdf_bytes: bytes):
