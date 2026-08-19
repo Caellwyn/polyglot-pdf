@@ -10,8 +10,12 @@ import { publishableKitFiles, safeKitFilename,
 interface KitMetadata {
   // Declared so the status gate reads a real field rather than a stray
   // property: this interface omitting `status` is WHY the bundle shipped
-  // drafts and retired forms (bd polyglot-pdf-fqexm).
+  // drafts and retired forms (bd polyglot-pdf-fqexm). `visibility` joined
+  // for the same reason (bd polyglot-pdf-kkos): the firm tier's private
+  // kits must never ship in the world-readable bundle, and an undeclared
+  // field is exactly how a gate silently reads nothing.
   status?: string;
+  visibility?: string;
   label?: string;
   description?: string;
   schema?: string;
@@ -118,7 +122,10 @@ async function collectKits(): Promise<FormKitDescriptor[]> {
     if (!isPubliclyServable(metadata)) {
       console.warn(
         `[form-manifest] Withholding ${entry.name}: status ` +
-        `${JSON.stringify(metadata?.status ?? null)} is not "complete"`,
+        `${JSON.stringify(metadata?.status ?? null)} / visibility ` +
+        `${JSON.stringify(metadata?.visibility ?? null)} is not ` +
+        `publicly servable (needs status "complete" and visibility ` +
+        `"public" or absent)`,
       );
       continue;
     }
