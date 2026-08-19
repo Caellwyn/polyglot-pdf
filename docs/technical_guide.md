@@ -1,35 +1,20 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-vccy: firm-scoped kit visibility -- the four form-kit/fill route rows, the `FIRMS_FIRESTORE_ENABLED` env row, and the new Surface contracts entry 7 -- see [the vccy journal entry](journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for closeout details. Same day, bd polyglot-pdf-y2l0p: the two draft-snapshot routes -- every editor save now copies the current schema into a bounded ring of the last 10 before overwriting, and an editor can list and restore their own overwritten work. Previously bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
-code-line citation in the Surface contracts section now resolves to the code
-it names. x82ii fixed the "2. WS handshake" block (producer/consumer lines,
-all handshake key citations, and the `full_schema` consumer chain -- one
-citation, the secretary-catalog renderer, was pointing at the wrong FILE, not
-just a wrong line) plus the adjacent "3. WS control messages" and "4. Backend
-<-> Gemini Live" blocks, all drifted off the same `websocket_routes.py` code
-motion the ws-protocol.md fix addressed. bxr3p fixed the rest -- section 5
-("Fill round-trip": producer/consumer line numbers, the two-pass
-alias-resolution range, the `_load_kit_dump` def + its actual
-promotion-gate call site, one of 7 call sites, not the one the doc previously
-named) and section 6 ("Confirmation audit trail": the confirm-field chain
-across `request_coordinator.py` / `webFormConnection.ts` /
-`callback_handler.py`, and the confirmation-event shape + all three log sinks
-in `confirmation_logger.py`). Also current: the `PDFFillRequest` line range in
-section 5 does not straddle into `fill_pdf` and the dropped-key example there
-names `form_number`, the key that actually produces `form_id="unknown"` (a
-dropped `kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 +
-qxad. Same week, bd polyglot-pdf-lo88 added the `FIRMS_FIRESTORE_ENABLED` env
-row and the single-live-project correction -- see [the lo88 journal
-entry](journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for
-closeout details. The Surface contracts section is the code-derived
-cross-surface data-contract map for blast-radius review (bd
-polyglot-pdf-n18q).
-Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
-`CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
-section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
-the deploy flow + env vars; per-channel model/auth config detail lives in
-[standards/ai-models.md](standards/ai-models.md) and
-[components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-08-19 (bd polyglot-pdf-xg0pm: Surface contracts section 1's
+`editor_kit_routes.py` line citations re-verified against the current file --
+draft save, the publish-gate `FormSchema.model_validate` + lint gate, and both
+schema read paths had all drifted; also fixed the adjacent `form_kits.py`
+`put_schema` citations in the same paragraph while re-verifying it. Same day,
+bd polyglot-pdf-vf48u: the translate-options route row's "409 on complete
+kits" wording widened to name the write-locked set (complete OR unpublished),
+matching the `/status` row's phrasing.). The Surface contracts section is the
+code-derived cross-surface data-contract map for blast-radius review (bd
+polyglot-pdf-n18q). Continuous-DTI is the production default (`USE_DTI` /
+`CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd
+polyglot-pdf-7872; section-reset is the deprecated fallback, bd
+polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel
+model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md)
+and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
 
@@ -116,7 +101,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
-| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on complete kits -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
+| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on any write-locked kit -- complete OR unpublished -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
@@ -176,16 +161,20 @@ The canonical shape is Pydantic `FormSchema` (`backend/models/form_models.py:883
 rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 - **Validation happens ONLY at the publish gate.** Draft saves
-  (`backend/routes/editor_kit_routes.py:602-646`) check just that `fields` is a
-  list and write the raw dict via the store (`backend/services/form_kits.py:353`
-  local / :565 GCS). The one chokepoint is "mark complete":
-  `FormSchema.model_validate` at `editor_kit_routes.py:1530` plus the zero-ERROR
-  schema-lint gate (`backend/services/schema_lint.py:776`, checked at
-  `editor_kit_routes.py:1571-1600`). Every read path streams the raw stored dict
-  unvalidated (`backend/routes/form_kit_routes.py:194`,
-  `editor_kit_routes.py:553`). *Breaks if bypassed:* a hand-edited or draft kit
-  reaching the voice path carries whatever shape it has -- e.g. a field without
-  `pdf_field_name` is silently never written to the output PDF.
+  (`save_editor_kit_schema`, `backend/routes/editor_kit_routes.py:1617-1700`)
+  check just that `fields` is a list and write the raw dict via the store
+  (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
+  `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
+  :1172 GCS). The one chokepoint is "mark complete":
+  `FormSchema.model_validate` at `editor_kit_routes.py:2809` plus the
+  zero-ERROR schema-lint gate
+  (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
+  `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
+  dict unvalidated (`get_form_kit_schema`,
+  `backend/routes/form_kit_routes.py:235-256`; `get_editor_kit_schema`,
+  `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
+  draft kit reaching the voice path carries whatever shape it has -- e.g. a
+  field without `pdf_field_name` is silently never written to the output PDF.
 - **The frontend type is a hand-maintained mirror.**
   `frontend/src/schema-forms/types/schema.ts:325` (`interface FormSchema`)
   mirrors `form_models.py` with no codegen or sync check, and the SPA casts the
