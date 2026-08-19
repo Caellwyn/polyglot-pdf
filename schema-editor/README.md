@@ -84,8 +84,10 @@ The editor is a stand-alone PDF -> schema tool when run locally:
    `form-kits/<id>/` (status:draft, no schema yet).
 3. Click **Run extraction** on the new card. This POSTs to the dev server's
    `/api/extract`, which runs `scripts/authoring/extract_form.py` on the host and
-   writes `form-kits/<id>/schema.json` (a validated draft). The kit then becomes
-   openable for review.
+   writes `form-kits/<id>/schema.json` -- a draft that is stored even when it
+   does NOT fully validate; the editor surfaces that as a "stored with issues"
+   state rather than refusing the write. The kit then becomes openable for
+   review either way.
 
 The folder you open in step 1 must be **the same `form-kits/` the dev server
 uses** -- extraction runs on the host and writes `schema.json` under the server's

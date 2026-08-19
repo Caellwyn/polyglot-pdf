@@ -61,7 +61,9 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
 1. ONBOARD + EXTRACT (in the editor, when run locally)
    ├─→ drag-drop an AcroForm PDF onto the catalogue (creates form-kits/<id>/)
    ├─→ click "Run extraction" on the new kit's card
-   └─→ Output: form-kits/<id>/schema.json (a validated draft)
+   └─→ Output: form-kits/<id>/schema.json (a draft, stored even if it does
+       not fully validate -- surfaced as "stored with issues" rather than
+       refused)
 
    The button POSTs to the dev server's /api/extract, which runs
    scripts/authoring/extract_form.py on the host (the browser can't spawn the
@@ -163,9 +165,11 @@ The front door is the **form catalogue** -- it reads your local `form-kits/`
 directory directly (File System Access API; Chrome/Edge):
 
 1. Click **Open form-kits folder** and pick your `form-kits/` directory.
-2. The catalogue lists every kit as a card, showing its status badge
-   (draft / complete), a **review-progress %** bar (how much of the human review
-   is done), and an aggregate overview ("N forms - X complete - Y in progress").
+2. The catalogue lists every kit as a card, showing its status badge (one of
+   three: draft, complete, or unpublished -- a retired kit that was complete
+   and has since been taken out of service), a **review-progress %** bar (how
+   much of the human review is done), and an aggregate overview ("N forms -
+   X complete - Y in progress - Z retired").
 3. Click a card to open that kit -- PDF on the left, fields in the center,
    properties on the right, validation panel at the bottom.
 4. To onboard a NEW form, **drag-drop an AcroForm PDF** onto the catalogue; it
@@ -441,6 +445,18 @@ A kit is **draft** until you promote it. On each catalogue card:
   editor cannot reopen or retire a form that is already live, because pulling
   a published form away from clients is not a subcontractor's call. An editor
   sees "Published -- ask an author to reopen it" instead of the button.
+- **Unpublish** -- retires a complete kit without reverting it to draft (hosted
+  mode's contractor workspace, **author only**): the kit's status becomes
+  `unpublished` and it drops off the next deploy, but its schema stays exactly
+  as it was published -- that snapshot is what earlier voice confirmations
+  were recorded against, so it must not silently change under an in-progress
+  edit.
+- **Publish again** -- appears on an `unpublished` (retired) kit. It runs the
+  full publish gate again, same as the original Publish. In the LOCAL editor
+  with no backend reachable, a retired kit instead shows "Retired -- start the
+  backend to publish again": its schema cannot be reopened for editing there,
+  because doing so would let a local edit diverge from the confirmations
+  already recorded against the published bytes.
 
 Promote a form only after its review % is where you want it -- once complete, the
 next deploy ships it to the voice app.
