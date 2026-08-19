@@ -353,7 +353,12 @@ clean rerun of the first-field cycle. **Before each retry's reload, clear the
 field state explicitly:** `preview`/`javascript_tool`-eval
 `sessionStorage.removeItem('schema_form_state')` (or
 `window.__VFF_HARNESS.clearFieldState(FIELD)` then also clear the rest), THEN
-reload and redo steps 5-6. (`runCycle`'s own `clearFieldState` at cycle start is a
+reload and redo the Agree click (step 3) and the cycle (step 6) -- clearing
+`schema_form_state` also wipes `disclaimerAccepted`, so the modal RE-MOUNTS on
+that reload and must be dismissed again. (This used to read "steps 5-6", from
+when step 5 was the Agree click; the click moved to step 3 in bd
+`polyglot-pdf-s1iex.7` and step 5 is now a placeholder, so "5-6" would skip
+the Agree entirely and run the cycle against a blocked page.) (`runCycle`'s own `clearFieldState` at cycle start is a
 same-session backstop; it cannot undo a stale value already sent in a prior
 handshake.) Run up to 3 times; report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY
 otherwise -- with the per-run breakdown and the model (2.5 vs 3.1). The harness
