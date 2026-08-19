@@ -17,6 +17,7 @@ never touch the revision archive's keyspace.
 """
 import asyncio
 import json
+import pathlib
 from datetime import datetime
 
 import pytest
@@ -1001,3 +1002,83 @@ def test_a_precondition_failure_on_an_ORDINARY_write_stays_fail_closed():
     # An ORDINARY write, nothing to do with draft snapshots.
     with pytest.raises(FormKitStoreError):
         _run(store.put_schema("w7", _schema("A")))
+
+
+# --- the reaper's guards, ONE LAYER AT A TIME -------------------------------
+#
+# test_the_REAPER_never_deletes_a_snapshot_someone_just_COMPLETED only reddens
+# when BOTH guards are removed: its concurrent write lands in the OUTER window
+# (between the two listings), so the early return fires and rmdir is never
+# reached -- swapping rmdir for rmtree is invisible to it. Each guard covers a
+# different window and needs its own test, or a refactor silently deletes one
+# and reopens the round-8 data loss (Opus fresh-eyes round 9).
+
+
+def test_the_reaper_uses_RMDIR_so_a_last_instant_schema_survives(client):
+    """The INNER window: the write lands after the emptiness check but before
+    the delete. Only rmdir's refusal to remove a non-empty directory saves it;
+    rmtree would take the schema with it."""
+    import backend.services.form_kits as fk
+
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "1").mkdir()
+
+    real_exists = pathlib.Path.exists
+    state = {"armed": True}
+
+    def hooked(self, *a, **k):
+        out = real_exists(self, *a, **k)
+        # The instant the reaper asks "is 1/schema.json there?" and hears no,
+        # the other saver writes it.
+        if state["armed"] and self.name == "schema.json" and "1" in self.parts                 and not out:
+            state["armed"] = False
+            self.write_text(json.dumps(_schema("THEIR_WORK")), encoding="utf-8")
+        return out
+
+    pathlib.Path.exists = hooked
+    try:
+        _run(store.put_draft_snapshot("w7", _schema("mine")))
+    finally:
+        pathlib.Path.exists = real_exists
+
+    assert (drafts / "1" / "schema.json").exists(),         "rmtree semantics: a schema written in the last instant was destroyed"
+
+
+def test_the_reaper_leaves_an_IN_FLIGHT_temp_write_alone(client):
+    """A saver mid-_write_json holds only .schema.json.<pid>.<hex>.tmp in its
+    directory. Unlinking anything other than meta.json removes that temp file,
+    lets rmdir succeed, and the saver dies on os.replace -- losing the
+    snapshot it was in the middle of writing."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "1").mkdir()
+    # Exactly what an in-flight _write_json leaves on disk.
+    tmp = drafts / "1" / ".schema.json.19436.deadbeef.tmp"
+    tmp.write_text(json.dumps(_schema("MID_WRITE")), encoding="utf-8")
+
+    _run(store.put_draft_snapshot("w7", _schema("mine")))
+
+    assert tmp.exists(), "the reaper unlinked another saver's in-flight write"
+    assert (drafts / "1").exists(), "and removed the directory under them"
+
+
+def test_the_reaper_DOES_still_reap(client):
+    """The other failure direction: a reaper so cautious it never deletes would
+    pass every test above and silently regrow the phantom problem."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("live"))
+    drafts = root / "w7" / "_drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "1").mkdir()                       # a genuinely abandoned claim
+    (drafts / "2").mkdir()
+    (drafts / "2" / "meta.json").write_text("{}", encoding="utf-8")  # ...and one with a stamp only
+
+    _run(store.put_draft_snapshot("w7", _schema("mine")))
+
+    assert not (drafts / "1").exists(), "an abandoned claim was not reaped"
+    assert not (drafts / "2").exists(), "a stamp-only claim was not reaped"
