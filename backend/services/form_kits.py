@@ -1131,9 +1131,15 @@ class GCSFormKitStore(FormKitStore):
 				**kwargs,
 			)
 
+		# getattr, not self._precondition_exc: a store built without going
+		# through __init__ (the ABC's own __new__-based test doubles do this)
+		# would otherwise raise AttributeError from the except CLAUSE itself,
+		# masking the real storage error it was meant to classify. Falling back
+		# to a never-raised sentinel keeps the fail-closed path intact.
+		precondition_exc = getattr(self, "_precondition_exc", _SnapshotIdTaken)
 		try:
 			await anyio.to_thread.run_sync(_upload)
-		except self._precondition_exc as exc:
+		except precondition_exc as exc:
 			# A taken id is a RETRY SIGNAL, not a store failure.
 			raise _SnapshotIdTaken(str(exc)) from exc
 		except Exception as exc:  # google API errors are env-specific; fail closed
