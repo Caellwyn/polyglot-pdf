@@ -10,8 +10,10 @@ judgment -- so this script collapses the mechanical subset into ONE process wher
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
 
 Review happens BEFORE this script runs (2026-07-08 flow change). Both review
-layers -- the Sonnet/Haiku fresh-eyes inner loop and the ONE looped Opus-5 outer
-cross-surface review -- run on the LOCAL branch and each clear to ``NO-GAPS``
+layers -- the Sonnet/Haiku fresh-eyes inner loop and ONE looped outer
+adversarial pass (Opus cross-surface review for a source diff, the Haiku
+docs-reviewer for a docs-only diff, none for a trivial diff) -- run on the
+LOCAL branch and each clear to ``NO-GAPS``
 before the PR is ever opened. There is NO
 external reviewer and NO post-PR review watch (the maintainer's Codex subscription
 ended 2026-07-08; the ``pr_review_watcher.py`` bot-watch path is retired). So by
@@ -111,8 +113,10 @@ EXIT_REBASE_CONFLICT = 4
 SUBPROCESS_TIMEOUT_SEC = 600
 
 # Review is entirely Claude-based and runs BEFORE this script (SKILL Steps 5.5 +
-# 5.6): a Sonnet/Haiku fresh-eyes inner loop and an Opus-5 outer loop, both on
-# the local branch, cleared to their terminal signals before the PR opens. There
+# 5.6): a Sonnet/Haiku fresh-eyes inner loop and one outer adversarial pass
+# (Opus for a source diff, Haiku docs-reviewer for docs-only, none for
+# trivial), both on the local branch, cleared to their terminal signals before
+# the PR opens. There
 # is NO external reviewer and NO post-PR watch -- this script neither triggers a
 # bot nor emits a watch command (the maintainer's Codex subscription ended
 # 2026-07-08; the pr_review_watcher.py path is retired).

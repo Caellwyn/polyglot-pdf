@@ -21,6 +21,10 @@ format) are gated on the version stamp.
 Rules (stable ids; one finding per violation site):
 - unknown-operator      ERROR   operator not in the v2 registry
 - value-arity           ERROR   value shape does not match the operator's arity
+- hidden-with-show-if   ERROR   a field is BOTH always-hidden and
+                                conditionally shown -- contradictory, and
+                                the condition currently wins at runtime
+                                (bd polyglot-pdf-pfx1)
 - option-value-missing  ERROR   an option has no/empty value
 - option-value-duplicate ERROR  two options of one field share a value
 - option-value-comma    ERROR   an option value contains a comma (breaks the
@@ -467,6 +471,52 @@ def _check_atom(
 
 
 # ---------------------------------------------------------------------------
+# Per-field visibility coherence (bd polyglot-pdf-pfx1).
+# ---------------------------------------------------------------------------
+
+def _check_hidden_vs_show_if(
+    field_path: str, f: Dict[str, Any], out: List[LintFinding]
+) -> None:
+    """A field may not be BOTH globally hidden and conditionally shown.
+
+    MAINTAINER DECISION 2026-08-04 (bd polyglot-pdf-pfx1): "A field cannot be
+    hidden and have a condition to be shown. period." A warning was considered
+    and rejected -- a warning still lets the contradictory state reach a saved
+    kit, and every consumer then has to interpret it (bd polyglot-pdf-ubam had
+    to fix SEVEN call sites that each interpreted it differently).
+
+    Today the CONDITION silently wins: shouldShowField returns
+    evaluateConditionGroup(...) without consulting the hidden flag once a valid
+    show_if exists. Nobody chose that -- it falls out of the branch order --
+    and it fails in the riskier direction: a field an author marked "never
+    show" APPEARS to the applicant once its condition is met. On a legal form
+    that can mean an acceptance-agent-only field shown to the person filing.
+
+    ERROR, not WARNING: this is a promotion gate, and the whole point of the
+    decision is that the state must not be authorable.
+
+    FIELDS ONLY, and that IS the complete set: FormSection carries show_if but
+    has NO hidden attribute (form_models.FormSection; the editor type says the
+    same and notes the editor never even authors a section show_if), so the
+    contradiction is structurally impossible one level up. Re-check this if a
+    section ever gains a hidden flag.
+    """
+    if not f.get("hidden"):
+        return
+    if f.get("show_if") in (None, {}, []):
+        return
+    out.append(LintFinding(
+        SEVERITY_ERROR, "hidden-with-show-if", f"{field_path}.hidden",
+        "this field is marked always-hidden AND has a 'show when' condition, "
+        "which contradict each other -- today the condition wins and the field "
+        "IS shown to the applicant when it matches, which is not what "
+        "always-hidden means. Keep the condition and untick Hidden (show it "
+        "only when the condition matches), or keep Hidden and delete the "
+        "condition (never show it).",
+    ))
+
+
+# ---------------------------------------------------------------------------
 # Per-field option-value convention.
 # ---------------------------------------------------------------------------
 
@@ -818,6 +868,7 @@ def lint_schema(
         fid = f.get("id")
 
         _check_options(field_path, f, is_v2, out)
+        _check_hidden_vs_show_if(field_path, f, out)
 
         show_if_atoms = _walk_condition(f.get("show_if"), f"{field_path}.show_if", out)
         triggers: List[str] = []

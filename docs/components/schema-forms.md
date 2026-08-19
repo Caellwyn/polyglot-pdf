@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: FieldType count corrected to 13; the mobile-overlay breakpoint described as its 700/820 dead-zone hysteresis, not a flat 768px rule; the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified. Also current: `fieldValues` has two independent writers -- the React UI and WebFormConnection -- reconciled per logical field by `reconcileFieldValues` (bd polyglot-pdf-uw3w / 3irc / qim7; see "Two writers, one map" below).)*
+*Last updated: 2026-08-17 (bd polyglot-pdf-pfx1: hidden + show_if may not both be set -- shouldShowField resolves the contradiction toward the CONDITION, which is now pinned in all four combinations and made unauthorable upstream by the editor gate and the hidden-with-show-if lint ERROR).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -297,6 +297,24 @@ evaluate on one path: the legacy single `{field, operator, value}`
 group of such atoms ("(A AND B) AND NOT C" = `all_of:[A,B] + none_of:[C]`).
 A hidden field renders `null`. An absent, malformed, or unknown-operator
 condition falls back to the field's static `hidden` state (fail-open).
+
+**`hidden: true` and `show_if` may not BOTH be set** (bd
+`polyglot-pdf-pfx1`, maintainer decision 2026-08-04). When they are, this
+function resolves the contradiction toward the CONDITION -- the third branch
+returns `evaluateConditionGroup(...)` without consulting `hidden` -- so a
+field marked never-show is DISPLAYED once its condition matches. That reading
+is pinned (`utils/hiddenShowIfPrecedence.test.ts`, all four combinations) but
+is NOT relied on: the state is made unauthorable upstream instead, by the
+schema editor's mutual gate and schema-lint's `hidden-with-show-if` ERROR.
+
+**But do NOT "simplify" the runtime toward that rule.** A kit is malformed at
+the AUTHORING gate; at RUNTIME the seven `ubam` call sites must keep treating a
+satisfied-condition field as fully live -- it renders, it is required, and it
+must stay voice-reachable. Re-adding a `field.hidden ||` short-circuit anywhere
+(navigation, the completion check, the voice field list) would skip such a
+field and reintroduce exactly the false-completion + voice-unreachability bug
+bd `polyglot-pdf-ubam` closed across seven sites. The gate stops the state being
+CREATED; it does not license the runtime to start ignoring it.
 `utils/validation.ts#isFieldRequired` evaluates the same legacy-or-composite
 shape on `field.require_if` (statically required OR a satisfied require_if;
 fail-open = not required). The editor preview mirrors both in

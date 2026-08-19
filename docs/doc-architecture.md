@@ -1,12 +1,13 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-6dn2n: corrected the current-state-only
-section's claim about the mechanical checker's regex coverage -- it now catches
-`Prior:`/`Earlier:` too, not just `Previously:`). This file documents the doc
-SYSTEM (current state). It is a meta-doc about that system, not a doc about the
-product: it sits outside the three product tiers below, is reached on demand via
-[`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no code
-path.*
+*Last updated: 2026-08-18 (bd polyglot-pdf-r8d9r: this file is now covered by
+the mechanical convention scan via `CONVENTION_ONLY_DOCS`, so a stacked or
+chained stamp here is caught by CI going forward.) This file documents the doc
+SYSTEM (current
+state). It is a meta-doc about that system, not a doc about the product: it
+sits outside the three product tiers below, is reached on demand via
+[`INDEX.md`](INDEX.md), and carries no `**Tracks:**` line because it owns no
+code path.*
 
 This project organizes its docs for **progressive discovery**: a small always-loaded core points at on-demand docs, so an agent (or human) loads only what the task needs and context stays lean. This file explains the system and the discipline that keeps it from rotting. It is the most transferable artifact in the claude-swarm-kit -- the structure below works for any codebase.
 
@@ -15,7 +16,7 @@ This project organizes its docs for **progressive discovery**: a small always-lo
 | Tier | What | Loaded |
 |------|------|--------|
 | **1 -- Always loaded** | `CLAUDE.md` (top-level rules + doc map) and `docs/INDEX.md` (the canonical map). | Auto, every session. Keep these LEAN -- they point, they don't duplicate. |
-| **2 -- Easily reached** | `docs/components/<surface>.md` (one per user-facing surface or subsystem), `docs/standards/*.md` (cross-cutting rules: testing, security, performance, conventions, review), `docs/technical_guide.md` (system-wide routes/endpoints/gotchas), and the **active sprint plans** `docs/sprint_<N>_<slug>_plan.md` (each sprint's maintainer-approved scope-of-record). | On demand, when that surface or concern is in scope. A "trigger read" in CLAUDE.md tells the agent when. Reach a plan via the "Active sprint plans" row in [`INDEX.md`](INDEX.md) or the owning epic's `plan:` metadata. |
+| **2 -- Easily reached** | `docs/components/<surface>.md` (one per user-facing surface or subsystem), `docs/standards/*.md` (cross-cutting rules: testing, security, performance, conventions, review), `docs/doctrine/*.md` (process/workflow rules: planning, review-flow, promotion tiers), `docs/technical_guide.md` (system-wide routes/endpoints/gotchas), and the **active sprint plans** `docs/sprint_<N>_<slug>_plan.md` (each sprint's maintainer-approved scope-of-record). | On demand, when that surface or concern is in scope. A "trigger read" in CLAUDE.md tells the agent when. Reach a plan via the "Active sprint plans" row in [`INDEX.md`](INDEX.md) or the owning epic's `plan:` metadata. |
 | **3 -- Indexed / historical** | `docs/journal/entries/*.md` (one file per sprint/bead, YAML-frontmatter tagged), `docs/journal/TAGS.md` (the controlled tag vocabulary = the per-feature index), `docs/archive/` (completed plans). | On demand, when investigating "why was this built this way?" or "when did X change?" |
 
 **The key move:** tier 1 stays small and stable; everything else is reached only when relevant. The agent never loads the whole corpus -- it loads CLAUDE.md + INDEX.md, then follows pointers. This is what keeps a large doc set from bloating every session's context.
@@ -26,7 +27,7 @@ Without active defense, tier-2/tier-3 docs drift out of sync with the code and b
 
 ### 1. `**Tracks:**` lines map docs to code
 
-Every `docs/components/*.md` and `docs/standards/*.md` declares, near the top, a line like:
+Every `docs/components/*.md`, `docs/standards/*.md`, and `docs/doctrine/*.md` may declare, near the top, a line like:
 
 ```
 **Tracks:** `src/auth/**/*.py`, `src/routes/login.py`
@@ -63,7 +64,7 @@ Tier-1 and tier-2 docs describe CURRENT STATE ONLY:
 
 Chronological history lives in the **journal** (tier 3), which is append-only at the corpus level (write a new entry file; never edit an old one). The checker's regexes (`PREVIOUSLY_CHAIN_RE`, `HISTORY_HEADING_RE`) flag violations; the CI test fails on them. **Prune-on-bump:** when you update a stamp, replace the old content, don't append.
 
-**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them (they sit outside the scanned set: `TIER1_DOCS` + `docs/components/*` + `docs/standards/*` + `docs/doctrine/*`). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
+**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them: plans live at `docs/` root, which sits outside the directory globs the scanned set is built from, and `is_sprint_plan()` is a belt-and-braces skip on top of that so the exemption holds even if a plan is ever force-added to the scanned set by a future hand (see `is_sprint_plan()`'s docstring in `scripts/check_doc_freshness.py` for the exact mechanism -- deliberately not hand-listing the scanned set's membership here, to avoid this sentence itself drifting out of sync the way DOC_DIRS' hand-listed prose sites once did; bd polyglot-pdf-jfq16). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
 
 ### 4. Trigger reads bake review into the work
 
@@ -77,7 +78,7 @@ When a journal lesson **generalizes** (applies anywhere), promote a one-liner up
 
 ## Setting this up in a new project
 
-1. Keep the directory skeleton this template ships: `docs/INDEX.md`, `docs/components/`, `docs/standards/`, `docs/journal/entries/`, `docs/journal/TAGS.md`, `docs/archive/`, `docs/technical_guide.md`.
+1. Keep the directory skeleton this template ships: `docs/INDEX.md`, `docs/components/`, `docs/standards/`, `docs/doctrine/`, `docs/journal/entries/`, `docs/journal/TAGS.md`, `docs/archive/`, `docs/technical_guide.md`.
 2. Give each component/standard doc a `**Tracks:**` line and a `*Last updated:*` stamp.
 3. List your tier-1 docs in `scripts/check_doc_freshness.py`'s `TIER1_DOCS`.
 4. Wire `check_doc_freshness.py` as a pre-commit hook + run `tests/test_doc_freshness.py` in CI.
