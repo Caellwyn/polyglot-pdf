@@ -133,11 +133,13 @@ async function clickIfPresent(page, pattern, label) {
   //    exist yet and waiting for it first would hang until timeout.
   // Clicking when present, then waiting, is correct under both.
   // BILINGUAL on purpose: this session's agree button is TRANSLATED
-  // ("Prinimayu", not "I Agree") -- the English literal already timed out and
-  // crashed a run once, which is why RU_AGREE exists below. An English-only
-  // pre-click would silently match nothing here and leave the flag-ON path
-  // hanging on the inject-hook wait (bd polyglot-pdf-s1iex.7, fresh-eyes
-  // round 1). Escaped to keep this source ASCII (scar #6).
+  // ("Prinimayu", not "I Agree" -- DisclaimerModal.BUTTON_TRANSLATIONS). The
+  // English literal already timed out at 20s and crashed a run once, which is
+  // why this pattern is bilingual: an English-only match would silently hit
+  // nothing here and leave the flag-ON path hanging on the inject-hook wait
+  // (bd polyglot-pdf-s1iex.7). This is the ONLY Agree click in this driver --
+  // a second one below would block once this dismisses the modal. Escaped to
+  // keep this source ASCII (scar #6).
   await clickIfPresent(
     page, new RegExp('\u041f\u0440\u0438\u043d\u0438\u043c\u0430\u044e' + '|I Agree'),
     'disclaimer agree (ru, pre-hook)');
@@ -152,12 +154,11 @@ async function clickIfPresent(page, pattern, label) {
   // loop went, so it is gone rather than left as an inert no-op.
   log('harness installed');
 
-  // The disclaimer's agree button is TRANSLATED per session language
-  // (DisclaimerModal.BUTTON_TRANSLATIONS): a Russian session shows
-  // "Prinimayu", NOT "I Agree" -- matching the English literal timed out at
-  // 20s and crashed the first run. \u-escaped to keep this source ASCII (scar #6).
-  const RU_AGREE = '\u041f\u0440\u0438\u043d\u0438\u043c\u0430\u044e';  // 'Prinimayu'
-  await clickButton(page, new RegExp(RU_AGREE + '|I Agree'), 'disclaimer agree (ru)');
+  // (Agree was already clicked above, before the inject-hook wait -- see the
+  // bilingual clickIfPresent there. A second click here would BLOCK: clickButton
+  // waits 60s and throws when the modal is already dismissed, which is exactly
+  // what happens with the intro flag OFF. bd polyglot-pdf-s1iex.7, cross-surface
+  // review round 1 -- the same removal the three non-RU drivers got.)
 
   // No VFF_PACING here: nothing is injected, so there is nothing to pace
   // against. The listen loop does its own quiet-detection inline.
