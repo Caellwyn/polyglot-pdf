@@ -173,16 +173,24 @@ THREE cases:
    vintage would report "verified: no records" and be hard-deleted WITH its
    archive.
 
-   This sweep is scoped to `event == "field_confirmed"` deliberately, and that
-   scoping is load-bearing: `log_form_session_start`/`_end` produce the SAME
-   missing-key shape, so sweeping on the shape alone would make every kit
-   permanently undeletable the moment one session is logged. (Since bd
-   `polyglot-pdf-xwlt` those two are live on every voice session and DO carry
-   `kit_id`, which makes the correct scoping matter more, not less: an
-   unscoped sweep would now match real records on every kit.) Firestore cannot
-   query for a missing key, so this is a bounded client-side scan
-   (`_LEGACY_SCAN_LIMIT`) rather than a filter -- enough to find legacy records
-   if any exist, small enough that a delete never streams a large collection.
+   **EVERY query in this guard is scoped to `event == "field_confirmed"`**,
+   and that scoping is load-bearing. It has to be: since bd
+   `polyglot-pdf-xwlt` the session-lifecycle events are live on every voice
+   session AND carry a `kit_id`, so an unscoped kit query matches them. When
+   only the legacy scan was scoped, a single voice session made its kit
+   permanently undeletable, and one session whose `kit_id` was null made
+   EVERY kit unverifiable (the stored-null branch fired for any kit id) --
+   found and reproduced by the outer cross-surface review, bd
+   `polyglot-pdf-68s2q`.
+
+   The event filter runs SERVER-SIDE and the `kit_id` comparison runs
+   client-side over the bounded stream, deliberately: filtering both
+   server-side would need a composite index, and this guard is built on
+   single-field equality queries that work on a bare collection. The stream
+   short-circuits on the first record naming the kit (so the common case
+   reads one document on a metered path) and is otherwise bounded by
+   `_LEGACY_SCAN_LIMIT`. Firestore cannot query for a missing key, which is
+   why the legacy shape is detected client-side in that same pass.
 
 `author_version` is NOT `form_metadata.version`, which is auto-extracted display
 text and frequently meaningless for this purpose (real shipped values include

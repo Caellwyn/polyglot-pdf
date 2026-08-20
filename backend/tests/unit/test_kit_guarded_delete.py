@@ -291,12 +291,17 @@ class _FilteringQuery:
         ]
         if self._limit is not None:
             matched = matched[:self._limit]
-        # Record what this query actually streamed, so a test can assert the
-        # SHAPE of the request (see the limit(1) test) rather than only its
-        # boolean answer.
+        # Record the SHAPE of the request (see the limit test) rather than
+        # only its boolean answer. `streamed` counts documents the caller
+        # actually CONSUMED, not the batch size: a caller that breaks early
+        # reads fewer, and on a metered path that difference is the whole
+        # point. Counting the batch instead made an early `return` invisible
+        # (bd polyglot-pdf-xwlt).
+        record = {"limit": self._limit, "streamed": 0}
         if self._sink is not None:
-            self._sink.append({"limit": self._limit, "streamed": len(matched)})
+            self._sink.append(record)
         for d in matched:
+            record["streamed"] += 1
             m = MagicMock()
             m.to_dict.return_value = d
             yield m
@@ -344,21 +349,24 @@ def _firestore_with(monkeypatch, docs):
 def test_firestore_existence_query_finds_a_record_for_THIS_kit(monkeypatch):
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
-    db = _firestore_with(monkeypatch, [{"kit_id": "w7", "field_id": "f1"}])
+    db = _firestore_with(monkeypatch, [{"event": "field_confirmed", "kit_id": "w7", "field_id": "f1"}])
 
     assert kit_has_confirmation_records("w7") is True
-    # Filtered on kit_id server-side, not by streaming everything and checking
-    # client-side -- an equality query needs no composite index, and streaming a
-    # kit's whole history to answer yes/no is the wrong shape.
-    assert db._collection.where_calls == [("kit_id", "==", "w7")]
+    # Filtered on EVENT server-side, with the kit_id test client-side over the
+    # bounded stream (bd polyglot-pdf-xwlt / 68s2q). It was a kit_id equality
+    # query until the session-lifecycle events became live callers WITH a
+    # kit_id: an unscoped kit_id query then matched them, and one voice session
+    # made a kit permanently undeletable. Filtering on both fields server-side
+    # would need a COMPOSITE INDEX, which this guard deliberately avoids.
+    assert db._collection.where_calls == [("event", "==", "field_confirmed")]
 
 
 def test_firestore_existence_query_ignores_records_for_OTHER_kits(monkeypatch):
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
     _firestore_with(monkeypatch, [
-        {"kit_id": "i-90", "field_id": "f1"},
-        {"kit_id": "w7-2024", "field_id": "f2"},
+        {"event": "field_confirmed", "kit_id": "i-90", "field_id": "f1"},
+        {"event": "field_confirmed", "kit_id": "w7-2024", "field_id": "f2"},
     ])
 
     assert kit_has_confirmation_records("w7") is False
@@ -532,22 +540,31 @@ def test_gcs_delete_refuses_wholesale_if_the_listing_returns_a_STRAY(tmp_path):
 
 
 def test_the_existence_query_asks_for_at_most_ONE_document(monkeypatch):
-    """Existence is a yes/no, so limit(1) is what stops a popular kit's whole
-    confirmation history streaming on a metered read path.
+    """The check is BOUNDED, so a popular kit's whole confirmation history
+    never streams on a metered read path.
 
-    Asserts the SHAPE the query asked for, recorded by the fake. My first
+    The bound moved from limit(1) on a kit_id query to _LEGACY_SCAN_LIMIT on
+    the event-scoped stream (bd polyglot-pdf-xwlt / 68s2q): a kit_id query
+    could not stay unscoped once the session events carried a kit_id. The
+    stream still SHORT-CIRCUITS on the first record naming this kit, so the
+    common case reads one document, and the worst case is bounded by the
+    limit -- never the full history.
+
+    Asserts the SHAPE the query asked for, recorded by the fake. An earlier
     version tried to wrap stream() after the fact and silently measured
-    nothing -- dropping limit(1) left it green (caught by re-running the
+    nothing -- dropping the limit left it green (caught by re-running the
     mutation rather than trusting the pass)."""
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
-    docs = [{"kit_id": "w7", "field_id": f"f{i}"} for i in range(50)]
+    docs = [{"event": "field_confirmed", "kit_id": "w7", "field_id": f"f{i}"}
+            for i in range(50)]
     db = _firestore_with(monkeypatch, docs)
 
     assert kit_has_confirmation_records("w7") is True
 
-    assert db._collection.streams == [{"limit": 1, "streamed": 1}], (
-        "the existence check must ask for at most one document"
+    assert db._collection.streams == [{"limit": 50, "streamed": 1}], (
+        "the check must be BOUNDED by the scan limit, and must short-circuit "
+        "on the first record naming this kit"
     )
 
 
@@ -564,23 +581,26 @@ def test_a_record_naming_NO_kit_blocks_deletion_rather_than_clearing_it(monkeypa
     """
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
-    db = _firestore_with(monkeypatch, [{"kit_id": None, "form_id": "W-7"}])
+    db = _firestore_with(monkeypatch, [{"event": "field_confirmed", "kit_id": None, "form_id": "W-7"}])
 
     with pytest.raises(ConfirmationCheckUnavailable) as exc:
         kit_has_confirmation_records("w7")
     assert "name no kit" in str(exc.value)
 
-    # PIN THE OPERATOR, not just the outcome. The SDK resolves
-    # ("kit_id","==",None) to a UnaryFilter(IS_NULL); the INVERSE (IS_NOT_NULL)
-    # matches every record that HAS a kit_id, which would make every kit
-    # permanently undeletable in production -- and a value-only assertion
-    # cannot tell the two apart (Opus fresh-eyes round 3 proved that inversion
-    # kept all 31 tests green).
-    field, op, value = db._collection.where_calls[-1]
-    assert (field, value) == ("kit_id", None)
-    assert op == "IS_NULL", (
-        f"the sweep must resolve to IS_NULL, got {op!r} -- IS_NOT_NULL would "
-        f"match every record that HAS a kit_id and make every kit undeletable"
+    # PIN THE SERVER-SIDE FILTER. The null test moved client-side (bd
+    # polyglot-pdf-xwlt / 68s2q: a kit_id-shaped query could not stay unscoped
+    # once the session events carried a kit_id), so the operator this once
+    # pinned -- IS_NULL vs its catastrophic inverse IS_NOT_NULL -- no longer
+    # exists. What must NOT drift is that the ONLY server-side filter is the
+    # event scope: a query on kit_id here would match session rows again and
+    # resurrect the undeletable-kit bug, and one on any other field could
+    # sweep in every record that HAS a kit_id (the inversion danger, in its
+    # new form). The client-side null semantics are pinned by outcome above
+    # and by test_a_session_event_with_a_kit_id_does_NOT_block_deletion.
+    assert db._collection.where_calls == [("event", "==", "field_confirmed")], (
+        "the guard must filter server-side ONLY on the event scope; a kit_id "
+        "filter here would match session-telemetry rows and make a kit "
+        "permanently undeletable after one voice session"
     )
 
 
@@ -591,8 +611,8 @@ def test_an_unattributed_record_does_not_mask_a_DIRECT_hit(monkeypatch):
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
     _firestore_with(monkeypatch, [
-        {"kit_id": None, "form_id": "W-7"},
-        {"kit_id": "w7", "field_id": "f1"},
+        {"event": "field_confirmed", "kit_id": None, "form_id": "W-7"},
+        {"event": "field_confirmed", "kit_id": "w7", "field_id": "f1"},
     ])
 
     assert kit_has_confirmation_records("w7") is True
@@ -605,8 +625,8 @@ def test_a_clean_collection_still_clears_a_kit_for_deletion(monkeypatch):
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
     _firestore_with(monkeypatch, [
-        {"kit_id": "i-90", "field_id": "f1"},
-        {"kit_id": "w7-2024", "field_id": "f2"},
+        {"event": "field_confirmed", "kit_id": "i-90", "field_id": "f1"},
+        {"event": "field_confirmed", "kit_id": "w7-2024", "field_id": "f2"},
     ])
 
     assert kit_has_confirmation_records("w7") is False
@@ -628,23 +648,23 @@ def test_a_session_event_with_NO_kit_id_KEY_does_not_block_deletion(monkeypatch)
 
 
 def test_the_NULL_SWEEP_also_asks_for_at_most_one_document(monkeypatch):
-    """The sweep is the newer and more expensive of the two queries, and its
-    limit(1) was unpinned: the existing limit test seeds docs that all name the
-    kit, so the first query returns True and the sweep never runs (Opus
-    fresh-eyes round 3). Seeded so ONLY the sweep matches."""
+    """The unattributed-record refusal is reached only after the whole bounded
+    stream is checked (a definite match for THIS kit must win first), so this
+    seeds records that name NO kit and asserts the scan is still bounded --
+    the expensive path, unpinned before Opus fresh-eyes round 3."""
     from backend.utils.confirmation_logger import kit_has_confirmation_records
 
-    docs = [{"kit_id": None, "form_id": f"F{i}"} for i in range(50)]
+    docs = [{"event": "field_confirmed", "kit_id": None, "form_id": f"F{i}"}
+            for i in range(50)]
     db = _firestore_with(monkeypatch, docs)
 
     with pytest.raises(ConfirmationCheckUnavailable):
         kit_has_confirmation_records("w7")
 
-    # Both queries ran, and NEITHER streamed more than one document.
-    assert db._collection.streams == [
-        {"limit": 1, "streamed": 0},   # kit-scoped: no record names w7
-        {"limit": 1, "streamed": 1},   # the sweep: found one unattributed
-    ]
+    # ONE bounded stream now does both jobs (event-scoped, kit tested
+    # client-side): it reads to the limit because no record names w7, and
+    # never beyond it.
+    assert db._collection.streams == [{"limit": 50, "streamed": 50}]
 
 
 def test_the_refusal_is_NOT_reported_as_a_query_failure(monkeypatch):
@@ -676,7 +696,7 @@ def test_the_refusal_is_NOT_reported_as_a_query_failure(monkeypatch):
 
     monkeypatch.setattr(cl, "_log", _Spy())
 
-    _firestore_with(monkeypatch, [{"kit_id": None, "form_id": "W-7"}])
+    _firestore_with(monkeypatch, [{"event": "field_confirmed", "kit_id": None, "form_id": "W-7"}])
     with pytest.raises(ConfirmationCheckUnavailable):
         cl.kit_has_confirmation_records("w7")
     assert "confirmation_kit_existence_check_failed" not in names, (
@@ -754,3 +774,64 @@ def test_the_legacy_scan_is_BOUNDED(monkeypatch):
     assert db._collection.streams[-1] == {
         "limit": _LEGACY_SCAN_LIMIT, "streamed": _LEGACY_SCAN_LIMIT,
     }
+
+
+# --- session telemetry must never block a delete (bd polyglot-pdf-68s2q) -----
+#
+# bd polyglot-pdf-xwlt wired log_form_session_start/_end as live callers AND
+# gave both events a kit_id. Two of this guard's three queries were unscoped,
+# so those rows matched: ONE voice session made a kit permanently undeletable,
+# and one session with a null kit_id made EVERY kit unverifiable. Reproduced
+# by the outer cross-surface review against this very harness.
+
+
+def test_a_session_event_with_a_kit_id_does_NOT_block_deletion(monkeypatch):
+    """THE bug: a kit whose only records are session telemetry is deletable.
+
+    Mutation: drop the `event == "field_confirmed"` filter (query on kit_id
+    instead) -- red. This is the 68s2q reproduction, kept as a regression.
+    """
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"event": "form_session_started", "kit_id": "w7", "form_session_id": "s1"},
+        {"event": "form_session_ended", "kit_id": "w7", "form_session_id": "s1"},
+    ])
+
+    assert kit_has_confirmation_records("w7") is False, (
+        "session telemetry is not evidence a client confirmed anything"
+    )
+
+
+def test_a_session_event_with_a_NULL_kit_id_does_not_make_every_kit_unverifiable(
+    monkeypatch,
+):
+    """The worse half: a no-firm/no-kit session wrote kit_id as a STORED null,
+    which tripped the unattributed-records refusal for EVERY kit queried --
+    project-wide, from one session. Mutation: drop the event filter -- red
+    (raises ConfirmationCheckUnavailable instead of returning False).
+    """
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"event": "form_session_started", "kit_id": None, "form_session_id": "s1"},
+    ])
+
+    assert kit_has_confirmation_records("i-90") is False
+    assert kit_has_confirmation_records("w7") is False
+
+
+def test_a_REAL_confirmation_with_a_null_kit_id_still_blocks(monkeypatch):
+    """The scoping must not weaken the guard it protects: an actual
+    field_confirmed record naming no kit is still unattributable evidence and
+    still refuses. Mutation: skip the client-side `record_kit is None` branch
+    -- red."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    _firestore_with(monkeypatch, [
+        {"event": "form_session_started", "kit_id": None, "form_session_id": "s1"},
+        {"event": "field_confirmed", "kit_id": None, "field_id": "f1"},
+    ])
+
+    with pytest.raises(ConfirmationCheckUnavailable):
+        kit_has_confirmation_records("w7")
