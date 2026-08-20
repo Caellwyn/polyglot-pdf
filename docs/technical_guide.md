@@ -493,7 +493,47 @@ tokens, not the client tier):
   half strands a private kit's fill/download while every public-kit test
   stays green.
 
-### 8. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
+### 8. Firm retire write path (bd polyglot-pdf-z6bk9)
+
+The firm tier's ONLY write contract -- every other firm-facing surface is read
++ telemetry. `POST /api/form-kits/{kit_id}/retire`
+(`form_kit_routes.py`, `retire_own_kit`) flips a firm-owned private kit to
+`status: "unpublished"` after archiving it. It INVERTS contract 7's
+assumptions, which is the trap for anyone changing either one:
+
+- **Visibility is NOT authorization here.** Contract 7's read gate admits any
+  kit in the caller's `allowed_kits` -- INCLUDING kits the firm does not own.
+  This write path instead requires `owner_firm_id == firm_id` (the key
+  contract 7 explicitly calls "bookkeeping for the write path, NOT the read
+  gate"). A change that makes the read gate consult `owner_firm_id`, or makes
+  this route consult `allowed_kits`, silently lets a firm retire a form it
+  merely licenses. Producer of the claims: `scripts/bootstrap_firm.py`
+  (`firm_id` + `firm_role` custom claims); consumer: `_require_firm_owns_private_kit`.
+- **`firm_role == "manager"` is the only consumer of that claim.** The
+  four-level access model (app admin / firm management / employee / firm
+  client) exists in the claim, but this is the FIRST route to read it -- an
+  employee-level session must not retire forms. Any future firm write path
+  must gate on it too; there is no shared helper yet because there is one
+  caller.
+- **Refusals are 404, never 403** -- same reason as contract 7's read gate: a
+  403 confirms existence to a firm that cannot see the kit. Pinned by
+  `test_firm_retire.py::test_a_nonexistent_kit_and_another_firms_kit_are_INDISTINGUISHABLE`.
+- **Archive-then-retire, shared with staff.** `_archive_published_revision`
+  moved OUT of `editor_kit_routes.py` into `backend/services/kit_gates.py`
+  so the staff route's three call sites and this one share ONE implementation
+  (routes importing routes would be circular -- `editor_kit_routes` already
+  imports `_safe_kit_id` from `form_kit_routes`). Its marker-precedence and
+  sibling-disambiguation behavior is contract 6's retrieval guarantee; a
+  change there breaks BOTH tiers at once.
+- **Retirement is not deletion.** `unpublished` is hidden + write-locked, and
+  the retired revision's bytes are what its confirmation records were
+  confirmed against. Hard delete stays staff-only behind the guard in
+  `confirmation_logger.kit_has_confirmation_records` (contract 6).
+
+No UI consumes this route yet -- the button belongs to the firm console (bd
+polyglot-pdf-gob8l), per the maintainer's 2026-08-20 decision.
+
+### 9. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 
 Producer: `backend/services/intro_agree_labels.json` (18 language ->
 agree-label entries). Consumer: `BUTTON_TRANSLATIONS` in
@@ -504,7 +544,7 @@ backend's copy of the label -- so a drift means Sol speaks a button name
 that is not the one on screen. Pinned by
 `backend/tests/unit/test_intro_route.py::TestIntroTables::test_agree_labels_match_frontend_mirror`.
 
-### 9. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
+### 10. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
 
 `Settings.LIVE_VOICE_NAME` (`backend/config.py:360`) has TWO independent
 consumers in different surfaces, so changing the env var moves both at
