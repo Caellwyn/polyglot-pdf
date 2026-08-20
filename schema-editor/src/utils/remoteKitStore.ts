@@ -228,7 +228,12 @@ export async function probeSession(): Promise<{ role: EditorRole }> {
 export interface StoreHandshake {
   sameFolder: boolean;
   backendRoot?: string | null;
-  reason?: 'mismatch' | 'stale' | 'unwritable' | 'not-a-local-store' | null;
+  // Exactly what the backend can return (editor_kit_routes.py's
+  // store-handshake handler). NOT 'unwritable': that is minted
+  // client-side in formKitDirectory.ts when the marker WRITE fails,
+  // and it returns before this route is called -- it belongs to
+  // FolderCheck, not to the wire type.
+  reason?: 'mismatch' | 'stale' | 'not-a-local-store' | null;
 }
 
 /**
