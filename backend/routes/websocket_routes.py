@@ -8,6 +8,10 @@ import time
 from ..config import get_settings
 from ..dependencies import get_form_filling_service
 from ..utils.dev_file_logger import DEV_LOGGING_ENABLED
+from ..utils.confirmation_logger import (
+	log_form_session_start,
+	log_form_session_end,
+)
 import structlog
 
 # Structured logger for websocket routes
@@ -185,6 +189,7 @@ async def _handle_fill_session(
 	initial_field_hint: str | None = None,  # Initial field hint from frontend (pre-computed)
 	form_session_id: str | None = None,  # Persistent form session ID from frontend
 	kit_id: str | None = None,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
+	firm_id: str | None = None,  # Firm identity from the token claim (bd polyglot-pdf-xwlt)
 	is_reconnect: bool = False,  # True when handshake carries resume:true (mid-section reconnect)
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
@@ -274,6 +279,7 @@ async def _handle_fill_session(
 			system_instruction=system_instruction,  # Include in initial Gemini config
 			form_session_id=form_session_id,  # Persistent ID from frontend
 			kit_id=kit_id,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
+			firm_id=firm_id,  # Firm identity for per-firm telemetry (bd polyglot-pdf-xwlt)
 			current_section_id=section_id,  # Current section for token-log context (bd polyglot-pdf-tb7)
 		)
 
@@ -289,9 +295,30 @@ async def _handle_fill_session(
 	# on reconnect, and (c) use fill_language as the spoken language -- so it is
 	# deliberately absent (Codex PR #254).
 
+	# Session-start telemetry (bd polyglot-pdf-xwlt). These two functions
+	# shipped with bd z2is but had NEVER been called; this is their first
+	# caller. Guarded on form_session_id like the confirmation records are --
+	# without it there is no session key to correlate on. A RECONNECT
+	# deliberately does not re-log a start: form_session_id survives
+	# reconnects, so re-logging would inflate a per-firm session count with
+	# what is one session to the user.
+	if form_session_id and not is_reconnect:
+		log_form_session_start(
+			form_id=(schema or {}).get("form_metadata", {}).get("form_number", "unknown"),
+			form_session_id=form_session_id,
+			section_id=section_id,
+			firm_id=firm_id,
+			kit_id=kit_id,
+		)
+
 	try:
 		# Flag to drop audio during section switch
 		drop_audio = False
+		# Set when the client reports the WHOLE form confirmed (the
+		# form_complete message below), so the session-end record can say
+		# "completed" honestly instead of guessing from a socket close
+		# (bd polyglot-pdf-xwlt).
+		session_completed = False
 
 		# Start watchdog to close connection after idle timeout.
 		# (get_settings is imported at module scope; do NOT re-import it function-locally
@@ -875,6 +902,7 @@ async def _handle_fill_session(
 						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
 						session_id=session_id,
 					)
+					session_completed = True  # bd polyglot-pdf-xwlt
 					_spawn_pro_complete(proactive_fields)
 					await websocket.send_json({"type": "form_complete_ack"})
 					continue
@@ -984,6 +1012,25 @@ async def _handle_fill_session(
 		# it up (e.g. an early handshake error) -- guard with locals().
 		for task in list(locals().get("validation_tasks", ())):
 			task.cancel()
+		# Session-end telemetry (bd polyglot-pdf-xwlt), in the finally so it
+		# records however the socket died -- a disconnect, an idle timeout, or
+		# a clean close. Status is "completed" only when the client said so via
+		# the session_complete signal; anything else is honestly "abandoned"
+		# (we cannot know the user finished). Never raises into teardown: the
+		# logger swallows its own sink errors, and a telemetry failure must not
+		# break session cleanup.
+		if form_session_id and not is_reconnect:
+			try:
+				log_form_session_end(
+					form_id=(schema or {}).get("form_metadata", {}).get("form_number", "unknown"),
+					form_session_id=form_session_id,
+					completion_status="completed" if locals().get("session_completed") else "abandoned",
+					total_fields_confirmed=service.confirmed_field_count(),
+					firm_id=firm_id,
+					kit_id=kit_id,
+				)
+			except Exception as e:
+				log.error("session_end_telemetry_failed", error=str(e))
 		await service.end_session()
 
 
@@ -1013,7 +1060,12 @@ async def fill_form_from_schema(
 	try:
 		# Verify Auth Token
 		try:
-			verify_token(token)
+			# KEEP the decoded claims: the firm_id custom claim (bd
+			# polyglot-pdf-lo88) rides this verification, and the telemetry
+			# below keys session + confirmation records on it (bd
+			# polyglot-pdf-xwlt). Discarding the return value was why the
+			# WS path could not see firm identity at all.
+			claims = verify_token(token)
 		except Exception as e:
 			log.warning("websocket_auth_failed", error=str(e))
 			await websocket.close(code=1008, reason="Authentication failed")
@@ -1070,6 +1122,12 @@ async def fill_form_from_schema(
 	# share a form_number (a standard W-7 and a firm-specific variant), and only
 	# kit_id distinguishes them in the confirmation record.
 	kit_id = handshake.get("kit_id")
+	# Firm identity comes from the verified TOKEN, never the handshake: the
+	# handshake is client-controlled, and a firm id a client could type is
+	# not an identity (bd polyglot-pdf-xwlt). isinstance-guarded because the
+	# dev-bypass stub and any legacy account carry no firm claim.
+	_firm_claim = claims.get("firm_id") if isinstance(claims, dict) else None
+	firm_id = _firm_claim if isinstance(_firm_claim, str) and _firm_claim else None
 
 	if is_jit_mode:
 		# Manifest-first transport: extract the manifest + first field schema.
@@ -1265,5 +1323,6 @@ async def fill_form_from_schema(
 		initial_field_hint=initial_field_hint,  # Computed by frontend before connection
 		form_session_id=form_session_id,  # Persistent ID from frontend (survives reconnects)
 		kit_id=kit_id,  # Kit identity for the confirmation audit trail (bd polyglot-pdf-47r3)
+		firm_id=firm_id,  # Firm identity from the token claim (bd polyglot-pdf-xwlt)
 		is_reconnect=is_reconnect,  # Suppresses greeting on mid-section reconnect (bd polyglot-pdf-vmxx)
 	)

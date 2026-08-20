@@ -291,6 +291,7 @@ def log_field_confirmation(
     confirmation_method: ConfirmationMethod,
     kit_id: Optional[str] = None,
     edition_date: Optional[str] = None,
+    firm_id: Optional[str] = None,
 ) -> None:
     """
     Log field confirmation event (NO PII).
@@ -311,8 +312,13 @@ def log_field_confirmation(
             Sourced from form_metadata.edition_date, NOT form_metadata.version --
             `version` is a schema-authoring field whose values differ in meaning
             per kit ("v9_conformant", "draft") and would be misleading here.
-        Both default to None so an older client that omits the handshake keys
-        degrades to the pre-47r3 record shape rather than erroring.
+        firm_id: The CUSTOMER FIRM this session ran under, from the staff
+            member's firm_id token claim (bd polyglot-pdf-xwlt, epic 02ye).
+            Identifies the FIRM, never the client -- per-firm usage is then an
+            equality query on this key. None for a session with no firm claim
+            (a legacy authed user or local dev), which logs exactly as before.
+        All three default to None so an older client that omits the handshake
+        keys degrades to the pre-47r3 record shape rather than erroring.
 
     CRITICAL: This function MUST NEVER receive or log actual field values or PII.
 
@@ -341,6 +347,10 @@ def log_field_confirmation(
         # client that does not send them.
         "kit_id": kit_id,
         "edition_date": edition_date,
+        # Firm identity (bd polyglot-pdf-xwlt). Always present as a key so
+        # every record has a uniform shape; None when no firm claim rode the
+        # session.
+        "firm_id": firm_id,
         "form_session_id": form_session_id,
         "field_id": field_id,
         "field_name": field_name or field_id,
@@ -384,6 +394,8 @@ def log_form_session_start(
     form_id: str,
     form_session_id: str,
     section_id: Optional[str] = None,
+    firm_id: Optional[str] = None,
+    kit_id: Optional[str] = None,
 ) -> None:
     """
     Log start of form filling session.
@@ -392,6 +404,10 @@ def log_form_session_start(
         form_id: Form type (e.g., "I-90")
         form_session_id: Persistent session ID
         section_id: Initial section ID if applicable
+        firm_id: Customer firm this session runs under (bd polyglot-pdf-xwlt);
+            None when no firm claim rode the token.
+        kit_id: Kit identity, so a session record names the same kit its
+            confirmations do.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -399,6 +415,8 @@ def log_form_session_start(
         "timestamp": timestamp,
         "event": "form_session_started",
         "form_id": form_id,
+        "kit_id": kit_id,
+        "firm_id": firm_id,
         "form_session_id": form_session_id,
         "section_id": section_id,
     }
@@ -416,6 +434,8 @@ def log_form_session_end(
     form_session_id: str,
     completion_status: Literal["completed", "abandoned", "error"],
     total_fields_confirmed: int,
+    firm_id: Optional[str] = None,
+    kit_id: Optional[str] = None,
 ) -> None:
     """
     Log end of form filling session.
@@ -425,6 +445,8 @@ def log_form_session_end(
         form_session_id: Persistent session ID
         completion_status: How session ended
         total_fields_confirmed: Count of fields confirmed in this session
+        firm_id: Customer firm this session ran under (bd polyglot-pdf-xwlt).
+        kit_id: Kit identity, matching the session-start record.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -432,6 +454,8 @@ def log_form_session_end(
         "timestamp": timestamp,
         "event": "form_session_ended",
         "form_id": form_id,
+        "kit_id": kit_id,
+        "firm_id": firm_id,
         "form_session_id": form_session_id,
         "completion_status": completion_status,
         "total_fields_confirmed": total_fields_confirmed,

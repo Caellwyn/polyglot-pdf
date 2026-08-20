@@ -40,6 +40,7 @@ class CallbackHandler:
         form_session_id: Optional[str] = None,
         kit_id: Optional[str] = None,
         edition_date: Optional[str] = None,
+        firm_id: Optional[str] = None,
     ):
         """
         Initialize callback handler.
@@ -53,6 +54,9 @@ class CallbackHandler:
             form_session_id: Persistent form session ID for confirmation logging
             kit_id: Kit identifier (e.g., "w7") -- the UNIQUE kit key, since two
                 kits can share a form_id (bd polyglot-pdf-47r3)
+            firm_id: The customer FIRM this session runs under, from the staff
+                token's firm_id claim (bd polyglot-pdf-xwlt). None when no firm
+                claim rode the session; identifies the firm, never the client.
             edition_date: The form's government edition (e.g., "12/2024"), so the
                 audit record names which edition was confirmed against
         """
@@ -73,6 +77,12 @@ class CallbackHandler:
         self._form_session_id = form_session_id  # For confirmation logging
         self._kit_id = kit_id  # Audit trail: which KIT (bd polyglot-pdf-47r3)
         self._edition_date = edition_date  # Audit trail: which EDITION
+        self._firm_id = firm_id  # Telemetry: which FIRM (bd polyglot-pdf-xwlt)
+        # Confirmed-field count for the session-end record (bd
+        # polyglot-pdf-xwlt). Incremented at the ONE place a confirmation is
+        # known to have actually taken -- the same `recorded` guard that gates
+        # log_field_confirmation -- so the count can never exceed the events.
+        self._confirmed_count = 0
         
         # Service methods will be injected
         self._handle_update_fields = None
@@ -978,6 +988,7 @@ class CallbackHandler:
         if self._form_id and self._form_session_id:
             # Get field name from schema for logging (we need to request this from frontend)
             # For now, just log the field_id
+            self._confirmed_count += 1
             log_field_confirmation(
                 form_id=self._form_id,
                 form_session_id=self._form_session_id,
@@ -985,7 +996,8 @@ class CallbackHandler:
                 field_name=None,  # Will be enriched by frontend if needed
                 confirmation_method=confirmation_method,
                 kit_id=self._kit_id,  # bd polyglot-pdf-47r3
-                edition_date=self._edition_date
+                edition_date=self._edition_date,
+                firm_id=self._firm_id,  # bd polyglot-pdf-xwlt
             )
 
         # SECTION-BOUNDARY SHORT-CIRCUIT (bd polyglot-pdf-njvh). When this confirm

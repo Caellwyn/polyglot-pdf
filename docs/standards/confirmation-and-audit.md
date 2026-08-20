@@ -62,6 +62,7 @@ project's `StructuredLogger` / the Cloud Run→BigQuery typed-event path describ
   "form_id": "I-90",
   "kit_id": "i-90",
   "edition_date": "01/20/25",
+  "firm_id": "acme-legal",
   "form_session_id": "fss_abc123_xyz789",
   "field_id": "p1_line1_aliennumber",
   "field_name": "p1_line1_aliennumber",
@@ -80,6 +81,13 @@ form NUMBER and identifies neither of the things a liability record needs:
   it, a form filled against the 12/2024 W-7 and one filled after a later
   revision read identically, and a disputed filing cannot answer "which edition
   did the client confirm against?".
+- **`firm_id`** (bd `polyglot-pdf-xwlt`) -- the CUSTOMER FIRM whose staff ran
+  the session, from the `firm_id` custom claim on the verified token (never
+  from the handshake, which is client-controlled: a firm id a caller can type
+  is not an identity). It names our paying customer so per-firm usage is an
+  equality query; it is **not** a client identifier, and the firm tier
+  deliberately has none anywhere in this record. `null` for a session with no
+  firm claim.
 
 `edition_date` comes from `form_metadata.edition_date`, **never**
 `form_metadata.version`: `version` is a schema-AUTHORING field whose values
@@ -89,10 +97,10 @@ per-kit semantics into a legal record. Both keys are always written (as `null`
 when unavailable) so every record has a uniform shape and a missing value reads
 as "not recorded" rather than as a different edition.
 
-**Both are established once per form-session and PRESERVED across section
+**These are established once per form-session and PRESERVED across section
 switches.** The internal section-switch restart re-enters `start_session` with
 only the new section's schema, so `FormFillingService` keeps `self._kit_id` /
-`self._edition_date` rather than re-deriving them (same pattern as
+`self._edition_date` / `self._firm_id` rather than re-deriving them (same pattern as
 `_form_session_id` and `_full_schema`). Without that, `kit_id` reset to `null`
 after section 1 and the fingerprint was recomputed from a single-section schema
 -- so the "pinned" marker changed mid-session, which is the opposite of pinning
@@ -168,7 +176,10 @@ THREE cases:
    This sweep is scoped to `event == "field_confirmed"` deliberately, and that
    scoping is load-bearing: `log_form_session_start`/`_end` produce the SAME
    missing-key shape, so sweeping on the shape alone would make every kit
-   permanently undeletable the moment one session is logged. Firestore cannot
+   permanently undeletable the moment one session is logged. (Since bd
+   `polyglot-pdf-xwlt` those two are live on every voice session and DO carry
+   `kit_id`, which makes the correct scoping matter more, not less: an
+   unscoped sweep would now match real records on every kit.) Firestore cannot
    query for a missing key, so this is a bounded client-side scan
    (`_LEGACY_SCAN_LIMIT`) rather than a filter -- enough to find legacy records
    if any exist, small enough that a delete never streams a large collection.
@@ -197,19 +208,23 @@ actually writes.
 
 ### Other events in the same log
 
-These helpers are **defined but not yet wired** — only `log_field_confirmation`
-has a live caller today; the session-lifecycle pair is scaffolding for the
-logging roadmap (see [logging-and-cost.md](logging-and-cost.md), Phase 2).
-(The pair previously raised a latent `TypeError` on every call — `**event`
-collided with structlog's positional event name; fixed under bd
-polyglot-pdf-z2is when the sink tests gave them their first caller, so wiring
-them is now safe.)
+The session-lifecycle pair is **wired** as of bd `polyglot-pdf-xwlt` — the WS
+route (`_handle_fill_session`) is their first and only caller. (They
+previously raised a latent `TypeError` on every call — `**event` collided
+with structlog's positional event name; fixed under bd polyglot-pdf-z2is.)
 
-- `log_form_session_start(form_id, form_session_id, section_id=None)` →
-  `form_session_started`.
+- `log_form_session_start(form_id, form_session_id, section_id=None,
+  firm_id=None, kit_id=None)` → `form_session_started`, logged once per
+  session after the Gemini session starts. A **reconnect does not re-log**:
+  `form_session_id` survives reconnects, so re-logging would inflate a
+  per-firm session count with what is one session to the user.
 - `log_form_session_end(form_id, form_session_id, completion_status,
-  total_fields_confirmed)` → `form_session_ended` with a confirmed-field **count**
-  (no values). `completion_status` is one of `completed` / `abandoned` / `error`.
+  total_fields_confirmed, firm_id=None, kit_id=None)` → `form_session_ended`
+  with a confirmed-field **count** (no values), logged in the handler's
+  `finally` so it records however the socket died. `completion_status` is
+  `completed` only when the client sent `form_complete`; otherwise
+  `abandoned` (we cannot know the user finished). `error` remains available
+  for callers that can distinguish it.
 - `read_confirmation_log(form_session_id)` / `get_confirmation_log_path(...)` read
   back a session's events for review or legal purposes. The operational entry
   point is **`scripts/read_confirmations.py <form_session_id>`** (bd z2is) --
@@ -353,7 +368,7 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-19 (bd polyglot-pdf-1dt9b: the Undertaken-register
+*Last updated: 2026-08-20 (bd polyglot-pdf-xwlt: `firm_id` joins the confirmation record and the session-lifecycle pair is WIRED -- see [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md). Previously bd polyglot-pdf-1dt9b: the Undertaken-register
 reachability claim was stale -- the frontend intro-clip player shipped in bd
 s1iex.5, so the real gate is now both flags defaulting off, not "no player
 exists").*

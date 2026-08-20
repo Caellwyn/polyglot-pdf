@@ -134,6 +134,7 @@ class FormFillingService:
         # Kit identity + government edition for the audit trail (bd
         # polyglot-pdf-47r3), stored for the same reason as _form_session_id.
         self._kit_id: Optional[str] = None
+        self._firm_id: Optional[str] = None
         self._edition_date: Optional[str] = None
         # Resume flag: True when the handshake carried resume:true (mid-section
         # reconnect). Suppresses the greeting in send_initiating_message so Gemini
@@ -234,6 +235,16 @@ class FormFillingService:
             declarations.append(deepcopy(self._settings.SPELLBACK_TOOL_DECLARATION))
         return declarations
 
+    def confirmed_field_count(self) -> int:
+        """Fields confirmed so far this session (bd polyglot-pdf-xwlt).
+
+        Reads the callback handler's counter, which increments only inside the
+        `recorded` guard that gates confirmation logging -- so this can never
+        report more confirmations than there are events. 0 when the handler
+        was never built (a session that failed before start_session).
+        """
+        return getattr(self._callback_handler, "_confirmed_count", 0)
+
     async def start_session(
         self,
         websocket: WebSocket,
@@ -247,6 +258,7 @@ class FormFillingService:
         system_instruction: Optional[str] = None,
         form_session_id: Optional[str] = None,
         kit_id: Optional[str] = None,
+        firm_id: Optional[str] = None,
         current_section_id: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
@@ -363,6 +375,12 @@ class FormFillingService:
         # masquerading as the form's revision is not (bd polyglot-pdf-n41r).
         if kit_id is not None:
             self._kit_id = kit_id
+        # PRESERVED for the same reason as kit_id directly above: the internal
+        # section-switch restart re-enters start_session with firm_id=None, and
+        # overwriting would strip firm identity from every record after section
+        # 1 -- the exact shape of the 47r3 kit_id bug (bd polyglot-pdf-xwlt).
+        if firm_id is not None:
+            self._firm_id = firm_id
         if full_schema is not None:
             # Look for the government edition in the per-section schema FIRST
             # (where a 47r3-aware client puts it via the handshake key), then in
@@ -414,6 +432,7 @@ class FormFillingService:
             # with -- same reason form_session_id is threaded from self.
             kit_id=self._kit_id,
             edition_date=self._edition_date,
+            firm_id=self._firm_id,
         )
 
         # Inject tool handler methods into callback handler

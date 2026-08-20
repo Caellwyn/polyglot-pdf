@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-08-18. See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-08-20. See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -175,9 +175,11 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
   bootstrap script below. The claims ride the existing ID-token verification
   (`require_auth` / the WS `?token=` gate). **`firm_id` is consumed** by the
   form-kit routes' firm-scoped visibility filter
-  (`backend/routes/form_kit_routes.py`, bd `polyglot-pdf-vccy`); `firm_role`
-  and the telemetry threading (bd `polyglot-pdf-xwlt`) are still future
-  consumers. A stamped claim appears in decoded tokens only on the next
+  (`backend/routes/form_kit_routes.py`, bd `polyglot-pdf-vccy`) AND by the
+  voice path's telemetry: the `/ws/fill` gate keeps its decoded claims and
+  keys session + confirmation records on `firm_id` (bd `polyglot-pdf-xwlt`;
+  the claim is read from the TOKEN, never the client-controlled handshake).
+  `firm_role` is still a future consumer. A stamped claim appears in decoded tokens only on the next
   token refresh (up to ~1h; force via sign-out/in or `getIdToken(true)`).
 
 **The admin step** (creates/updates the firm record and stamps staff claims;

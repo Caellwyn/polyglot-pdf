@@ -143,3 +143,67 @@ async def test_missing_current_values_defaults_to_empty(mock_fill_session, mock_
     _, helper_kwargs = mock_fill_session.await_args
     assert helper_kwargs["current_values"] == {}
 
+
+
+# --- firm identity from the TOKEN, not the handshake (bd polyglot-pdf-xwlt) ---
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_firm_id_comes_from_the_verified_token_claim(
+    mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message
+):
+    """The firm_id custom claim on the verified token reaches the session.
+
+    Before bd xwlt the WS gate CALLED verify_token and threw the decoded
+    claims away, so the voice path could not see firm identity at all.
+    Mutation: revert `claims = verify_token(token)` to a bare call, or drop
+    firm_id from the _handle_fill_session kwargs -- red.
+    """
+    mock_verify_token.return_value = {"uid": "staff-a", "firm_id": "firm-a"}
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="tok")
+
+    assert mock_fill_session.await_args.kwargs["firm_id"] == "firm-a"
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_handshake_supplied_firm_id_is_IGNORED(
+    mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message
+):
+    """A firm id a CLIENT can type is not an identity.
+
+    The handshake is client-controlled, so a firm_id there must never become
+    the telemetry key -- otherwise any signed-in user could bill their usage
+    to another firm (or hide their own). Mutation: read firm_id from the
+    handshake instead of the claims -- red.
+    """
+    mock_verify_token.return_value = {"uid": "legacy-user"}  # NO firm claim
+    spoofed = dict(handshake_message, firm_id="firm-victim")
+    mock_websocket.receive_text.return_value = json.dumps(spoofed)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="tok")
+
+    assert mock_fill_session.await_args.kwargs["firm_id"] is None
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_session_with_no_firm_claim_still_runs(
+    mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message
+):
+    """EXIT CRITERION 2: a legacy authed user (and the dev-bypass stub, which
+    returns a claims dict with no firm_id) connects unchanged, firm_id None.
+    Mutation: require a firm claim to proceed -- red."""
+    mock_verify_token.return_value = {"uid": "dev_user", "email": "dev@example.com"}
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="tok")
+
+    mock_fill_session.assert_awaited()
+    assert mock_fill_session.await_args.kwargs["firm_id"] is None
