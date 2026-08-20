@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-19 (bd polyglot-pdf-1bsuq: the extract route row now
+*Last updated: 2026-08-20 (bd polyglot-pdf-1bsuq: the extract route row now
 states its write-locked-kit 409 gate, matching the sibling translate-options
 row. Same day, bd polyglot-pdf-5guak added Surface contracts entry 8 (the
 intro agree-label mirror) and bd polyglot-pdf-qfak0 added entry 9 (the
