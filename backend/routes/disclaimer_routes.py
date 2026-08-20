@@ -23,6 +23,13 @@ class DisclaimerAcceptanceRequest(BaseModel):
 	language: str = Field(..., description="Language user selected (e.g., 'Spanish', 'English')")
 	timestamp: int = Field(..., description="Unix timestamp (milliseconds) when user clicked 'I Agree'")
 	user_agent: Optional[str] = Field(None, description="Browser user agent string")
+	# Which exact disclaimer TEXT the user agreed to (sprint 20, bd
+	# polyglot-pdf-s1iex.7). Optional: a client one deploy behind, and the
+	# legacy model-read path, both omit it -> None.
+	script_version: Optional[str] = Field(
+		None,
+		description="Hash of the scripted intro text the user saw/heard (intro_tts.script_version)",
+	)
 
 
 @router.post("/disclaimer-acceptance")
@@ -37,6 +44,14 @@ async def log_disclaimer_acceptance(
 	- Selected language
 	- Form session ID
 	- User agent (device class -- deliberate low-sensitivity retention)
+	- script_version: WHICH TEXT they agreed to (bd polyglot-pdf-s1iex.7)
+
+	`script_version` is what turns determinism into EVIDENCE. Sol's intro is
+	synthesized from a fixed per-language script, so the record can now name
+	the exact text -- without it the log proves someone clicked Agree but not
+	what they were told. Non-PII: a hash of copy that ships in the client
+	bundle. None on the legacy model-read path (nothing deterministic to
+	name) and on a client one deploy behind.
 
 	The client IP is deliberately NOT logged (bd polyglot-pdf-z2is): an IP is
 	PII under GDPR/CCPA, and the acceptance evidence that matters is the
@@ -58,6 +73,7 @@ async def log_disclaimer_acceptance(
 		timestamp_unix_ms=data.timestamp,
 		timestamp_iso=iso_timestamp,
 		user_agent=data.user_agent,
+		script_version=data.script_version,
 	)
 
 	return {

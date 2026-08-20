@@ -304,13 +304,23 @@ deployment.** The frontend player shipped (bd `polyglot-pdf-s1iex.5`, closed --
 frontend flag is on), but both gating flags default OFF: `INTRO_TTS_ENABLED`
 (backend) defaults false, so `POST /api/tts/intro` 503s, and
 `VITE_INTRO_CLIP_ENABLED` (frontend) defaults false, so the modal never
-requests the clip in the first place. `intro_script.json` and `intro_tts.py`
-both assert
+requests the clip in the first place. Flipping BOTH is the deliberate cutover
+step (bd `polyglot-pdf-vr5bj`), gated on counsel review of the frozen script.
+`intro_script.json` and `intro_tts.py` both assert
 a HARD INVARIANT that "the modal renders exactly these paragraphs -- one
 source, no separate fullText"; **that invariant describes the intended end
 state, not shipped behavior.** Do not cite it as current.
 
-**Why this matters when s1iex.5 ships.** It changes the user-facing legal
+**The acceptance record now names WHICH text was agreed to.** `POST
+/api/disclaimer-acceptance` logs `script_version` (bd
+`polyglot-pdf-s1iex.7`) -- the hash of the exact per-language script, taken
+from the intro route's `X-Intro-Script-Version` response header so the backend
+stays the single source of it. That is what turns the epic's determinism into
+EVIDENCE: without it the record proves someone clicked Agree but not what they
+were told. `None` on the legacy model-read path, which has no deterministic
+text to name.
+
+**Why this matters when the flags flip.** It changes the user-facing legal
 posture, not just the audio: today the applicant is ADVISED to obtain review;
 the staged script has them AGREE to obtain it, and the `[AGREE LABEL]` click
 would record that undertaking. Whether the written modal should adopt the same

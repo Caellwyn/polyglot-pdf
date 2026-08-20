@@ -86,6 +86,27 @@ async function clickButton(page, re, label) {
   log(`clicked ${label}`);
 }
 
+/**
+ * Click a button only if it is already on screen (bd polyglot-pdf-s1iex.7).
+ *
+ * Unlike clickButton this does NOT wait or fail when the control is absent --
+ * the disclaimer modal's presence at this point depends on the intro-clip
+ * flag, and the driver must work under both states.
+ */
+async function clickIfPresent(page, pattern, label) {
+  const button = page.getByRole('button', { name: pattern }).first();
+  try {
+    if (await button.isVisible({ timeout: 2000 })) {
+      await button.click();
+      log(`clicked ${label}`);
+      return true;
+    }
+  } catch {
+    // Not present yet -- the caller's wait handles the other ordering.
+  }
+  return false;
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -112,6 +133,26 @@ async function clickButton(page, re, label) {
   await clickButton(page, /Russkiy|Russian/, 'Russian');
   await clickButton(page, /W-7/, 'W-7 form');
 
+  // Agree FIRST if the disclaimer modal is already up (bd polyglot-pdf-s1iex.7).
+  // ORDER IS FLAG-DEPENDENT, so this handles BOTH states rather than swapping:
+  //  - intro clip OFF (today): the app connects before Agree, so
+  //    __VFF_TEST_INJECT already exists and this click is simply early --
+  //    harmless, the modal is up either way.
+  //  - intro clip ON: NO session exists until Agree, so the hook does not
+  //    exist yet and waiting for it first would hang until timeout.
+  // Clicking when present, then waiting, is correct under both.
+  // BILINGUAL on purpose: this session's agree button is TRANSLATED
+  // ("Prinimayu", not "I Agree" -- DisclaimerModal.BUTTON_TRANSLATIONS). The
+  // English literal already timed out at 20s and crashed a run once, which is
+  // why this pattern is bilingual: an English-only match would silently hit
+  // nothing here and leave the flag-ON path hanging on the inject-hook wait
+  // (bd polyglot-pdf-s1iex.7). This is the ONLY Agree click in this driver --
+  // a second one below would block once this dismisses the modal. Escaped to
+  // keep this source ASCII (scar #6).
+  await clickIfPresent(
+    page, new RegExp('\u041f\u0440\u0438\u043d\u0438\u043c\u0430\u044e' + '|I Agree'),
+    'disclaimer agree (ru, pre-hook)');
+
   await page.waitForFunction(
     () => typeof window.__VFF_TEST_INJECT === 'object' && window.__VFF_TEST_INJECT !== null,
     undefined, { timeout: 40000 });
@@ -127,12 +168,11 @@ async function clickButton(page, re, label) {
     window.__vffYes = await H.loadFixture('/test-fixtures/confirm_yes.wav');
   }, FIXTURES);
 
-  // The disclaimer's agree button is TRANSLATED per session language
-  // (DisclaimerModal.BUTTON_TRANSLATIONS): a Russian session shows
-  // "Prinimayu", NOT "I Agree" -- matching the English literal timed out at
-  // 20s and crashed the first run. \u-escaped to keep this source ASCII (scar #6).
-  const RU_AGREE = '\u041f\u0440\u0438\u043d\u0438\u043c\u0430\u044e';  // 'Prinimayu'
-  await clickButton(page, new RegExp(RU_AGREE + '|I Agree'), 'disclaimer agree (ru)');
+  // (Agree was already clicked above, before the inject-hook wait -- see the
+  // bilingual clickIfPresent there. A second click here would BLOCK: clickButton
+  // waits 60s and throws when the modal is already dismissed, which is exactly
+  // what happens with the intro flag OFF. bd polyglot-pdf-s1iex.7, cross-surface
+  // review round 1 -- the same removal the three non-RU drivers got.)
 
   const PACING = process.env.VFF_PACING || 'polite';
   log(`lead-in + probe (pacing: ${PACING})`);

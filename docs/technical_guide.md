@@ -1,34 +1,30 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-19 (bd polyglot-pdf-qfyxr: the archive read routes -- four route-table rows, two client-tier firm-scoped + two editor token-gated -- see [the qfyxr journal entry](journal/entries/2026-08-19-bd-qfyxr-kit-history-ui.md). Same day, bd polyglot-pdf-kkos: the static bundle now ships only complete AND public kits, so Surface contracts entry 7's rewrite paragraph is a shipped security boundary -- see [the kkos journal entry](journal/entries/2026-08-19-bd-kkos-static-bundle-scoping.md). 2026-08-18, bd polyglot-pdf-vccy: firm-scoped kit visibility -- the four form-kit/fill route rows, the `FIRMS_FIRESTORE_ENABLED` env row, and the new Surface contracts entry 7 -- see [the vccy journal entry](journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for closeout details. Same day, bd polyglot-pdf-y2l0p: the two draft-snapshot routes -- every editor save now copies the current schema into a bounded ring of the last 10 before overwriting, and an editor can list and restore their own overwritten work. Previously bd polyglot-pdf-bdedm: the retire-candidates route -- a SUGGESTION layer over the replaces_kit_id contract, author-only, matching on form_number first and exact label second. Also bd polyglot-pdf-bxr3p + polyglot-pdf-x82ii: every
-code-line citation in the Surface contracts section now resolves to the code
-it names. x82ii fixed the "2. WS handshake" block (producer/consumer lines,
-all handshake key citations, and the `full_schema` consumer chain -- one
-citation, the secretary-catalog renderer, was pointing at the wrong FILE, not
-just a wrong line) plus the adjacent "3. WS control messages" and "4. Backend
-<-> Gemini Live" blocks, all drifted off the same `websocket_routes.py` code
-motion the ws-protocol.md fix addressed. bxr3p fixed the rest -- section 5
-("Fill round-trip": producer/consumer line numbers, the two-pass
-alias-resolution range, the `_load_kit_dump` def + its actual
-promotion-gate call site, one of 7 call sites, not the one the doc previously
-named) and section 6 ("Confirmation audit trail": the confirm-field chain
-across `request_coordinator.py` / `webFormConnection.ts` /
-`callback_handler.py`, and the confirmation-event shape + all three log sinks
-in `confirmation_logger.py`). Also current: the `PDFFillRequest` line range in
-section 5 does not straddle into `fill_pdf` and the dropped-key example there
-names `form_number`, the key that actually produces `form_id="unknown"` (a
-dropped `kit_id` degrades to `kit_id=None` instead) -- bd polyglot-pdf-a4v4 +
-qxad. Same week, bd polyglot-pdf-lo88 added the `FIRMS_FIRESTORE_ENABLED` env
-row and the single-live-project correction -- see [the lo88 journal
-entry](journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for
-closeout details. The Surface contracts section is the code-derived
-cross-surface data-contract map for blast-radius review (bd
-polyglot-pdf-n18q).
-Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` /
+*Last updated: 2026-08-20 (bd polyglot-pdf-qfyxr: the archive read routes -- four route-table rows, two client-tier firm-scoped + two editor token-gated -- see [the qfyxr journal entry](journal/entries/2026-08-19-bd-qfyxr-kit-history-ui.md). Same week, bd polyglot-pdf-xg0pm: Surface contracts section 1's
+`editor_kit_routes.py` line citations re-verified against the current file --
+draft save, the publish-gate `FormSchema.model_validate` + lint gate, and both
+schema read paths had all drifted; also fixed the adjacent `form_kits.py`
+`put_schema` citations in the same paragraph while re-verifying it. Same day,
+bd polyglot-pdf-vf48u: the translate-options route row's "409 on complete
+kits" wording widened to name the write-locked set (complete OR unpublished),
+matching the `/status` row's phrasing. Same day, bd polyglot-pdf-1bsuq: the
+extract route row now states the same write-locked-kit 409 gate. Same day,
+bd polyglot-pdf-5guak added Surface contracts entry 8 (the intro agree-label
+mirror) and bd polyglot-pdf-qfak0 added entry 9 (the `LIVE_VOICE_NAME`
+two-consumer coupling). Same day, bd polyglot-pdf-s1iex.7: the
+disclaimer-acceptance record now carries `script_version`, and
+`/api/tts/intro` returns the matching `X-Intro-Script-Version` header -- both
+surfaced in the route table below. Also same day, bd polyglot-pdf-kkos: the
+static bundle now ships only complete AND public kits, so Surface contracts
+entry 7's rewrite paragraph is a shipped security boundary -- see [the kkos
+journal entry](journal/entries/2026-08-19-bd-kkos-static-bundle-scoping.md)).
+The Surface contracts section is the code-derived cross-surface data-contract
+map for blast-radius review (bd polyglot-pdf-n18q). Continuous-DTI is the
+production default (`USE_DTI` / `CONTINUOUS_SESSION` /
 `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872;
-section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists
-the deploy flow + env vars; per-channel model/auth config detail lives in
-[standards/ai-models.md](standards/ai-models.md) and
+section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide
+lists the deploy flow + env vars; per-channel model/auth config detail lives
+in [standards/ai-models.md](standards/ai-models.md) and
 [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
@@ -97,9 +93,9 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is) + **firm-scoped** (bd vy6id: the body's caller-supplied `kit_id` runs the same visibility gate as the kit reads -- a private kit 404s for non-members). `components/pdf-filling.md` |
-| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). `standards/confirmation-and-audit.md` |
+| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path (bd s1iex.7). `standards/confirmation-and-audit.md` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
-| POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304; 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
+| POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy): PRIVATE kits appear only for callers whose `firm_id` claim resolves to an allowlist containing them, with paths rewritten to the authenticated backend routes. `components/pdf-filling.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
@@ -118,8 +114,8 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
 | POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
-| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
-| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on complete kits -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
+| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). 409 on any write-locked kit -- complete OR unpublished -- with a revert-first message (`force=true` would overwrite the published schema in place, bd polyglot-pdf-w3zw). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
+| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on any write-locked kit -- complete OR unpublished -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
@@ -179,16 +175,20 @@ The canonical shape is Pydantic `FormSchema` (`backend/models/form_models.py:883
 rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 - **Validation happens ONLY at the publish gate.** Draft saves
-  (`backend/routes/editor_kit_routes.py:602-646`) check just that `fields` is a
-  list and write the raw dict via the store (`backend/services/form_kits.py:353`
-  local / :565 GCS). The one chokepoint is "mark complete":
-  `FormSchema.model_validate` at `editor_kit_routes.py:1530` plus the zero-ERROR
-  schema-lint gate (`backend/services/schema_lint.py:776`, checked at
-  `editor_kit_routes.py:1571-1600`). Every read path streams the raw stored dict
-  unvalidated (`backend/routes/form_kit_routes.py:194`,
-  `editor_kit_routes.py:553`). *Breaks if bypassed:* a hand-edited or draft kit
-  reaching the voice path carries whatever shape it has -- e.g. a field without
-  `pdf_field_name` is silently never written to the output PDF.
+  (`save_editor_kit_schema`, `backend/routes/editor_kit_routes.py:1617-1700`)
+  check just that `fields` is a list and write the raw dict via the store
+  (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
+  `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
+  :1172 GCS). The one chokepoint is "mark complete":
+  `FormSchema.model_validate` at `editor_kit_routes.py:2809` plus the
+  zero-ERROR schema-lint gate
+  (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
+  `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
+  dict unvalidated (`get_form_kit_schema`,
+  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema`,
+  `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
+  draft kit reaching the voice path carries whatever shape it has -- e.g. a
+  field without `pdf_field_name` is silently never written to the output PDF.
 - **The frontend type is a hand-maintained mirror.**
   `frontend/src/schema-forms/types/schema.ts:325` (`interface FormSchema`)
   mirrors `form_models.py` with no codegen or sync check, and the SPA casts the
@@ -485,3 +485,33 @@ tokens, not the client tier):
   `pdf_filename` feeds `store.load_pdf_bytes`, contract 5). Breaking either
   half strands a private kit's fill/download while every public-kit test
   stays green.
+
+### 8. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
+
+Producer: `backend/services/intro_agree_labels.json` (18 language ->
+agree-label entries). Consumer: `BUTTON_TRANSLATIONS` in
+`frontend/src/schema-forms/components/DisclaimerModal.tsx:38`. The backend
+label is INTERPOLATED INTO SPOKEN AUDIO -- `intro_tts.build_intro_text`
+replaces the `[AGREE LABEL]` placeholder (`intro_tts.py:76`) with the
+backend's copy of the label -- so a drift means Sol speaks a button name
+that is not the one on screen. Pinned by
+`backend/tests/unit/test_intro_route.py::TestIntroTables::test_agree_labels_match_frontend_mirror`.
+
+### 9. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
+
+`Settings.LIVE_VOICE_NAME` (`backend/config.py:360`) has TWO independent
+consumers in different surfaces, so changing the env var moves both at
+once:
+
+- `backend/adapters/live_ai_gemini.py:1866` -- the Gemini Live session's
+  `speech_config.voice_config.prebuilt_voice_config.voice_name`. An
+  unaccepted name is a hard `1007 Invalid voice name` at connect that
+  breaks EVERY session.
+- `backend/services/spellback_tts.py:269`
+  (`resolve_spellback_voice`) -- the PERSONA half of the spell-back clip's
+  Cloud TTS voice (`{locale}-Chirp3-HD-{persona}`), which in turn selects
+  the clip's loudness gain via `spellback_gain_db` /
+  `_MEASURED_GAIN_DB` (`spellback_tts.py:91-98`).
+
+Full detail: [`components/voice-ai.md`](components/voice-ai.md), which has
+its own "`LIVE_VOICE_NAME` has a SECOND consumer" section.
