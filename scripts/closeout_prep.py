@@ -106,6 +106,25 @@ def _git(args: list[str], cwd: str | None = None) -> subprocess.CompletedProcess
     )
 
 
+def _git_stdin(args: list[str], stdin_text: str,
+               cwd: str | None = None) -> subprocess.CompletedProcess:
+    """Run a git command feeding it stdin -- for the --batch forms.
+
+    Separate from _git so one process can answer N queries: spawning per query
+    is what made the rewind check cost ~30s on a wide branch.
+    """
+    return subprocess.run(
+        ["git", *args],
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        timeout=60,
+    )
+
+
 def resolve_roots() -> tuple[Path, Path]:
     """Return (R, WT): the main-repo root and this worktree's root.
 
@@ -144,6 +163,68 @@ def _result(check: str, status: str, summary: str, detail: str = "") -> dict:
     return {"check": check, "status": status, "summary": summary, "detail": detail.strip()}
 
 
+def _rewound_paths(WT: Path, base: str, path: str) -> list[str]:
+    """[path] if HEAD's version of `path` is an OLDER blob from base history.
+
+    The discriminator between "I reverted their work" and "I edited this file".
+    A rewound file is byte-identical to some earlier commit's version; an edited
+    file is identical to none. Blob identity is used because it SURVIVES the bad
+    reset -- commit topology does not, since afterwards the merge-base is the
+    base tip, which is why four topology-based signals all failed here.
+
+    The base tip's own version is skipped: matching THAT just means the branch
+    holds current content, which is the normal case rather than a revert.
+
+    Any git failure yields [] -- the caller has already fail-closed on the
+    enumerating diff, and a per-file hiccup must not manufacture a false alarm.
+    """
+    cur = _git(["rev-parse", "HEAD:{}".format(path)], cwd=str(WT))
+    if cur.returncode != 0:
+        return []
+    cur_blob = cur.stdout.strip()
+
+    # THE BASE's history of this path, deliberately -- not HEAD's. The question
+    # is "did this branch rewind to something the BASE once held", so the
+    # branch's own past versions are not candidates, and walking HEAD would also
+    # shift commits[0] and defeat the base-tip skip below.
+    #
+    # DO NOT "simplify" this to HEAD. An earlier comment here called the two
+    # interchangeable; a reviewer constructed a case where they are not (a
+    # branch that self-reverts an experiment, plus the mirror case where the
+    # match is pruned by history simplification). I could not reproduce either
+    # divergence in three attempts, and the accompanying test does not catch the
+    # mutation -- so the disagreement is UNRESOLVED and the argument for `base`
+    # is the semantic one above, not a measurement. Treat this line as
+    # load-bearing until someone settles it.
+    history = _git(["rev-list", base, "--", path], cwd=str(WT))
+    if history.returncode != 0:
+        return []
+    commits = [c for c in history.stdout.split("\n") if c.strip()]
+    if len(commits) < 2:
+        # Only the base tip's own version exists, and matching THAT is the normal
+        # case (the branch holds current content), not a revert. Provably inert
+        # to mutate -- with one commit, commits[1:] is empty, the batch gets
+        # empty stdin, and the comparison below can never match a 40-hex blob --
+        # so no test pins it, which would pin shape rather than behaviour.
+        return []
+
+    # ONE cat-file --batch-check for the whole history, not a rev-parse spawn
+    # per revision. Measured on this repo: backend/config.py has 129 revisions;
+    # spawning per revision costs ~0.8s for just 20 of them, while the batched
+    # form resolves all 129 in ~0.14s. At 20-odd modified files the spawn-per-
+    # revision shape added ~30s to every closeout, on a script that already has
+    # a documented 2-minute timeout problem.
+    revs = "\n".join("{}:{}".format(c, path) for c in commits[1:])
+    batch = _git_stdin(["cat-file", "--batch-check=%(objectname)"], revs,
+                       cwd=str(WT))
+    if batch.returncode != 0:
+        return []
+    for line in batch.stdout.split("\n"):
+        if line.strip() == cur_blob:
+            return [path]
+    return []
+
+
 def check_preconditions(WT: Path, base: str) -> dict:
     """Step 0: working tree clean AND at least one commit ahead of `base`.
 
@@ -173,10 +254,74 @@ def check_preconditions(WT: Path, base: str) -> dict:
     if not commits:
         problems.append("no commits ahead of {} (nothing to close out)".format(base))
 
+    # WHOLESALE DELETIONS are the signature of a stale-base squash. `git reset
+    # --soft <branch>` moves the branch pointer FORWARD while keeping the OLD
+    # tree as the content, so every commit that landed on the base in between
+    # becomes a deletion -- silently reverting other people's merged work, with
+    # no error, a clean `git status`, and a green suite (the deleted work's
+    # tests go with it). Caught once by eye on bd polyglot-pdf-06u5o (a 4-file
+    # change reporting "11 files changed, 261 deletions"); this makes it
+    # mechanical. Deleting a file on purpose is legitimate, so it is ATTENTION
+    # rather than FAIL -- the orchestrator confirms or fixes.
+    # THE ANCESTRY GATE IS LOAD-BEARING -- for a reason my first comment here
+    # got wrong. It is NOT about diff noise (the three-dot range already
+    # handles that). It separates "this branch REVERTED their work" from "this
+    # branch is simply BEHIND the base": a behind branch legitimately holds an
+    # older version of a file it also touches, and without the gate that
+    # false-positives -- measured on 2 of this repo's live worktrees. Only
+    # `reset --soft <branch-name>` makes a branch CLAIM to contain the base
+    # while its tree does not, so that claim is the discriminator.
+    contains = _git(["merge-base", "--is-ancestor", base, "HEAD"], cwd=str(WT))
+    reverted_files = []
+    if contains.returncode == 0:
+        # TWO SHAPES, both real. A file the base ADDED comes back as a deletion;
+        # a file the base EDITED comes back as an older blob. The second is the
+        # commoner shape of merged work and needs blob identity to see, because
+        # the reset destroys commit topology -- afterwards the merge-base IS the
+        # base tip. Content survives it: a REWOUND file is byte-identical to an
+        # older version in the base's history, an EDITED one to none of them.
+        # (An earlier --diff-filter=DM attempt lacked that distinction and fired
+        # on this very commit's own three intentional edits; a guard that fires
+        # on every branch is one the orchestrator learns to skip.)
+        # --no-renames: git's rename detection collapses a rewound RENAME into
+        # an R entry, which neither the D nor the M filter selects -- so the
+        # trap reported OK on a base that had renamed a file (measured).
+        # -z: without it git QUOTES paths with spaces or non-ASCII bytes, and
+        # `rev-parse HEAD:"quoted name"` then fails, silently returning no
+        # rewind for exactly the paths hardest to notice.
+        deleted = _git(["diff", "--diff-filter=D", "--name-only", "-z",
+                        "--no-renames", "{}...HEAD".format(base)], cwd=str(WT))
+        changed = _git(["diff", "--diff-filter=M", "--name-only", "-z",
+                        "--no-renames", "{}...HEAD".format(base)], cwd=str(WT))
+        if deleted.returncode != 0 or changed.returncode != 0:
+            # FAIL CLOSED. Reading a broken diff as "nothing reverted" would
+            # make the detector report the same thing as a safe branch --
+            # silence, the exact failure this check exists to eliminate.
+            problems.append(
+                "could not check for reverted work against {} -- treat as "
+                "UNVERIFIED, not clean; re-check `git diff {}...HEAD --stat` "
+                "by hand".format(base, base))
+        else:
+            # -z output is NUL-separated, not newline-separated.
+            reverted_files = [f for f in deleted.stdout.split("\0") if f.strip()]
+            for path in [f for f in changed.stdout.split("\0") if f.strip()]:
+                reverted_files.extend(_rewound_paths(WT, base, path))
+    if reverted_files:
+        problems.append(
+            "branch REVERTS {} file(s) to an older state than {} has -- if that "
+            "was not deliberate, this is the squash-to-a-branch-name trap "
+            "(CLAUDE.md scar #3); re-check `git diff {}...HEAD --stat`".format(
+                len(reverted_files), base, base))
+
     if problems:
         detail = ""
         if dirty:
             detail += "Uncommitted changes:\n{}\n".format(dirty)
+        if reverted_files:
+            detail += "\nFiles this branch REVERTS to an older state than {}:\n{}\n".format(
+                base, "\n".join("  " + f for f in reverted_files[:20]))
+            if len(reverted_files) > 20:
+                detail += "  ... and {} more\n".format(len(reverted_files) - 20)
         if commits:
             detail += "\nCommits ahead:\n{}".format(commits)
         elif not dirty:
