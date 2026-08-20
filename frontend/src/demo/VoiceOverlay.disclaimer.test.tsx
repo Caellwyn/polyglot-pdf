@@ -375,4 +375,60 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
   it('mobile (VoiceOverlayMobile): soft-refresh resume with disclaimer accepted reconnects WITHOUT re-showing/re-reading the disclaimer (fn1m)', async () => {
     await assertAcceptedSoftRefreshResumeSkipsDisclaimer(VoiceOverlayMobile)
   })
+
+  // ---- ONE SOURCE: the register the applicant actually accepts (bd nsb4y) ----
+  //
+  // Settled by the maintainer 2026-08-19: what the modal RENDERS and what the
+  // model SPEAKS must be the same text. Before this, the modal showed "we
+  // strongly advise" (advice) while Sol's clip said "you agree to review" (an
+  // undertaking) -- two legal registers behind ONE Agree button, decided by
+  // whether the user listened or read.
+  //
+  // These drive the REAL overlay, with no introParagraphs prop, so they
+  // exercise the component's own decision about which text to show. A
+  // DisclaimerModal-level test cannot: passing the prop explicitly bypasses
+  // exactly the gate that was the bug (verified -- that test stayed green
+  // through a mutation restoring it).
+  async function assertScreenStatesTheUndertaking(Overlay: typeof VoiceOverlay) {
+    vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
+      schema: MINIMAL_SCHEMA,
+      fieldValues: {},
+      currentSectionId: 'section_1',
+      completedSections: new Set<string>(),
+      validationErrors: {},
+      lastUpdated: 0,
+      formSessionId: 'fss_test',
+      loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false,
+      disclaimerAccepted: false,
+      selectedLanguage: 'English',
+    } as any))
+    vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+
+    render(
+      <Overlay
+        schema={MINIMAL_SCHEMA}
+        connectionManager={makeMockManager([])}
+        status="connected"
+        initialLanguage="English"
+      />
+    )
+    await screen.findByText('I Agree')
+
+    const body = document.body.textContent?.toLowerCase() ?? ''
+    // The UNDERTAKING must be on screen...
+    expect(body).toContain('agree to review the completed document')
+    expect(body).toContain('certified professional')
+    // ...and the retired advisory copy must NOT be, or both registers are live
+    // at once and the Agree click is ambiguous again.
+    expect(body).not.toContain('we strongly advise')
+  }
+
+  it('desktop (VoiceOverlay): the SCREEN states the review undertaking, unconditionally (nsb4y)', async () => {
+    await assertScreenStatesTheUndertaking(VoiceOverlay)
+  })
+
+  it('mobile (VoiceOverlayMobile): the SCREEN states the review undertaking, unconditionally (nsb4y)', async () => {
+    await assertScreenStatesTheUndertaking(VoiceOverlayMobile)
+  })
 })
