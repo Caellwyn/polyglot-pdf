@@ -574,6 +574,15 @@ def test_single_kit_routes_read_metadata_exactly_once(_firm_world, monkeypatch):
     assert resp.status_code == 200
     assert calls == ["pub-kit"]
 
+    # The archived-schema read follows the same one-read pattern (qfyxr).
+    calls.clear()
+    resp = client.get(
+        "/api/form-kits/priv-kit/archive/2024-01/schema",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert calls == ["priv-kit"]
+
 
 def test_empty_allowlist_hides_private_even_for_claimed_firm(_firm_world, monkeypatch):
     """FAIL-CLOSED pin: a firms store answering [] (disabled, broken, firm

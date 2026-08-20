@@ -64,6 +64,23 @@ describe('ArchivedVersions disclosure', () => {
     await waitFor(() => expect(screen.getByText('No archived versions.')).toBeTruthy());
   });
 
+  it('a vanished revision shows the in-viewer not-found message', async () => {
+    // loadArchivedSchema returns null on 404 (remoteKitStore contract): the
+    // revision was listed a moment ago and has since gone. Same register as
+    // the client sibling's 404 branch, pinned on BOTH twins deliberately
+    // (each round found the unpinned twin). Mutation: remove the
+    // viewing.schema === null branch from the dialog -- red.
+    mount({ loadSchema: vi.fn(async () => null) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived versions' }));
+    await waitFor(() => expect(screen.getByText('2025-06')).toBeTruthy());
+    fireEvent.click(screen.getByText('2025-06'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('could not be found');
+    expect(dialog.querySelectorAll('input, textarea, select')).toHaveLength(0);
+  });
+
   it('opening a revision shows the READ-ONLY viewer with no inputs', async () => {
     // Mutation: drop the "read only" labeling from the dialog heading -- red.
     const { loadSchema } = mount();
