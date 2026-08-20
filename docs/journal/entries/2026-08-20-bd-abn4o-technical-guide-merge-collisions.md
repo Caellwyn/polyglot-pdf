@@ -19,12 +19,19 @@ Measured on origin/dev over 8 weeks, commit counts as a contention proxy:
 technical_guide.md 38, standards/ws-protocol.md 34, INDEX.md 26,
 components/config-deployment.md 24, components/voice-ai.md 23. The maintainer
 then named technical_guide.md as the file conflicting that day, so the hunk
-headers of the 11 commits touching it in the week to 2026-08-20 were read
+headers of the 12 commits touching it in the week to 2026-08-20 were read
 directly:
 
-- stamp paragraph (L1-24): 8 of 11 commits
-- routes table (~L96-116): 8 of 11 commits
-- Surface-contract appends (EOF): 2 of 11 commits
+- stamp paragraph (L1-24): 12 of 12 commits -- every one
+- routes table (~L96-116): 7 of 12 commits
+- Surface-contract appends (EOF): 4 of 12 commits
+
+(Re-measured at the end of the review loop, because the window kept filling as
+work landed: the first count, taken mid-bead, saw 11 commits and read the zones
+as 8/8/2. The re-count over the same 08-14..08-21 window strengthens the case
+rather than weakening it -- the stamp paragraph was touched by EVERY commit that
+touched the file. The zone ordering that drove the scoping decision is unchanged:
+stamp first, routes table second, EOF appends last.)
 
 ## What shipped
 
@@ -85,7 +92,7 @@ addressing it. Both halves are now in.
 
 **The Surface-contracts split was deferred** to polyglot-pdf-m2j14 rather than
 shipped here, on the bead's own evidence. It addresses the least frequent
-collision zone (2 of 11 commits, against 8 of 11 each for the two zones fixed
+collision zone (4 of 12 commits, against 12 of 12 and 7 of 12 for the two zones fixed
 here), and the enumeration showed it is a change to REVIEW INFRASTRUCTURE, not
 doc layout: it touches the tier lists in three review agents plus the closeout
 skill, TIER1_DOCS in check_doc_freshness.py, seven assertions in

@@ -1,6 +1,6 @@
 """THE SET PIN for docs/technical_guide.md's routes table (bd polyglot-pdf-abn4o).
 
-The routes table is a merge-collision hotspot: 8 of the 11 commits touching the
+The routes table is a merge-collision hotspot: 7 of the 12 commits touching the
 guide in the week to 2026-08-20 edited that ~20-line region, because every
 kit/editor feature adds a row there. Parallel PRs land on adjacent lines and
 conflict.
@@ -263,7 +263,7 @@ def _row_sort_key(row: str) -> tuple[str, str]:
 
 def test_guide_routes_table_is_sorted_by_path_then_method():
     """THE COLLISION FIX. Drift is only half the problem this table has -- the
-    other half is that 8 of the 11 commits touching the guide in the week to
+    other half is that 7 of the 12 commits touching the guide in the week to
     2026-08-20 edited this ~20-line region, and parallel PRs collided there.
 
     A row order that is merely conventional gives a new row no determined
