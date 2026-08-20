@@ -73,6 +73,26 @@ Unblocked by vccy (the firm-scoped serving seam the client half rides).
   disclosure path needs no open, which is also why the click-through went
   through the cards.
 
+- Closeout assess (fresh-eyes, sonnet-routed): round 1 rubric-PASS with
+  four fixes -- the kit_gates set-count docstring falsified by this diff's
+  own call sites; the archive LIST answering 200-empty for a GHOST kit in
+  local mode (manifest-membership check + pin, reproduced live by the
+  reviewer); the marker regex duplicated across route files (one
+  is_safe_marker in kit_gates now); the client/editor viewer 404
+  asymmetry. Round 2: the client 404 branch my own r1 fix added was
+  UNTESTED (the brief overclaimed it) -- pinned + mutation-verified; a
+  paste-duplicated comment; the archived-schema read's ghost-kit check
+  made deliberate + pinned. Round 3: the EDITOR twin's vanished-revision
+  branch untested (the exact mirror of r2's client finding -- twins keep
+  teaching the same lesson; both now pinned) + the single-read pin
+  extended to the archive route. Round 4: rubric PASS x3, terminal -- its
+  one finding (the error-banner rendering branches on both twins,
+  UNCHANGED since the original commit, untested) classified a true nit and
+  deferred with the catalogue-mount integration assertions to the
+  closeout nit bead. Round 4 also independently re-mutation-verified two
+  of round 3's pins (both genuinely red-then-green). Outer review
+  recorded in the merge ping.
+
 ## Lessons
 
 - A URL path segment that is itself an ENCODED value (the archive marker)
