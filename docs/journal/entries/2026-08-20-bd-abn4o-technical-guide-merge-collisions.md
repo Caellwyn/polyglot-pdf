@@ -152,6 +152,27 @@ asks whether the editor client switches on those strings, since an undocumented
 `"stale"` and a fictional `"unwritable"` could be a real unhandled branch rather
 than just stale prose.
 
+Round 2 confirmed both fixes and found the same class of hole one more time,
+in a narrower corner: `_documented_routes` scanned the WHOLE table row, so a
+path name-dropped in a row's DESCRIPTION cell ("the `/status` promotion gate",
+"no `/api` prefix") counted as a documented route. A future route literally
+named `/status` would have passed the completeness check with no row of its
+own -- again, a doc claim satisfied by unrelated prose. The parser now reads
+only the Path column, which also let two compensating filters come out of the
+phantom test. Both `/status` and `/api` are now correctly reported as
+undocumented.
+
+That is three findings of one shape across two rounds. The generalizable
+lesson: when a checker infers a claim from a text region, the region must be
+exactly the claim's scope -- widening it to "the whole row" or "the whole
+table" silently converts nearby prose into evidence.
+
+Round 2's third finding was mine to own: exit criterion 2 required a follow-up
+bead if the stable-sort branch was taken rather than generation, and I took
+that branch without filing it. Filed as bd polyglot-pdf-m1ulw -- deliberately
+framed as "measure whether the sort worked, generator only if it did not",
+since building it speculatively would discard the reasoning that rejected it.
+
 ## Verification
 
 - All three tests mutation-verified, with the mutation confirmed applied by

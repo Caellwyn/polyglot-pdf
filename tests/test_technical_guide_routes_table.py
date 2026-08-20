@@ -85,12 +85,23 @@ def _documented_routes() -> set[str]:
     for line in section.splitlines():
         if not line.startswith("|"):
             continue
-        # Cells are `-quoted; a row may carry several ("`/api/x/{id}/schema`,
-        # `.../pdf`"). Collect this row's own tokens, in order, so `...`
-        # resolves against a sibling from the SAME row.
+        # Read ONLY the Path column. The description column name-drops paths in
+        # prose ("the `/status` promotion gate", "no `/api` prefix"), and a
+        # whole-row scan cannot tell those from a row's actual route claim --
+        # so a future route literally named /status would count as documented
+        # with no row of its own. Same failure shape as the cross-row ellipsis
+        # bug: a doc claim satisfied by unrelated prose.
+        cells = line.split("|")
+        if len(cells) < 3:
+            continue
+        path_cell = cells[2]
+
+        # A row may carry several path tokens ("`/api/x/{id}/schema`,
+        # `.../pdf`"). Collect this row's own, in order, so `...` resolves
+        # against a sibling from the SAME row.
         row_paths: list[str] = []
         row_shorthand: list[str] = []
-        for match in re.findall(r"`([^`]+)`", line):
+        for match in re.findall(r"`([^`]+)`", path_cell):
             token = match.strip()
             if token.startswith("/"):
                 row_paths.append(token)
@@ -188,20 +199,15 @@ def test_guide_routes_table_documents_no_phantom_routes():
     tells the next reader a surface exists when it does not.
     """
     shipped = _shipped_routes()
-    documented = {d for d in _documented_routes() if d.startswith("/")}
+    documented = _documented_routes()
 
-    # Only flag fully-concrete paths; the table also backticks partial tokens
-    # (e.g. "`/api`") in its prose cells, which are not route claims.
     phantom = sorted(
         d for d in documented
-        if d.count("/") >= 2
-        and d not in shipped
+        if d not in shipped
         and d not in EXEMPT
-        # Glob references to a whole surface ("the `/api/editor/*` surface is
-        # 503 when no token is configured") are prose, not route claims.
-        and "*" not in d
         # The guide documents the bare WS path and notes the /api mirror
-        # inline; _shipped_routes folds the mirror away, so don't demand it.
+        # inline ("`/ws/fill` (+ `/api/ws/fill`)"); _shipped_routes folds the
+        # mirror away, so the mirror is a real doc claim, not a phantom.
         and not d.startswith(WS_MIRROR_PREFIX)
     )
     assert not phantom, (
