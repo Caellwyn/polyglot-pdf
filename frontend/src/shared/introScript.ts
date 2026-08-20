@@ -95,10 +95,19 @@ export function renderIntroParagraphs(
   return introParagraphs(language).map((p) =>
     p.split(FORM_PLACEHOLDER).join(formName)
       .split(AGREE_PLACEHOLDER).join(agreeLabel)
-      // An empty form slot leaves a double space (and " ." before punctuation)
-      // that the model would read as a stumble. Normalize AFTER interpolation.
+      // An empty form slot leaves a DOUBLE space (and a space before the
+      // following punctuation) that the model would read as a stumble.
+      // Normalize AFTER interpolation, and NARROWLY:
+      //   - drop a space before punctuation ONLY where 2+ spaces preceded it,
+      //     i.e. only damage this interpolation itself caused;
+      //   - then collapse remaining runs of 2+ spaces/tabs to one.
+      // This is NOT a general typographic tidier. French puts a (narrow
+      // no-break) space before ! ? ; : and that is CORRECT; a broad
+      // /\s+([.,!?;:])/ would silently strip it the day a translator writes
+      // one. No shipped language uses those marks today (verified across all
+      // 18), so this guards a future edit rather than a present bug.
+      .replace(/ {2,}([.,!?;:])/g, '$1')
       .replace(/[ \t]{2,}/g, ' ')
-      .replace(/\s+([.,!?;:])/g, '$1')
       .trim(),
   )
 }

@@ -118,6 +118,44 @@ describe('renderIntroParagraphs: a kit with NO form number (bd polyglot-pdf-nsb4
     expect(joined).not.toContain('  ')
   })
 
+  it('leaves EVERY shipped language byte-identical in the normal case', () => {
+    // The normalizer runs on every paragraph of every language on every
+    // render and every spoken read. It must be inert when a form number IS
+    // present -- otherwise this bead's own fix silently edits shipped legal
+    // text in 18 languages.
+    for (const language of introScriptLanguages()) {
+      const rendered = renderIntroParagraphs(language, 'I-90', 'OK')
+      const raw = introParagraphs(language).map(p =>
+        p.split(FORM_PLACEHOLDER).join('Form I-90')
+         .split(AGREE_PLACEHOLDER).join('OK'))
+      expect(rendered).toEqual(raw)
+    }
+  })
+
+  it('does NOT strip a legitimate space before punctuation (French typography)', () => {
+    // French puts a narrow no-break space before ! ? ; : and that is CORRECT.
+    // A broad /\s+([.,!?;:])/ normalizer would silently "fix" it the day a
+    // translator writes one.
+    //
+    // Drives the REAL renderer, not a copy of its regexes: an earlier version
+    // of this test re-implemented the normalization inline, so swapping the
+    // shipped regex for the broad one left it green (mutation-verified). A
+    // test that cannot see the source cannot guard it.
+    //
+    // The AGREE LABEL is caller-supplied and interpolated verbatim, so it is
+    // the seam through which a legitimate space-before-punctuation reaches
+    // the normalizer.
+    const rendered = renderIntroParagraphs('French', 'I-90', 'Continuer ?').join(' ')
+    expect(rendered).toContain('Continuer ?')
+    expect(rendered).not.toContain('Continuer?')
+  })
+
+  it('DOES remove the double space an empty form slot leaves', () => {
+    const rendered = renderIntroParagraphs('English', '', 'OK').join(' ')
+    expect(rendered).not.toContain('  ')
+    expect(rendered).not.toMatch(/ [.,!?;:]/)
+  })
+
   it('never substitutes an ENGLISH noun phrase into another language', () => {
     // The placeholder sits mid-sentence inside each language's own grammar,
     // so an English fallback ("this form") would read wrong in 17 languages
