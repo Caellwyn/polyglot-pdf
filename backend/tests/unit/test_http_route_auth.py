@@ -650,6 +650,12 @@ _EXPECTED_GATED_ROUTES = {
     # live schema read, incl. firm visibility on the owning kit.
     ("GET", "/api/form-kits/{kit_id}/archive"),
     ("GET", "/api/form-kits/{kit_id}/archive/{marker}/schema"),
+    # The firm tier's FIRST write path (bd polyglot-pdf-z6bk9): a firm
+    # MANAGER retires a private form the firm owns. Authorization is three
+    # checks beyond require_auth (role + ownership + private), pinned in
+    # test_firm_retire.py -- require_auth alone would let any authed user
+    # reach it.
+    ("POST", "/api/form-kits/{kit_id}/retire"),
     ("POST", "/api/fill-pdf"),
     ("POST", "/api/tts/spellback"),
     ("POST", "/api/tts/intro"),

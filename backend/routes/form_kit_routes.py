@@ -24,6 +24,7 @@ from backend.services.form_kits import (
     get_form_kit_store,
 )
 from backend.services.kit_gates import (
+    _archive_published_revision,
     firm_allowed_kits as _firm_allowed_kits,
     is_safe_marker,
     kit_visibility as _kit_visibility,  # noqa: F401 (re-exported for tests/docs symmetry)
@@ -428,3 +429,115 @@ async def get_archived_kit_schema(
         raise HTTPException(status_code=502, detail="Unable to load archived revision") from exc
 
     return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})
+
+
+class RetireKitResponse(BaseModel):
+    """The outcome of a firm retiring one of its own forms."""
+    kit_id: str
+    status: str
+    archived_marker: Optional[str] = None
+
+
+def _require_firm_owns_private_kit(
+    kit_id: str, meta: Optional[dict], user: Optional[dict]
+) -> str:
+    """Authorize a firm-initiated WRITE on a kit. Returns the acting firm_id.
+
+    THREE conditions, all required (bd polyglot-pdf-z6bk9; the maintainer's
+    2026-08-07 decision plus the four-level access model from the 02ye
+    addendum):
+
+      1. firm_role == "manager". Retirement is FIRM MANAGEMENT, not employee
+         level -- an employee sends links and tracks status, and must not be
+         able to take a form out of service.
+      2. owner_firm_id == the caller's firm. Visibility is not authorization:
+         bd vccy lets a firm SEE and use a kit its allowlist names, which
+         includes kits it does not own.
+      3. visibility == "private". A firm must never retire a shared or
+         government form, even one it can see and fill.
+
+    EVERY refusal is FormKitNotFound -> 404, never 403: a 403 would confirm
+    the kit exists to a firm that cannot see it, which is exactly the
+    existence leak the read gates are built to prevent (exit criterion 2 --
+    "the refusal does not reveal whether the other kit exists").
+    """
+    claims = user if isinstance(user, dict) else {}
+    firm_id = claims.get("firm_id")
+    firm_role = claims.get("firm_role")
+    if (
+        not isinstance(firm_id, str)
+        or not firm_id
+        or firm_role != "manager"
+        or not isinstance(meta, dict)
+        or _kit_visibility(meta) != "private"
+        or meta.get("owner_firm_id") != firm_id
+    ):
+        raise FormKitNotFound(f"Kit not retirable: {kit_id}")
+    return firm_id
+
+
+@router.post("/form-kits/{kit_id}/retire", response_model=RetireKitResponse)
+async def retire_own_kit(
+    kit_id: str, user: dict = Depends(require_auth)
+) -> RetireKitResponse:
+    """Retire a form this firm owns (bd polyglot-pdf-z6bk9).
+
+    The FIRST firm-facing write path: the firm tier was read + telemetry
+    only. Retiring sets status "unpublished" -- hidden from clients but
+    write-locked, NOT deleted: the retired revision's bytes are what its
+    confirmation records were confirmed against. Hard delete stays guarded
+    and staff-only (bd polyglot-pdf-6x1j).
+
+    ARCHIVE FIRST, exactly as staff retirement does (bd polyglot-pdf-w3zw):
+    retirement is the last moment the published bytes exist unaltered, so
+    the revision is copied into the archive before the status flips. That
+    call is best-effort by design (it logs loudly and returns None rather
+    than failing the retirement, which would strand a kit published and
+    uneditable) -- the SAME posture the three staff call sites have.
+
+    No UI ships with this route: the button belongs to the firm console
+    (bd polyglot-pdf-gob8l), per the maintainer's 2026-08-20 decision --
+    deliberately NOT bolted onto the token-gated staff editor.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    try:
+        # Manifest membership first, like every sibling read: a nonexistent
+        # kit 404s identically to an unauthorized one.
+        await _resolve_kit_filenames(store, kit_id)
+        meta = await _load_live_metadata(store, kit_id)
+        firm_id = _require_firm_owns_private_kit(kit_id, meta, user)
+
+        current_status = (meta or {}).get("status")
+        if current_status != "complete":
+            # Only a LIVE form can be retired -- the same rule the staff
+            # route enforces. 409, not 404: the caller is authorized here,
+            # so the state is safe to disclose to them.
+            raise HTTPException(
+                status_code=409,
+                detail=f"Only a published form can be retired (this one is "
+                       f"{current_status}).",
+            )
+
+        archived_marker = await _archive_published_revision(store, kit_id, meta)
+        next_meta = {**(meta or {}), "status": "unpublished"}
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
+    except FormKitStoreError as exc:
+        _log.error("firm_retire_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(status_code=502, detail="Unable to retire this form") from exc
+
+    # AUDIT (requirement 4): who did what to which kit, keyed the way the
+    # telemetry bead keys its events (bd polyglot-pdf-xwlt). firm_id names
+    # our CUSTOMER, never a client -- no client PII rides this line, and
+    # there is deliberately no client identifier to log.
+    _log.info(
+        "firm_retired_own_kit",
+        kit_id=kit_id,
+        firm_id=firm_id,
+        archived_marker=archived_marker,
+    )
+    return RetireKitResponse(
+        kit_id=kit_id, status="unpublished", archived_marker=archived_marker
+    )
