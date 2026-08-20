@@ -75,6 +75,13 @@ export function ArchivedVersionsLink({ kitId, kitLabel }: { kitId: string; kitLa
       const resp = await authedGet(
         `/api/form-kits/${encodeURIComponent(kitId)}/archive/${encodeURIComponent(rev.marker)}/schema`,
       );
+      if (resp.status === 404) {
+        // Same register as the editor sibling: an explicit in-viewer
+        // message, not a banner -- the revision was listed a moment ago
+        // and has since gone (qfyxr fresh-eyes: the two viewers diverged).
+        setViewing({ marker: rev.marker, published_at: rev.published_at, schema: null });
+        return;
+      }
       if (!resp.ok) throw new Error(`Could not load that archived version (${resp.status})`);
       const schema = (await resp.json()) as FormSchema;
       setViewing({ marker: rev.marker, published_at: rev.published_at, schema });
@@ -156,6 +163,11 @@ export function ArchivedVersionsLink({ kitId, kitLabel }: { kitId: string; kitLa
               This older version is kept for the record. It cannot be filled or
               edited — the current version is the form behind this window.
             </p>
+            {viewing.schema === null && (
+              <p style={{ fontSize: 13, color: "#78350f" }}>
+                This archived version could not be found (it may have been removed).
+              </p>
+            )}
             {viewing.schema && (
               <div style={{ minHeight: 0, flex: 1, overflow: "auto", fontSize: 12, color: "#78350f" }}>
                 <div>

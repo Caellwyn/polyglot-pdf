@@ -60,6 +60,7 @@ from backend.config import get_settings
 from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.services.kit_gates import is_safe_marker
 from backend.adapters.text_ai_gemini import TextAIGemini
 from backend.services.editor_text_ai import (
     EditorTextAIUnavailable,
@@ -1358,15 +1359,10 @@ class ArchivedRevisionsResponse(BaseModel):
     revisions: list[ArchivedRevisionEntry]
 
 
-# An encoded revision marker's contract (form_kits.encode_marker): charset
-# [A-Za-z0-9._-], <= 128 chars, dot-runs collapsed -- so a legitimate marker
-# never contains ".." or a separator. Same validation the client-facing
-# archive routes apply (form_kit_routes._safe_marker).
-_ARCHIVE_MARKER_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
-
-
+# The marker contract lives in kit_gates.is_safe_marker (ONE definition for
+# the client + editor archive routes); this wrapper only maps refusal to 400.
 def _safe_archive_marker(marker: str) -> str:
-    if ".." in marker or not _ARCHIVE_MARKER_RE.fullmatch(marker):
+    if not is_safe_marker(marker):
         raise HTTPException(status_code=400, detail="Invalid revision marker")
     return marker
 

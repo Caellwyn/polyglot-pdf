@@ -25,6 +25,7 @@ from backend.services.form_kits import (
 )
 from backend.services.kit_gates import (
     firm_allowed_kits as _firm_allowed_kits,
+    is_safe_marker,
     kit_visibility as _kit_visibility,  # noqa: F401 (re-exported for tests/docs symmetry)
     load_live_metadata as _load_live_metadata,
     require_published as _require_published,
@@ -311,15 +312,12 @@ async def get_form_kit_pdf(
     )
 
 
-# A revision marker in a URL is an ENCODED marker (form_kits.encode_marker):
-# charset [A-Za-z0-9._-], length <= 128, dot-runs collapsed -- so a legitimate
-# marker never contains ".." or a separator. Validate to exactly that contract
-# before the value becomes a path segment (same discipline as _safe_kit_id).
-_MARKER_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
-
-
+# The marker contract lives in kit_gates.is_safe_marker (ONE definition for
+# the client + editor archive routes); this wrapper only maps refusal to 400
+# (same discipline as _safe_kit_id -- a hostile marker never reaches the
+# store as a path segment).
 def _safe_marker(marker: str) -> str:
-    if ".." in marker or not _MARKER_SEGMENT_RE.fullmatch(marker):
+    if not is_safe_marker(marker):
         raise HTTPException(status_code=400, detail="Invalid revision marker")
     return marker
 
@@ -357,6 +355,17 @@ async def list_kit_archive(
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     try:
+        # Manifest membership FIRST, like the sibling schema/pdf reads: a
+        # NONEXISTENT kit must 404 in every mode, never answer 200 with an
+        # empty archive -- "no archived versions" and "no such form" are
+        # different answers (qfyxr fresh-eyes, reproduced live in local
+        # mode where list_archived_markers returns [] for a ghost).
+        # Manifest membership FIRST, like the sibling schema/pdf reads: a
+        # NONEXISTENT kit must 404 in every mode, never answer 200 with an
+        # empty archive -- "no archived versions" and "no such form" are
+        # different answers (qfyxr fresh-eyes, reproduced live in local
+        # mode where list_archived_markers returns [] for a ghost).
+        await _resolve_kit_filenames(store, kit_id)
         meta = await _load_live_metadata(store, kit_id)
         _require_published(store, kit_id, meta)
         await _require_visible(kit_id, meta, user)

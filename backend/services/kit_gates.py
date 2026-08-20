@@ -1,16 +1,18 @@
 """Client-tier kit read gates: publish status + firm-scoped visibility.
 
-Shared by EVERY route that serves kit bytes or schema to the CLIENT tier --
-the set is exactly four read sites (bd polyglot-pdf-vy6id, Opus cross-surface
-finding on bd polyglot-pdf-vccy): the three reads in form_kit_routes.py
-(catalogue list, schema GET, pdf GET) and pdf_fill_routes.py's fill read.
-The gates originally lived inside form_kit_routes.py, which left the fourth
-door unlocked -- a POST /api/fill-pdf with a private kit_id and an empty
-field_values returned the private kit's blank template to any authed user.
-Living in services/ (not a routes file) keeps the dependency edge clean and
-makes the set pinnable: test_http_route_auth.py asserts every client-tier
-load_pdf_bytes/load_schema call site runs these gates, so a FIFTH read site
-fails CI instead of shipping ungated.
+Shared by EVERY route that serves kit bytes or schema to the CLIENT tier.
+The set is PINNED BY TEST, not by this prose
+(test_http_route_auth.py::test_every_client_tier_kit_read_is_visibility_gated
+derives it from the shipped route sources): today that is form_kit_routes.py's
+catalogue list, schema GET, pdf GET, and archived-schema GET (bd
+polyglot-pdf-qfyxr; the archive LIST route gates too, it just reads no kit
+bytes), plus pdf_fill_routes.py's fill read. The gates originally lived
+inside form_kit_routes.py, which left the fill door unlocked (bd
+polyglot-pdf-vy6id, Opus cross-surface finding on bd polyglot-pdf-vccy): a
+POST /api/fill-pdf with a private kit_id and an empty field_values returned
+the private kit's blank template to any authed user. Living in services/
+(not a routes file) keeps the dependency edge clean, and the test makes a
+NEW ungated read site fail CI instead of shipping.
 
 The /api/editor/* surface is deliberately NOT in the set: it is the
 maintainer/contractor tooling behind the role tokens, not the client tier
@@ -19,10 +21,23 @@ maintainer/contractor tooling behind the role tokens, not the client tier
 ASCII only.
 """
 import asyncio
+import re
 from typing import Optional
 
 from backend.services.firms import get_allowed_kits
 from backend.services.form_kits import FormKitNotFound
+
+# An ENCODED revision marker's contract (form_kits.encode_marker): charset
+# [A-Za-z0-9._-], <= 128 chars, dot-runs collapsed -- so a legitimate marker
+# never contains ".." or a separator. ONE definition serving both the client
+# and editor archive routes (qfyxr fresh-eyes: the regex was duplicated
+# byte-for-byte across the two route files).
+MARKER_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def is_safe_marker(marker: str) -> bool:
+    """True when marker is a legitimate encode_marker output segment."""
+    return ".." not in marker and bool(MARKER_SEGMENT_RE.fullmatch(marker))
 
 
 async def load_live_metadata(store, kit_id: str) -> Optional[dict]:

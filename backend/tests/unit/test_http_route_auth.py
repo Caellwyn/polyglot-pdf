@@ -408,6 +408,20 @@ def test_private_kit_archive_lists_newest_first_for_own_firm(_firm_world):
     ]
 
 
+def test_archive_list_on_nonexistent_kit_is_404(_firm_world):
+    """A GHOST kit must 404 on the archive list in EVERY mode -- local
+    stores return [] from list_archived_markers for a directory that never
+    existed, so without the manifest-membership check the route answered
+    200 {"revisions": []} while the sibling schema read 404'd (qfyxr
+    fresh-eyes, reproduced live). Mutation: drop the _resolve_kit_filenames
+    call in list_kit_archive -- red."""
+    resp = client.get(
+        "/api/form-kits/ghost-kit/archive",
+        headers={"Authorization": "Bearer tok-legacy"},
+    )
+    assert resp.status_code == 404
+
+
 def test_public_kit_archive_lists_for_any_authed_user(_firm_world):
     resp = client.get(
         "/api/form-kits/pub-kit/archive",
