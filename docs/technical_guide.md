@@ -7,7 +7,11 @@ schema read paths had all drifted; also fixed the adjacent `form_kits.py`
 `put_schema` citations in the same paragraph while re-verifying it. Same day,
 bd polyglot-pdf-vf48u: the translate-options route row's "409 on complete
 kits" wording widened to name the write-locked set (complete OR unpublished),
-matching the `/status` row's phrasing. Same day, bd polyglot-pdf-s1iex.7: the
+matching the `/status` row's phrasing. Same day, bd polyglot-pdf-1bsuq: the
+extract route row now states the same write-locked-kit 409 gate. Same day,
+bd polyglot-pdf-5guak added Surface contracts entry 8 (the intro agree-label
+mirror) and bd polyglot-pdf-qfak0 added entry 9 (the `LIVE_VOICE_NAME`
+two-consumer coupling). Same day, bd polyglot-pdf-s1iex.7: the
 disclaimer-acceptance record now carries `script_version`, and
 `/api/tts/intro` returns the matching `X-Intro-Script-Version` header -- both
 surfaced in the route table below. Also same day, bd polyglot-pdf-kkos: the
@@ -107,7 +111,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
 | POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
-| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
+| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). 409 on any write-locked kit -- complete OR unpublished -- with a revert-first message (`force=true` would overwrite the published schema in place, bd polyglot-pdf-w3zw). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
 | POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on any write-locked kit -- complete OR unpublished -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
@@ -478,3 +482,33 @@ tokens, not the client tier):
   `pdf_filename` feeds `store.load_pdf_bytes`, contract 5). Breaking either
   half strands a private kit's fill/download while every public-kit test
   stays green.
+
+### 8. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
+
+Producer: `backend/services/intro_agree_labels.json` (18 language ->
+agree-label entries). Consumer: `BUTTON_TRANSLATIONS` in
+`frontend/src/schema-forms/components/DisclaimerModal.tsx:38`. The backend
+label is INTERPOLATED INTO SPOKEN AUDIO -- `intro_tts.build_intro_text`
+replaces the `[AGREE LABEL]` placeholder (`intro_tts.py:76`) with the
+backend's copy of the label -- so a drift means Sol speaks a button name
+that is not the one on screen. Pinned by
+`backend/tests/unit/test_intro_route.py::TestIntroTables::test_agree_labels_match_frontend_mirror`.
+
+### 9. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
+
+`Settings.LIVE_VOICE_NAME` (`backend/config.py:360`) has TWO independent
+consumers in different surfaces, so changing the env var moves both at
+once:
+
+- `backend/adapters/live_ai_gemini.py:1866` -- the Gemini Live session's
+  `speech_config.voice_config.prebuilt_voice_config.voice_name`. An
+  unaccepted name is a hard `1007 Invalid voice name` at connect that
+  breaks EVERY session.
+- `backend/services/spellback_tts.py:269`
+  (`resolve_spellback_voice`) -- the PERSONA half of the spell-back clip's
+  Cloud TTS voice (`{locale}-Chirp3-HD-{persona}`), which in turn selects
+  the clip's loudness gain via `spellback_gain_db` /
+  `_MEASURED_GAIN_DB` (`spellback_tts.py:91-98`).
+
+Full detail: [`components/voice-ai.md`](components/voice-ai.md), which has
+its own "`LIVE_VOICE_NAME` has a SECOND consumer" section.
