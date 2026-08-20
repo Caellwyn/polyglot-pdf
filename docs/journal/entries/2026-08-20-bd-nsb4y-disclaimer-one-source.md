@@ -90,6 +90,27 @@ the three options and their tradeoffs rather than decided.
   The general shape: when a test asserts "the last call to X", know WHICH call
   that is. A passing test whose trigger you have misidentified is not
   evidence.
+- **Testing one language hid a whole class of bug.** All four spoken-side
+  tests ran in English, so hardcoding `'English'` inside the spoken
+  `renderIntroParagraphs` calls passed every one of them -- a Spanish user
+  would have READ Spanish and HEARD English. Round 3 caught it. Non-English
+  cases added; the language argument is now asserted to reach the script.
+- **The pinned phrases could not see a broken JOIN.** Both sit inside ONE
+  paragraph, so `.join('')` -- which runs the last word of each paragraph into
+  the first of the next in what Sol reads aloud -- passed everything. The
+  guard now asserts across the paragraph BOUNDARY: the tail of one paragraph
+  immediately followed by the head of the next must NOT appear.
+- **I made the same English-anchoring mistake TWICE.** After fixing it once
+  (asserting an English phrase against 18 translated modal texts), I wrote
+  `expectUndertaking` with the identical flaw and only saw it when the new
+  Spanish tests failed on Spanish input. `expectUndertaking` now compares
+  against the script FOR THAT LANGUAGE, keeping the verbatim English assertion
+  as an anchor for the source language only.
+- **A scripted edit hit the wrong function.** My language parameterization
+  replaced `selectedLanguage: 'English'` in a PRE-EXISTING helper 300 lines
+  away, breaking two unrelated tests. Caught because those tests went red;
+  restored, then applied inside the intended function by locating it first.
+  A blind string replace in a large file needs a scope, not just a pattern.
 - **A mutation that does not COMPILE proves nothing.** My first attempt at
   reproducing the evasion left unbalanced parens; vitest reported exit 1 and a
   passing test count, which reads like a catch. It was a transform error -- the

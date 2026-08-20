@@ -18,6 +18,8 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
+import { BUTTON_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
+import { renderIntroParagraphs } from '../shared/introScript'
 
 // --- mock the VAD hook: the real one calls navigator.mediaDevices.getUserMedia
 //     and loads WASM, neither of which works in jsdom.
@@ -447,19 +449,52 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
   //      (the Agree click is a no-op for this assertion; round 2 caught the
   //      original comment here claiming otherwise);
   //   2. handleDisclaimerListenAgain -- the modal's "Listen Again" button.
-  function expectUndertaking(spokenRaw: unknown) {
+  function expectUndertaking(
+    spokenRaw: unknown,
+    language: string,
+    formNumber: string,
+    agreeLabel: string,
+  ) {
     const spoken = String(spokenRaw ?? '').toLowerCase()
-    expect(spoken).toContain('agree to review the completed document')
-    expect(spoken).toContain('certified professional')
+    const parts = renderIntroParagraphs(language, formNumber, agreeLabel)
+    // What the model is told to read IS the shared script for THIS language.
+    // Asserting an English phrase here is the bug this test exists to catch:
+    // it would pass while a Spanish user is read English (round 3), and it
+    // fails for the wrong reason on every non-English language. Compare
+    // against the script itself instead.
+    for (const paragraph of parts) {
+      expect(spoken).toContain(paragraph.toLowerCase())
+    }
+    // English is the source language and is not translated, so the register
+    // is assertable verbatim there -- the anchor the loop above cannot be if
+    // renderIntroParagraphs itself were ever gutted.
+    if (language === 'English') {
+      expect(spoken).toContain('agree to review the completed document')
+      expect(spoken).toContain('certified professional')
+    }
     // The retired advisory copy must not reach the model, however obtained.
     expect(spoken).not.toContain('we strongly advise')
     // Placeholders must be interpolated, not spoken literally.
     expect(spoken).not.toContain('[form number]')
     expect(spoken).not.toContain('[agree label]')
     expect(spoken).not.toContain('undefined')
+    // The paragraphs must be JOINED WITH A SEPARATOR. Both phrases above sit
+    // inside ONE paragraph, so they cannot see a broken join -- .join('')
+    // passed every test until round 3 caught it, and it runs the last word of
+    // each paragraph into the first of the next in what Sol reads aloud.
+    // Assert against the real boundary: the end of one paragraph followed by
+    // the start of the next, with nothing between them.
+    expect(parts.length).toBeGreaterThan(1)
+    for (let i = 0; i < parts.length - 1; i++) {
+      const runOn = (parts[i].slice(-12) + parts[i + 1].slice(0, 12)).toLowerCase()
+      expect(spoken).not.toContain(runOn)
+    }
   }
 
-  function mountWithDisclaimerPending(Overlay: typeof VoiceOverlay) {
+  function mountWithDisclaimerPending(
+    Overlay: typeof VoiceOverlay,
+    language = 'English',
+  ) {
     const manager = makeMockManager([])
     vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
       schema: MINIMAL_SCHEMA,
@@ -472,7 +507,7 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
       loadedFieldIds: new Set<string>(),
       jitModeEnabled: false,
       disclaimerAccepted: false,
-      selectedLanguage: 'English',
+      selectedLanguage: language,
     } as any))
     vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
 
@@ -481,34 +516,49 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
         schema={MINIMAL_SCHEMA}
         connectionManager={manager}
         status="connected"
-        initialLanguage="English"
+        initialLanguage={language}
       />
     )
     return manager
   }
 
   // SITE 1: the connect-time read.
-  async function assertConnectReadStatesTheUndertaking(Overlay: typeof VoiceOverlay) {
-    const manager = mountWithDisclaimerPending(Overlay)
-    await screen.findByText('I Agree')
+  async function assertConnectReadStatesTheUndertaking(
+    Overlay: typeof VoiceOverlay,
+    language = 'English',
+  ) {
+    const manager = mountWithDisclaimerPending(Overlay, language)
+    const labels = BUTTON_TRANSLATIONS[language] || BUTTON_TRANSLATIONS['English']
+    await screen.findByText(labels.agree)
     await waitFor(() => expect(manager.readDisclaimer).toHaveBeenCalled())
-    expectUndertaking(manager.readDisclaimer.mock.calls.at(-1)?.[1])
+    // The LANGUAGE argument must reach the script too: hardcoding 'English'
+    // inside renderIntroParagraphs passed every test until round 3 -- a
+    // Spanish user would have HEARD ENGLISH.
+    expect(manager.readDisclaimer.mock.calls.at(-1)?.[0]).toBe(language)
+    expectUndertaking(
+      manager.readDisclaimer.mock.calls.at(-1)?.[1], language, '', labels.agree)
   }
 
   // SITE 2: the "Listen Again" re-read. Independently reachable, and reverting
   // ONLY this one used to leave the whole suite green (round 2).
-  async function assertListenAgainStatesTheUndertaking(Overlay: typeof VoiceOverlay) {
-    const manager = mountWithDisclaimerPending(Overlay)
-    await screen.findByText('I Agree')
+  async function assertListenAgainStatesTheUndertaking(
+    Overlay: typeof VoiceOverlay,
+    language = 'English',
+  ) {
+    const manager = mountWithDisclaimerPending(Overlay, language)
+    const labels = BUTTON_TRANSLATIONS[language] || BUTTON_TRANSLATIONS['English']
+    await screen.findByText(labels.agree)
     await waitFor(() => expect(manager.readDisclaimer).toHaveBeenCalled())
     const beforeReRead = manager.readDisclaimer.mock.calls.length
 
-    fireEvent.click(screen.getByText('Listen Again'))
+    fireEvent.click(screen.getByText(labels.listenAgain))
 
     // A DISTINCT call from the connect-time one, or this asserts site 1 twice.
     await waitFor(() =>
       expect(manager.readDisclaimer.mock.calls.length).toBeGreaterThan(beforeReRead))
-    expectUndertaking(manager.readDisclaimer.mock.calls.at(-1)?.[1])
+    expect(manager.readDisclaimer.mock.calls.at(-1)?.[0]).toBe(language)
+    expectUndertaking(
+      manager.readDisclaimer.mock.calls.at(-1)?.[1], language, '', labels.agree)
   }
 
   it('desktop (VoiceOverlay): the connect-time read states the undertaking (nsb4y)', async () => {
@@ -525,5 +575,24 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
 
   it('mobile (VoiceOverlayMobile): Listen Again states the undertaking (nsb4y)', async () => {
     await assertListenAgainStatesTheUndertaking(VoiceOverlayMobile)
+  })
+
+  // NON-ENGLISH, both overlays. All four tests above run in English, so
+  // hardcoding 'English' inside the spoken renderIntroParagraphs call passed
+  // every one of them (round 3) -- and a Spanish user would have HEARD
+  // ENGLISH while READING Spanish. Spanish is the highest-volume non-English
+  // language for this product; the per-language CONTENT of all 18 is pinned
+  // in backend/tests/unit/test_intro_script.py, so what these add is the
+  // WIRING: the selected language reaches the script.
+  it('desktop (VoiceOverlay): the connect-time read is in the SELECTED language (nsb4y)', async () => {
+    await assertConnectReadStatesTheUndertaking(VoiceOverlay, 'Spanish')
+  })
+
+  it('mobile (VoiceOverlayMobile): the connect-time read is in the SELECTED language (nsb4y)', async () => {
+    await assertConnectReadStatesTheUndertaking(VoiceOverlayMobile, 'Spanish')
+  })
+
+  it('desktop (VoiceOverlay): Listen Again is in the SELECTED language (nsb4y)', async () => {
+    await assertListenAgainStatesTheUndertaking(VoiceOverlay, 'Spanish')
   })
 })
