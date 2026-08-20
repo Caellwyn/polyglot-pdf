@@ -1,15 +1,13 @@
 # PDF filling
 
-**Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
+**Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-18 (bd polyglot-pdf-vccy: `fillPDF` carries the
-manifest's explicit `pdf_filename` + `/api/` asset-path resolution for
-private kits -- see
-[the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md).
-Same day, bd polyglot-pdf-6dn2n: pruned a stamp chain -- no
-content change; a fourth status, `submitted`, and the per-transition role
-split -- editors submit, authors publish -- plus a role-scoped editing lock
-authors can always take back, bd polyglot-pdf-hqztg.)*
+*Last updated: 2026-08-20 (bd polyglot-pdf-i9e79: added the "Draft
+snapshots" paragraph documenting the bounded `_drafts/<n>/` ring (bd
+polyglot-pdf-y2l0p) alongside the revision archive, and added
+`backend/routes/editor_kit_routes.py` to this doc's tracked-source
+declaration above -- the file the archive/lifecycle/lock sections already
+cite extensively, but which the Tracks line had never named.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -211,6 +209,24 @@ answers to the marker, and **exits 3 (AMBIGUOUS) without guessing** when
 several do -- for a confirmation record, a confident wrong schema is worse than
 an honest "cannot tell". `--segment` reads one exact archived segment after the
 operator disambiguates from `--list`.
+
+**Draft snapshots** (bd `polyglot-pdf-y2l0p`): `put_draft_snapshot`,
+`list_draft_snapshots`, and `load_draft_snapshot` keep a bounded ring of
+overwritten DRAFT copies readable at `<kit_id>/_drafts/<n>/`
+(`schema.json` + `meta.json`), capped at `DRAFT_SNAPSHOT_LIMIT = 10` --
+oldest evicted first. This is a distinct namespace from the archive above:
+draft snapshots never land under `_archive/<marker>/`, and the archive
+never sees a draft. The routes are `GET
+/api/editor/kits/{kit_id}/draft-snapshots` (list, newest first) and `POST
+/api/editor/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore`. The two
+write paths are DELIBERATELY asymmetric: a plain save snapshots the
+schema it is about to overwrite BEST-EFFORT (a snapshot failure is logged
+but never blocks the save -- the editor's current work outranks protecting
+an older copy), while a restore snapshots the CURRENT draft it is about to
+replace and REFUSES if that snapshot fails (a restore knowingly destroys
+the live draft, so declining when the safety net can't be laid down is the
+honest failure -- a recovery feature that silently loses work is worse than
+one that says no).
 
 **The kit lifecycle has FOUR statuses** (bd `polyglot-pdf-hqztg`):
 `draft -> submitted -> complete`, plus `unpublished` for a retired revision.
