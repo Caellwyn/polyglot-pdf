@@ -62,6 +62,11 @@ from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.kit_gates import (
     is_safe_marker,
+    # ONE definition of the default/sanitized (schema, pdf) filename pair,
+    # beside the archive helper that is its main consumer. It was duplicated
+    # byte-for-byte here after that move (fresh-eyes r1) -- two copies of one
+    # rule is the shape CLAUDE.md scar #7 names.
+    _resolve_meta_names,
     # Moved out of this module (bd polyglot-pdf-z6bk9): the client-tier firm
     # retire route needs it too, and routes importing routes would be
     # circular. Imported under its original private name so every call site
@@ -93,7 +98,6 @@ from backend.services.form_kits import (
     LocalFormKitStore,
     encode_marker,
     get_form_kit_store,
-    safe_filename,
     sibling_marker,
 )
 from backend.utils.confirmation_logger import (
@@ -474,14 +478,6 @@ class UnclaimedWidgetsResponse(BaseModel):
     picker then simply shows nothing to add."""
 
     widgets: list[UnclaimedWidget]
-
-
-def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
-    """(schema_file, pdf_file) from a kit's metadata, defaulted + sanitized."""
-    meta = meta if isinstance(meta, dict) else {}
-    schema_file = safe_filename(meta.get("schema") or "schema.json", "schema.json")
-    pdf_file = safe_filename(meta.get("pdf") or "form.pdf", "form.pdf")
-    return schema_file, pdf_file
 
 
 # A kit's lifecycle status (bd polyglot-pdf-6dz0).
