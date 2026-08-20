@@ -283,33 +283,48 @@ top of it, and would become wrong if it stopped holding.
 **The internal invariant and what the app TELLS the applicant are different
 statements, deliberately.**
 
-**What SHIPS today -- both user-facing surfaces are ADVISORY, and they are the
-same text.** The modal's `fullText` is what the Live model reads aloud
-(`VoiceOverlay.tsx` -> `readDisclaimer` -> the `read_disclaimer` WS message ->
-`websocket_routes.py`), so the spoken and written disclaimers do not differ:
-both say *"We strongly advise you to have a qualified professional check your
-final form before you submit it."* Neither asks the applicant to undertake
-anything.
+**What SHIPS today -- both user-facing surfaces state the UNDERTAKING, and
+they are the same text** (bd `polyglot-pdf-nsb4y`). The modal renders
+`intro_script.json`'s paragraphs, and the Live model reads those same
+paragraphs joined (`VoiceOverlay.tsx` -> `readDisclaimer` -> the
+`read_disclaimer` WS message -> `websocket_routes.py`), so the spoken and
+written disclaimers cannot differ: both say *"you agree to review the
+completed document yourself and with a certified professional before
+filing."* The applicant is asked to undertake that review, and the Agree click
+records consent to it.
 
 | Register | Status | Where | Wording |
 |---|---|---|---|
 | **Required** (internal) | live, contractual | customer contracts | review is an obligation on the customer; this is what makes the SI's deferral coherent |
-| **Advised** (we recommend) | **LIVE -- both surfaces** | `DisclaimerModal.tsx` `p2`/`fullText`, written AND read aloud | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
-| **Undertaken** (they agree) | **STAGED, NOT LIVE** | `intro_script.json` para 6, 18 languages | "you **agree to** review the completed document yourself and with a certified professional before filing" |
+| **Advised** (we recommend) | **RETIRED** | `DisclaimerModal.tsx` `p1`/`p2`/`p3`/`fullText` -- no longer rendered or spoken (bd `polyglot-pdf-nsb4y`) | "We **strongly advise** you to have a qualified professional check your final form before you submit it" |
+| **Undertaken** (they agree) | **LIVE -- both surfaces** | `intro_script.json`, 18 languages: rendered by the modal AND spoken, from ONE source | "you **agree to** review the completed document yourself and with a certified professional before filing" |
 
-**The Undertaken register is not reachable by any user on the DEFAULT
-deployment.** The frontend player shipped (bd `polyglot-pdf-s1iex.5`, closed --
-`frontend/src/shared/introPlayer.ts` POSTs to `/api/tts/intro`, and
-`DisclaimerModal`'s `introParagraphs` prop renders the intro script when the
-frontend flag is on), but both gating flags default OFF: `INTRO_TTS_ENABLED`
-(backend) defaults false, so `POST /api/tts/intro` 503s, and
-`VITE_INTRO_CLIP_ENABLED` (frontend) defaults false, so the modal never
-requests the clip in the first place. Flipping BOTH is the deliberate cutover
-step (bd `polyglot-pdf-vr5bj`), gated on counsel review of the frozen script.
-`intro_script.json` and `intro_tts.py` both assert
-a HARD INVARIANT that "the modal renders exactly these paragraphs -- one
-source, no separate fullText"; **that invariant describes the intended end
-state, not shipped behavior.** Do not cite it as current.
+**The Undertaken register is LIVE, on both surfaces, on the default
+deployment** (bd `polyglot-pdf-nsb4y`, maintainer decision 2026-08-19). What
+the modal RENDERS and what the model SPEAKS both come from
+`intro_script.json` via `renderIntroParagraphs`, unconditionally -- so a
+reader and a listener accept the SAME terms behind the same Agree button.
+
+That was NOT true before `nsb4y`. Both overlays gated the shared paragraphs on
+`introEnabled`, which tied the WRITTEN legal text to whether AUDIO plays: a
+reader got `DisclaimerModal`'s own `p2` ("we strongly advise" -- advice) while
+a listener got the script ("you agree to review" -- an undertaking). Two legal
+registers, one button, and `script_version` hashed only the spoken side, so
+the audit record named text a reader never saw.
+
+**The `introEnabled` flag pair still gates the AUDIO CLIP** (`INTRO_TTS_ENABLED`
+backend, `VITE_INTRO_CLIP_ENABLED` frontend, both default false; flipping them
+is bd `polyglot-pdf-vr5bj`, gated on counsel review). It does NOT gate the
+text. Keep that separation: a flag may decide whether Sol SPEAKS, never which
+terms the applicant ACCEPTS.
+
+`DisclaimerModal`'s `DISCLAIMER_TRANSLATIONS` survives only as the modal TITLE
+source and as a fallback for a caller that passes no `introParagraphs`; no app
+code renders or speaks its body text, and a test pins that set.
+
+The HARD INVARIANT asserted in `intro_script.json` and `intro_tts.py` -- "the
+modal renders exactly these paragraphs -- one source, no separate fullText" --
+is now TRUE of shipped behavior and may be cited as current.
 
 **The acceptance record now names WHICH text was agreed to.** `POST
 /api/disclaimer-acceptance` logs `script_version` (bd

@@ -1190,10 +1190,14 @@ class Settings(BaseModel):
 		# person. Opened to self-filers or sold direct-to-consumer, the deferral
 		# points nowhere and a careful hedge becomes a dead end.
 		#
-		# NOTE THE REGISTER SPLIT (bd polyglot-pdf-rdsl): review is REQUIRED
-		# contractually, but only ADVISED to the applicant -- the shipped
-		# disclaimer says "we strongly advise", it does not guarantee. Do not
-		# "tighten" this text into promising that a review WILL happen.
+		# NOTE THE REGISTER (bd polyglot-pdf-rdsl, updated by bd
+		# polyglot-pdf-nsb4y): review is REQUIRED contractually, and the shipped
+		# disclaimer now has the applicant UNDERTAKE it -- "you agree to review
+		# the completed document yourself and with a certified professional
+		# before filing". That is the applicant's commitment, NOT a promise by
+		# us that a review will occur. Do not "tighten" this text into
+		# guaranteeing that a professional WILL review the form: we do not
+		# control whether they do, and the deferral must stay a deferral.
 		#
 		# This prompt is NOT the record of that invariant -- see
 		# docs/standards/confirmation-and-audit.md ("The deployment invariant").
