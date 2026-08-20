@@ -162,10 +162,28 @@ only the Path column, which also let two compensating filters come out of the
 phantom test. Both `/status` and `/api` are now correctly reported as
 undocumented.
 
-That is three findings of one shape across two rounds. The generalizable
-lesson: when a checker infers a claim from a text region, the region must be
-exactly the claim's scope -- widening it to "the whole row" or "the whole
-table" silently converts nearby prose into evidence.
+Round 3 scored both criteria PASS with no gaps, but flagged a FOURTH instance
+of the same shape, still dormant: both parsers hardcoded `cells[2]` as the
+Path column, so a literal `|` before that column (the table already uses an
+escaped `\|` in one description) would shift every column right and the row
+would silently document nothing. No current row triggers it -- a shift needs a
+pipe in the Method cell, and all 37 rows hold a bare verb.
+
+**At that point the instance was the wrong thing to fix.** Scar #7's tell had
+fired exactly as written: three review findings differing only in location.
+So rather than add a fourth filter, the parser now REFUSES TO GUESS. One
+shared `_parse_row` locates the columns for both consumers and raises on any
+row it cannot parse unambiguously, and a new fourth test pins the property all
+four instances violated: every row must parse into locatable columns with a
+real path in the Path column, and no two rows may share a sort key. A row that
+cannot be parsed now fails loudly instead of quietly contributing nothing.
+
+The generalizable lesson: when a checker infers a claim from a text region,
+the region must be exactly the claim's scope -- widening it to "the whole row"
+or "the whole table" silently converts nearby prose into evidence. And when
+the same finding arrives three times in different locations, stop fixing
+instances and go pin the property. Stored as repo scar tissue via
+`bd remember` (key `a-checker-that-infers-a-claim-from-text`).
 
 Round 2's third finding was mine to own: exit criterion 2 required a follow-up
 bead if the stable-sort branch was taken rather than generation, and I took
@@ -175,13 +193,16 @@ since building it speculatively would discard the reasoning that rejected it.
 
 ## Verification
 
-- All three tests mutation-verified, with the mutation confirmed applied by
-  grep before each run and the file restored by hash afterward: adding an
-  undocumented route turned `test_every_shipped_route_is_in_the_guide_routes_
-  table` red (naming the route); adding a phantom doc row turned
+- All four tests mutation-verified, with each mutation confirmed applied by
+  grep before the run and the file restored by hash afterward: an undocumented
+  route turns `test_every_shipped_route_is_in_the_guide_routes_table` red
+  (naming the route); a phantom doc row turns
   `test_guide_routes_table_documents_no_phantom_routes` red; swapping two
-  adjacent rows turned `test_guide_routes_table_is_sorted_by_path_then_method`
-  red (naming the divergence).
+  adjacent rows turns `test_guide_routes_table_is_sorted_by_path_then_method`
+  red (naming the divergence); an escaped `\|` in a Method cell turns
+  `test_every_routes_table_row_parses_unambiguously` red (naming the row and
+  saying why). The first three were RE-verified after the shared-parser
+  refactor, since that changed the code path all of them run through.
 - The ellipsis fix re-verified against the mutation that DEFEATED the first
   version: a route at `/api/editor/kits/{kit_id}/draft-snapshots/
   {snapshot_id}/pdf` (a path shape the old parser invented as a ghost) now

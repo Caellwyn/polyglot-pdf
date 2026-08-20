@@ -61,40 +61,81 @@ def _shipped_routes() -> set[str]:
     return paths - EXEMPT
 
 
-def _documented_routes() -> set[str]:
-    """Every path documented by the guide's routes table.
+def _table_rows() -> list[str]:
+    """The routes table's body rows, in file order.
 
-    Parses only the `## Routes / endpoints` section so a path mentioned in
-    prose elsewhere (Gotchas, Surface contracts) cannot satisfy the pin.
-
-    Shorthand is resolved PER ROW, never across the table. The table
-    abbreviates a repeated prefix within one row ("`/api/editor/kits/{kit_id}/
-    schema`, `.../pdf`"), so `...` means "the sibling path in THIS row". An
-    earlier version resolved each `...` against every concrete path in the
-    whole table, which invented 21 paths that no row documents (e.g.
-    `/api/tts/pdf`, `/api/editor/kits/{kit_id}/draft-snapshots/
-    {snapshot_id}/pdf`) -- and a genuinely undocumented route matching one of
-    those ghosts passed the completeness check silently.
+    The single place the table's location is decided; every check below reads
+    the table through this, so none of them can disagree about which lines
+    are rows.
     """
     text = GUIDE.read_text(encoding="utf-8")
     start = text.index("## Routes / endpoints")
     end = text.index("\n## ", start + 1)
-    section = text[start:end]
+    lines = text[start:end].split("\n")
 
+    header = next(i for i, l in enumerate(lines) if l.startswith("| Method "))
+    body = header + 2  # skip the header and its |---| separator
+    rows = []
+    while body < len(lines) and lines[body].startswith("|"):
+        rows.append(lines[body])
+        body += 1
+    return rows
+
+
+def _parse_row(line: str) -> tuple[str, str]:
+    """One table row -> (method cell, path cell). Raises on a row it cannot
+    parse -- never returns a silently-wrong column.
+
+    THE RECURRING BUG THIS EXISTS TO END. Successive versions of this parser
+    drew a doc claim from text that was not the row's route claim: shorthand
+    resolved across the WHOLE TABLE (inventing 21 ghost paths), then a
+    WHOLE-ROW scan catching paths name-dropped in descriptions ("the `/status`
+    promotion gate"), then a hardcoded `cells[2]` that a literal `|` before
+    the Path column shifts -- the table already uses an escaped `\\|` in one
+    description -- leaving `cells[2]` holding "ST" instead of a path while the
+    row silently documents NOTHING.
+
+    All of them share one shape: the evidence region stopped matching the
+    claim, and the checker stayed GREEN while checking less than it claimed.
+    The structural fix is not a fourth filter -- it is refusing to guess.
+    Every consumer reads rows through this function, so a row whose columns
+    cannot be located fails LOUDLY instead of quietly contributing nothing.
+    """
+    cells = line.split("|")
+    # A well-formed row is: "" | method | path | description | "" -> 5 cells.
+    # More cells means a literal `|` inside some cell; only an escaped `\|`
+    # AFTER the path column is safe, because it cannot shift the path left.
+    if len(cells) < 5:
+        raise AssertionError(f"routes-table row has too few columns: {line!r}")
+    method, path_cell = cells[1].strip(), cells[2]
+    if "\\" in cells[1] or not method.isalpha():
+        raise AssertionError(
+            f"routes-table Method cell is not a bare verb ({method!r}) -- an "
+            f"escaped pipe here would shift the Path column: {line!r}"
+        )
+    if not re.search(r"`\s*(?:/|\.\.\.)", path_cell):
+        raise AssertionError(
+            f"routes-table row has no backticked path in its Path column "
+            f"(column shift? unparseable row?): {line!r}"
+        )
+    return method, path_cell
+
+
+def _documented_routes() -> set[str]:
+    """Every path documented by the guide's routes table.
+
+    Parses only the `## Routes / endpoints` section so a path mentioned in
+    prose elsewhere (Gotchas, Surface contracts) cannot satisfy the pin, and
+    only the Path COLUMN of each row, so a path name-dropped in a description
+    ("the `/status` promotion gate", "no `/api` prefix") cannot either.
+
+    Shorthand is resolved PER ROW, never across the table. The table
+    abbreviates a repeated prefix within one row ("`/api/editor/kits/{kit_id}/
+    schema`, `.../pdf`"), so `...` means "the sibling path in THIS row".
+    """
     documented = set()
-    for line in section.splitlines():
-        if not line.startswith("|"):
-            continue
-        # Read ONLY the Path column. The description column name-drops paths in
-        # prose ("the `/status` promotion gate", "no `/api` prefix"), and a
-        # whole-row scan cannot tell those from a row's actual route claim --
-        # so a future route literally named /status would count as documented
-        # with no row of its own. Same failure shape as the cross-row ellipsis
-        # bug: a doc claim satisfied by unrelated prose.
-        cells = line.split("|")
-        if len(cells) < 3:
-            continue
-        path_cell = cells[2]
+    for line in _table_rows():
+        _method, path_cell = _parse_row(line)
 
         # A row may carry several path tokens ("`/api/x/{id}/schema`,
         # `.../pdf`"). Collect this row's own, in order, so `...` resolves
@@ -125,6 +166,36 @@ def _documented_routes() -> set[str]:
     return documented
 
 
+def test_every_routes_table_row_parses_unambiguously():
+    """PINS THE CLASS, not another instance.
+
+    Three rounds of review found three versions of one bug: the parser drew a
+    doc claim from text that was not the row's route claim (shorthand resolved
+    across the whole table; a whole-row scan catching prose; a shifted column).
+    Every one stayed GREEN -- the checker kept passing while quietly checking
+    less than it claimed.
+
+    Fixing a fourth instance would repeat the pattern, so this asserts the
+    property all three violated: every row must parse into locatable columns
+    with a real path in the Path column. A row that does not -- because a
+    literal `|` shifted the columns, or the table's shape changed -- fails
+    HERE, loudly, instead of silently contributing nothing to the other checks.
+
+    Mutation: put an escaped `\\|` in any row's Method cell -- red.
+    """
+    rows = _table_rows()
+    assert rows, "routes table body not found -- has the table shape changed?"
+
+    for row in rows:
+        _parse_row(row)  # raises AssertionError naming the offending row
+
+    # Every row must also yield a sort key and at least one documented path,
+    # so no row can be present yet invisible to the checks below.
+    assert len({_row_sort_key(r) for r in rows}) == len(rows), (
+        "two routes-table rows share a (path, method) key -- a duplicate row?"
+    )
+
+
 def test_every_shipped_route_is_in_the_guide_routes_table():
     """A shipped route missing from the doc table fails HERE, naming itself."""
     shipped = _shipped_routes()
@@ -139,32 +210,16 @@ def test_every_shipped_route_is_in_the_guide_routes_table():
     )
 
 
-def _table_rows() -> list[str]:
-    """The routes table's body rows, in file order."""
-    text = GUIDE.read_text(encoding="utf-8")
-    start = text.index("## Routes / endpoints")
-    end = text.index("\n## ", start + 1)
-    lines = text[start:end].split("\n")
-
-    header = next(i for i, l in enumerate(lines) if l.startswith("| Method "))
-    body = header + 2  # skip the header and its |---| separator
-    rows = []
-    while body < len(lines) and lines[body].startswith("|"):
-        rows.append(lines[body])
-        body += 1
-    return rows
-
-
 def _row_sort_key(row: str) -> tuple[str, str]:
     """(path, method) -- the table's stable order.
 
-    The path is the row's FIRST backticked token, which is the route the row
-    is about; later tokens are shorthand siblings or prose.
+    The path is the Path column's FIRST backticked token, which is the route
+    the row is about; later tokens are shorthand siblings. Shares _parse_row
+    with the completeness check so both agree on where the columns are.
     """
-    cells = row.split("|")
-    method = cells[1].strip()
-    match = re.search(r"`([^`]+)`", cells[2])
-    path = match.group(1).strip() if match else cells[2].strip()
+    method, path_cell = _parse_row(row)
+    match = re.search(r"`([^`]+)`", path_cell)
+    path = match.group(1).strip() if match else path_cell.strip()
     return (path, method)
 
 
