@@ -100,6 +100,14 @@ def _parse_row(line: str) -> tuple[str, str]:
     The structural fix is not a fourth filter -- it is refusing to guess.
     Every consumer reads rows through this function, so a row whose columns
     cannot be located fails LOUDLY instead of quietly contributing nothing.
+
+    What this deliberately does NOT do: it locates the columns, it does not
+    judge their content. A hand-crafted row carrying a backticked
+    path-shaped DECOY ahead of the real path (6+ cells, bare-alpha method, no
+    unescaped pipe) would parse to the decoy. No such row exists, and no
+    purely positional parser can rule that out -- ruling it out needs a
+    semantic check, which is a different tool. Recorded so the next reader
+    does not re-derive it.
     """
     cells = line.split("|")
     # A well-formed row is: "" | method | path | description | "" -> 5 cells.
