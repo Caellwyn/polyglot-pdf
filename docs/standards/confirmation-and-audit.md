@@ -335,19 +335,26 @@ EVIDENCE: without it the record proves someone clicked Agree but not what they
 were told. `None` on the legacy model-read path, which has no deterministic
 text to name.
 
-**Why this matters when the flags flip.** It changes the user-facing legal
-posture, not just the audio: today the applicant is ADVISED to obtain review;
-the staged script has them AGREE to obtain it, and the `[AGREE LABEL]` click
-would record that undertaking. Whether the written modal should adopt the same
-undertaking -- so the two surfaces stay in one register -- is a legal/product
-decision, tracked in bd `polyglot-pdf-nsb4y`; `intro_script.json` notes a
-counsel pass is still pending. Shipping the player without settling it is what
-would create a listened-vs-read split.
+**The register question is SETTLED; the flags no longer bear on it.** Whether
+the written modal should adopt the spoken undertaking -- so both surfaces stay
+in one register -- was the legal/product decision tracked in bd
+`polyglot-pdf-nsb4y`, and the maintainer settled it on 2026-08-19: ONE SOURCE,
+the modal shows the spoken script. Both surfaces now state the undertaking
+regardless of the audio flags, so flipping them cannot create a
+listened-vs-read split. What the flags still change is only whether Sol SPEAKS
+the clip or the Live model reads the same text aloud.
 
-**The SI sits at the ADVISORY register and must stay there**, whichever way
-that lands: *"Do not promise the user that a review WILL happen -- the
-disclaimer they accepted advises it rather than guaranteeing it."* Even once
-an applicant undertakes to obtain review, an undertaking by the user is not a
+A counsel pass on the frozen script is still outstanding (noted in
+`intro_script.json`), and remains a gate on the flag flip (bd
+`polyglot-pdf-vr5bj`) -- but it no longer gates the register, which is live
+today.
+
+**The SI must never promise a review WILL happen**, even though the applicant
+now undertakes to obtain one: *"Do not promise the user that a review WILL
+happen -- the disclaimer has them AGREE to obtain review, which is their
+commitment, not our guarantee that it occurred."* This is the register
+distinction that survives bd `polyglot-pdf-nsb4y`: what the APPLICANT commits
+to changed; what WE guarantee did not. An undertaking by the user is not a
 guarantee by us, and the model cannot know whether it was honoured.
 Strengthening this text re-introduces the exact bd `rdsl` bug: the SI once
 PROMISED review ("Every form drafted here is reviewed...") where the disclaimer

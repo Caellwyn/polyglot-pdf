@@ -111,7 +111,23 @@ the three options and their tradeoffs rather than decided.
   away, breaking two unrelated tests. Caught because those tests went red;
   restored, then applied inside the intended function by locating it first.
   A blind string replace in a large file needs a scope, not just a pattern.
-- **A mutation that does not COMPILE proves nothing.** My first attempt at
+- **I rewrote a doc's TABLE and left a paragraph below it saying the opposite.**
+  Round 4 found `confirmation-and-audit.md` still asserting "today the
+  applicant is ADVISED" and calling this bead a pending decision -- twelve
+  lines under the table I had just corrected to say the opposite. A future
+  agent reading that paragraph would reach the wrong conclusion about shipped
+  behavior, in a tier-2 doc, three paragraphs after the right answer. Fixing
+  the flagged paragraph, I then swept EVERY register claim in the file rather
+  than only the one named -- which is how the next one surfaced.
+- **The SI's live text carried the falsified REASON, not just a comment.** The
+  prompt said *"the disclaimer they accepted advises it rather than
+  guaranteeing it"* -- no longer true, since the disclaimer now has them AGREE.
+  The GUARDRAIL it protects is still right (never promise a review WILL
+  happen), so the fix corrects the reason and leaves the rule identical: the
+  applicant's commitment is not our guarantee. The standards doc quotes that
+  sentence verbatim, so it was updated in the same commit -- a quote in a doc
+  is a consumer of the string, and changing one without the other just moves
+  the staleness. My first attempt at
   reproducing the evasion left unbalanced parens; vitest reported exit 1 and a
   passing test count, which reads like a catch. It was a transform error -- the
   test never ran. Re-done syntactically valid before trusting the red.
