@@ -96,3 +96,37 @@ describe('intro script rendering (bd s1iex.5)', () => {
     }
   })
 })
+
+describe('renderIntroParagraphs: a kit with NO form number (bd polyglot-pdf-nsb4y)', () => {
+  // schema_lint makes a missing form_number a WARNING, not a publish gate, so
+  // firm-proprietary intake sheets can ship without one. Before nsb4y the
+  // degraded string was unreachable (the text was flag-gated, and the clip
+  // early-returns on an empty form number); the modal now renders this
+  // UNCONDITIONALLY, so an empty value would be both SHOWN and READ ALOUD.
+  it('does not emit a dangling "Form" or a double space', () => {
+    const parts = renderIntroParagraphs('English', '', 'I Agree')
+    const joined = parts.join(' ')
+    expect(joined).not.toMatch(/Form\s*$/m)
+    expect(joined).not.toContain('Form  ')
+    expect(joined).not.toContain('  ')
+    expect(joined).not.toMatch(/\s+[.,!?;:]/)
+  })
+
+  it('still names the form when one IS present', () => {
+    const joined = renderIntroParagraphs('English', 'I-90', 'I Agree').join(' ')
+    expect(joined).toContain('Form I-90')
+    expect(joined).not.toContain('  ')
+  })
+
+  it('never substitutes an ENGLISH noun phrase into another language', () => {
+    // The placeholder sits mid-sentence inside each language's own grammar,
+    // so an English fallback ("this form") would read wrong in 17 languages
+    // -- the trap bd s1iex.5 avoided by keeping English state strings out of
+    // this modal entirely.
+    for (const language of introScriptLanguages()) {
+      const joined = renderIntroParagraphs(language, '', 'OK').join(' ')
+      if (language !== 'English') expect(joined).not.toContain('this form')
+      expect(joined).not.toContain('  ')
+    }
+  })
+})

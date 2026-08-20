@@ -72,8 +72,33 @@ export function renderIntroParagraphs(
   formNumber: string,
   agreeLabel: string,
 ): string[] {
-  const formName = formNumber.startsWith('Form ') ? formNumber : `Form ${formNumber}`
+  // A kit MAY legitimately have no form number: schema_lint makes it a
+  // WARNING, not a publish gate, so firm-proprietary intake sheets can ship.
+  // Before bd polyglot-pdf-nsb4y the degraded "Form  " (double space) was
+  // unreachable -- the text was flag-gated and the clip early-returns on an
+  // empty form number. The modal now renders this UNCONDITIONALLY, so an
+  // empty value would be both shown and READ ALOUD. Fall back to a generic
+  // noun phrase rather than a dangling "Form".
+  //
+  // NO ENGLISH FALLBACK. The placeholder sits mid-sentence inside each
+  // language's own grammar ("...fill out your [FORM NUMBER] today", "...llenar
+  // su [FORM NUMBER]"), so substituting an English noun phrase would read
+  // wrong in 17 languages -- the same trap avoided in bd s1iex.5, which kept
+  // English state strings out of this 18-language modal. Instead emit the
+  // untranslated form WORD only when we have a number, and collapse to
+  // nothing when we do not: every language's sentence stays grammatical
+  // around an empty slot, just less specific.
+  const trimmed = formNumber.trim()
+  const formName = !trimmed
+    ? ''
+    : trimmed.startsWith('Form ') ? trimmed : `Form ${trimmed}`
   return introParagraphs(language).map((p) =>
-    p.split(FORM_PLACEHOLDER).join(formName).split(AGREE_PLACEHOLDER).join(agreeLabel),
+    p.split(FORM_PLACEHOLDER).join(formName)
+      .split(AGREE_PLACEHOLDER).join(agreeLabel)
+      // An empty form slot leaves a double space (and " ." before punctuation)
+      // that the model would read as a stumble. Normalize AFTER interpolation.
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\s+([.,!?;:])/g, '$1')
+      .trim(),
   )
 }

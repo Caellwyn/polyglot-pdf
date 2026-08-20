@@ -332,8 +332,23 @@ is now TRUE of shipped behavior and may be cited as current.
 from the intro route's `X-Intro-Script-Version` response header so the backend
 stays the single source of it. That is what turns the epic's determinism into
 EVIDENCE: without it the record proves someone clicked Agree but not what they
-were told. `None` on the legacy model-read path, which has no deterministic
-text to name.
+were told.
+
+**KNOWN GAP as of bd `polyglot-pdf-nsb4y`: on the DEFAULT deployment the
+record still logs `None`.** That clause used to read "the legacy model-read
+path has no deterministic text to name", and that was true when it was
+written. It is not true now: since `nsb4y` the modal renders the scripted
+text unconditionally, so a user on the default deployment READS deterministic
+text, clicks Agree, and the record names nothing. The reason is mechanical --
+`script_version` is read from the intro PLAYER
+(`introPlayerRef.current?.scriptVersion()`), and the player is only
+constructed when `introEnabled` is true (`VoiceOverlay.tsx`), so with the
+audio flags off the value is `undefined` and the key is dropped.
+
+Closing it is NOT a one-line change: the hash currently comes from the intro
+route's response header precisely so the backend stays its single source, and
+having the client compute it instead would reintroduce the drift risk bd
+`s1iex.7` was designed to avoid. Tracked as bd `polyglot-pdf-pyebx`.
 
 **The register question is SETTLED; the flags no longer bear on it.** Whether
 the written modal should adopt the spoken undertaking -- so both surfaces stay
