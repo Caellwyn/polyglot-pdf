@@ -360,11 +360,6 @@ async def list_kit_archive(
         # empty archive -- "no archived versions" and "no such form" are
         # different answers (qfyxr fresh-eyes, reproduced live in local
         # mode where list_archived_markers returns [] for a ghost).
-        # Manifest membership FIRST, like the sibling schema/pdf reads: a
-        # NONEXISTENT kit must 404 in every mode, never answer 200 with an
-        # empty archive -- "no archived versions" and "no such form" are
-        # different answers (qfyxr fresh-eyes, reproduced live in local
-        # mode where list_archived_markers returns [] for a ghost).
         await _resolve_kit_filenames(store, kit_id)
         meta = await _load_live_metadata(store, kit_id)
         _require_published(store, kit_id, meta)
@@ -412,6 +407,11 @@ async def get_archived_kit_schema(
     marker = _safe_marker(marker)
     store = get_form_kit_store()
     try:
+        # Same manifest-membership check as the list route and the sibling
+        # schema/pdf reads -- DELIBERATE, not incidental: without it a ghost
+        # kit's 404 relied solely on load_archived_revision happening to
+        # fail closed in both store impls (qfyxr fresh-eyes round 2).
+        await _resolve_kit_filenames(store, kit_id)
         meta = await _load_live_metadata(store, kit_id)
         _require_published(store, kit_id, meta)
         await _require_visible(kit_id, meta, user)

@@ -26,12 +26,19 @@ const SCHEMA = {
   parts: [], sections: [{ id: "s1", title: "Part One" }], fields: [],
 };
 
-function stubFetch() {
+function stubFetch(opts: { schema404?: boolean } = {}) {
   const calls: { url: string; init: RequestInit }[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any, init?: any) => {
       calls.push({ url: String(url), init: init ?? {} });
+      if (opts.schema404 && String(url).includes("/schema")) {
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ detail: "gone" }),
+        } as unknown as Response;
+      }
       const body = String(url).includes("/schema") ? SCHEMA : REVS;
       return {
         ok: true,
@@ -65,6 +72,25 @@ describe("ArchivedVersionsLink", () => {
     expect(calls[0].url).toContain("/api/form-kits/w7/archive");
     const headers = calls[0].init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer tok-a");
+  });
+
+  it("a 404 on the revision read shows the in-viewer not-found message", async () => {
+    // The listed revision vanished between listing and opening (removed,
+    // superseded storage churn). Same register as the editor sibling: an
+    // explicit read-only-viewer message, NOT an error banner and NOT a
+    // throw. Mutation: revert the 404 branch to throwing -- red (the
+    // dialog never opens).
+    stubFetch({ schema404: true });
+    const user = userEvent.setup();
+    render(<ArchivedVersionsLink kitId="w7" kitLabel="W-7" />);
+
+    await user.click(screen.getByRole("button", { name: "Archived versions" }));
+    await waitFor(() => expect(screen.getByText(/2025-06/)).toBeTruthy());
+    await user.click(screen.getByText(/2025-06/));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("could not be found");
+    expect(dialog.querySelectorAll("input, textarea, select")).toHaveLength(0);
   });
 
   it("opening a revision shows the read-only viewer with no inputs", async () => {

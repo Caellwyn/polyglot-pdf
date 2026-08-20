@@ -408,6 +408,21 @@ def test_private_kit_archive_lists_newest_first_for_own_firm(_firm_world):
     ]
 
 
+def test_archived_schema_on_nonexistent_kit_is_404(_firm_world):
+    """The schema-read sibling of the ghost-kit pin below: the 404 must come
+    from the DELIBERATE manifest-membership check, not from the store
+    happening to fail closed. Mutation: drop the _resolve_kit_filenames call
+    in get_archived_kit_schema -- this stays 404 via the store miss, so the
+    REAL mutation target is the pair: dropping BOTH the check and relying on
+    a store whose load_archived_revision returns a default -- pinned here so
+    the route's contract is explicit either way."""
+    resp = client.get(
+        "/api/form-kits/ghost-kit/archive/2024-01/schema",
+        headers={"Authorization": "Bearer tok-legacy"},
+    )
+    assert resp.status_code == 404
+
+
 def test_archive_list_on_nonexistent_kit_is_404(_firm_world):
     """A GHOST kit must 404 on the archive list in EVERY mode -- local
     stores return [] from list_archived_markers for a directory that never
