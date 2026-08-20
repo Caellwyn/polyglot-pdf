@@ -9,9 +9,11 @@ bd polyglot-pdf-vf48u: the translate-options route row's "409 on complete
 kits" wording widened to name the write-locked set (complete OR unpublished),
 matching the `/status` row's phrasing. Same day, bd polyglot-pdf-1bsuq: the
 extract route row now states the same write-locked-kit 409 gate. Same day,
-bd polyglot-pdf-5guak added Surface contracts entry 8 (the intro agree-label
-mirror) and bd polyglot-pdf-qfak0 added entry 9 (the `LIVE_VOICE_NAME`
-two-consumer coupling). Same day, bd polyglot-pdf-s1iex.7: the
+bd polyglot-pdf-5guak added the Surface contracts entry for the intro
+agree-label mirror (now entry 9) and bd polyglot-pdf-qfak0 added the
+`LIVE_VOICE_NAME` two-consumer coupling (now entry 10) -- both renumbered
+2026-08-20 when bd polyglot-pdf-z6bk9 inserted entry 8, the firm retire write
+path. Same day, bd polyglot-pdf-s1iex.7: the
 disclaimer-acceptance record now carries `script_version`, and
 `/api/tts/intro` returns the matching `X-Intro-Script-Version` header -- both
 surfaced in the route table below. Also same day, bd polyglot-pdf-kkos: the
@@ -529,6 +531,21 @@ assumptions, which is the trap for anyone changing either one:
   the retired revision's bytes are what its confirmation records were
   confirmed against. Hard delete stays staff-only behind the guard in
   `confirmation_logger.kit_has_confirmation_records` (contract 6).
+- **The status write has TWO consumers beyond this route**, and missing either
+  is the cross-surface trap (both caught by Opus outer review, bd
+  polyglot-pdf-65hgz / polyglot-pdf-d4hi8):
+  - **The archive reads must survive it.** `require_archive_readable`
+    (`kit_gates.py`) admits `complete` OR `unpublished` for the two archive
+    routes, while `require_published` still guards the LIVE schema/pdf reads.
+    Gating history on `complete` meant this route archived a revision and made
+    it unreachable to the owning firm in the SAME request -- the exact
+    guarantee archive-then-retire exists to provide. Staff never saw it
+    (`/api/editor/*` is ungated), so only a cross-surface trace finds it.
+  - **The editing lock must be released.** Both staff sites writing this same
+    `unpublished` transition pop `editing_lock` (`_lock_after_transition`: a
+    transition ends the editing turn). A merged-through lock 409s every editor
+    action on the kit with no author actually working. Any THIRD site reaching
+    `unpublished` must do both.
 
 No UI consumes this route yet -- the button belongs to the firm console (bd
 polyglot-pdf-gob8l), per the maintainer's 2026-08-20 decision.

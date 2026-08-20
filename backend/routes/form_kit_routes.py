@@ -25,6 +25,7 @@ from backend.services.form_kits import (
 )
 from backend.services.kit_gates import (
     _archive_published_revision,
+    require_archive_readable as _require_archive_readable,
     firm_allowed_kits as _firm_allowed_kits,
     is_safe_marker,
     kit_visibility as _kit_visibility,  # noqa: F401 (re-exported for tests/docs symmetry)
@@ -363,7 +364,9 @@ async def list_kit_archive(
         # mode where list_archived_markers returns [] for a ghost).
         await _resolve_kit_filenames(store, kit_id)
         meta = await _load_live_metadata(store, kit_id)
-        _require_published(store, kit_id, meta)
+        # ARCHIVE reads survive retirement (see require_archive_readable):
+        # history is exactly what a firm needs AFTER it retires a form.
+        _require_archive_readable(store, kit_id, meta)
         await _require_visible(kit_id, meta, user)
         markers = await store.list_archived_markers(kit_id)
         snapshots = await asyncio.gather(
@@ -414,7 +417,8 @@ async def get_archived_kit_schema(
         # fail closed in both store impls (qfyxr fresh-eyes round 2).
         await _resolve_kit_filenames(store, kit_id)
         meta = await _load_live_metadata(store, kit_id)
-        _require_published(store, kit_id, meta)
+        # ARCHIVE read: allowed for a retired kit too (require_archive_readable).
+        _require_archive_readable(store, kit_id, meta)
         await _require_visible(kit_id, meta, user)
         schema = await store.load_archived_revision(kit_id, marker)
     except FormKitNotFound as exc:
@@ -521,6 +525,14 @@ async def retire_own_kit(
 
         archived_marker = await _archive_published_revision(store, kit_id, meta)
         next_meta = {**(meta or {}), "status": "unpublished"}
+        # RELEASE THE EDITING LOCK, exactly as both staff sites writing this
+        # same "unpublished" transition do (editor_kit_routes
+        # _lock_after_transition: a transition ends the editing turn; the sole
+        # exception is reopening a live kit TO DRAFT, which this is not).
+        # Merging a stale lock through would 409 every editor action on the
+        # kit with no author actually working (Opus outer r1, demonstrated;
+        # bd polyglot-pdf-d4hi8).
+        next_meta.pop("editing_lock", None)
         await store.put_metadata(kit_id, next_meta)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc

@@ -66,6 +66,35 @@ async def load_live_metadata(store, kit_id: str) -> Optional[dict]:
     return meta if isinstance(meta, dict) else None
 
 
+# A revision that is LIVE or RETIRED -- both are published bytes a
+# confirmation record can name. Mirrors editor_kit_routes._PUBLISHED_STATUSES.
+_ARCHIVE_READABLE_STATUSES = ("complete", "unpublished")
+
+
+def require_archive_readable(store, kit_id: str, meta: Optional[dict]) -> None:
+    """Gate for the ARCHIVE (history) reads: allow complete OR unpublished.
+
+    History must OUTLIVE retirement (bd polyglot-pdf-z6bk9, Opus outer r1,
+    reproduced). The archive exists so a confirmation record naming a revision
+    stays resolvable -- and retirement is the moment a revision most needs
+    that, because the live schema is gone. Gating history on "complete" meant
+    the archive-then-retire sequence archived the bytes and, in the SAME
+    request, made them unreachable to the only party entitled to read them:
+    the owning firm. (Staff were never affected -- /api/editor/* is ungated.)
+
+    This is deliberately NARROWER than require_published, which still guards
+    the LIVE schema/pdf reads: a retired revision must not be served as the
+    current form. Visibility is unchanged and still applies -- require_visible
+    runs after this, so another firm still cannot see the archive at all.
+    """
+    if not getattr(store, "enforce_complete_on_public_reads", False):
+        return
+    if getattr(store, "load_metadata", None) is None:
+        return
+    if not isinstance(meta, dict) or meta.get("status") not in _ARCHIVE_READABLE_STATUSES:
+        raise FormKitNotFound(f"Kit not published: {kit_id}")
+
+
 def require_published(store, kit_id: str, meta: Optional[dict]) -> None:
     """Refuse to serve a kit whose LIVE metadata status is not "complete", on
     stores that enforce it (GCS -- the editor-writable shared store).

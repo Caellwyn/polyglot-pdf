@@ -127,3 +127,66 @@ exactly which three places to update, instead of a reviewer finding the stale
 doc two rounds later. `auth.md` gained a table of the three authorization
 checks, because "gated by require_auth" badly undersells what protects this
 route.
+
+## The outer review found what only a cross-surface trace could
+
+Fresh-eyes returned NO-GAPS. The Opus cross-surface pass then found three
+things, and the first two are the real lesson of this bead: **a status write is
+not a local edit.** Setting `unpublished` changes the meaning of code in files
+this diff never opened.
+
+**1 (HIGH, bd polyglot-pdf-65hgz) -- retiring locked the firm out of its own
+archive.** Both client-tier archive routes gate on `require_published`, which
+demands status `complete`. So the retire archived the revision and, in the same
+request, made it unreachable to the owning firm. The entire justification for
+archive-then-retire is that a confirmation record naming that revision stays
+resolvable BY THE FIRM -- and retirement is when that matters most, because the
+live schema is gone. Staff were never affected (`/api/editor/*` is ungated),
+which is exactly why nothing local caught it.
+
+Worse: **my own test docstring asserted the opposite** -- "the firm can still
+see its own history (bd qfyxr)" -- while the test asserted only that metadata
+keys survived and never drove the archive route. A false claim, shipped, in the
+file whose job is to be true.
+
+Fixed with `require_archive_readable` (`complete` OR `unpublished`) on the two
+ARCHIVE routes only; `require_published` still guards the LIVE reads, or
+retirement would mean nothing. Visibility is untouched and still applies.
+
+**2 (MEDIUM, bd polyglot-pdf-d4hi8) -- a stale editing lock.** My
+`{**meta, "status": "unpublished"}` merged `editing_lock` through verbatim.
+Both staff sites writing that same transition pop it (`_lock_after_transition`:
+a transition ends the editing turn; the one exception is reopening a live kit
+to draft, which this is not). A merged-through lock 409s every editor action on
+the kit with no author actually working. This was the only path in the codebase
+reaching `unpublished` with a lock intact.
+
+**3 (LOW) -- inserting Surface contract 8 renumbered 8->9 and 9->10, and the
+file's own "Last updated" header still cited the old numbers.** Fixed. The
+reviewer checked every other by-number reference repo-wide and found none stale.
+
+### What I take from it
+
+The bead's requirement 3 said "THE ARCHIVE INVARIANT STILL HOLDS," and I
+implemented the half I could see -- archive before retiring. The half I could
+not see from inside this file was that retiring changes who may READ that
+archive. **When adding a WRITE path to a status field, enumerate every reader
+of that field and ask what the new value means to each** -- the catalogue
+filter, the publish gates, the archive gates, the lock helpers. Four of those
+five were fine; the two that were not are invisible to any test scoped to this
+route.
+
+Both fixes are now pinned by tests that DRIVE THE REAL ROUTES before and after
+a retire, plus one asserting the live schema is still gone (so the archive
+widening did not leak into the live read) and one asserting another firm still
+cannot see the retired kit's archive (so widening the STATUS gate did not widen
+the VISIBILITY gate). All four mutation-verified.
+
+Fixture note worth keeping: the archive test first failed at the PRE-retire
+assertion, because reading a private kit resolves the firm's allowlist from
+Firestore while the WRITE path authorizes off `owner_firm_id` -- different
+mechanisms (contract 7 vs contract 8), and my double stubbed only one. Then it
+failed again on the marker: the URL segment carries the ENCODED marker
+(`encode_marker` turns `01/2025` into `01-2025`), not the raw one the response
+returns. Both failures were the test being wrong about the system, which is the
+useful kind.

@@ -149,6 +149,15 @@ further checks all have to hold, and each refuses a different real attacker:
 | `owner_firm_id == <caller's firm_id>` | Another firm -- including one whose allowlist legitimately NAMES this kit. **Visibility is not authorization:** bd `polyglot-pdf-vccy` lets a firm read and fill kits it does not own. |
 | `visibility == "private"` | A shared/government form (the maintainer's 2026-08-07 line: a firm retires its own proprietary intake forms, never the shared ones). |
 
+**Retiring does NOT cost the firm its history.** The two archive reads
+(`GET /api/form-kits/{kit_id}/archive` + `.../archive/{marker}/schema`) gate on
+`require_archive_readable` -- `complete` OR `unpublished` -- while the LIVE
+schema/pdf reads still gate on `require_published` (`complete` only). Without
+that split, archive-then-retire archived a revision and made it unreachable to
+the only party entitled to read it in the same request (bd
+`polyglot-pdf-65hgz`, caught by cross-surface review). The VISIBILITY gate is
+unchanged and still applies to both, so another firm sees neither.
+
 **Every refusal is a 404, never a 403.** A 403 would confirm the kit exists to
 a firm that cannot see it -- the same existence leak the read gates are built
 to prevent, so an unauthorized retire is indistinguishable from a kit that was

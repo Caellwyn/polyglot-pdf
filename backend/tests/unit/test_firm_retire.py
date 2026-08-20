@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import backend.routes.form_kit_routes as fkr
+from backend.services.form_kits import FormKitNotFound
 
 
 _TOKENS = {
@@ -89,6 +90,23 @@ class _Store:
         self.written[kit_id] = meta
         self.meta[kit_id] = meta
 
+    # --- the archive READ surface, so the tests below can drive the real
+    # --- routes rather than asserting on metadata keys.
+    async def list_archived_markers(self, kit_id):
+        return [m for k, m in self.archived if k == kit_id]
+
+    async def load_archived_metadata_or_none(self, kit_id, marker):
+        return {"marker": marker}
+
+    async def load_archived_revision(self, kit_id, marker):
+        # Routes pass the ENCODED marker from the URL segment; the archive was
+        # written under the raw one (encode_marker: "01/2025" -> "01-2025").
+        from backend.services.form_kits import encode_marker
+        known = {encode_marker(m) for k, m in self.archived if k == kit_id}
+        if marker not in known:
+            raise FormKitNotFound("no such archived revision")
+        return {"form_metadata": {"edition_date": marker}, "fields": []}
+
 
 @pytest.fixture
 def client(monkeypatch):
@@ -103,6 +121,15 @@ def client(monkeypatch):
     monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
     monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
     monkeypatch.setattr("backend.services.auth.verify_token", _verify)
+    # The READ gates resolve the firm's allowlist from Firestore, while the
+    # WRITE gate uses owner_firm_id -- DIFFERENT mechanisms (contract 7 vs 8).
+    # Stub the allowlist so the archive-read tests exercise the real routes;
+    # without it every private read 404s on visibility and an archive test
+    # would pass for the wrong reason.
+    _ALLOWED = {"firm-a": ["firm-a-intake", "w7-mis-tagged"],
+                "firm-b": ["firm-b-intake"]}
+    monkeypatch.setattr("backend.services.kit_gates.get_allowed_kits",
+                        lambda firm_id: _ALLOWED.get(firm_id, []))
     app = FastAPI()
     app.include_router(fkr.router)
     return TestClient(app), store
@@ -136,9 +163,18 @@ def test_a_manager_retires_their_OWN_private_form(client):
 
 def test_retiring_preserves_ownership_and_visibility(client):
     """Retirement is a STATUS change, not a delete and not an unshare: the
-    kit stays private and stays owned, so the firm can still see its own
-    history (bd qfyxr) and republish through the normal gate. Mutation:
-    write a bare status-only dict instead of merging -- red."""
+    kit stays private and stays owned, so it can be republished through the
+    normal staff gate. Mutation: write a bare status-only dict instead of
+    merging -- red.
+
+    This docstring USED to claim the firm "can still see its own history",
+    which was FALSE when written: both archive routes gated on status
+    "complete", so retiring locked the firm out of the very revision the
+    retire had just archived. The claim is true now only because
+    require_archive_readable was added -- and that behavior is pinned by
+    test_the_firm_can_still_READ_ITS_ARCHIVE_after_retiring below, which
+    drives the real route. An assertion about metadata keys could never have
+    caught it (Opus outer r1)."""
     c, store = client
 
     _retire(c, "firm-a-intake", "mgr-a")
@@ -246,3 +282,87 @@ def test_the_retirement_is_logged_with_the_acting_firm_and_no_client_pii(
     assert captured.get("kit_id") == "firm-a-intake"
     for banned in ("uid", "email", "user_id", "client_id", "value", "field_values"):
         assert banned not in captured, banned + " must never ride an audit line"
+
+
+# --- the cross-surface consequences of retiring (Opus outer r1) --------------
+
+
+def test_the_firm_can_still_READ_ITS_ARCHIVE_after_retiring(client):
+    """HISTORY MUST OUTLIVE RETIREMENT (bd polyglot-pdf-65hgz).
+
+    The whole justification for archive-then-retire is that a confirmation
+    record naming a revision stays resolvable BY THE FIRM -- and retirement is
+    when that matters most, because the live schema is gone. Both archive
+    routes gated on status "complete", so this route archived the bytes and,
+    in the same request, made them unreachable to the only party entitled to
+    read them. Staff were never affected (/api/editor/* is ungated), which is
+    exactly why a metadata-key assertion could not see it.
+
+    Drives the REAL routes before and after. Mutation: put _require_published
+    back on either archive route -- red.
+    """
+    c, _store = client
+    hdr = {"Authorization": "Bearer mgr-a"}
+
+    before = c.get("/api/form-kits/firm-a-intake/archive", headers=hdr)
+    assert before.status_code == 200
+
+    retire = _retire(c, "firm-a-intake", "mgr-a")
+    marker = retire.json()["archived_marker"]
+
+    after = c.get("/api/form-kits/firm-a-intake/archive", headers=hdr)
+    assert after.status_code == 200, (
+        "a firm must still reach its own archive after retiring -- otherwise "
+        "the retire destroys the access the archive exists to provide"
+    )
+    # The URL segment carries the ENCODED marker, which is what a real client
+    # would send back from the archive listing.
+    from backend.services.form_kits import encode_marker
+    schema = c.get(
+        "/api/form-kits/firm-a-intake/archive/" + encode_marker(marker) + "/schema",
+        headers=hdr,
+    )
+    assert schema.status_code == 200, "the archived REVISION must still resolve"
+
+
+def test_another_firm_still_cannot_see_the_retired_kits_archive(client):
+    """Widening the STATUS gate must not widen the VISIBILITY gate. The two
+    are independent, and only the status one moved. Mutation: drop
+    _require_visible from either archive route -- red."""
+    c, _store = client
+
+    _retire(c, "firm-a-intake", "mgr-a")
+
+    for token in ("mgr-b", "legacy"):
+        resp = c.get("/api/form-kits/firm-a-intake/archive",
+                     headers={"Authorization": "Bearer " + token})
+        assert resp.status_code == 404, token
+
+
+def test_a_retired_kits_LIVE_schema_is_still_gone(client):
+    """The point of retiring: the live form stops being served. Only the
+    ARCHIVE gate widened -- require_published still guards the live reads, or
+    retirement would mean nothing. Mutation: use require_archive_readable on
+    the live schema route -- red."""
+    c, _store = client
+
+    _retire(c, "firm-a-intake", "mgr-a")
+
+    resp = c.get("/api/form-kits/firm-a-intake/schema",
+                 headers={"Authorization": "Bearer mgr-a"})
+    assert resp.status_code == 404
+
+
+def test_retiring_RELEASES_a_stale_editing_lock(client):
+    """A transition ends the editing turn -- the rule both staff sites writing
+    this same "unpublished" status already follow. Merging a lock through
+    would 409 every editor action on the kit with no author actually working
+    (bd polyglot-pdf-d4hi8). Mutation: drop the pop -- red."""
+    c, store = client
+    store.meta["firm-a-intake"]["editing_lock"] = {"role": "author"}
+
+    _retire(c, "firm-a-intake", "mgr-a")
+
+    assert "editing_lock" not in store.written["firm-a-intake"], (
+        "no editing turn survives a firm-initiated retire"
+    )
