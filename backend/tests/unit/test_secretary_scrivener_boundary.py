@@ -432,16 +432,25 @@ def test_si_makes_hedge_and_defer_UNCONDITIONAL():
     # used for self-filing (maintainer: a core product invariant), so the
     # hedge must not point at a lawyer the applicant may not have.
     assert "reviewing their form" in si
-    # REGISTER MATTERS (Opus round 4): the shipped DisclaimerModal -- the text
-    # the user clicks "I Agree" to, and which is read aloud verbatim -- says
-    # "We strongly ADVISE you to have a qualified professional check your final
-    # form". It recommends review; it does not guarantee it. An SI that told
-    # the user review WILL happen would upgrade that recommendation into a
-    # promise, in the one place the two speak to the same person -- and it is
-    # exactly the premise an applicant would lean on when accepting a hedged
-    # answer about their own eligibility. Pin the conditional register.
+    # REGISTER MATTERS (Opus round 4; premise updated by bd
+    # polyglot-pdf-nsb4y). The shipped disclaimer -- the text the user clicks
+    # "I Agree" to, rendered on screen AND read aloud from one source -- has
+    # them UNDERTAKE review: "you agree to review the completed document
+    # yourself and with a certified professional before filing".
+    #
+    # That is the APPLICANT's commitment, and it is still not a guarantee by
+    # US that any review occurred: we do not control whether they obtain one,
+    # and the model cannot know whether it happened. An SI that told the user
+    # review WILL happen would convert their undertaking into our promise, in
+    # the one place the two speak to the same person -- and that is exactly
+    # the premise an applicant would lean on when accepting a hedged answer
+    # about their own eligibility. Pin the conditional register.
+    #
+    # (This comment previously reasoned from "the disclaimer only ADVISES
+    # review", which nsb4y made false. The ASSERTIONS below were correct
+    # either way -- what changed is why.)
     assert "expected to review this form" in si
     assert "do not promise the user that a review will happen" in si
     assert "reviewed by a qualified human before filing" not in si, (
-        "that phrasing asserts review as certain; the disclaimer only advises "
-        "it -- keep the SI in the disclaimer's register")
+        "that phrasing asserts review as certain; the applicant UNDERTAKES "
+        "review but we never guarantee it happened -- keep the SI conditional")
