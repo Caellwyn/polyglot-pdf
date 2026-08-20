@@ -162,6 +162,27 @@ class _TwoKitStore:
                 "owner_firm_id": "firm-a",
             },
         }
+        # Superseded revisions (bd qfyxr): one stamped-newer, one
+        # stamped-older, one stampless -- the sorting dimension.
+        self.archive = {
+            "priv-kit": {
+                "2024-01": {
+                    "schema": {"rev": "old"},
+                    "metadata": {"published_at": "2024-01-05T00:00:00+00:00"},
+                },
+                "2025-06": {
+                    "schema": {"rev": "newer"},
+                    "metadata": {"published_at": "2025-06-01T00:00:00+00:00"},
+                },
+                "sha256-abc": {"schema": {"rev": "unstamped"}, "metadata": None},
+            },
+            "pub-kit": {
+                "2023-12": {
+                    "schema": {"rev": "pub-old"},
+                    "metadata": {"published_at": "2023-12-01T00:00:00+00:00"},
+                },
+            },
+        }
 
     async def load_manifest(self, manifest_file: str = "index.json") -> dict:
         return normalize_manifest({
@@ -176,6 +197,19 @@ class _TwoKitStore:
 
     async def load_schema(self, kit_id: str, schema_file: str = "schema.json"):
         return {"kit": kit_id}
+
+    async def list_archived_markers(self, kit_id: str) -> list:
+        return list(self.archive.get(kit_id, {}))
+
+    async def load_archived_metadata_or_none(self, kit_id: str, marker: str):
+        entry = self.archive.get(kit_id, {}).get(marker)
+        return entry.get("metadata") if entry else None
+
+    async def load_archived_revision(self, kit_id: str, marker: str):
+        entry = self.archive.get(kit_id, {}).get(marker)
+        if entry is None:
+            raise FormKitNotFound(f"no archive {kit_id}/{marker}")
+        return entry["schema"]
 
     async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:
         if pdf_filename == "REAL":
@@ -347,6 +381,118 @@ def test_fill_pdf_loads_private_kit_for_own_firm(_firm_world):
     assert resp.content.startswith(b"%PDF")
 
 
+@pytest.mark.parametrize("token", ["tok-b", "tok-legacy"])
+def test_private_kit_archive_is_404_for_other_firms_and_legacy(_firm_world, token):
+    """A private kit's HISTORY is as invisible as the kit (bd qfyxr): the
+    archive list 404s for non-members. Mutation: drop the _require_visible
+    call in list_kit_archive -- red."""
+    resp = client.get(
+        "/api/form-kits/priv-kit/archive",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_private_kit_archive_lists_newest_first_for_own_firm(_firm_world):
+    """Firm-A sees its private kit's revisions sorted newest-first by
+    published_at, stampless revisions last (the maintainer's 'organized by
+    form, then chronologically'). Mutation: drop the sort -- red (the store
+    returns markers in dict order: 2024-01 first)."""
+    resp = client.get(
+        "/api/form-kits/priv-kit/archive",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert [r["marker"] for r in resp.json()["revisions"]] == [
+        "2025-06", "2024-01", "sha256-abc",
+    ]
+
+
+def test_archived_schema_on_nonexistent_kit_is_404(_firm_world):
+    """The schema-read sibling of the ghost-kit pin below: the 404 must come
+    from the DELIBERATE manifest-membership check, not from the store
+    happening to fail closed. Mutation: drop the _resolve_kit_filenames call
+    in get_archived_kit_schema -- this stays 404 via the store miss, so the
+    REAL mutation target is the pair: dropping BOTH the check and relying on
+    a store whose load_archived_revision returns a default -- pinned here so
+    the route's contract is explicit either way."""
+    resp = client.get(
+        "/api/form-kits/ghost-kit/archive/2024-01/schema",
+        headers={"Authorization": "Bearer tok-legacy"},
+    )
+    assert resp.status_code == 404
+
+
+def test_archive_list_on_nonexistent_kit_is_404(_firm_world):
+    """A GHOST kit must 404 on the archive list in EVERY mode -- local
+    stores return [] from list_archived_markers for a directory that never
+    existed, so without the manifest-membership check the route answered
+    200 {"revisions": []} while the sibling schema read 404'd (qfyxr
+    fresh-eyes, reproduced live). Mutation: drop the _resolve_kit_filenames
+    call in list_kit_archive -- red."""
+    resp = client.get(
+        "/api/form-kits/ghost-kit/archive",
+        headers={"Authorization": "Bearer tok-legacy"},
+    )
+    assert resp.status_code == 404
+
+
+def test_public_kit_archive_lists_for_any_authed_user(_firm_world):
+    resp = client.get(
+        "/api/form-kits/pub-kit/archive",
+        headers={"Authorization": "Bearer tok-legacy"},
+    )
+    assert resp.status_code == 200
+    assert [r["marker"] for r in resp.json()["revisions"]] == ["2023-12"]
+
+
+@pytest.mark.parametrize("token", ["tok-b", "tok-legacy"])
+def test_private_archived_schema_is_404_for_other_firms_and_legacy(_firm_world, token):
+    """Mutation: drop the _require_visible call in get_archived_kit_schema
+    -- red."""
+    resp = client.get(
+        "/api/form-kits/priv-kit/archive/2024-01/schema",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_private_archived_schema_loads_for_own_firm(_firm_world):
+    resp = client.get(
+        "/api/form-kits/priv-kit/archive/2024-01/schema",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"rev": "old"}
+
+
+@pytest.mark.parametrize(
+    "marker, expected",
+    [
+        ("a..b", 400),      # contains ".." -- validation, not the store
+        ("a/b", 404),       # the slash splits the path -- FastAPI routing 404
+        ("a" * 129, 400),   # over encode_marker's length cap
+        ("%2e%2e", 400),    # decodes to ".." at the route -- validation
+        ("a b", 400),       # outside the charset
+    ],
+    ids=["dotdot-inside", "slash", "overlong", "encoded-dotdot", "space"],
+)
+def test_archive_marker_validation_rejects_unsafe_segments(_firm_world, marker, expected):
+    """The marker becomes a path segment; anything outside encode_marker's
+    contract must be refused by VALIDATION (400), never by luck of the store
+    lookup missing (404) -- a 404 here would mean the hostile value REACHED
+    the store. (A raw ".." segment is untestable at this layer: the HTTP
+    client normalizes /archive/../schema into the LIVE schema route, which
+    carries its own gates; "%2e%2e" is the row that reaches _safe_marker as
+    "..".) Mutation: drop the _safe_marker call -- every 400 row goes red
+    (the fake store's miss turns them into 404s)."""
+    resp = client.get(
+        f"/api/form-kits/pub-kit/archive/{marker}/schema",
+        headers={"Authorization": "Bearer tok-legacy"},
+    )
+    assert resp.status_code == expected
+
+
 def test_every_client_tier_kit_read_is_visibility_gated():
     """THE SET PIN (bd polyglot-pdf-vy6id). The Opus cross-surface review
     caught the fill route ungated precisely because the set of client-tier
@@ -364,9 +510,14 @@ def test_every_client_tier_kit_read_is_visibility_gated():
     expected = {
         ("form_kit_routes.py", "get_form_kit_schema"),
         ("form_kit_routes.py", "get_form_kit_pdf"),
+        ("form_kit_routes.py", "get_archived_kit_schema"),
         ("pdf_fill_routes.py", "fill_pdf"),
     }
-    read_re = _re.compile(r"\.load_pdf_bytes\(|\.load_schema\(")
+    # load_archived_revision joined the read set with bd polyglot-pdf-qfyxr:
+    # an archived schema is the same secret as the live one.
+    read_re = _re.compile(
+        r"\.load_pdf_bytes\(|\.load_schema\(|\.load_archived_revision\("
+    )
     func_split = _re.compile(r"^(?:async )?def (\w+)", _re.MULTILINE)
     found = set()
     ungated = []
@@ -422,6 +573,15 @@ def test_single_kit_routes_read_metadata_exactly_once(_firm_world, monkeypatch):
     resp = client.get("/api/form-kits/pub-kit/pdf")
     assert resp.status_code == 200
     assert calls == ["pub-kit"]
+
+    # The archived-schema read follows the same one-read pattern (qfyxr).
+    calls.clear()
+    resp = client.get(
+        "/api/form-kits/priv-kit/archive/2024-01/schema",
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    assert resp.status_code == 200
+    assert calls == ["priv-kit"]
 
 
 def test_empty_allowlist_hides_private_even_for_claimed_firm(_firm_world, monkeypatch):
@@ -479,13 +639,17 @@ def _routes_depending_on_require_auth() -> set:
     return gated
 
 
-# The five routes that carry user data or gate paid work. Update this list ONLY
+# The seven routes that carry user data or gate paid work. Update this list ONLY
 # together with the prose enumerations in:
 #   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
 #   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)
 _EXPECTED_GATED_ROUTES = {
     ("GET", "/api/form-kits"),
     ("GET", "/api/form-kits/{kit_id}/schema"),
+    # The archived-revisions reads (bd polyglot-pdf-qfyxr): same gates as the
+    # live schema read, incl. firm visibility on the owning kit.
+    ("GET", "/api/form-kits/{kit_id}/archive"),
+    ("GET", "/api/form-kits/{kit_id}/archive/{marker}/schema"),
     ("POST", "/api/fill-pdf"),
     ("POST", "/api/tts/spellback"),
     ("POST", "/api/tts/intro"),

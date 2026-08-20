@@ -282,6 +282,38 @@ export async function loadRemotePdfBlobUrl(kitId: string): Promise<string | null
   return URL.createObjectURL(blob);
 }
 
+/** One superseded revision of a kit (bd polyglot-pdf-qfyxr): the encoded
+ * archive marker plus the archived snapshot's published_at (null when the
+ * snapshot predates the stamp). */
+export interface ArchivedRevision {
+  marker: string;
+  published_at: string | null;
+}
+
+/** A kit's superseded revisions, newest first (the backend sorts by the
+ * archived snapshot's published_at; stampless revisions last). Empty for a
+ * kit with no archive -- the normal state, not an error. */
+export async function listArchivedRevisions(kitId: string): Promise<ArchivedRevision[]> {
+  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/archive`);
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load archived versions'));
+  const body = (await res.json()) as { revisions?: ArchivedRevision[] };
+  return Array.isArray(body.revisions) ? body.revisions : [];
+}
+
+/** An archived revision's schema, READ-ONLY (there is deliberately no write
+ * counterpart -- superseded bytes are what the audit trail names). Null when
+ * the marker has no revision. */
+export async function loadArchivedSchema(
+  kitId: string, marker: string,
+): Promise<FormSchema | null> {
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/archive/${encodeURIComponent(marker)}/schema`,
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the archived version'));
+  return (await res.json()) as FormSchema;
+}
+
 /** Save an edited schema back to the shared store (the hosted Cmd+S). Applies
  * the same stripEditorState the File System Access save path applies. */
 export async function saveRemoteSchema(kitId: string, schema: FormSchema): Promise<void> {
