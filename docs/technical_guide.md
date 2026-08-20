@@ -70,11 +70,13 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 **not** part of that double-mount and have no `/api` mirror.
 
 Rows are sorted by **path, then method**, and the set is pinned against the
-live app by `tests/test_technical_guide_routes_table.py`: a shipped route with
-no row, a row for a route that no longer ships, and an out-of-order row each
-fail that test. The sort is not cosmetic -- it gives every row exactly one
-correct position, so two PRs adding different routes edit different lines
-instead of colliding over the same insertion point.
+live app by `tests/test_technical_guide_routes_table.py`, keyed on
+`(path, method)`: a shipped route with no row -- including a NEW METHOD on an
+already-listed path, which needs its own row -- a row for a route that no
+longer ships, and an out-of-order row each fail that test. The sort is not
+cosmetic: it gives every row exactly one correct position, so two PRs adding
+different routes edit different lines instead of colliding over the same
+insertion point.
 
 | Method | Path | Surface doc |
 |--------|------|-------------|

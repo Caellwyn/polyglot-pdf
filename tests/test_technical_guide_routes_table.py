@@ -11,13 +11,15 @@ gate is, why a 409 fires), and a generator would either discard that or need
 the prose stored somewhere else -- moving the conflict rather than removing it.
 
 So the table stays hand-written and this test pins the SET instead. It derives
-the shipped route set from the LIVE FastAPI app and asserts the doc documents
-every one, so a new route fails HERE (naming itself) instead of silently
-drifting out of the doc for weeks. That drift was real: when this test was
-written the table was missing NINE shipped routes.
+the shipped set of (path, METHOD) pairs from the LIVE FastAPI app and asserts
+the doc documents every one, so a new route -- or a new method on an
+already-listed path -- fails HERE (naming itself) instead of silently drifting
+out of the doc for weeks. That drift was real: when this test was written the
+table was missing NINE shipped routes.
 
 Mutations that must turn this red:
   - add a route to any router without adding its doc row
+  - add a new METHOD on an already-documented path without its own row
   - delete a documented row while its route still ships
   - typo a path in the doc table
 """
@@ -46,19 +48,36 @@ EXEMPT = {
 WS_MIRROR_PREFIX = "/api/ws/"
 
 
-def _shipped_routes() -> set[str]:
-    """Every path the live app actually serves, normalized."""
+def _shipped_routes() -> set[tuple[str, str]]:
+    """Every (path, method) pair the live app actually serves, normalized.
+
+    Keyed on the METHOD too, not the path alone. Three paths in this table
+    already ship two methods each (`/api/editor/kits` GET+POST,
+    `.../{kit_id}/lock` POST+DELETE, `.../{kit_id}/schema` GET+PUT) and each
+    needed its own hand-written row -- so a path-only key would let a NEW
+    method on an already-documented path ship undocumented with the suite
+    green, which is the exact drift this gate exists to stop.
+    """
     from backend.main import app
 
-    paths = set()
+    shipped = set()
     for route in app.routes:
         path = getattr(route, "path", None)
         if not path:
             continue
         if path.startswith(WS_MIRROR_PREFIX):
             path = path[len("/api"):]  # fold /api/ws/x onto /ws/x
-        paths.add(path)
-    return paths - EXEMPT
+        if path in EXEMPT:
+            continue
+        # A websocket route has no .methods; the table spells those "WS".
+        methods = getattr(route, "methods", None) or {"WS"}
+        for method in methods:
+            # HEAD is auto-added alongside GET by Starlette and is not a
+            # separately documented surface.
+            if method in ("HEAD", "OPTIONS"):
+                continue
+            shipped.add((path, method))
+    return shipped
 
 
 def _table_rows() -> list[str]:
@@ -129,8 +148,11 @@ def _parse_row(line: str) -> tuple[str, str]:
     return method, path_cell
 
 
-def _documented_routes() -> set[str]:
-    """Every path documented by the guide's routes table.
+def _documented_routes() -> set[tuple[str, str]]:
+    """Every (path, method) pair documented by the guide's routes table.
+
+    Keyed on the method too, matching _shipped_routes -- a row documents its
+    own verb, not every verb on that path.
 
     Parses only the `## Routes / endpoints` section so a path mentioned in
     prose elsewhere (Gotchas, Surface contracts) cannot satisfy the pin, and
@@ -143,7 +165,7 @@ def _documented_routes() -> set[str]:
     """
     documented = set()
     for line in _table_rows():
-        _method, path_cell = _parse_row(line)
+        method, path_cell = _parse_row(line)
 
         # A row may carry several path tokens ("`/api/x/{id}/schema`,
         # `.../pdf`"). Collect this row's own, in order, so `...` resolves
@@ -157,7 +179,7 @@ def _documented_routes() -> set[str]:
             elif token.startswith("..."):
                 row_shorthand.append(token)
 
-        documented.update(row_paths)
+        documented.update((p, method) for p in row_paths)
         if not row_shorthand:
             continue
         # Resolve against the row's LAST concrete path -- the one the
@@ -170,7 +192,7 @@ def _documented_routes() -> set[str]:
             suffix = token[3:]  # strip the leading "..." only
             if not suffix.startswith("/"):
                 continue  # malformed cell ("`...pdf`") documents nothing
-            documented.add(base.rsplit("/", 1)[0] + suffix)
+            documented.add((base.rsplit("/", 1)[0] + suffix, method))
     return documented
 
 
@@ -209,12 +231,15 @@ def test_every_shipped_route_is_in_the_guide_routes_table():
     shipped = _shipped_routes()
     documented = _documented_routes()
 
-    undocumented = sorted(p for p in shipped if p not in documented)
+    undocumented = sorted(
+        f"{method} {path}" for path, method in shipped - documented
+    )
     assert not undocumented, (
         "routes shipping but absent from docs/technical_guide.md's routes "
         f"table: {undocumented}\n"
         "Add a row (with its owning surface doc), or add it to EXEMPT here "
-        "with the reason it is not a documented product surface."
+        "with the reason it is not a documented product surface. NOTE a new "
+        "METHOD on an already-documented path needs its OWN row."
     )
 
 
@@ -265,15 +290,15 @@ def test_guide_routes_table_documents_no_phantom_routes():
     documented = _documented_routes()
 
     phantom = sorted(
-        d for d in documented
-        if d not in shipped
-        and d not in EXEMPT
+        f"{method} {path}"
+        for path, method in documented - shipped
+        if path not in EXEMPT
         # The guide documents the bare WS path and notes the /api mirror
         # inline ("`/ws/fill` (+ `/api/ws/fill`)"); _shipped_routes folds the
         # mirror away, so the mirror is a real doc claim, not a phantom.
-        and not d.startswith(WS_MIRROR_PREFIX)
+        and not path.startswith(WS_MIRROR_PREFIX)
     )
     assert not phantom, (
         f"documented in the guide but not shipped by the app: {phantom}\n"
-        "Remove the stale row, or fix the path typo."
+        "Remove the stale row, or fix the path/method typo."
     )

@@ -191,18 +191,66 @@ that branch without filing it. Filed as bd polyglot-pdf-m1ulw -- deliberately
 framed as "measure whether the sort worked, generator only if it did not",
 since building it speculatively would discard the reasoning that rejected it.
 
+## The outer review found what four inner rounds could not
+
+The Opus cross-surface pass returned GAPS-FOUND (2), and both live OUTSIDE the
+diff -- which is exactly the split between the two review layers. Four
+fresh-eyes rounds read this change carefully and could not have found either,
+because neither is in a file the diff touches.
+
+**The dangerous one: the change had a path to silently reverting itself.**
+`.claude/skills/closeout/SKILL.md` tells every closing agent, unconditionally,
+to "bump its `*Last updated:*` line" for each stale doc whose `**Tracks:**`
+covers a file the branch changed. `technical_guide.md` tracks
+`backend/routes/*.py`. So the NEXT route PR would list this doc as stale, and
+the skill's remedy is precisely the stamp this bead deleted -- re-added in good
+faith, by an agent following the documented process. The skill now names the
+exception and says to fix the prose and stop.
+
+**The second: the doc that DEFINES the convention now contradicted the corpus.**
+`docs/doc-architecture.md` opened its stamp section with "Every tier-1/tier-2
+doc carries a one-line stamp." A reader following the rule would re-add it.
+Now "Nearly every", with the exception, its rationale, and the git-fallback
+behavior spelled out.
+
+Both are the same failure mode as the diff's own bug class, one level up: a
+rule stated in one place, a corpus changed in another, and nothing connecting
+them. The lesson from scar #7 -- enumerate the set before changing any of it --
+applies to a convention's STATEMENTS as much as to its instances.
+
+The pass also found the new gate was **method-blind**: `_shipped_routes`
+discarded `route.methods`, so a new HTTP method on an already-documented path
+would ship undocumented with the suite green. Fixed here rather than deferred
+(bd polyglot-pdf-zvjs2, closed) -- both sides are now keyed on
+`(path, method)`, and the mutation that proves it is exactly the escape
+described: a `DELETE` on `/api/form-kits/{kit_id}/schema` now fails by name
+where it previously passed. The table needed no new rows; it was already
+method-complete, since each of the three two-method paths already had a row per
+method.
+
 ## Verification
 
 - All four tests mutation-verified, with each mutation confirmed applied by
   grep before the run and the file restored by hash afterward: an undocumented
   route turns `test_every_shipped_route_is_in_the_guide_routes_table` red
-  (naming the route); a phantom doc row turns
+  (naming the route); a NEW METHOD on an already-documented path turns the same
+  test red (`DELETE /api/form-kits/{kit_id}/schema` -- the escape that passed
+  green under the path-only key); a phantom doc row turns
   `test_guide_routes_table_documents_no_phantom_routes` red; swapping two
   adjacent rows turns `test_guide_routes_table_is_sorted_by_path_then_method`
   red (naming the divergence); an escaped `\|` in a Method cell turns
   `test_every_routes_table_row_parses_unambiguously` red (naming the row and
-  saying why). The first three were RE-verified after the shared-parser
-  refactor, since that changed the code path all of them run through.
+  saying why).
+- The earlier mutations were RE-verified twice: after the shared-parser
+  refactor and again after the `(path, method)` key change, since each altered
+  the code path all four tests run through. A refactor that quietly broke a
+  guard would otherwise read as a clean green.
+- `docs/doc-architecture.md` also claimed the freshness checker is "a CI gate
+  via tests/test_doc_freshness.py". It is not: that suite pins the checker's
+  LOGIC against synthetic fixtures and its scan-set membership, never that the
+  real corpus is fresh, and the script always exits 0. Corrected while fixing
+  the stamp claim in the same section -- and it explains how 20 tier-2 docs sit
+  stale with a green suite.
 - The ellipsis fix re-verified against the mutation that DEFEATED the first
   version: a route at `/api/editor/kits/{kit_id}/draft-snapshots/
   {snapshot_id}/pdf` (a path shape the old parser invented as a ghost) now

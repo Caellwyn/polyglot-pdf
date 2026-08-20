@@ -182,6 +182,8 @@ you're in the main checkout and both forms behave identically.
 
 For each STALE doc whose `**Tracks:**` globs cover a file THIS branch changed: update the doc's CURRENT-STATE prose and bump its `*Last updated:*` line to **today's UTC date** (`date -u +%F`), swapping any obsolete journal pointer for this sprint's per-file entry. If a stale doc tracks files your branch did NOT touch, leave it -- it was already stale before you; note that in the journal entry.
 
+**A doc with NO stamp: update the prose, do NOT add one.** `docs/technical_guide.md` deliberately carries no `*Last updated:*` line (bd polyglot-pdf-abn4o) -- the checker falls back to its git commit time, which is why it still reports staleness normally. Its stamp had become a running changelog every PR appended to, which conflicted on every parallel edit and violated the CURRENT-STATE-ONLY rule. It tracks `backend/routes/*.py`, so a route change WILL list it as stale here: fix the prose and stop. Re-adding the stamp would revert that fix.
+
 Use the per-file-entry stamp shape:
 `*Last updated: YYYY-MM-DD. See [path/to/journal/entry.md](...) for closeout details.*`
 
