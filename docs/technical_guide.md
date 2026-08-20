@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-19 (bd polyglot-pdf-xg0pm: Surface contracts section 1's
+*Last updated: 2026-08-20 (bd polyglot-pdf-xg0pm: Surface contracts section 1's
 `editor_kit_routes.py` line citations re-verified against the current file --
 draft save, the publish-gate `FormSchema.model_validate` + lint gate, and both
 schema read paths had all drifted; also fixed the adjacent `form_kits.py`
