@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-qfyxr: the archive read routes -- four route-table rows, two client-tier firm-scoped + two editor token-gated -- see [the qfyxr journal entry](journal/entries/2026-08-19-bd-qfyxr-kit-history-ui.md). Same week, bd polyglot-pdf-xg0pm: Surface contracts section 1's
+*Last updated: 2026-08-20 (bd polyglot-pdf-xwlt: Surface contracts entry 6 gains `firm_id` on the confirmation record plus the two session records the voice path now writes -- see [the xwlt journal entry](journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md). Same week, bd polyglot-pdf-qfyxr: the archive read routes -- four route-table rows, two client-tier firm-scoped + two editor token-gated -- see [the qfyxr journal entry](journal/entries/2026-08-19-bd-qfyxr-kit-history-ui.md). Same week, bd polyglot-pdf-xg0pm: Surface contracts section 1's
 `editor_kit_routes.py` line citations re-verified against the current file --
 draft save, the publish-gate `FormSchema.model_validate` + lint gate, and both
 schema read paths had all drifted; also fixed the adjacent `form_kits.py`
@@ -411,12 +411,14 @@ has a usable value and acks (`webFormConnection.ts:1924`,
 `handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse` at
 :3197 -- `reason` is a fixed category token, never a field value) -> backend
 logs ONLY on a positive ack (the `recorded` guard at
-`callback_handler.py:947`; the `log_field_confirmation` call it protects at
-:981-989). Event shape (NO PII, no `value` key anywhere):
-`backend/utils/confirmation_logger.py:335-347` --
-`{timestamp, event, form_id, kit_id, edition_date, form_session_id, field_id,
-field_name, confirmation_method}`. Sinks: structured log (:353-355), local
-JSONL (`_write_confirmation_to_file` :364-379, dies with the instance),
+`callback_handler.py:961`; the `log_field_confirmation` call it protects at
+:1000-1009). Event shape (NO PII, no `value` key anywhere):
+`backend/utils/confirmation_logger.py:341-356` --
+`{timestamp, event, form_id, kit_id, edition_date, firm_id, form_session_id,
+field_id, field_name, confirmation_method}` (`firm_id` joined under bd
+polyglot-pdf-xwlt -- the CUSTOMER FIRM from the verified token claim, never a
+client identifier). Sinks: structured log (:363-366), local
+JSONL (`_write_confirmation_to_file` :374-389, dies with the instance),
 Firestore `confirmation_events` (`_firestore_write` :88-117, gated by
 `CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
@@ -427,7 +429,12 @@ handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
 fingerprint (bd polyglot-pdf-xzw5) -- so the name is narrower than the values
-it holds. *Known gap:* a
+it holds. The SAME sink also carries two SESSION records per voice session
+(`form_session_started` / `form_session_ended`, wired from
+`_handle_fill_session` under bd polyglot-pdf-xwlt), keyed on the same
+`firm_id` + `kit_id` so per-firm usage spans sessions and confirmations in one
+equality query; the end record carries a confirmed-field COUNT, never values.
+*Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).
 
