@@ -62,10 +62,19 @@ def _shipped_routes() -> set[str]:
 
 
 def _documented_routes() -> set[str]:
-    """Every path appearing in a backticked cell of the guide's routes table.
+    """Every path documented by the guide's routes table.
 
     Parses only the `## Routes / endpoints` section so a path mentioned in
     prose elsewhere (Gotchas, Surface contracts) cannot satisfy the pin.
+
+    Shorthand is resolved PER ROW, never across the table. The table
+    abbreviates a repeated prefix within one row ("`/api/editor/kits/{kit_id}/
+    schema`, `.../pdf`"), so `...` means "the sibling path in THIS row". An
+    earlier version resolved each `...` against every concrete path in the
+    whole table, which invented 21 paths that no row documents (e.g.
+    `/api/tts/pdf`, `/api/editor/kits/{kit_id}/draft-snapshots/
+    {snapshot_id}/pdf`) -- and a genuinely undocumented route matching one of
+    those ghosts passed the completeness check silently.
     """
     text = GUIDE.read_text(encoding="utf-8")
     start = text.index("## Routes / endpoints")
@@ -76,41 +85,39 @@ def _documented_routes() -> set[str]:
     for line in section.splitlines():
         if not line.startswith("|"):
             continue
-        # `/api/x`, `/api/x/{id}/y`, and comma-separated cells like
-        # "`/api/editor/kits/{kit_id}/schema`, `.../pdf`" all appear.
+        # Cells are `-quoted; a row may carry several ("`/api/x/{id}/schema`,
+        # `.../pdf`"). Collect this row's own tokens, in order, so `...`
+        # resolves against a sibling from the SAME row.
+        row_paths: list[str] = []
+        row_shorthand: list[str] = []
         for match in re.findall(r"`([^`]+)`", line):
             token = match.strip()
             if token.startswith("/"):
-                documented.add(token)
+                row_paths.append(token)
             elif token.startswith("..."):
-                documented.add(token)  # resolved against its row below
-    return documented
+                row_shorthand.append(token)
 
-
-def _resolve_ellipses(documented: set[str]) -> set[str]:
-    """Expand `.../pdf`-style shorthand against the longest sibling path.
-
-    The table abbreviates repeated prefixes ("`/api/editor/kits/{kit_id}/schema`,
-    `.../pdf`"). Resolve each against the deepest concrete path that shares its
-    row's prefix, so the shorthand still counts as documented.
-    """
-    concrete = {d for d in documented if d.startswith("/")}
-    resolved = set(concrete)
-    for token in documented:
-        if not token.startswith("..."):
+        documented.update(row_paths)
+        if not row_shorthand:
             continue
-        suffix = token[3:]  # strip the leading "..."
-        for base in concrete:
-            candidate = base.rsplit("/", 1)[0] + suffix
-            if candidate.count("/") >= 2:
-                resolved.add(candidate)
-    return resolved
+        # Resolve against the row's LAST concrete path -- the one the
+        # shorthand is abbreviating. A shorthand with no concrete sibling in
+        # its row documents nothing (and must not silently expand).
+        if not row_paths:
+            continue
+        base = row_paths[-1]
+        for token in row_shorthand:
+            suffix = token[3:]  # strip the leading "..." only
+            if not suffix.startswith("/"):
+                continue  # malformed cell ("`...pdf`") documents nothing
+            documented.add(base.rsplit("/", 1)[0] + suffix)
+    return documented
 
 
 def test_every_shipped_route_is_in_the_guide_routes_table():
     """A shipped route missing from the doc table fails HERE, naming itself."""
     shipped = _shipped_routes()
-    documented = _resolve_ellipses(_documented_routes())
+    documented = _documented_routes()
 
     undocumented = sorted(p for p in shipped if p not in documented)
     assert not undocumented, (
@@ -118,6 +125,59 @@ def test_every_shipped_route_is_in_the_guide_routes_table():
         f"table: {undocumented}\n"
         "Add a row (with its owning surface doc), or add it to EXEMPT here "
         "with the reason it is not a documented product surface."
+    )
+
+
+def _table_rows() -> list[str]:
+    """The routes table's body rows, in file order."""
+    text = GUIDE.read_text(encoding="utf-8")
+    start = text.index("## Routes / endpoints")
+    end = text.index("\n## ", start + 1)
+    lines = text[start:end].split("\n")
+
+    header = next(i for i, l in enumerate(lines) if l.startswith("| Method "))
+    body = header + 2  # skip the header and its |---| separator
+    rows = []
+    while body < len(lines) and lines[body].startswith("|"):
+        rows.append(lines[body])
+        body += 1
+    return rows
+
+
+def _row_sort_key(row: str) -> tuple[str, str]:
+    """(path, method) -- the table's stable order.
+
+    The path is the row's FIRST backticked token, which is the route the row
+    is about; later tokens are shorthand siblings or prose.
+    """
+    cells = row.split("|")
+    method = cells[1].strip()
+    match = re.search(r"`([^`]+)`", cells[2])
+    path = match.group(1).strip() if match else cells[2].strip()
+    return (path, method)
+
+
+def test_guide_routes_table_is_sorted_by_path_then_method():
+    """THE COLLISION FIX. Drift is only half the problem this table has -- the
+    other half is that 8 of the 11 commits touching the guide in the week to
+    2026-08-20 edited this ~20-line region, and parallel PRs collided there.
+
+    A row order that is merely conventional gives a new row no determined
+    home, so two parallel PRs pick different insertion points and conflict.
+    Sorting by (path, method) gives every row EXACTLY ONE correct position:
+    two PRs adding different routes land on different lines, and a reviewer
+    can tell where a row belongs without reading the whole table.
+
+    Mutation: swap any two adjacent rows -- red.
+    """
+    rows = _table_rows()
+    assert rows, "routes table body not found -- has the table shape changed?"
+
+    actual = [_row_sort_key(r) for r in rows]
+    expected = sorted(actual)
+    assert actual == expected, (
+        "the routes table is out of order; sort rows by (path, method).\n"
+        f"first divergence: {next(a for a, e in zip(actual, expected) if a != e)}"
     )
 
 

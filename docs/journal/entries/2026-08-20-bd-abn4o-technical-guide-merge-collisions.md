@@ -47,6 +47,15 @@ directly:
   Derives the shipped route set from the live FastAPI app and asserts the doc
   documents every one, in both directions (undocumented route; phantom row).
 
+- **The routes table is sorted by (path, method), pinned by a third test.**
+  This is the half that addresses COLLISIONS rather than drift. The previous
+  order was conventional-but-arbitrary (`lint` -> `status` ->
+  `retire-candidates` -> `lock` -> `DELETE {kit_id}` -> `readiness` -> `POST
+  kits` -> `extract`), which gives a new row no determined home: two parallel
+  PRs pick different insertion points and collide. Sorting gives every row
+  exactly one correct position. The convention is stated in the guide above
+  the table, so the next author sorts rather than appends.
+
 - **Eight undocumented routes documented.** The new test's first run found the
   table was already nine routes stale (the ninth was covered by an ellipsis
   row): `store-handshake`, `draft-snapshots`, `draft-snapshots/{id}/restore`,
@@ -57,14 +66,22 @@ directly:
 
 ## Decisions
 
-**Generating the routes table was rejected.** It was the proposal's preferred
-option, and it does remove the conflict class outright. But each row's value
-is its hand-written "Surface doc" prose -- which surface owns the route, what
-the auth gate is, why a 409 fires -- and a generator would either discard that
-or need the prose stored somewhere else, moving the conflict rather than
-removing it. A completeness TEST keeps the prose, kills the drift, and turns a
-missing row into a red test that names itself. The table stays hand-written;
-the set is pinned.
+**Generating the routes table was rejected; a completeness test plus a stable
+sort replaced it.** Generation was the proposal's preferred option and does
+remove the conflict class outright, but each row's value is its hand-written
+"Surface doc" prose -- which surface owns the route, what the auth gate is, why
+a 409 fires -- and a generator would either discard that or need the prose
+stored elsewhere, moving the conflict rather than removing it. The pairing that
+replaced it covers both failure modes: the completeness test kills DRIFT, and
+the (path, method) sort kills COLLISIONS by giving every row exactly one
+correct position.
+
+The first version of this change shipped only the test, and the fresh-eyes
+review correctly scored that a FAIL against the bead's second exit criterion:
+a completeness test catches a missing row but does nothing about two PRs
+editing the same region, which is the problem the bead actually measured. The
+sort was the cheap fallback the bead named and the first pass skipped without
+addressing it. Both halves are now in.
 
 **The Surface-contracts split was deferred** to polyglot-pdf-m2j14 rather than
 shipped here, on the bead's own evidence. It addresses the least frequent
@@ -100,20 +117,68 @@ edits would have made one PR that is half trivial and half consequential.
   in separate commits. Recorded on polyglot-pdf-9hdt4 so the repo-wide stamp
   removal does not re-derive it.
 
+## The review round (and the lesson in it)
+
+The fresh-eyes pass found three gaps, two of them real bugs in the first
+version of this change. Both are worth recording because they are the same
+class of mistake in different clothing: **trusting a convenient artifact
+instead of the shipped one.**
+
+- **The completeness test had a hole big enough to drive a route through.**
+  `_resolve_ellipses` expanded the table's `.../pdf` shorthand against EVERY
+  concrete path in the table rather than the shorthand's own row, inventing 21
+  paths no row documents (`/api/tts/pdf`,
+  `/api/editor/kits/{kit_id}/draft-snapshots/{snapshot_id}/pdf`, ...). A new
+  route matching any ghost passed the check silently -- the exact mutation
+  class the test's own docstring claimed to guard. My mutation verification had
+  used a route shape that happened not to collide with a ghost, so it went
+  green for the wrong reason. **A mutation that passes tells you nothing unless
+  it is the mutation most likely to happen.** Fixed by resolving shorthand
+  per-row; re-verified with the reviewer's ghost-shaped route, which now fails
+  the test by name.
+
+- **A new doc row asserted behavior the code does not have.** The
+  `store-handshake` row claimed `reason="unwritable"`. The handler
+  (`editor_kit_routes.py:993-1007`) returns `mismatch`, `stale`, or
+  `not-a-local-store` and never `unwritable`. I had written the row from the
+  handler's DOCSTRING (:976), which is stale, rather than its return
+  statements -- while writing a change whose entire premise is that docs drift
+  from code. The repo's own rule already covers this (verify claims against
+  code, not prose); the row now names the three real values.
+
+The pre-existing docstring/comment drift at `editor_kit_routes.py:193` and
+`:976` is out of scope here and filed as bd polyglot-pdf-ffnbc -- which also
+asks whether the editor client switches on those strings, since an undocumented
+`"stale"` and a fictional `"unwritable"` could be a real unhandled branch rather
+than just stale prose.
+
 ## Verification
 
-- Both new tests mutation-verified in BOTH directions, with the mutation
-  confirmed applied by grep before each run and the file restored by hash
-  afterward: adding an undocumented route to editor_kit_routes.py turned
-  `test_every_shipped_route_is_in_the_guide_routes_table` red (naming the
-  route); adding a phantom doc row turned
-  `test_guide_routes_table_documents_no_phantom_routes` red.
+- All three tests mutation-verified, with the mutation confirmed applied by
+  grep before each run and the file restored by hash afterward: adding an
+  undocumented route turned `test_every_shipped_route_is_in_the_guide_routes_
+  table` red (naming the route); adding a phantom doc row turned
+  `test_guide_routes_table_documents_no_phantom_routes` red; swapping two
+  adjacent rows turned `test_guide_routes_table_is_sorted_by_path_then_method`
+  red (naming the divergence).
+- The ellipsis fix re-verified against the mutation that DEFEATED the first
+  version: a route at `/api/editor/kits/{kit_id}/draft-snapshots/
+  {snapshot_id}/pdf` (a path shape the old parser invented as a ghost) now
+  fails the completeness test by name. Ghost count went from 21 invented paths
+  to 0.
 - The stamp removal's real risk -- that dropping the stamp drops the doc out
   of the freshness discipline -- was mutation-verified too: with no stamp,
   `parse_last_updated_ts` returns None and the git fallback supplies the date;
   forcing that fallback to epoch 0 flipped `check_doc` from `ok` to `stale`
   with 23 files flagged. The fallback is load-bearing, not a silent skip.
-- `tests/test_doc_freshness.py`: 105 passed.
+- `tests/test_doc_freshness.py`: 105 passed. Root suite `tests/`: 1189 passed,
+  1 skipped. Backend suite via closeout_prep: 2402 passed, 2 skipped.
+- closeout_prep's other two flags were triaged, not ignored: the stale bead
+  (`polyglot-pdf-ly00c`) is someone else's in-progress work, and the 20 STALE
+  docs are pre-existing -- verified by confirming this branch's diff touches
+  none of them. That staleness is recorded as evidence on the epic: 20 of ~24
+  tier-2 docs are stale, so the repo is paying the stamp's full merge-conflict
+  cost for a freshness signal it is already ignoring at scale.
 
 **A near-miss worth recording:** the first full-suite run reported exit code 0
 while running ZERO tests -- pytest had rejected an unrecognized `--timeout=300`
