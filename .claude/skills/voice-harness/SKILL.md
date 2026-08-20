@@ -66,10 +66,19 @@ cd "$WT/frontend" && npm run build:worklet && \
 Then in a Chrome tab (see RUNBOOK steps 2-7 for the exact JS):
 1. `navigate` 5174; set `__VFF_LOCAL_DEV` / `__VFF_TEST_HARNESS` /
    `__VFF_BACKEND_URL=ws://localhost:8001/ws/fill` in localStorage; reload.
-2. Click English -> i-90 (JS `.click()`). Confirm `connected` +
-   `typeof window.__VFF_TEST_INJECT === 'object'`.
-3. Inject `harness.js`; pre-load both fixtures into `window.__vffDigits/__vffYes`.
-4. Click "I Agree".
+2. Click English -> i-90 (JS `.click()`), then click Agree as soon as the
+   modal is up -- BEFORE waiting for the hook. With the intro-clip flag OFF
+   (today's default) the app is already `connected` here; with it ON there is
+   no session until Agree, so waiting first would hang. Clicking first is
+   correct under both (bd `polyglot-pdf-s1iex.7`). Match the TRANSLATED label
+   -- a Russian session shows "Prinimayu", not "I Agree":
+   ```js
+   [...document.querySelectorAll('button')]
+     .find(b=>/Принимаю|I Agree/i.test(b.innerText)).click();
+   ```
+3. Confirm `typeof window.__VFF_TEST_INJECT === 'object'`, then inject
+   `harness.js` and pre-load both fixtures into `window.__vffDigits/__vffYes`.
+4. (Agree already clicked in step 2 -- nothing to do here.)
 5. Run and poll:
    ```js
    window.__vffReport = null;

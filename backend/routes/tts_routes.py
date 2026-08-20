@@ -31,7 +31,12 @@ import structlog
 
 from backend.config import get_settings
 from backend.services.auth import require_auth
-from backend.services.intro_tts import KNOWN_FORMS, synthesize_intro
+from backend.services.intro_tts import (
+    KNOWN_FORMS,
+    resolve_intro_language,
+    script_version,
+    synthesize_intro,
+)
 from backend.services.spellback_tts import (
     MAX_SPELLBACK_CHARS,
     synthesize_spellback,
@@ -124,7 +129,17 @@ async def intro_tts(
     # a re-fetch to get the 304 instead of re-downloading ~400KB. The
     # Cache-Control header is inert on a POST today and is kept only because
     # the plan specifies it (it activates if this ever becomes a GET).
-    headers = {"Cache-Control": "private, max-age=3600", "ETag": etag}
+    # X-Intro-Script-Version: the hash of the exact text this clip speaks, so
+    # the client can echo it into the acceptance record (bd
+    # polyglot-pdf-s1iex.7). Returned as a HEADER rather than recomputed in the
+    # browser on purpose: the backend stays the single source of the hash, so
+    # the two can never drift into recording a version the backend never
+    # synthesized. Exposed via CORS below.
+    headers = {
+        "Cache-Control": "private, max-age=3600",
+        "ETag": etag,
+        "X-Intro-Script-Version": script_version(resolve_intro_language(request.language)),
+    }
     if http_request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     return Response(content=audio, media_type="audio/mpeg", headers=headers)
