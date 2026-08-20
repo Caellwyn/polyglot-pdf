@@ -106,8 +106,41 @@ i-90 form button. Use `el.click()` in JS (not `computer {ref}`):
 // (re-read; then on the form step)
 [...document.querySelectorAll('button')].find(b=>/i-90/i.test(b.innerText)).click();
 ```
-The form loads, voice auto-connects to :8001, and the disclaimer ("I Agree")
-appears. Confirm status is `connected` and `typeof window.__VFF_TEST_INJECT === 'object'`.
+The form loads and the disclaimer ("I Agree") appears.
+
+**Whether the voice auto-connects HERE depends on the intro-clip flag** (bd
+`polyglot-pdf-s1iex.7`):
+
+- **`VITE_INTRO_CLIP_ENABLED` off (today's default)** -- the app connects
+  BEFORE Agree, so confirm status is `connected` and
+  `typeof window.__VFF_TEST_INJECT === 'object'` at this point, then click
+  Agree.
+- **Flag on** -- there is NO session until Agree (Sol's clip plays against
+  nothing), so `__VFF_TEST_INJECT` does not exist yet. Click Agree FIRST, then
+  wait for the hook.
+
+Clicking Agree when the modal is up and waiting for the hook afterwards is
+correct under BOTH states -- which is exactly what the five drivers do via
+their `clickIfPresent` helper. Do not wait for the hook before clicking, or
+the flag-on path hangs until timeout.
+
+**Match the TRANSLATED label.** The agree button is per-language
+(`DisclaimerModal.BUTTON_TRANSLATIONS`), so a Russian session shows
+"Prinimayu", not "I Agree" -- the two RU drivers pass a bilingual pattern for
+exactly this reason (an English-only match silently hits nothing and leaves
+the flag-on path hanging). Any new driver in a non-English session must do the
+same.
+
+Click Agree here -- bilingual, so it works in an English OR Russian session
+(add the label for any other language you drive):
+
+```js
+[...document.querySelectorAll('button')]
+  .find(b=>/Принимаю|I Agree/i.test(b.innerText)).click();
+```
+
+This is the ONLY Agree click in this procedure -- step 5 below is a
+placeholder, not a second click.
 
 ### 4. Install the harness + pre-load fixtures
 
@@ -124,13 +157,18 @@ Promise.all([
 ]).then(([d,y,d2]) => { window.__vffDigits = d; window.__vffYes = y; window.__vffDigits2 = d2; window.__vffReady = true; });
 ```
 
-### 5. Agree to the disclaimer
+### 5. Agree to the disclaimer -- ALREADY DONE in step 3
 
-```js
-[...document.querySelectorAll('button')].find(b=>/I Agree/i.test(b.innerText)).click();
-```
-This calls `switchToFirstSection` -> restarts Gemini for field 1 on the same
-connection (the hook stays valid; `isNativeVad()` still resolves).
+Nothing to click here. Step 3 dismisses the modal, so a second click would
+find no button and throw (`.find(...)` returns undefined) -- and an
+English-only selector would miss a translated label anyway. This step is kept
+as a numbered placeholder so the step numbering below stays stable.
+
+What that step-3 click did, on the **flag-OFF** path: it calls
+`switchToFirstSection` -> restarts Gemini for field 1 on the same connection
+(the hook stays valid; `isNativeVad()` still resolves). With the intro clip
+flag ON there is no session yet at that point, so Agree CONNECTS instead and
+`switchToFirstSection` is never reached.
 
 ### 6. Run the cycle (outcome-gated)
 
@@ -315,7 +353,12 @@ clean rerun of the first-field cycle. **Before each retry's reload, clear the
 field state explicitly:** `preview`/`javascript_tool`-eval
 `sessionStorage.removeItem('schema_form_state')` (or
 `window.__VFF_HARNESS.clearFieldState(FIELD)` then also clear the rest), THEN
-reload and redo steps 5-6. (`runCycle`'s own `clearFieldState` at cycle start is a
+reload and redo the Agree click (step 3) and the cycle (step 6) -- clearing
+`schema_form_state` also wipes `disclaimerAccepted`, so the modal RE-MOUNTS on
+that reload and must be dismissed again. (This used to read "steps 5-6", from
+when step 5 was the Agree click; the click moved to step 3 in bd
+`polyglot-pdf-s1iex.7` and step 5 is now a placeholder, so "5-6" would skip
+the Agree entirely and run the cycle against a blocked page.) (`runCycle`'s own `clearFieldState` at cycle start is a
 same-session backstop; it cannot undo a stale value already sent in a prior
 handshake.) Run up to 3 times; report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY
 otherwise -- with the per-run breakdown and the model (2.5 vs 3.1). The harness

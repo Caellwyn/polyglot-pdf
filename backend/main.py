@@ -77,7 +77,11 @@ app.add_middleware(
     # dev stack and can never send If-None-Match -- while production
     # (same-origin via the Hosting rewrite) hides the gap (bd s1iex.3
     # cross-surface review).
-    expose_headers=["ETag"],
+    # X-Intro-Script-Version joins ETag here (bd polyglot-pdf-s1iex.7): neither
+    # is CORS-safelisted, so without this the intro client reads null on the
+    # cross-origin local dev stack and the acceptance record silently loses the
+    # script version -- the same trap the ETag omission set (bd s1iex.3 review).
+    expose_headers=["ETag", "X-Intro-Script-Version"],
 )
 
 app.include_router(websocket_routes.router)
