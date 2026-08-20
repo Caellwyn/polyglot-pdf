@@ -2,11 +2,13 @@ import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
+  listArchivedRevisions, loadArchivedSchema,
   onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
   translateRemoteKitOptions, fetchRetireCandidates,
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
   type RetireCandidate,
 } from '../utils/remoteKitStore';
+import { ArchivedVersions } from './ArchivedVersions';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
 import { AuthorVersionDialog } from './AuthorVersionDialog';
@@ -1018,6 +1020,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   </button>
                 )}
 
+                {/* Same per-form archive disclosure as the card grid (bd
+                    qfyxr) -- the strip and the cards must move together. */}
+                <ArchivedVersions
+                  kitId={kit.id}
+                  kitLabel={kit.label ?? kit.id}
+                  listRevisions={listArchivedRevisions}
+                  loadSchema={loadArchivedSchema}
+                />
               </>
             );
           })()}
@@ -1418,6 +1428,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     </button>
                   </div>
                 )}
+                {/* Per-form archive disclosure (bd polyglot-pdf-qfyxr):
+                    collapsed and LAST in the card -- the archive is
+                    secondary by requirement; read/update stay the obvious
+                    actions above. */}
+                <ArchivedVersions
+                  kitId={kit.id}
+                  kitLabel={kit.label ?? kit.id}
+                  listRevisions={listArchivedRevisions}
+                  loadSchema={loadArchivedSchema}
+                />
               </li>
             );
           })}

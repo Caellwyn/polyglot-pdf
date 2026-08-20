@@ -16,6 +16,7 @@ import type { FormSchema } from "./types/schema";
 import type { FormKitDescriptor, FormKitManifest } from "./types/formKit";
 import { getBackendHttpUrl, resolveKitAssetUrl } from "./utils/pdfFiller";
 import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
+import { ArchivedVersionsLink } from "./components/ArchivedVersionsLink";
 import { useAuth } from "../contexts/AuthContext";
 import {
   loadOnboardingState,
@@ -292,6 +293,14 @@ export function SchemaFormDemo() {
         >
           <span style={{ fontWeight: 600 }}>
             {selectedForm?.label ?? "Form"}
+            {/* Per-form history disclosure (bd polyglot-pdf-qfyxr): out of
+                the fill flow, read-only viewer, firm-gated server-side. */}
+            {selectedForm && (
+              <ArchivedVersionsLink
+                kitId={selectedForm.id}
+                kitLabel={selectedForm.label}
+              />
+            )}
           </span>
           <button
             onClick={handleClearSession}
