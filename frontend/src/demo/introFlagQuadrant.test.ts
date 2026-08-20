@@ -48,7 +48,17 @@ describe.each(OVERLAYS)('%s: intro flag disables the legacy read', (file) => {
     for (const site of callSites) {
       // Each must sit inside a block that returns early when introEnabled.
       // Look back far enough to cover the effect's guard-at-top shape.
-      const window = lines.slice(Math.max(0, site.i - 40), site.i).join('\n')
+      // Measured in CODE lines, not raw lines: a comment block must not be
+      // able to push the guard out of range. bd polyglot-pdf-nsb4y added
+      // ~10 comment lines above each site and ate a third of the old raw-40
+      // budget in a single commit (cross-surface round 2 measured the slack
+      // down to 12). A scope-walk was tried and REJECTED -- climbing outward
+      // until introEnabled appears anywhere always succeeds in a component
+      // that mentions the flag, so removing a real guard left it green.
+      const codeAbove = lines
+        .slice(0, site.i)
+        .filter((l) => l.trim() && !l.trim().startsWith('//'))
+      const window = codeAbove.slice(-40).join('\n')
       expect(window).toContain('introEnabled')
     }
   })
