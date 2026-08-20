@@ -189,8 +189,14 @@ class StoreHandshakeResponse(BaseModel):
     # The backend's root, for the error dialog. Local dev only, and it is a
     # path the operator already knows -- it is their own working copy.
     backendRoot: Optional[str] = None
-    # Why the handshake failed, for the dialog: "mismatch" (a different folder)
-    # or "unwritable" (the backend cannot read its own root).
+    # Why the handshake failed, for the dialog. The backend returns exactly
+    # three values: "not-a-local-store" (this deployment has no local root),
+    # "mismatch" (nothing readable at the backend's root -- no marker, or
+    # one it could not parse; the editor is pointed somewhere else),
+    # or "stale" (the marker is there but carries an older nonce). NOT
+    # "unwritable" -- that one is minted client-side when the editor cannot
+    # WRITE its marker, and it returns before this route is ever called
+    # (schema-editor/src/utils/formKitDirectory.ts).
     reason: Optional[str] = None
 
 
@@ -973,8 +979,11 @@ async def editor_store_handshake(
     root and reports whether the nonce matches.
 
     Read-only on the backend side: it never creates or deletes the file, so a
-    read-only store simply reports sameFolder=false with reason="unwritable"
-    (the file was never observed) instead of failing.
+    store it cannot read simply reports sameFolder=false with
+    reason="mismatch" (nothing readable was observed at its own root)
+    instead of failing. The editor knows whether its own marker WRITE
+    failed -- it just tried it -- so it picks the user-facing message;
+    this route only reports what it saw.
     """
     store = get_form_kit_store()
     if not isinstance(store, LocalFormKitStore):
