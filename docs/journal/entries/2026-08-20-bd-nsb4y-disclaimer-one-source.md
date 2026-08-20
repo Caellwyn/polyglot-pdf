@@ -76,6 +76,20 @@ the three options and their tradeoffs rather than decided.
   leaked), on both overlays. Re-running the reviewer's exact evasion now fails
   that test. The source scan stays as a cheap second layer, explicitly labelled
   as not being the guarantee.
+- **I pinned ONE of two call sites and believed I had pinned the other.** My
+  spoken-side test clicked Agree and asserted the last `readDisclaimer` call.
+  Round 2 showed the click was a NO-OP for that assertion: the call had
+  already fired at mount, from the `pendingDisclaimerRead` effect. So the test
+  passed for a reason I had not understood, and the "Listen Again" handler --
+  a real button, an independently editable second call site -- was pinned by
+  nothing. Reverting only that site left all 116 tests green. Both sites are
+  now driven explicitly, and the Listen Again test asserts the call count
+  INCREASED before reading the last call, or it would just be asserting site 1
+  twice. Each of the four sites (2 per overlay) is individually
+  mutation-verified.
+  The general shape: when a test asserts "the last call to X", know WHICH call
+  that is. A passing test whose trigger you have misidentified is not
+  evidence.
 - **A mutation that does not COMPILE proves nothing.** My first attempt at
   reproducing the evasion left unbalanced parens; vitest reported exit 1 and a
   passing test count, which reads like a catch. It was a transform error -- the

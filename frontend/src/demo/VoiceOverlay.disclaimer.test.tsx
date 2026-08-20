@@ -438,7 +438,28 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
   // which reintroduces the advisory register on the spoken side only and left
   // the whole suite green (fresh-eyes round 1 demonstrated exactly that).
   // Guard the PROPERTY -- what the model is told to say -- not the spelling.
-  async function assertModelIsToldTheUndertaking(Overlay: typeof VoiceOverlay) {
+  //
+  // BOTH production call sites are covered, because fresh-eyes round 2 showed
+  // one is not enough: reverting ONLY the Listen Again handler left all 116
+  // tests green. The two sites are independently reachable and independently
+  // editable:
+  //   1. the pendingDisclaimerRead effect -- fires on CONNECT, before Agree
+  //      (the Agree click is a no-op for this assertion; round 2 caught the
+  //      original comment here claiming otherwise);
+  //   2. handleDisclaimerListenAgain -- the modal's "Listen Again" button.
+  function expectUndertaking(spokenRaw: unknown) {
+    const spoken = String(spokenRaw ?? '').toLowerCase()
+    expect(spoken).toContain('agree to review the completed document')
+    expect(spoken).toContain('certified professional')
+    // The retired advisory copy must not reach the model, however obtained.
+    expect(spoken).not.toContain('we strongly advise')
+    // Placeholders must be interpolated, not spoken literally.
+    expect(spoken).not.toContain('[form number]')
+    expect(spoken).not.toContain('[agree label]')
+    expect(spoken).not.toContain('undefined')
+  }
+
+  function mountWithDisclaimerPending(Overlay: typeof VoiceOverlay) {
     const manager = makeMockManager([])
     vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
       schema: MINIMAL_SCHEMA,
@@ -463,26 +484,46 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
         initialLanguage="English"
       />
     )
-    fireEvent.click(await screen.findByText('I Agree'))
-    await waitFor(() => expect(manager.readDisclaimer).toHaveBeenCalled())
-
-    const spoken = String(manager.readDisclaimer.mock.calls.at(-1)?.[1] ?? '').toLowerCase()
-    // What the model is told to read IS the shared script...
-    expect(spoken).toContain('agree to review the completed document')
-    expect(spoken).toContain('certified professional')
-    // ...and NOT the retired advisory copy, however it was obtained.
-    expect(spoken).not.toContain('we strongly advise')
-    // Placeholders must be interpolated, not spoken literally.
-    expect(spoken).not.toContain('[form number]')
-    expect(spoken).not.toContain('[agree label]')
-    expect(spoken).not.toContain('undefined')
+    return manager
   }
 
-  it('desktop (VoiceOverlay): the MODEL is told to read the undertaking (nsb4y)', async () => {
-    await assertModelIsToldTheUndertaking(VoiceOverlay)
+  // SITE 1: the connect-time read.
+  async function assertConnectReadStatesTheUndertaking(Overlay: typeof VoiceOverlay) {
+    const manager = mountWithDisclaimerPending(Overlay)
+    await screen.findByText('I Agree')
+    await waitFor(() => expect(manager.readDisclaimer).toHaveBeenCalled())
+    expectUndertaking(manager.readDisclaimer.mock.calls.at(-1)?.[1])
+  }
+
+  // SITE 2: the "Listen Again" re-read. Independently reachable, and reverting
+  // ONLY this one used to leave the whole suite green (round 2).
+  async function assertListenAgainStatesTheUndertaking(Overlay: typeof VoiceOverlay) {
+    const manager = mountWithDisclaimerPending(Overlay)
+    await screen.findByText('I Agree')
+    await waitFor(() => expect(manager.readDisclaimer).toHaveBeenCalled())
+    const beforeReRead = manager.readDisclaimer.mock.calls.length
+
+    fireEvent.click(screen.getByText('Listen Again'))
+
+    // A DISTINCT call from the connect-time one, or this asserts site 1 twice.
+    await waitFor(() =>
+      expect(manager.readDisclaimer.mock.calls.length).toBeGreaterThan(beforeReRead))
+    expectUndertaking(manager.readDisclaimer.mock.calls.at(-1)?.[1])
+  }
+
+  it('desktop (VoiceOverlay): the connect-time read states the undertaking (nsb4y)', async () => {
+    await assertConnectReadStatesTheUndertaking(VoiceOverlay)
   })
 
-  it('mobile (VoiceOverlayMobile): the MODEL is told to read the undertaking (nsb4y)', async () => {
-    await assertModelIsToldTheUndertaking(VoiceOverlayMobile)
+  it('mobile (VoiceOverlayMobile): the connect-time read states the undertaking (nsb4y)', async () => {
+    await assertConnectReadStatesTheUndertaking(VoiceOverlayMobile)
+  })
+
+  it('desktop (VoiceOverlay): Listen Again states the undertaking (nsb4y)', async () => {
+    await assertListenAgainStatesTheUndertaking(VoiceOverlay)
+  })
+
+  it('mobile (VoiceOverlayMobile): Listen Again states the undertaking (nsb4y)', async () => {
+    await assertListenAgainStatesTheUndertaking(VoiceOverlayMobile)
   })
 })
