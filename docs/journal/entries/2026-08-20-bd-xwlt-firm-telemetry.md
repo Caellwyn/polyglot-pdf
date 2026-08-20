@@ -65,11 +65,24 @@ with no client PII anywhere.
   queries that had been safe only because session events carried no kit_id
   and had no callers -- both facts this bead reversed. One voice session
   made a kit permanently undeletable; one session with a null kit_id made
-  every kit unverifiable. Fixed by scoping all queries to the event
-  (server-side) with the kit test client-side over the bounded,
-  short-circuiting stream -- no composite index, guard semantics unchanged
-  -- and pinned by three regression tests including the exact reproduction.
-  Filed as bd polyglot-pdf-68s2q.
+  every kit unverifiable. Filed as bd polyglot-pdf-68s2q.
+  MY FIRST FIX FOR IT WAS ITSELF A BLOCKER (bd polyglot-pdf-u66ka, caught by
+  outer round 2): scoping every query to the event server-side and moving the
+  kit comparison client-side over the bounded stream silently turned the
+  POSITIVE check from exhaustive into an arbitrary 50-document sample, so a
+  confirmation past that window read as "no records" and the kit would be
+  hard-deleted WITH its archive -- the same permit-a-delete direction as the
+  bug it replaced. Round 2 also corrected the premise I had reasoned from:
+  two EQUALITY filters need no composite index (Firestore merges single-field
+  indexes; composites are for equality+range/order_by), which I verified
+  against the SDK before re-fixing.
+  WHAT SHIPPED is three checks: (1) an EXHAUSTIVE chained equality kit match
+  (kit_id AND event) with limit(1) bounding the RESULT not the search, (2) an
+  EXHAUSTIVE chained stored-null check for a real confirmation naming no kit,
+  and (3) the BOUNDED legacy missing-key sweep -- sampling is defensible only
+  there, because that cohort is CLOSED. Five regression tests pin it,
+  including one asserting a record BEYOND the scan window is still found: the
+  test whose absence let the sampling regression ship.
 
 ## Lessons
 
@@ -81,7 +94,7 @@ with no client PII anywhere.
   interesting sessions are the ones that die badly, and those are exactly
   the ones a happy-path call would miss.
 - WIRING A DORMANT FUNCTION CHANGES THE MEANING OF CODE THAT READS ITS
-  OUTPUT. Two guard queries were correct for years because session events
+  OUTPUT. Guard queries that were correct for years because session events
   had no kit_id and no callers; this bead falsified both premises at once,
   and the queries silently changed meaning without being touched. When a
   bead gives a dormant writer its first caller -- or adds a key to an

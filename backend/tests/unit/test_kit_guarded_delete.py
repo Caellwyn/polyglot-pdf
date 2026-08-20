@@ -610,16 +610,6 @@ def test_a_record_naming_NO_kit_blocks_deletion_rather_than_clearing_it(monkeypa
         kit_has_confirmation_records("w7")
     assert "name no kit" in str(exc.value)
 
-    # PIN THE SERVER-SIDE FILTER. The null test moved client-side (bd
-    # polyglot-pdf-xwlt / 68s2q: a kit_id-shaped query could not stay unscoped
-    # once the session events carried a kit_id), so the operator this once
-    # pinned -- IS_NULL vs its catastrophic inverse IS_NOT_NULL -- no longer
-    # exists. What must NOT drift is that the ONLY server-side filter is the
-    # event scope: a query on kit_id here would match session rows again and
-    # resurrect the undeletable-kit bug, and one on any other field could
-    # sweep in every record that HAS a kit_id (the inversion danger, in its
-    # new form). The client-side null semantics are pinned by outcome above
-    # and by test_a_session_event_with_a_kit_id_does_NOT_block_deletion.
     # PIN THE OPERATOR. The SDK resolves ("kit_id","==",None) to a
     # UnaryFilter(IS_NULL); the INVERSE (IS_NOT_NULL) matches every record
     # that HAS a kit_id and would make every kit permanently undeletable --
