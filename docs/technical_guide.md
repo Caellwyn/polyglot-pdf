@@ -1,11 +1,18 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-1bsuq: the extract route row now
-states its write-locked-kit 409 gate, matching the sibling translate-options
-row. Same day, bd polyglot-pdf-5guak added Surface contracts entry 8 (the
-intro agree-label mirror) and bd polyglot-pdf-qfak0 added entry 9 (the
-`LIVE_VOICE_NAME` two-consumer coupling). Same day, bd polyglot-pdf-s1iex.7:
-the disclaimer-acceptance record now carries `script_version`, and
+*Last updated: 2026-08-20 (bd polyglot-pdf-xg0pm: Surface contracts section 1's
+`editor_kit_routes.py` line citations re-verified against the current file --
+draft save, the publish-gate `FormSchema.model_validate` + lint gate, and both
+schema read paths had all drifted; also fixed the adjacent `form_kits.py`
+`put_schema` citations in the same paragraph while re-verifying it. Same day,
+bd polyglot-pdf-vf48u: the translate-options route row's "409 on complete
+kits" wording widened to name the write-locked set (complete OR unpublished),
+matching the `/status` row's phrasing. Same day, bd polyglot-pdf-1bsuq: the
+extract route row now states the same write-locked-kit 409 gate. Same day,
+bd polyglot-pdf-5guak added Surface contracts entry 8 (the intro agree-label
+mirror) and bd polyglot-pdf-qfak0 added entry 9 (the `LIVE_VOICE_NAME`
+two-consumer coupling). Same day, bd polyglot-pdf-s1iex.7: the
+disclaimer-acceptance record now carries `script_version`, and
 `/api/tts/intro` returns the matching `X-Intro-Script-Version` header -- both
 surfaced in the route table below. Also same day, bd polyglot-pdf-kkos: the
 static bundle now ships only complete AND public kits, so Surface contracts
@@ -105,7 +112,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). 409 on any write-locked kit -- complete OR unpublished -- with a revert-first message (`force=true` would overwrite the published schema in place, bd polyglot-pdf-w3zw). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
-| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on complete kits -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
+| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on any write-locked kit -- complete OR unpublished -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
@@ -165,16 +172,20 @@ The canonical shape is Pydantic `FormSchema` (`backend/models/form_models.py:883
 rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 - **Validation happens ONLY at the publish gate.** Draft saves
-  (`backend/routes/editor_kit_routes.py:602-646`) check just that `fields` is a
-  list and write the raw dict via the store (`backend/services/form_kits.py:353`
-  local / :565 GCS). The one chokepoint is "mark complete":
-  `FormSchema.model_validate` at `editor_kit_routes.py:1530` plus the zero-ERROR
-  schema-lint gate (`backend/services/schema_lint.py:776`, checked at
-  `editor_kit_routes.py:1571-1600`). Every read path streams the raw stored dict
-  unvalidated (`backend/routes/form_kit_routes.py:194`,
-  `editor_kit_routes.py:553`). *Breaks if bypassed:* a hand-edited or draft kit
-  reaching the voice path carries whatever shape it has -- e.g. a field without
-  `pdf_field_name` is silently never written to the output PDF.
+  (`save_editor_kit_schema`, `backend/routes/editor_kit_routes.py:1617-1700`)
+  check just that `fields` is a list and write the raw dict via the store
+  (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
+  `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
+  :1172 GCS). The one chokepoint is "mark complete":
+  `FormSchema.model_validate` at `editor_kit_routes.py:2809` plus the
+  zero-ERROR schema-lint gate
+  (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
+  `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
+  dict unvalidated (`get_form_kit_schema`,
+  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema`,
+  `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
+  draft kit reaching the voice path carries whatever shape it has -- e.g. a
+  field without `pdf_field_name` is silently never written to the output PDF.
 - **The frontend type is a hand-maintained mirror.**
   `frontend/src/schema-forms/types/schema.ts:325` (`interface FormSchema`)
   mirrors `form_models.py` with no codegen or sync check, and the SPA casts the
