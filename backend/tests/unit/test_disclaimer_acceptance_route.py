@@ -52,6 +52,47 @@ def test_acceptance_log_kwargs_are_exactly_the_allowlist(monkeypatch):
         "timestamp_unix_ms",
         "timestamp_iso",
         "user_agent",
+        # ADDED DELIBERATELY (bd polyglot-pdf-s1iex.7): which exact disclaimer
+        # TEXT the user agreed to. Non-PII -- a hash of copy that ships in the
+        # client bundle -- and it is what turns the epic's determinism into
+        # evidence: without it the record proves someone clicked Agree but not
+        # what they were told.
+        "script_version",
     }
     assert kwargs["form_session_id"] == "fss_disc_1"
     assert kwargs["language"] == "Spanish"
+
+
+def test_script_version_reaches_the_log_when_the_client_sends_it(monkeypatch):
+    """The evidence half of the audit record (bd polyglot-pdf-s1iex.7).
+
+    The allowlist test above pins the KEY SET; this pins that the VALUE
+    survives the route rather than being silently dropped -- an allowlist
+    entry that always logs None would satisfy the set check while recording
+    nothing.
+    """
+    mock_log = MagicMock()
+    monkeypatch.setattr(dr, "_log", mock_log)
+
+    body = dict(_BODY)
+    body["script_version"] = "a1b2c3d4e5f60718"
+    resp = client.post("/api/disclaimer-acceptance", json=body)
+    assert resp.status_code == 200
+
+    _args, kwargs = mock_log.info.call_args
+    assert kwargs["script_version"] == "a1b2c3d4e5f60718"
+
+
+def test_script_version_is_optional_for_an_older_client(monkeypatch):
+    """The legacy model-read path has no deterministic text to name, and a
+    client one deploy behind omits the field entirely. Both must still log
+    (a 422 here would break disclaimer acceptance outright), with the key
+    present and null rather than absent."""
+    mock_log = MagicMock()
+    monkeypatch.setattr(dr, "_log", mock_log)
+
+    resp = client.post("/api/disclaimer-acceptance", json=_BODY)
+    assert resp.status_code == 200
+
+    _args, kwargs = mock_log.info.call_args
+    assert kwargs["script_version"] is None
