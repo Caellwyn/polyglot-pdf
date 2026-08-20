@@ -169,6 +169,49 @@ async def ws_audio(ws: WebSocket, idle_timeout: int | None = Query(default=None)
 		wtask.cancel()
 
 
+def _form_number_of(schema: dict | None) -> str:
+	"""form_number from a schema, defensively (bd polyglot-pdf-xwlt).
+
+	isinstance-guarded at both levels: a malformed/legacy client can send a
+	non-dict form_metadata, and the session-START call site sits OUTSIDE the
+	handler's try, so an AttributeError there would kill the session
+	ungracefully (the bd polyglot-pdf-ypk4 crash class; fresh-eyes round 1).
+	"""
+	if not isinstance(schema, dict):
+		return "unknown"
+	meta = schema.get("form_metadata")
+	if not isinstance(meta, dict):
+		return "unknown"
+	number = meta.get("form_number")
+	return number if isinstance(number, str) and number else "unknown"
+
+
+def should_log_session_start(form_session_id: str | None, is_reconnect: bool) -> bool:
+	"""Log a session START only on a FIRST connection for this form session.
+
+	form_session_id survives reconnects, so re-logging on a resume would
+	inflate a per-firm session count with what is one session to the user
+	(bd polyglot-pdf-xwlt).
+	"""
+	return bool(form_session_id) and not is_reconnect
+
+
+def should_log_session_end(form_session_id: str | None, is_reconnect: bool) -> bool:
+	"""Log a session END on EVERY connection teardown -- reconnects included.
+
+	Deliberately NOT gated on is_reconnect (fresh-eyes round 1 caught that):
+	that flag describes the connection that just OPENED, not the one closing,
+	so gating on it dropped the real end record for any session that ever
+	reconnected AND emitted a false "abandoned" for the connection that was
+	about to resume. The backend cannot tell a mid-form reconnect from a real
+	exit at teardown -- the protocol has no terminal-close signal -- so these
+	are per-CONNECTION rows and a per-firm SESSION count is a distinct count
+	over form_session_id. `is_reconnect` is accepted (unused) to keep the
+	pair's call shape symmetric and the asymmetry documented where it lives.
+	"""
+	return bool(form_session_id)
+
+
 async def _handle_fill_session(
 	websocket: WebSocket,
 	session_id: str,
@@ -302,23 +345,25 @@ async def _handle_fill_session(
 	# deliberately does not re-log a start: form_session_id survives
 	# reconnects, so re-logging would inflate a per-firm session count with
 	# what is one session to the user.
-	if form_session_id and not is_reconnect:
+	if should_log_session_start(form_session_id, is_reconnect):
 		log_form_session_start(
-			form_id=(schema or {}).get("form_metadata", {}).get("form_number", "unknown"),
+			form_id=_form_number_of(schema),
 			form_session_id=form_session_id,
 			section_id=section_id,
 			firm_id=firm_id,
 			kit_id=kit_id,
 		)
 
+	# Set when the client reports the WHOLE form confirmed (the form_complete
+	# message below), so the session-end record can say "completed" honestly
+	# instead of guessing from a socket close (bd polyglot-pdf-xwlt). Bound at
+	# FUNCTION scope, not inside the try: the finally reads it on every exit
+	# path, including one that fails before the try is entered.
+	session_completed = False
+
 	try:
 		# Flag to drop audio during section switch
 		drop_audio = False
-		# Set when the client reports the WHOLE form confirmed (the
-		# form_complete message below), so the session-end record can say
-		# "completed" honestly instead of guessing from a socket close
-		# (bd polyglot-pdf-xwlt).
-		session_completed = False
 
 		# Start watchdog to close connection after idle timeout.
 		# (get_settings is imported at module scope; do NOT re-import it function-locally
@@ -1012,19 +1057,29 @@ async def _handle_fill_session(
 		# it up (e.g. an early handshake error) -- guard with locals().
 		for task in list(locals().get("validation_tasks", ())):
 			task.cancel()
-		# Session-end telemetry (bd polyglot-pdf-xwlt), in the finally so it
-		# records however the socket died -- a disconnect, an idle timeout, or
-		# a clean close. Status is "completed" only when the client said so via
-		# the session_complete signal; anything else is honestly "abandoned"
-		# (we cannot know the user finished). Never raises into teardown: the
-		# logger swallows its own sink errors, and a telemetry failure must not
-		# break session cleanup.
-		if form_session_id and not is_reconnect:
+		# Session-end telemetry (bd polyglot-pdf-xwlt). Fires on EVERY
+		# connection teardown, including the disconnect that precedes a
+		# reconnect -- deliberately, because at teardown the backend cannot
+		# know whether this is the end of the form or the middle of a
+		# reconnect: the protocol has no terminal-close signal, and
+		# is_reconnect describes the CONNECTION THAT JUST OPENED, not the one
+		# closing (gating on it logged a false "abandoned" for the connection
+		# that reconnected AND dropped the real end record -- fresh-eyes
+		# round 1).
+		#
+		# So the record carries the truth instead of guessing it:
+		# completion_status is "completed" only on an explicit client
+		# form_complete, and `connection_ended` marks these as per-CONNECTION
+		# rows. A per-firm SESSION count is therefore a distinct-count over
+		# form_session_id (the id survives reconnects), never a row count --
+		# stated in standards/confirmation-and-audit.md so the query is
+		# written correctly.
+		if should_log_session_end(form_session_id, is_reconnect):
 			try:
 				log_form_session_end(
-					form_id=(schema or {}).get("form_metadata", {}).get("form_number", "unknown"),
+					form_id=_form_number_of(schema),
 					form_session_id=form_session_id,
-					completion_status="completed" if locals().get("session_completed") else "abandoned",
+					completion_status="completed" if session_completed else "abandoned",
 					total_fields_confirmed=service.confirmed_field_count(),
 					firm_id=firm_id,
 					kit_id=kit_id,

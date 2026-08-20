@@ -78,11 +78,15 @@ class CallbackHandler:
         self._kit_id = kit_id  # Audit trail: which KIT (bd polyglot-pdf-47r3)
         self._edition_date = edition_date  # Audit trail: which EDITION
         self._firm_id = firm_id  # Telemetry: which FIRM (bd polyglot-pdf-xwlt)
-        # Confirmed-field count for the session-end record (bd
-        # polyglot-pdf-xwlt). Incremented at the ONE place a confirmation is
-        # known to have actually taken -- the same `recorded` guard that gates
-        # log_field_confirmation -- so the count can never exceed the events.
-        self._confirmed_count = 0
+        # Confirmed-field tally for the session-end record (bd
+        # polyglot-pdf-xwlt). The counter lives on the SERVICE, not here:
+        # this handler is REBUILT on every section switch and reconnect
+        # (form_filling_service.start_session), so a counter here would
+        # restart at 0 mid-form and the session total would only ever count
+        # the last section (fresh-eyes round 1). The service injects this
+        # callback; it is None until then, so the handler stays usable
+        # standalone in tests.
+        self._on_field_confirmed = None
         
         # Service methods will be injected
         self._handle_update_fields = None
@@ -988,7 +992,11 @@ class CallbackHandler:
         if self._form_id and self._form_session_id:
             # Get field name from schema for logging (we need to request this from frontend)
             # For now, just log the field_id
-            self._confirmed_count += 1
+            # Tally on the SERVICE (survives the handler rebuild). Bumped
+            # inside the same guard that gates the log call below, so the
+            # count can never exceed the confirmation events.
+            if self._on_field_confirmed is not None:
+                self._on_field_confirmed()
             log_field_confirmation(
                 form_id=self._form_id,
                 form_session_id=self._form_session_id,

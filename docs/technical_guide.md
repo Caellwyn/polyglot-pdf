@@ -411,14 +411,14 @@ has a usable value and acks (`webFormConnection.ts:1924`,
 `handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse` at
 :3197 -- `reason` is a fixed category token, never a field value) -> backend
 logs ONLY on a positive ack (the `recorded` guard at
-`callback_handler.py:947`; the `log_field_confirmation` call it protects at
-:981-989). Event shape (NO PII, no `value` key anywhere):
-`backend/utils/confirmation_logger.py:335-347` --
+`callback_handler.py:961`; the `log_field_confirmation` call it protects at
+:1000-1009). Event shape (NO PII, no `value` key anywhere):
+`backend/utils/confirmation_logger.py:341-356` --
 `{timestamp, event, form_id, kit_id, edition_date, firm_id, form_session_id,
 field_id, field_name, confirmation_method}` (`firm_id` joined under bd
 polyglot-pdf-xwlt -- the CUSTOMER FIRM from the verified token claim, never a
-client identifier). Sinks: structured log (:353-355), local
-JSONL (`_write_confirmation_to_file` :364-379, dies with the instance),
+client identifier). Sinks: structured log (:363-366), local
+JSONL (`_write_confirmation_to_file` :374-389, dies with the instance),
 Firestore `confirmation_events` (`_firestore_write` :88-117, gated by
 `CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the

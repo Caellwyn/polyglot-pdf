@@ -149,3 +149,90 @@ def test_no_client_identifier_rides_any_record(fake_db, monkeypatch):
     for d in _drain(fake_db):
         for banned in ("uid", "email", "user_id", "client_id", "value", "name"):
             assert banned not in d, f"{banned} must never ride a telemetry record"
+
+
+# --- the two bugs fresh-eyes round 1 caught (both would have passed the
+# --- original suite, which is why they are pinned here explicitly) ---
+
+
+def test_the_confirmed_count_survives_a_section_switch():
+    """The session-end count is SESSION-scoped, not per-section.
+
+    The counter first lived on the callback handler, which start_session
+    REBUILDS on every section switch and reconnect -- so a 3-field form
+    filled across two sections reported 1. It now lives on the service,
+    which survives the rebuild. Mutation: move the counter back onto the
+    handler (or drop the _on_field_confirmed wiring) -- red.
+    """
+    from backend.services.form_filling_service import FormFillingService
+
+    svc = FormFillingService.__new__(FormFillingService)  # no live Gemini
+    svc._confirmed_count = 0
+
+    # Two confirmations, then the section-switch handler rebuild, then one more.
+    svc._note_field_confirmed()
+    svc._note_field_confirmed()
+
+    class _Rebuilt:
+        """A fresh handler, as start_session builds on a section switch."""
+        _on_field_confirmed = None
+
+    svc._callback_handler = _Rebuilt()
+    svc._callback_handler._on_field_confirmed = svc._note_field_confirmed
+    svc._callback_handler._on_field_confirmed()
+
+    assert svc.confirmed_field_count() == 3, "the count must span sections"
+
+
+def test_form_number_extraction_never_raises_on_a_malformed_schema():
+    """The session-START call sits OUTSIDE the handler's try, so a non-dict
+    form_metadata from a legacy/malformed client must degrade to "unknown"
+    rather than kill the session (the bd polyglot-pdf-ypk4 crash class).
+    Mutation: revert to (schema or {}).get("form_metadata", {}).get(...) --
+    red on the non-dict rows."""
+    from backend.routes.websocket_routes import _form_number_of
+
+    assert _form_number_of({"form_metadata": {"form_number": "I-90"}}) == "I-90"
+    for malformed in (
+        None,
+        {},
+        {"form_metadata": None},
+        {"form_metadata": "not-a-dict"},
+        {"form_metadata": []},
+        {"form_metadata": {"form_number": None}},
+        {"form_metadata": {"form_number": ""}},
+        "not-a-schema",
+    ):
+        assert _form_number_of(malformed) == "unknown"
+
+
+@pytest.mark.parametrize(
+    "form_session_id, is_reconnect, start, end",
+    [
+        ("fss_1", False, True, True),    # first connection: both
+        ("fss_1", True, False, True),    # RECONNECT: end only, never a 2nd start
+        (None, False, False, False),     # no session key: neither
+        (None, True, False, False),
+    ],
+    ids=["first-connection", "reconnect", "no-session-id", "no-session-id-resume"],
+)
+def test_session_logging_decisions(form_session_id, is_reconnect, start, end):
+    """The whole start/end decision table (bd polyglot-pdf-xwlt).
+
+    The RECONNECT row is the one fresh-eyes round 1 caught: end-logging was
+    gated on is_reconnect, which describes the connection that just OPENED,
+    so a reconnected connection's real teardown logged NOTHING while the
+    pre-reconnect disconnect logged a false "abandoned". End must fire on
+    every teardown; start must not re-fire on a resume.
+
+    Mutation: add `and not is_reconnect` to should_log_session_end -- the
+    reconnect row goes red. Drop it from should_log_session_start -- the
+    reconnect row goes red the other way.
+    """
+    from backend.routes.websocket_routes import (
+        should_log_session_end,
+        should_log_session_start,
+    )
+
+    assert should_log_session_start(form_session_id, is_reconnect) is start
+    assert should_log_session_end(form_session_id, is_reconnect) is end

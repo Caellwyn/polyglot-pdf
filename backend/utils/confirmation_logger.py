@@ -447,6 +447,13 @@ def log_form_session_end(
         total_fields_confirmed: Count of fields confirmed in this session
         firm_id: Customer firm this session ran under (bd polyglot-pdf-xwlt).
         kit_id: Kit identity, matching the session-start record.
+
+    ONE ROW PER CONNECTION, not per session. The WS teardown cannot know
+    whether it is the end of the form or the middle of a reconnect (the
+    protocol has no terminal-close signal), so this fires on every
+    connection teardown and the reader aggregates: a per-firm SESSION count
+    is a DISTINCT count over form_session_id, never a row count. See
+    docs/standards/confirmation-and-audit.md.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 

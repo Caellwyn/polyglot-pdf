@@ -135,6 +135,12 @@ class FormFillingService:
         # polyglot-pdf-47r3), stored for the same reason as _form_session_id.
         self._kit_id: Optional[str] = None
         self._firm_id: Optional[str] = None
+        # Session-scoped confirmed-field tally for the session-end telemetry
+        # record (bd polyglot-pdf-xwlt). Lives HERE, not on the callback
+        # handler, because the handler is rebuilt on every section switch and
+        # reconnect -- a counter there restarted at 0 mid-form and reported
+        # only the last section's confirmations (fresh-eyes round 1).
+        self._confirmed_count: int = 0
         self._edition_date: Optional[str] = None
         # Resume flag: True when the handshake carried resume:true (mid-section
         # reconnect). Suppresses the greeting in send_initiating_message so Gemini
@@ -236,14 +242,18 @@ class FormFillingService:
         return declarations
 
     def confirmed_field_count(self) -> int:
-        """Fields confirmed so far this session (bd polyglot-pdf-xwlt).
+        """Fields confirmed so far this SESSION (bd polyglot-pdf-xwlt).
 
-        Reads the callback handler's counter, which increments only inside the
-        `recorded` guard that gates confirmation logging -- so this can never
-        report more confirmations than there are events. 0 when the handler
-        was never built (a session that failed before start_session).
+        Session-scoped: survives the handler rebuild that every section
+        switch and reconnect performs. Incremented only inside the `recorded`
+        guard that gates confirmation logging, so it can never report more
+        confirmations than there are events.
         """
-        return getattr(self._callback_handler, "_confirmed_count", 0)
+        return self._confirmed_count
+
+    def _note_field_confirmed(self) -> None:
+        """Callback the callback handler fires on each RECORDED confirmation."""
+        self._confirmed_count += 1
 
     async def start_session(
         self,
@@ -434,6 +444,10 @@ class FormFillingService:
             edition_date=self._edition_date,
             firm_id=self._firm_id,
         )
+
+        # Tally confirmations on the SERVICE so the count survives this
+        # handler being rebuilt on the next section switch (bd xwlt).
+        self._callback_handler._on_field_confirmed = self._note_field_confirmed
 
         # Inject tool handler methods into callback handler
         self._callback_handler.set_tool_handlers(

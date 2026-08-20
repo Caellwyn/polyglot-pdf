@@ -225,6 +225,18 @@ with structlog's positional event name; fixed under bd polyglot-pdf-z2is.)
   `completed` only when the client sent `form_complete`; otherwise
   `abandoned` (we cannot know the user finished). `error` remains available
   for callers that can distinguish it.
+
+  **ONE ROW PER CONNECTION, not per session** -- unlike the start event, this
+  is NOT suppressed on a reconnect. At teardown the backend cannot tell a
+  mid-form reconnect from a real exit (the protocol has no terminal-close
+  signal), and gating on the resume flag both dropped the real end record for
+  any reconnecting session and emitted a false `abandoned` for the connection
+  about to resume. So the row is per-connection and **a per-firm SESSION
+  count is a DISTINCT count over `form_session_id`** (which survives
+  reconnects), never a row count. The decision lives in the named predicates
+  `should_log_session_start` / `should_log_session_end`
+  (`backend/routes/websocket_routes.py`), whose whole truth table is pinned
+  by `test_session_logging_decisions`.
 - `read_confirmation_log(form_session_id)` / `get_confirmation_log_path(...)` read
   back a session's events for review or legal purposes. The operational entry
   point is **`scripts/read_confirmations.py <form_session_id>`** (bd z2is) --
