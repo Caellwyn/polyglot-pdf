@@ -64,6 +64,22 @@ the three options and their tradeoffs rather than decided.
   real component with no prop; both mutations then failed, on desktop AND
   mobile. The tell: a test that constructs the exact input whose ABSENCE is
   the defect can never observe the defect.
+- **A string-scan pin is not a behavioral pin -- fresh-eyes DEFEATED mine.**
+  I guarded the retirement by scanning overlay source for `.fullText`. The
+  reviewer reintroduced the bug on the SPOKEN half with
+  `const { fullText } = DISCLAIMER_TRANSLATIONS[...]` -- no `.fullText`
+  substring anywhere in the code -- and the entire suite stayed green. That is
+  this repo's "guard the PROPERTY, not the code shape" scar, and I walked
+  straight into it: I pinned a spelling, and a synonym defeated it. The fix
+  asserts the VALUE handed to `readDisclaimer` (it contains the undertaking,
+  it does not contain the advisory copy, and no placeholder or `undefined`
+  leaked), on both overlays. Re-running the reviewer's exact evasion now fails
+  that test. The source scan stays as a cheap second layer, explicitly labelled
+  as not being the guarantee.
+- **A mutation that does not COMPILE proves nothing.** My first attempt at
+  reproducing the evasion left unbalanced parens; vitest reported exit 1 and a
+  passing test count, which reads like a catch. It was a transform error -- the
+  test never ran. Re-done syntactically valid before trusting the red.
 - **Do not duplicate a pin that already exists, badly.** My first per-language
   test asserted the ENGLISH phrase "agree to review" against translated text
   and failed in 17 of 18 languages. The backend suite already pins this well

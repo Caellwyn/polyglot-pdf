@@ -293,29 +293,39 @@ describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', ()
 });
 
 // ===========================================================================
-// The ADVISORY register is load-bearing (bd polyglot-pdf-rtyia)
+// The UNDERTAKING register is load-bearing (bd polyglot-pdf-rtyia, register
+// settled by the maintainer 2026-08-19 in bd polyglot-pdf-nsb4y)
 // ===========================================================================
 //
 // docs/standards/confirmation-and-audit.md ("The deployment invariant") pins
-// three registers and which are LIVE. Two facts about this file are what make
-// that table true, and neither was guarded:
+// three registers and which are LIVE. ONE SOURCE is what makes that table
+// true now: what the modal RENDERS and what the model SPEAKS both come from
+// intro_script.json via renderIntroParagraphs, so a reader and a listener
+// accept the SAME terms behind the same Agree button.
 //
-//   1. fullText is what the LIVE MODEL READS ALOUD -- VoiceOverlay/
-//      VoiceOverlayMobile pass DISCLAIMER_TRANSLATIONS[lang].fullText to
-//      connectionManager.readDisclaimer(), which the backend relays verbatim
-//      to Gemini. It is not merely a screen-reader convenience.
-//   2. It ADVISES review; it must never UNDERTAKE it on the applicant's
-//      behalf. The staged intro script (backend/services/intro_script.json,
-//      unshipped -- bd s1iex.5) says "you agree to review ..."; that is a
-//      STRONGER register and adopting it here silently would change the
-//      user-facing legal posture without the counsel pass bd
-//      polyglot-pdf-nsb4y exists to get.
+//   1. DISCLAIMER_TRANSLATIONS is RETIRED as body text. It survives as the
+//      modal TITLE source and as a fallback for a caller that passes no
+//      introParagraphs. No app code renders or speaks its p1/p2/p3/fullText.
+//   2. The shipped register is the UNDERTAKING -- "you agree to review the
+//      completed document yourself and with a certified professional before
+//      filing" -- not the advisory "we strongly advise". Reverting to the
+//      advisory copy on EITHER surface reintroduces two legal registers
+//      behind one button, which is the bug nsb4y fixed.
 //
-// The SI is deliberately pinned to the weaker register too ("Do not promise
-// the user that a review WILL happen"), and bd rdsl is the precedent: the SI
-// once PROMISED review where the disclaimer only advised it, and that survived
-// the author, the tests and two review rounds.
-describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia)', () => {
+// WHY THE PINS BELOW LOOK THE WAY THEY DO. Guarding this by scanning source
+// for ".fullText" is NOT enough: fresh-eyes round 1 defeated exactly that with
+// `const { fullText } = DISCLAIMER_TRANSLATIONS[...]`, which reintroduced the
+// advisory register on the SPOKEN half with the whole suite green. The
+// behavioral pins live in VoiceOverlay.disclaimer.test.tsx and assert the
+// VALUE handed to readDisclaimer plus the text on SCREEN. The source scan
+// here is a cheap second layer, not the guarantee.
+//
+// The SI carries the matching register note (backend/config.py): review is
+// contractually REQUIRED and the applicant now UNDERTAKES it, but we still do
+// not promise a review WILL happen -- we do not control that. bd rdsl is the
+// precedent: the SI once PROMISED review where the disclaimer only advised
+// it, and that survived the author, the tests and two review rounds.
+describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia, nsb4y)', () => {
     const languages = Object.keys(DISCLAIMER_TRANSLATIONS);
 
     it('ships a disclaimer for every language, each with a spoken fullText', () => {

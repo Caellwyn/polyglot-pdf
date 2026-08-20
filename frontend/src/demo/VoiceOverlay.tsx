@@ -1295,16 +1295,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Send read_disclaimer message using the same proven pattern
 		// ONE SOURCE (bd polyglot-pdf-nsb4y): the model reads the SAME
-			// paragraphs the modal renders, joined. It used to read
-			// DISCLAIMER_TRANSLATIONS.fullText, which carries only "we strongly
-			// advise" -- while the modal (and Sol's clip) carry "you agree to
-			// review". Same Agree button, two legal registers, decided by
-			// whether the user listened or read. The heading is NOT script.
-			const disclaimerText = renderIntroParagraphs(
-				selectedLanguage,
-				introFormNumber,
-				(BUTTON_TRANSLATIONS[selectedLanguage] || BUTTON_TRANSLATIONS['English']).agree,
-			).join(' ')
+		// paragraphs the modal renders, joined. It used to read
+		// DISCLAIMER_TRANSLATIONS.fullText, which carries only "we strongly
+		// advise" -- while the modal (and Sol's clip) carry "you agree to
+		// review". Same Agree button, two legal registers, decided by
+		// whether the user listened or read. The heading is NOT script.
+		const disclaimerText = renderIntroParagraphs(
+			selectedLanguage,
+			introFormNumber,
+			(BUTTON_TRANSLATIONS[selectedLanguage] || BUTTON_TRANSLATIONS['English']).agree,
+		).join(' ')
 		connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 	}
 

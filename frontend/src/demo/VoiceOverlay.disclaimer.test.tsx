@@ -431,4 +431,58 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
   it('mobile (VoiceOverlayMobile): the SCREEN states the review undertaking, unconditionally (nsb4y)', async () => {
     await assertScreenStatesTheUndertaking(VoiceOverlayMobile)
   })
+
+  // The SPOKEN half of one source. Asserts the VALUE handed to
+  // readDisclaimer, not the code shape that builds it: a string-scan for
+  // ".fullText" is defeated by `const { fullText } = DISCLAIMER_TRANSLATIONS[...]`,
+  // which reintroduces the advisory register on the spoken side only and left
+  // the whole suite green (fresh-eyes round 1 demonstrated exactly that).
+  // Guard the PROPERTY -- what the model is told to say -- not the spelling.
+  async function assertModelIsToldTheUndertaking(Overlay: typeof VoiceOverlay) {
+    const manager = makeMockManager([])
+    vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
+      schema: MINIMAL_SCHEMA,
+      fieldValues: {},
+      currentSectionId: 'section_1',
+      completedSections: new Set<string>(),
+      validationErrors: {},
+      lastUpdated: 0,
+      formSessionId: 'fss_test',
+      loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false,
+      disclaimerAccepted: false,
+      selectedLanguage: 'English',
+    } as any))
+    vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+
+    render(
+      <Overlay
+        schema={MINIMAL_SCHEMA}
+        connectionManager={manager}
+        status="connected"
+        initialLanguage="English"
+      />
+    )
+    fireEvent.click(await screen.findByText('I Agree'))
+    await waitFor(() => expect(manager.readDisclaimer).toHaveBeenCalled())
+
+    const spoken = String(manager.readDisclaimer.mock.calls.at(-1)?.[1] ?? '').toLowerCase()
+    // What the model is told to read IS the shared script...
+    expect(spoken).toContain('agree to review the completed document')
+    expect(spoken).toContain('certified professional')
+    // ...and NOT the retired advisory copy, however it was obtained.
+    expect(spoken).not.toContain('we strongly advise')
+    // Placeholders must be interpolated, not spoken literally.
+    expect(spoken).not.toContain('[form number]')
+    expect(spoken).not.toContain('[agree label]')
+    expect(spoken).not.toContain('undefined')
+  }
+
+  it('desktop (VoiceOverlay): the MODEL is told to read the undertaking (nsb4y)', async () => {
+    await assertModelIsToldTheUndertaking(VoiceOverlay)
+  })
+
+  it('mobile (VoiceOverlayMobile): the MODEL is told to read the undertaking (nsb4y)', async () => {
+    await assertModelIsToldTheUndertaking(VoiceOverlayMobile)
+  })
 })
