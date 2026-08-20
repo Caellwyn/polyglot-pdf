@@ -183,14 +183,23 @@ THREE cases:
    found and reproduced by the outer cross-surface review, bd
    `polyglot-pdf-68s2q`.
 
-   The event filter runs SERVER-SIDE and the `kit_id` comparison runs
-   client-side over the bounded stream, deliberately: filtering both
-   server-side would need a composite index, and this guard is built on
-   single-field equality queries that work on a bare collection. The stream
-   short-circuits on the first record naming the kit (so the common case
-   reads one document on a metered path) and is otherwise bounded by
-   `_LEGACY_SCAN_LIMIT`. Firestore cannot query for a missing key, which is
-   why the legacy shape is detected client-side in that same pass.
+   Three checks, and the first two are **EXHAUSTIVE**: a chained
+   `kit_id == <kit> AND event == "field_confirmed"` with `limit(1)`, then the
+   same pair with `kit_id == None` for a real confirmation naming no kit.
+   Two EQUALITY filters need no composite index -- Firestore serves them by
+   merging auto-created single-field indexes (composites are for
+   equality+range/order_by) -- and `limit(1)` bounds the RESULT, not the
+   search, so neither can miss a record for sitting far down the collection.
+   Only the third check, the pre-47r3 MISSING-key sweep, is a bounded sample
+   (`_LEGACY_SCAN_LIMIT`), because Firestore cannot query for a missing key
+   at all; sampling is defensible there and only there, since that cohort is
+   CLOSED -- nothing writes that shape any more.
+
+   An intermediate version of this fix bounded the whole guard and made the
+   positive check a 50-document sample, so a busy collection could answer
+   "no records" for a kit that had them -- a hard delete of the evidence the
+   archive exists to preserve. That is bd `polyglot-pdf-u66ka`, and
+   `test_a_confirmation_BEYOND_the_scan_window_is_still_found` is its pin.
 
 `author_version` is NOT `form_metadata.version`, which is auto-extracted display
 text and frequently meaningless for this purpose (real shipped values include

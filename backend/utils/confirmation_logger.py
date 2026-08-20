@@ -667,15 +667,38 @@ class ConfirmationCheckUnavailable(Exception):
 # ships no firestore.indexes.json -- the query would 400 at runtime instead
 # (Opus outer cross-surface review, which enumerated every event value ever
 # written and confirmed this bound is the right call).
+#
+# THE BOUND APPLIES TO THIS LEGACY SWEEP ONLY. It briefly bounded the whole
+# guard, which silently turned the POSITIVE kit match into an arbitrary
+# 50-document sample -- a false "no records" on any busy collection, and a
+# hard delete of a kit clients had really confirmed against (bd
+# polyglot-pdf-u66ka). The contiguous-cohort argument above justifies
+# sampling a CLOSED population; it does not transfer to a live one. The kit
+# match and the stored-null check are exhaustive equality queries.
 _LEGACY_SCAN_LIMIT = 50
 
 
 def kit_has_confirmation_records(kit_id: str) -> bool:
     """True when ANY confirmation event names this kit.
 
-    The guard behind irreversible kit deletion. Queries the Firestore sink on
-    kit_id equality -- an equality-only query needs no composite index, same
-    shape as the form_session_id read above.
+    The guard behind irreversible kit deletion. Three checks, in order:
+
+    1. EXHAUSTIVE: `kit_id == kit_id AND event == "field_confirmed"`,
+       limit(1). Both filters are equality, which Firestore serves by merging
+       auto-created single-field indexes -- no composite index (the repo
+       ships no firestore.indexes.json). limit(1) bounds the RESULT, not the
+       search, so the scan cannot miss a record for being far down the
+       collection.
+    2. EXHAUSTIVE: the same pair with `kit_id == None` -- a real confirmation
+       naming NO kit is unattributable evidence, so it refuses.
+    3. BOUNDED (_LEGACY_SCAN_LIMIT): the pre-47r3 missing-key shape, which
+       Firestore cannot query for. Sampling is defensible only here; see that
+       constant's comment.
+
+    The event scope on every one of them is load-bearing: since bd
+    polyglot-pdf-xwlt the session-lifecycle events carry a kit_id, so an
+    unscoped kit query matches session telemetry and makes a kit undeletable
+    after a single voice session (bd polyglot-pdf-68s2q).
 
     Raises ConfirmationCheckUnavailable rather than returning False when the
     durable record cannot be consulted (sink disabled, or the query failed).
@@ -696,51 +719,67 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
         from google.cloud.firestore_v1.base_query import FieldFilter
 
         # EVERY query here is scoped to event == "field_confirmed" (bd
-        # polyglot-pdf-xwlt). Only the legacy scan below used to be, because
-        # session-lifecycle records had no kit_id and no live callers -- both
-        # became false when xwlt wired them and gave them a kit_id, and the
-        # unscoped queries then matched them: ONE voice session made a kit
-        # permanently undeletable, and one session with a null kit_id made
-        # EVERY kit unverifiable (reproduced by the outer cross-surface
-        # review, bd polyglot-pdf-68s2q).
+        # polyglot-pdf-xwlt / 68s2q). The session-lifecycle events became live
+        # callers WITH a kit_id under xwlt, so an unscoped kit_id query
+        # matched them: one voice session made a kit permanently undeletable,
+        # and a session with a null kit_id made EVERY kit unverifiable.
         #
-        # The event filter is server-side and the kit_id test is client-side
-        # over the bounded stream, deliberately: filtering on both fields
-        # server-side would need a COMPOSITE INDEX, and this guard's whole
-        # design is single-field equality queries that work on a bare
-        # collection. _LEGACY_SCAN_LIMIT bounds every stream.
-        confirmations = collection.where(
-            filter=FieldFilter("event", "==", "field_confirmed")
-        ).limit(_LEGACY_SCAN_LIMIT)
-        saw_unattributed = False
-        for doc in confirmations.stream():
-            data = doc.to_dict() or {}
-            if "kit_id" not in data:
-                # The legacy shape: written before kit_id joined the event
-                # dict (bd polyglot-pdf-47r3). Unattributable, so refuse.
-                _log.info("confirmation_legacy_records_block_delete", kit_id=kit_id)
-                raise ConfirmationCheckUnavailable(
-                    "confirmation records predating kit identity exist, so this "
-                    "kit cannot be cleared for deletion"
-                )
-            record_kit = data.get("kit_id")
-            if record_kit == kit_id:
-                # SHORT-CIRCUIT: a definite match answers the question, so the
-                # common case reads ONE document on a metered path rather than
-                # the whole bounded window (its own limit test caught this).
-                return True
-            if record_kit is None:
-                # A STORED null: a real confirmation naming no kit. Cannot be
-                # attributed, so it blocks -- but only after the whole bounded
-                # stream is checked, so a definite match for THIS kit still
-                # answers True first.
-                saw_unattributed = True
-        if saw_unattributed:
+        # Both filters are EQUALITY, which Firestore serves by merging
+        # auto-created single-field indexes -- no composite index, no
+        # firestore.indexes.json (verified: the repo ships none). The first
+        # cut of this fix filtered only on the event and compared kit_id
+        # client-side over a bounded stream, which silently turned the
+        # POSITIVE check from exhaustive into an arbitrary 50-document sample
+        # -- a false "no records" on a busy collection, i.e. a hard delete of
+        # a kit clients really had confirmed against (bd polyglot-pdf-u66ka).
+        # limit(1) bounds the RESULT, not the search: the scan stays
+        # exhaustive through the index.
+        kit_match = (
+            collection
+            .where(filter=FieldFilter("kit_id", "==", kit_id))
+            .where(filter=FieldFilter("event", "==", "field_confirmed"))
+            .limit(1)
+        )
+        if any(True for _ in kit_match.stream()):
+            return True
+
+        # A stored NULL kit_id on a REAL confirmation: unattributable evidence
+        # that a client confirmed something, so refuse rather than guess.
+        # Equality-on-null resolves to IS_NULL, which matches a stored null and
+        # NOT a missing key -- the missing-key shape is the legacy sweep below.
+        unattributed = (
+            collection
+            .where(filter=FieldFilter("kit_id", "==", None))
+            .where(filter=FieldFilter("event", "==", "field_confirmed"))
+            .limit(1)
+        )
+        if any(True for _ in unattributed.stream()):
             _log.info("confirmation_unattributed_records_block_delete", kit_id=kit_id)
             raise ConfirmationCheckUnavailable(
                 "confirmation records exist that name no kit, so this kit cannot "
                 "be cleared for deletion"
             )
+
+        # ...and the same blindness one shape over: IS_NULL cannot match a
+        # MISSING key, and records written between the sink shipping
+        # (2026-08-03) and kit_id joining the event dict (2026-08-05, bd
+        # polyglot-pdf-47r3) omit it entirely. Firestore cannot query for a
+        # missing key, so this is a BOUNDED client-side scan -- and the bound
+        # is defensible ONLY here: legacy records are a contiguous, closed
+        # cohort (nothing writes that shape any more), so a sample that finds
+        # none is strong evidence none exist. That reasoning does NOT extend
+        # to the positive match above, which is why it is a separate,
+        # exhaustive query (bd polyglot-pdf-u66ka).
+        legacy = collection.where(
+            filter=FieldFilter("event", "==", "field_confirmed")
+        ).limit(_LEGACY_SCAN_LIMIT)
+        for doc in legacy.stream():
+            if "kit_id" not in (doc.to_dict() or {}):
+                _log.info("confirmation_legacy_records_block_delete", kit_id=kit_id)
+                raise ConfirmationCheckUnavailable(
+                    "confirmation records predating kit identity exist, so this "
+                    "kit cannot be cleared for deletion"
+                )
         return False
     except ConfirmationCheckUnavailable:
         raise

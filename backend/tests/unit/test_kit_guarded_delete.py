@@ -261,42 +261,64 @@ def test_delete_kit_does_not_touch_a_SIBLING_with_a_shared_prefix(tmp_path):
 
 
 class _FilteringQuery:
-    def __init__(self, docs, field=None, value=None, limit=None, sink=None, op=None):
+    """A fake query supporting CHAINED equality filters.
+
+    Chaining is not a nicety: the guard now filters on kit_id AND event
+    together (two equality filters, which Firestore serves by merging
+    single-field indexes). A fake that honored only the last filter would
+    model a query the production code does not make -- and would have hidden
+    the sampling regression this chaining fixes (bd polyglot-pdf-u66ka).
+    """
+
+    def __init__(self, docs, filters=None, limit=None, sink=None, calls=None):
         self._docs = docs
-        self._field = field
-        self._value = value
+        self._filters = list(filters or [])   # [(field, value, op), ...]
         self._limit = limit
         self._sink = sink
-        self._op = op
+        self._calls = calls
+
+    def where(self, *args, **kwargs):
+        flt = kwargs.get("filter")
+        if flt is not None:
+            field, op, value = flt.field_path, flt.op_string, flt.value
+        else:
+            field, op, value = args[0], args[1], args[2]
+        if self._calls is not None:
+            # Record CHAINED filters as well as the first: the event scope is
+            # applied second, and it is exactly the property that must never
+            # drift (bd polyglot-pdf-68s2q).
+            self._calls.append((field, getattr(op, "name", None) or str(op), value))
+        return _FilteringQuery(
+            self._docs, self._filters + [(field, value, op)], self._limit,
+            self._sink, self._calls,
+        )
 
     def limit(self, n):
         return _FilteringQuery(
-            self._docs, self._field, self._value, n, self._sink, self._op
+            self._docs, self._filters, n, self._sink, self._calls
         )
 
+    @staticmethod
+    def _match_one(d, field, value, op):
+        # Mirror the SDK's resolved semantics: IS_NULL matches a STORED null
+        # and not a missing key; IS_NOT_NULL is its complement.
+        opname = getattr(op, "name", None) or str(op or "")
+        if "IS_NOT_NULL" in opname:
+            return field in d and d[field] is not None
+        if "IS_NULL" in opname:
+            return field in d and d[field] is None
+        return field in d and d[field] == value
+
     def _match(self, d):
-        # Mirror the SDK's resolved semantics: IS_NULL matches a STORED null and
-        # not a missing key; IS_NOT_NULL is its complement.
-        op = getattr(self._op, "name", None) or str(self._op or "")
-        if "IS_NOT_NULL" in op:
-            return self._field in d and d[self._field] is not None
-        if "IS_NULL" in op:
-            return self._field in d and d[self._field] is None
-        return self._field in d and d[self._field] == self._value
+        return all(self._match_one(d, f, v, o) for f, v, o in self._filters)
 
     def stream(self):
-        matched = [
-            d for d in self._docs
-            if self._field is None or self._match(d)
-        ]
+        matched = [d for d in self._docs if self._match(d)]
         if self._limit is not None:
             matched = matched[:self._limit]
-        # Record the SHAPE of the request (see the limit test) rather than
-        # only its boolean answer. `streamed` counts documents the caller
-        # actually CONSUMED, not the batch size: a caller that breaks early
-        # reads fewer, and on a metered path that difference is the whole
-        # point. Counting the batch instead made an early `return` invisible
-        # (bd polyglot-pdf-xwlt).
+        # `streamed` counts documents the caller actually CONSUMED, not the
+        # batch size: a caller that breaks early reads fewer, and on a metered
+        # path that difference is the whole point.
         record = {"limit": self._limit, "streamed": 0}
         if self._sink is not None:
             self._sink.append(record)
@@ -328,7 +350,9 @@ class _FilteringCollection:
         # record .name when there is one -- otherwise every operator assertion
         # compares against a meaningless digit.
         self.where_calls.append((field, getattr(op, "name", None) or str(op), value))
-        return _FilteringQuery(self.docs, field, value, op=op, sink=self.streams)
+        return _FilteringQuery(
+            self.docs, [(field, value, op)], sink=self.streams, calls=self.where_calls
+        )
 
 
 class _FilteringDB:
@@ -352,13 +376,18 @@ def test_firestore_existence_query_finds_a_record_for_THIS_kit(monkeypatch):
     db = _firestore_with(monkeypatch, [{"event": "field_confirmed", "kit_id": "w7", "field_id": "f1"}])
 
     assert kit_has_confirmation_records("w7") is True
-    # Filtered on EVENT server-side, with the kit_id test client-side over the
-    # bounded stream (bd polyglot-pdf-xwlt / 68s2q). It was a kit_id equality
-    # query until the session-lifecycle events became live callers WITH a
-    # kit_id: an unscoped kit_id query then matched them, and one voice session
-    # made a kit permanently undeletable. Filtering on both fields server-side
-    # would need a COMPOSITE INDEX, which this guard deliberately avoids.
-    assert db._collection.where_calls == [("event", "==", "field_confirmed")]
+    # BOTH filters server-side, as one chained equality query (bd
+    # polyglot-pdf-xwlt / 68s2q / u66ka). The kit scope alone matched session
+    # telemetry once those events carried a kit_id; the event scope ALONE
+    # (with kit_id compared client-side over a bounded stream) turned this
+    # into an arbitrary 50-doc sample that could miss a real record and
+    # permit a delete. Two equality filters need no composite index --
+    # Firestore merges single-field indexes -- so the query stays exhaustive
+    # with limit(1) bounding only the RESULT.
+    assert db._collection.where_calls == [
+        ("kit_id", "==", "w7"),
+        ("event", "==", "field_confirmed"),
+    ]
 
 
 def test_firestore_existence_query_ignores_records_for_OTHER_kits(monkeypatch):
@@ -540,15 +569,10 @@ def test_gcs_delete_refuses_wholesale_if_the_listing_returns_a_STRAY(tmp_path):
 
 
 def test_the_existence_query_asks_for_at_most_ONE_document(monkeypatch):
-    """The check is BOUNDED, so a popular kit's whole confirmation history
-    never streams on a metered read path.
-
-    The bound moved from limit(1) on a kit_id query to _LEGACY_SCAN_LIMIT on
-    the event-scoped stream (bd polyglot-pdf-xwlt / 68s2q): a kit_id query
-    could not stay unscoped once the session events carried a kit_id. The
-    stream still SHORT-CIRCUITS on the first record naming this kit, so the
-    common case reads one document, and the worst case is bounded by the
-    limit -- never the full history.
+    """Existence is a yes/no, so limit(1) is what stops a popular kit's whole
+    confirmation history streaming on a metered read path -- while the SEARCH
+    stays exhaustive (limit bounds the result, not the scan), so a record far
+    down the collection is still found (bd polyglot-pdf-u66ka).
 
     Asserts the SHAPE the query asked for, recorded by the fake. An earlier
     version tried to wrap stream() after the fact and silently measured
@@ -562,9 +586,8 @@ def test_the_existence_query_asks_for_at_most_ONE_document(monkeypatch):
 
     assert kit_has_confirmation_records("w7") is True
 
-    assert db._collection.streams == [{"limit": 50, "streamed": 1}], (
-        "the check must be BOUNDED by the scan limit, and must short-circuit "
-        "on the first record naming this kit"
+    assert db._collection.streams == [{"limit": 1, "streamed": 1}], (
+        "the existence check must ask for at most one document"
     )
 
 
@@ -597,11 +620,14 @@ def test_a_record_naming_NO_kit_blocks_deletion_rather_than_clearing_it(monkeypa
     # sweep in every record that HAS a kit_id (the inversion danger, in its
     # new form). The client-side null semantics are pinned by outcome above
     # and by test_a_session_event_with_a_kit_id_does_NOT_block_deletion.
-    assert db._collection.where_calls == [("event", "==", "field_confirmed")], (
-        "the guard must filter server-side ONLY on the event scope; a kit_id "
-        "filter here would match session-telemetry rows and make a kit "
-        "permanently undeletable after one voice session"
-    )
+    # PIN THE OPERATOR. The SDK resolves ("kit_id","==",None) to a
+    # UnaryFilter(IS_NULL); the INVERSE (IS_NOT_NULL) matches every record
+    # that HAS a kit_id and would make every kit permanently undeletable --
+    # a value-only assertion cannot tell the two apart (Opus fresh-eyes round
+    # 3 proved that inversion kept all 31 tests green). The null check is
+    # ALSO event-scoped, or session telemetry trips it (bd 68s2q).
+    assert ("kit_id", "IS_NULL", None) in db._collection.where_calls
+    assert ("event", "==", "field_confirmed") in db._collection.where_calls
 
 
 def test_an_unattributed_record_does_not_mask_a_DIRECT_hit(monkeypatch):
@@ -661,10 +687,11 @@ def test_the_NULL_SWEEP_also_asks_for_at_most_one_document(monkeypatch):
     with pytest.raises(ConfirmationCheckUnavailable):
         kit_has_confirmation_records("w7")
 
-    # ONE bounded stream now does both jobs (event-scoped, kit tested
-    # client-side): it reads to the limit because no record names w7, and
-    # never beyond it.
-    assert db._collection.streams == [{"limit": 50, "streamed": 50}]
+    # Both exhaustive checks ran, and NEITHER streamed more than one document.
+    assert db._collection.streams[:2] == [
+        {"limit": 1, "streamed": 0},   # kit-scoped: no record names w7
+        {"limit": 1, "streamed": 1},   # the null check: found one unattributed
+    ]
 
 
 def test_the_refusal_is_NOT_reported_as_a_query_failure(monkeypatch):
@@ -832,6 +859,55 @@ def test_a_REAL_confirmation_with_a_null_kit_id_still_blocks(monkeypatch):
         {"event": "form_session_started", "kit_id": None, "form_session_id": "s1"},
         {"event": "field_confirmed", "kit_id": None, "field_id": "f1"},
     ])
+
+    with pytest.raises(ConfirmationCheckUnavailable):
+        kit_has_confirmation_records("w7")
+
+
+def test_a_confirmation_BEYOND_the_scan_window_is_still_found(monkeypatch):
+    """THE regression the sampling bug shipped past (bd polyglot-pdf-u66ka).
+
+    The positive check must be EXHAUSTIVE. When it briefly filtered only on
+    the event and compared kit_id client-side over a _LEGACY_SCAN_LIMIT
+    stream, a kit whose confirmation sat past document 50 answered "no
+    records" -- and the delete route then hard-deleted the kit AND its
+    revision archive. That is the evidence-destroying direction: the guard
+    exists precisely to prevent it.
+
+    One field_confirmed doc is written per FIELD, so 50 documents is roughly
+    one or two filled forms -- this is reachable on any real collection, not
+    a theoretical edge.
+
+    Mutation: drop the kit_id filter and compare client-side over a bounded
+    stream (the u66ka shape) -- red.
+    """
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    docs = [
+        {"event": "field_confirmed", "kit_id": "i-90", "field_id": f"f{i}"}
+        for i in range(80)
+    ]
+    docs.append({"event": "field_confirmed", "kit_id": "w7", "field_id": "late"})
+    _firestore_with(monkeypatch, docs)
+
+    assert kit_has_confirmation_records("w7") is True, (
+        "the kit match must be exhaustive -- limit(1) bounds the RESULT, "
+        "never the search"
+    )
+
+
+def test_an_unattributed_record_BEYOND_the_window_still_blocks(monkeypatch):
+    """The same exhaustiveness for the stored-null refusal: a real
+    confirmation naming no kit is unattributable evidence wherever it sits.
+    Mutation: bound the null check with _LEGACY_SCAN_LIMIT -- red."""
+    from backend.utils.confirmation_logger import kit_has_confirmation_records
+
+    docs = [
+        {"event": "field_confirmed", "kit_id": "i-90", "field_id": f"f{i}"}
+        for i in range(80)
+    ]
+    docs.append({"event": "field_confirmed", "kit_id": None, "field_id": "late"})
+    _firestore_with(monkeypatch, docs)
 
     with pytest.raises(ConfirmationCheckUnavailable):
         kit_has_confirmation_records("w7")
