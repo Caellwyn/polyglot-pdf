@@ -112,6 +112,27 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    the shell cwd resets between tool calls; a chained `cd <main-repo> && git ...`
    silently operates on the main checkout. The same trap hits file writes: an
    absolute path into the main repo writes there, not the worktree.
+   **To squash, reset to the MERGE-BASE -- never to a branch name.**
+   `git reset --soft origin/dev` (or any branch) is the trap: it moves your
+   pointer to THAT COMMIT while keeping YOUR OLD TREE as the content, so every
+   commit on the base your branch never had becomes a DELETION -- silently
+   reverting other people's merged work. A CURRENT `origin/dev` does this just
+   as readily as a stale one; being behind the base is the whole condition, and
+   in a long-lived worktree you usually are. Use
+   `git reset --soft $(git merge-base origin/dev HEAD)`, or `HEAD~N`, or
+   `git rebase -i origin/dev` (which refuses rather than silently rewriting).
+   It fails with NO error, a CLEAN `git status`, and a GREEN suite -- the
+   deleted work's tests are deleted with it -- so the only tell is the stat
+   line: a 4-file change reporting "11 files changed, 261 deletions". After
+   any reset, confirm `git diff origin/dev...HEAD --stat` lists ONLY your own
+   files. closeout_prep checks this mechanically and names the casualties --
+   it catches all three shapes (a file the base ADDED comes back as a deletion;
+   one it EDITED comes back as an older version of itself; one it RENAMED comes
+   back under the old name). It also fires on a DELIBERATE revert, which looks
+   identical from outside -- confirm intent, do not read a fire as proof of the
+   trap. Resetting to the merge-base is what PREVENTS it; the check is only the
+   net.
+   Recovery: `bd memories git-reset-soft`.
 4. **The backend is stateless by design; the client owns all field state.**
    Field values, confirmations, and section state live in the browser's
    `sessionStorage` -- the backend rebuilds context from the WS handshake on
