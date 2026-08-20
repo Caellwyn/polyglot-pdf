@@ -246,11 +246,20 @@ method.
   the code path all four tests run through. A refactor that quietly broke a
   guard would otherwise read as a clean green.
 - `docs/doc-architecture.md` also claimed the freshness checker is "a CI gate
-  via tests/test_doc_freshness.py". It is not: that suite pins the checker's
-  LOGIC against synthetic fixtures and its scan-set membership, never that the
-  real corpus is fresh, and the script always exits 0. Corrected while fixing
-  the stamp claim in the same section -- and it explains how 20 tier-2 docs sit
-  stale with a green suite.
+  via tests/test_doc_freshness.py". That needed splitting, not simply denying,
+  and the first attempt at it OVER-CORRECTED to "warn-only everywhere" -- which
+  the outer review's round 2 caught as flatly wrong for one half. The checker
+  has two halves with different enforcement:
+    - **Staleness** is warn-only: the script always exits 0 and the suite pins
+      that logic against synthetic fixtures, never the real corpus. This is how
+      20 tier-2 docs sit stale with a green suite.
+    - **The current-state-only convention IS a real CI gate**:
+      `test_no_history_chains_in_current_state_docs` calls
+      `check_doc_conventions()` over the REAL corpus and raises on any finding.
+  The over-correction would have taught the next reader that a `Previously:`
+  chain cannot redden a test -- exactly backwards, in the doc whose own rule 3
+  that gate enforces. Mutation-verified before rewriting: appending a
+  `## Changelog` to a tier-2 doc reddens that test by name.
 - The ellipsis fix re-verified against the mutation that DEFEATED the first
   version: a route at `/api/editor/kits/{kit_id}/draft-snapshots/
   {snapshot_id}/pdf` (a path shape the old parser invented as a ghost) now

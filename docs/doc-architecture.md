@@ -47,7 +47,12 @@ Nearly every tier-1/tier-2 doc carries a one-line stamp:
 
 **The one deliberate exception: [`technical_guide.md`](technical_guide.md) carries NO stamp** (bd polyglot-pdf-abn4o). Its stamp had degenerated into a running changelog each PR appended a paragraph to -- so every parallel PR touching the doc conflicted on that one line, and the accumulated narrative broke the current-state-only rule below. For a doc with no parseable stamp the checker falls back to the doc's own `git log -1` commit time, so it is still freshness-checked normally; it simply has nothing to hand-bump. **When it shows up STALE, fix the prose and do not add a stamp back.**
 
-The checker is **warn-only everywhere** -- it always exits 0. `tests/test_doc_freshness.py` pins the checker's own LOGIC against synthetic fixtures (and its scan-set membership); it does **not** assert the real corpus is fresh, so a stale doc never reddens a test. Staleness is a signal read at closeout, not a gate -- which is why docs can and do sit stale with the suite green. Wire the hook in your project (see the kit README).
+The checker has TWO halves with DIFFERENT enforcement, and the difference matters:
+
+- **Staleness is warn-only everywhere.** The script always exits 0, and `tests/test_doc_freshness.py` pins its staleness LOGIC against synthetic fixtures rather than asserting the real corpus is fresh -- so a stale doc never reddens a test. Staleness is a signal read at closeout, which is why docs can and do sit stale with the suite green.
+- **The current-state-only convention IS a CI gate.** `test_no_history_chains_in_current_state_docs` calls `check_doc_conventions()` over the REAL corpus and raises on any finding, so a `Previously:` chain or an `## Update history` heading fails CI (see rule 3 below).
+
+Wire the hook in your project (see the kit README).
 
 ### 3. Current-state-only rule
 
