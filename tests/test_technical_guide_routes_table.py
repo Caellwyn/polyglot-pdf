@@ -72,8 +72,13 @@ def _shipped_routes() -> set[tuple[str, str]]:
         # A websocket route has no .methods; the table spells those "WS".
         methods = getattr(route, "methods", None) or {"WS"}
         for method in methods:
-            # HEAD is auto-added alongside GET by Starlette and is not a
-            # separately documented surface.
+            # HEAD is auto-added alongside GET by Starlette, and OPTIONS by
+            # CORS handling -- neither is a hand-declared product surface, so
+            # neither earns a row. Verified: no route in this app declares
+            # OPTIONS at all, and HEAD appears only on the four
+            # FastAPI-generated doc endpoints already in EXEMPT. If a genuine
+            # OPTIONS surface is ever added deliberately, it will be hidden by
+            # this skip -- drop it from the tuple then.
             if method in ("HEAD", "OPTIONS"):
                 continue
             shipped.add((path, method))

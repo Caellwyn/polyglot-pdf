@@ -43,7 +43,7 @@ Nearly every tier-1/tier-2 doc carries a one-line stamp:
 *Last updated: YYYY-MM-DD. See [docs/journal/entries/YYYY-MM-DD-bd-<code>-<slug>.md](...) for closeout details.*
 ```
 
-`scripts/check_doc_freshness.py` compares each doc's stamp (treated as end-of-day UTC) against the `git log -1` commit time of every file its `**Tracks:**` globs cover. If tracked code is newer than the stamp, the doc is flagged STALE -- a signal to review and re-stamp (or confirm it's still accurate). Stamp with **today's UTC date** (`date -u +%F`); a local date in a UTC-ahead-of-local evening lags UTC and self-flags.
+`scripts/check_doc_freshness.py` compares each doc's stamp (treated as end-of-day UTC) against the `git log -1` commit time of every file its `**Tracks:**` globs cover. If tracked code is newer than the stamp, the doc is flagged STALE -- a signal to review and re-stamp (or confirm it's still accurate), **except for the no-stamp doc below, where the fix is the prose alone**. Stamp with **today's UTC date** (`date -u +%F`); a local date in a UTC-ahead-of-local evening lags UTC and self-flags.
 
 **The one deliberate exception: [`technical_guide.md`](technical_guide.md) carries NO stamp** (bd polyglot-pdf-abn4o). Its stamp had degenerated into a running changelog each PR appended a paragraph to -- so every parallel PR touching the doc conflicted on that one line, and the accumulated narrative broke the current-state-only rule below. For a doc with no parseable stamp the checker falls back to the doc's own `git log -1` commit time, so it is still freshness-checked normally; it simply has nothing to hand-bump. **When it shows up STALE, fix the prose and do not add a stamp back.**
 
