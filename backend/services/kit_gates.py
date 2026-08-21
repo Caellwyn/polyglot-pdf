@@ -82,10 +82,13 @@ def require_archive_readable(store, kit_id: str, meta: Optional[dict]) -> None:
     request, made them unreachable to the only party entitled to read them:
     the owning firm. (Staff were never affected -- /api/editor/* is ungated.)
 
-    This is deliberately NARROWER than require_published, which still guards
-    the LIVE schema/pdf reads: a retired revision must not be served as the
-    current form. Visibility is unchanged and still applies -- require_visible
-    runs after this, so another firm still cannot see the archive at all.
+    The widening is deliberately SCOPED to the two archive routes:
+    require_published still guards the LIVE schema/pdf reads and the catalogue
+    filter, so a retired revision is never served as the current form. (This
+    gate ADMITS STRICTLY MORE than require_published -- "complete" is a subset
+    of the tuple above; it is the scope that is narrow, not the predicate.)
+    Visibility is unchanged and still applies -- require_visible runs after
+    this, so another firm still cannot see the archive at all.
     """
     if not getattr(store, "enforce_complete_on_public_reads", False):
         return
@@ -189,8 +192,12 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
     published bytes still exist; by promotion time the new schema has already
     replaced them.
 
-    THREE call sites retire a revision, and each archives first (bd
-    polyglot-pdf-6dz0 widened this from one):
+    FOUR triggers retire a revision, and each archives first (bd
+    polyglot-pdf-6dz0 widened this from one; bd polyglot-pdf-z6bk9 added the
+    fourth). They are only THREE call SITES -- triggers 1 and 2 share one
+    guarded line -- and the call-site SET is pinned by
+    test_kit_revision_archive.py::test_the_complete_set_of_archive_call_sites_is_pinned,
+    so a new caller fails CI instead of a review round:
       1. complete -> draft   -- the classic edit cycle
          (complete -> draft -> save -> complete).
       2. complete -> unpublished -- retiring a revision outright.
@@ -198,8 +205,11 @@ async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) 
          onboarded as its own kit takes over. Note this route produces a new
          live revision WITHOUT any draft step, which is why the one-way
          "complete -> draft -> ..." framing above is not the whole story.
+      4. the CLIENT-TIER firm retire route (form_kit_routes.retire_own_kit,
+         bd polyglot-pdf-z6bk9) -- the ONLY non-editor caller, and the reason
+         this helper lives in kit_gates.py rather than editor_kit_routes.py.
     Keep this list in step with docs/components/pdf-filling.md, which states the
-    same three triggers.
+    same four triggers.
 
     The marker is resolved from the SUPERSEDED revision's OWN schema, so it
     matches what that revision's confirmation records carry (an edition_date if

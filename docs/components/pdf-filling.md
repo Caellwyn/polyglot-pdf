@@ -194,8 +194,10 @@ fails (bd `polyglot-pdf-xzw5` -- an `author_version` kit archived under a
 `sha256:` fingerprint until this was fixed; the agreement is pinned by a test
 that resolves both sides). The
 archive is written whenever a PUBLISHED revision is retired -- on
-revert-to-draft, on unpublish, and on the outgoing kit of a `replaces_kit_id`
-supersede (bd `polyglot-pdf-6dz0`): every editor route
+revert-to-draft, on unpublish, on the outgoing kit of a `replaces_kit_id`
+supersede (bd `polyglot-pdf-6dz0`), and on the CLIENT-TIER firm retire route
+(bd `polyglot-pdf-z6bk9`), the one writer that is NOT an editor route. Every
+editor route
 that writes `schema.json` refuses while the kit is write-locked (save, repair,
 translate-options, derive-divisions, regenerate-guidance, and extract -- the
 last of these was ungated until bd `polyglot-pdf-w3zw` and is now pinned by a
