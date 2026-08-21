@@ -351,8 +351,8 @@ async def list_kit_archive(
     read's -- a private kit's archive 404s for non-members like the kit itself
     (existence is the secret) -- but the STATUS gate is WIDER:
     require_archive_readable admits complete OR unpublished, because history
-    must outlive retirement (bd polyglot-pdf-65hgz). Sorted newest-first by the archived
-    snapshot's published_at (ISO strings sort chronologically); revisions
+    must outlive retirement (bd polyglot-pdf-65hgz). Sorted newest-first by
+    the archived snapshot's published_at (ISO strings sort chronologically); revisions
     whose snapshot lacks the stamp sort last.
     """
     kit_id = _safe_kit_id(kit_id)
