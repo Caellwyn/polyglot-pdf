@@ -820,3 +820,57 @@ def test_revert_of_an_already_draft_kit_archives_nothing(route_client):
 
     assert resp.status_code == 200, resp.text
     assert _run(store.list_archived_markers("w7")) == []
+
+
+def test_the_complete_set_of_archive_call_sites_is_pinned():
+    """PIN THE SET, not an instance (CLAUDE.md scar #7).
+
+    _archive_published_revision had THREE semantic triggers for months; bd
+    polyglot-pdf-z6bk9 added a FOURTH (the client-tier firm retire) and the
+    docstring naming the count -- plus docs/components/pdf-filling.md, which
+    that docstring explicitly says to keep in step -- both still said three.
+    Two coupled prose enumerations, one stale addition, found by review
+    rather than CI.
+
+    NOTE THE TWO DIFFERENT COUNTS, which is what made the prose easy to get
+    wrong: there are FOUR semantic triggers but only THREE call SITES,
+    because the editor's `complete -> draft` and `complete -> unpublished`
+    transitions share one guarded line (`if body.status in ("draft",
+    "unpublished")`). This test pins the call SITES, derived from the shipped
+    sources rather than a hand-typed list, so a fifth reddens here instead of
+    costing a review round. If you add one: update this set, the helper's
+    docstring in backend/services/kit_gates.py, and pdf-filling.md together.
+    """
+    import re
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parents[3]
+    call = re.compile(r"_archive_published_revision\s*\(")
+    sites = {}
+    for rel in ("backend/routes", "backend/services"):
+        for path in sorted((root / rel).rglob("*.py")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                stripped = line.lstrip()
+                if stripped.startswith("#"):
+                    continue  # prose, e.g. the "moved to kit_gates" note
+                if stripped.startswith(("async def ", "def ")):
+                    continue  # the definition itself
+                if not call.search(line):
+                    continue  # includes the bare import-list entry (no paren)
+                key = path.relative_to(root).as_posix()
+                sites[key] = sites.get(key, 0) + 1
+
+    assert sites == {
+        # Trigger 1 (complete -> draft) and trigger 2 (complete ->
+        # unpublished) SHARE one line; trigger 3 is the outgoing kit of a
+        # replaces_kit_id supersede.
+        "backend/routes/editor_kit_routes.py": 2,
+        # Trigger 4: the CLIENT-TIER firm retire (bd polyglot-pdf-z6bk9) --
+        # the only non-editor caller, and the reason the helper lives in
+        # services/kit_gates.py rather than in the editor routes.
+        "backend/routes/form_kit_routes.py": 1,
+    }, (
+        "the archive call-site SET changed. Update this test, the helper's "
+        "docstring in backend/services/kit_gates.py (which states the count), "
+        "and docs/components/pdf-filling.md -- together."
+    )

@@ -60,7 +60,19 @@ from backend.config import get_settings
 from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
-from backend.services.kit_gates import is_safe_marker
+from backend.services.kit_gates import (
+    is_safe_marker,
+    # ONE definition of the default/sanitized (schema, pdf) filename pair,
+    # beside the archive helper that is its main consumer. It was duplicated
+    # byte-for-byte here after that move (fresh-eyes r1) -- two copies of one
+    # rule is the shape CLAUDE.md scar #7 names.
+    _resolve_meta_names,
+    # Moved out of this module (bd polyglot-pdf-z6bk9): the client-tier firm
+    # retire route needs it too, and routes importing routes would be
+    # circular. Imported under its original private name so every call site
+    # here is unchanged.
+    _archive_published_revision,
+)
 from backend.adapters.text_ai_gemini import TextAIGemini
 from backend.services.editor_text_ai import (
     EditorTextAIUnavailable,
@@ -86,7 +98,6 @@ from backend.services.form_kits import (
     LocalFormKitStore,
     encode_marker,
     get_form_kit_store,
-    safe_filename,
     sibling_marker,
 )
 from backend.utils.confirmation_logger import (
@@ -467,14 +478,6 @@ class UnclaimedWidgetsResponse(BaseModel):
     picker then simply shows nothing to add."""
 
     widgets: list[UnclaimedWidget]
-
-
-def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
-    """(schema_file, pdf_file) from a kit's metadata, defaulted + sanitized."""
-    meta = meta if isinstance(meta, dict) else {}
-    schema_file = safe_filename(meta.get("schema") or "schema.json", "schema.json")
-    pdf_file = safe_filename(meta.get("pdf") or "form.pdf", "form.pdf")
-    return schema_file, pdf_file
 
 
 # A kit's lifecycle status (bd polyglot-pdf-6dz0).
@@ -1099,109 +1102,10 @@ async def _load_meta_or_404(store, kit_id: str) -> tuple[Optional[dict], set[str
     return meta, set(files_by_kit[kit_id])
 
 
-async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) -> Optional[str]:
-    """Copy the currently-PUBLISHED revision into the archive before it can be
-    edited. Returns the marker archived under, or None when nothing was archived.
-
-    bd polyglot-pdf-w3zw. The confirmation audit trail records kit_id + a
-    revision marker, but a marker is not a storage address and kit storage is
-    one slot per kit -- so overwriting a published schema used to destroy the
-    only copy of what an old record was confirmed against.
-
-    WHY THIS FIRES WHEN A REVISION IS RETIRED, not on promotion: a published
-    kit's schema cannot be written at all (every editing route refuses while it
-    is write-locked -- the publish gate). So retirement is the LAST moment the
-    published bytes still exist; by promotion time the new schema has already
-    replaced them.
-
-    THREE call sites retire a revision, and each archives first (bd
-    polyglot-pdf-6dz0 widened this from one):
-      1. complete -> draft   -- the classic edit cycle
-         (complete -> draft -> save -> complete).
-      2. complete -> unpublished -- retiring a revision outright.
-      3. the OUTGOING kit of a `replaces_kit_id` supersede, where a new edition
-         onboarded as its own kit takes over. Note this route produces a new
-         live revision WITHOUT any draft step, which is why the one-way
-         "complete -> draft -> ..." framing above is not the whole story.
-    Keep this list in step with docs/components/pdf-filling.md, which states the
-    same three triggers.
-
-    The marker is resolved from the SUPERSEDED revision's OWN schema, so it
-    matches what that revision's confirmation records carry (an edition_date if
-    the form has one, else the shape fingerprint) -- that is what makes a
-    fingerprint-era record still retrievable later.
-
-    Best-effort by design: an archive failure must not block the retirement
-    (which would strand a kit published-and-uneditable). It is logged LOUDLY --
-    the same posture as the confirmation sink, where losing the record is worse
-    than a slow path but never worth failing the user's action over.
-    """
-    schema_file, _pdf = _resolve_meta_names(meta)
-    try:
-        schema = await store.load_schema(kit_id, schema_file)
-    except (FormKitNotFound, FormKitStoreError) as exc:
-        _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error=str(exc))
-        return None
-
-    # Resolve through the SAME three ranks the confirmation record used, or the
-    # archive is keyed on something no record names and the retrieval this whole
-    # mechanism exists for silently fails (bd polyglot-pdf-xzw5; caught by Opus
-    # fresh-eyes, which showed an author_version kit archiving under a sha256:
-    # fingerprint while its records named the version).
-    _meta_block = schema.get("form_metadata")
-    _meta_block = _meta_block if isinstance(_meta_block, dict) else {}
-    marker = resolve_edition_marker(
-        _meta_block.get("edition_date"),
-        schema,
-        _meta_block.get("author_version"),
-    )
-    if not marker:
-        # No edition date AND no fingerprintable shape (an empty/fieldless
-        # schema): nothing a confirmation record could name, so nothing to key
-        # an archive on.
-        _log.warning("kit_revision_archive_no_marker", kit_id=kit_id)
-        return None
-
-    # Idempotence (exit criterion 2) vs. NOT LOSING A REVISION: skip only when
-    # the archived copy IS this schema, never merely because the marker name is
-    # taken. Markers are not unique keys -- an author who edits fields without
-    # bumping the government edition string produces two DIFFERENT revisions
-    # under one edition_date, and a marker-only check would treat the second as
-    # "already archived" and destroy it (fresh-eyes on this bead, reproduced
-    # live: retrieval then returns the WRONG schema, which for a legal record is
-    # worse than a missing one).
-    #
-    # So: same marker + same bytes -> skip (the cheap re-press case). Same marker
-    # + different bytes -> archive under a disambiguated segment so BOTH survive.
-    # Retrieval by the plain marker still finds the first; the sibling keeps the
-    # later revision recoverable instead of silently gone.
-    try:
-        existing = await store.load_archived_revision_or_none(kit_id, marker)
-        if existing == schema:
-            return None
-        store_marker = marker
-        if existing is not None:
-            # Distinct revision under a taken marker: suffix with this
-            # revision's own shape fingerprint, which is what actually
-            # distinguishes it (and is stable, so a repeat of THIS revision
-            # re-collides with itself and skips above on the next pass).
-            fingerprint = resolve_edition_marker(None, schema) or "revision"
-            # sibling_marker budgets the fingerprint against the segment length
-            # cap FIRST: naively joining the raw marker would let a long
-            # edition_date truncate the fingerprint away, at which point the
-            # sibling collides with the base and OVERWRITES the earlier
-            # revision (verified live by fresh-eyes on this bead).
-            store_marker = sibling_marker(marker, fingerprint)
-            if await store.load_archived_revision_or_none(kit_id, store_marker) == schema:
-                return None
-        await store.put_archived_revision(kit_id, store_marker, schema, meta)
-    except FormKitStoreError as exc:
-        _log.error("kit_revision_archive_failed", kit_id=kit_id, marker=marker,
-                   error=str(exc))
-        return None
-    _log.info("kit_revision_archived", kit_id=kit_id, marker=marker,
-              store_marker=store_marker)
-    return store_marker
+# _archive_published_revision now lives in backend/services/kit_gates.py
+# (imported above): bd polyglot-pdf-z6bk9 gave it a SECOND caller in the
+# client-tier routes, and routes importing routes would be circular --
+# editor_kit_routes already imports _safe_kit_id from form_kit_routes.
 
 
 class RetireCandidate(BaseModel):
