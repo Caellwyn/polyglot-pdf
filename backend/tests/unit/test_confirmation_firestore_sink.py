@@ -619,3 +619,107 @@ def test_fingerprint_ignores_prose_edits():
 def test_no_edition_and_no_schema_yields_none():
     assert cl.resolve_edition_marker(None, None) is None
     assert cl.resolve_edition_marker(None, {"fields": []}) is None
+
+
+def test_disclaimer_acceptance_reaches_the_durable_sink(fake_db, monkeypatch):
+    """The acceptance is written to Firestore, not just to a log line.
+
+    bd polyglot-pdf-0dsv4: the record that a user accepted the LEGAL TERMS
+    used to be a structlog line only, while the record of what they TYPED
+    went to Firestore. That is backwards for an evidence trail.
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_test_1",
+        language="Spanish",
+        timestamp_unix_ms=1755000000000,
+        script_version="deadbeefcafe0001",
+        user_agent="Mozilla/5.0 (test)",
+        firm_id=None,
+    )
+    cl.flush_confirmation_sink()
+
+    added = fake_db.collections[cl._FIRESTORE_COLLECTION].added
+    assert len(added) == 1
+    doc = added[0]
+    # ALLOWLIST: exactly these keys, nothing else. A `value`, `client_ip`, or
+    # any client identifier appearing here would be a PII regression
+    # (pin-with-allowlist, never a blacklist -- banning one word is a synonym
+    # away from defeat). script_version is a HASH of copy that ships in the
+    # client bundle, so it names WHICH text was agreed to without carrying
+    # user content. firm_id names our CUSTOMER FIRM, never the person filling
+    # the form.
+    assert set(doc) == {
+        "timestamp",
+        "event",
+        "form_session_id",
+        "firm_id",
+        "language",
+        "timestamp_unix_ms",
+        "script_version",
+        "user_agent",
+    }
+    assert doc["event"] == "disclaimer_accepted"
+    assert doc["form_session_id"] == "fss_test_1"
+    assert doc["script_version"] == "deadbeefcafe0001"
+    # firm_id is present-but-None today (the route is unauthenticated). The
+    # KEY must exist so the collection has one shape and no migration is
+    # needed when firm auth reaches this route.
+    assert doc["firm_id"] is None
+
+
+def test_acceptance_and_confirmations_form_ONE_session_record(fake_db, monkeypatch):
+    """The whole point: both event kinds are retrievable together.
+
+    Keyed on form_session_id, so read_confirmation_log() returns the
+    acceptance and the field confirmations as one timestamp-ordered record --
+    "this session accepted this text, then confirmed these fields".
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_join_1",
+        language="English",
+        timestamp_unix_ms=1755000000000,
+        script_version="abc123def4567890",
+        user_agent="ua",
+        firm_id=None,
+    )
+    cl.log_field_confirmation(
+        form_id="I-90",
+        form_session_id="fss_join_1",
+        field_id="p1_line1_aliennumber",
+        field_name=None,
+        confirmation_method="verbal",
+        kit_id="i-90",
+        edition_date="01/20/25",
+        firm_id="firm-a",
+    )
+    cl.flush_confirmation_sink()
+
+    added = fake_db.collections[cl._FIRESTORE_COLLECTION].added
+    session = [d for d in added if d.get("form_session_id") == "fss_join_1"]
+    assert len(session) == 2
+    assert {d["event"] for d in session} == {"disclaimer_accepted", "field_confirmed"}
+
+
+def test_acceptance_does_NOT_match_the_kit_deletion_guard(fake_db, monkeypatch):
+    """A new event kind must not make a kit undeletable.
+
+    The deletion guard's own history is the reason this test exists: an
+    UNSCOPED kit query once matched session-lifecycle events, so a single
+    voice session made a kit permanently undeletable (bd polyglot-pdf-68s2q /
+    u66ka). Every guard query is now scoped to event == "field_confirmed".
+    The acceptance record carries NO kit_id at all, so it cannot match -- but
+    pin it, because the failure mode is silent and expensive.
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_guard_1",
+        language="English",
+        timestamp_unix_ms=1755000000000,
+        script_version="abc123def4567890",
+        user_agent="ua",
+        firm_id=None,
+    )
+    cl.flush_confirmation_sink()
+
+    doc = fake_db.collections[cl._FIRESTORE_COLLECTION].added[0]
+    assert "kit_id" not in doc
+    assert doc["event"] != "field_confirmed"

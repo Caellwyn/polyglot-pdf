@@ -429,6 +429,93 @@ def log_form_session_start(
     _submit_firestore_write(event)
 
 
+def log_disclaimer_acceptance(
+    form_session_id: str,
+    language: str,
+    timestamp_unix_ms: int,
+    script_version: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    firm_id: Optional[str] = None,
+) -> None:
+    """Log the user's acceptance of the disclaimer, DURABLY.
+
+    Why this exists (bd polyglot-pdf-0dsv4): the acceptance used to be a
+    single structured log line and nothing else, so the record that a user
+    accepted the legal terms was LESS durable than the record of what they
+    typed into a field -- backwards for a legal-evidence trail. It now goes
+    through the same sink the field confirmations use, keyed on
+    form_session_id, so `read_confirmation_log(form_session_id)` returns the
+    acceptance and the confirmations as ONE timestamp-ordered session record.
+
+    NO PII, and deliberately no client IP (bd polyglot-pdf-z2is): an IP is
+    PII under GDPR/CCPA. `script_version` is a hash of copy that ships in the
+    client bundle, so it names WHICH text was agreed to without carrying user
+    content.
+
+    firm_id: the customer firm, matching the session-lifecycle and
+        confirmation records (bd polyglot-pdf-xwlt). CURRENTLY ALWAYS None:
+        POST /api/disclaimer-acceptance carries no auth token, because Agree
+        fires before any authenticated session exists. The field is written
+        anyway so the collection has ONE shape and no migration is needed
+        when firm auth reaches this route (maintainer decision 2026-08-20).
+        Until then a firm's acceptances are reachable by joining on
+        form_session_id against their confirmation records, which DO carry
+        firm_id -- see resolve_firm_for_session below.
+    """
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    event = {
+        "timestamp": timestamp,
+        "event": "disclaimer_accepted",
+        "form_session_id": form_session_id,
+        "firm_id": firm_id,
+        "language": language,
+        "timestamp_unix_ms": timestamp_unix_ms,
+        "script_version": script_version,
+        "user_agent": user_agent,
+    }
+
+    # Filter the "event" key: it collides with structlog's positional event
+    # name (same pattern as log_field_confirmation).
+    _log.info(
+        "disclaimer_accepted", **{k: v for k, v in event.items() if k != "event"}
+    )
+    _write_confirmation_to_file(form_session_id, event)
+    _submit_firestore_write(event)
+
+
+def resolve_firm_for_session(form_session_id: str) -> Optional[str]:
+    """Best-effort firm attribution for a session, via the JOIN fallback.
+
+    An acceptance record carries firm_id=None today (the route is
+    unauthenticated -- see log_disclaimer_acceptance). The session's OTHER
+    records do carry it, so the firm is recoverable by looking at them.
+
+    Returns the firm_id found on any record for this session, or None when
+    the session has none (a genuinely firm-less session, or one that accepted
+    and abandoned before confirming a field -- that case has no firm anywhere
+    and this correctly reports None rather than guessing).
+
+    Raises nothing: attribution is supplementary. A read failure is reported
+    as None and logged, because a broken lookup must never take down a caller
+    that is only enriching a record.
+    """
+    try:
+        events = read_confirmation_log(form_session_id, strict=True)
+    except Exception as e:
+        _log.warning(
+            "firm_attribution_lookup_failed",
+            form_session_id=form_session_id,
+            error=str(e),
+        )
+        return None
+    for event in events:
+        firm_id = event.get("firm_id")
+        if firm_id:
+            return firm_id
+    return None
+
+
 def log_form_session_end(
     form_id: str,
     form_session_id: str,

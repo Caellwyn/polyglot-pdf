@@ -11,6 +11,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 import structlog
 
+from ..utils.confirmation_logger import log_disclaimer_acceptance
+
 _log = structlog.get_logger().bind(module="disclaimer_routes")
 
 router = APIRouter(prefix="/api", tags=["disclaimer"])
@@ -83,6 +85,36 @@ async def log_disclaimer_acceptance(
 		user_agent=data.user_agent,
 		script_version=data.script_version,
 	)
+
+	# DURABLE record (bd polyglot-pdf-0dsv4). The structlog line above ages out
+	# with the log bucket; this writes the same acceptance to the confirmation
+	# sink -- Firestore plus the per-session file -- keyed on form_session_id,
+	# so read_confirmation_log() returns the acceptance and the field
+	# confirmations as ONE timestamp-ordered session record.
+	#
+	# FAIL-OPEN, deliberately: a sink outage must never 500 an Agree click and
+	# block the user from starting their form. _submit_firestore_write already
+	# swallows and logs its own failures, but the file write and any import-time
+	# error are caught here so nothing on this path can reach the client.
+	try:
+		log_disclaimer_acceptance(
+			form_session_id=data.form_session_id,
+			language=data.language,
+			timestamp_unix_ms=data.timestamp,
+			script_version=data.script_version,
+			user_agent=data.user_agent,
+			# No firm_id: this route carries no auth token (Agree fires before
+			# any authenticated session exists). Written as None so the record
+			# shape matches the rest of the collection; recoverable via
+			# resolve_firm_for_session() until firm auth reaches this route.
+			firm_id=None,
+		)
+	except Exception as e:
+		_log.error(
+			"disclaimer_acceptance_durable_write_failed",
+			form_session_id=data.form_session_id,
+			error=str(e),
+		)
 
 	return {
 		"status": "logged",

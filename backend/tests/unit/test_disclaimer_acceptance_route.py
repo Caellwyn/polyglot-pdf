@@ -99,3 +99,59 @@ def test_script_version_is_optional_for_an_older_client(monkeypatch):
 
     _args, kwargs = mock_log.info.call_args
     assert kwargs["script_version"] is None
+
+
+def test_a_sink_outage_does_NOT_break_the_agree_click(monkeypatch):
+    """FAIL-OPEN: the durable write must never 500 an Agree click.
+
+    bd polyglot-pdf-0dsv4. If Firestore is down, or the sink raises for any
+    reason, the user must still get through the disclaimer and into their
+    form. Losing an audit record is bad; blocking every user from starting is
+    worse, and the structlog line still records the acceptance either way.
+    """
+    def _boom(**kwargs):
+        raise RuntimeError("firestore is down")
+
+    monkeypatch.setattr(dr, "log_disclaimer_acceptance", _boom)
+    response = client.post(
+        "/api/disclaimer-acceptance",
+        json={
+            "form_session_id": "fss_outage",
+            "language": "English",
+            "timestamp": 1755000000000,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "logged"
+
+
+def test_the_durable_write_actually_HAPPENS_on_the_happy_path(monkeypatch):
+    """The fail-open guard must not hide a write that never fires.
+
+    A try/except around a call that was never wired would satisfy the outage
+    test above while recording nothing -- so pin that the route really does
+    reach the sink, with the values it was given.
+    """
+    seen = {}
+
+    def _capture(**kwargs):
+        seen.update(kwargs)
+
+    monkeypatch.setattr(dr, "log_disclaimer_acceptance", _capture)
+    response = client.post(
+        "/api/disclaimer-acceptance",
+        json={
+            "form_session_id": "fss_happy",
+            "language": "Spanish",
+            "timestamp": 1755000000000,
+            "script_version": "deadbeefcafe0001",
+            "user_agent": "ua",
+        },
+    )
+    assert response.status_code == 200
+    assert seen["form_session_id"] == "fss_happy"
+    assert seen["language"] == "Spanish"
+    assert seen["script_version"] == "deadbeefcafe0001"
+    # Written as None TODAY (no auth on this route), but the key must be
+    # passed so the record shape is stable when firm auth arrives.
+    assert seen["firm_id"] is None
