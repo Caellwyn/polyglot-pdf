@@ -940,21 +940,30 @@ def _porcelain_z_ack_paths(raw: str) -> set[str]:
     suffix counts, whether or not it carries a status prefix.
     """
     out: set[str] = set()
-    for record in raw.split("\0"):
-        if not record:
+    records = [r for r in raw.split("\0") if r]
+    i = 0
+    while i < len(records):
+        record = records[i]
+        status, path = record[:2], record[3:] if len(record) > 3 else ""
+        # DO NOT GUESS whether a record carries a status prefix. -z output has
+        # a determinate structure: every record is "XY <path>", EXCEPT that a
+        # rename/copy is followed by ONE extra record holding the bare source
+        # path. So consume that follow-up positionally, driven by the status
+        # code, instead of sniffing the string.
+        #
+        # An earlier version sniffed (`if record[2] == " "` -> strip 3 chars),
+        # which mangled a bare source path whose third character is a space:
+        # "ab cd/old.md.ack" became "cd/old.md.ack" -- an INVENTED path, and
+        # the string still ended in .ack so the fallback never noticed.
+        if path.endswith(ACK_SUFFIX):
+            out.add(path)
+        if status and status[0] in ("R", "C") and i + 1 < len(records):
+            source = records[i + 1]          # bare path, no status prefix
+            if source.endswith(ACK_SUFFIX):
+                out.add(source)
+            i += 2
             continue
-        # A status-prefixed record is "XY path"; a rename's source record is a
-        # bare path. Strip a prefix only when it is actually shaped like one.
-        candidate = record
-        if len(record) > 3 and record[2] == " ":
-            candidate = record[3:]
-        candidate = candidate.strip()
-        if candidate.endswith(ACK_SUFFIX):
-            out.add(candidate)
-        elif record.strip().endswith(ACK_SUFFIX):
-            # The prefix-strip guessed wrong (a bare path whose 3rd char is a
-            # space). Prefer the interpretation that names a real ack.
-            out.add(record.strip())
+        i += 1
     return out
 
 

@@ -1370,6 +1370,28 @@ class TestFreshnessAcks:
         ) == {"docs/freshness/new -> weird.md.ack", "docs/freshness/old.md.ack"}
         assert z("?? docs/other.txt\0") == set()
         assert z("") == set()
+        # A bare rename-SOURCE path whose 3rd character is a space. The first
+        # -z version sniffed for a status prefix (`record[2] == " "` -> strip
+        # 3 chars), which turned "ab cd/old.md.ack" into the INVENTED path
+        # "cd/old.md.ack" -- and its fallback never noticed, because the
+        # truncated string still ended in .ack. (Verified against that old
+        # implementation: it really did emit cd/old.md.ack.)
+        #
+        # HONEST NOTE ON WHAT THIS ASSERTION PROVES: the fix was STRUCTURAL --
+        # the source record is now consumed positionally, driven by the R/C
+        # status, so it never reaches the prefix logic at all. Re-introducing
+        # the sniff therefore does NOT redden this test; the sniff is simply
+        # unreachable for that record now. This assertion pins the OUTCOME
+        # (no invented path) rather than the mechanism, which is the right
+        # thing to pin -- but it is not a mutation-proof guard on the sniff
+        # itself, and saying so is better than implying a stronger guarantee.
+        assert z("R  docs/freshness/new.md.ack\0ab cd/old.md.ack\0") == {
+            "docs/freshness/new.md.ack", "ab cd/old.md.ack"}
+        # A rename of NON-ack files must consume its own pair and not swallow
+        # the record after it.
+        assert z(
+            "R  docs/other.txt\0docs/old.txt\0?? docs/freshness/z.md.ack\0"
+        ) == {"docs/freshness/z.md.ack"}
 
     def test_branch_ack_count_actually_reads_uncommitted_acks(self, monkeypatch):
         """Pins that branch_ack_count WIRES UP the -z parser, not just that
