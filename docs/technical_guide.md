@@ -454,23 +454,23 @@ tokens, not the client tier):
   string `"private"` coerces public). Producer: the kit's `metadata.json`
   (hand-authored / future publish UI). Consumers: the gates read LIVE
   metadata -- ONE `load_live_metadata` read per request feeds both the
-  publish and visibility gates (`kit_gates.py:28`; visibility coercion
-  `kit_visibility` `:84`; the manifest copy is deploy-time stale in GCS) --
+  publish and visibility gates (`kit_gates.py`'s `load_live_metadata`; visibility coercion in
+  `kit_gates.py`'s `kit_visibility`; the manifest copy is deploy-time stale in GCS) --
   and the store passes normalized `visibility` / `ownerFirmId` through both
-  manifest paths (`form_kits.py:226` normalize, `:516` local synthesis).
+  manifest paths (`form_kits.py`'s `normalize_manifest` and `LocalFormKitStore.load_manifest`).
   `owner_firm_id` is bookkeeping for the firm write path (bd z6bk9), NOT the
   read gate.
 - **The firm allowlist**: `firms/{firm_id}.allowed_kits` (producer:
-  `scripts/bootstrap_firm.py`) -> `firms.get_allowed_kits`
-  (`backend/services/firms.py:55`, fail-closed `[]`) -> resolved per request
-  off the `firm_id` ID-token claim (`kit_gates.py:67`, `firm_allowed_kits`;
-  run off the event loop) -> enforced by `require_visible` (`:99`, 404 =
+  `scripts/bootstrap_firm.py`) -> `firms.py`'s `get_allowed_kits`
+  (fail-closed `[]`) -> resolved per request
+  off the `firm_id` ID-token claim (`kit_gates.py`'s `firm_allowed_kits`;
+  run off the event loop) -> enforced by `kit_gates.py`'s `require_visible` (404 =
   invisibility) on the schema + pdf + fill reads
   (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
-  (`form_kit_routes.py:127`). The pdf route parses its bearer token
-  OPTIONALLY (`:293`); an invalid token degrades to anonymous rather
+  (`form_kit_routes.py`'s `list_form_kits`). The pdf route parses its bearer token
+  OPTIONALLY (`form_kit_routes.py:293`); an invalid token degrades to anonymous rather
   than 401.
-- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:193`)
+- **The private-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
   backend routes (`/api/form-kits/<id>/schema|pdf`) because the static
   Hosting bundle excludes private kits (bd kkos:
@@ -484,9 +484,9 @@ tokens, not the client tier):
   `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on
   Hosting via the rewrite but not against the Vite dev server).
 - **Explicit filenames** `schema_file`/`pdf_file` on `FormKitInfo`
-  (`form_kit_routes.py:117`): under rewritten paths the URL's last segment is
+  (`form_kit_routes.py`, the `FormKitInfo` model): under rewritten paths the URL's last segment is
   a literal route word, so the client must STOP deriving filenames by URL
-  split. Consumers: `SchemaFormDemo.tsx:114`/`:116` (manifest mapping) and
+  split. Consumers: `SchemaFormDemo.tsx`'s manifest mapping (the `schemaFile`/`pdfFile` fallback derivation) and
   `fillPDF`'s explicit `pdfFile` param (`pdfFiller.ts:117` -- the fill POST's
   `pdf_filename` feeds `store.load_pdf_bytes`, contract 5). Breaking either
   half strands a private kit's fill/download while every public-kit test
