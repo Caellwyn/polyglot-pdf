@@ -84,10 +84,13 @@ def test_script_version_reaches_the_log_when_the_client_sends_it(monkeypatch):
 
 
 def test_script_version_is_optional_for_an_older_client(monkeypatch):
-    """The legacy model-read path has no deterministic text to name, and a
-    client one deploy behind omits the field entirely. Both must still log
-    (a 422 here would break disclaimer acceptance outright), with the key
-    present and null rather than absent."""
+    """The legacy model-read path omits script_version (the client sources it
+    from the intro player, which is only built when the intro flag is on --
+    NOT because that path lacks deterministic text; see bd
+    polyglot-pdf-pyebx), and a client one deploy behind omits the field
+    entirely. Both must still log (a 422 here would break disclaimer
+    acceptance outright), with the key present and null rather than
+    absent."""
     mock_log = MagicMock()
     monkeypatch.setattr(dr, "_log", mock_log)
 

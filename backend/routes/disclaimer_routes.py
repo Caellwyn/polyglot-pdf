@@ -24,8 +24,12 @@ class DisclaimerAcceptanceRequest(BaseModel):
 	timestamp: int = Field(..., description="Unix timestamp (milliseconds) when user clicked 'I Agree'")
 	user_agent: Optional[str] = Field(None, description="Browser user agent string")
 	# Which exact disclaimer TEXT the user agreed to (sprint 20, bd
-	# polyglot-pdf-s1iex.7). Optional: a client one deploy behind, and the
-	# legacy model-read path, both omit it -> None.
+	# polyglot-pdf-s1iex.7). Optional for two DIFFERENT reasons: a client one
+	# deploy behind simply predates the field, while the legacy model-read
+	# path omits it because the client sources the value from the intro
+	# player, which is only constructed when the intro flag is on. The second
+	# case is a KNOWN AUDIT GAP -- the user read deterministic scripted text
+	# and the record still names nothing (bd polyglot-pdf-pyebx).
 	script_version: Optional[str] = Field(
 		None,
 		description="Hash of the scripted intro text the user saw/heard (intro_tts.script_version)",
@@ -50,8 +54,12 @@ async def log_disclaimer_acceptance(
 	synthesized from a fixed per-language script, so the record can now name
 	the exact text -- without it the log proves someone clicked Agree but not
 	what they were told. Non-PII: a hash of copy that ships in the client
-	bundle. None on the legacy model-read path (nothing deterministic to
-	name) and on a client one deploy behind.
+	bundle. None on a client one deploy behind, and None on the legacy
+	model-read path -- NOT because that path lacks deterministic text (it
+	serves the same scripted paragraphs), but because the client reads the
+	value off the intro player, which exists only when the intro flag is on.
+	On the default deployment that leaves a real evidence gap, tracked by bd
+	polyglot-pdf-pyebx.
 
 	The client IP is deliberately NOT logged (bd polyglot-pdf-z2is): an IP is
 	PII under GDPR/CCPA, and the acceptance evidence that matters is the
