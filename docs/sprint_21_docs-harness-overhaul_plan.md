@@ -252,7 +252,10 @@ B5  (reviewers)     independent
 
 ## Success metrics (gate-independent -- a metric the gate can manufacture is
 not a metric)
-- **Corpus stale count**: 21 today -> <=2 after B7, staying <5 at +4 weeks.
+- **Corpus stale count**: 21 at survey time (2026-08-22); re-measured at 24 two
+  days later as dev advanced -- THE BASELINE DRIFTS UPWARD ON ITS OWN, which is
+  itself the argument for the epic. Measure it fresh at the start of B7 rather
+  than trusting either number. Target: <=2 at B7 completion, <5 at +4 weeks.
 - **Ack:fix ratio** per month: mostly-fixes healthy; ack-heavy is the
   ack-spam tell (this number falsifies the anti-gaming design if it goes
   wrong). Both computable from git by a scheduled check.

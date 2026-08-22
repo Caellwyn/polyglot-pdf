@@ -1144,3 +1144,139 @@ class TestEveryTier2DocHasTracksOrIsExempt:
             "as a deliberate choice (bd polyglot-pdf-teizj):\n  "
             + "\n  ".join(missing)
         )
+
+
+class TestFreshnessAcks:
+    """The ack: a cheap, squash-proof 'I reviewed this; it is still accurate'
+    (bd polyglot-pdf-fytzi).
+
+    WHY THE ACK EXISTS. Before it, the only ways to clear a stale flag were a
+    stamp bump (which conflicted between parallel PRs) or a doc commit (noise).
+    So the HONEST action -- reading the doc and finding it correct -- left the
+    flag ON, and the flag stopped being read: 24 of 28 tracked docs are stale.
+
+    WHY IT IS A FILE AND NOT A SHA. This repo squash-merges, so a branch commit
+    never joins dev's history and a recorded branch SHA is orphaned the instant
+    its PR merges. A tracked file's `git log -1` resolves to the SQUASH commit
+    on dev instead, which is a real ancestor -- so the ack's timestamp survives
+    exactly where a SHA would not. test_ack_survives_squash_merge pins that.
+    """
+
+    def _doc_tracking_swarm_config(self, tmp_path):
+        return _make_doc(
+            tmp_path,
+            "# Foo\n\n*Last updated: 2025-04-01*\n\n"
+            "**Tracks:** `scripts/swarm_config.py`\n",
+        )
+
+    def _code_at(self, year):
+        return int(datetime.datetime(
+            year, 4, 28, 12, 0, 0, tzinfo=datetime.timezone.utc,
+        ).timestamp())
+
+    def test_ack_clears_staleness(self, tmp_path, monkeypatch):
+        """The core promise: reviewed-and-still-accurate clears the flag."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        code_ts = self._code_at(2026)
+        ack_ts = code_ts + 86_400  # acked the day AFTER the code moved
+
+        def fake_git_ct(path):
+            if "swarm_config" in str(path):
+                return code_ts
+            if str(path).endswith(freshness.ACK_SUFFIX):
+                return ack_ts
+            return None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        # Without an ack the doc is stale...
+        assert freshness.check_doc(doc)[0] == "stale"
+        # ...and with one it is not.
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: ack_ts)
+        assert freshness.check_doc(doc)[0] == "ok"
+
+    def test_ack_older_than_the_code_does_not_clear(self, tmp_path, monkeypatch):
+        """THE MUTATION THAT MATTERS. An ack must not be a permanent
+        get-out-of-stale card: once the code moves PAST the ack, the doc is
+        stale again. Without this the ack would be strictly worse than the
+        stamp it replaces -- ack once, never hear about the doc again."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        code_ts = self._code_at(2026)
+        stale_ack = code_ts - 86_400  # acked the day BEFORE the code moved
+
+        def fake_git_ct(path):
+            return code_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: stale_ack)
+        status, stale, _ = freshness.check_doc(doc)
+        assert status == "stale"
+        assert any("swarm_config" in str(fp) for fp, _, _ in stale)
+
+    def test_ack_survives_squash_merge(self, tmp_path, monkeypatch):
+        """THE DESIGN'S LOAD-BEARING PROPERTY, pinned.
+
+        Under squash-merge the ack FILE lands on dev inside the squash commit,
+        so its commit time is the squash commit's time -- at or after the code
+        it was acked against, even though the branch commits are gone. Model
+        that: code and ack share one commit timestamp (the squash), and the
+        doc must read FRESH. A SHA-anchored design fails here, which is why
+        this test exists rather than a SHA-ancestry one."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        squash_ts = self._code_at(2026)
+
+        def fake_git_ct(path):
+            return squash_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: squash_ts)
+        # Equal timestamps: the strict `file_ct > doc_ct` compare treats the
+        # doc+code-in-one-squash case as fresh, which is correct.
+        assert freshness.check_doc(doc)[0] == "ok"
+
+    def test_ack_path_is_unique_per_doc_and_flattened(self):
+        """One ack file per doc is what makes acks conflict-free: two sessions
+        acking two docs touch two different files. A collision here would
+        reintroduce the shared-line problem the ack replaces."""
+        a = freshness.ack_path(freshness.REPO_ROOT / "docs/components/auth.md")
+        b = freshness.ack_path(freshness.REPO_ROOT / "docs/standards/testing.md")
+        assert a != b
+        assert a.name == "components__auth.md" + freshness.ACK_SUFFIX
+        assert a.parent == freshness.REPO_ROOT / freshness.ACK_DIR
+        # Flattened: no nested dirs to create, no path-separator surprises.
+        assert "/" not in a.name and "\\" not in a.name
+
+    def test_ack_dir_is_not_gitignored(self):
+        """A silently-ignored ack directory fails in the WORST direction: acks
+        vanish at commit, every acked doc reads stale again, and the mechanism
+        looks broken rather than absent. Pin that the path is committable."""
+        import subprocess
+        probe = (freshness.REPO_ROOT / freshness.ACK_DIR
+                 / ("probe.md" + freshness.ACK_SUFFIX))
+        result = subprocess.run(
+            ["git", "check-ignore", str(probe)],
+            cwd=freshness.REPO_ROOT, capture_output=True, text=True,
+        )
+        # rc 1 == "not ignored". rc 0 would mean a gitignore rule shadows it.
+        assert result.returncode == 1, (
+            f"{freshness.ACK_DIR}/ is gitignored -- acks would never reach the "
+            f"repo: {result.stdout.strip()}"
+        )
+
+    def test_write_ack_records_the_verified_files_and_reason(self, tmp_path, monkeypatch):
+        """The ack's CONTENT is the anti-gaming surface. A bare marker gives a
+        reviewer nothing to judge; the auto-filled file list plus the mandatory
+        reason are what make a blind ack visible in the diff."""
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "git_head_sha", lambda: "abc1234")
+        doc = tmp_path / "docs" / "components" / "thing.md"
+        doc.parent.mkdir(parents=True)
+        doc.write_text("# Thing\n", encoding="utf-8")
+        code = tmp_path / "backend" / "thing.py"
+        code.parent.mkdir(parents=True)
+        code.write_text("x = 1\n", encoding="utf-8")
+
+        ack = freshness.write_ack(doc, "re-read against the handler; unchanged", [code])
+        body = ack.read_text(encoding="utf-8")
+        assert "verified: backend/thing.py" in body
+        assert "because: re-read against the handler; unchanged" in body
+        assert "sha: abc1234" in body
