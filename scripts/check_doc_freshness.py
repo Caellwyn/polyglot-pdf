@@ -904,22 +904,57 @@ def _porcelain_ack_paths(line: str) -> set[str]:
     """
     if len(line) < 4:
         return set()
-    status, payload = line[:2], line[3:].strip()
-    # Split on " -> " ONLY when the status code says rename/copy. Splitting on
-    # the arrow unconditionally mis-parses a FILENAME that happens to contain
-    # " -> " (a real, if exotic, path): "?? docs/freshness/weird -> name.ack"
-    # would yield a bogus "name.ack" and miss the real file. git only emits the
-    # arrow form for R/C, so the status code is the honest discriminator.
-    if ("R" in status or "C" in status) and " -> " in payload:
-        parts = [p.strip() for p in payload.split(" -> ")]
-    else:
-        parts = [payload]
+    payload = line[3:].strip()
+    # NOTE: this text-mode parser is the FALLBACK. branch_ack_count() reads
+    # `--porcelain -z`, where rename pairs are NUL-separated records and no
+    # arrow-splitting is needed at all -- see _porcelain_z_ack_paths(). Arrow
+    # splitting is unfixable in general: with `RM old.ack -> new -> weird.ack`
+    # you cannot tell which arrow separates the pair and which is part of the
+    # filename. So this path deliberately does NOT split; it reads the whole
+    # payload as one path. That under-counts a rename's old path in the text
+    # fallback (harmless -- the count only drives an advisory hint) rather
+    # than inventing a path that does not exist.
+    parts = [payload]
     out: set[str] = set()
     for part in parts:
         if part.startswith('"') and part.endswith('"') and len(part) > 1:
             part = part[1:-1]
         if part.endswith(ACK_SUFFIX):
             out.add(part)
+    return out
+
+
+def _porcelain_z_ack_paths(raw: str) -> set[str]:
+    """Ack paths from `git status --porcelain -z -uall` output.
+
+    THE POINT OF -z: records are NUL-separated and a rename/copy emits its two
+    paths as TWO records (`R  new\\0old\\0`), so there is no arrow to parse and
+    no ambiguity when a FILENAME itself contains " -> ". Text-mode parsing
+    cannot resolve that case even in principle -- given
+    `RM old.ack -> new -> weird.ack` you cannot tell which arrow is the
+    separator. Reading -z removes the ambiguity by construction rather than
+    guessing at it, which is why it is the primary path.
+
+    Each record is `XY <path>` except the second half of a rename/copy pair,
+    which is a bare path. Both forms are handled: anything ending in the ack
+    suffix counts, whether or not it carries a status prefix.
+    """
+    out: set[str] = set()
+    for record in raw.split("\0"):
+        if not record:
+            continue
+        # A status-prefixed record is "XY path"; a rename's source record is a
+        # bare path. Strip a prefix only when it is actually shaped like one.
+        candidate = record
+        if len(record) > 3 and record[2] == " ":
+            candidate = record[3:]
+        candidate = candidate.strip()
+        if candidate.endswith(ACK_SUFFIX):
+            out.add(candidate)
+        elif record.strip().endswith(ACK_SUFFIX):
+            # The prefix-strip guessed wrong (a bare path whose 3rd char is a
+            # space). Prefer the interpretation that names a real ack.
+            out.add(record.strip())
     return out
 
 
@@ -946,12 +981,11 @@ def branch_ack_count(base: str = "origin/dev") -> int:
             # directory to ONE "?? docs/freshness/" line, so the first session
             # ever to create acks parsed zero of them and the hint stayed
             # silent for exactly the case it exists to catch.
-            ["git", "status", "--porcelain", "-uall", "--", ACK_DIR],
+            ["git", "status", "--porcelain", "-z", "-uall", "--", ACK_DIR],
             cwd=REPO_ROOT, capture_output=True, text=True, check=True,
-        ).stdout.splitlines()
+        ).stdout
         names = {p for p in committed if p.endswith(ACK_SUFFIX)}
-        for line in pending:
-            names |= _porcelain_ack_paths(line)
+        names |= _porcelain_z_ack_paths(pending)
         return len(names)
     except (subprocess.CalledProcessError, OSError):
         ack_dir = REPO_ROOT / ACK_DIR

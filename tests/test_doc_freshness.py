@@ -1315,9 +1315,12 @@ class TestFreshnessAcks:
         parser is not merely correct for the one example I happened to try."""
         f = freshness._porcelain_ack_paths
         assert f("?? docs/freshness/a.md.ack") == {"docs/freshness/a.md.ack"}
-        # A rename names TWO paths; both count as this branch's work.
+        # A rename line in TEXT mode is read whole, NOT split: see the
+        # docstring above and test_z_parsing_is_unambiguous_where_text_parsing
+        # _cannot_be. Renames are the -z parser's job, where they arrive as two
+        # separate records and need no arrow handling.
         assert f("R  docs/freshness/old.md.ack -> docs/freshness/new.md.ack") == {
-            "docs/freshness/old.md.ack", "docs/freshness/new.md.ack"}
+            "docs/freshness/old.md.ack -> docs/freshness/new.md.ack"}
         # Git QUOTES paths with spaces -- the quotes must not defeat the suffix.
         assert f(' M "docs/freshness/has space.md.ack"') == {
             "docs/freshness/has space.md.ack"}
@@ -1329,18 +1332,80 @@ class TestFreshnessAcks:
         # Other real status codes must still yield their path.
         assert f("AM docs/freshness/a.md.ack") == {"docs/freshness/a.md.ack"}
         assert f("UU docs/freshness/b.md.ack") == {"docs/freshness/b.md.ack"}
-        # A COPY names two paths, like a rename.
+        # A COPY line, like a rename, is read WHOLE in text mode -- the -z
+        # parser is what resolves pairs.
         assert f("C  docs/freshness/x.md.ack -> docs/freshness/y.md.ack") == {
-            "docs/freshness/x.md.ack", "docs/freshness/y.md.ack"}
+            "docs/freshness/x.md.ack -> docs/freshness/y.md.ack"}
         # An ack nested a level deeper still counts.
         assert f("?? docs/freshness/sub/c.md.ack") == {"docs/freshness/sub/c.md.ack"}
         # THE ARROW TRAP: a FILENAME containing " -> " must not be split.
-        # Only R/C status lines use the arrow as a separator, so the status
-        # code -- not the presence of the arrow -- is the discriminator.
-        # Splitting unconditionally yielded a bogus "name.md.ack" and LOST the
-        # real file.
+        # This text parser is the FALLBACK and deliberately never splits --
+        # it reads the whole payload as one path, under-counting a rename's
+        # old path rather than inventing a path that does not exist.
         assert f("?? docs/freshness/weird -> name.md.ack") == {
             "docs/freshness/weird -> name.md.ack"}
+
+    def test_z_parsing_is_unambiguous_where_text_parsing_cannot_be(self):
+        """THE PRIMARY PARSER. `--porcelain -z` emits NUL-separated records and
+        a rename as TWO records, so there is no arrow to split on.
+
+        This exists because arrow-splitting is unfixable IN PRINCIPLE, not just
+        buggy: given `RM old.ack -> new -> weird.ack` no parser can tell which
+        arrow separates the pair and which belongs to the filename. Round 2 of
+        review found exactly that compound case still broken after the
+        status-code fix. -z removes the ambiguity by construction instead of
+        guessing better."""
+        z = freshness._porcelain_z_ack_paths
+        assert z("?? docs/freshness/a.md.ack\0") == {"docs/freshness/a.md.ack"}
+        # A rename is two records, not one arrow-joined line.
+        assert z("R  docs/freshness/new.md.ack\0docs/freshness/old.md.ack\0") == {
+            "docs/freshness/new.md.ack", "docs/freshness/old.md.ack"}
+        # An arrow inside a filename survives intact.
+        assert z("?? docs/freshness/weird -> name.md.ack\0") == {
+            "docs/freshness/weird -> name.md.ack"}
+        # THE COMPOUND CASE text parsing could not resolve: a rename whose
+        # DESTINATION contains an arrow.
+        assert z(
+            "RM docs/freshness/new -> weird.md.ack\0docs/freshness/old.md.ack\0"
+        ) == {"docs/freshness/new -> weird.md.ack", "docs/freshness/old.md.ack"}
+        assert z("?? docs/other.txt\0") == set()
+        assert z("") == set()
+
+    def test_branch_ack_count_actually_reads_uncommitted_acks(self, monkeypatch):
+        """Pins that branch_ack_count WIRES UP the -z parser, not just that
+        the parser exists.
+
+        Round 2 caught this: deleting the `names |= _porcelain_z_ack_paths(...)`
+        line left every ack test green, because each one exercised the parser
+        DIRECTLY. A helper that is correct but unreferenced is worth nothing --
+        the same class as the dead read_ack(), except this one silently
+        degrades a working feature instead of sitting inert.
+
+        Fakes git so the test is hermetic and never writes into the repo."""
+        import subprocess as _sp
+
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 0
+            if "merge-base" in cmd:
+                R.stdout = "abc123\n"
+            elif "diff" in cmd:
+                R.stdout = ""          # nothing committed on this branch
+            elif "status" in cmd:
+                assert "-z" in cmd, "branch_ack_count must request -z output"
+                R.stdout = ("?? docs/freshness/pending-one.md.ack\0"
+                            "?? docs/freshness/pending-two.md.ack\0")
+            else:
+                R.stdout = ""
+            return R
+
+        monkeypatch.setattr(_sp, "run", fake_run)
+        monkeypatch.setattr(freshness.subprocess, "run", fake_run)
+        assert freshness.branch_ack_count() == 2, (
+            "branch_ack_count must count UNCOMMITTED acks via the -z parser; "
+            "dropping that wiring silently reports 0 while the parser's own "
+            "tests stay green"
+        )
 
     def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
         """The anti-ack-spam hint must not die of its own alarm fatigue.
