@@ -1393,6 +1393,54 @@ class TestFreshnessAcks:
             "R  docs/other.txt\0docs/old.txt\0?? docs/freshness/z.md.ack\0"
         ) == {"docs/freshness/z.md.ack"}
 
+    def test_bulk_ack_hint_fires_only_above_the_threshold(self, tmp_path, monkeypatch, capsys):
+        """The bulk-acking hint is the CLI half of the anti-gaming design, and
+        it was unpinned: nothing asserted the hint TEXT ever prints, only that
+        the count is branch-scoped. A silent regression here removes the one
+        nudge that redirects bulk acking to the audit bead.
+
+        Pins the boundary in both directions -- at the threshold it stays
+        quiet, above it it speaks -- because a hint that fires always is as
+        useless as one that never fires (the alarm-fatigue failure this whole
+        epic exists to undo)."""
+        # run_ack reports a REPO-RELATIVE path, so the doc must live inside the
+        # repo. Use a real tracked doc and fake only the timestamps, so the
+        # test exercises run_ack's real resolution rather than a stub of it.
+        doc = freshness.REPO_ROOT / "docs" / "standards" / "terminology.md"
+        if not doc.is_file():
+            pytest.skip("terminology.md not present in this checkout")
+        code_ts = self._code_at(2026)
+        # Every tracked file reads as newer than the doc -> genuinely stale, so
+        # run_ack reaches the ack-writing path where the hint lives.
+        monkeypatch.setattr(freshness, "git_commit_time", lambda p: code_ts)
+        monkeypatch.setattr(freshness, "parse_last_updated_ts", lambda d: code_ts - 86_400)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: None)
+        monkeypatch.setattr(freshness, "ack_path_or_none", lambda d: None)
+        # Stub write_ack so NOTHING is written into the repo. It must return an
+        # in-repo path because run_ack renders it repo-relative for display --
+        # the path is never created, only reported.
+        monkeypatch.setattr(
+            freshness, "write_ack",
+            lambda d, b, v: freshness.REPO_ROOT / freshness.ACK_DIR / "unwritten.ack",
+        )
+
+        hint = "this branch now carries"
+
+        monkeypatch.setattr(freshness, "branch_ack_count",
+                            lambda *a, **k: freshness.ACK_RATE_HINT)
+        freshness.run_ack(str(doc), "reason")
+        assert hint not in capsys.readouterr().out, (
+            "the hint must stay quiet AT the threshold, or it becomes noise"
+        )
+
+        monkeypatch.setattr(freshness, "branch_ack_count",
+                            lambda *a, **k: freshness.ACK_RATE_HINT + 1)
+        freshness.run_ack(str(doc), "reason")
+        assert hint in capsys.readouterr().out, (
+            "above the threshold the hint must actually print -- it is the "
+            "only nudge routing bulk acking to the audit bead"
+        )
+
     def test_uncommitted_ack_counts_via_its_real_mtime(self, tmp_path, monkeypatch):
         """THE ONE BRANCH THE OTHER ACK TESTS ALL BYPASS.
 
