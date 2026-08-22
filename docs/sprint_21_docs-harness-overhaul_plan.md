@@ -1,7 +1,9 @@
 # Epic plan: docs-harness overhaul -- fresh, lean, conflict-free
 
-**Status: FINAL (v3). Survey-informed; adversarial Opus review round applied
-(2 blockers + 5 majors found and integrated -- summary at bottom).**
+**Status: APPROVED + FILED (v3.1). Survey-informed; adversarial Opus review
+round applied (2 blockers + 5 majors found and integrated -- summary at
+bottom). Maintainer-approved 2026-08-22; all beads filed and wired that day,
+9hdt4 closed as superseded. Bead ids are inlined in the headings below.**
 
 ## Context
 
@@ -58,9 +60,10 @@ prompts, and doc formats.
   (:185); worktree $WT-not-$R hazard documented (bd 9pe); Step 0 requires a
   clean tree; trivial-diff arm skips adversarial review (:408-411);
   push-time is `git pull --rebase origin dev` (:597, :647).
-- 39 files still carry stamps (9hdt4/w3btc say "44" -- stale, correct when
-  updating those beads). doc-architecture.md's own stamp interacts with the
-  TRACKS_RE first-match hazard documented at checker :151-163.
+- 39 files still carry stamps (the closed 9hdt4 and the epic said "44" --
+  corrected on the epic 2026-08-22). doc-architecture.md's own stamp
+  interacts with the TRACKS_RE first-match hazard documented at checker
+  :151-163.
 - Tool docs: voice-ai.md :302-341 documents tool SEMANTICS; technical_guide
   contract-4 table :344-353 is a COUPLING map. Same nouns, different facts --
   NOT duplicates (review-verified: switch_to_field appears only in the
@@ -75,16 +78,30 @@ prompts, and doc formats.
 
 ## Epic structure
 
-**Extend epic w3btc** (update its description to the broadened scope, point
-`plan:` at this file, correct its "44 stamps" to 39). No second docs epic.
-Existing children unchanged unless named below: jqgpl, m2j14 (conditional),
-m1ulw (measure-first). vjdcn is implemented AS WRITTEN (merge replaces the
-:597 rebase -- the plan adds nothing to it; an earlier draft misread it).
+**Extend epic w3btc** -- done 2026-08-22: the broadened scope and the design
+ground truth below are recorded on the epic, and this file is its `plan:`
+pointer. No second docs epic.
+
+**polyglot-pdf-9hdt4 is CLOSED as superseded** (not "unchanged"): its scope
+was this plan's B1a + B1c + B1b, it could not carry 1-3 binary exit criteria,
+and its recorded implementation note recommended the commit-ancestry design
+that the adversarial review proved invalid here. Closing it was deliberate --
+left open, a session could have claimed it and duplicated three beads while
+resurrecting the broken design. Its still-valid investigation notes (the
+overstated docstring objection; the doc-first-then-code case) are carried into
+B1a's exit criteria. The "44 stamps" figure it and the epic carried is wrong;
+39 is correct.
+
+Other existing children unchanged: jqgpl, m2j14 (conditional), m1ulw
+(measure-first). vjdcn is implemented AS WRITTEN (merge replaces the :597
+rebase -- this plan adds nothing to it; an earlier draft misread it).
 
 ## Beads
 
 ### B1a = polyglot-pdf-fytzi (new, P1): the ack mechanism + freshness rule, mechanism-only
-**No doc files touched. First PR of the epic.**
+**No doc files touched. First PR of the epic. Supersedes the closed 9hdt4 --
+do NOT implement that bead's ancestry recommendation; see the ground-truth
+block above for why it is invalid under squash-merge.**
 - Keep the existing timestamp compare. Add ONE new doc_ct source: a per-doc
   ack file `docs/freshness/<slug>.ack` (NOT dot-prefixed -- avoids gitignore
   shadowing and hidden-dir invisibility; test asserts the path is not
