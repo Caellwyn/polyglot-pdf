@@ -371,7 +371,7 @@ modal renders exactly these paragraphs -- one source, no separate fullText" --
 is now TRUE of shipped behavior and may be cited as current.
 
 **The acceptance record now names WHICH text was agreed to.** `POST
-/api/disclaimer-acceptance` logs `script_version` (bd
+/api/disclaimer-acceptance` records `script_version` (bd
 `polyglot-pdf-s1iex.7`) -- the hash of the exact per-language script, taken
 from the intro route's `X-Intro-Script-Version` response header so the backend
 stays the single source of it. That is what turns the epic's determinism into
