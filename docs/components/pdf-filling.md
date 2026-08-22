@@ -2,12 +2,10 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-i9e79: added the "Draft
-snapshots" paragraph documenting the bounded `_drafts/<n>/` ring (bd
-polyglot-pdf-y2l0p) alongside the revision archive, and added
-`backend/routes/editor_kit_routes.py` to this doc's tracked-source
-declaration above -- the file the archive/lifecycle/lock sections already
-cite extensively, but which the Tracks line had never named.)*
+*Last updated: 2026-08-22 (bd polyglot-pdf-7hicd: noted the new
+`_safe_pdf_filename` guard in the request-flow step 3 -- `/fill-pdf` is the
+one route whose `pdf_filename` never went through the manifest allowlist,
+so it needed its own sanitiser rather than inheriting one.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -33,12 +31,17 @@ is [../standards/stateless-architecture.md](../standards/stateless-architecture.
    (Backend HTTP base: env override → `VITE_BACKEND_HTTP_URL` →
    current origin via Firebase rewrite → `localhost:8000` dev fallback.
    Manifest `/api/` asset paths resolve via `resolveKitAssetUrl` -- same base.)
-3. The backend (`backend/routes/pdf_fill_routes.py`) runs the shared
-   client-tier kit gates (`backend/services/kit_gates.py`: publish status +
-   firm visibility -- the body's caller-supplied `kit_id` made this the
-   fourth gated read, bd polyglot-pdf-vy6id; a private kit 404s for
-   non-members), then loads the blank PDF from the form-kit store, fills it,
-   and returns `application/pdf` bytes.
+3. The backend (`backend/routes/pdf_fill_routes.py`) first sanitises both
+   body fields the store will path-join (`_safe_kit_id`, same guard every
+   other `{kit_id}` route uses; `_safe_pdf_filename`, new for this route --
+   bd polyglot-pdf-7hicd. Unlike every other route, `pdf_filename` here comes
+   straight off the client body rather than the manifest allowlist, so
+   without its own guard a traversing value reached the store unsanitised),
+   then runs the shared client-tier kit gates (`backend/services/kit_gates.py`:
+   publish status + firm visibility -- the body's caller-supplied `kit_id`
+   made this the fourth gated read, bd polyglot-pdf-vy6id; a private kit 404s
+   for non-members), then loads the blank PDF from the form-kit store, fills
+   it, and returns `application/pdf` bytes.
 4. The client wraps the bytes in a Blob: `downloadPDF` (anchor download) or
    `printPDF` (opens a new window → `print()`; falls back to download if the popup
    is blocked — the tablet print path).
