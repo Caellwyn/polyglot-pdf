@@ -1,0 +1,95 @@
+"""Every reviewer agent must carry the read-only-on-the-working-tree rule.
+
+WHY THIS EXISTS (bd polyglot-pdf-fytzi, 2026-08-22). The three reviewer agents
+are given `Bash`, and their frontmatter `description:` said "Read-only on the
+codebase" -- but that field is ROUTING METADATA the orchestrator reads when
+picking an agent, not an instruction the agent itself sees. Nothing in any
+agent's BODY said not to mutate the tree.
+
+A reviewer then did exactly what nothing forbade: it ran experiments in the
+worktree the author was actively editing, stashed the author's uncommitted fix,
+and later restored files outright. The same two fixes had to be reconstructed
+twice, and the author spent the round chasing "my change vanished".
+
+These are presence-checks over prose, in the style of test_agents_md.py: they
+pin that the RULE and its load-bearing prohibitions exist in each agent's body,
+not their exact wording. The set of agents is DERIVED from the directory (any
+file whose description says it reviews), so a FOURTH reviewer added later is
+covered automatically instead of quietly shipping without the rule -- that is
+the enumerate-the-set lesson (CLAUDE.md scar #7) applied to agent prompts.
+"""
+import pathlib
+
+import pytest
+
+AGENTS_DIR = pathlib.Path(__file__).resolve().parent.parent / ".claude" / "agents"
+
+# The reviewers this rule governs. Derived, not hand-listed: any agent file
+# whose name ends in -reviewer is one, so a new reviewer inherits the pin.
+REVIEWER_FILES = sorted(AGENTS_DIR.glob("*reviewer*.md"))
+
+
+def _body(path: pathlib.Path) -> str:
+    """The agent's prompt body -- everything AFTER the YAML frontmatter.
+
+    Deliberately excludes frontmatter: a `description:` claiming "read-only"
+    is exactly the false comfort that let this bug ship. The agent reads the
+    BODY, so the body is what must carry the rule.
+    """
+    text = path.read_text(encoding="utf-8")
+    parts = text.split("---\n", 2)
+    return parts[2] if len(parts) >= 3 else text
+
+
+def test_reviewer_set_is_not_empty():
+    """Guard the guard: if the glob stops matching, every test below would
+    vacuously pass over an empty set."""
+    assert REVIEWER_FILES, f"no *reviewer*.md found under {AGENTS_DIR}"
+    names = {p.name for p in REVIEWER_FILES}
+    # The three that existed when this rule was written. A missing one means a
+    # rename that should be deliberate, not silent.
+    assert {
+        "fresh-eyes-reviewer.md",
+        "docs-reviewer.md",
+        "cross-surface-reviewer.md",
+    } <= names, f"a known reviewer disappeared or was renamed: {sorted(names)}"
+
+
+@pytest.mark.parametrize("path", REVIEWER_FILES, ids=lambda p: p.name)
+def test_body_states_the_read_only_rule(path):
+    """The rule must be in the BODY, not just the frontmatter description."""
+    body = _body(path).lower()
+    assert "read-only" in body, (
+        f"{path.name}: the agent body never says it is read-only. A "
+        "`description:` field saying so does NOT reach the agent."
+    )
+
+
+@pytest.mark.parametrize("path", REVIEWER_FILES, ids=lambda p: p.name)
+def test_body_forbids_the_commands_that_destroyed_work(path):
+    """Name the actual weapons, not just the principle.
+
+    `git stash` and `git checkout`/`restore` are what silently ate the author's
+    work; a rule that says only "be careful" would not have stopped it.
+    """
+    body = _body(path).lower()
+    for forbidden in ("git stash", "checkout"):
+        assert forbidden in body, (
+            f"{path.name}: body does not name `{forbidden}` as forbidden -- "
+            "this is the command class that destroyed uncommitted work"
+        )
+
+
+@pytest.mark.parametrize("path", REVIEWER_FILES, ids=lambda p: p.name)
+def test_body_still_permits_verification(path):
+    """The rule must not read as 'do less work'.
+
+    A reviewer that stops running tests to stay safe is a worse reviewer. The
+    prompt has to say tests are encouraged and give the mutation-testing
+    workaround, or the fix trades one failure mode for another.
+    """
+    body = _body(path).lower()
+    assert "run tests" in body or "running tests" in body, (
+        f"{path.name}: body forbids writing without explicitly permitting "
+        "test runs -- reviewers must not read this as 'verify less'"
+    )
