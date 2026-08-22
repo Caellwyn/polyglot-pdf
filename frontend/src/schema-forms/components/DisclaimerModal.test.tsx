@@ -1,7 +1,20 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from './DisclaimerModal';
+import { renderIntroParagraphs } from '../../shared/introScript';
+import introScript from '../../shared/introScript.json';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// DERIVED from the shipped script store, never hand-listed: the language set
+// is growing toward ~90 and a typed list rots silently (repo scar tissue).
+const SPOKEN_LANGUAGES = Object.keys(
+    (introScript as { languages: Record<string, unknown> }).languages,
+);
 
 describe('DisclaimerModal', () => {
     afterEach(() => {
@@ -280,29 +293,39 @@ describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', ()
 });
 
 // ===========================================================================
-// The ADVISORY register is load-bearing (bd polyglot-pdf-rtyia)
+// The UNDERTAKING register is load-bearing (bd polyglot-pdf-rtyia, register
+// settled by the maintainer 2026-08-19 in bd polyglot-pdf-nsb4y)
 // ===========================================================================
 //
 // docs/standards/confirmation-and-audit.md ("The deployment invariant") pins
-// three registers and which are LIVE. Two facts about this file are what make
-// that table true, and neither was guarded:
+// three registers and which are LIVE. ONE SOURCE is what makes that table
+// true now: what the modal RENDERS and what the model SPEAKS both come from
+// intro_script.json via renderIntroParagraphs, so a reader and a listener
+// accept the SAME terms behind the same Agree button.
 //
-//   1. fullText is what the LIVE MODEL READS ALOUD -- VoiceOverlay/
-//      VoiceOverlayMobile pass DISCLAIMER_TRANSLATIONS[lang].fullText to
-//      connectionManager.readDisclaimer(), which the backend relays verbatim
-//      to Gemini. It is not merely a screen-reader convenience.
-//   2. It ADVISES review; it must never UNDERTAKE it on the applicant's
-//      behalf. The staged intro script (backend/services/intro_script.json,
-//      unshipped -- bd s1iex.5) says "you agree to review ..."; that is a
-//      STRONGER register and adopting it here silently would change the
-//      user-facing legal posture without the counsel pass bd
-//      polyglot-pdf-nsb4y exists to get.
+//   1. DISCLAIMER_TRANSLATIONS is RETIRED as body text. It survives as the
+//      modal TITLE source and as a fallback for a caller that passes no
+//      introParagraphs. No app code renders or speaks its p1/p2/p3/fullText.
+//   2. The shipped register is the UNDERTAKING -- "you agree to review the
+//      completed document yourself and with a certified professional before
+//      filing" -- not the advisory "we strongly advise". Reverting to the
+//      advisory copy on EITHER surface reintroduces two legal registers
+//      behind one button, which is the bug nsb4y fixed.
 //
-// The SI is deliberately pinned to the weaker register too ("Do not promise
-// the user that a review WILL happen"), and bd rdsl is the precedent: the SI
-// once PROMISED review where the disclaimer only advised it, and that survived
-// the author, the tests and two review rounds.
-describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia)', () => {
+// WHY THE PINS BELOW LOOK THE WAY THEY DO. Guarding this by scanning source
+// for ".fullText" is NOT enough: fresh-eyes round 1 defeated exactly that with
+// `const { fullText } = DISCLAIMER_TRANSLATIONS[...]`, which reintroduced the
+// advisory register on the SPOKEN half with the whole suite green. The
+// behavioral pins live in VoiceOverlay.disclaimer.test.tsx and assert the
+// VALUE handed to readDisclaimer plus the text on SCREEN. The source scan
+// here is a cheap second layer, not the guarantee.
+//
+// The SI carries the matching register note (backend/config.py): review is
+// contractually REQUIRED and the applicant now UNDERTAKES it, but we still do
+// not promise a review WILL happen -- we do not control that. bd rdsl is the
+// precedent: the SI once PROMISED review where the disclaimer only advised
+// it, and that survived the author, the tests and two review rounds.
+describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia, nsb4y)', () => {
     const languages = Object.keys(DISCLAIMER_TRANSLATIONS);
 
     it('ships a disclaimer for every language, each with a spoken fullText', () => {
@@ -333,29 +356,76 @@ describe('DISCLAIMER_TRANSLATIONS register (bd polyglot-pdf-rtyia)', () => {
         },
     );
 
-    it.each(Object.keys(DISCLAIMER_TRANSLATIONS))(
-        '%s: the disclaimer ADVISES review, it does not UNDERTAKE it',
+    it.each(SPOKEN_LANGUAGES)(
+        '%s: the modal renders the SHARED script, not its own copy',
         (lang) => {
-            // English-anchored: the English source is not translated, so the
-            // undertaking phrasing is assertable verbatim. For the other
-            // languages this guards the specific regression of pasting the
-            // English undertaking in wholesale.
-            const t = DISCLAIMER_TRANSLATIONS[lang];
-            expect(
-                t.fullText.toLowerCase().includes('agree to review'),
-                `${lang}: the disclaimer now says the applicant AGREES to `
-                + `review. That is the STAGED intro-script register (bd `
-                + `s1iex.5), not the shipped advisory one. Changing the `
-                + `user-facing legal posture needs bd polyglot-pdf-nsb4y `
-                + `settled first -- see docs/standards/confirmation-and-audit.md.`,
-            ).toBe(false);
+            // REGISTER, settled by the maintainer 2026-08-19 (bd
+            // polyglot-pdf-nsb4y): ONE SOURCE. What the modal renders and what
+            // the model speaks both come from intro_script.json, so a reader
+            // and a listener accept the SAME terms behind the same Agree
+            // button. Before this, the modal said "we strongly advise"
+            // (advice) while the audio said "you agree to review" (an
+            // undertaking).
+            //
+            // This pins the WIRING -- that the rendered text IS the shared
+            // script. The CONTENT of the undertaking is pinned per-language in
+            // backend/tests/unit/test_intro_script.py, which anchors English
+            // verbatim and guards translations with calibrated length floors.
+            // Re-asserting an English phrase against translated text is the
+            // bug that pass caught; do not reintroduce it here.
+            render(
+                <DisclaimerModal
+                    isOpen
+                    selectedLanguage={lang}
+                    introParagraphs={renderIntroParagraphs(lang, 'I-90', 'I Agree')}
+                    onListenAgain={() => {}}
+                    onAgree={() => {}}
+                />,
+            );
+            for (const paragraph of renderIntroParagraphs(lang, 'I-90', 'I Agree')) {
+                expect(screen.getByText(paragraph)).toBeTruthy();
+            }
         },
     );
 
-    it('English advises review by a qualified professional', () => {
-        // The clause the SI's hedge-and-defer policy leans on.
-        const en = DISCLAIMER_TRANSLATIONS['English'].fullText.toLowerCase();
-        expect(en).toContain('strongly advise');
-        expect(en).toContain('qualified professional');
+    it('the English undertaking reaches the SCREEN, verbatim', () => {
+        // English is the source language and is not translated, so the exact
+        // clause is assertable -- and this asserts it against the RENDERED
+        // DOM, not a constant: the whole bug was that a pinned constant said
+        // one thing while the screen showed another.
+        render(
+            <DisclaimerModal
+                isOpen
+                selectedLanguage="English"
+                introParagraphs={renderIntroParagraphs('English', 'I-90', 'I Agree')}
+                onListenAgain={() => {}}
+                onAgree={() => {}}
+            />,
+        );
+        const body = document.body.textContent?.toLowerCase() ?? '';
+        expect(body).toContain('agree to review the completed document');
+        expect(body).toContain('certified professional');
+    });
+
+    it('DISCLAIMER_TRANSLATIONS is no longer rendered OR spoken', () => {
+        // The retired constant (bd polyglot-pdf-nsb4y). It survives only as
+        // the modal TITLE source and the p1/p2/p3 fallback for a caller that
+        // passes no introParagraphs. If a future edit routes user-facing
+        // disclaimer BODY text through it again, the two-register bug returns:
+        // this constant carries "we strongly advise" (advice) while the
+        // shipped script carries "you agree to review" (an undertaking).
+        //
+        // Pinned as a SET: every app-code consumer, enumerated. A new one
+        // fails here rather than silently reintroducing the drift.
+        const overlaySrc = [
+            readFileSync(resolve(__dirname, '../../demo/VoiceOverlay.tsx'), 'utf-8'),
+            readFileSync(resolve(__dirname, '../../demo/VoiceOverlayMobile.tsx'), 'utf-8'),
+        ].join(String.fromCharCode(10));
+        // Strip comments: the explanatory notes ABOUT the retirement mention
+        // fullText by name, and must not count as consumers.
+        const code = overlaySrc
+            .replace(/\/\/.*/g, '')
+            .replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(code).not.toContain('.fullText');
     });
 });

@@ -1190,16 +1190,20 @@ class Settings(BaseModel):
 		# person. Opened to self-filers or sold direct-to-consumer, the deferral
 		# points nowhere and a careful hedge becomes a dead end.
 		#
-		# NOTE THE REGISTER SPLIT (bd polyglot-pdf-rdsl): review is REQUIRED
-		# contractually, but only ADVISED to the applicant -- the shipped
-		# disclaimer says "we strongly advise", it does not guarantee. Do not
-		# "tighten" this text into promising that a review WILL happen.
+		# NOTE THE REGISTER (bd polyglot-pdf-rdsl, updated by bd
+		# polyglot-pdf-nsb4y): review is REQUIRED contractually, and the shipped
+		# disclaimer now has the applicant UNDERTAKE it -- "you agree to review
+		# the completed document yourself and with a certified professional
+		# before filing". That is the applicant's commitment, NOT a promise by
+		# us that a review will occur. Do not "tighten" this text into
+		# guaranteeing that a professional WILL review the form: we do not
+		# control whether they do, and the deferral must stay a deferral.
 		#
 		# This prompt is NOT the record of that invariant -- see
 		# docs/standards/confirmation-and-audit.md ("The deployment invariant").
 		"ANSWERING QUESTIONS:\n"
 		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary quotes the form's official instructions back to you, and also holds the user's past answers and can identify a field you do not hold. Ask it what the instructions SAY, never what the user should do. Relay its answer FAITHFULLY AND WHOLE -- including every condition or exception it flags, and its closing deferral. Never trim the conditions to give a cleaner yes: the qualifier is the part that protects the user. Never add a conclusion of your own on top ('so yours should be fine') -- the guidance speaks, you do not decide their case.\n"
-		"ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements, documents, or what a rule means for THIS user -- even when the answer looks obvious, even if they press, and even if you are sure. Say what the official guidance says, attribute it ('according to the instructions for this form ...'), state the conditions it puts on it, and close by telling them to confirm their own situation with the firm or professional reviewing their form. A qualified human is expected to review this form before it is filed; that reviewer makes the determinations, never you. Do not promise the user that a review WILL happen -- the disclaimer they accepted advises it rather than guaranteeing it.\n"
+		"ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements, documents, or what a rule means for THIS user -- even when the answer looks obvious, even if they press, and even if you are sure. Say what the official guidance says, attribute it ('according to the instructions for this form ...'), state the conditions it puts on it, and close by telling them to confirm their own situation with the firm or professional reviewing their form. A qualified human is expected to review this form before it is filed; that reviewer makes the determinations, never you. Do not promise the user that a review WILL happen -- the disclaimer has them AGREE to obtain review, which is their commitment, not our guarantee that it occurred.\n"
 		"INFORMATION, NEVER ADVICE: you explain what a field expects and what the official instructions say. You never tell the user what to enter, which option to choose, or what applies to their situation -- those decisions are theirs alone. 'The instructions say category a covers X' is information; 'you should check box a' is advice. Never give advice."
 	)
 

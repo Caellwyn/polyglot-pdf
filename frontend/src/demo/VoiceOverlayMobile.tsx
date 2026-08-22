@@ -672,7 +672,17 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Pass the full translated disclaimer text (mirrors desktop VoiceOverlay.tsx):
 			// omitting it makes the backend log missing_disclaimer_text and read a generic
 			// fallback instead of the verbatim legal disclaimer (bd polyglot-pdf-cd0).
-			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
+			// ONE SOURCE (bd polyglot-pdf-nsb4y): the model reads the SAME
+			// paragraphs the modal renders, joined. It used to read
+			// DISCLAIMER_TRANSLATIONS.fullText, which carries only "we strongly
+			// advise" -- while the modal (and Sol's clip) carry "you agree to
+			// review". Same Agree button, two legal registers, decided by
+			// whether the user listened or read. The heading is NOT script.
+			const disclaimerText = renderIntroParagraphs(
+				selectedLanguage,
+				introFormNumber,
+				(BUTTON_TRANSLATIONS[selectedLanguage] || BUTTON_TRANSLATIONS['English']).agree,
+			).join(' ')
 			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
 	}, [introEnabled, status, pendingDisclaimerRead, connectionManager, selectedLanguage])
@@ -770,7 +780,17 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Send read_disclaimer message using the same proven pattern. Pass the
 			// full translated text so the backend reads the verbatim disclaimer, not
 			// the generic missing_disclaimer_text fallback (bd polyglot-pdf-cd0).
-			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
+			// ONE SOURCE (bd polyglot-pdf-nsb4y): the model reads the SAME
+			// paragraphs the modal renders, joined. It used to read
+			// DISCLAIMER_TRANSLATIONS.fullText, which carries only "we strongly
+			// advise" -- while the modal (and Sol's clip) carry "you agree to
+			// review". Same Agree button, two legal registers, decided by
+			// whether the user listened or read. The heading is NOT script.
+			const disclaimerText = renderIntroParagraphs(
+				selectedLanguage,
+				introFormNumber,
+				(BUTTON_TRANSLATIONS[selectedLanguage] || BUTTON_TRANSLATIONS['English']).agree,
+			).join(' ')
 			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
 	}
@@ -1322,10 +1342,15 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				selectedLanguage={selectedLanguage}
 				onListenAgain={handleDisclaimerListenAgain}
 				onAgree={handleDisclaimerAgree}
-				// ONE SOURCE (bd polyglot-pdf-s1iex.5): the exact paragraphs the
-				// backend synthesizes. Omitted when the flag is off, which keeps
-				// today's p1/p2/p3 text verbatim.
-				introParagraphs={introEnabled && selectedLanguage
+				// ONE SOURCE (bd polyglot-pdf-s1iex.5, unconditional as of bd
+				// polyglot-pdf-nsb4y): the exact paragraphs the backend
+				// synthesizes -- NOT gated on introEnabled. That gate was the bug:
+				// it tied the WRITTEN legal text to whether AUDIO plays, so a
+				// reader got "we strongly advise" (advice) while a listener got
+				// "you agree to review" (an undertaking) behind the SAME Agree
+				// button. The audio flag may gate the CLIP; it must never gate
+				// which legal terms the applicant accepts.
+				introParagraphs={selectedLanguage
 					? renderIntroParagraphs(
 						selectedLanguage,
 						introFormNumber,

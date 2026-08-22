@@ -22,7 +22,10 @@ makes the legal determinations; the app never does. This is a **deployment
 precondition that shipped behavior already depends on** (the SI's hedge-and-defer
 answer policy defers to "the firm or professional reviewing their form"), so do
 not reason from a filing-app or self-filer mental model. Full invariant, the
-behaviors resting on it, and the advisory-vs-required register distinction:
+behaviors resting on it, and the required-vs-undertaken register distinction
+(what the FIRM is contractually required to do vs. what the APPLICANT agrees
+to -- the applicant now UNDERTAKES review, bd `polyglot-pdf-nsb4y`; we still
+never guarantee it happened):
 [`docs/standards/confirmation-and-audit.md`](docs/standards/confirmation-and-audit.md).
 
 A browser SPA streams the user's voice over a

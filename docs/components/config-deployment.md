@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-19 (bd polyglot-pdf-vf48u: the deploy-gate sentence
+*Last updated: 2026-08-20 (bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review. Also bd polyglot-pdf-vf48u: the deploy-gate sentence
 enumerated `kit_is_complete`'s skip set as draft/unmarked only; widened to
 name submitted and unpublished too, matching the three-status lifecycle bd
 polyglot-pdf-6dz0 shipped). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
@@ -62,10 +62,14 @@ which bypasses the cache).
 `isIntroClipEnabled()`, bd `polyglot-pdf-s1iex.5`) is the CLIENT half of that
 pair. It cannot be a backend flag delivered in `session_ready` the way
 `jit_mode_enabled` is, because it decides whether the client connects
-**before Agree at all** -- a decision made before any connection exists. ON,
-the disclaimer modal renders the canonical scripted paragraphs and plays the
-synthesized clip; OFF is today's behavior verbatim (the legacy `p1/p2/p3`
-text and the model-read `read_disclaimer`). A window/localStorage override
+**before Agree at all** -- a decision made before any connection exists. It gates the AUDIO only. ON,
+the modal plays the synthesized clip; OFF, the model reads the disclaimer via
+`read_disclaimer`. It does NOT gate the disclaimer TEXT: since bd
+`polyglot-pdf-nsb4y` the modal renders the canonical scripted paragraphs
+UNCONDITIONALLY, and the model-read path speaks those same paragraphs, so a
+reader and a listener accept identical terms in either state. (The flag used
+to gate the text too, which put the advisory `p1/p2/p3` on screen while the
+clip spoke an undertaking -- two legal registers behind one Agree button.) A window/localStorage override
 (`__VFF_INTRO_CLIP`) exists for manual testing; unlike `isTestHarnessEnabled`
 it is **not** localhost-gated, because it gates no security-sensitive path.
 The ON/OFF skew quadrant (modal renders, route 503s, no audio, Agree still
