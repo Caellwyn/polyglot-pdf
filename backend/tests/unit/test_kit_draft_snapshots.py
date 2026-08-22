@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 import backend.routes.editor_kit_routes as ekr
 from backend.services.form_kits import (
     DRAFT_SNAPSHOT_LIMIT,
+    FormKitNotFound,
     FormKitStoreError,
     LocalFormKitStore,
 )
@@ -304,6 +305,31 @@ def test_a_TRAVERSING_snapshot_id_is_refused(client):
     assert _restore(c, "w7", "1abc").status_code == 400
 
 
+def test_load_draft_snapshot_ITSELF_refuses_a_traversing_id(client, tmp_path):
+    """bd polyglot-pdf-xddtl: the ROUTE's guard is not the only caller this
+    store method will ever have. Drive the store directly, bypassing the
+    route/router entirely -- a `..` segment never reaches FastAPI's router as
+    a literal string (it resolves the path first), so this is the only way to
+    exercise what load_draft_snapshot itself does with one.
+
+    A real escape, reproduced before this bead's fix landed: a sibling
+    directory outside the kit's own tree, read back via
+    load_draft_snapshot('w7', '../../../outside_secret'). Three levels, not
+    two: the real path being escaped is
+    <root>/w7/_drafts/<snapshot_id>/schema.json, so climbing out to a sibling
+    of <root> itself takes _drafts -> w7 -> root -- three hops."""
+    c, store, root = client
+    _make_kit(root, "w7", schema=_schema("A"))
+
+    outside = tmp_path.parent / "outside_secret"
+    outside.mkdir(exist_ok=True)
+    (outside / "schema.json").write_text(json.dumps({"pwn": True}), encoding="utf-8")
+
+    for bad in ("../../../outside_secret", "1abc", "1/2", "-1", "1.5", ""):
+        with pytest.raises(FormKitNotFound):
+            _run(store.load_draft_snapshot("w7", bad))
+
+
 def test_an_unknown_snapshot_404s(client):
     c, _store, root = client
     _make_kit(root, "w7", schema=_schema("A"))
@@ -440,6 +466,25 @@ def test_GCS_load_of_a_missing_snapshot_raises_NotFound():
 
     with pytest.raises(FormKitNotFound):
         _run(store.load_draft_snapshot("w7", "999"))
+
+
+def test_GCS_load_draft_snapshot_ITSELF_refuses_a_traversing_id():
+    """bd polyglot-pdf-xddtl's GCS twin. _build_blob_path just joins its
+    parts with "/" -- blob names are flat strings with no path-resolution
+    semantics, so a ".."-bearing snapshot_id does not climb anywhere; it
+    becomes a literal substring of the constructed blob name. The registry
+    key below is that literal construction -- "form-kits/w7/_drafts/../other-
+    firms-kit/schema.json", NOT a resolved "form-kits/other-firms-kit/..." --
+    because a real fake-GCS backend does exactly this flat string match, and
+    proving the guard matters means proving this exact literal would
+    otherwise resolve to a real blob."""
+    injected_path = "form-kits/w7/_drafts/../other-firms-kit/schema.json"
+    registry = {injected_path: {"data": json.dumps({"pwn": True})}}
+    store = _gcs_store(registry)
+
+    for bad in ("../other-firms-kit", "1abc", "1/2", "-1", "1.5", ""):
+        with pytest.raises(FormKitNotFound):
+            _run(store.load_draft_snapshot("w7", bad))
 
 
 # --- the guards that had no test --------------------------------------------
