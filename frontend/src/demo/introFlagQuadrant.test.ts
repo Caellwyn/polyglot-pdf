@@ -87,11 +87,20 @@ describe.each(OVERLAYS)('%s: intro flag disables the legacy read', (file) => {
   })
 
   it('still HAS the legacy path for the flag-off quadrant', () => {
-    // bead s1iex.6 owns deleting read_disclaimer entirely. Until then,
-    // flag-off must remain exactly today's behavior -- this bead must not
+    // bd polyglot-pdf-vr5bj owns deleting read_disclaimer entirely (s1iex.6
+    // is closed and shipped the single-handshake change instead). Until the
+    // flags flip, flag-off must keep working -- this bead must not
     // half-delete it.
+    //
+    // The second assertion used to be `toContain('DISCLAIMER_TRANSLATIONS')`,
+    // which pinned that the legacy path SPOKE the legacy text. bd
+    // polyglot-pdf-nsb4y retired that constant as body text, leaving only an
+    // import -- so the assertion degraded to a string-presence check
+    // satisfiable by a line that could be deleted with zero behavioral
+    // effect (tsconfig sets no noUnusedLocals, so tsc would not notice).
+    // Pin what the legacy path ACTUALLY speaks now: the shared script.
     const src = overlaySource(file)
     expect(src).toContain('connectionManager.readDisclaimer(')
-    expect(src).toContain('DISCLAIMER_TRANSLATIONS')
+    expect(src).toContain('renderIntroParagraphs(')
   })
 })
