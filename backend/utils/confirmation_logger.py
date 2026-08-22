@@ -383,13 +383,45 @@ def log_field_confirmation(
 _FORM_SESSION_ID_RE = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 
 
+# Windows treats these as DEVICES, not files, with or without an extension:
+# opening "NUL.jsonl" succeeds and discards every byte, so an attacker could
+# make a session's evidence vanish silently rather than noisily. This backend
+# runs on Linux in production and Windows in local dev; the check is
+# unconditional so behavior does not diverge between them.
+_WINDOWS_RESERVED = frozenset(
+    ["CON", "PRN", "AUX", "NUL"]
+    + ["COM%d" % i for i in range(1, 10)]
+    + ["LPT%d" % i for i in range(1, 10)]
+)
+
+
 def _is_safe_session_id(form_session_id: str) -> bool:
-    """Whether this id is safe to use as a single filename segment."""
-    return (
-        isinstance(form_session_id, str)
-        and ".." not in form_session_id
-        and _FORM_SESSION_ID_RE.fullmatch(form_session_id) is not None
-    )
+    """Whether this id is safe to use as a single filename segment.
+
+    Rejects, in order: non-strings; anything containing "..";  anything outside
+    the charset/length bound; a name that is only dots; a name ending in a dot
+    (Windows silently strips trailing dots, so "x." and "x" collide); and the
+    Windows reserved device names.
+
+    All of these were reached by adversarially attacking this function rather
+    than by reasoning about it -- the device names and trailing dots passed the
+    first version (bd polyglot-pdf-0dsv4).
+    """
+    if not isinstance(form_session_id, str):
+        return False
+    if ".." in form_session_id:
+        return False
+    if _FORM_SESSION_ID_RE.fullmatch(form_session_id) is None:
+        return False
+    if form_session_id.strip(".") == "":
+        return False
+    if form_session_id.endswith("."):
+        return False
+    # Windows matches the device name before the extension, case-insensitively.
+    stem = form_session_id.split(".", 1)[0].upper()
+    if stem in _WINDOWS_RESERVED:
+        return False
+    return True
 
 
 def _write_confirmation_to_file(form_session_id: str, event: dict) -> None:

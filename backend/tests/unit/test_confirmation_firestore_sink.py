@@ -767,12 +767,25 @@ def test_firm_attribution_REFUSES_to_guess_when_records_disagree():
 
 @pytest.mark.parametrize("unsafe", [
     "../../PWNED",
+    ".." + chr(92) + ".." + chr(92) + "PWNED",   # Windows separators
     "..",
     "a/b",
-    "a\b",
+    "a" + chr(92) + "b",
     "/etc/passwd",
-    "fss_x\n",          # the fullmatch-vs-match trap (bd polyglot-pdf-sbfk)
-    "fss_x\nfss_y",
+    "C:" + chr(92) + "evil",                            # drive-qualified
+    chr(92) + chr(92) + "server" + chr(92) + "share",   # UNC
+    "%2e%2e%2fPWNED",                                   # url-encoded
+    "%252e%252e%252f",                                  # double-encoded
+    "fss_x" + chr(0),                                   # NUL byte
+    "fss_x\n",   # the fullmatch-vs-match trap (bd polyglot-pdf-sbfk)
+    # Windows RESERVED DEVICE NAMES. "NUL.jsonl" opens the null device and
+    # discards every byte -- SILENT evidence loss, worse than a noisy failure.
+    # These passed the first version of this validator; found by attacking it
+    # rather than reasoning about it.
+    "CON", "con", "NUL", "nul.jsonl", "COM1", "LPT9", "PRN", "AUX",
+    "fss_x.",           # Windows strips trailing dots: "x." and "x" collide
+    ".",
+    "...",
     "",
     "x" * 129,          # length bound
 ])
@@ -782,10 +795,15 @@ def test_an_unsafe_session_id_is_refused_as_a_filename(unsafe):
 
 @pytest.mark.parametrize("safe", [
     "fss_abc123_xyz789",   # the real shape from schemaFormState.ts
+    "fss_1755000000_ab12cd34",
     "fss_a_b",
     "a",
     "A-Z_0.9",
     "x" * 128,             # at the bound, not over it
+    # NEAR-MISSES on the device list: ordinary names that must NOT be refused.
+    # Silently dropping a legitimate id is WORSE than the traversal -- it is
+    # evidence loss with no error at all.
+    "CONSOLE", "NULLABLE", "COM10", "AUXILIARY",
 ])
 def test_a_legitimate_session_id_is_accepted(safe):
     assert cl._is_safe_session_id(safe) is True
