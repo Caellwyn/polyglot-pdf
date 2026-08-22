@@ -208,7 +208,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
     `schema.fields.find` by id). Duplicate ids silently drop a field (dict
     overwrite); an unknown id returns `undefined`.
   - `pdf_field_name` (field- and option-level): consumed only by the fill route
-    (`backend/routes/pdf_fill_routes.py:115-117`, options :434-442). Missing =
+    (`backend/routes/pdf_fill_routes.py:142-144`, options :461-469). Missing =
     field silently absent from the filled PDF.
   - `name` vs `spoken_name`: guidance builds speak
     `spoken_name || name || id` (`backend/services/manifest_service.py:125`).
@@ -375,11 +375,11 @@ plus the in-browser preview
 `{kit_id, pdf_filename, field_values, form_schema}`
 (`frontend/src/schema-forms/utils/pdfFiller.ts:98-103`). A payload-shape change
 made against only one call site silently misses the other two.
-Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
+Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:62-68`).
 
 - **The backend fills from the CLIENT-SUBMITTED `form_schema`**, typed
   `Dict[str, Any]` -- no `FormSchema` validation runs at fill time, the kit
-  store is consulted only for the PDF bytes (:68), and the extraction-time
+  store is consulted only for the PDF bytes (:95), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
   the editor/publish surface (`_load_kit_dump`,
   `backend/routes/editor_kit_routes.py:687`, with 7 call sites across the
@@ -389,16 +389,16 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (`pdf_fill_routes.py:107-131`); widget dispatch by
-  `field_type` (`pdf_fill_routes.py:409-681`):
-  text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
-  (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
+  exact id always winning (`pdf_fill_routes.py:134-158`); widget dispatch by
+  `field_type` (`pdf_fill_routes.py:436-708`):
+  text via `fill_widget` (:244-304) with cosmetic-only Comb overflow handling
+  (:184-242), checkboxes via `get_button_on_state` (:163-179, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
-  direct `xref_set_key` writes (:475-476, within the wider :459-495 branch).
+  direct `xref_set_key` writes (:502-503, within the wider :486-522 branch).
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (`pdf_fill_routes.py:410-412`).
-- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
+  (`pdf_fill_routes.py:437-439`).
+- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:718-724`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
 
@@ -466,7 +466,7 @@ tokens, not the client tier):
   off the `firm_id` ID-token claim (`kit_gates.py:67`, `firm_allowed_kits`;
   run off the event loop) -> enforced by `require_visible` (`:99`, 404 =
   invisibility) on the schema + pdf + fill reads
-  (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
+  (`pdf_fill_routes.py:109`) and by the list filter inside `list_form_kits`
   (`form_kit_routes.py:127`). The pdf route parses its bearer token
   OPTIONALLY (`:293`); an invalid token degrades to anonymous rather
   than 401.

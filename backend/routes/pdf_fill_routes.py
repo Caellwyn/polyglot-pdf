@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 import fitz  # PyMuPDF
 import structlog
 
+from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.auth import require_auth
 from backend.services.kit_gates import (
 	load_live_metadata,
@@ -22,12 +23,35 @@ from backend.services.kit_gates import (
 	require_visible,
 )
 from backend.services.form_kits import (
+	_SAFE_FILENAME_RE,
 	FormKitNotFound,
 	FormKitStoreError,
 	get_form_kit_store,
 )
 
 _log = structlog.get_logger().bind(module="pdf_fill_routes")
+
+
+def _safe_pdf_filename(pdf_filename: str) -> str:
+	"""Return pdf_filename if it is a safe bare filename, else raise HTTP 400.
+
+	Every OTHER {kit_id} route resolves pdf_filename through the manifest (an
+	allowlist normalized by form_kits.normalize_manifest at write time) via
+	_resolve_kit_filenames -- it never trusts a raw client value. This route is
+	the one exception: PDFFillRequest.pdf_filename comes straight from the POST
+	body, never through that allowlist, so store.load_pdf_bytes joined it into a
+	path/blob-path with no guard at all (bd polyglot-pdf-7hicd, found tracing bd
+	polyglot-pdf-xddtl's store-level guard out to its siblings). Same charset as
+	form_kits._SAFE_FILENAME_RE (the single source of truth for what a safe
+	filename looks like); raises rather than degrading to a default the way
+	form_kits.safe_filename does, because there is no legitimate default here --
+	the caller asked for a specific file and a substituted one would silently
+	return the wrong PDF instead of failing loudly.
+	"""
+	if ".." in pdf_filename or not _SAFE_FILENAME_RE.fullmatch(pdf_filename):
+		raise HTTPException(status_code=400, detail="Invalid pdf filename")
+	return pdf_filename
+
 
 # Characters that terminate or escape a raw PDF /Name token. An on-state
 # containing any of these cannot be written via direct xref surgery without
@@ -63,29 +87,32 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 	reads enforce. Same gates, same 404 denial (existence is the secret).
 	"""
 
+	kit_id = _safe_kit_id(request.kit_id)
+	pdf_filename = _safe_pdf_filename(request.pdf_filename)
+
 	store = get_form_kit_store()
 	_log.info(
 		"pdf_fill_request",
-		kit=request.kit_id,
-		pdf=request.pdf_filename,
+		kit=kit_id,
+		pdf=pdf_filename,
 		field_count=len(request.field_values),
 	)
 
 	# Log the field IDs present (never the values -- they are PII/PHI). bd hjo
 	if request.field_values:
 		sample_field_ids = list(request.field_values.keys())[:5]
-		_log.info("pdf_fill_sample_field_ids", kit=request.kit_id, sample_field_ids=sample_field_ids)
+		_log.info("pdf_fill_sample_field_ids", kit=kit_id, sample_field_ids=sample_field_ids)
 
 	try:
-		meta = await load_live_metadata(store, request.kit_id)
-		require_published(store, request.kit_id, meta)
-		await require_visible(request.kit_id, meta, user)
-		pdf_bytes = await store.load_pdf_bytes(request.kit_id, request.pdf_filename)
+		meta = await load_live_metadata(store, kit_id)
+		require_published(store, kit_id, meta)
+		await require_visible(kit_id, meta, user)
+		pdf_bytes = await store.load_pdf_bytes(kit_id, pdf_filename)
 	except FormKitNotFound as exc:
-		_log.error("kit_pdf_not_found", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))
+		_log.error("kit_pdf_not_found", kit=kit_id, pdf=pdf_filename, error=str(exc))
 		raise HTTPException(status_code=404, detail=str(exc)) from exc
 	except FormKitStoreError as exc:
-		_log.error("kit_pdf_load_failed", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))
+		_log.error("kit_pdf_load_failed", kit=kit_id, pdf=pdf_filename, error=str(exc))
 		raise HTTPException(status_code=502, detail="Unable to load PDF for requested kit") from exc
 
 	doc = None
@@ -737,7 +764,7 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 			content=filled_pdf_bytes,
 			media_type="application/pdf",
 			headers={
-				"Content-Disposition": f"attachment; filename={request.pdf_filename}",
+				"Content-Disposition": f"attachment; filename={pdf_filename}",
 				"Content-Length": str(len(filled_pdf_bytes)),
 			},
 		)
