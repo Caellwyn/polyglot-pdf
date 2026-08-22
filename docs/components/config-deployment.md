@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-19. See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-20 (bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
