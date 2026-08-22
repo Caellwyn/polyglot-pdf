@@ -752,3 +752,72 @@ def test_firm_attribution_REFUSES_to_guess_when_records_disagree():
         {"event": "field_confirmed", "firm_id": "firm-b"},
     ]
     assert cl.firm_of_events(events) is None
+
+
+# --- path traversal: form_session_id becomes a FILENAME -------------------
+#
+# POST /api/disclaimer-acceptance is UNAUTHENTICATED (Agree fires before any
+# session exists), and bd polyglot-pdf-0dsv4 made its client-supplied
+# form_session_id reach the filesystem. "../../PWNED" wrote a file two
+# directories outside CONFIRMATION_LOG_DIR and returned 200 -- reproduced in
+# the cross-surface review of that bead, before this guard existed.
+#
+# Validated at the SINK, not in the route, so every caller is covered --
+# including ones added later that forget.
+
+@pytest.mark.parametrize("unsafe", [
+    "../../PWNED",
+    "..",
+    "a/b",
+    "a\b",
+    "/etc/passwd",
+    "fss_x\n",          # the fullmatch-vs-match trap (bd polyglot-pdf-sbfk)
+    "fss_x\nfss_y",
+    "",
+    "x" * 129,          # length bound
+])
+def test_an_unsafe_session_id_is_refused_as_a_filename(unsafe):
+    assert cl._is_safe_session_id(unsafe) is False
+
+
+@pytest.mark.parametrize("safe", [
+    "fss_abc123_xyz789",   # the real shape from schemaFormState.ts
+    "fss_a_b",
+    "a",
+    "A-Z_0.9",
+    "x" * 128,             # at the bound, not over it
+])
+def test_a_legitimate_session_id_is_accepted(safe):
+    assert cl._is_safe_session_id(safe) is True
+
+
+def test_an_unsafe_session_id_writes_NO_file(tmp_path, monkeypatch):
+    """The guard must actually prevent the write, not just return False.
+
+    NOTE THE DEPTH. "../../PWNED" escapes TWO levels above the log dir, so a
+    check that only globs the log dir -- or even its parent -- passes while
+    the file lands somewhere else entirely. My first version of this test did
+    exactly that and stayed green with the guard disabled. Nest the log dir
+    deep enough that every escape target is still inside tmp_path, then assert
+    NOTHING was written anywhere beneath it.
+    """
+    log_dir = tmp_path / "a" / "b" / "c" / "confirmations"
+    log_dir.mkdir(parents=True)
+    monkeypatch.setenv("CONFIRMATION_LOG_DIR", str(log_dir))
+
+    for unsafe in ("../../PWNED", "../ESCAPED", "..", "a/b"):
+        cl._write_confirmation_to_file(unsafe, {"event": "disclaimer_accepted"})
+
+    written = list(tmp_path.rglob("*.jsonl"))
+    assert written == [], f"files escaped the log dir: {written}"
+
+
+def test_a_legitimate_session_id_STILL_writes(tmp_path, monkeypatch):
+    """The guard must not break the normal path -- pin both directions."""
+    log_dir = tmp_path / "confirmations"
+    log_dir.mkdir()
+    monkeypatch.setenv("CONFIRMATION_LOG_DIR", str(log_dir))
+
+    cl._write_confirmation_to_file("fss_good_1", {"event": "disclaimer_accepted"})
+
+    assert (log_dir / "fss_good_1.jsonl").exists()

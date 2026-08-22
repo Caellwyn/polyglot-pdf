@@ -16,6 +16,7 @@ retrievable per form-session. Events are metadata-only (field ids, methods,
 timestamps -- never values), so this persistence does not touch the
 stateless/no-PII invariant (docs/standards/stateless-architecture.md).
 """
+import re
 import os
 import threading
 import time
@@ -371,13 +372,48 @@ def log_field_confirmation(
     _submit_firestore_write(confirmation_event)
 
 
+# A form session id is client-generated: `fss_<base36 ts>_<8 chars>`
+# (schemaFormState.ts). It becomes a FILENAME below, so it must be a single
+# path segment and nothing else.
+#
+# fullmatch, NOT match: with `match` the `$` anchor also matches just before a
+# trailing newline, so an id ending in a newline would pass and reach the
+# filesystem. That exact bug was found in _safe_kit_id (bd
+# polyglot-pdf-sbfk) -- same trap, same fix.
+_FORM_SESSION_ID_RE = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+
+
+def _is_safe_session_id(form_session_id: str) -> bool:
+    """Whether this id is safe to use as a single filename segment."""
+    return (
+        isinstance(form_session_id, str)
+        and ".." not in form_session_id
+        and _FORM_SESSION_ID_RE.fullmatch(form_session_id) is not None
+    )
+
+
 def _write_confirmation_to_file(form_session_id: str, event: dict) -> None:
     """
     Write confirmation event to dedicated log file.
 
     One log file per form session for easy correlation.
     File format: logs/confirmations/{form_session_id}.jsonl
+
+    REFUSES a form_session_id that is not a single safe path segment. This is
+    enforced HERE, at the write, rather than in any one caller: the id reaches
+    this function from an UNAUTHENTICATED route (POST /api/disclaimer-acceptance
+    -- Agree fires before any session exists, so it carries no token), and
+    "../../PWNED" wrote outside the log directory and returned 200 (reproduced,
+    bd polyglot-pdf-0dsv4 cross-surface review). Validating at the sink protects
+    every caller, including ones added later.
     """
+    if not _is_safe_session_id(form_session_id):
+        _log.error(
+            "confirmation_log_unsafe_session_id",
+            note="refused: not a single safe path segment; no file written",
+            length=len(form_session_id) if isinstance(form_session_id, str) else None,
+        )
+        return
     try:
         log_file = _confirmation_log_dir() / f"{form_session_id}.jsonl"
 
