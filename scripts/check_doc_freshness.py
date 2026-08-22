@@ -128,6 +128,10 @@ DOC_DIRS = ["docs/components", "docs/standards", "docs/doctrine"]
 # worst direction (acks vanish on merge, docs look stale, trust erodes).
 ACK_DIR = "docs/freshness"
 ACK_SUFFIX = ".ack"
+# Path separator in a flattened ack filename. Must be a character that cannot
+# appear in a doc path component, or the doc -> ack mapping stops being
+# injective and one doc's ack can clear another's staleness. See ack_path().
+ACK_SEP = "~"
 TRACKS_RE = re.compile(r"\*\*Tracks:\*\*\s*(.+)$", re.MULTILINE)
 # Match *Last updated: YYYY-MM-DD ...* (anything after the date is fine —
 # some docs include a parenthetical sprint annotation).
@@ -249,10 +253,18 @@ def ack_path(doc: Path) -> Path:
     """The ack file for a doc: docs/freshness/<flattened-doc-path>.ack.
 
     The slug flattens the doc's repo-relative path (docs/components/auth.md
-    -> components__auth.md.ack) so every doc gets a UNIQUE, one-per-file ack.
+    -> components~auth.md.ack) so every doc gets a UNIQUE, one-per-file ack.
     One file per doc is the whole point: two sessions acking two different
     docs touch two different files and never conflict -- the property the
     single shared `*Last updated:*` line did not have.
+
+    UNIQUENESS IS LOAD-BEARING, so the separator must be a character that
+    cannot occur in a path component. An earlier version used `__`, which
+    collides: `docs/components/auth.md` and `docs/components__auth.md` both
+    flatten to `components__auth.md.ack`, and one doc's ack would silently
+    clear the other's staleness -- a wrong answer with no error. `~` is not
+    legal in this repo's doc names and is rejected below if it ever appears,
+    so the mapping stays injective by construction rather than by luck.
     """
     resolved = doc.resolve()
     try:
@@ -266,7 +278,16 @@ def ack_path(doc: Path) -> Path:
         rel = resolved.name
     if rel.startswith("docs/"):
         rel = rel[len("docs/"):]
-    return REPO_ROOT / ACK_DIR / (rel.replace("/", "__") + ACK_SUFFIX)
+    if ACK_SEP in rel:
+        # Refuse rather than return a path that could shadow another doc's
+        # ack. A doc name containing the separator is not a supported shape;
+        # silently mapping it somewhere plausible is how a checker starts
+        # giving confidently wrong answers.
+        raise ValueError(
+            f"doc path contains the ack separator {ACK_SEP!r}, which would "
+            f"make its ack file ambiguous: {rel}"
+        )
+    return REPO_ROOT / ACK_DIR / (rel.replace("/", ACK_SEP) + ACK_SUFFIX)
 
 
 def ack_commit_time(doc: Path) -> int | None:
@@ -277,10 +298,24 @@ def ack_commit_time(doc: Path) -> int | None:
     still COUNTS during a session (so triage-then-commit works within one
     closeout), but its durable freshness value only exists once committed.
     """
-    ack = ack_path(doc)
-    if not ack.exists():
+    ack = ack_path_or_none(doc)
+    if ack is None or not ack.exists():
         return None
     return git_commit_time(ack)
+
+
+def ack_path_or_none(doc: Path) -> Path | None:
+    """ack_path(), but None instead of raising for an unsupported doc path.
+
+    The READ paths (freshness checking) must be total: this script is
+    warn-only and must never take down a closeout over a filename. The WRITE
+    path (--ack) deliberately keeps the raising version, so an author naming
+    a doc unsupportedly is told rather than given a silently-shadowed ack.
+    """
+    try:
+        return ack_path(doc)
+    except ValueError:
+        return None
 
 
 def read_ack(doc: Path) -> dict[str, str] | None:
@@ -290,8 +325,8 @@ def read_ack(doc: Path) -> dict[str, str] | None:
     to be READABLE IN A DIFF. A reviewer must be able to see what was
     verified and why without running anything.
     """
-    ack = ack_path(doc)
-    if not ack.exists():
+    ack = ack_path_or_none(doc)
+    if ack is None or not ack.exists():
         return None
     fields: dict[str, str] = {}
     for line in ack.read_text(encoding="utf-8").splitlines():
@@ -489,8 +524,14 @@ def check_doc(
     # Its durable value arrives when it is committed (closeout requires that
     # before the PR opens).
     ack_ct = ack_commit_time(doc)
-    if ack_ct is None and ack_path(doc).exists():
-        ack_ct = int(ack_path(doc).stat().st_mtime)
+    if ack_ct is None:
+        pending = ack_path_or_none(doc)
+        if pending is not None and pending.exists():
+            # Uncommitted ack: it counts NOW so triage-then-commit works
+            # inside one closeout. mtime is used only for this pre-commit
+            # window -- every durable comparison uses git commit times, per
+            # this module's note that mtimes do not survive clones.
+            ack_ct = int(pending.stat().st_mtime)
     if ack_ct is not None:
         doc_ct = ack_ct if doc_ct is None else max(doc_ct, ack_ct)
     if doc_ct is None:

@@ -1240,10 +1240,26 @@ class TestFreshnessAcks:
         a = freshness.ack_path(freshness.REPO_ROOT / "docs/components/auth.md")
         b = freshness.ack_path(freshness.REPO_ROOT / "docs/standards/testing.md")
         assert a != b
-        assert a.name == "components__auth.md" + freshness.ACK_SUFFIX
+        assert a.name == "components" + freshness.ACK_SEP + "auth.md" + freshness.ACK_SUFFIX
         assert a.parent == freshness.REPO_ROOT / freshness.ACK_DIR
         # Flattened: no nested dirs to create, no path-separator surprises.
         assert "/" not in a.name and "\\" not in a.name
+
+    def test_ack_path_refuses_a_doc_name_that_would_shadow_another(self):
+        """THE COLLISION THIS SEPARATOR EXISTS TO PREVENT.
+
+        With `__` as the separator, `docs/components/auth.md` and
+        `docs/components__auth.md` both flattened to the SAME ack file -- so
+        acking one silently cleared the other's staleness. A wrong answer with
+        no error is the worst failure a checker can have, so an unsupported
+        doc name is REFUSED rather than mapped somewhere plausible."""
+        collide = (freshness.REPO_ROOT / "docs"
+                   / ("components" + freshness.ACK_SEP + "auth.md"))
+        with pytest.raises(ValueError):
+            freshness.ack_path(collide)
+        # But the READ path stays total -- freshness is warn-only and must
+        # never take down a closeout over a filename.
+        assert freshness.ack_path_or_none(collide) is None
 
     def test_ack_dir_is_not_gitignored(self):
         """A silently-ignored ack directory fails in the WORST direction: acks
