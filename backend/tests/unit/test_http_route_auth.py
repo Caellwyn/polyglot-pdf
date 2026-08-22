@@ -656,6 +656,12 @@ _EXPECTED_GATED_ROUTES = {
     # test_firm_retire.py -- require_auth alone would let any authed user
     # reach it.
     ("POST", "/api/form-kits/{kit_id}/retire"),
+    # Firm staff mint a CLIENT link (bd polyglot-pdf-ugm6). Per-user Firebase
+    # auth, deliberately NOT a per-firm API key -- the employee's uid is what
+    # attributes the link. Its sibling POST /api/links/open is correctly
+    # ABSENT from this set: the client has no account, so the signed link IS
+    # the credential.
+    ("POST", "/api/links/mint"),
     ("POST", "/api/fill-pdf"),
     ("POST", "/api/tts/spellback"),
     ("POST", "/api/tts/intro"),
