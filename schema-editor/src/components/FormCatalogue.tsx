@@ -15,7 +15,10 @@ import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStam
 // Completion routes through the SAME editor endpoint the hosted catalogue uses
 // (bd polyglot-pdf-rh5v) so the publish gates and the translation drift sweep
 // run in local mode too -- one implementation, not two that disagree.
-import { setRemoteStatus } from '../utils/remoteKitStore';
+import {
+  listArchivedRevisions, loadArchivedSchema, setRemoteStatus,
+} from '../utils/remoteKitStore';
+import { ArchivedVersions } from './ArchivedVersions';
 // Dev-only single-kit deploy (bd polyglot-pdf-ipzh): absent in a static/hosted
 // build, so the probe returns null there and the button never renders.
 import { deployKit, getDeployTarget } from '../utils/deployKitClient';
@@ -1000,6 +1003,19 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                     Run the extractor to produce its schema.
                   </div>
                 )
+              )}
+              {/* Per-form archive disclosure (bd polyglot-pdf-qfyxr). The
+                  archive lives server-side (the store's _archive ring), so
+                  this renders only when the local backend is reachable AND
+                  serving this folder -- the same gate the status actions
+                  use. Collapsed and last: the archive is secondary. */}
+              {serverActionsOk && (
+                <ArchivedVersions
+                  kitId={kit.id}
+                  kitLabel={kit.label ?? kit.id}
+                  listRevisions={listArchivedRevisions}
+                  loadSchema={loadArchivedSchema}
+                />
               )}
             </li>
             );

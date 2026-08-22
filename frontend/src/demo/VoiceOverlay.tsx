@@ -1329,9 +1329,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				user_agent: navigator.userAgent,
 				// WHICH text they agreed to (bd polyglot-pdf-s1iex.7). Echoed from
 				// the intro route's X-Intro-Script-Version header, so the backend
-				// stays the single source of the hash. undefined on the legacy
-				// model-read path (no deterministic text to name) -- JSON.stringify
-				// drops the key, and the route's field is Optional.
+				// stays the single source of the hash. undefined whenever the intro
+				// player was never built -- introPlayerRef is populated only when
+				// introEnabled, so the DEFAULT deployment sends no version even
+				// though the user did read deterministic scripted text. That is a
+				// known audit gap, not a benign omission (bd polyglot-pdf-pyebx).
+				// JSON.stringify drops the key, and the route's field is Optional.
 				script_version: introPlayerRef.current?.scriptVersion(),
 			}),
 		}).then(

@@ -60,6 +60,19 @@ from backend.config import get_settings
 from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.services.kit_gates import (
+    is_safe_marker,
+    # ONE definition of the default/sanitized (schema, pdf) filename pair,
+    # beside the archive helper that is its main consumer. It was duplicated
+    # byte-for-byte here after that move (fresh-eyes r1) -- two copies of one
+    # rule is the shape CLAUDE.md scar #7 names.
+    _resolve_meta_names,
+    # Moved out of this module (bd polyglot-pdf-z6bk9): the client-tier firm
+    # retire route needs it too, and routes importing routes would be
+    # circular. Imported under its original private name so every call site
+    # here is unchanged.
+    _archive_published_revision,
+)
 from backend.adapters.text_ai_gemini import TextAIGemini
 from backend.services.editor_text_ai import (
     EditorTextAIUnavailable,
@@ -85,7 +98,6 @@ from backend.services.form_kits import (
     LocalFormKitStore,
     encode_marker,
     get_form_kit_store,
-    safe_filename,
     sibling_marker,
 )
 from backend.utils.confirmation_logger import (
@@ -188,8 +200,14 @@ class StoreHandshakeResponse(BaseModel):
     # The backend's root, for the error dialog. Local dev only, and it is a
     # path the operator already knows -- it is their own working copy.
     backendRoot: Optional[str] = None
-    # Why the handshake failed, for the dialog: "mismatch" (a different folder)
-    # or "unwritable" (the backend cannot read its own root).
+    # Why the handshake failed, for the dialog. The backend returns exactly
+    # three values: "not-a-local-store" (this deployment has no local root),
+    # "mismatch" (nothing readable at the backend's root -- no marker, or
+    # one it could not parse; the editor is pointed somewhere else),
+    # or "stale" (the marker is there but carries an older nonce). NOT
+    # "unwritable" -- that one is minted client-side when the editor cannot
+    # WRITE its marker, and it returns before this route is ever called
+    # (schema-editor/src/utils/formKitDirectory.ts).
     reason: Optional[str] = None
 
 
@@ -460,14 +478,6 @@ class UnclaimedWidgetsResponse(BaseModel):
     picker then simply shows nothing to add."""
 
     widgets: list[UnclaimedWidget]
-
-
-def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
-    """(schema_file, pdf_file) from a kit's metadata, defaulted + sanitized."""
-    meta = meta if isinstance(meta, dict) else {}
-    schema_file = safe_filename(meta.get("schema") or "schema.json", "schema.json")
-    pdf_file = safe_filename(meta.get("pdf") or "form.pdf", "form.pdf")
-    return schema_file, pdf_file
 
 
 # A kit's lifecycle status (bd polyglot-pdf-6dz0).
@@ -972,8 +982,11 @@ async def editor_store_handshake(
     root and reports whether the nonce matches.
 
     Read-only on the backend side: it never creates or deletes the file, so a
-    read-only store simply reports sameFolder=false with reason="unwritable"
-    (the file was never observed) instead of failing.
+    store it cannot read simply reports sameFolder=false with
+    reason="mismatch" (nothing readable was observed at its own root)
+    instead of failing. The editor knows whether its own marker WRITE
+    failed -- it just tried it -- so it picks the user-facing message;
+    this route only reports what it saw.
     """
     store = get_form_kit_store()
     if not isinstance(store, LocalFormKitStore):
@@ -1089,109 +1102,10 @@ async def _load_meta_or_404(store, kit_id: str) -> tuple[Optional[dict], set[str
     return meta, set(files_by_kit[kit_id])
 
 
-async def _archive_published_revision(store, kit_id: str, meta: Optional[dict]) -> Optional[str]:
-    """Copy the currently-PUBLISHED revision into the archive before it can be
-    edited. Returns the marker archived under, or None when nothing was archived.
-
-    bd polyglot-pdf-w3zw. The confirmation audit trail records kit_id + a
-    revision marker, but a marker is not a storage address and kit storage is
-    one slot per kit -- so overwriting a published schema used to destroy the
-    only copy of what an old record was confirmed against.
-
-    WHY THIS FIRES WHEN A REVISION IS RETIRED, not on promotion: a published
-    kit's schema cannot be written at all (every editing route refuses while it
-    is write-locked -- the publish gate). So retirement is the LAST moment the
-    published bytes still exist; by promotion time the new schema has already
-    replaced them.
-
-    THREE call sites retire a revision, and each archives first (bd
-    polyglot-pdf-6dz0 widened this from one):
-      1. complete -> draft   -- the classic edit cycle
-         (complete -> draft -> save -> complete).
-      2. complete -> unpublished -- retiring a revision outright.
-      3. the OUTGOING kit of a `replaces_kit_id` supersede, where a new edition
-         onboarded as its own kit takes over. Note this route produces a new
-         live revision WITHOUT any draft step, which is why the one-way
-         "complete -> draft -> ..." framing above is not the whole story.
-    Keep this list in step with docs/components/pdf-filling.md, which states the
-    same three triggers.
-
-    The marker is resolved from the SUPERSEDED revision's OWN schema, so it
-    matches what that revision's confirmation records carry (an edition_date if
-    the form has one, else the shape fingerprint) -- that is what makes a
-    fingerprint-era record still retrievable later.
-
-    Best-effort by design: an archive failure must not block the retirement
-    (which would strand a kit published-and-uneditable). It is logged LOUDLY --
-    the same posture as the confirmation sink, where losing the record is worse
-    than a slow path but never worth failing the user's action over.
-    """
-    schema_file, _pdf = _resolve_meta_names(meta)
-    try:
-        schema = await store.load_schema(kit_id, schema_file)
-    except (FormKitNotFound, FormKitStoreError) as exc:
-        _log.warning("kit_revision_archive_no_schema", kit_id=kit_id, error=str(exc))
-        return None
-
-    # Resolve through the SAME three ranks the confirmation record used, or the
-    # archive is keyed on something no record names and the retrieval this whole
-    # mechanism exists for silently fails (bd polyglot-pdf-xzw5; caught by Opus
-    # fresh-eyes, which showed an author_version kit archiving under a sha256:
-    # fingerprint while its records named the version).
-    _meta_block = schema.get("form_metadata")
-    _meta_block = _meta_block if isinstance(_meta_block, dict) else {}
-    marker = resolve_edition_marker(
-        _meta_block.get("edition_date"),
-        schema,
-        _meta_block.get("author_version"),
-    )
-    if not marker:
-        # No edition date AND no fingerprintable shape (an empty/fieldless
-        # schema): nothing a confirmation record could name, so nothing to key
-        # an archive on.
-        _log.warning("kit_revision_archive_no_marker", kit_id=kit_id)
-        return None
-
-    # Idempotence (exit criterion 2) vs. NOT LOSING A REVISION: skip only when
-    # the archived copy IS this schema, never merely because the marker name is
-    # taken. Markers are not unique keys -- an author who edits fields without
-    # bumping the government edition string produces two DIFFERENT revisions
-    # under one edition_date, and a marker-only check would treat the second as
-    # "already archived" and destroy it (fresh-eyes on this bead, reproduced
-    # live: retrieval then returns the WRONG schema, which for a legal record is
-    # worse than a missing one).
-    #
-    # So: same marker + same bytes -> skip (the cheap re-press case). Same marker
-    # + different bytes -> archive under a disambiguated segment so BOTH survive.
-    # Retrieval by the plain marker still finds the first; the sibling keeps the
-    # later revision recoverable instead of silently gone.
-    try:
-        existing = await store.load_archived_revision_or_none(kit_id, marker)
-        if existing == schema:
-            return None
-        store_marker = marker
-        if existing is not None:
-            # Distinct revision under a taken marker: suffix with this
-            # revision's own shape fingerprint, which is what actually
-            # distinguishes it (and is stable, so a repeat of THIS revision
-            # re-collides with itself and skips above on the next pass).
-            fingerprint = resolve_edition_marker(None, schema) or "revision"
-            # sibling_marker budgets the fingerprint against the segment length
-            # cap FIRST: naively joining the raw marker would let a long
-            # edition_date truncate the fingerprint away, at which point the
-            # sibling collides with the base and OVERWRITES the earlier
-            # revision (verified live by fresh-eyes on this bead).
-            store_marker = sibling_marker(marker, fingerprint)
-            if await store.load_archived_revision_or_none(kit_id, store_marker) == schema:
-                return None
-        await store.put_archived_revision(kit_id, store_marker, schema, meta)
-    except FormKitStoreError as exc:
-        _log.error("kit_revision_archive_failed", kit_id=kit_id, marker=marker,
-                   error=str(exc))
-        return None
-    _log.info("kit_revision_archived", kit_id=kit_id, marker=marker,
-              store_marker=store_marker)
-    return store_marker
+# _archive_published_revision now lives in backend/services/kit_gates.py
+# (imported above): bd polyglot-pdf-z6bk9 gave it a SECOND caller in the
+# client-tier routes, and routes importing routes would be circular --
+# editor_kit_routes already imports _safe_kit_id from form_kit_routes.
 
 
 class RetireCandidate(BaseModel):
@@ -1343,6 +1257,101 @@ async def list_kit_draft_snapshots(
     _log.info("draft_snapshots_listed", kit_id=kit_id, count=len(snapshots), role=role)
     return DraftSnapshotsResponse(
         snapshots=[DraftSnapshot(**s) for s in snapshots])
+
+
+class ArchivedRevisionEntry(BaseModel):
+    """One superseded revision (bd polyglot-pdf-qfyxr): the ENCODED archive
+    marker (the path segment under <kit>/_archive/) plus the archived
+    metadata snapshot's published_at (None when the snapshot predates the
+    stamp or is missing)."""
+    marker: str
+    published_at: Optional[str] = None
+
+
+class ArchivedRevisionsResponse(BaseModel):
+    revisions: list[ArchivedRevisionEntry]
+
+
+# The marker contract lives in kit_gates.is_safe_marker (ONE definition for
+# the client + editor archive routes); this wrapper only maps refusal to 400.
+def _safe_archive_marker(marker: str) -> str:
+    if not is_safe_marker(marker):
+        raise HTTPException(status_code=400, detail="Invalid revision marker")
+    return marker
+
+
+@router.get("/kits/{kit_id}/archive", response_model=ArchivedRevisionsResponse)
+async def list_kit_archive(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> ArchivedRevisionsResponse:
+    """This kit's superseded revisions, NEWEST FIRST (bd polyglot-pdf-qfyxr).
+
+    EDITOR-accessible: the archive is read-only history (the bytes old
+    confirmation records name), so reading it risks nothing an editor could
+    corrupt -- same reasoning as draft snapshots above. Sorted newest-first
+    by the archived snapshot's published_at; stampless revisions sort last.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    # 404 for a kit that does not exist rather than an empty list -- "no
+    # archived versions" and "no such form" are different answers (the
+    # draft-snapshots lesson, Opus fresh-eyes round 4 there).
+    await _load_meta_or_404(store, kit_id)
+    try:
+        markers = await store.list_archived_markers(kit_id)
+        snapshots = await asyncio.gather(
+            *(store.load_archived_metadata_or_none(kit_id, m) for m in markers)
+        )
+    except FormKitStoreError as exc:
+        _log.error("kit_archive_list_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to list archived revisions") from exc
+    revisions = []
+    for marker, snapshot in zip(markers, snapshots):
+        stamp = (snapshot or {}).get("published_at")
+        revisions.append(ArchivedRevisionEntry(
+            marker=marker,
+            published_at=stamp if isinstance(stamp, str) else None,
+        ))
+    revisions.sort(
+        key=lambda r: (r.published_at is not None, r.published_at or ""),
+        reverse=True,
+    )
+    _log.info("kit_archive_listed", kit_id=kit_id, count=len(revisions), role=role)
+    return ArchivedRevisionsResponse(revisions=revisions)
+
+
+@router.get("/kits/{kit_id}/archive/{marker}/schema")
+async def get_archived_kit_schema(
+    kit_id: str,
+    marker: str,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> JSONResponse:
+    """An archived revision's schema, READ-ONLY (bd polyglot-pdf-qfyxr).
+
+    There is deliberately no write counterpart: a superseded revision is what
+    the audit trail references, and editing it would corrupt those bytes --
+    the exact corruption the unpublished write-lock exists to prevent.
+    Returning to an old revision goes through the normal draft/publish flow,
+    never through the archive.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    marker = _safe_archive_marker(marker)
+    store = get_form_kit_store()
+    await _load_meta_or_404(store, kit_id)
+    try:
+        schema = await store.load_archived_revision(kit_id, marker)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Archived revision not found for kit {kit_id}") from exc
+    except FormKitStoreError as exc:
+        _log.error(
+            "kit_archive_read_failed", kit_id=kit_id, marker=marker, error=str(exc))
+        raise HTTPException(
+            status_code=502, detail="Unable to load archived revision") from exc
+    return JSONResponse(content=schema, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore",

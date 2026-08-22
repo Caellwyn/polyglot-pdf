@@ -2,7 +2,10 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-20 (bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review. Also bd polyglot-pdf-vf48u: the deploy-gate sentence
+enumerated `kit_is_complete`'s skip set as draft/unmarked only; widened to
+name submitted and unpublished too, matching the three-status lifecycle bd
+polyglot-pdf-6dz0 shipped). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -113,7 +116,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the
   `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
-  `/api/fill-pdf`, the form-kit list/schema reads, and both TTS routes
+  `/api/fill-pdf`, the form-kit list/schema reads, the archived-revision
+  reads `/api/form-kits/{kit_id}/archive` + `.../archive/{marker}/schema`
+  (bd `polyglot-pdf-qfyxr`), the firm retire write path
+  `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`), and both TTS routes
   `/api/tts/spellback` + `/api/tts/intro`). **LOCAL ONLY, fail-closed on
   deploy** (bd `polyglot-pdf-knmp`): with `K_SERVICE` set, `Settings` refuses
   to start and `verify_token` ignores the flag — no override exists. Auth
@@ -213,10 +219,12 @@ two channel scripts use.
   to `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
   `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`. A kit is
   uploaded (and listed in the manifest) only when its `metadata.json` has
-  `status: complete` — the `kit_is_complete` gate in `deploy-all.sh` skips draft
-  / unmarked kits so in-progress forms stay local + git-backed and never reach the
-  voice app (bd polyglot-pdf-b0pe). Both the upload loop and the manifest loop are
-  gated, so a draft is absent from GCS *and* the served manifest.
+  `status: complete` — the `kit_is_complete` gate in `deploy-all.sh` skips
+  draft, submitted, unmarked, AND unpublished (retired) kits, so in-progress
+  or no-longer-live forms stay local + git-backed and never reach the voice
+  app (bd polyglot-pdf-b0pe). Both the upload loop and the manifest loop are
+  gated, so a non-`complete` kit is absent from GCS *and* the served
+  manifest.
 - **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
   `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
   → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting:app`. The

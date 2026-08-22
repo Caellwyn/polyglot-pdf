@@ -291,6 +291,7 @@ def log_field_confirmation(
     confirmation_method: ConfirmationMethod,
     kit_id: Optional[str] = None,
     edition_date: Optional[str] = None,
+    firm_id: Optional[str] = None,
 ) -> None:
     """
     Log field confirmation event (NO PII).
@@ -311,8 +312,13 @@ def log_field_confirmation(
             Sourced from form_metadata.edition_date, NOT form_metadata.version --
             `version` is a schema-authoring field whose values differ in meaning
             per kit ("v9_conformant", "draft") and would be misleading here.
-        Both default to None so an older client that omits the handshake keys
-        degrades to the pre-47r3 record shape rather than erroring.
+        firm_id: The CUSTOMER FIRM this session ran under, from the staff
+            member's firm_id token claim (bd polyglot-pdf-xwlt, epic 02ye).
+            Identifies the FIRM, never the client -- per-firm usage is then an
+            equality query on this key. None for a session with no firm claim
+            (a legacy authed user or local dev), which logs exactly as before.
+        All three default to None so an older client that omits the handshake
+        keys degrades to the pre-47r3 record shape rather than erroring.
 
     CRITICAL: This function MUST NEVER receive or log actual field values or PII.
 
@@ -341,6 +347,10 @@ def log_field_confirmation(
         # client that does not send them.
         "kit_id": kit_id,
         "edition_date": edition_date,
+        # Firm identity (bd polyglot-pdf-xwlt). Always present as a key so
+        # every record has a uniform shape; None when no firm claim rode the
+        # session.
+        "firm_id": firm_id,
         "form_session_id": form_session_id,
         "field_id": field_id,
         "field_name": field_name or field_id,
@@ -384,6 +394,8 @@ def log_form_session_start(
     form_id: str,
     form_session_id: str,
     section_id: Optional[str] = None,
+    firm_id: Optional[str] = None,
+    kit_id: Optional[str] = None,
 ) -> None:
     """
     Log start of form filling session.
@@ -392,6 +404,10 @@ def log_form_session_start(
         form_id: Form type (e.g., "I-90")
         form_session_id: Persistent session ID
         section_id: Initial section ID if applicable
+        firm_id: Customer firm this session runs under (bd polyglot-pdf-xwlt);
+            None when no firm claim rode the token.
+        kit_id: Kit identity, so a session record names the same kit its
+            confirmations do.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -399,6 +415,8 @@ def log_form_session_start(
         "timestamp": timestamp,
         "event": "form_session_started",
         "form_id": form_id,
+        "kit_id": kit_id,
+        "firm_id": firm_id,
         "form_session_id": form_session_id,
         "section_id": section_id,
     }
@@ -416,6 +434,8 @@ def log_form_session_end(
     form_session_id: str,
     completion_status: Literal["completed", "abandoned", "error"],
     total_fields_confirmed: int,
+    firm_id: Optional[str] = None,
+    kit_id: Optional[str] = None,
 ) -> None:
     """
     Log end of form filling session.
@@ -425,6 +445,15 @@ def log_form_session_end(
         form_session_id: Persistent session ID
         completion_status: How session ended
         total_fields_confirmed: Count of fields confirmed in this session
+        firm_id: Customer firm this session ran under (bd polyglot-pdf-xwlt).
+        kit_id: Kit identity, matching the session-start record.
+
+    ONE ROW PER CONNECTION, not per session. The WS teardown cannot know
+    whether it is the end of the form or the middle of a reconnect (the
+    protocol has no terminal-close signal), so this fires on every
+    connection teardown and the reader aggregates: a per-firm SESSION count
+    is a DISTINCT count over form_session_id, never a row count. See
+    docs/standards/confirmation-and-audit.md.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -432,6 +461,8 @@ def log_form_session_end(
         "timestamp": timestamp,
         "event": "form_session_ended",
         "form_id": form_id,
+        "kit_id": kit_id,
+        "firm_id": firm_id,
         "form_session_id": form_session_id,
         "completion_status": completion_status,
         "total_fields_confirmed": total_fields_confirmed,
@@ -636,15 +667,38 @@ class ConfirmationCheckUnavailable(Exception):
 # ships no firestore.indexes.json -- the query would 400 at runtime instead
 # (Opus outer cross-surface review, which enumerated every event value ever
 # written and confirmed this bound is the right call).
+#
+# THE BOUND APPLIES TO THIS LEGACY SWEEP ONLY. It briefly bounded the whole
+# guard, which silently turned the POSITIVE kit match into an arbitrary
+# 50-document sample -- a false "no records" on any busy collection, and a
+# hard delete of a kit clients had really confirmed against (bd
+# polyglot-pdf-u66ka). The contiguous-cohort argument above justifies
+# sampling a CLOSED population; it does not transfer to a live one. The kit
+# match and the stored-null check are exhaustive equality queries.
 _LEGACY_SCAN_LIMIT = 50
 
 
 def kit_has_confirmation_records(kit_id: str) -> bool:
     """True when ANY confirmation event names this kit.
 
-    The guard behind irreversible kit deletion. Queries the Firestore sink on
-    kit_id equality -- an equality-only query needs no composite index, same
-    shape as the form_session_id read above.
+    The guard behind irreversible kit deletion. Three checks, in order:
+
+    1. EXHAUSTIVE: `kit_id == kit_id AND event == "field_confirmed"`,
+       limit(1). Both filters are equality, which Firestore serves by merging
+       auto-created single-field indexes -- no composite index (the repo
+       ships no firestore.indexes.json). limit(1) bounds the RESULT, not the
+       search, so the scan cannot miss a record for being far down the
+       collection.
+    2. EXHAUSTIVE: the same pair with `kit_id == None` -- a real confirmation
+       naming NO kit is unattributable evidence, so it refuses.
+    3. BOUNDED (_LEGACY_SCAN_LIMIT): the pre-47r3 missing-key shape, which
+       Firestore cannot query for. Sampling is defensible only here; see that
+       constant's comment.
+
+    The event scope on every one of them is load-bearing: since bd
+    polyglot-pdf-xwlt the session-lifecycle events carry a kit_id, so an
+    unscoped kit query matches session telemetry and makes a kit undeletable
+    after a single voice session (bd polyglot-pdf-68s2q).
 
     Raises ConfirmationCheckUnavailable rather than returning False when the
     durable record cannot be consulted (sink disabled, or the query failed).
@@ -662,40 +716,43 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
         from backend.services.auth import get_db
 
         collection = get_db().collection(_FIRESTORE_COLLECTION)
-        try:
-            from google.cloud.firestore_v1.base_query import FieldFilter
+        from google.cloud.firestore_v1.base_query import FieldFilter
 
-            query = collection.where(filter=FieldFilter("kit_id", "==", kit_id))
-        except ImportError:
-            query = collection.where("kit_id", "==", kit_id)
-        # limit(1): existence only -- never stream a kit's whole history to
-        # answer a yes/no question.
-        if any(True for _ in query.limit(1).stream()):
+        # EVERY query here is scoped to event == "field_confirmed" (bd
+        # polyglot-pdf-xwlt / 68s2q). The session-lifecycle events became live
+        # callers WITH a kit_id under xwlt, so an unscoped kit_id query
+        # matched them: one voice session made a kit permanently undeletable,
+        # and a session with a null kit_id made EVERY kit unverifiable.
+        #
+        # Both filters are EQUALITY, which Firestore serves by merging
+        # auto-created single-field indexes -- no composite index, no
+        # firestore.indexes.json (verified: the repo ships none). The first
+        # cut of this fix filtered only on the event and compared kit_id
+        # client-side over a bounded stream, which silently turned the
+        # POSITIVE check from exhaustive into an arbitrary 50-document sample
+        # -- a false "no records" on a busy collection, i.e. a hard delete of
+        # a kit clients really had confirmed against (bd polyglot-pdf-u66ka).
+        # limit(1) bounds the RESULT, not the search: the scan stays
+        # exhaustive through the index.
+        kit_match = (
+            collection
+            .where(filter=FieldFilter("kit_id", "==", kit_id))
+            .where(filter=FieldFilter("event", "==", "field_confirmed"))
+            .limit(1)
+        )
+        if any(True for _ in kit_match.stream()):
             return True
 
-        # An equality filter cannot match a record whose kit_id is NULL, and
-        # those exist: kit_id is optional end to end (log_field_confirmation's
-        # default, websocket_routes' handshake.get, and today's frontend sends
-        # `?? null`), and session start/end events omit the key entirely. A
-        # kit-scoped query is therefore blind to them, so "no rows" would be a
-        # silent false SAFE on a form clients really did confirm against -- the
-        # evidence-destroying direction (Opus fresh-eyes round 2).
-        #
-        # Such a record cannot be attributed to a specific kit, so guessing is
-        # not available. Refuse instead: report the check as UNAVAILABLE and let
-        # the caller offer unpublish. Bounded with limit(1) like the query above.
-        # No positional fallback here, deliberately. firebase-admin is a pinned
-        # hard dependency and vendors google-cloud-firestore, so FieldFilter
-        # always imports; the old `except NameError` guard was unreachable, and
-        # on the SDK it claimed to serve the positional form is the deprecated
-        # one the branch above exists to avoid -- untested code guarding an
-        # impossible case (Opus fresh-eyes round 4). If the import ever DID
-        # fail, NameError falls into the broad handler below and the check
-        # reports UNAVAILABLE -- a refusal, which is the fail-safe direction
-        # this whole guard is built around.
-        unattributed = collection.where(
-            filter=FieldFilter("kit_id", "==", None)
-        ).limit(1)
+        # A stored NULL kit_id on a REAL confirmation: unattributable evidence
+        # that a client confirmed something, so refuse rather than guess.
+        # Equality-on-null resolves to IS_NULL, which matches a stored null and
+        # NOT a missing key -- the missing-key shape is the legacy sweep below.
+        unattributed = (
+            collection
+            .where(filter=FieldFilter("kit_id", "==", None))
+            .where(filter=FieldFilter("event", "==", "field_confirmed"))
+            .limit(1)
+        )
         if any(True for _ in unattributed.stream()):
             _log.info("confirmation_unattributed_records_block_delete", kit_id=kit_id)
             raise ConfirmationCheckUnavailable(
@@ -703,19 +760,16 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
                 "be cleared for deletion"
             )
 
-        # ...and the same blindness one shape over. IS_NULL matches a STORED
-        # null, not a MISSING key -- and records written between the Firestore
-        # sink shipping (2026-08-03) and kit_id being added to the event dict
-        # (2026-08-05, bd polyglot-pdf-47r3) omit the key entirely. Both
-        # queries above skip them, so a kit whose only records are that vintage
-        # reported "verified: no records" and was hard-deleted WITH its archive
-        # (Opus outer cross-surface review).
-        #
-        # Scoped to event == "field_confirmed" deliberately: session-lifecycle
-        # records share the missing-key shape, and sweeping on the shape alone
-        # would make every kit permanently undeletable the moment one session
-        # is logged. The event value is the discriminator, and it keeps this a
-        # single-field equality query -- no composite index.
+        # ...and the same blindness one shape over: IS_NULL cannot match a
+        # MISSING key, and records written between the sink shipping
+        # (2026-08-03) and kit_id joining the event dict (2026-08-05, bd
+        # polyglot-pdf-47r3) omit it entirely. Firestore cannot query for a
+        # missing key, so this is a BOUNDED client-side scan -- and the bound
+        # is defensible ONLY here: legacy records are a contiguous, closed
+        # cohort (nothing writes that shape any more), so a sample that finds
+        # none is strong evidence none exist. That reasoning does NOT extend
+        # to the positive match above, which is why it is a separate,
+        # exhaustive query (bd polyglot-pdf-u66ka).
         legacy = collection.where(
             filter=FieldFilter("event", "==", "field_confirmed")
         ).limit(_LEGACY_SCAN_LIMIT)
@@ -728,14 +782,6 @@ def kit_has_confirmation_records(kit_id: str) -> bool:
                 )
         return False
     except ConfirmationCheckUnavailable:
-        # The "records name no kit" refusal is raised INSIDE the try above, so
-        # without this it fell into the handler below and was logged as
-        # `confirmation_kit_existence_check_failed` -- an ERROR naming a broken
-        # client. That is the one path where the guard's answer is a deliberate
-        # product decision rather than an infrastructure fault, and the whole
-        # ConfirmationCheckUnavailable-vs-False design exists to keep those
-        # apart; re-merging them in the telemetry sends an operator hunting a
-        # Firestore outage that never happened (Opus fresh-eyes round 3).
         raise
     except Exception as e:
         _log.error(

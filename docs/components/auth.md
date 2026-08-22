@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-08-18. See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-08-20. See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -123,14 +123,53 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
-`verify_token` (so the same dev bypass applies). It gates FIVE routes: `POST
+`verify_token` (so the same dev bypass applies). It gates EIGHT routes: `POST
 /api/fill-pdf` (the body carries user-entered field values), the kit-catalogue
-reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, and both TTS
+reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, the
+archived-revision reads `GET /api/form-kits/{kit_id}/archive` +
+`.../archive/{marker}/schema` (bd `polyglot-pdf-qfyxr`; same firm-visibility
+gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd
+`polyglot-pdf-z6bk9` -- the firm tier's only WRITE path; `require_auth` is
+necessary but nowhere near sufficient there, see below), and both TTS
 routes `POST /api/tts/spellback` + `POST /api/tts/intro` (each synthesizes
 audio, so each is paid work as well as a user-data path). The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
+### The firm WRITE path: authorization is not authentication
+
+`POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`) is the firm
+tier's ONLY write path -- everything else a firm touches is read + telemetry.
+`require_auth` gets the caller through the door; it authorizes nothing. THREE
+further checks all have to hold, and each refuses a different real attacker:
+
+| Check | Refuses |
+|-------|---------|
+| `firm_role == "manager"` | An EMPLOYEE of the owning firm. Per the four-level access model, employees send links and track status; they never take a form out of service. |
+| `owner_firm_id == <caller's firm_id>` | Another firm -- including one whose allowlist legitimately NAMES this kit. **Visibility is not authorization:** bd `polyglot-pdf-vccy` lets a firm read and fill kits it does not own. |
+| `visibility == "private"` | A shared/government form (the maintainer's 2026-08-07 line: a firm retires its own proprietary intake forms, never the shared ones). |
+
+**Retiring does NOT cost the firm its history.** The two archive reads
+(`GET /api/form-kits/{kit_id}/archive` + `.../archive/{marker}/schema`) gate on
+`require_archive_readable` -- `complete` OR `unpublished` -- while the LIVE
+schema/pdf reads still gate on `require_published` (`complete` only). Without
+that split, archive-then-retire archived a revision and made it unreachable to
+the only party entitled to read it in the same request (bd
+`polyglot-pdf-65hgz`, caught by cross-surface review). The VISIBILITY gate is
+unchanged and still applies to both, so another firm sees neither.
+
+**Every refusal is a 404, never a 403.** A 403 would confirm the kit exists to
+a firm that cannot see it -- the same existence leak the read gates are built
+to prevent, so an unauthorized retire is indistinguishable from a kit that was
+never there. Retirement is also NOT a delete: it sets `unpublished` (hidden,
+write-locked) and archives the revision first, because that revision's bytes
+are what its confirmation records were confirmed against. Hard delete stays
+guarded and staff-only (bd `polyglot-pdf-6x1j`).
+
+No UI ships with the route: the button belongs to the firm console (bd
+`polyglot-pdf-gob8l`), per the maintainer's 2026-08-20 decision -- deliberately
+not bolted onto the token-gated staff editor.
+
 `GET /api/form-kits/{kit_id}/pdf` is **ungated for PUBLIC kits only** (bd
 `polyglot-pdf-vccy` scoped the former blanket non-gate): a public kit's
 blank-template bytes ship in the static Hosting bundle regardless, so gating
@@ -172,9 +211,11 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
   bootstrap script below. The claims ride the existing ID-token verification
   (`require_auth` / the WS `?token=` gate). **`firm_id` is consumed** by the
   form-kit routes' firm-scoped visibility filter
-  (`backend/routes/form_kit_routes.py`, bd `polyglot-pdf-vccy`); `firm_role`
-  and the telemetry threading (bd `polyglot-pdf-xwlt`) are still future
-  consumers. A stamped claim appears in decoded tokens only on the next
+  (`backend/routes/form_kit_routes.py`, bd `polyglot-pdf-vccy`) AND by the
+  voice path's telemetry: the `/ws/fill` gate keeps its decoded claims and
+  keys session + confirmation records on `firm_id` (bd `polyglot-pdf-xwlt`;
+  the claim is read from the TOKEN, never the client-controlled handshake).
+  `firm_role` is still a future consumer. A stamped claim appears in decoded tokens only on the next
   token refresh (up to ~1h; force via sign-out/in or `getIdToken(true)`).
 
 **The admin step** (creates/updates the firm record and stamps staff claims;

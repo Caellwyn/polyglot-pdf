@@ -96,6 +96,7 @@ def test_confirmation_event_mirrors_to_firestore(fake_db):
         confirmation_method="verbal",
         kit_id="i-90",
         edition_date="01/20/25",
+        firm_id="firm-a",
     )
     cl.flush_confirmation_sink()  # drain the background writer
 
@@ -106,12 +107,16 @@ def test_confirmation_event_mirrors_to_firestore(fake_db):
     # here would be a PII regression (pin-with-allowlist, never a blacklist).
     # kit_id + edition_date joined under bd polyglot-pdf-47r3: both are form
     # METADATA (which kit, which government edition), never user data.
+    # firm_id joined under bd polyglot-pdf-xwlt: it names the CUSTOMER FIRM
+    # (our paying customer), never the client filling the form -- the firm
+    # tier deliberately has no client identifier anywhere in this record.
     assert set(doc) == {
         "timestamp",
         "event",
         "form_id",
         "kit_id",
         "edition_date",
+        "firm_id",
         "form_session_id",
         "field_id",
         "field_name",
@@ -122,6 +127,7 @@ def test_confirmation_event_mirrors_to_firestore(fake_db):
     assert doc["confirmation_method"] == "verbal"
     assert doc["kit_id"] == "i-90"
     assert doc["edition_date"] == "01/20/25"
+    assert doc["firm_id"] == "firm-a"
 
 
 def test_confirmation_event_keys_present_even_when_unset(fake_db):
