@@ -114,8 +114,22 @@ async def log_disclaimer_acceptance(
 			# No firm_id: this route carries no auth token (Agree fires before
 			# any authenticated session exists). Written as None so the record
 			# shape matches the rest of the collection; recoverable via
-			# resolve_firm_for_session() until firm auth reaches this route.
+			# firm_of_events() until firm auth reaches this route.
 			firm_id=None,
+		)
+	except TypeError as e:
+		# A TypeError here is a WIRING error, not an outage: the call reached
+		# something with the wrong signature. That is exactly how this feature
+		# shipped broken once (the util was shadowed by this route handler,
+		# which shares its name -- bd polyglot-pdf-0dsv4), and it fails on
+		# EVERY request rather than intermittently. Logging it under the same
+		# event name as a transient sink failure would bury a 100%-failure
+		# bug inside normal degradation noise, so it gets its own name.
+		_log.error(
+			"disclaimer_acceptance_wiring_error",
+			form_session_id=data.form_session_id,
+			error=str(e),
+			note="the durable-write call has the wrong signature; this fails on every request",
 		)
 	except Exception as e:
 		_log.error(

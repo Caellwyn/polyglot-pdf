@@ -211,3 +211,44 @@ def test_the_durable_write_actually_HAPPENS_on_the_happy_path(monkeypatch):
     # Written as None TODAY (no auth on this route), but the key must be
     # passed so the record shape is stable when firm auth arrives.
     assert seen["firm_id"] is None
+
+
+def test_a_WIRING_error_logs_distinctly_from_a_sink_outage(monkeypatch):
+    """A signature mismatch must not look like a transient outage.
+
+    This feature once shipped completely broken: the util was shadowed by this
+    route handler (same name), so every call raised TypeError and the fail-open
+    except logged it as an ordinary durable-write failure -- a 100% failure
+    rate wearing the costume of intermittent degradation. Wiring errors now get
+    their own event name so that is greppable.
+    """
+    mock_log = MagicMock()
+    monkeypatch.setattr(dr, "_log", mock_log)
+
+    def _wrong_signature(*args, **kwargs):
+        raise TypeError("got an unexpected keyword argument 'form_session_id'")
+
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", _wrong_signature)
+    resp = client.post("/api/disclaimer-acceptance", json=_BODY)
+
+    assert resp.status_code == 200  # still fail-open
+    events = [c.args[0] for c in mock_log.error.call_args_list]
+    assert "disclaimer_acceptance_wiring_error" in events
+    assert "disclaimer_acceptance_durable_write_failed" not in events
+
+
+def test_a_genuine_sink_outage_still_logs_as_a_write_failure(monkeypatch):
+    """The other side of the split: a real outage keeps its own name."""
+    mock_log = MagicMock()
+    monkeypatch.setattr(dr, "_log", mock_log)
+
+    def _outage(**kwargs):
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", _outage)
+    resp = client.post("/api/disclaimer-acceptance", json=_BODY)
+
+    assert resp.status_code == 200
+    events = [c.args[0] for c in mock_log.error.call_args_list]
+    assert "disclaimer_acceptance_durable_write_failed" in events
+    assert "disclaimer_acceptance_wiring_error" not in events

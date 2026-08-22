@@ -460,7 +460,7 @@ def log_disclaimer_acceptance(
         when firm auth reaches this route (maintainer decision 2026-08-20).
         Until then a firm's acceptances are reachable by joining on
         form_session_id against their confirmation records, which DO carry
-        firm_id -- see resolve_firm_for_session below.
+        firm_id -- see firm_of_events below.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -482,34 +482,6 @@ def log_disclaimer_acceptance(
     )
     _write_confirmation_to_file(form_session_id, event)
     _submit_firestore_write(event)
-
-
-def resolve_firm_for_session(form_session_id: str) -> Optional[str]:
-    """Best-effort firm attribution for a session, via the JOIN fallback.
-
-    An acceptance record carries firm_id=None today (the route is
-    unauthenticated -- see log_disclaimer_acceptance). The session's OTHER
-    records do carry it, so the firm is recoverable by looking at them.
-
-    Returns the firm_id found on any record for this session, or None when
-    the session has none (a genuinely firm-less session, or one that accepted
-    and abandoned before confirming a field -- that case has no firm anywhere
-    and this correctly reports None rather than guessing).
-
-    Raises nothing: attribution is supplementary. A read failure is reported
-    as None and logged, because a broken lookup must never take down a caller
-    that is only enriching a record.
-    """
-    try:
-        events = read_confirmation_log(form_session_id, strict=True)
-    except Exception as e:
-        _log.warning(
-            "firm_attribution_lookup_failed",
-            form_session_id=form_session_id,
-            error=str(e),
-        )
-        return None
-    return firm_of_events(events)
 
 
 def firm_of_events(events: list) -> Optional[str]:
