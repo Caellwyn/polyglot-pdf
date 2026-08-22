@@ -1393,6 +1393,49 @@ class TestFreshnessAcks:
             "R  docs/other.txt\0docs/old.txt\0?? docs/freshness/z.md.ack\0"
         ) == {"docs/freshness/z.md.ack"}
 
+    def test_uncommitted_ack_counts_via_its_real_mtime(self, tmp_path, monkeypatch):
+        """THE ONE BRANCH THE OTHER ACK TESTS ALL BYPASS.
+
+        Every other test here stubs `ack_commit_time`, so the real fallback --
+        an UNCOMMITTED ack counting via its filesystem mtime -- never
+        executed. Round 3 of review caught that: the bead's design calls this
+        branch deliberate ("triage-then-commit has to work inside one
+        closeout"), and it shipped with no regression protection at all.
+
+        This drives the REAL path: a genuine ack file on disk, `ack_commit_time`
+        returning None (git has never seen it), and check_doc reading its mtime.
+
+        Mutation: delete the `pending.stat().st_mtime` fallback -- red."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        code_ts = self._code_at(2026)
+
+        # A real ack file on disk for this doc, never committed.
+        ack = tmp_path / "real.ack"
+        ack.write_text("doc: x\nverified: y\nbecause: z\n", encoding="utf-8")
+        import os
+        # Stamp it AFTER the code commit, as a real ack written today would be.
+        os.utime(ack, (code_ts + 86_400, code_ts + 86_400))
+
+        def fake_git_ct(path):
+            # The tracked code has a commit time; the ack does NOT (uncommitted).
+            return code_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        # Point the ack lookup at our real file; do NOT stub ack_commit_time --
+        # it must genuinely return None so the mtime fallback fires.
+        monkeypatch.setattr(freshness, "ack_path", lambda d: ack)
+        monkeypatch.setattr(freshness, "ack_path_or_none", lambda d: ack)
+        assert freshness.ack_commit_time(doc) is None, (
+            "precondition: the ack must look uncommitted, or this test would "
+            "silently exercise the committed path instead"
+        )
+
+        status, _stale, _ = freshness.check_doc(doc)
+        assert status == "ok", (
+            "an uncommitted ack whose mtime postdates the code must count -- "
+            "otherwise triage-then-commit cannot work inside one closeout"
+        )
+
     def test_branch_ack_count_actually_reads_uncommitted_acks(self, monkeypatch):
         """Pins that branch_ack_count WIRES UP the -z parser, not just that
         the parser exists.
@@ -1415,19 +1458,43 @@ class TestFreshnessAcks:
                 R.stdout = ""          # nothing committed on this branch
             elif "status" in cmd:
                 assert "-z" in cmd, "branch_ack_count must request -z output"
+                # Include a RENAME PAIR, not just two `??` records. Round 3
+                # showed that with only `??` shapes a naive inline parser
+                # (NUL-split + suffix filter, no status handling) also returns
+                # 2 and this test stays green -- so the fake would not
+                # distinguish the real parser from a broken substitute. A
+                # rename's bare source record has no status prefix, so only a
+                # parser that handles record structure counts all three.
                 R.stdout = ("?? docs/freshness/pending-one.md.ack\0"
-                            "?? docs/freshness/pending-two.md.ack\0")
+                            "R  docs/freshness/renamed-new.md.ack\0"
+                            "docs/freshness/renamed-old.md.ack\0")
             else:
                 R.stdout = ""
             return R
 
         monkeypatch.setattr(_sp, "run", fake_run)
         monkeypatch.setattr(freshness.subprocess, "run", fake_run)
-        assert freshness.branch_ack_count() == 2, (
-            "branch_ack_count must count UNCOMMITTED acks via the -z parser; "
+        assert freshness.branch_ack_count() == 3, (
+            "branch_ack_count must count UNCOMMITTED acks via the -z parser, "
+            "including a rename's prefixed record and its bare source; "
             "dropping that wiring silently reports 0 while the parser's own "
             "tests stay green"
         )
+        # COUNTING ALONE IS NOT ENOUGH -- verified by mutation. A naive
+        # NUL-split + suffix filter also returns 3 here, but with the status
+        # prefixes still glued on ('?? docs/...', 'R  docs/...'). Same number,
+        # garbage values. So assert the PATHS the parser actually produces,
+        # which is what any consumer of this set would depend on.
+        parsed = freshness._porcelain_z_ack_paths(
+            "?? docs/freshness/pending-one.md.ack\0"
+            "R  docs/freshness/renamed-new.md.ack\0"
+            "docs/freshness/renamed-old.md.ack\0"
+        )
+        assert parsed == {
+            "docs/freshness/pending-one.md.ack",
+            "docs/freshness/renamed-new.md.ack",
+            "docs/freshness/renamed-old.md.ack",
+        }, "status prefixes must be stripped, not carried into the path"
 
     def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
         """The anti-ack-spam hint must not die of its own alarm fatigue.
