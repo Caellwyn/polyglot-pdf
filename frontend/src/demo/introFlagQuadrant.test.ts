@@ -101,6 +101,22 @@ describe.each(OVERLAYS)('%s: intro flag disables the legacy read', (file) => {
     // Pin what the legacy path ACTUALLY speaks now: the shared script.
     const src = overlaySource(file)
     expect(src).toContain('connectionManager.readDisclaimer(')
-    expect(src).toContain('renderIntroParagraphs(')
+    // Pin the PAIRING, not either symbol's mere presence. A bare
+    // toContain('renderIntroParagraphs(') is satisfied by the MODAL prop
+    // alone, so both SPOKEN sites could be broken with this green
+    // (mutation-proven). Require every readDisclaimer call to be fed a
+    // disclaimerText built from the shared script.
+    const spokenBuilders = [...src.matchAll(
+      /const disclaimerText = (\w+)\(/g)].map(m => m[1])
+    expect(spokenBuilders.length).toBe(2)
+    for (const builder of spokenBuilders) {
+      expect(
+        builder,
+        `the flag-off spoken path in ${file} builds disclaimerText with `
+        + `${builder}(), not renderIntroParagraphs(). Both surfaces must `
+        + `speak ONE source (bd polyglot-pdf-nsb4y) or a reader and a `
+        + `listener accept different legal terms.`,
+      ).toBe('renderIntroParagraphs')
+    }
   })
 })
