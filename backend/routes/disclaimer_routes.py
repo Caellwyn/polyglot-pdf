@@ -11,7 +11,15 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 import structlog
 
-from ..utils.confirmation_logger import log_disclaimer_acceptance
+# ALIASED deliberately: the route handler below is also called
+# log_disclaimer_acceptance, and a bare import would be SHADOWED by it at
+# import time -- the call would resolve to the handler, raise TypeError on
+# the kwargs, and get swallowed by the fail-open except, so the durable
+# write would silently never happen (caught in fresh-eyes review of bd
+# polyglot-pdf-0dsv4, after tests that patched the shadowed name passed).
+from ..utils.confirmation_logger import (
+	log_disclaimer_acceptance as write_durable_acceptance_record,
+)
 
 _log = structlog.get_logger().bind(module="disclaimer_routes")
 
@@ -97,7 +105,7 @@ async def log_disclaimer_acceptance(
 	# swallows and logs its own failures, but the file write and any import-time
 	# error are caught here so nothing on this path can reach the client.
 	try:
-		log_disclaimer_acceptance(
+		write_durable_acceptance_record(
 			form_session_id=data.form_session_id,
 			language=data.language,
 			timestamp_unix_ms=data.timestamp,

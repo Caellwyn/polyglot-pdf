@@ -723,3 +723,32 @@ def test_acceptance_does_NOT_match_the_kit_deletion_guard(fake_db, monkeypatch):
     doc = fake_db.collections[cl._FIRESTORE_COLLECTION].added[0]
     assert "kit_id" not in doc
     assert doc["event"] != "field_confirmed"
+
+
+def test_firm_attribution_recovers_the_firm_from_sibling_records():
+    """The JOIN fallback: the acceptance has no firm, its siblings do."""
+    events = [
+        {"event": "disclaimer_accepted", "firm_id": None},
+        {"event": "field_confirmed", "firm_id": "firm-a"},
+    ]
+    assert cl.firm_of_events(events) == "firm-a"
+
+
+def test_firm_attribution_is_None_when_the_session_has_no_firm():
+    """A session that accepted and abandoned before confirming a field has no
+    firm ANYWHERE. Report that honestly rather than inventing one."""
+    assert cl.firm_of_events([{"event": "disclaimer_accepted", "firm_id": None}]) is None
+    assert cl.firm_of_events([]) is None
+
+
+def test_firm_attribution_REFUSES_to_guess_when_records_disagree():
+    """Two firms on one session means something is wrong upstream.
+
+    Returning the first would launder a data problem into a confident wrong
+    answer on a legal-evidence path. "We do not know" is the honest result.
+    """
+    events = [
+        {"event": "field_confirmed", "firm_id": "firm-a"},
+        {"event": "field_confirmed", "firm_id": "firm-b"},
+    ]
+    assert cl.firm_of_events(events) is None

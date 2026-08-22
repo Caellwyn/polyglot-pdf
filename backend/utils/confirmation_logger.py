@@ -509,11 +509,33 @@ def resolve_firm_for_session(form_session_id: str) -> Optional[str]:
             error=str(e),
         )
         return None
-    for event in events:
-        firm_id = event.get("firm_id")
-        if firm_id:
-            return firm_id
-    return None
+    return firm_of_events(events)
+
+
+def firm_of_events(events: list) -> Optional[str]:
+    """The firm a session's records attribute it to, or None.
+
+    Split out so a caller that ALREADY holds the events (the retrieval script)
+    attributes without a second query, and so the attribution rule is testable
+    without a datastore.
+
+    DISAGREEMENT IS NOT SILENTLY RESOLVED. One session belongs to one firm, so
+    two different firm_ids on one session means something is wrong upstream --
+    returning the first would launder that into a confident wrong answer on a
+    legal-evidence path. Log it loudly and return None: "we do not know" is the
+    honest result, and a caller can still read the raw records.
+    """
+    firms = {e.get("firm_id") for e in events if e.get("firm_id")}
+    if not firms:
+        return None
+    if len(firms) > 1:
+        _log.error(
+            "firm_attribution_conflict",
+            firm_ids=sorted(firms),
+            note="one session mapped to multiple firms; refusing to guess",
+        )
+        return None
+    return firms.pop()
 
 
 def log_form_session_end(

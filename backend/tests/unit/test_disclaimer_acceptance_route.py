@@ -101,6 +101,62 @@ def test_script_version_is_optional_for_an_older_client(monkeypatch):
     assert kwargs["script_version"] is None
 
 
+def test_the_route_reaches_the_REAL_durable_util(monkeypatch):
+    """The route must call the UTILITY, not something shaped like it.
+
+    THIS TEST EXISTS BECAUSE THE FIRST VERSION SHIPPED BROKEN. The route
+    handler is itself named log_disclaimer_acceptance, so a bare
+    `from ..utils.confirmation_logger import log_disclaimer_acceptance` was
+    SHADOWED by the handler at import time: the call resolved to the handler,
+    raised TypeError on the kwargs, and the fail-open except swallowed it. The
+    durable write never happened, and the original tests passed anyway because
+    they monkeypatched the shadowed name -- patching over the very bug.
+
+    So patch the util IN ITS OWN MODULE and assert it is reached THROUGH the
+    route. That cannot be satisfied by a shadowed name.
+    """
+    import backend.utils.confirmation_logger as cl
+
+    seen = {}
+    monkeypatch.setattr(cl, "log_disclaimer_acceptance",
+                        lambda **kw: seen.update(kw))
+    # Re-bind the route's alias to the patched util, as an import-time alias
+    # holds its own reference.
+    monkeypatch.setattr(dr, "write_durable_acceptance_record",
+                        cl.log_disclaimer_acceptance)
+
+    resp = client.post("/api/disclaimer-acceptance", json={
+        "form_session_id": "fss_real",
+        "language": "Spanish",
+        "timestamp": 1755000000000,
+        "script_version": "deadbeefcafe0001",
+        "user_agent": "ua",
+    })
+    assert resp.status_code == 200
+    assert seen, (
+        "the durable util was never reached -- the route is not wired to it "
+        "(this is the shadowing bug, and it is silent by design)"
+    )
+    assert seen["form_session_id"] == "fss_real"
+    assert seen["language"] == "Spanish"
+    assert seen["script_version"] == "deadbeefcafe0001"
+    assert seen["firm_id"] is None
+
+
+def test_the_route_alias_is_the_util_not_the_handler():
+    """Pin the WIRING itself, independent of any request.
+
+    The shadowing bug is a module-level identity error, so assert identity:
+    the name the route body calls must BE the util. A behavioral test can be
+    monkeypatched into passing; this cannot.
+    """
+    import backend.utils.confirmation_logger as cl
+
+    assert dr.write_durable_acceptance_record is cl.log_disclaimer_acceptance
+    # And the handler must NOT be what that name refers to.
+    assert dr.write_durable_acceptance_record is not dr.log_disclaimer_acceptance
+
+
 def test_a_sink_outage_does_NOT_break_the_agree_click(monkeypatch):
     """FAIL-OPEN: the durable write must never 500 an Agree click.
 
@@ -112,7 +168,7 @@ def test_a_sink_outage_does_NOT_break_the_agree_click(monkeypatch):
     def _boom(**kwargs):
         raise RuntimeError("firestore is down")
 
-    monkeypatch.setattr(dr, "log_disclaimer_acceptance", _boom)
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", _boom)
     response = client.post(
         "/api/disclaimer-acceptance",
         json={
@@ -137,7 +193,7 @@ def test_the_durable_write_actually_HAPPENS_on_the_happy_path(monkeypatch):
     def _capture(**kwargs):
         seen.update(kwargs)
 
-    monkeypatch.setattr(dr, "log_disclaimer_acceptance", _capture)
+    monkeypatch.setattr(dr, "write_durable_acceptance_record", _capture)
     response = client.post(
         "/api/disclaimer-acceptance",
         json={
