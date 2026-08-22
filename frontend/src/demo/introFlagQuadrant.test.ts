@@ -57,7 +57,15 @@ describe.each(OVERLAYS)('%s: intro flag disables the legacy read', (file) => {
       // that mentions the flag, so removing a real guard left it green.
       const codeAbove = lines
         .slice(0, site.i)
-        .filter((l) => l.trim() && !l.trim().startsWith('//'))
+        .filter((l) => {
+          const t = l.trim()
+          // Strip line comments AND block-comment bodies: a /* */ block
+          // pushed the guard out of range just as easily (verified by
+          // mutation). It failed CLOSED -- a false alarm, not a missed
+          // bug -- but a needless trip-wire on a legitimate edit.
+          return t && !t.startsWith('//') && !t.startsWith('/*')
+            && !t.startsWith('*') && !t.startsWith('*/')
+        })
       const window = codeAbove.slice(-40).join('\n')
       expect(window).toContain('introEnabled')
     }
