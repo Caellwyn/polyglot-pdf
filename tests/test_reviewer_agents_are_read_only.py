@@ -101,10 +101,21 @@ def test_body_carves_out_bead_filing(path):
     start = body.index("## YOU ARE READ-ONLY")
     end = body.index("\n## ", start + 1)
     section = body[start:end].lower()
-    assert "exception" in section and "bead" in section, (
-        f"{path.name}: the read-only section bans writing inside the repo but "
-        "never carves out bead filing -- .beads/ is TRACKED, so a literal "
-        "reading forbids the reviewer's own output channel"
+    # Assert the SANCTIONED COMMANDS, not the vocabulary. A keyword check for
+    # "exception"/"bead" is defeatable by a decoy that uses both words while
+    # NEGATING the rule ("There is no exception here; a bead is not relevant")
+    # -- verified: such a decoy passed. Naming the commands the reviewer must
+    # be allowed to run is the part with actual content.
+    assert "bd create" in section, (
+        f"{path.name}: the read-only section must name `bd create` as allowed. "
+        ".beads/ is TRACKED, so a blanket 'never write inside the repo' "
+        "forbids the reviewer's own output channel unless carved out here."
+    )
+    # And the carve-out must stay NARROW: hand-editing those files is still
+    # banned, or the exception swallows the rule.
+    assert "hand-edit" in section, (
+        f"{path.name}: the bead carve-out must still forbid hand-editing "
+        ".beads/ files -- otherwise it licenses arbitrary writes there"
     )
 
 
