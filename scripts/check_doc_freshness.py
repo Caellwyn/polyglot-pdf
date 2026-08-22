@@ -944,7 +944,12 @@ def _porcelain_z_ack_paths(raw: str) -> set[str]:
     i = 0
     while i < len(records):
         record = records[i]
-        status, path = record[:2], record[3:] if len(record) > 3 else ""
+        # Slicing already yields "" for a record shorter than the prefix, so
+        # no length guard is needed. (An earlier `if len(record) > 3 else ""`
+        # was provably a no-op -- identical output for every input -- which is
+        # why no mutation of it could fail a test. Defensive clutter that
+        # cannot be wrong is also code that cannot be verified; dropped.)
+        status, path = record[:2], record[3:]
         # DO NOT GUESS whether a record carries a status prefix. -z output has
         # a determinate structure: every record is "XY <path>", EXCEPT that a
         # rename/copy is followed by ONE extra record holding the bare source
