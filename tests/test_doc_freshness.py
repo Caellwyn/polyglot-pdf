@@ -1233,6 +1233,91 @@ class TestFreshnessAcks:
         # doc+code-in-one-squash case as fresh, which is correct.
         assert freshness.check_doc(doc)[0] == "ok"
 
+    def test_a_fresh_doc_edit_beats_an_older_ack(self, tmp_path, monkeypatch):
+        """PINS THE max(), which nothing else did.
+
+        Every other fixture here gives the doc a long-stale stamp, so
+        `max(doc_ct, ack_ct)` and a bare `ack_ct` behave identically and the
+        max() is invisible to them -- a reviewer showed that collapsing it to
+        `doc_ct = ack_ct` passes all seven. This is the case that separates
+        them: the doc was EDITED recently, its ack is OLD. Freshness must take
+        whichever evidence is NEWER, so the recent edit wins and the doc reads
+        fresh. Under the collapse it would wrongly read stale -- punishing the
+        author who actually updated the doc, which is precisely the behavior
+        this mechanism exists to stop."""
+        code_ts = self._code_at(2026)
+        old_ack = code_ts - 86_400          # ack predates the code
+        fresh_stamp = "2026-12-31"          # doc edited well after the code
+
+        doc = _make_doc(
+            tmp_path,
+            f"# Foo\n\n*Last updated: {fresh_stamp}*\n\n"
+            "**Tracks:** `scripts/swarm_config.py`\n",
+        )
+
+        def fake_git_ct(path):
+            return code_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: old_ack)
+        status, stale, _ = freshness.check_doc(doc)
+        assert status == "ok", (
+            "a doc edited AFTER its tracked code must be fresh even when its "
+            "ack is older -- freshness takes the newest evidence, not the ack"
+        )
+        assert stale == []
+
+    def test_run_ack_refuses_without_a_reason(self, capsys):
+        """`--because` is what makes a blind ack impossible, so its refusal is
+        the mechanism's whole anti-gaming guarantee -- not a UX nicety. It was
+        verified only by hand until a reviewer pointed out the CLI layer had
+        no test at all; a future edit could have silently dropped it."""
+        assert freshness.run_ack("docs/standards/testing.md", None) == 2
+        assert freshness.run_ack("docs/standards/testing.md", "   ") == 2
+        assert "requires --because" in capsys.readouterr().out
+
+    def test_run_ack_refuses_an_unknown_doc(self, capsys):
+        assert freshness.run_ack("docs/does-not-exist.md", "reason") == 2
+        assert "no such doc" in capsys.readouterr().out
+
+    def test_run_ack_refuses_a_doc_with_no_tracks_line(self, tmp_path, capsys):
+        """A doc with no **Tracks:** line is not freshness-checked at all, so
+        acking it would record a review of nothing. Say so instead."""
+        doc = _make_doc(tmp_path, "# No tracks here\n\nJust prose.\n")
+        rel = doc.relative_to(doc.parent)
+        import os
+        cwd = os.getcwd()
+        try:
+            os.chdir(doc.parent)
+            # run_ack resolves against REPO_ROOT; point it at the tmp doc via
+            # an absolute path so the no-tracks branch is what fires.
+            assert freshness.run_ack(str(doc), "reason") == 2
+        finally:
+            os.chdir(cwd)
+        assert "no **Tracks:** line" in capsys.readouterr().out
+
+    def test_run_ack_on_a_fresh_doc_is_a_no_op(self, tmp_path, monkeypatch, capsys):
+        """Acking a doc that is not stale must not manufacture an ack file --
+        an ack with an empty `verified:` list would be a record of nothing,
+        and the file's existence would still count toward freshness."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        monkeypatch.setattr(freshness, "git_commit_time", lambda p: None)
+        assert freshness.run_ack(str(doc), "reason") == 0
+        assert "already fresh" in capsys.readouterr().out
+
+    def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
+        """The anti-ack-spam hint must not die of its own alarm fatigue.
+
+        An earlier version counted every .ack file in the repo, so the moment
+        the corpus audit lands its ~20 acks the hint would fire on EVERY
+        future one-doc ack, forever -- turning the one signal that catches
+        ack-spam into background noise. That is exactly how the stale-doc flag
+        died, and it would have been self-inflicted. Scoped to the branch, a
+        mature corpus is invisible: only what THIS branch adds counts."""
+        # This branch adds no acks, so the count is 0 even though the repo may
+        # hold many. A corpus-wide count would return len(all acks) instead.
+        assert freshness.branch_ack_count() == 0
+
     def test_ack_path_is_unique_per_doc_and_flattened(self):
         """One ack file per doc is what makes acks conflict-free: two sessions
         acking two docs touch two different files. A collision here would

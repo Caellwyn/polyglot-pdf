@@ -879,11 +879,48 @@ def run_ack(doc_arg: str, because: str | None) -> int:
     # block: the honest bulk case (the corpus audit) has its own bead where
     # the labor is priced, and a session quietly acking its way out of a
     # closeout is exactly the failure this mechanism must not enable.
-    existing = list((REPO_ROOT / ACK_DIR).glob("*" + ACK_SUFFIX)) if (REPO_ROOT / ACK_DIR).is_dir() else []
-    if len(existing) > ACK_RATE_HINT:
-        print(f"\n  NOTE: {len(existing)} acks now exist. Acking several docs in one branch is")
-        print("  audit work -- see the docs-audit bead rather than clearing them at closeout.")
+    #
+    # SCOPED TO THIS BRANCH, deliberately. Counting every ack in the repo
+    # would fire forever the moment the corpus audit lands its ~20 acks --
+    # turning the one signal that catches ack-spam into permanent background
+    # noise. That is the same alarm-fatigue death the stale-doc flag already
+    # died of, and it would be self-inflicted.
+    branch_acks = branch_ack_count()
+    if branch_acks > ACK_RATE_HINT:
+        print(f"\n  NOTE: this branch now carries {branch_acks} acks. Acking several docs in")
+        print("  one branch is audit work -- see the docs-audit bead rather than clearing")
+        print("  them at closeout.")
     return 0
+
+
+def branch_ack_count(base: str = "origin/dev") -> int:
+    """How many ack files THIS branch adds or changes, vs its merge base.
+
+    Falls back to the working-tree count only if git cannot answer (a fresh
+    repo with no base, a detached state) -- a wrong-but-bounded number beats
+    crashing a warn-only tool.
+    """
+    try:
+        merge_base = subprocess.run(
+            ["git", "merge-base", base, "HEAD"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        committed = subprocess.run(
+            ["git", "diff", "--name-only", merge_base, "HEAD", "--", ACK_DIR],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        # Uncommitted acks count too: the session made them, they just have
+        # not landed yet.
+        pending = subprocess.run(
+            ["git", "status", "--porcelain", "--", ACK_DIR],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        names = {p for p in committed if p.endswith(ACK_SUFFIX)}
+        names |= {line[3:].strip() for line in pending if line.strip().endswith(ACK_SUFFIX)}
+        return len(names)
+    except (subprocess.CalledProcessError, OSError):
+        ack_dir = REPO_ROOT / ACK_DIR
+        return len(list(ack_dir.glob("*" + ACK_SUFFIX))) if ack_dir.is_dir() else 0
 
 
 def main() -> int:
