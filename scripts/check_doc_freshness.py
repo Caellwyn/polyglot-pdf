@@ -893,6 +893,28 @@ def run_ack(doc_arg: str, because: str | None) -> int:
     return 0
 
 
+def _porcelain_ack_paths(line: str) -> set[str]:
+    """Ack paths named by one `git status --porcelain -uall` line.
+
+    Porcelain lines are `XY <path>`, and a RENAME is `R  <old> -> <new>` --
+    which names two paths, only one of which still exists. Keeping both is
+    deliberate: an ack renamed INTO this branch is new work here, and a set()
+    collapses any double-count. Quoted paths (git quotes names with spaces or
+    non-ASCII) are unquoted so the suffix test still matches.
+    """
+    if len(line) < 4:
+        return set()
+    payload = line[3:].strip()
+    parts = [p.strip() for p in payload.split(" -> ")] if " -> " in payload else [payload]
+    out: set[str] = set()
+    for part in parts:
+        if part.startswith('"') and part.endswith('"') and len(part) > 1:
+            part = part[1:-1]
+        if part.endswith(ACK_SUFFIX):
+            out.add(part)
+    return out
+
+
 def branch_ack_count(base: str = "origin/dev") -> int:
     """How many ack files THIS branch adds or changes, vs its merge base.
 
@@ -912,11 +934,16 @@ def branch_ack_count(base: str = "origin/dev") -> int:
         # Uncommitted acks count too: the session made them, they just have
         # not landed yet.
         pending = subprocess.run(
-            ["git", "status", "--porcelain", "--", ACK_DIR],
+            # -uall is REQUIRED: without it git collapses a wholly-untracked
+            # directory to ONE "?? docs/freshness/" line, so the first session
+            # ever to create acks parsed zero of them and the hint stayed
+            # silent for exactly the case it exists to catch.
+            ["git", "status", "--porcelain", "-uall", "--", ACK_DIR],
             cwd=REPO_ROOT, capture_output=True, text=True, check=True,
         ).stdout.splitlines()
         names = {p for p in committed if p.endswith(ACK_SUFFIX)}
-        names |= {line[3:].strip() for line in pending if line.strip().endswith(ACK_SUFFIX)}
+        for line in pending:
+            names |= _porcelain_ack_paths(line)
         return len(names)
     except (subprocess.CalledProcessError, OSError):
         ack_dir = REPO_ROOT / ACK_DIR

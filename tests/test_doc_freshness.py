@@ -1305,6 +1305,28 @@ class TestFreshnessAcks:
         assert freshness.run_ack(str(doc), "reason") == 0
         assert "already fresh" in capsys.readouterr().out
 
+    def test_porcelain_ack_parsing_handles_every_real_git_line_shape(self):
+        """THE BUG THIS EXISTS TO PREVENT, found by probing rather than
+        assuming: `git status --porcelain` collapses a wholly-untracked
+        directory into a single `?? docs/freshness/` line, so the FIRST
+        session ever to create acks parsed zero of them and the bulk-ack hint
+        stayed silent for exactly the case it was built to catch. Fixed with
+        -uall; these pin the other shapes a porcelain line can take, so the
+        parser is not merely correct for the one example I happened to try."""
+        f = freshness._porcelain_ack_paths
+        assert f("?? docs/freshness/a.md.ack") == {"docs/freshness/a.md.ack"}
+        # A rename names TWO paths; both count as this branch's work.
+        assert f("R  docs/freshness/old.md.ack -> docs/freshness/new.md.ack") == {
+            "docs/freshness/old.md.ack", "docs/freshness/new.md.ack"}
+        # Git QUOTES paths with spaces -- the quotes must not defeat the suffix.
+        assert f(' M "docs/freshness/has space.md.ack"') == {
+            "docs/freshness/has space.md.ack"}
+        # The -uall bug's shape: a bare directory names no ack.
+        assert f("?? docs/freshness/") == set()
+        assert f("?? docs/other.txt") == set()
+        # Truncated/garbage must not raise -- this is a warn-only tool.
+        assert f("??") == set()
+
     def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
         """The anti-ack-spam hint must not die of its own alarm fatigue.
 
@@ -1316,7 +1338,27 @@ class TestFreshnessAcks:
         mature corpus is invisible: only what THIS branch adds counts."""
         # This branch adds no acks, so the count is 0 even though the repo may
         # hold many. A corpus-wide count would return len(all acks) instead.
-        assert freshness.branch_ack_count() == 0
+        # Pin the PROPERTY (branch-scoped, not corpus-scoped) rather than a
+        # bare `== 0`, which silently depends on the working tree being clean:
+        # a stray .ack from any other process fails the assertion for a reason
+        # unrelated to the behavior -- which is exactly what happened when a
+        # concurrent reviewer's experiment left two behind mid-run.
+        ack_dir = freshness.REPO_ROOT / freshness.ACK_DIR
+        corpus = len(list(ack_dir.glob("*" + freshness.ACK_SUFFIX))) if ack_dir.is_dir() else 0
+        branch = freshness.branch_ack_count()
+        assert branch <= corpus, (
+            "branch ack count must never exceed the corpus count -- it is a "
+            "subset by construction"
+        )
+        committed_on_base = [
+            p for p in (ack_dir.glob("*" + freshness.ACK_SUFFIX) if ack_dir.is_dir() else [])
+            if freshness.git_commit_time(p) is not None
+        ]
+        if committed_on_base:
+            assert branch < corpus or branch == 0, (
+                "acks already committed on the base must not be counted as "
+                "this branch's work"
+            )
 
     def test_ack_path_is_unique_per_doc_and_flattened(self):
         """One ack file per doc is what makes acks conflict-free: two sessions
