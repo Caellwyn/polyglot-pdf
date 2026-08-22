@@ -904,8 +904,16 @@ def _porcelain_ack_paths(line: str) -> set[str]:
     """
     if len(line) < 4:
         return set()
-    payload = line[3:].strip()
-    parts = [p.strip() for p in payload.split(" -> ")] if " -> " in payload else [payload]
+    status, payload = line[:2], line[3:].strip()
+    # Split on " -> " ONLY when the status code says rename/copy. Splitting on
+    # the arrow unconditionally mis-parses a FILENAME that happens to contain
+    # " -> " (a real, if exotic, path): "?? docs/freshness/weird -> name.ack"
+    # would yield a bogus "name.ack" and miss the real file. git only emits the
+    # arrow form for R/C, so the status code is the honest discriminator.
+    if ("R" in status or "C" in status) and " -> " in payload:
+        parts = [p.strip() for p in payload.split(" -> ")]
+    else:
+        parts = [payload]
     out: set[str] = set()
     for part in parts:
         if part.startswith('"') and part.endswith('"') and len(part) > 1:

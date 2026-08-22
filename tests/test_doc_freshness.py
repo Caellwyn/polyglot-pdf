@@ -1326,6 +1326,21 @@ class TestFreshnessAcks:
         assert f("?? docs/other.txt") == set()
         # Truncated/garbage must not raise -- this is a warn-only tool.
         assert f("??") == set()
+        # Other real status codes must still yield their path.
+        assert f("AM docs/freshness/a.md.ack") == {"docs/freshness/a.md.ack"}
+        assert f("UU docs/freshness/b.md.ack") == {"docs/freshness/b.md.ack"}
+        # A COPY names two paths, like a rename.
+        assert f("C  docs/freshness/x.md.ack -> docs/freshness/y.md.ack") == {
+            "docs/freshness/x.md.ack", "docs/freshness/y.md.ack"}
+        # An ack nested a level deeper still counts.
+        assert f("?? docs/freshness/sub/c.md.ack") == {"docs/freshness/sub/c.md.ack"}
+        # THE ARROW TRAP: a FILENAME containing " -> " must not be split.
+        # Only R/C status lines use the arrow as a separator, so the status
+        # code -- not the presence of the arrow -- is the discriminator.
+        # Splitting unconditionally yielded a bogus "name.md.ack" and LOST the
+        # real file.
+        assert f("?? docs/freshness/weird -> name.md.ack") == {
+            "docs/freshness/weird -> name.md.ack"}
 
     def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
         """The anti-ack-spam hint must not die of its own alarm fatigue.
