@@ -378,6 +378,35 @@ stays the single source of it. That is what turns the epic's determinism into
 EVIDENCE: without it the record proves someone clicked Agree but not what they
 were told.
 
+**The acceptance record is DURABLE** (bd `polyglot-pdf-0dsv4`). It goes to the
+same sink the field confirmations use -- the `confirmation_events` Firestore
+collection AND the per-session JSONL file -- keyed on `form_session_id`, so
+`read_confirmation_log(form_session_id)` returns the acceptance and the field
+confirmations as ONE timestamp-ordered session record: *this session accepted
+this exact text, then confirmed these fields*.
+
+It was a structlog line and nothing else until then, which meant the record
+that a user accepted the LEGAL TERMS aged out with the Cloud Run log bucket
+while the record of what they TYPED was durable -- backwards for an evidence
+trail.
+
+The write is FAIL-OPEN: a sink outage logs and continues rather than failing
+the request. Losing one audit record is bad; blocking every user from starting
+their form is worse, and the structlog line still records the acceptance
+either way. A signature mismatch logs distinctly
+(`disclaimer_acceptance_wiring_error`) from a transient failure
+(`disclaimer_acceptance_durable_write_failed`), because the former fails on
+EVERY request and must not hide inside degradation noise.
+
+**`firm_id` is written as `None` today, deliberately.** This route carries no
+auth token -- Agree fires before any authenticated session exists -- so the
+firm cannot be read here. The key is written anyway so the collection has ONE
+shape and needs no migration when firm auth reaches this route (maintainer
+decision 2026-08-20). Until then `firm_of_events()` recovers the firm from the
+session's OTHER records, which do carry it; a session that accepted and
+abandoned before confirming any field has no firm anywhere and correctly
+reports `None` rather than guessing, as do records that DISAGREE.
+
 **KNOWN GAP as of bd `polyglot-pdf-nsb4y`: on the DEFAULT deployment the
 record still logs `None`.** That clause used to read "the legacy model-read
 path has no deterministic text to name", and that was true when it was
@@ -434,7 +463,7 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-xwlt: `firm_id` joins the confirmation record and the session-lifecycle pair is WIRED -- see [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md). Previously bd polyglot-pdf-1dt9b: the Undertaken-register
+*Last updated: 2026-08-22 (bd polyglot-pdf-0dsv4: the disclaimer acceptance is now DURABLE -- same sink as the field confirmations, joined on form_session_id, with firm_id written as None until firm auth reaches that unauthenticated route. Also bd polyglot-pdf-xwlt: `firm_id` joins the confirmation record and the session-lifecycle pair is WIRED -- see [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md). Previously bd polyglot-pdf-1dt9b: the Undertaken-register
 reachability claim was stale -- the frontend intro-clip player shipped in bd
 s1iex.5, so the real gate is now both flags defaulting off, not "no player
 exists").*
