@@ -33,6 +33,34 @@ product's legal posture, not a convenience.
 originating employee). Staff are our customer's people, not the form's
 subject, so this does not touch the invariant.
 
+THREE CREDENTIAL SYSTEMS EXIST, AND THEY MUST NOT MERGE (checked against
+epic polyglot-pdf-ijntk, editor identity, 2026-08-22):
+
+  1. VOICE-APP / FIRM STAFF -- per-user Firebase ID tokens carrying
+     firm_id + firm_role custom claims (bd lo88). services/auth.py.
+  2. SCHEMA EDITOR -- today two shared secrets; epic ijntk is replacing
+     them with per-user editor identity in its OWN services/editor_auth.py.
+     Nothing here touches that path.
+  3. CLIENT LINKS -- this module. The ONLY credential a firm's CLIENT ever
+     holds, because a client never signs in at all.
+
+WHY (3) IS NOT REDUNDANT WITH (1): a client has no account and must never
+have one -- they are the firm's customer, not ours. There is nothing to sign
+in to, so a Firebase token cannot exist for them.
+
+WHY THE MINT ENDPOINT DOES NOT GET ITS OWN SECRET: this bead originally
+specified a per-firm API key, "X-Editor-Token-style". That is superseded --
+the minting caller is FIRM STAFF, who already hold (1). A per-firm shared
+secret would be a weaker duplicate of a credential they already have, would
+re-introduce exactly the shared-secret pattern epic ijntk is deleting, and
+CANNOT identify which employee minted a link -- which this bead's own
+telemetry requirement needs. employee_id therefore comes from the verified
+Firebase uid, never from the request body.
+
+The two token FORMATS are structurally distinct (a link token has one dot, a
+Firebase JWT has two), so neither verifier can silently accept the other's
+token. That property is pinned by test_link_tokens.py.
+
 ASCII only.
 """
 import base64
