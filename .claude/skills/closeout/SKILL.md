@@ -149,6 +149,11 @@ way. See `closeout_finish.py --help` for the full flag list.
 
 1. Working tree must be clean. If `preconditions` is flagged DIRTY, stop and tell the user: closeout assumes committed work. Do not proceed until it's committed/stashed.
 2. There must be at least one commit ahead of the integration branch (`origin/dev`; rename if yours differs). If prep reports "no commits ahead," there's nothing to close out.
+3. **"branch REVERTS N file(s) to an older state than `<base>` has"** -- the branch would undo work already merged into the base. A CLEAN tree and commits ahead do NOT rule this out; that is exactly the shape it hides in (CLAUDE.md scar #3, the squash-to-a-branch-name trap).
+   - Run `git diff <base>...HEAD --stat` and read the named casualties in prep's detail block.
+   - **If the revert was NOT deliberate** -> do not proceed. Redo the squash from the merge-base: `git reset --soft $(git merge-base origin/dev HEAD)`, recommit, and re-run prep.
+   - **If the revert WAS deliberate** (an intentional revert or file deletion) -> the guard fires identically either way, so confirm intent explicitly and proceed. **Do not read a fire as proof of the trap** -- and do not read the absence of one as proof of intent.
+4. **"could not check for reverted work against `<base>` -- treat as UNVERIFIED, not clean"** -- the detector itself failed; this is fail-closed, NOT a pass. Do not treat the silence as clean. Re-run `git diff <base>...HEAD --stat` by hand, confirm only your own files are listed, then proceed or fix per (3).
 
 ### Step 1 detail -- Beads housekeeping (triage if prep flagged `beads`)
 
