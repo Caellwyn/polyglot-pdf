@@ -23,6 +23,12 @@ NEVER run: `git stash` (in any form, including `-u`), `git checkout`/`restore`/
 `reset` on any path, `git clean`, `git add`, `git commit`, or any redirect,
 `sed -i`, `mv`, `rm`, or editor invocation that writes inside the repo.
 
+**THE ONE EXCEPTION: filing a bead.** `bd create` / `bd note` / `bd dolt push`
+write to `.beads/`, which IS tracked in this repo -- so they are technically
+writes inside it. File beads anyway: that is your sanctioned output channel,
+and the rule above exists to protect the AUTHOR'S IN-FLIGHT WORK, which
+`.beads/` is not. Never hand-edit `.beads/` files; use the `bd` commands.
+
 **This bit for real** (bd polyglot-pdf-fytzi, 2026-08-22): a reviewer running
 experiments stashed the author's uncommitted fix mid-review and later restored
 files outright. Two rounds of work vanished twice and had to be reconstructed;

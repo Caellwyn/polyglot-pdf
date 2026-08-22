@@ -81,6 +81,34 @@ def test_body_forbids_the_commands_that_destroyed_work(path):
 
 
 @pytest.mark.parametrize("path", REVIEWER_FILES, ids=lambda p: p.name)
+def test_body_carves_out_bead_filing(path):
+    """The write ban must not silently forbid the reviewer's OWN output channel.
+
+    `.beads/` is TRACKED in this repo (`git ls-files .beads/` lists it; it is
+    not gitignored), so `bd create` writes inside the repo -- which the blanket
+    "never write inside the repo" rule technically forbids. An agent reading it
+    literally would stop filing beads, which these same files call the one
+    intolerable outcome. Caught by the Opus cross-surface review of bd
+    polyglot-pdf-fytzi, which spotted the contradiction between two rules in
+    the same file.
+    """
+    # Anchor to the READ-ONLY SECTION, not the whole body. Every reviewer also
+    # carries bead-filing INSTRUCTIONS further down (a `bd create ...` command
+    # block), so a naive whole-body search for "bd create" passes even with the
+    # carve-out deleted -- verified: it did. That is a test passing for the
+    # wrong reason, which proves nothing about the rule it claims to guard.
+    body = _body(path)
+    start = body.index("## YOU ARE READ-ONLY")
+    end = body.index("\n## ", start + 1)
+    section = body[start:end].lower()
+    assert "exception" in section and "bead" in section, (
+        f"{path.name}: the read-only section bans writing inside the repo but "
+        "never carves out bead filing -- .beads/ is TRACKED, so a literal "
+        "reading forbids the reviewer's own output channel"
+    )
+
+
+@pytest.mark.parametrize("path", REVIEWER_FILES, ids=lambda p: p.name)
 def test_body_still_permits_verification(path):
     """The rule must not read as 'do less work'.
 
