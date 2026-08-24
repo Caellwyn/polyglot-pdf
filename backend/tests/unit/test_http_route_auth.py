@@ -493,6 +493,83 @@ def test_archive_marker_validation_rejects_unsafe_segments(_firm_world, marker, 
     assert resp.status_code == expected
 
 
+@pytest.mark.parametrize(
+    "kit_id, pdf_filename, hops_above_tmp_path",
+    [
+        ("../../outside_secret", "form.pdf", 1),
+        ("w7", "../../outside_secret/schema.json", 0),
+    ],
+    ids=["traversing-kit_id", "traversing-pdf_filename"],
+)
+def test_fill_pdf_refuses_a_traversing_kit_id_or_pdf_filename(
+    _auth_bypassed, monkeypatch, tmp_path, kit_id, pdf_filename, hops_above_tmp_path
+):
+    """bd polyglot-pdf-7hicd: /fill-pdf is the ONE client-tier kit read that
+    never resolves its filename through the manifest allowlist -- every other
+    route gets pdf_filename from _resolve_kit_filenames (kit-controlled,
+    normalize_manifest-sanitized), but PDFFillRequest.pdf_filename comes
+    straight off the POST body, and kit_id here arrives in JSON, not a URL
+    path segment -- unlike test_archive_marker_validation_rejects_unsafe_
+    segments above, a raw ".." is NOT normalized away before it reaches the
+    handler. A REAL LocalFormKitStore is used (not a fake) so a traversal
+    that isn't actually blocked would ACTUALLY read the planted decoy file
+    outside the store root, exactly as bd polyglot-pdf-xddtl's fix proved for
+    load_draft_snapshot.
+
+    The two cases escape to DIFFERENT depths relative to tmp_path, verified
+    by hand (os.path.normpath on the exact join each store method performs)
+    rather than guessed -- xddtl's own test got a depth wrong once already,
+    caught only by mutation-testing it:
+    - kit_id="../../outside_secret" joins as kits_root/../../outside_secret
+      (kits_root IS tmp_path/"form-kits") -> normalizes to
+      tmp_path.parent/"outside_secret" -- ONE hop above tmp_path.
+    - pdf_filename="../../outside_secret/schema.json" (with kit_id="w7")
+      joins as kits_root/"w7"/../../outside_secret/schema.json -> the extra
+      "w7" segment absorbs one ".." before any climbing out of tmp_path, so
+      this normalizes to tmp_path/"outside_secret"/"schema.json" -- ZERO
+      hops, still inside tmp_path itself."""
+    from backend.services.form_kits import LocalFormKitStore
+    import backend.routes.pdf_fill_routes as pfr
+
+    kits_root = tmp_path / "form-kits"
+    kits_root.mkdir()
+    (kits_root / "w7").mkdir()
+
+    # A REAL minimal PDF, not a fake byte string -- if the traversal isn't
+    # blocked, fitz.open() actually opens it and the route serves it as a
+    # 200, which is the unambiguous proof a mutation test needs. A fake
+    # non-PDF payload here would make an unguarded route 500 instead
+    # (Failed to open stream) -- still wrong, but not distinguishable from
+    # any other 4xx/5xx failure, so it would not pin what this test claims.
+    import fitz
+    decoy_doc = fitz.open()
+    decoy_doc.new_page()
+    decoy_bytes = decoy_doc.tobytes()
+    decoy_doc.close()
+
+    decoy_parent = tmp_path
+    for _ in range(hops_above_tmp_path):
+        decoy_parent = decoy_parent.parent
+    outside = decoy_parent / "outside_secret"
+    outside.mkdir(exist_ok=True)
+    (outside / "schema.json").write_bytes(decoy_bytes)
+
+    store = LocalFormKitStore(kits_root)
+    monkeypatch.setattr(pfr, "get_form_kit_store", lambda: store)
+
+    resp = client.post(
+        "/api/fill-pdf",
+        json={
+            "kit_id": kit_id,
+            "pdf_filename": pdf_filename,
+            "field_values": {},
+            "form_schema": {"fields": []},
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.content != decoy_bytes
+
+
 def test_every_client_tier_kit_read_is_visibility_gated():
     """THE SET PIN (bd polyglot-pdf-vy6id). The Opus cross-surface review
     caught the fill route ungated precisely because the set of client-tier

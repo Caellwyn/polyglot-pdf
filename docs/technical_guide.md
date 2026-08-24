@@ -80,7 +80,7 @@ insertion point.
 
 | Method | Path | Surface doc |
 |--------|------|-------------|
-| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
+| POST | `/api/disclaimer-acceptance` | Record disclaimer acceptance DURABLY (bd polyglot-pdf-0dsv4: the `confirmation_events` Firestore collection + the per-session file, keyed on `form_session_id`, not a log line -- fail-open, so a sink outage cannot block an Agree click). UNAUTHENTICATED by design (Agree fires before any session exists), so `firm_id` is always `None` here and the `form_session_id` is validated as a single safe path segment before it becomes a filename. Anonymized; client IP deliberately NOT logged, bd z2is. Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
@@ -208,7 +208,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
     `schema.fields.find` by id). Duplicate ids silently drop a field (dict
     overwrite); an unknown id returns `undefined`.
   - `pdf_field_name` (field- and option-level): consumed only by the fill route
-    (`backend/routes/pdf_fill_routes.py:115-117`, options :434-442). Missing =
+    (`backend/routes/pdf_fill_routes.py:142-144`, options :461-469). Missing =
     field silently absent from the filled PDF.
   - `name` vs `spoken_name`: guidance builds speak
     `spoken_name || name || id` (`backend/services/manifest_service.py:125`).
@@ -375,11 +375,11 @@ plus the in-browser preview
 `{kit_id, pdf_filename, field_values, form_schema}`
 (`frontend/src/schema-forms/utils/pdfFiller.ts:98-103`). A payload-shape change
 made against only one call site silently misses the other two.
-Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
+Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:62-68`).
 
 - **The backend fills from the CLIENT-SUBMITTED `form_schema`**, typed
   `Dict[str, Any]` -- no `FormSchema` validation runs at fill time, the kit
-  store is consulted only for the PDF bytes (:68), and the extraction-time
+  store is consulted only for the PDF bytes (:95), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
   the editor/publish surface (`_load_kit_dump`,
   `backend/routes/editor_kit_routes.py:687`, with 7 call sites across the
@@ -389,16 +389,16 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (`pdf_fill_routes.py:107-131`); widget dispatch by
-  `field_type` (`pdf_fill_routes.py:409-681`):
-  text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
-  (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
+  exact id always winning (`pdf_fill_routes.py:134-158`); widget dispatch by
+  `field_type` (`pdf_fill_routes.py:436-708`):
+  text via `fill_widget` (:244-304) with cosmetic-only Comb overflow handling
+  (:184-242), checkboxes via `get_button_on_state` (:163-179, defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
-  direct `xref_set_key` writes (:475-476, within the wider :459-495 branch).
+  direct `xref_set_key` writes (:502-503, within the wider :486-522 branch).
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (`pdf_fill_routes.py:410-412`).
-- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
+  (`pdf_fill_routes.py:437-439`).
+- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:718-724`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
 
@@ -428,11 +428,17 @@ handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
 fingerprint (bd polyglot-pdf-xzw5) -- so the name is narrower than the values
-it holds. The SAME sink also carries two SESSION records per voice session
+it holds. The SAME sink carries FOUR event kinds. Two SESSION records per voice session
 (`form_session_started` / `form_session_ended`, wired from
 `_handle_fill_session` under bd polyglot-pdf-xwlt), keyed on the same
 `firm_id` + `kit_id` so per-firm usage spans sessions and confirmations in one
 equality query; the end record carries a confirmed-field COUNT, never values.
+And `disclaimer_accepted` (bd polyglot-pdf-0dsv4) -- the ONLY one written from
+an UNAUTHENTICATED route, so its `firm_id` is structurally always `None` and a
+per-firm query cannot see it; `firm_of_events()` recovers the firm from the
+session's other records. Every query against this collection that means
+"confirmations" must scope on `event == "field_confirmed"`: an unscoped one
+already made a kit permanently undeletable once (bd polyglot-pdf-68s2q).
 *Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).
@@ -466,9 +472,10 @@ tokens, not the client tier):
   off the `firm_id` ID-token claim (`kit_gates.py`'s `firm_allowed_kits`;
   run off the event loop) -> enforced by `kit_gates.py`'s `require_visible` (404 =
   invisibility) on the schema + pdf + fill reads
-  (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
-  (`form_kit_routes.py`'s `list_form_kits`). The pdf route parses its bearer token
-  OPTIONALLY (`form_kit_routes.py:293`); an invalid token degrades to anonymous rather
+  (`pdf_fill_routes.py`'s `fill_pdf`) and by the list filter inside
+  `list_form_kits` (`form_kit_routes.py`'s `list_form_kits`). The pdf route
+  parses its bearer token OPTIONALLY (`form_kit_routes.py`'s
+  `get_form_kit_pdf`); an invalid token degrades to anonymous rather
   than 401.
 - **The private-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated

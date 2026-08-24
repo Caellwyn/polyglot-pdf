@@ -11,6 +11,16 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 import structlog
 
+# ALIASED deliberately: the route handler below is also called
+# log_disclaimer_acceptance, and a bare import would be SHADOWED by it at
+# import time -- the call would resolve to the handler, raise TypeError on
+# the kwargs, and get swallowed by the fail-open except, so the durable
+# write would silently never happen (caught in fresh-eyes review of bd
+# polyglot-pdf-0dsv4, after tests that patched the shadowed name passed).
+from ..utils.confirmation_logger import (
+	log_disclaimer_acceptance as write_durable_acceptance_record,
+)
+
 _log = structlog.get_logger().bind(module="disclaimer_routes")
 
 router = APIRouter(prefix="/api", tags=["disclaimer"])
@@ -83,6 +93,50 @@ async def log_disclaimer_acceptance(
 		user_agent=data.user_agent,
 		script_version=data.script_version,
 	)
+
+	# DURABLE record (bd polyglot-pdf-0dsv4). The structlog line above ages out
+	# with the log bucket; this writes the same acceptance to the confirmation
+	# sink -- Firestore plus the per-session file -- keyed on form_session_id,
+	# so read_confirmation_log() returns the acceptance and the field
+	# confirmations as ONE timestamp-ordered session record.
+	#
+	# FAIL-OPEN, deliberately: a sink outage must never 500 an Agree click and
+	# block the user from starting their form. _submit_firestore_write already
+	# swallows and logs its own failures, but the file write and any import-time
+	# error are caught here so nothing on this path can reach the client.
+	try:
+		write_durable_acceptance_record(
+			form_session_id=data.form_session_id,
+			language=data.language,
+			timestamp_unix_ms=data.timestamp,
+			script_version=data.script_version,
+			user_agent=data.user_agent,
+			# No firm_id: this route carries no auth token (Agree fires before
+			# any authenticated session exists). Written as None so the record
+			# shape matches the rest of the collection; recoverable via
+			# firm_of_events() until firm auth reaches this route.
+			firm_id=None,
+		)
+	except TypeError as e:
+		# A TypeError here is a WIRING error, not an outage: the call reached
+		# something with the wrong signature. That is exactly how this feature
+		# shipped broken once (the util was shadowed by this route handler,
+		# which shares its name -- bd polyglot-pdf-0dsv4), and it fails on
+		# EVERY request rather than intermittently. Logging it under the same
+		# event name as a transient sink failure would bury a 100%-failure
+		# bug inside normal degradation noise, so it gets its own name.
+		_log.error(
+			"disclaimer_acceptance_wiring_error",
+			form_session_id=data.form_session_id,
+			error=str(e),
+			note="the durable-write call has the wrong signature; this fails on every request",
+		)
+	except Exception as e:
+		_log.error(
+			"disclaimer_acceptance_durable_write_failed",
+			form_session_id=data.form_session_id,
+			error=str(e),
+		)
 
 	return {
 		"status": "logged",
