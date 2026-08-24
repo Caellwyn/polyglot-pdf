@@ -528,12 +528,28 @@ _ACCEPTED_SESSIONS_LOCK = threading.Lock()
 _ACCEPTED_SESSIONS_CAP = 10000
 
 
+# Ids that are NOT session-unique, so deduping on them would collapse DIFFERENT
+# users into one record. Both overlays send `state?.formSessionId || 'unknown'`
+# on the acceptance POST (VoiceOverlay.tsx / VoiceOverlayMobile.tsx, two sites
+# each), so every session missing an id sends the SAME literal. Deduping that
+# would keep the first and silently drop every later one -- evidence loss
+# across distinct users, which is far worse than the duplicate-write flood this
+# guard exists to bound. init() always generates an id and there is a migration
+# backfill, so this should be unreachable; "should be" is not good enough when
+# the failure is silent, so it is excluded explicitly.
+_NON_UNIQUE_SESSION_IDS = frozenset(["unknown", "undefined", "null", "none", ""])
+
+
 def _claim_first_acceptance(form_session_id: str) -> bool:
     """True if this is the FIRST acceptance seen for this session id.
 
     Returns True (write it) when the set is at capacity, so a memory bound can
-    never silently discard evidence.
+    never silently discard evidence -- and likewise for an id that is not
+    session-unique (see _NON_UNIQUE_SESSION_IDS): those are never deduped,
+    because two of them are two different users, not a retry.
     """
+    if form_session_id.strip().lower() in _NON_UNIQUE_SESSION_IDS:
+        return True
     with _ACCEPTED_SESSIONS_LOCK:
         if len(_ACCEPTED_SESSIONS) >= _ACCEPTED_SESSIONS_CAP:
             return True

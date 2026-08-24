@@ -919,3 +919,53 @@ def test_at_the_memory_cap_the_guard_STOPS_DEDUPING_not_writing():
         assert cl._claim_first_acceptance("brand_new") is True
     finally:
         cl._reset_acceptance_dedupe()
+
+
+@pytest.mark.parametrize("placeholder", [
+    "unknown", "UNKNOWN", "Unknown", " unknown ",
+    "undefined", "null", "none", "",
+])
+def test_a_NON_UNIQUE_id_is_never_deduped(placeholder, fake_db):
+    """Two 'unknown' acceptances are two USERS, not a retry.
+
+    Both overlays send `state?.formSessionId || 'unknown'` on the acceptance
+    POST (four sites), so every session missing an id sends the SAME literal.
+    Deduping on it would keep the first and silently drop every later one --
+    evidence loss across DISTINCT users, far worse than the duplicate flood
+    this guard bounds.
+    """
+    assert cl._claim_first_acceptance(placeholder) is True
+    assert cl._claim_first_acceptance(placeholder) is True
+
+
+def test_placeholder_acceptances_ALL_reach_the_sink(fake_db):
+    """End-to-end: three 'unknown' sessions produce three records."""
+    for i in range(3):
+        cl.log_disclaimer_acceptance(
+            form_session_id="unknown",
+            language="English",
+            timestamp_unix_ms=1755000000000 + i,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "unknown"]
+    assert len(added) == 3, (
+        f"expected all 3 placeholder acceptances, got {len(added)} -- the "
+        f"dedupe collapsed distinct users into one record"
+    )
+
+
+def test_a_REAL_id_is_still_deduped(fake_db):
+    """The placeholder carve-out must not disable the guard generally."""
+    for _ in range(3):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_still_deduped",
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "fss_still_deduped"]
+    assert len(added) == 1
