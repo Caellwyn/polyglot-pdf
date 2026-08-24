@@ -207,3 +207,58 @@ async def test_a_session_with_no_firm_claim_still_runs(
 
     mock_fill_session.assert_awaited()
     assert mock_fill_session.await_args.kwargs["firm_id"] is None
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_client_link_CANNOT_fill_a_form_it_does_not_name(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """A LINK NAMES ONE FORM (bd polyglot-pdf-ugm6).
+
+    The handshake is client-controlled, so a link holder who edits `kit_id`
+    could otherwise fill a DIFFERENT form of the same firm -- one they were
+    never sent -- and produce a confirmation record naming it. The token's
+    kit_id wins, and a mismatch is REFUSED rather than silently substituted:
+    quietly swapping the form would mean the record names a form the client
+    never saw.
+
+    Found unpinned by mutation: disabling the mismatch check left every other
+    test in this bead green.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    hostile = dict(handshake_message)
+    hostile["kit_id"] = "n-400"          # NOT the form the link names
+    mock_websocket.receive_text.return_value = json.dumps(hostile)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_websocket.close.assert_awaited()
+    assert mock_websocket.close.await_args.kwargs.get("code") == 1008
+    mock_fill_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_client_link_session_carries_the_links_firm_and_form(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """The telemetry requirement for a CLIENT session: firm + form come from
+    the signed link, with no account anywhere in the picture. The matching
+    handshake kit_id is accepted."""
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    ok = dict(handshake_message)
+    ok["kit_id"] = "i-90"
+    mock_websocket.receive_text.return_value = json.dumps(ok)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_fill_session.assert_awaited()
+    kwargs = mock_fill_session.await_args.kwargs
+    assert kwargs.get("firm_id") == "firm-a"

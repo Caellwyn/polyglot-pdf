@@ -1090,6 +1090,34 @@ async def _handle_fill_session(
 
 
 from ..services.auth import verify_token
+from ..services.link_tokens import LinkTokenError, verify_link_token
+
+
+def _verify_ws_credential(token: str) -> dict:
+	"""Resolve a WS credential to claims: a client LINK token or a staff
+	Firebase ID token (bd polyglot-pdf-ugm6).
+
+	Returns a claims dict either way. For a link, the claims are the ones WE
+	signed -- firm_id, kit_id, employee_id, jti -- so the telemetry
+	requirement (firm + form + originating employee) is satisfied for client
+	sessions without the client ever holding an account.
+
+	Dispatch is on SHAPE, not on a caller-supplied hint: a link token has one
+	dot, a Firebase JWT has two. A caller cannot opt into the weaker check by
+	labelling their token, and a Firebase JWT can never be parsed as a link.
+	Raises on failure, which the caller turns into a 1008 close.
+	"""
+	if isinstance(token, str) and token.count(".") == 1:
+		payload = verify_link_token(token)   # raises LinkTokenError
+		return {
+			"uid": None,                     # a client has NO account
+			"firm_id": payload["firm_id"],
+			"link_kit_id": payload["kit_id"],
+			"employee_id": payload["employee_id"],
+			"jti": payload["jti"],
+			"is_client_link": True,
+		}
+	return verify_token(token)
 
 @router.websocket("/fill")
 async def fill_form_from_schema(
@@ -1120,7 +1148,21 @@ async def fill_form_from_schema(
 			# below keys session + confirmation records on it (bd
 			# polyglot-pdf-xwlt). Discarding the return value was why the
 			# WS path could not see firm identity at all.
-			claims = verify_token(token)
+			#
+			# TWO CREDENTIAL KINDS REACH THIS SOCKET (bd polyglot-pdf-ugm6):
+			# a firm STAFF member's Firebase ID token, or a CLIENT's signed
+			# magic-link token. A client has no Firebase account and must
+			# never have one, so without this branch the client tier could
+			# not open the voice socket at all -- the feature would be
+			# unreachable in exactly the case it exists for.
+			#
+			# The two formats are structurally distinct (a link token has ONE
+			# dot, a Firebase JWT has two), so neither verifier can silently
+			# accept the other's token. We try the LINK shape first and only
+			# by that shape; anything else goes to Firebase verification
+			# unchanged. Both paths end with claims we SIGNED or Firebase
+			# signed -- the handshake is never trusted for identity.
+			claims = _verify_ws_credential(token)
 		except Exception as e:
 			log.warning("websocket_auth_failed", error=str(e))
 			await websocket.close(code=1008, reason="Authentication failed")
@@ -1183,6 +1225,23 @@ async def fill_form_from_schema(
 	# dev-bypass stub and any legacy account carry no firm claim.
 	_firm_claim = claims.get("firm_id") if isinstance(claims, dict) else None
 	firm_id = _firm_claim if isinstance(_firm_claim, str) and _firm_claim else None
+
+	# A CLIENT LINK NAMES ONE FORM (bd polyglot-pdf-ugm6). The handshake's
+	# kit_id is client-controlled, so a link holder who edits it could
+	# otherwise fill a DIFFERENT form of the same firm -- including one they
+	# were never sent. Enforce the token's kit_id over the handshake's, and
+	# refuse rather than silently substituting: a mismatch means the client is
+	# not filling the form they were given, and quietly swapping it would
+	# produce a record naming a form the client never saw.
+	if isinstance(claims, dict) and claims.get("is_client_link"):
+		_link_kit = claims.get("link_kit_id")
+		if isinstance(kit_id, str) and kit_id and kit_id != _link_kit:
+			log.warning("ws_link_kit_mismatch", link_kit_id=_link_kit,
+						handshake_kit_id=kit_id, jti=claims.get("jti"))
+			await websocket.close(code=1008, reason="Authentication failed")
+			return
+		# Absent/blank handshake kit_id: the token's is authoritative anyway.
+		kit_id = _link_kit
 
 	if is_jit_mode:
 		# Manifest-first transport: extract the manifest + first field schema.
