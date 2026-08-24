@@ -398,14 +398,43 @@ either way. A signature mismatch logs distinctly
 (`disclaimer_acceptance_durable_write_failed`), because the former fails on
 EVERY request and must not hide inside degradation noise.
 
-**`firm_id` is written as `None` today, deliberately.** This route carries no
-auth token -- Agree fires before any authenticated session exists -- so the
-firm cannot be read here. The key is written anyway so the collection has ONE
-shape and needs no migration when firm auth reaches this route (maintainer
-decision 2026-08-20). Until then `firm_of_events()` recovers the firm from the
-session's OTHER records, which do carry it; a session that accepted and
-abandoned before confirming any field has no firm anywhere and correctly
-reports `None` rather than guessing, as do records that DISAGREE.
+**`firm_id` is written as `None` here, PERMANENTLY.** This route carries no
+auth token and never will: a client filling a form has NO ACCOUNT by design --
+the magic link (bd `polyglot-pdf-ugm6`) is their only entry, and only firms,
+managers and devs have auth accounts (maintainer, 2026-08-24). Requiring a
+token would 401 every real user at the Agree button and block them from filling
+a form at all. An earlier version of this paragraph called the `None` a
+temporary compromise pending firm auth; that was wrong.
+
+The key is still written so the collection has ONE shape, and
+`firm_of_events()` recovers the firm from the session's OTHER records, which do
+carry it -- that join is the long-term answer, not a stopgap. A session that
+accepted and abandoned before confirming any field has no firm anywhere and
+correctly reports `None` rather than guessing, as do records that DISAGREE.
+
+**The anonymous write is BOUNDED, not gated** (bd `polyglot-pdf-g3kui`).
+Because the route cannot require auth and writes durably to this collection,
+any caller could otherwise append unbounded documents to the evidence trail the
+kit-deletion guard and legal retrieval both read. Two controls:
+
+- **One acceptance per `form_session_id`.** A session accepts once; that domain
+  fact is the bound, so a flood costs one row per DISTINCT id rather than one
+  per request. A duplicate is DROPPED silently, not errored -- a retry after a
+  lost response is legitimate client behavior.
+- **Bounded fields**, enforced on the Pydantic model so an oversized body never
+  reaches the handler or the sink. Nothing here is free text.
+
+**Both fail safe in the direction that matters.** At the dedupe set's memory cap
+the guard stops DEDUPING rather than stops writing: a duplicated row is a far
+better failure than a lost legal record.
+
+**KNOWN LIMIT, stated rather than implied:** the dedupe is IN-PROCESS. It does
+not survive a restart and does not bound a flood spread across Cloud Run
+workers. It is a cheap bound on the common case, NOT a rate limiter -- there is
+no rate limiting anywhere in this backend. A distributed limit would be new
+infrastructure and its own decision. Retention is separate again:
+`CONFIRMATION_RETENTION_DAYS` is unset, so nothing ages out (bd
+`polyglot-pdf-pol2`).
 
 **KNOWN GAP as of bd `polyglot-pdf-nsb4y`: on the DEFAULT deployment the
 record still logs `None`.** That clause used to read "the legacy model-read

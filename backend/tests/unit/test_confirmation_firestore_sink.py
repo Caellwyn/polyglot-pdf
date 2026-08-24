@@ -667,9 +667,11 @@ def test_disclaimer_acceptance_reaches_the_durable_sink(fake_db, monkeypatch):
     assert doc["event"] == "disclaimer_accepted"
     assert doc["form_session_id"] == "fss_test_1"
     assert doc["script_version"] == "deadbeefcafe0001"
-    # firm_id is present-but-None today (the route is unauthenticated). The
-    # KEY must exist so the collection has one shape and no migration is
-    # needed when firm auth reaches this route.
+    # firm_id is present-but-None PERMANENTLY: a client filling a form has no
+    # account by design, so this route can never carry a client token (bd
+    # polyglot-pdf-g3kui). The KEY must still exist so the collection has one
+    # shape; firm_of_events() recovers the firm from the session's other
+    # records, and that join is the long-term answer, not a stopgap.
     assert doc["firm_id"] is None
 
 

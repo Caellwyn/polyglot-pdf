@@ -57,3 +57,34 @@ def _isolate_k_service(monkeypatch):
     above, which runs before this fixture -- or any fixture -- ever could.
     """
     monkeypatch.delenv("K_SERVICE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_acceptance_dedupe():
+    """Clear the disclaimer-acceptance dedupe between tests (bd polyglot-pdf-g3kui).
+
+    log_disclaimer_acceptance keeps MODULE-LEVEL state: the first acceptance for
+    a form_session_id writes, later ones are silently dropped. Without this
+    reset, a test whose session id another test already used has its write
+    dropped and then passes or fails depending on COLLECTION ORDER -- the
+    ordering flake this repo has been bitten by before.
+
+    It lives HERE rather than in one test file because TWO files reach this
+    path: test_confirmation_firestore_sink.py calls the writer directly, and 7
+    of the 12 tests in test_disclaimer_acceptance_route.py post a real body
+    without mocking the writer, so they populate the same set.
+
+    HONEST SCOPE: as of this commit the leak does NOT manifest -- I removed
+    every reset and ran both files in both orders, and all 93 tests still
+    passed, because the ids in use happen not to collide. So this fixture is
+    PREVENTIVE, not a fix for a live failure. It earns its place because the
+    failure it prevents is silent (a dropped write looks like a passing test
+    asserting nothing) and order-dependent, which is the shape this repo has
+    been bitten by; a file added later that reuses an existing session id would
+    hit it with no obvious cause.
+    """
+    from backend.utils import confirmation_logger
+
+    confirmation_logger._reset_acceptance_dedupe()
+    yield
+    confirmation_logger._reset_acceptance_dedupe()
