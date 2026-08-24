@@ -7,6 +7,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 import { ClientLinkEntry, readTokenFromHash } from "./ClientLinkEntry";
+import {
+  clearClientLinkToken,
+  setClientLinkToken,
+} from "../shared/sessionCredential";
 import { ONBOARDING_FORM_KEY, ONBOARDING_LANGUAGE_KEY } from "./onboardingStorage";
 
 // SchemaFormDemo drags in the whole voice app (WS, audio, PDF worker). This
@@ -30,6 +34,7 @@ function setHash(hash: string) {
 describe("ClientLinkEntry", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    clearClientLinkToken();   // also drops the module's in-memory mirror
     vi.restoreAllMocks();
   });
 
@@ -139,7 +144,9 @@ describe("ClientLinkEntry", () => {
     expect(screen.queryByTestId("form-app")).toBeNull();
   });
 
-  it("refuses immediately when the URL carries no token", async () => {
+  it("refuses when the URL carries no token AND nothing was redeemed", async () => {
+    // A stranger opening /f with no fragment. Distinct from the RELOAD case
+    // below -- the difference is whether this tab ever redeemed a link.
     setHash("");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -148,6 +155,42 @@ describe("ClientLinkEntry", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("RECOVERS on reload: empty hash but a token in this tab's storage", async () => {
+    // THE RELOAD CASE, and the one the storage exists for. We clear the
+    // fragment after redeeming, so a refresh arrives with an empty URL and a
+    // still-valid token in sessionStorage.
+    //
+    // The first pass shipped the storage WITHOUT this branch -- written,
+    // never read -- so a reload still showed "This link is not valid" while
+    // the commit and three docs claimed it was fixed (fresh-eyes r3). A test
+    // that only checks the storage module cannot catch that; this one drives
+    // the gate component, which is where the bug was.
+    setClientLinkToken("already.redeemed.token");
+    setHash("");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ClientLinkEntry />);
+
+    expect(await screen.findByTestId("form-app")).toBeTruthy();
+    // And it must NOT re-redeem: the link is already open and the form id is
+    // already pinned, so a second /open is a wasted metered call.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a reload does NOT resurrect a session in a tab that never redeemed", async () => {
+    // The recovery must key on THIS tab's storage, not on anything ambient.
+    // sessionStorage is tab-scoped, so a fresh tab has nothing and must
+    // refuse -- otherwise the recovery branch becomes a way in.
+    clearClientLinkToken();
+    setHash("");
+    vi.stubGlobal("fetch", vi.fn());
+
+    render(<ClientLinkEntry />);
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
   });
 
   it("does not render the form app when the network fails", async () => {

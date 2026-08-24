@@ -1,8 +1,11 @@
 """One-time-use bookkeeping for client magic links (bd polyglot-pdf-ugm6).
 
-The maintainer's requirement (2026-08-17): a client link is good for ONE
-specific form and ONE completion, with ~48h to open and ~24h to complete
-after opening. "One time" cannot live in the token -- a signed bearer string
+The maintainer's requirement (2026-08-17, window widened 2026-08-24): a
+client link is good for ONE specific form and ONE completion, with ~48h to
+open and SEVEN DAYS to complete after opening. The bound is on FINISHING --
+reopening an unfinished form across that week is intended, so a client who
+loses their work returns to the original message rather than phoning the
+firm. "One time" cannot live in the token -- a signed bearer string
 is inherently replayable -- so redemption state is the only place it can be
 enforced.
 

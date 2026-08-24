@@ -22,7 +22,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { saveOnboardingState } from "./onboardingStorage";
 import { getBackendUrl } from "../shared/config";
-import { setClientLinkToken } from "../shared/sessionCredential";
+import {
+  hasClientLinkToken,
+  setClientLinkToken,
+} from "../shared/sessionCredential";
 
 /** What the backend tells us about a redeemed link. Deliberately NOT the
  *  firm's kit list -- the client sees exactly the one form they were sent. */
@@ -60,6 +63,24 @@ export function ClientLinkEntry() {
 
     const token = readTokenFromHash(window.location.hash);
     if (!token) {
+      // RELOAD RECOVERY. An empty hash is not necessarily an invalid link:
+      // we deliberately clear the fragment after redeeming, so a refresh --
+      // or back/forward, or a phone returning to a backgrounded tab --
+      // arrives here with nothing in the URL but a perfectly good token
+      // still in this tab's storage.
+      //
+      // Storing the token was pointless without this branch, and that is
+      // exactly what shipped in the first pass: the storage was written and
+      // never read, so a reload still showed "This link is not valid"
+      // (fresh-eyes r3). The fix is only real when BOTH halves exist.
+      //
+      // Do NOT re-POST /open here: the link is already redeemed and the form
+      // id is already pinned in onboardingStorage from the first open. Going
+      // straight to ready is both correct and one fewer metered call.
+      if (hasClientLinkToken()) {
+        setPhase("ready");
+        return;
+      }
       setPhase("invalid");
       return;
     }
@@ -125,7 +146,13 @@ export function ClientLinkEntry() {
   // redeemed link. Requiring `link` makes fail-closed structural rather than
   // incidental -- a mutation setting phase="ready" in the catch block still
   // lands here (verified).
-  if (phase !== "ready" || !link) {
+  // On the RELOAD path `link` is null -- the /open response was consumed on
+  // the first load and is not re-fetched -- so readiness alone is the right
+  // gate here. Fail-closed still holds: `phase` reaches "ready" only after a
+  // successful redemption OR a confirmed token in this tab's storage, never
+  // from an error path (pinned by
+  // "renders the form ONLY with a redeemed link, never on phase alone").
+  if (phase !== "ready") {
     return (
       <div className="client-link-entry client-link-entry--invalid" role="alert">
         <h1>This link is not valid</h1>
