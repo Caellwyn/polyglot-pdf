@@ -144,9 +144,16 @@ async def firm_allowed_kits(user: Optional[dict]) -> frozenset:
     # client a directory of that firm's private intake forms, and let them
     # fetch the schema and blank PDF of forms they were never sent.
     #
-    # Narrow to the single kit BEFORE the allowlist read (which is also one
-    # fewer Firestore round-trip per client request), and intersect with the
-    # allowlist so a kit the firm has since lost is still refused.
+    # Narrow by INTERSECTING the allowlist read -- the read still happens,
+    # because it is what refuses a kit the firm has since lost. (An earlier
+    # version of this comment claimed the narrowing saved a Firestore
+    # round-trip. It does not: both branches make exactly one
+    # get_allowed_kits call.)
+    #
+    # COST NOTE for bd polyglot-pdf-ik7e: a client HTTP request that touches
+    # a private kit costs TWO uncached Firestore reads -- this one, plus
+    # require_auth's redemption read. Size the per-session datastore spend
+    # from that, not from one.
     if user.get("is_client_link"):
         link_kit = user.get("link_kit_id")
         if not isinstance(link_kit, str) or not link_kit:

@@ -9,6 +9,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { ClientLinkEntry, readTokenFromHash } from "./ClientLinkEntry";
 import {
   clearClientLinkToken,
+  resolveSessionToken,
   setClientLinkToken,
 } from "../shared/sessionCredential";
 import { ONBOARDING_FORM_KEY, ONBOARDING_LANGUAGE_KEY } from "./onboardingStorage";
@@ -79,6 +80,36 @@ describe("ClientLinkEntry", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("/api/links/open");
     expect(JSON.parse(init.body).token).toBe("good.token");
+  });
+
+  it("STASHES the redeemed token so the app can AUTHENTICATE", async () => {
+    // THE UNPROVEN HALF of r1 finding 1. That bug was "the redeemed token
+    // was captured and then discarded", and the fix is one line in this
+    // component -- setClientLinkToken(token). NOTHING pinned it: delete that
+    // line and all 13 tests here stayed green, because they assert the form
+    // renders, the form id is pinned, or the fetch shape -- none of which
+    // touch the credential.
+    //
+    // sessionCredential.test.ts cannot cover it either: it proves the
+    // MODULE round-trips, which is the one-layer-removed shape this bead
+    // has now been bitten by four times.
+    //
+    // Mutation: drop setClientLinkToken(token) in ClientLinkEntry -- red.
+    clearClientLinkToken();
+    setHash("#t=good.token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => OPENED }),
+    );
+
+    render(<ClientLinkEntry />);
+    await screen.findByTestId("form-app");
+
+    // The assertion that MATTERS is the second one: it proves the credential
+    // is reachable through the resolver the nine backend-calling sites
+    // actually use, not merely that some key was written to storage.
+    expect(sessionStorage.getItem("vff_client_link_token")).toBe("good.token");
+    expect(await resolveSessionToken(null)).toBe("good.token");
   });
 
   it("PINS the form so the client never sees a form picker", async () => {

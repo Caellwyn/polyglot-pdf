@@ -177,6 +177,12 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 
   The token rides in the URL FRAGMENT so it never reaches access, referrer,
   or proxy logs. See [auth.md](auth.md) (Client magic links).
+
+  **Per-request cost, for whoever sizes bd `polyglot-pdf-ik7e`:** a client
+  HTTP request costs TWO uncached Firestore reads -- `require_auth`'s
+  redemption check, plus the firm-allowlist read whenever the visibility
+  gate fires on a private kit. Neither is cached, deliberately: caching a
+  revocation check reopens the replay window the redemption gate closes.
 - **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
   for the token-gated `/api/editor/*` surface the hosted schema editor uses
   (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:
