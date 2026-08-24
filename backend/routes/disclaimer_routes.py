@@ -134,10 +134,13 @@ async def log_disclaimer_acceptance(
 			timestamp_unix_ms=data.timestamp,
 			script_version=data.script_version,
 			user_agent=data.user_agent,
-			# No firm_id: this route carries no auth token (Agree fires before
-			# any authenticated session exists). Written as None so the record
-			# shape matches the rest of the collection; recoverable via
-			# firm_of_events() until firm auth reaches this route.
+			# No firm_id, PERMANENTLY: a client filling a form has no account
+			# by design -- the magic link is their only entry, and only firms,
+			# managers and devs have auth accounts (maintainer, 2026-08-24) --
+			# so this route can never carry a client token. Written as None so
+			# the record shape matches the rest of the collection; the firm is
+			# recovered via firm_of_events(), which is the long-term answer,
+			# not a stopgap (bd polyglot-pdf-g3kui).
 			firm_id=None,
 		)
 	except TypeError as e:

@@ -424,9 +424,13 @@ kit-deletion guard and legal retrieval both read. Two controls:
 - **Bounded fields**, enforced on the Pydantic model so an oversized body never
   reaches the handler or the sink. Nothing here is free text.
 
-**Both fail safe in the direction that matters.** At the dedupe set's memory cap
-the guard stops DEDUPING rather than stops writing: a duplicated row is a far
-better failure than a lost legal record.
+**They fail in OPPOSITE directions, both deliberately.** At the dedupe set's
+memory cap the guard stops DEDUPING rather than stops writing -- a duplicated
+row is a far better failure than a lost legal record. The field caps do the
+reverse and REJECT (422): an oversized body is not a real acceptance, and
+truncating one into the evidence trail would record something the user never
+sent. Caps are set well above every real value so a legitimate acceptance
+cannot hit them.
 
 **KNOWN LIMIT, stated rather than implied:** the dedupe is IN-PROCESS. It does
 not survive a restart and does not bound a flood spread across Cloud Run
@@ -492,7 +496,9 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-22 (bd polyglot-pdf-0dsv4: the disclaimer acceptance is now DURABLE -- same sink as the field confirmations, joined on form_session_id, with firm_id written as None until firm auth reaches that unauthenticated route. Also bd polyglot-pdf-xwlt: `firm_id` joins the confirmation record and the session-lifecycle pair is WIRED -- see [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md). Previously bd polyglot-pdf-1dt9b: the Undertaken-register
-reachability claim was stale -- the frontend intro-clip player shipped in bd
-s1iex.5, so the real gate is now both flags defaulting off, not "no player
-exists").*
+*Last updated: 2026-08-24 (bd polyglot-pdf-g3kui: the anonymous acceptance
+write is BOUNDED -- one record per form_session_id plus field caps -- because
+the route can never require auth: a client filling a form has no account by
+design. firm_id is therefore PERMANENTLY None here, not pending firm auth.
+Also bd polyglot-pdf-0dsv4: the acceptance is durable, written to the same
+sink as the field confirmations and joined on form_session_id.)*

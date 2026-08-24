@@ -70,18 +70,21 @@ def _reset_acceptance_dedupe():
     ordering flake this repo has been bitten by before.
 
     It lives HERE rather than in one test file because TWO files reach this
-    path: test_confirmation_firestore_sink.py calls the writer directly, and 7
-    of the 12 tests in test_disclaimer_acceptance_route.py post a real body
-    without mocking the writer, so they populate the same set.
+    path: test_confirmation_firestore_sink.py calls the writer directly, and 6
+    of the 12 test functions in test_disclaimer_acceptance_route.py post a real
+    body without mocking the writer (5 of those reach the writer; the sixth is
+    rejected at validation), so they populate the same set.
 
-    HONEST SCOPE: as of this commit the leak does NOT manifest -- I removed
-    every reset and ran both files in both orders, and all 93 tests still
-    passed, because the ids in use happen not to collide. So this fixture is
-    PREVENTIVE, not a fix for a live failure. It earns its place because the
-    failure it prevents is silent (a dropped write looks like a passing test
-    asserting nothing) and order-dependent, which is the shape this repo has
-    been bitten by; a file added later that reuses an existing session id would
-    hit it with no obvious cause.
+    SCOPE, measured rather than asserted. The existing tests do not currently
+    collide: with every reset removed, all 93 still pass in both file orders,
+    because the ids in use happen to differ. But the leak is REAL and I
+    reproduced it -- two tests writing the same session id, with no reset, and
+    the second write is silently dropped; with this fixture, both land.
+
+    So the failure it prevents is live, not hypothetical, and it is the worst
+    shape: SILENT (a dropped write looks like a passing test asserting nothing)
+    and order-dependent. A test added later that reuses an existing session id
+    hits it with no obvious cause.
     """
     from backend.utils import confirmation_logger
 

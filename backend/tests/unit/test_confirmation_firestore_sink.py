@@ -73,12 +73,6 @@ def _fresh_sink():
     cl.flush_confirmation_sink()
     cl._probe_cache = None
     cl._probe_in_flight = None
-    # The acceptance dedupe is MODULE-level state (bd polyglot-pdf-g3kui), so
-    # without this reset a test reusing a session id another test already used
-    # would have its write silently dropped -- passing or failing depending on
-    # collection ORDER, which is the classic ordering flake this repo has been
-    # bitten by. Reset it here rather than per-test so a new test cannot forget.
-    cl._reset_acceptance_dedupe()
     yield
     cl.flush_confirmation_sink()
     cl._probe_cache = None
