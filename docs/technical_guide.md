@@ -80,7 +80,7 @@ insertion point.
 
 | Method | Path | Surface doc |
 |--------|------|-------------|
-| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
+| POST | `/api/disclaimer-acceptance` | Record disclaimer acceptance DURABLY (bd polyglot-pdf-0dsv4: the `confirmation_events` Firestore collection + the per-session file, keyed on `form_session_id`, not a log line -- fail-open, so a sink outage cannot block an Agree click). UNAUTHENTICATED by design (Agree fires before any session exists), so `firm_id` is always `None` here and the `form_session_id` is validated as a single safe path segment before it becomes a filename. Anonymized; client IP deliberately NOT logged, bd z2is. Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
@@ -428,11 +428,17 @@ handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
 fingerprint (bd polyglot-pdf-xzw5) -- so the name is narrower than the values
-it holds. The SAME sink also carries two SESSION records per voice session
+it holds. The SAME sink carries FOUR event kinds. Two SESSION records per voice session
 (`form_session_started` / `form_session_ended`, wired from
 `_handle_fill_session` under bd polyglot-pdf-xwlt), keyed on the same
 `firm_id` + `kit_id` so per-firm usage spans sessions and confirmations in one
 equality query; the end record carries a confirmed-field COUNT, never values.
+And `disclaimer_accepted` (bd polyglot-pdf-0dsv4) -- the ONLY one written from
+an UNAUTHENTICATED route, so its `firm_id` is structurally always `None` and a
+per-firm query cannot see it; `firm_of_events()` recovers the firm from the
+session's other records. Every query against this collection that means
+"confirmations" must scope on `event == "field_confirmed"`: an unscoped one
+already made a kit permanently undeletable once (bd polyglot-pdf-68s2q).
 *Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).

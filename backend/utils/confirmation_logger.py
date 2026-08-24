@@ -16,6 +16,7 @@ retrievable per form-session. Events are metadata-only (field ids, methods,
 timestamps -- never values), so this persistence does not touch the
 stateless/no-PII invariant (docs/standards/stateless-architecture.md).
 """
+import re
 import os
 import threading
 import time
@@ -371,13 +372,80 @@ def log_field_confirmation(
     _submit_firestore_write(confirmation_event)
 
 
+# A form session id is client-generated: `fss_<base36 ts>_<8 chars>`
+# (schemaFormState.ts). It becomes a FILENAME below, so it must be a single
+# path segment and nothing else.
+#
+# fullmatch, NOT match: with `match` the `$` anchor also matches just before a
+# trailing newline, so an id ending in a newline would pass and reach the
+# filesystem. That exact bug was found in _safe_kit_id (bd
+# polyglot-pdf-sbfk) -- same trap, same fix.
+_FORM_SESSION_ID_RE = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+
+
+# Windows treats these as DEVICES, not files, with or without an extension:
+# opening "NUL.jsonl" succeeds and discards every byte, so an attacker could
+# make a session's evidence vanish silently rather than noisily. This backend
+# runs on Linux in production and Windows in local dev; the check is
+# unconditional so behavior does not diverge between them.
+_WINDOWS_RESERVED = frozenset(
+    ["CON", "PRN", "AUX", "NUL"]
+    + ["COM%d" % i for i in range(1, 10)]
+    + ["LPT%d" % i for i in range(1, 10)]
+)
+
+
+def _is_safe_session_id(form_session_id: str) -> bool:
+    """Whether this id is safe to use as a single filename segment.
+
+    Rejects, in order: non-strings; anything containing "..";  anything outside
+    the charset/length bound; a name that is only dots; a name ending in a dot
+    (Windows silently strips trailing dots, so "x." and "x" collide); and the
+    Windows reserved device names.
+
+    All of these were reached by adversarially attacking this function rather
+    than by reasoning about it -- the device names and trailing dots passed the
+    first version (bd polyglot-pdf-0dsv4).
+    """
+    if not isinstance(form_session_id, str):
+        return False
+    if ".." in form_session_id:
+        return False
+    if _FORM_SESSION_ID_RE.fullmatch(form_session_id) is None:
+        return False
+    if form_session_id.strip(".") == "":
+        return False
+    if form_session_id.endswith("."):
+        return False
+    # Windows matches the device name before the extension, case-insensitively.
+    stem = form_session_id.split(".", 1)[0].upper()
+    if stem in _WINDOWS_RESERVED:
+        return False
+    return True
+
+
 def _write_confirmation_to_file(form_session_id: str, event: dict) -> None:
     """
     Write confirmation event to dedicated log file.
 
     One log file per form session for easy correlation.
     File format: logs/confirmations/{form_session_id}.jsonl
+
+    REFUSES a form_session_id that is not a single safe path segment. This is
+    enforced HERE, at the write, rather than in any one caller: the id reaches
+    this function from an UNAUTHENTICATED route (POST /api/disclaimer-acceptance
+    -- Agree fires before any session exists, so it carries no token), and
+    "../../PWNED" wrote outside the log directory and returned 200 (reproduced,
+    bd polyglot-pdf-0dsv4 cross-surface review). Validating at the sink protects
+    every caller, including ones added later.
     """
+    if not _is_safe_session_id(form_session_id):
+        _log.error(
+            "confirmation_log_unsafe_session_id",
+            note="refused: not a single safe path segment; no file written",
+            length=len(form_session_id) if isinstance(form_session_id, str) else None,
+        )
+        return
     try:
         log_file = _confirmation_log_dir() / f"{form_session_id}.jsonl"
 
@@ -427,6 +495,87 @@ def log_form_session_start(
     _log.info("form_session_started", **{k: v for k, v in event.items() if k != "event"})
     _write_confirmation_to_file(form_session_id, event)
     _submit_firestore_write(event)
+
+
+def log_disclaimer_acceptance(
+    form_session_id: str,
+    language: str,
+    timestamp_unix_ms: int,
+    script_version: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    firm_id: Optional[str] = None,
+) -> None:
+    """Log the user's acceptance of the disclaimer, DURABLY.
+
+    Why this exists (bd polyglot-pdf-0dsv4): the acceptance used to be a
+    single structured log line and nothing else, so the record that a user
+    accepted the legal terms was LESS durable than the record of what they
+    typed into a field -- backwards for a legal-evidence trail. It now goes
+    through the same sink the field confirmations use, keyed on
+    form_session_id, so `read_confirmation_log(form_session_id)` returns the
+    acceptance and the confirmations as ONE timestamp-ordered session record.
+
+    NO PII, and deliberately no client IP (bd polyglot-pdf-z2is): an IP is
+    PII under GDPR/CCPA. `script_version` is a hash of copy that ships in the
+    client bundle, so it names WHICH text was agreed to without carrying user
+    content.
+
+    firm_id: the customer firm, matching the session-lifecycle and
+        confirmation records (bd polyglot-pdf-xwlt). CURRENTLY ALWAYS None:
+        POST /api/disclaimer-acceptance carries no auth token, because Agree
+        fires before any authenticated session exists. The field is written
+        anyway so the collection has ONE shape and no migration is needed
+        when firm auth reaches this route (maintainer decision 2026-08-20).
+        Until then a firm's acceptances are reachable by joining on
+        form_session_id against their confirmation records, which DO carry
+        firm_id -- see firm_of_events below.
+    """
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    event = {
+        "timestamp": timestamp,
+        "event": "disclaimer_accepted",
+        "form_session_id": form_session_id,
+        "firm_id": firm_id,
+        "language": language,
+        "timestamp_unix_ms": timestamp_unix_ms,
+        "script_version": script_version,
+        "user_agent": user_agent,
+    }
+
+    # Filter the "event" key: it collides with structlog's positional event
+    # name (same pattern as log_field_confirmation).
+    _log.info(
+        "disclaimer_accepted", **{k: v for k, v in event.items() if k != "event"}
+    )
+    _write_confirmation_to_file(form_session_id, event)
+    _submit_firestore_write(event)
+
+
+def firm_of_events(events: list) -> Optional[str]:
+    """The firm a session's records attribute it to, or None.
+
+    Split out so a caller that ALREADY holds the events (the retrieval script)
+    attributes without a second query, and so the attribution rule is testable
+    without a datastore.
+
+    DISAGREEMENT IS NOT SILENTLY RESOLVED. One session belongs to one firm, so
+    two different firm_ids on one session means something is wrong upstream --
+    returning the first would launder that into a confident wrong answer on a
+    legal-evidence path. Log it loudly and return None: "we do not know" is the
+    honest result, and a caller can still read the raw records.
+    """
+    firms = {e.get("firm_id") for e in events if e.get("firm_id")}
+    if not firms:
+        return None
+    if len(firms) > 1:
+        _log.error(
+            "firm_attribution_conflict",
+            firm_ids=sorted(firms),
+            note="one session mapped to multiple firms; refusing to guess",
+        )
+        return None
+    return firms.pop()
 
 
 def log_form_session_end(

@@ -117,8 +117,16 @@ def main() -> int:
         counts: dict = {}
         for e in events:
             counts[e.get("event", "?")] = counts.get(e.get("event", "?"), 0) + 1
+        # Firm attribution (bd polyglot-pdf-0dsv4). The disclaimer-acceptance
+        # record carries firm_id=None -- that route has no auth token -- so the
+        # firm is recovered from the session's OTHER records. None here means
+        # genuinely unknown: a firm-less session, one that accepted and
+        # abandoned before confirming a field, or records that disagree.
+        from backend.utils.confirmation_logger import firm_of_events
+
         print(json.dumps({
             "form_session_id": args.form_session_id,
+            "firm_id": firm_of_events(events),
             "total_events": len(events),
             "by_type": counts,
             "first": events[0].get("timestamp"),
