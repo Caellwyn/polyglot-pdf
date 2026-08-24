@@ -136,6 +136,63 @@ audio, so each is paid work as well as a user-data path). The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
+### Client magic links -- the THIRD credential system
+
+`bd polyglot-pdf-ugm6`. **A firm's CLIENT never signs in.** They are our
+customer's customer; they have no account and must never have one (maintainer,
+2026-08-17, who also explicitly rejected the alternative of a client working on
+a staff-signed-in machine). Their entry is a one-time link.
+
+**Three credential systems now exist, and they must not merge:**
+
+| # | Who | Credential | Where |
+|---|-----|-----------|-------|
+| 1 | Firm STAFF (voice app) | per-user Firebase ID token + `firm_id`/`firm_role` claims | `services/auth.py` |
+| 2 | Schema EDITOR | its own per-user identity (epic `polyglot-pdf-ijntk`) | `services/editor_auth.py` |
+| 3 | Firm CLIENT | a signed magic-link token | `services/link_tokens.py` |
+
+They are kept apart STRUCTURALLY, not by convention: a link token has ONE
+dot, a Firebase JWT has two, so neither verifier can silently accept the
+other's token. `/ws/fill` dispatches on that shape (`_verify_ws_credential`),
+so a caller cannot opt into the weaker check by labelling their credential.
+
+**The token carries `{firm_id, kit_id, employee_id, jti, iat, exp, cw}` and
+DELIBERATELY no client identifier.** That absence is the product's legal
+posture, not privacy hygiene: WE hold a pseudonymous record keyed by `jti`,
+THE FIRM holds the identity mapping, and neither side alone can connect a
+record to a person. Re-identification requires the firm to act, which puts
+the disclosure decision -- and the legal process behind it -- on the party
+with the attorney-client relationship. Adding a client identifier is a
+breaking change to that posture; the complete field set is pinned by
+`test_link_tokens.py` so it cannot be widened quietly.
+
+`employee_id` IS carried, from the minting employee's VERIFIED uid (never the
+request body, which could forge attribution). That is what makes the
+maintainer's telemetry requirement -- firm, form, and originating employee on
+every session -- true for CLIENT sessions, which have no account to read
+identity from.
+
+**One form, one completion, two clocks.** The link names one kit and the
+socket ENFORCES it: the handshake is client-controlled, so a link holder who
+edits `kit_id` is REFUSED, not silently given the right form (a silent
+substitution would produce a confirmation record naming a form the client
+never saw). ~48h to open from issuance, then ~24h to complete from FIRST
+OPEN -- the completion clock starts at open, so a client who opens on hour 47
+still gets a full window. One-time use lives in the `link_redemptions` store,
+because a signed bearer string is inherently replayable; reopening an
+UNFINISHED link is allowed (a refresh or dropped connection must not strand a
+client), only COMPLETION burns it.
+
+**Every refusal is the same 404** -- forged, expired, replayed, suspended
+firm, kit no longer allowed. Distinguishable errors would make the
+unauthenticated endpoint an oracle for probing which links and firms exist.
+Entitlement is RE-CHECKED at open rather than trusted from the mint-time
+snapshot, since a firm can be suspended in the 48 hours in between.
+
+**Minting is OFF by default** (`LINK_MINTING_ENABLED`) until the spend
+ceiling ships (bd `polyglot-pdf-ik7e`) -- see
+[config-deployment.md](config-deployment.md).
+
 ### The firm WRITE path: authorization is not authentication
 
 `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`) is the firm

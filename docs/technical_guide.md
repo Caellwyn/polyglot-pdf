@@ -549,7 +549,49 @@ assumptions, which is the trap for anyone changing either one:
 No UI consumes this route yet -- the button belongs to the firm console (bd
 polyglot-pdf-gob8l), per the maintainer's 2026-08-20 decision.
 
-### 9. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
+### 9. Client magic links (bd polyglot-pdf-ugm6)
+
+The CLIENT tier's entire contract surface, and the first credential in this
+system that is NOT a Firebase account. Five coupled pieces:
+
+- **The link token** (`backend/services/link_tokens.py`): HMAC-SHA256 over a
+  canonical JSON payload, `<payload_b64>.<sig>`. Producer: `POST
+  /api/links/mint`. Consumers: `POST /api/links/open` AND
+  `websocket_routes._verify_ws_credential`. **The ONE-DOT shape is load-
+  bearing** -- it is what keeps this credential and a Firebase JWT (two dots)
+  from ever being confused, in both directions. Giving the token a third
+  segment, or routing on a caller-supplied hint instead of shape, merges two
+  credential systems that must stay apart.
+- **The no-client-identifier invariant.** The payload's field set is CLOSED
+  and pinned by `test_link_tokens.py`. We hold the pseudonym (`jti`), the
+  firm holds identity; neither side alone re-identifies. Widening the payload
+  is a change to the product's legal posture (see
+  `docs/components/auth.md`).
+- **`employee_id` from the verified uid.** Producer: the mint route, reading
+  `user["uid"]` -- never `body`, which has no such field (also pinned).
+  Consumer: the session telemetry (contract 6), which is how a CLIENT session
+  satisfies "firm + form + originating employee" with no account involved.
+- **The kit_id the link names beats the handshake's.** The WS handshake is
+  client-controlled; a link holder editing `kit_id` is REFUSED (1008), not
+  silently corrected -- a substitution would produce a confirmation record
+  naming a form the client never saw. Any future code path that trusts the
+  handshake's `kit_id` for a link session reopens this.
+- **One-time use lives in Firestore** (`link_redemptions`), not the token: a
+  signed bearer string is replayable by construction. FAILS CLOSED BY
+  REFUSING (opposite polarity to the firms allowlist read, which fails closed
+  by returning `[]`) -- note the two "fail closed" directions when changing
+  either.
+
+Frontend: `/f` renders `ClientLinkEntry` OUTSIDE `ProtectedRoute`
+(`frontend/src/schema-forms/main.tsx`). Moving it inside bounces every client
+to a sign-in they can never pass. The gate pins the form id via
+`saveOnboardingState` and leaves LANGUAGE unset -- the form is the firm's
+choice, the language is the client's.
+
+**Minting is off by default** until the spend ceiling ships (bd
+polyglot-pdf-ik7e): a live link is an unauthenticated door to a paid session.
+
+### 10. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 
 Producer: `backend/services/intro_agree_labels.json` (18 language ->
 agree-label entries). Consumer: `BUTTON_TRANSLATIONS` in
@@ -560,7 +602,7 @@ backend's copy of the label -- so a drift means Sol speaks a button name
 that is not the one on screen. Pinned by
 `backend/tests/unit/test_intro_route.py::TestIntroTables::test_agree_labels_match_frontend_mirror`.
 
-### 10. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
+### 11. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
 
 `Settings.LIVE_VOICE_NAME` (`backend/config.py:360`) has TWO independent
 consumers in different surfaces, so changing the env var moves both at
