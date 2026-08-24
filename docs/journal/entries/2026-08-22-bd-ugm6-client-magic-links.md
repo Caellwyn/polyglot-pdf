@@ -199,3 +199,99 @@ enough for cleanup to win, so the fetch never started. Even
 synchronous (returning a union type rather than being `async`), and the
 racing call site awaits only when a promise is actually returned.
 
+## Rounds 2 and 3: the same mistake at three different layers
+
+**r2 finding 1 (HIGH) -- the HTTP routes still refused a client.** I taught
+`/ws/fill` the link credential and left `require_auth` untouched, so a
+client's FIRST call (the manifest read) 401'd and every session dead-ended at
+"Unable to load forms". Verified by direct call before fixing. Fixed at the
+ONE shared gate rather than nine routes, dispatching on the same token shape
+the socket uses.
+
+**A leak that fix nearly shipped, caught before commit.** A link carries the
+FIRM's id, because the session must be firm-keyed for telemetry. But
+`firm_allowed_kits` resolves a firm id to every private kit the FIRM owns --
+so a client's link would have granted read access to the firm's whole private
+catalogue, schemas and blank PDFs included. Verified live: one client
+resolved to three kits. Clients now resolve to exactly their link's kit,
+INTERSECTED with the firm's live allowlist so a retired kit still refuses.
+The client credential also carries no `firm_role` and no `uid`, so every
+role-gated surface refuses them through the existing check with no new code.
+
+**r3 finding 1 (HIGH) -- I wrote the token to storage and never read it
+back.** The maintainer chose tab-scoped storage so a reload would not strand
+a client. I implemented the storage, and `ClientLinkEntry` kept reading only
+`location.hash` -- which is empty after a reload BY DESIGN, since we clear
+the fragment once redeemed. A refresh still showed "This link is not valid",
+while the commit message and three docs said it was fixed.
+
+### The pattern, which is the actual lesson
+
+Three rounds, three times I reported the client path complete, three times it
+was not -- and each gap sat one layer further out than the last:
+
+| Round | The layer I forgot |
+|-------|--------------------|
+| r1 | the WebSocket (the token was captured and discarded) |
+| r2 | the nine HTTP routes (only the socket knew the credential) |
+| r3 | the reload path (storage written, never read) |
+
+Every one of them had green tests, because in every case the test sat one
+layer away from the behavior. `sessionCredential.test.ts` proves the storage
+MODULE round-trips a token; it cannot prove the GATE consults it.
+`ClientLinkEntry.test.tsx` mocks `SchemaFormDemo` away, so it cannot see that
+the app it renders makes an HTTP call the client cannot authenticate.
+
+**The generalizable rule: for a feature with a NEW ACTOR, the only test that
+means anything is one that walks the actor's whole path.** Component tests
+prove components. Nothing short of an end-to-end walk proves a new kind of
+user can actually get in -- and each of these three bugs was invisible to
+everything except asking "what does the client's browser do NEXT?".
+
+That is also why I stopped claiming completeness by inspection after r3 and
+let the review rounds run until one comes back clean.
+
+## Two product decisions from the maintainer (2026-08-24)
+
+**7-day completion window** (was 24h), and the mint cap raised to 30d so it
+sits above the default rather than forcing a re-issue. The reasoning is the
+firm's workload, not the client's convenience: a client who loses their work
+returns to the original message and clicks the SAME link instead of phoning
+the firm for a new one. The bound stays on FINISHING -- a genuine completion
+burns the link -- not on how many times a client may open their own
+unfinished form. Reopening a 40-minute intake form across a week is intended
+behavior.
+
+**Tab-scoped token storage**, so an accidental refresh never needs that
+fallback at all. Never `localStorage`, which would outlive the browser
+session.
+
+Maintainer framing, worth keeping: "I don't want to be punishing, or create
+extra work for the firm staff. I just want to avoid abuse."
+
+## Anti-abuse is bd polyglot-pdf-ik7e, and it gained scope
+
+The maintainer's commercial model: ~2-4 AI turns per question, so a
+100-question form is 200-400 turns. "I don't really want clients just
+chatting with the AI for a week."
+
+That last clause was NEW scope. ik7e was written around REPLAY and a
+per-session cost ceiling; neither bounds a SINGLE legitimate session that
+runs long -- and the 7-day window makes that materially more likely.
+
+**Cost is the enforcement unit, not turns.** I initially suggested a turn cap
+and the maintainer corrected it: cost is what threatens margin, turns are
+only a proxy (a long answer costs more than "yes", so a turn cap fires late
+on expensive turns and early on cheap ones). Turns remain valuable as a
+DIAGNOSTIC -- a client looping on question 12 and a client answering 100
+questions at length produce the same dollar figure for completely different
+reasons, and the 2-4 turns/question ratio drifting to 5-6 is how a model
+regression surfaces before any single session breaches a ceiling.
+
+Enforceability confirmed rather than assumed: the live adapter already reads
+per-turn `usage_metadata`, so a running per-session total is available in real
+time. Nothing accumulates it today. Recorded on ik7e with two design
+constraints: the ceiling must span the whole FORM SESSION (not one
+connection, or reconnects hide an unbounded session), and a breach must
+preserve the client's work and say so plainly.
+
