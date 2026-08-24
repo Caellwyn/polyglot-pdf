@@ -204,12 +204,17 @@ describe("ClientLinkEntry", () => {
     expect(screen.queryByTestId("form-app")).toBeNull();
   });
 
-  it("renders the form ONLY with a redeemed link, never on phase alone", async () => {
-    // FAIL-CLOSED, STRUCTURALLY. Found by mutation: flipping the catch block
-    // to setPhase("ready") left all 11 tests green, because `link` happened
-    // to stay null. That is accidental protection -- the guard now requires
-    // BOTH a ready phase and a redeemed link, and this test drives the exact
-    // case (a network failure that wrongly reports ready).
+  it("never renders the form from an ERROR path", async () => {
+    // FAIL-CLOSED. Found by mutation: flipping the catch block to
+    // setPhase("ready") once left every test green because `link` happened to
+    // stay null -- accidental protection, not a guarantee.
+    //
+    // The guard is now `phase !== "ready"` alone (the reload path has no
+    // `link` object, since /open is not re-fetched), so what makes it safe is
+    // that ONLY TWO paths set "ready": a successful redemption, and a
+    // confirmed token in this tab. No catch, timeout, or refusal does --
+    // verified independently by fresh-eyes r4, which mutated the catch block
+    // and watched this test and its neighbour go red.
     //
     // A malformed 200 is the real-world shape: a proxy or captive portal
     // returning HTML where JSON was expected.

@@ -150,8 +150,8 @@ export function ClientLinkEntry() {
   // the first load and is not re-fetched -- so readiness alone is the right
   // gate here. Fail-closed still holds: `phase` reaches "ready" only after a
   // successful redemption OR a confirmed token in this tab's storage, never
-  // from an error path (pinned by
-  // "renders the form ONLY with a redeemed link, never on phase alone").
+  // from an error path (pinned by "never renders the form from an ERROR
+  // path"; fresh-eyes r4 verified it by mutating the catch block).
   if (phase !== "ready") {
     return (
       <div className="client-link-entry client-link-entry--invalid" role="alert">

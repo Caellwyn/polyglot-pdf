@@ -1,0 +1,211 @@
+"""The redemption store's REAL logic (bd polyglot-pdf-ugm6).
+
+Fresh-eyes r4: every test touching one-time use monkeypatched `open_link` at
+its CALL SITE, so the actual function -- and the `_enabled()` fail-closed
+gate the whole guarantee rests on -- never executed. The full backend suite
+stayed green regardless of what this module did.
+
+That is the shape CLAUDE.md scar #8 warns about: a guard that reads correctly
+and is documented prominently, verified only through a stand-in that behaves
+correctly by construction. These tests drive the real functions.
+
+THE SCENARIO THAT MOTIVATES THEM: an operator turns on LINK_MINTING_ENABLED
+(the bd ik7e rollout) and forgets LINK_REDEMPTIONS_FIRESTORE_ENABLED. That
+must refuse every open -- a link with no redemption store is an unbounded
+replay hole -- and it must refuse LOUDLY rather than crash somewhere the
+caller does not expect.
+
+ASCII only.
+"""
+import pytest
+
+from backend.services import link_redemptions as lrd
+from backend.services.link_redemptions import (
+    LinkAlreadyUsed,
+    RedemptionUnavailable,
+    complete_link,
+    open_link,
+)
+
+
+class _Doc:
+    def __init__(self, store, jti):
+        self._store, self._jti = store, jti
+
+    def get(self):
+        return _Snap(self._store.get(self._jti))
+
+    def set(self, rec):
+        self._store[self._jti] = dict(rec)
+
+    def update(self, patch):
+        if self._jti not in self._store:
+            raise RuntimeError("no such document")
+        self._store[self._jti].update(patch)
+
+
+class _Snap:
+    def __init__(self, rec):
+        self._rec = rec
+
+    @property
+    def exists(self):
+        return self._rec is not None
+
+    def to_dict(self):
+        return dict(self._rec) if self._rec else None
+
+
+class _Collection:
+    def __init__(self, store):
+        self._store = store
+
+    def document(self, jti):
+        return _Doc(self._store, jti)
+
+
+@pytest.fixture
+def store(monkeypatch):
+    """Enable the module and give it a Firestore-shaped collection."""
+    data = {}
+    monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", "true")
+    monkeypatch.setattr(lrd, "_collection", lambda: _Collection(data))
+    return data
+
+
+# --- the fail-closed gate, which had no test at all --------------------------
+
+
+def test_the_store_is_DISABLED_by_default(monkeypatch):
+    """A deployment that has not provisioned Firestore must not silently
+    treat every link as fresh. Mutation: default the env var to "true" --
+    red."""
+    monkeypatch.delenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", raising=False)
+    assert lrd._enabled() is False
+
+
+@pytest.mark.parametrize(
+    "value, enabled",
+    [("true", True), ("TRUE", True), ("True", True),
+     ("false", False), ("", False), ("1", False), ("yes", False),
+     ("truthy", False)],
+)
+def test_only_an_explicit_true_enables_the_store(monkeypatch, value, enabled):
+    """Pinned per-value, not just the happy case: a comparison flipped to
+    `!= "false"` would enable the store for "1", "yes", and "truthy", which
+    an operator could plausibly set.
+
+    Mutation: `!= "false"` instead of `== "true"` -- the "1"/"yes"/"truthy"
+    cases go red.
+    """
+    monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", value)
+    assert lrd._enabled() is enabled
+
+
+def test_a_DISABLED_store_REFUSES_rather_than_admitting(monkeypatch):
+    """THE OPERATOR SCENARIO: minting on, redemption store not provisioned.
+    Refusing every open is correct -- a link with no store behind it is an
+    unbounded replay hole -- and it must raise the exception the CALLERS
+    handle, not an arbitrary one.
+
+    Mutation: `return {}` instead of raising -- red.
+    """
+    monkeypatch.delenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", raising=False)
+
+    with pytest.raises(RedemptionUnavailable):
+        open_link("jti-1", "firm-a", "i-90")
+
+
+# --- the real open/complete cycle --------------------------------------------
+
+
+def test_the_first_open_writes_a_record_with_NO_client_identifier(store):
+    """The record's field set is CLOSED, like the token's: we hold the
+    pseudonym, the firm holds identity. Mutation: add an email/name field --
+    red."""
+    rec = open_link("jti-1", "firm-a", "i-90", now=1_000)
+
+    assert set(rec) == {"jti", "firm_id", "kit_id", "opened_at", "completed_at"}
+    assert rec["opened_at"] == 1_000
+    assert rec["completed_at"] is None
+
+
+def test_reopening_an_UNFINISHED_link_returns_the_ORIGINAL_open_time(store):
+    """The completion clock must not restart on every reopen -- otherwise a
+    client could hold a link open indefinitely by refreshing, and the 7-day
+    window would never actually expire.
+
+    Mutation: overwrite opened_at on reopen -- red.
+    """
+    open_link("jti-1", "firm-a", "i-90", now=1_000)
+    again = open_link("jti-1", "firm-a", "i-90", now=500_000)
+
+    assert again["opened_at"] == 1_000, "the completion clock must not restart"
+
+
+def test_a_COMPLETED_link_refuses_to_reopen(store):
+    """One completion per link, enforced by the real function rather than a
+    stand-in. Mutation: drop the completed_at check -- red."""
+    open_link("jti-1", "firm-a", "i-90", now=1_000)
+    complete_link("jti-1", now=2_000)
+
+    with pytest.raises(LinkAlreadyUsed):
+        open_link("jti-1", "firm-a", "i-90", now=3_000)
+
+
+def test_complete_link_is_BEST_EFFORT_and_never_raises(store, monkeypatch):
+    """Asymmetric by design: failing to RECORD a completion costs one extra
+    reopen of a form already finished, while failing to BLOCK an open costs a
+    second paid session. So completion absorbs its failure and open refuses.
+
+    Mutation: let the exception propagate -- red (a store failure at session
+    end would then surface as a crash on the client's completed form).
+    """
+    def _boom():
+        raise RuntimeError("firestore down")
+
+    monkeypatch.setattr(lrd, "_collection", _boom)
+
+    complete_link("jti-1")   # must not raise
+
+
+def test_a_store_failure_during_open_becomes_RedemptionUnavailable(
+    store, monkeypatch
+):
+    """Callers refuse on RedemptionUnavailable specifically. A raw exception
+    escaping would bypass their fail-closed handling and surface as a 500 (or
+    an unhandled crash on the socket).
+
+    Mutation: let the raw exception propagate -- red.
+    """
+    def _boom():
+        raise RuntimeError("firestore down")
+
+    monkeypatch.setattr(lrd, "_collection", _boom)
+
+    with pytest.raises(RedemptionUnavailable):
+        open_link("jti-1", "firm-a", "i-90")
+
+
+def test_LinkAlreadyUsed_is_not_swallowed_by_the_generic_handler(store):
+    """The broad `except Exception` that wraps store failures must not
+    convert an ALREADY-USED verdict into "store unavailable" -- both refuse,
+    but only one of them is a real answer, and conflating them would hide a
+    replay behind an infrastructure warning in the logs.
+
+    Mutation: remove LinkAlreadyUsed from the re-raise tuple -- red.
+    """
+    open_link("jti-1", "firm-a", "i-90", now=1_000)
+    complete_link("jti-1", now=2_000)
+
+    with pytest.raises(LinkAlreadyUsed):
+        open_link("jti-1", "firm-a", "i-90", now=3_000)
+
+
+def test_separate_links_do_not_interfere(store):
+    """Records are keyed by jti; completing one link must not burn another."""
+    open_link("jti-1", "firm-a", "i-90", now=1_000)
+    open_link("jti-2", "firm-a", "i-90", now=1_000)
+    complete_link("jti-1", now=2_000)
+
+    assert open_link("jti-2", "firm-a", "i-90", now=3_000)["completed_at"] is None
