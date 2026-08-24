@@ -30,6 +30,17 @@ _SECRET = "h" * 40
 def _secret(monkeypatch):
     monkeypatch.setenv("LINK_TOKEN_SECRET", _SECRET)
     monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+    # require_auth now REDEEMS a client link (Opus cross-surface r1), so a
+    # test that does not supply a store fails closed -- correct behavior,
+    # pinned separately below. Default to a fresh, unburned link.
+    import time as _t
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
 
 
 async def _auth(token: str) -> dict:
@@ -177,3 +188,69 @@ def test_a_client_link_with_no_kit_resolves_to_nothing(monkeypatch):
         client = {"firm_id": "firm-a", "link_kit_id": bad,
                   "is_client_link": True, "uid": None}
         assert asyncio.run(kit_gates.firm_allowed_kits(client)) == frozenset()
+
+
+# --- the r1 hole: HTTP accepted a BURNED link for the rest of its exp -------
+
+
+def test_a_COMPLETED_link_is_refused_by_HTTP_too(monkeypatch):
+    """THE CROSS-SURFACE HOLE (Opus r1). verify_link_token checks the
+    signature and the OPEN window only, so before this the socket refused a
+    burned link while every HTTP route kept serving it -- schema, PDF bytes,
+    /api/fill-pdf, and both PAID TTS routes -- for the rest of its ~48h exp.
+    One-time use enforced only on a door an attacker need not use.
+
+    Mutation: drop the enforce_link_redemption call in require_auth -- red.
+    """
+    from backend.services.link_redemptions import LinkAlreadyUsed
+
+    def _burned(jti, firm_id, kit_id, now=None):
+        raise LinkAlreadyUsed("already completed")
+
+    monkeypatch.setattr("backend.services.link_redemptions.open_link", _burned)
+    token, _ = mint_link_token("firm-a", "i-90", "u-emp-7")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_auth(token))
+    assert exc.value.status_code == 401
+
+
+def test_an_ELAPSED_completion_window_is_refused_by_HTTP_too(monkeypatch):
+    """The socket enforced the completion clock; HTTP did not, so a link
+    could outlive its window on every route except the one that starts the
+    paid session.
+
+    Mutation: drop the window check in enforce_link_redemption -- red.
+    """
+    import time as _t
+
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            # Opened well before a short window closed.
+            "opened_at": int(_t.time()) - 10_000, "completed_at": None,
+        },
+    )
+    token, _ = mint_link_token("firm-a", "i-90", "u-emp-7",
+                               complete_window_s=3600)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_auth(token))
+    assert exc.value.status_code == 401
+
+
+def test_an_UNREACHABLE_store_refuses_HTTP_too(monkeypatch):
+    """Fail closed on both doors. Mutation: admit on
+    RedemptionUnavailable -- red."""
+    from backend.services.link_redemptions import RedemptionUnavailable
+
+    def _down(jti, firm_id, kit_id, now=None):
+        raise RedemptionUnavailable("firestore down")
+
+    monkeypatch.setattr("backend.services.link_redemptions.open_link", _down)
+    token, _ = mint_link_token("firm-a", "i-90", "u-emp-7")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_auth(token))
+    assert exc.value.status_code == 401

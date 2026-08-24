@@ -277,6 +277,19 @@ export function SchemaFormDemo() {
         <LanguageSelectionModal
           forms={forms}
           onSelection={handleOnboardingSelection}
+          // A CLIENT LINK PINS THE FORM (bd polyglot-pdf-ugm6). The pin is
+          // written by ClientLinkEntry with NO language -- the form is the
+          // firm's choice, the language is the client's -- but the restore
+          // effect above only skips the modal when BOTH are set. So a client
+          // still reached the modal, and without this prop the modal fell
+          // through to its "Select Form" step and offered them the whole
+          // catalogue: for a PUBLIC kit that is every public form, and
+          // picking one overwrote the pin and got them refused at the socket
+          // with no explanation (Opus cross-surface r1).
+          //
+          // Passing the pin makes the modal ask ONLY for the language and
+          // then proceed with the form the link named.
+          preselectedFormId={loadOnboardingState().formId ?? undefined}
         />
       )}
 

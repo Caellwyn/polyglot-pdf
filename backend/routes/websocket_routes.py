@@ -240,6 +240,10 @@ async def _handle_fill_session(
 	# fill_form_from_schema, a DIFFERENT function, and reaching for them here
 	# is a NameError at runtime that no import check catches.
 	link_jti: str | None = None,
+	# The staff member who SENT the link (bd polyglot-pdf-ugm6). Rides the
+	# session records so a CLIENT session satisfies the telemetry requirement
+	# -- firm, form, AND originating employee -- with no account anywhere.
+	link_employee_id: str | None = None,
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
 	
@@ -1083,6 +1087,8 @@ async def _handle_fill_session(
 		if should_log_session_end(form_session_id, is_reconnect):
 			try:
 				log_form_session_end(
+					link_jti=link_jti,
+					employee_id=link_employee_id,
 					form_id=_form_number_of(schema),
 					form_session_id=form_session_id,
 					completion_status="completed" if session_completed else "abandoned",
@@ -1121,9 +1127,10 @@ from ..services.auth import verify_token
 from ..services.link_tokens import LinkTokenError, verify_link_token
 from ..services.link_redemptions import (
 	LinkAlreadyUsed,
+	LinkWindowElapsed,
 	RedemptionUnavailable,
 	complete_link,
-	open_link,
+	enforce_link_redemption,
 )
 
 
@@ -1269,37 +1276,21 @@ async def fill_form_from_schema(
 	# not filling the form they were given, and quietly swapping it would
 	# produce a record naming a form the client never saw.
 	if isinstance(claims, dict) and claims.get("is_client_link"):
-		# REDEEM AT THE SOCKET, not only at /api/links/open (bd
-		# polyglot-pdf-ugm6, fresh-eyes r1 finding 2). verify_link_token
-		# checks the SIGNATURE and the open window -- it cannot know whether
-		# this link was already used, because that lives in the redemption
-		# store. Without this call the socket was reachable directly: anyone
-		# holding the raw token (a shared screenshot, a forwarded URL) could
-		# start UNLIMITED paid Gemini sessions for the full ~48h window,
-		# skipping /open entirely. The one-time-use guarantee the product
-		# promises was enforced only on a route an attacker need not call.
+		# REDEEM VIA THE SHARED GATE (bd polyglot-pdf-ugm6). This block used to
+		# hand-roll the redemption + completion-window checks, and
+		# require_auth hand-rolled nothing at all -- so the HTTP door accepted
+		# a burned link for the rest of its ~48h exp (Opus cross-surface r1).
+		# ONE helper now serves both doors: two copies of a security check
+		# drift, and the drift is silent.
 		try:
-			_record = await asyncio.to_thread(
-				open_link, claims["jti"], firm_id, claims.get("link_kit_id")
-			)
-		except (LinkAlreadyUsed, RedemptionUnavailable) as exc:
-			# Same refusal for "already used" and "cannot confirm": the
-			# socket must not become an oracle either, and an unreachable
-			# store must FAIL CLOSED (the guarded failure is a replayed link
-			# starting a second paid session).
+			await asyncio.to_thread(enforce_link_redemption, claims)
+		except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+			# Same refusal for already-used, window-closed, and
+			# store-unreachable: the socket must not be an oracle either, and
+			# an unreachable store FAILS CLOSED (the guarded failure is a
+			# replayed link starting a second paid session).
 			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
 						error=str(exc))
-			await websocket.close(code=1008, reason="Authentication failed")
-			return
-
-		# The COMPLETION window is enforced here too -- verify_link_token
-		# only knows the OPEN deadline.
-		_opened_at = _record.get("opened_at") if isinstance(_record, dict) else None
-		if not isinstance(_opened_at, int) or isinstance(_opened_at, bool) 				or _opened_at <= 0 or _opened_at > int(_time.time()) + 300:
-			_opened_at = int(_time.time())
-		if int(_time.time()) >= _opened_at + int(claims.get("cw") or 0):
-			log.warning("ws_link_completion_window_elapsed",
-						jti=claims.get("jti"))
 			await websocket.close(code=1008, reason="Authentication failed")
 			return
 
@@ -1513,4 +1504,8 @@ async def fill_form_from_schema(
 		link_jti=(claims.get("jti")
 				  if isinstance(claims, dict) and claims.get("is_client_link")
 				  else None),
+		link_employee_id=(claims.get("employee_id")
+						  if isinstance(claims, dict)
+						  and claims.get("is_client_link")
+						  else None),
 	)

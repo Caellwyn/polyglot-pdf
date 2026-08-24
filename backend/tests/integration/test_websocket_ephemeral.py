@@ -234,7 +234,7 @@ async def test_a_client_link_CANNOT_fill_a_form_it_does_not_name(
     # not an unstubbed-store fail-closed that would pass for the wrong reason.
     import time as _t
     monkeypatch.setattr(
-        "backend.routes.websocket_routes.open_link",
+        "backend.services.link_redemptions.open_link",
         lambda jti, firm_id, kit_id, now=None: {
             "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
             "opened_at": int(_t.time()), "completed_at": None,
@@ -269,7 +269,7 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     # below.
     import time as _t
     monkeypatch.setattr(
-        "backend.routes.websocket_routes.open_link",
+        "backend.services.link_redemptions.open_link",
         lambda jti, firm_id, kit_id, now=None: {
             "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
             "opened_at": int(_t.time()), "completed_at": None,
@@ -313,7 +313,7 @@ async def test_a_COMPLETED_link_cannot_open_a_second_socket(
     def _already_used(jti, firm_id, kit_id, now=None):
         raise LinkAlreadyUsed("already completed")
 
-    monkeypatch.setattr("backend.routes.websocket_routes.open_link",
+    monkeypatch.setattr("backend.services.link_redemptions.open_link",
                         _already_used)
     ok = dict(handshake_message)
     ok["kit_id"] = "i-90"
@@ -345,7 +345,7 @@ async def test_an_UNREACHABLE_redemption_store_refuses_the_socket(
     def _down(jti, firm_id, kit_id, now=None):
         raise RedemptionUnavailable("firestore down")
 
-    monkeypatch.setattr("backend.routes.websocket_routes.open_link", _down)
+    monkeypatch.setattr("backend.services.link_redemptions.open_link", _down)
     ok = dict(handshake_message)
     ok["kit_id"] = "i-90"
     mock_websocket.receive_text.return_value = json.dumps(ok)
@@ -378,7 +378,7 @@ async def test_the_COMPLETION_WINDOW_is_enforced_at_the_socket(
                                   complete_window_s=3600)
     opened_long_ago = int(_t.time()) - 10_000     # past the 1h window
     monkeypatch.setattr(
-        "backend.routes.websocket_routes.open_link",
+        "backend.services.link_redemptions.open_link",
         lambda jti, firm_id, kit_id, now=None: {
             "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
             "opened_at": opened_long_ago, "completed_at": None,

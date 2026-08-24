@@ -209,3 +209,87 @@ def test_separate_links_do_not_interfere(store):
     complete_link("jti-1", now=2_000)
 
     assert open_link("jti-2", "firm-a", "i-90", now=3_000)["completed_at"] is None
+
+
+# --- the shared gate both doors call ----------------------------------------
+
+
+def _claims(cw=7 * 24 * 3600, jti="jti-1"):
+    return {"jti": jti, "firm_id": "firm-a", "link_kit_id": "i-90",
+            "employee_id": "u-emp-7", "cw": cw, "is_client_link": True}
+
+
+def test_the_gate_admits_a_fresh_unburned_link(store):
+    from backend.services.link_redemptions import enforce_link_redemption
+
+    rec = enforce_link_redemption(_claims(), now=1_000)
+
+    assert rec["jti"] == "jti-1"
+    assert rec["completed_at"] is None
+
+
+def test_the_gate_refuses_a_link_past_its_completion_window(store):
+    """Mutation: drop the `stamp >= opened_at + window` check -- red."""
+    from backend.services.link_redemptions import (
+        LinkWindowElapsed,
+        enforce_link_redemption,
+    )
+
+    enforce_link_redemption(_claims(cw=3600), now=1_000)
+
+    with pytest.raises(LinkWindowElapsed):
+        enforce_link_redemption(_claims(cw=3600), now=1_000 + 3601)
+
+
+@pytest.mark.parametrize(
+    "bad_cw", [None, 0, -1, "week", True, 1.5],
+    ids=["missing", "zero", "negative", "string", "bool", "float"],
+)
+def test_a_credential_with_NO_USABLE_WINDOW_is_refused(store, bad_cw):
+    """FAIL CLOSED on an uncheckable credential.
+
+    Found by mutation: returning the record instead of raising here left the
+    whole suite green. A claims dict with no usable `cw` cannot have its
+    completion window checked at all, so admitting it restores exactly the
+    hole this gate exists to close -- and `cw` is attacker-adjacent, since it
+    rides the token payload.
+
+    Mutation: `return record` instead of raising -- red.
+    """
+    from backend.services.link_redemptions import (
+        LinkWindowElapsed,
+        enforce_link_redemption,
+    )
+
+    with pytest.raises(LinkWindowElapsed):
+        enforce_link_redemption(_claims(cw=bad_cw), now=1_000)
+
+
+def test_the_gate_refuses_a_COMPLETED_link(store):
+    from backend.services.link_redemptions import (
+        LinkAlreadyUsed,
+        complete_link,
+        enforce_link_redemption,
+    )
+
+    enforce_link_redemption(_claims(), now=1_000)
+    complete_link("jti-1", now=2_000)
+
+    with pytest.raises(LinkAlreadyUsed):
+        enforce_link_redemption(_claims(), now=3_000)
+
+
+def test_the_gate_tolerates_an_IMPLAUSIBLE_stored_open_time(store, monkeypatch):
+    """A corrupt stamp must not lock out a client who just opened their link
+    (a 0 computes a deadline in 1970), nor extend the window forever."""
+    from backend.services.link_redemptions import enforce_link_redemption
+
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": 0, "completed_at": None,
+        },
+    )
+
+    assert enforce_link_redemption(_claims(), now=1_000_000)

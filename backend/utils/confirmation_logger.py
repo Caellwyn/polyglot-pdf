@@ -396,6 +396,16 @@ def log_form_session_start(
     section_id: Optional[str] = None,
     firm_id: Optional[str] = None,
     kit_id: Optional[str] = None,
+    # THE FIRM'S JOIN KEY (bd polyglot-pdf-ugm6). We hold the pseudonymous
+    # record; the FIRM holds jti -> which client. Without this column on OUR
+    # side the split-key arrangement is not a split -- it is one half of a
+    # join with nothing to join to, and the firm cannot match their client to
+    # our record even under a court order. Absent for staff sessions.
+    link_jti: Optional[str] = None,
+    # The staff member who SENT the link. Verified at mint from the uid, so a
+    # client session still satisfies "firm + form + originating employee"
+    # (maintainer's telemetry requirement) with no account anywhere.
+    employee_id: Optional[str] = None,
 ) -> None:
     """
     Log start of form filling session.
@@ -408,6 +418,10 @@ def log_form_session_start(
             None when no firm claim rode the token.
         kit_id: Kit identity, so a session record names the same kit its
             confirmations do.
+        link_jti: The client link's id -- the FIRM'S JOIN KEY. None for a
+            staff session.
+        employee_id: The staff member who sent the link. None for a staff
+            session (they are their own originator).
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -417,6 +431,8 @@ def log_form_session_start(
         "form_id": form_id,
         "kit_id": kit_id,
         "firm_id": firm_id,
+        "link_jti": link_jti,
+        "employee_id": employee_id,
         "form_session_id": form_session_id,
         "section_id": section_id,
     }
@@ -436,6 +452,16 @@ def log_form_session_end(
     total_fields_confirmed: int,
     firm_id: Optional[str] = None,
     kit_id: Optional[str] = None,
+    # THE FIRM'S JOIN KEY (bd polyglot-pdf-ugm6). We hold the pseudonymous
+    # record; the FIRM holds jti -> which client. Without this column on OUR
+    # side the split-key arrangement is not a split -- it is one half of a
+    # join with nothing to join to, and the firm cannot match their client to
+    # our record even under a court order. Absent for staff sessions.
+    link_jti: Optional[str] = None,
+    # The staff member who SENT the link. Verified at mint from the uid, so a
+    # client session still satisfies "firm + form + originating employee"
+    # (maintainer's telemetry requirement) with no account anywhere.
+    employee_id: Optional[str] = None,
 ) -> None:
     """
     Log end of form filling session.
@@ -461,6 +487,8 @@ def log_form_session_end(
         "timestamp": timestamp,
         "event": "form_session_ended",
         "form_id": form_id,
+        "link_jti": link_jti,
+        "employee_id": employee_id,
         "kit_id": kit_id,
         "firm_id": firm_id,
         "form_session_id": form_session_id,

@@ -49,6 +49,10 @@ class LinkAlreadyUsed(Exception):
     """The link was already completed. Callers refuse, indistinguishably."""
 
 
+class LinkWindowElapsed(Exception):
+    """The completion window closed. Callers refuse, indistinguishably."""
+
+
 def _enabled() -> bool:
     return os.getenv(_ENABLED_ENV, "false").lower() == "true"
 
@@ -126,3 +130,58 @@ def complete_link(jti: str, now: Optional[float] = None) -> None:
         _log.info("link_completed", jti=jti)
     except Exception as exc:  # noqa: BLE001
         _log.error("link_complete_failed", jti=jti, error=str(exc))
+
+
+def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
+    """THE ONE redemption gate, called by EVERY door a client credential opens.
+
+    bd polyglot-pdf-ugm6, Opus cross-surface r1. `verify_link_token` answers
+    only "did we issue this, unmodified, and is it inside its OPEN window?"
+    -- it deliberately knows nothing about one-time use, because that lives
+    here. So a door that calls only the verifier accepts a link that was
+    already COMPLETED, or whose completion window has elapsed, for the whole
+    ~48h `exp`.
+
+    That was the state of the HTTP surface: the socket redeemed, the nine
+    require_auth routes did not, so a burned link kept serving schema, PDF
+    bytes, fill-pdf, and the two PAID TTS routes until exp. The docs claimed
+    one-time use was "enforced at BOTH doors" while the door this bead had
+    just opened enforced neither check.
+
+    Extracted rather than duplicated ON PURPOSE: two hand-written copies of a
+    security check drift, and the drift is silent. Callers pass the claims
+    dict from verify_link_token / require_auth and get the redemption record
+    back; anything else raises.
+
+    Raises LinkAlreadyUsed, RedemptionUnavailable (unreachable store -- fail
+    closed), or LinkWindowElapsed.
+    """
+    stamp = int(now if now is not None else time.time())
+    # Forward `now`: honoring it for the deadline math but not for the OPEN
+    # would make the two halves disagree about what time it is -- the first
+    # open would stamp wall-clock while the comparison used the injected
+    # value. Harmless in production (both are time.time()) and quietly wrong
+    # anywhere a caller controls the clock, which is exactly where a
+    # window-expiry bug would be caught.
+    record = open_link(claims["jti"], claims.get("firm_id"),
+                       claims.get("link_kit_id"), now=stamp)
+
+    # Validate the stored stamp rather than trusting it: a corrupt or missing
+    # value computes a deadline in 1970 and locks out a client who just
+    # opened their link, while a far-future one extends the window forever.
+    opened_at = record.get("opened_at") if isinstance(record, dict) else None
+    if not isinstance(opened_at, int) or isinstance(opened_at, bool)             or opened_at <= 0 or opened_at > stamp + 300:
+        _log.warning("link_opened_at_implausible", jti=claims.get("jti"),
+                     opened_at=repr(opened_at))
+        opened_at = stamp
+
+    window = claims.get("cw")
+    if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
+        # A credential with no usable completion window cannot be checked, so
+        # it must not be admitted -- failing open here would restore exactly
+        # the hole this function exists to close.
+        raise LinkWindowElapsed("no usable completion window on the claims")
+    if stamp >= opened_at + window:
+        raise LinkWindowElapsed("completion window elapsed")
+
+    return record

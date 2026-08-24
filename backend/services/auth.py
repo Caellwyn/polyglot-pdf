@@ -107,14 +107,43 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
         # account) and NO firm_role -- so every role-gated surface (the firm
         # retire route, and anything added later) refuses them by the same
         # check that refuses an ordinary employee. A client is not staff.
-        return {
+        claims = {
             "uid": None,
             "firm_id": payload["firm_id"],
             "link_kit_id": payload["kit_id"],
             "employee_id": payload["employee_id"],
             "jti": payload["jti"],
+            "cw": payload["cw"],   # completion window, needed by the gate below
             "is_client_link": True,
         }
+
+        # REDEEM HERE TOO (Opus cross-surface r1). verify_link_token checks
+        # the signature and the OPEN window and nothing else, so without this
+        # a COMPLETED link -- or one whose completion window elapsed -- kept
+        # serving schema, PDF bytes, /api/fill-pdf and the two PAID TTS
+        # routes for the rest of its ~48h exp. The socket redeemed; these
+        # nine routes did not, which is the same "enforced only on a door an
+        # attacker need not use" hole the socket fix closed.
+        from backend.services.link_redemptions import (
+            LinkAlreadyUsed,
+            LinkWindowElapsed,
+            RedemptionUnavailable,
+            enforce_link_redemption,
+        )
+        try:
+            enforce_link_redemption(claims)
+        except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+            # ONE refusal for all three: already-used, window-closed, and
+            # store-unreachable must be indistinguishable, and an unreachable
+            # store must FAIL CLOSED here exactly as it does at the socket.
+            logger.warning("link_redemption_refused", error=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+
+        return claims
 
     return verify_token(token)
 
