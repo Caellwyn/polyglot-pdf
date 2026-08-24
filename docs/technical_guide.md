@@ -591,6 +591,13 @@ system that is NOT a Firebase account. Five coupled pieces:
   completion -- an abandoned session must not consume the client's one
   chance.
 
+The redeemed token lives in `sessionStorage` via
+`shared/sessionCredential.ts` -- TAB-SCOPED, so it survives a reload (the
+entry gate clears it from the URL, so memory-only stranded a client on any
+refresh) and dies with the tab. Never `localStorage`, which would outlive the
+browser session. All NINE backend-calling sites resolve through that one
+module; a tenth inline `user.getIdToken()` fails CI.
+
 Frontend: `/f` renders `ClientLinkEntry` OUTSIDE `ProtectedRoute`
 (`frontend/src/schema-forms/main.tsx`). Moving it inside bounces every client
 to a sign-in they can never pass. The gate pins the form id via

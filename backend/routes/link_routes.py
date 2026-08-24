@@ -50,11 +50,13 @@ _log = structlog.get_logger().bind(module="link_routes")
 router = APIRouter(prefix="/api/links", tags=["client-links"])
 
 # Windows are capped so a mis-set console (or a hostile staff request) cannot
-# mint a link that is effectively permanent. The maintainer's defaults are
-# 48h/24h; these ceilings are deliberately generous multiples, not the
-# defaults themselves.
+# mint a link that is effectively permanent. The defaults are 48h to open and
+# SEVEN DAYS to complete (services/link_tokens.py); these ceilings sit above
+# them deliberately -- a cap equal to the default would mean any firm wanting
+# slightly longer had to re-issue, which is exactly the staff work the 7-day
+# window exists to avoid.
 _MAX_OPEN_WINDOW_S = 14 * 24 * 3600
-_MAX_COMPLETE_WINDOW_S = 7 * 24 * 3600
+_MAX_COMPLETE_WINDOW_S = 30 * 24 * 3600
 
 
 def _minting_enabled() -> bool:

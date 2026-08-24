@@ -81,11 +81,27 @@ _log = structlog.get_logger().bind(module="link_tokens")
 # of being reinterpreted under new rules.
 TOKEN_VERSION = 1
 
-# Maintainer's defaults (2026-08-17), confirmed at build time: ~48h to OPEN
-# from issuance, ~24h to COMPLETE after opening. Both are overridable per
-# mint so a firm with a slower intake process is not forced to re-issue.
+# WINDOWS. ~48h to OPEN from issuance (maintainer, 2026-08-17), then SEVEN
+# DAYS to complete once opened (maintainer, 2026-08-24, widened from 24h).
+#
+# The widening is deliberate and its reasoning matters: a client who loses
+# their work -- a closed tab, a new device, a phone that died -- can go back
+# to the original message and click the SAME link again rather than phoning
+# the firm for a new one. The maintainer's framing: "I don't want to be
+# punishing, or create extra work for the firm staff. I just want to avoid
+# abuse."
+#
+# So the bound is NOT on how many times a client may open their form. It is
+# on FINISHING: a genuine completion burns the link (complete_link), and the
+# window expires regardless. Reopening an unfinished form as often as needed
+# across the week is the intended behavior, not a loophole -- a 40-minute
+# immigration form is not filled in one sitting, and refusing a reopen turns
+# an ordinary interruption into a support call for the firm.
+#
+# Both are overridable per mint (and capped in link_routes) so a firm with a
+# slower intake process is not forced to re-issue.
 DEFAULT_OPEN_WINDOW_S = 48 * 3600
-DEFAULT_COMPLETE_WINDOW_S = 24 * 3600
+DEFAULT_COMPLETE_WINDOW_S = 7 * 24 * 3600
 
 
 class LinkTokenError(Exception):

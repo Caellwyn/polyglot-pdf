@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   clearClientLinkToken,
+  clearInMemoryOnly,
   hasClientLinkToken,
   resolveSessionToken,
   setClientLinkToken,
@@ -48,14 +49,37 @@ describe("resolveSessionToken", () => {
     expect(await resolveSessionToken(staffUser)).toBe("link-token");
   });
 
-  it("does not persist the token to storage", () => {
-    // The token rides the URL fragment precisely to stay out of durable
-    // places. Writing it to sessionStorage would undo that.
+  it("SURVIVES a reload but never reaches localStorage", () => {
+    // Maintainer decision 2026-08-24. Memory-only stranded a client on any
+    // RELOAD (the entry gate clears the token from the URL once redeemed),
+    // which on a 40-minute form is a likely event with an expensive cost.
+    //
+    // sessionStorage is scoped to the TAB: it survives a reload, dies when
+    // the tab closes, and is never shared with another tab. localStorage
+    // would outlive the browser session entirely and is the line we hold.
     setClientLinkToken("secret.token");
 
-    const dump = JSON.stringify({ ...sessionStorage, ...localStorage });
-    expect(dump).not.toContain("secret.token");
-    expect(hasClientLinkToken()).toBe(true);
+    expect(sessionStorage.getItem("vff_client_link_token")).toBe("secret.token");
+    expect(JSON.stringify({ ...localStorage })).not.toContain("secret.token");
+  });
+
+  it("recovers the token from storage after a reload drops memory", async () => {
+    // THE RELOAD CASE, simulated the only honest way: wipe the module's
+    // in-memory copy the way a page load does, and require the token to come
+    // back from the tab's storage. Asserting only setItem would pass even if
+    // nothing ever READ it back.
+    setClientLinkToken("reload.token");
+    clearInMemoryOnly();
+
+    expect(await resolveSessionToken(null)).toBe("reload.token");
+  });
+
+  it("a closed tab leaves nothing behind (clear removes storage too)", () => {
+    setClientLinkToken("gone.token");
+    clearClientLinkToken();
+
+    expect(sessionStorage.getItem("vff_client_link_token")).toBeNull();
+    expect(hasClientLinkToken()).toBe(false);
   });
 });
 

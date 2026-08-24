@@ -176,9 +176,17 @@ identity from.
 socket ENFORCES it: the handshake is client-controlled, so a link holder who
 edits `kit_id` is REFUSED, not silently given the right form (a silent
 substitution would produce a confirmation record naming a form the client
-never saw). ~48h to open from issuance, then ~24h to complete from FIRST
+never saw). ~48h to open from issuance, then SEVEN DAYS to complete from FIRST
 OPEN -- the completion clock starts at open, so a client who opens on hour 47
-still gets a full window. One-time use lives in the `link_redemptions` store,
+still gets a full window. The 7 days is deliberate (maintainer, 2026-08-24):
+a client who loses their work returns to the original message and clicks the
+SAME link rather than phoning the firm for a new one. The bound is on
+FINISHING, not on how many times they may open it -- a long intake form is
+not filled in one sitting, and refusing a reopen creates firm staff work
+without preventing any abuse. The client's browser tab also keeps the
+credential across a RELOAD (sessionStorage, tab-scoped), so the 7-day
+fallback is for a closed tab or a new device, not for an accidental
+refresh. One-time use lives in the `link_redemptions` store,
 because a signed bearer string is inherently replayable -- and it is enforced
 at BOTH doors, `/api/links/open` AND the WebSocket. That matters: the socket
 is where the paid session actually starts, so a token holder who skips
