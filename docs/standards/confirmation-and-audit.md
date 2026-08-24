@@ -417,10 +417,24 @@ Because the route cannot require auth and writes durably to this collection,
 any caller could otherwise append unbounded documents to the evidence trail the
 kit-deletion guard and legal retrieval both read. Two controls:
 
-- **One acceptance per `form_session_id`.** A session accepts once; that domain
-  fact is the bound, so a flood costs one row per DISTINCT id rather than one
-  per request. A duplicate is DROPPED silently, not errored -- a retry after a
-  lost response is legitimate client behavior.
+- **One acceptance per `form_session_id`**, with one deliberate exception. A
+  session accepts once; that domain fact is the bound, so a flood costs one row
+  per DISTINCT id rather than one per request. A duplicate is DROPPED silently,
+  not errored -- a retry after a lost response is legitimate client behavior.
+
+  **PLACEHOLDER IDS ARE NOT DEDUPED, so they are NOT BOUNDED.** Both overlays
+  send `state?.formSessionId || 'unknown'`, so every session missing an id
+  sends the same literal. Deduping on it would keep the first acceptance and
+  silently drop every later one -- from DIFFERENT USERS. Losing a real
+  acceptance is far worse than a duplicated row, so `unknown` / `undefined` /
+  `null` / `none` / empty are exempt (`_NON_UNIQUE_SESSION_IDS`).
+
+  The cost is explicit: a caller who sends `form_session_id=unknown` on every
+  request is bounded ONLY by the field caps below -- one row per request, the
+  flood this control otherwise prevents. That is the accepted trade, because
+  the alternative silently destroys evidence rather than merely accumulating
+  it. A real bound for that case needs a rate limit, which this backend does
+  not have (see KNOWN LIMIT below).
 - **Bounded fields**, enforced on the Pydantic model so an oversized body never
   reaches the handler or the sink. Nothing here is free text.
 
@@ -432,9 +446,11 @@ truncating one into the evidence trail would record something the user never
 sent. Caps are set well above every real value so a legitimate acceptance
 cannot hit them.
 
-**KNOWN LIMIT, stated rather than implied:** the dedupe is IN-PROCESS. It does
-not survive a restart and does not bound a flood spread across Cloud Run
-workers. It is a cheap bound on the common case, NOT a rate limiter -- there is
+**KNOWN LIMITS, stated rather than implied.** Three, in rising order of size:
+the dedupe is IN-PROCESS, so it does not survive a restart; it does not bound a
+flood spread across Cloud Run workers; and it does not bound a caller who sends
+a PLACEHOLDER id at all, since those are deliberately exempt (above). It is a
+cheap bound on the common case, NOT a rate limiter -- there is
 no rate limiting anywhere in this backend. A distributed limit would be new
 infrastructure and its own decision. Retention is separate again:
 `CONFIRMATION_RETENTION_DAYS` is unset, so nothing ages out (bd
