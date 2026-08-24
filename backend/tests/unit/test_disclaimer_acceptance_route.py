@@ -210,8 +210,10 @@ def test_the_durable_write_actually_HAPPENS_on_the_happy_path(monkeypatch):
     assert seen["form_session_id"] == "fss_happy"
     assert seen["language"] == "Spanish"
     assert seen["script_version"] == "deadbeefcafe0001"
-    # Written as None TODAY (no auth on this route), but the key must be
-    # passed so the record shape is stable when firm auth arrives.
+    # Written as None PERMANENTLY: a client filling a form has no account by
+    # design, so this route can never carry a client token (bd
+    # polyglot-pdf-g3kui). The key must still be passed so the record shape
+    # matches the rest of the collection.
     assert seen["firm_id"] is None
 
 
