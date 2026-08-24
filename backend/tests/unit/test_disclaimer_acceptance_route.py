@@ -12,6 +12,8 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 import backend.routes.disclaimer_routes as dr
 from backend.main import app
 
@@ -252,3 +254,46 @@ def test_a_genuine_sink_outage_still_logs_as_a_write_failure(monkeypatch):
     events = [c.args[0] for c in mock_log.error.call_args_list]
     assert "disclaimer_acceptance_durable_write_failed" in events
     assert "disclaimer_acceptance_wiring_error" not in events
+
+
+# --- bounded body on an UNAUTHENTICATED route (bd polyglot-pdf-g3kui) -----
+
+@pytest.mark.parametrize("field,value", [
+    ("form_session_id", "x" * 129),
+    ("language", "x" * 65),
+    ("user_agent", "x" * 513),
+    ("script_version", "x" * 65),
+])
+def test_an_oversized_field_is_REJECTED_at_the_model(field, value):
+    """Rejected before the handler runs, so it never reaches the sink.
+
+    This route cannot be auth-gated (a client has no account by design -- the
+    magic link is their only entry), and it writes durably to the
+    legal-evidence collection, so an unbounded body is an unbounded write.
+    None of these fields is free text: a generated id, a language from a fixed
+    set, a user-agent, and a 16-char hash. The caps sit well above every real
+    value.
+    """
+    body = dict(_BODY)
+    body[field] = value
+    resp = client.post("/api/disclaimer-acceptance", json=body)
+    assert resp.status_code == 422, (
+        f"{field} of length {len(value)} was accepted; the cap is not enforced"
+    )
+
+
+def test_a_REALISTIC_body_still_passes():
+    """The caps must not reject anything real.
+
+    A real user agent is long; a cap set too tight would reject legitimate
+    acceptances, which is worse than the flood it guards against.
+    """
+    body = dict(_BODY)
+    body["user_agent"] = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+    )
+    body["form_session_id"] = "fss_lz4k2p9q_a1b2c3d4"
+    body["script_version"] = "deadbeefcafe0001"
+    resp = client.post("/api/disclaimer-acceptance", json=body)
+    assert resp.status_code == 200

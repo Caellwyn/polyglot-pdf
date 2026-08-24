@@ -497,6 +497,58 @@ def log_form_session_start(
     _submit_firestore_write(event)
 
 
+# ONE ACCEPTANCE PER SESSION (bd polyglot-pdf-g3kui).
+#
+# POST /api/disclaimer-acceptance is UNAUTHENTICATED and cannot be gated: a
+# client filling a form has no account by design -- the magic link is their
+# only entry (maintainer, 2026-08-24) -- so requiring a token would 401 every
+# real user at the Agree button. Since bd polyglot-pdf-0dsv4 it also writes
+# DURABLY to the legal-evidence collection, so an unbounded caller is an
+# unbounded writer to the collection the kit-deletion guard and every legal
+# retrieval read.
+#
+# A session accepts ONCE. That domain fact is the bound: the first acceptance
+# for a form_session_id is recorded, later ones are dropped. A flood from one
+# caller costs one row per DISTINCT id instead of one row per request.
+#
+# IN-PROCESS, deliberately. The alternative -- read Firestore before every
+# write -- adds a round trip on the Agree path, races the executor that
+# actually performs the write, and fails open anyway when the read fails. This
+# does not survive a restart or bound a distributed flood across instances; it
+# is a cheap bound on the common case, NOT a replacement for a rate limit.
+# That gap is stated in the bead and in confirmation-and-audit.md rather than
+# implied by the code.
+#
+# The cap stops the guard itself becoming a memory leak: a flood of distinct
+# ids would otherwise grow this set without limit. At the cap the guard stops
+# deduping (writes proceed) rather than stops writing -- losing legal evidence
+# is worse than a duplicated row.
+_ACCEPTED_SESSIONS: set = set()
+_ACCEPTED_SESSIONS_LOCK = threading.Lock()
+_ACCEPTED_SESSIONS_CAP = 10000
+
+
+def _claim_first_acceptance(form_session_id: str) -> bool:
+    """True if this is the FIRST acceptance seen for this session id.
+
+    Returns True (write it) when the set is at capacity, so a memory bound can
+    never silently discard evidence.
+    """
+    with _ACCEPTED_SESSIONS_LOCK:
+        if len(_ACCEPTED_SESSIONS) >= _ACCEPTED_SESSIONS_CAP:
+            return True
+        if form_session_id in _ACCEPTED_SESSIONS:
+            return False
+        _ACCEPTED_SESSIONS.add(form_session_id)
+        return True
+
+
+def _reset_acceptance_dedupe() -> None:
+    """Test seam: clear the in-process dedupe state."""
+    with _ACCEPTED_SESSIONS_LOCK:
+        _ACCEPTED_SESSIONS.clear()
+
+
 def log_disclaimer_acceptance(
     form_session_id: str,
     language: str,
@@ -521,15 +573,28 @@ def log_disclaimer_acceptance(
     content.
 
     firm_id: the customer firm, matching the session-lifecycle and
-        confirmation records (bd polyglot-pdf-xwlt). CURRENTLY ALWAYS None:
-        POST /api/disclaimer-acceptance carries no auth token, because Agree
-        fires before any authenticated session exists. The field is written
-        anyway so the collection has ONE shape and no migration is needed
-        when firm auth reaches this route (maintainer decision 2026-08-20).
-        Until then a firm's acceptances are reachable by joining on
-        form_session_id against their confirmation records, which DO carry
-        firm_id -- see firm_of_events below.
+        confirmation records (bd polyglot-pdf-xwlt). ALWAYS None here, and
+        PERMANENTLY so: a client filling a form has no account by design --
+        the magic link is their only entry path (maintainer, 2026-08-24) --
+        so this route cannot carry a client token and must never require one.
+        An earlier note called this a temporary compromise pending firm auth;
+        that was wrong (bd polyglot-pdf-g3kui). The field is still written so
+        the collection has ONE shape, and a firm's acceptances are reached by
+        joining on form_session_id against their confirmation records, which
+        DO carry firm_id -- see firm_of_events below. That join is the
+        long-term answer, not a stopgap.
     """
+    # ONE per session: the domain fact that bounds an unauthenticated writer.
+    # A duplicate is DROPPED silently, not an error -- a retry after a lost
+    # response is a legitimate client behavior, and the first record is the
+    # one that matters.
+    if not _claim_first_acceptance(form_session_id):
+        _log.info(
+            "disclaimer_acceptance_duplicate_dropped",
+            form_session_id=form_session_id,
+            note="this session already has an acceptance record",
+        )
+        return
     timestamp = datetime.now(timezone.utc).isoformat()
 
     event = {
