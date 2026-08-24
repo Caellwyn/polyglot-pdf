@@ -1144,3 +1144,499 @@ class TestEveryTier2DocHasTracksOrIsExempt:
             "as a deliberate choice (bd polyglot-pdf-teizj):\n  "
             + "\n  ".join(missing)
         )
+
+
+class TestFreshnessAcks:
+    """The ack: a cheap, squash-proof 'I reviewed this; it is still accurate'
+    (bd polyglot-pdf-fytzi).
+
+    WHY THE ACK EXISTS. Before it, the only ways to clear a stale flag were a
+    stamp bump (which conflicted between parallel PRs) or a doc commit (noise).
+    So the HONEST action -- reading the doc and finding it correct -- left the
+    flag ON, and the flag stopped being read: 24 of 28 tracked docs are stale.
+
+    WHY IT IS A FILE AND NOT A SHA. This repo squash-merges, so a branch commit
+    never joins dev's history and a recorded branch SHA is orphaned the instant
+    its PR merges. A tracked file's `git log -1` resolves to the SQUASH commit
+    on dev instead, which is a real ancestor -- so the ack's timestamp survives
+    exactly where a SHA would not. test_ack_survives_squash_merge pins that.
+    """
+
+    def _doc_tracking_swarm_config(self, tmp_path):
+        return _make_doc(
+            tmp_path,
+            "# Foo\n\n*Last updated: 2025-04-01*\n\n"
+            "**Tracks:** `scripts/swarm_config.py`\n",
+        )
+
+    def _code_at(self, year):
+        return int(datetime.datetime(
+            year, 4, 28, 12, 0, 0, tzinfo=datetime.timezone.utc,
+        ).timestamp())
+
+    def test_ack_clears_staleness(self, tmp_path, monkeypatch):
+        """The core promise: reviewed-and-still-accurate clears the flag."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        code_ts = self._code_at(2026)
+        ack_ts = code_ts + 86_400  # acked the day AFTER the code moved
+
+        def fake_git_ct(path):
+            if "swarm_config" in str(path):
+                return code_ts
+            if str(path).endswith(freshness.ACK_SUFFIX):
+                return ack_ts
+            return None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        # Without an ack the doc is stale...
+        assert freshness.check_doc(doc)[0] == "stale"
+        # ...and with one it is not.
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: ack_ts)
+        assert freshness.check_doc(doc)[0] == "ok"
+
+    def test_ack_older_than_the_code_does_not_clear(self, tmp_path, monkeypatch):
+        """THE MUTATION THAT MATTERS. An ack must not be a permanent
+        get-out-of-stale card: once the code moves PAST the ack, the doc is
+        stale again. Without this the ack would be strictly worse than the
+        stamp it replaces -- ack once, never hear about the doc again."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        code_ts = self._code_at(2026)
+        stale_ack = code_ts - 86_400  # acked the day BEFORE the code moved
+
+        def fake_git_ct(path):
+            return code_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: stale_ack)
+        status, stale, _ = freshness.check_doc(doc)
+        assert status == "stale"
+        assert any("swarm_config" in str(fp) for fp, _, _ in stale)
+
+    def test_ack_survives_squash_merge(self, tmp_path, monkeypatch):
+        """THE DESIGN'S LOAD-BEARING PROPERTY, pinned.
+
+        Under squash-merge the ack FILE lands on dev inside the squash commit,
+        so its commit time is the squash commit's time -- at or after the code
+        it was acked against, even though the branch commits are gone. Model
+        that: code and ack share one commit timestamp (the squash), and the
+        doc must read FRESH. A SHA-anchored design fails here, which is why
+        this test exists rather than a SHA-ancestry one."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        squash_ts = self._code_at(2026)
+
+        def fake_git_ct(path):
+            return squash_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: squash_ts)
+        # Equal timestamps: the strict `file_ct > doc_ct` compare treats the
+        # doc+code-in-one-squash case as fresh, which is correct.
+        assert freshness.check_doc(doc)[0] == "ok"
+
+    def test_a_fresh_doc_edit_beats_an_older_ack(self, tmp_path, monkeypatch):
+        """PINS THE max(), which nothing else did.
+
+        Every other fixture here gives the doc a long-stale stamp, so
+        `max(doc_ct, ack_ct)` and a bare `ack_ct` behave identically and the
+        max() is invisible to them -- a reviewer showed that collapsing it to
+        `doc_ct = ack_ct` passes all seven. This is the case that separates
+        them: the doc was EDITED recently, its ack is OLD. Freshness must take
+        whichever evidence is NEWER, so the recent edit wins and the doc reads
+        fresh. Under the collapse it would wrongly read stale -- punishing the
+        author who actually updated the doc, which is precisely the behavior
+        this mechanism exists to stop."""
+        code_ts = self._code_at(2026)
+        old_ack = code_ts - 86_400          # ack predates the code
+        fresh_stamp = "2026-12-31"          # doc edited well after the code
+
+        doc = _make_doc(
+            tmp_path,
+            f"# Foo\n\n*Last updated: {fresh_stamp}*\n\n"
+            "**Tracks:** `scripts/swarm_config.py`\n",
+        )
+
+        def fake_git_ct(path):
+            return code_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: old_ack)
+        status, stale, _ = freshness.check_doc(doc)
+        assert status == "ok", (
+            "a doc edited AFTER its tracked code must be fresh even when its "
+            "ack is older -- freshness takes the newest evidence, not the ack"
+        )
+        assert stale == []
+
+    def test_run_ack_refuses_without_a_reason(self, capsys):
+        """`--because` is what makes a blind ack impossible, so its refusal is
+        the mechanism's whole anti-gaming guarantee -- not a UX nicety. It was
+        verified only by hand until a reviewer pointed out the CLI layer had
+        no test at all; a future edit could have silently dropped it."""
+        assert freshness.run_ack("docs/standards/testing.md", None) == 2
+        assert freshness.run_ack("docs/standards/testing.md", "   ") == 2
+        assert "requires --because" in capsys.readouterr().out
+
+    def test_run_ack_refuses_an_unknown_doc(self, capsys):
+        assert freshness.run_ack("docs/does-not-exist.md", "reason") == 2
+        assert "no such doc" in capsys.readouterr().out
+
+    def test_run_ack_refuses_a_doc_with_no_tracks_line(self, tmp_path, capsys):
+        """A doc with no **Tracks:** line is not freshness-checked at all, so
+        acking it would record a review of nothing. Say so instead."""
+        doc = _make_doc(tmp_path, "# No tracks here\n\nJust prose.\n")
+        rel = doc.relative_to(doc.parent)
+        import os
+        cwd = os.getcwd()
+        try:
+            os.chdir(doc.parent)
+            # run_ack resolves against REPO_ROOT; point it at the tmp doc via
+            # an absolute path so the no-tracks branch is what fires.
+            assert freshness.run_ack(str(doc), "reason") == 2
+        finally:
+            os.chdir(cwd)
+        assert "no **Tracks:** line" in capsys.readouterr().out
+
+    def test_run_ack_on_a_fresh_doc_is_a_no_op(self, tmp_path, monkeypatch, capsys):
+        """Acking a doc that is not stale must not manufacture an ack file --
+        an ack with an empty `verified:` list would be a record of nothing,
+        and the file's existence would still count toward freshness."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        monkeypatch.setattr(freshness, "git_commit_time", lambda p: None)
+        assert freshness.run_ack(str(doc), "reason") == 0
+        assert "already fresh" in capsys.readouterr().out
+
+    def test_porcelain_ack_parsing_handles_every_real_git_line_shape(self):
+        """THE BUG THIS EXISTS TO PREVENT, found by probing rather than
+        assuming: `git status --porcelain` collapses a wholly-untracked
+        directory into a single `?? docs/freshness/` line, so the FIRST
+        session ever to create acks parsed zero of them and the bulk-ack hint
+        stayed silent for exactly the case it was built to catch. Fixed with
+        -uall; these pin the other shapes a porcelain line can take, so the
+        parser is not merely correct for the one example I happened to try."""
+        f = freshness._porcelain_ack_paths
+        assert f("?? docs/freshness/a.md.ack") == {"docs/freshness/a.md.ack"}
+        # A rename line in TEXT mode is read whole, NOT split: see the
+        # docstring above and test_z_parsing_is_unambiguous_where_text_parsing
+        # _cannot_be. Renames are the -z parser's job, where they arrive as two
+        # separate records and need no arrow handling.
+        assert f("R  docs/freshness/old.md.ack -> docs/freshness/new.md.ack") == {
+            "docs/freshness/old.md.ack -> docs/freshness/new.md.ack"}
+        # Git QUOTES paths with spaces -- the quotes must not defeat the suffix.
+        assert f(' M "docs/freshness/has space.md.ack"') == {
+            "docs/freshness/has space.md.ack"}
+        # The -uall bug's shape: a bare directory names no ack.
+        assert f("?? docs/freshness/") == set()
+        assert f("?? docs/other.txt") == set()
+        # Truncated/garbage must not raise -- this is a warn-only tool.
+        assert f("??") == set()
+        # Other real status codes must still yield their path.
+        assert f("AM docs/freshness/a.md.ack") == {"docs/freshness/a.md.ack"}
+        assert f("UU docs/freshness/b.md.ack") == {"docs/freshness/b.md.ack"}
+        # A COPY line, like a rename, is read WHOLE in text mode -- the -z
+        # parser is what resolves pairs.
+        assert f("C  docs/freshness/x.md.ack -> docs/freshness/y.md.ack") == {
+            "docs/freshness/x.md.ack -> docs/freshness/y.md.ack"}
+        # An ack nested a level deeper still counts.
+        assert f("?? docs/freshness/sub/c.md.ack") == {"docs/freshness/sub/c.md.ack"}
+        # THE ARROW TRAP: a FILENAME containing " -> " must not be split.
+        # This text parser is the FALLBACK and deliberately never splits --
+        # it reads the whole payload as one path, under-counting a rename's
+        # old path rather than inventing a path that does not exist.
+        assert f("?? docs/freshness/weird -> name.md.ack") == {
+            "docs/freshness/weird -> name.md.ack"}
+
+    def test_z_parsing_is_unambiguous_where_text_parsing_cannot_be(self):
+        """THE PRIMARY PARSER. `--porcelain -z` emits NUL-separated records and
+        a rename as TWO records, so there is no arrow to split on.
+
+        This exists because arrow-splitting is unfixable IN PRINCIPLE, not just
+        buggy: given `RM old.ack -> new -> weird.ack` no parser can tell which
+        arrow separates the pair and which belongs to the filename. Round 2 of
+        review found exactly that compound case still broken after the
+        status-code fix. -z removes the ambiguity by construction instead of
+        guessing better."""
+        z = freshness._porcelain_z_ack_paths
+        assert z("?? docs/freshness/a.md.ack\0") == {"docs/freshness/a.md.ack"}
+        # A rename is two records, not one arrow-joined line.
+        assert z("R  docs/freshness/new.md.ack\0docs/freshness/old.md.ack\0") == {
+            "docs/freshness/new.md.ack", "docs/freshness/old.md.ack"}
+        # An arrow inside a filename survives intact.
+        assert z("?? docs/freshness/weird -> name.md.ack\0") == {
+            "docs/freshness/weird -> name.md.ack"}
+        # THE COMPOUND CASE text parsing could not resolve: a rename whose
+        # DESTINATION contains an arrow.
+        assert z(
+            "RM docs/freshness/new -> weird.md.ack\0docs/freshness/old.md.ack\0"
+        ) == {"docs/freshness/new -> weird.md.ack", "docs/freshness/old.md.ack"}
+        assert z("?? docs/other.txt\0") == set()
+        assert z("") == set()
+        # A bare rename-SOURCE path whose 3rd character is a space. The first
+        # -z version sniffed for a status prefix (`record[2] == " "` -> strip
+        # 3 chars), which turned "ab cd/old.md.ack" into the INVENTED path
+        # "cd/old.md.ack" -- and its fallback never noticed, because the
+        # truncated string still ended in .ack. (Verified against that old
+        # implementation: it really did emit cd/old.md.ack.)
+        #
+        # HONEST NOTE ON WHAT THIS ASSERTION PROVES: the fix was STRUCTURAL --
+        # the source record is now consumed positionally, driven by the R/C
+        # status, so it never reaches the prefix logic at all. Re-introducing
+        # the sniff therefore does NOT redden this test; the sniff is simply
+        # unreachable for that record now. This assertion pins the OUTCOME
+        # (no invented path) rather than the mechanism, which is the right
+        # thing to pin -- but it is not a mutation-proof guard on the sniff
+        # itself, and saying so is better than implying a stronger guarantee.
+        assert z("R  docs/freshness/new.md.ack\0ab cd/old.md.ack\0") == {
+            "docs/freshness/new.md.ack", "ab cd/old.md.ack"}
+        # A rename of NON-ack files must consume its own pair and not swallow
+        # the record after it.
+        assert z(
+            "R  docs/other.txt\0docs/old.txt\0?? docs/freshness/z.md.ack\0"
+        ) == {"docs/freshness/z.md.ack"}
+
+    def test_bulk_ack_hint_fires_only_above_the_threshold(self, tmp_path, monkeypatch, capsys):
+        """The bulk-acking hint is the CLI half of the anti-gaming design, and
+        it was unpinned: nothing asserted the hint TEXT ever prints, only that
+        the count is branch-scoped. A silent regression here removes the one
+        nudge that redirects bulk acking to the audit bead.
+
+        Pins the boundary in both directions -- at the threshold it stays
+        quiet, above it it speaks -- because a hint that fires always is as
+        useless as one that never fires (the alarm-fatigue failure this whole
+        epic exists to undo)."""
+        # run_ack reports a REPO-RELATIVE path, so the doc must live inside the
+        # repo. Use a real tracked doc and fake only the timestamps, so the
+        # test exercises run_ack's real resolution rather than a stub of it.
+        doc = freshness.REPO_ROOT / "docs" / "standards" / "terminology.md"
+        if not doc.is_file():
+            pytest.skip("terminology.md not present in this checkout")
+        code_ts = self._code_at(2026)
+        # Every tracked file reads as newer than the doc -> genuinely stale, so
+        # run_ack reaches the ack-writing path where the hint lives.
+        monkeypatch.setattr(freshness, "git_commit_time", lambda p: code_ts)
+        monkeypatch.setattr(freshness, "parse_last_updated_ts", lambda d: code_ts - 86_400)
+        monkeypatch.setattr(freshness, "ack_commit_time", lambda d: None)
+        monkeypatch.setattr(freshness, "ack_path_or_none", lambda d: None)
+        # Stub write_ack so NOTHING is written into the repo. It must return an
+        # in-repo path because run_ack renders it repo-relative for display --
+        # the path is never created, only reported.
+        monkeypatch.setattr(
+            freshness, "write_ack",
+            lambda d, b, v: freshness.REPO_ROOT / freshness.ACK_DIR / "unwritten.ack",
+        )
+
+        hint = "this branch now carries"
+
+        monkeypatch.setattr(freshness, "branch_ack_count",
+                            lambda *a, **k: freshness.ACK_RATE_HINT)
+        freshness.run_ack(str(doc), "reason")
+        assert hint not in capsys.readouterr().out, (
+            "the hint must stay quiet AT the threshold, or it becomes noise"
+        )
+
+        monkeypatch.setattr(freshness, "branch_ack_count",
+                            lambda *a, **k: freshness.ACK_RATE_HINT + 1)
+        freshness.run_ack(str(doc), "reason")
+        assert hint in capsys.readouterr().out, (
+            "above the threshold the hint must actually print -- it is the "
+            "only nudge routing bulk acking to the audit bead"
+        )
+
+    def test_uncommitted_ack_counts_via_its_real_mtime(self, tmp_path, monkeypatch):
+        """THE ONE BRANCH THE OTHER ACK TESTS ALL BYPASS.
+
+        Every other test here stubs `ack_commit_time`, so the real fallback --
+        an UNCOMMITTED ack counting via its filesystem mtime -- never
+        executed. Round 3 of review caught that: the bead's design calls this
+        branch deliberate ("triage-then-commit has to work inside one
+        closeout"), and it shipped with no regression protection at all.
+
+        This drives the REAL path: a genuine ack file on disk, `ack_commit_time`
+        returning None (git has never seen it), and check_doc reading its mtime.
+
+        Mutation: delete the `pending.stat().st_mtime` fallback -- red."""
+        doc = self._doc_tracking_swarm_config(tmp_path)
+        code_ts = self._code_at(2026)
+
+        # A real ack file on disk for this doc, never committed.
+        ack = tmp_path / "real.ack"
+        ack.write_text("doc: x\nverified: y\nbecause: z\n", encoding="utf-8")
+        import os
+        # Stamp it AFTER the code commit, as a real ack written today would be.
+        os.utime(ack, (code_ts + 86_400, code_ts + 86_400))
+
+        def fake_git_ct(path):
+            # The tracked code has a commit time; the ack does NOT (uncommitted).
+            return code_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        # Point the ack lookup at our real file; do NOT stub ack_commit_time --
+        # it must genuinely return None so the mtime fallback fires.
+        monkeypatch.setattr(freshness, "ack_path", lambda d: ack)
+        monkeypatch.setattr(freshness, "ack_path_or_none", lambda d: ack)
+        assert freshness.ack_commit_time(doc) is None, (
+            "precondition: the ack must look uncommitted, or this test would "
+            "silently exercise the committed path instead"
+        )
+
+        status, _stale, _ = freshness.check_doc(doc)
+        assert status == "ok", (
+            "an uncommitted ack whose mtime postdates the code must count -- "
+            "otherwise triage-then-commit cannot work inside one closeout"
+        )
+
+    def test_branch_ack_count_actually_reads_uncommitted_acks(self, monkeypatch):
+        """Pins that branch_ack_count WIRES UP the -z parser, not just that
+        the parser exists.
+
+        Round 2 caught this: deleting the `names |= _porcelain_z_ack_paths(...)`
+        line left every ack test green, because each one exercised the parser
+        DIRECTLY. A helper that is correct but unreferenced is worth nothing --
+        the same class as the dead read_ack(), except this one silently
+        degrades a working feature instead of sitting inert.
+
+        Fakes git so the test is hermetic and never writes into the repo."""
+        import subprocess as _sp
+
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 0
+            if "merge-base" in cmd:
+                R.stdout = "abc123\n"
+            elif "diff" in cmd:
+                R.stdout = ""          # nothing committed on this branch
+            elif "status" in cmd:
+                assert "-z" in cmd, "branch_ack_count must request -z output"
+                # Include a RENAME PAIR, not just two `??` records. Round 3
+                # showed that with only `??` shapes a naive inline parser
+                # (NUL-split + suffix filter, no status handling) also returns
+                # 2 and this test stays green -- so the fake would not
+                # distinguish the real parser from a broken substitute. A
+                # rename's bare source record has no status prefix, so only a
+                # parser that handles record structure counts all three.
+                R.stdout = ("?? docs/freshness/pending-one.md.ack\0"
+                            "R  docs/freshness/renamed-new.md.ack\0"
+                            "docs/freshness/renamed-old.md.ack\0")
+            else:
+                R.stdout = ""
+            return R
+
+        monkeypatch.setattr(_sp, "run", fake_run)
+        monkeypatch.setattr(freshness.subprocess, "run", fake_run)
+        assert freshness.branch_ack_count() == 3, (
+            "branch_ack_count must count UNCOMMITTED acks via the -z parser, "
+            "including a rename's prefixed record and its bare source; "
+            "dropping that wiring silently reports 0 while the parser's own "
+            "tests stay green"
+        )
+        # COUNTING ALONE IS NOT ENOUGH -- verified by mutation. A naive
+        # NUL-split + suffix filter also returns 3 here, but with the status
+        # prefixes still glued on ('?? docs/...', 'R  docs/...'). Same number,
+        # garbage values. So assert the PATHS the parser actually produces,
+        # which is what any consumer of this set would depend on.
+        parsed = freshness._porcelain_z_ack_paths(
+            "?? docs/freshness/pending-one.md.ack\0"
+            "R  docs/freshness/renamed-new.md.ack\0"
+            "docs/freshness/renamed-old.md.ack\0"
+        )
+        assert parsed == {
+            "docs/freshness/pending-one.md.ack",
+            "docs/freshness/renamed-new.md.ack",
+            "docs/freshness/renamed-old.md.ack",
+        }, "status prefixes must be stripped, not carried into the path"
+
+    def test_bulk_ack_hint_counts_this_branch_not_the_whole_corpus(self):
+        """The anti-ack-spam hint must not die of its own alarm fatigue.
+
+        An earlier version counted every .ack file in the repo, so the moment
+        the corpus audit lands its ~20 acks the hint would fire on EVERY
+        future one-doc ack, forever -- turning the one signal that catches
+        ack-spam into background noise. That is exactly how the stale-doc flag
+        died, and it would have been self-inflicted. Scoped to the branch, a
+        mature corpus is invisible: only what THIS branch adds counts."""
+        # This branch adds no acks, so the count is 0 even though the repo may
+        # hold many. A corpus-wide count would return len(all acks) instead.
+        # Pin the PROPERTY (branch-scoped, not corpus-scoped) rather than a
+        # bare `== 0`, which silently depends on the working tree being clean:
+        # a stray .ack from any other process fails the assertion for a reason
+        # unrelated to the behavior -- which is exactly what happened when a
+        # concurrent reviewer's experiment left two behind mid-run.
+        ack_dir = freshness.REPO_ROOT / freshness.ACK_DIR
+        corpus = len(list(ack_dir.glob("*" + freshness.ACK_SUFFIX))) if ack_dir.is_dir() else 0
+        branch = freshness.branch_ack_count()
+        assert branch <= corpus, (
+            "branch ack count must never exceed the corpus count -- it is a "
+            "subset by construction"
+        )
+        committed_on_base = [
+            p for p in (ack_dir.glob("*" + freshness.ACK_SUFFIX) if ack_dir.is_dir() else [])
+            if freshness.git_commit_time(p) is not None
+        ]
+        if committed_on_base:
+            assert branch < corpus or branch == 0, (
+                "acks already committed on the base must not be counted as "
+                "this branch's work"
+            )
+
+    def test_ack_path_is_unique_per_doc_and_flattened(self):
+        """One ack file per doc is what makes acks conflict-free: two sessions
+        acking two docs touch two different files. A collision here would
+        reintroduce the shared-line problem the ack replaces."""
+        a = freshness.ack_path(freshness.REPO_ROOT / "docs/components/auth.md")
+        b = freshness.ack_path(freshness.REPO_ROOT / "docs/standards/testing.md")
+        assert a != b
+        assert a.name == "components" + freshness.ACK_SEP + "auth.md" + freshness.ACK_SUFFIX
+        assert a.parent == freshness.REPO_ROOT / freshness.ACK_DIR
+        # Flattened: no nested dirs to create, no path-separator surprises.
+        assert "/" not in a.name and "\\" not in a.name
+
+    def test_ack_path_refuses_a_doc_name_that_would_shadow_another(self):
+        """THE COLLISION THIS SEPARATOR EXISTS TO PREVENT.
+
+        With `__` as the separator, `docs/components/auth.md` and
+        `docs/components__auth.md` both flattened to the SAME ack file -- so
+        acking one silently cleared the other's staleness. A wrong answer with
+        no error is the worst failure a checker can have, so an unsupported
+        doc name is REFUSED rather than mapped somewhere plausible."""
+        collide = (freshness.REPO_ROOT / "docs"
+                   / ("components" + freshness.ACK_SEP + "auth.md"))
+        with pytest.raises(ValueError):
+            freshness.ack_path(collide)
+        # But the READ path stays total -- freshness is warn-only and must
+        # never take down a closeout over a filename.
+        assert freshness.ack_path_or_none(collide) is None
+
+    def test_ack_dir_is_not_gitignored(self):
+        """A silently-ignored ack directory fails in the WORST direction: acks
+        vanish at commit, every acked doc reads stale again, and the mechanism
+        looks broken rather than absent. Pin that the path is committable."""
+        import subprocess
+        probe = (freshness.REPO_ROOT / freshness.ACK_DIR
+                 / ("probe.md" + freshness.ACK_SUFFIX))
+        result = subprocess.run(
+            ["git", "check-ignore", str(probe)],
+            cwd=freshness.REPO_ROOT, capture_output=True, text=True,
+        )
+        # rc 1 == "not ignored". rc 0 would mean a gitignore rule shadows it.
+        assert result.returncode == 1, (
+            f"{freshness.ACK_DIR}/ is gitignored -- acks would never reach the "
+            f"repo: {result.stdout.strip()}"
+        )
+
+    def test_write_ack_records_the_verified_files_and_reason(self, tmp_path, monkeypatch):
+        """The ack's CONTENT is the anti-gaming surface. A bare marker gives a
+        reviewer nothing to judge; the auto-filled file list plus the mandatory
+        reason are what make a blind ack visible in the diff."""
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "git_head_sha", lambda: "abc1234")
+        doc = tmp_path / "docs" / "components" / "thing.md"
+        doc.parent.mkdir(parents=True)
+        doc.write_text("# Thing\n", encoding="utf-8")
+        code = tmp_path / "backend" / "thing.py"
+        code.parent.mkdir(parents=True)
+        code.write_text("x = 1\n", encoding="utf-8")
+
+        ack = freshness.write_ack(doc, "re-read against the handler; unchanged", [code])
+        body = ack.read_text(encoding="utf-8")
+        assert "verified: backend/thing.py" in body
+        assert "because: re-read against the handler; unchanged" in body
+        assert "sha: abc1234" in body

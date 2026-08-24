@@ -39,25 +39,48 @@ doc_ct`. Parsing the stamp keeps the user's mental model honest: bump the
 date, get a green check.
 
 Fallback: if the doc has no parseable `*Last updated:* YYYY-MM-DD*` line,
-the script falls back to the doc's git commit time (the prior behavior).
+the script falls back to the doc's git commit time.
 
-Two modes:
+FRESHNESS ACKS (bd polyglot-pdf-fytzi). A doc is fresh if it was EDITED after
+its code changed OR explicitly REVIEWED after its code changed. The second is
+what `--ack` records, in `docs/freshness/<slug>.ack`. It exists because the
+honest action -- reading a doc and finding it still correct -- previously left
+the stale flag ON (the only ways to clear it were a stamp bump, which
+conflicted between parallel PRs, or a no-op doc commit). So the flag stopped
+being read: 24 of the 28 tracked docs are stale.
+
+The ack's timestamp is the ACK FILE'S OWN commit time, never a SHA recorded
+inside it. This repo squash-merges, so a branch commit never joins dev's
+history and a SHA-anchored ack would be orphaned the moment its PR merged; a
+tracked file's `git log -1` resolves to the squash commit on dev instead.
+An ack is NOT permanent: once tracked code commits past the ack, the doc is
+stale again.
+
+Modes:
   --all (default)  scan every doc; print each stale doc + the offending
                    newer code paths. Used by the sprint closeout checklist.
   --staged         scan only docs whose tracked code is in the current git
-                   staging area. Used by the pre-commit hook.
+                   staging area.
+  --ack DOC --because "..."
+                   record that DOC was reviewed and is still accurate.
+                   --because is MANDATORY; the tool auto-fills which tracked
+                   files were stale, so the review is visible in the diff.
 
 The sprint-archive check runs in BOTH modes — it's cheap (two filesystem
 listings + one regex) and the orphan signal is worth surfacing on every
 commit, not just at closeout.
 
-Exit code: always 0. The hook decides whether to be loud (it isn't —
-warn-only, never blocks). Sprint closeout treats output as a checklist.
+Exit code: always 0 -- warn-only, never blocks. The real consumer is the
+sprint-closeout checklist, which treats the output as a triage list. (There is
+NO pre-commit hook wired in this repo; earlier revisions of this docstring said
+otherwise and were wrong -- bd polyglot-pdf-olphy removes the matching claim
+from doc-architecture.md.)
 
 Usage:
   python scripts/check_doc_freshness.py
   python scripts/check_doc_freshness.py --staged
   python scripts/check_doc_freshness.py --all --quiet  # suppress "OK" lines
+  python scripts/check_doc_freshness.py --ack docs/standards/x.md --because "..." 
 
 Notes:
 - Tracked-file timestamps come from `git log -1 --format=%ct <path>`, not
@@ -86,6 +109,29 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DOC_DIRS = ["docs/components", "docs/standards", "docs/doctrine"]
+# Freshness ACKS -- the cheap "I reviewed this doc; it is still accurate"
+# record (bd polyglot-pdf-fytzi).
+#
+# WHY A FILE AND NOT A SHA. This repo squash-merges every PR, so a branch
+# commit never joins dev's history: a recorded branch SHA is orphaned the
+# moment its own PR merges, and an ack keyed on one would go permanently
+# false-stale exactly when it started mattering. A tracked FILE has no such
+# problem -- `git log -1 <file>` resolves to the SQUASH commit on dev, which
+# is a real ancestor. Verified against tests/test_technical_guide_routes_table.py,
+# added on a branch and squashed as PR #622. So the ack's timestamp comes
+# from the ack file itself; the SHA inside it is a human breadcrumb only and
+# is never compared.
+#
+# NOT dot-prefixed: a `.freshness/` directory risks gitignore shadowing and
+# is invisible to anyone browsing the tree. test_doc_freshness.py pins that
+# this path is not ignored -- a silently-ignored ack dir would fail in the
+# worst direction (acks vanish on merge, docs look stale, trust erodes).
+ACK_DIR = "docs/freshness"
+ACK_SUFFIX = ".ack"
+# Path separator in a flattened ack filename. Must be a character that cannot
+# appear in a doc path component, or the doc -> ack mapping stops being
+# injective and one doc's ack can clear another's staleness. See ack_path().
+ACK_SEP = "~"
 TRACKS_RE = re.compile(r"\*\*Tracks:\*\*\s*(.+)$", re.MULTILINE)
 # Match *Last updated: YYYY-MM-DD ...* (anything after the date is fine —
 # some docs include a parenthetical sprint annotation).
@@ -200,6 +246,130 @@ def git_commit_time(path: Path) -> int | None:
         out = result.stdout.strip()
         return int(out) if out else None
     except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
+def ack_path(doc: Path) -> Path:
+    """The ack file for a doc: docs/freshness/<flattened-doc-path>.ack.
+
+    The slug flattens the doc's repo-relative path (docs/components/auth.md
+    -> components~auth.md.ack) so every doc gets a UNIQUE, one-per-file ack.
+    One file per doc is the whole point: two sessions acking two different
+    docs touch two different files and never conflict -- the property the
+    single shared `*Last updated:*` line did not have.
+
+    UNIQUENESS IS LOAD-BEARING, so the separator must be a character that
+    cannot occur in a path component. An earlier version used `__`, which
+    collides: `docs/components/auth.md` and `docs/components__auth.md` both
+    flatten to `components__auth.md.ack`, and one doc's ack would silently
+    clear the other's staleness -- a wrong answer with no error. `~` is not
+    legal in this repo's doc names and is rejected below if it ever appears,
+    so the mapping stays injective by construction rather than by luck.
+    """
+    resolved = doc.resolve()
+    try:
+        rel = resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        # A doc outside REPO_ROOT (tmp_path fixtures; a doc passed by absolute
+        # path from elsewhere). It can have no ack in this repo, but it must
+        # not CRASH the checker -- freshness is warn-only and a path shape has
+        # no business taking it down. Fall back to the bare filename so the
+        # derived path is still well-formed and simply will not exist.
+        rel = resolved.name
+    if rel.startswith("docs/"):
+        rel = rel[len("docs/"):]
+    if ACK_SEP in rel:
+        # Refuse rather than return a path that could shadow another doc's
+        # ack. A doc name containing the separator is not a supported shape;
+        # silently mapping it somewhere plausible is how a checker starts
+        # giving confidently wrong answers.
+        raise ValueError(
+            f"doc path contains the ack separator {ACK_SEP!r}, which would "
+            f"make its ack file ambiguous: {rel}"
+        )
+    return REPO_ROOT / ACK_DIR / (rel.replace("/", ACK_SEP) + ACK_SUFFIX)
+
+
+def ack_commit_time(doc: Path) -> int | None:
+    """Commit time of this doc's ack file, or None if it has no committed ack.
+
+    An ack that exists in the working tree but is not yet committed has no
+    commit time. That is deliberate and is handled by the caller: the ack
+    still COUNTS during a session (so triage-then-commit works within one
+    closeout), but its durable freshness value only exists once committed.
+    """
+    ack = ack_path_or_none(doc)
+    if ack is None or not ack.exists():
+        return None
+    return git_commit_time(ack)
+
+
+def ack_path_or_none(doc: Path) -> Path | None:
+    """ack_path(), but None instead of raising for an unsupported doc path.
+
+    The READ paths (freshness checking) must be total: this script is
+    warn-only and must never take down a closeout over a filename. The WRITE
+    path (--ack) deliberately keeps the raising version, so an author naming
+    a doc unsupportedly is told rather than given a silently-shadowed ack.
+    """
+    try:
+        return ack_path(doc)
+    except ValueError:
+        return None
+
+
+def read_ack(doc: Path) -> dict[str, str] | None:
+    """Parse a doc's ack file into its fields, or None if there is no ack.
+
+    Format is deliberately trivial (`key: value` lines) -- the ack's job is
+    to be READABLE IN A DIFF. A reviewer must be able to see what was
+    verified and why without running anything.
+    """
+    ack = ack_path_or_none(doc)
+    if ack is None or not ack.exists():
+        return None
+    fields: dict[str, str] = {}
+    for line in ack.read_text(encoding="utf-8").splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            fields[key.strip()] = value.strip()
+    return fields
+
+
+def write_ack(doc: Path, because: str, verified: list[Path]) -> Path:
+    """Record that this doc was reviewed against its tracked code.
+
+    `verified` is AUTO-FILLED by the caller from the files that actually
+    triggered staleness -- the author does not get to type a convenient
+    list. Together with the mandatory `because`, that is what makes a blind
+    ack impossible: the diff shows which files were supposedly checked and
+    the stated reason, so a reviewer has something real to judge.
+    """
+    ack = ack_path(doc)
+    ack.parent.mkdir(parents=True, exist_ok=True)
+    head = git_head_sha() or "unknown"
+    rels = sorted(fp.resolve().relative_to(REPO_ROOT).as_posix() for fp in verified)
+    body = (
+        f"doc: {doc.resolve().relative_to(REPO_ROOT).as_posix()}\n"
+        f"verified: {', '.join(rels) if rels else '(no tracked files were stale)'}\n"
+        f"because: {because}\n"
+        # Informational ONLY -- never compared. See the ACK_DIR note above:
+        # this SHA is orphaned by squash-merge and would be a false anchor.
+        f"sha: {head}\n"
+    )
+    ack.write_text(body, encoding="utf-8")
+    return ack
+
+
+def git_head_sha() -> str | None:
+    """Short HEAD sha, for the ack's human breadcrumb line."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip() or None
+    except subprocess.CalledProcessError:
         return None
 
 
@@ -343,8 +513,29 @@ def check_doc(
     doc_ct = parse_last_updated_ts(doc)
     if doc_ct is None:
         doc_ct = git_commit_time(doc)
+    # THE ACK (bd polyglot-pdf-fytzi). A doc is fresh if it was EDITED after
+    # its code changed OR explicitly REVIEWED after its code changed. Before
+    # the ack, only the first counted -- so the honest action ("I read it; it
+    # is still accurate") left the stale flag ON, which is precisely why 21
+    # of 28 tracked docs sit stale and the signal stopped being read.
+    #
+    # An UNCOMMITTED ack counts as "now": it is the author saying so during
+    # this session, and triage-then-commit has to work inside one closeout.
+    # Its durable value arrives when it is committed (closeout requires that
+    # before the PR opens).
+    ack_ct = ack_commit_time(doc)
+    if ack_ct is None:
+        pending = ack_path_or_none(doc)
+        if pending is not None and pending.exists():
+            # Uncommitted ack: it counts NOW so triage-then-commit works
+            # inside one closeout. mtime is used only for this pre-commit
+            # window -- every durable comparison uses git commit times, per
+            # this module's note that mtimes do not survive clones.
+            ack_ct = int(pending.stat().st_mtime)
+    if ack_ct is not None:
+        doc_ct = ack_ct if doc_ct is None else max(doc_ct, ack_ct)
     if doc_ct is None:
-        return ("ok", [], [f"{doc.relative_to(REPO_ROOT)}: doc not yet committed and has no parseable *Last updated:* stamp"])
+        return ("ok", [], [f"{doc.relative_to(REPO_ROOT)}: doc not yet committed, and has no *Last updated:* stamp or freshness ack"])
     # If --staged AND the doc itself is staged, the author already updated it.
     if only_if_staged is not None and doc.resolve() in only_if_staged:
         return ("ok", [], [])
@@ -645,6 +836,176 @@ def report_sprint_archive(
     return flagged
 
 
+ACK_RATE_HINT = 3
+
+
+def run_ack(doc_arg: str, because: str | None) -> int:
+    """Handle `--ack <doc> --because "<reason>"`. Returns an exit code.
+
+    This is the ONE place the ack is created, and it deliberately refuses
+    more than it accepts: no reason, no ack; unknown doc, no ack; a doc that
+    is not actually stale gets told so rather than silently acked.
+    """
+    if not because or not because.strip():
+        print("ERROR: --ack requires --because \"<one line on why it is still accurate>\".")
+        print("  A reason-less ack is the stamp bump this mechanism exists to replace:")
+        print("  it clears the flag while proving nothing to the next reader.")
+        return 2
+
+    doc = (REPO_ROOT / doc_arg).resolve()
+    if not doc.is_file():
+        print(f"ERROR: no such doc: {doc_arg}")
+        return 2
+
+    status, stale, _warnings = check_doc(doc)
+    if status == "no-tracks":
+        print(f"ERROR: {doc_arg} has no **Tracks:** line, so it is not freshness-checked.")
+        print("  Give it a Tracks: line (or add it to the no-tracks allowlist) instead of acking it.")
+        return 2
+
+    verified = [fp for fp, _fct, _dct in stale]
+    if not verified:
+        print(f"{doc_arg} is already fresh -- nothing to ack.")
+        return 0
+
+    ack = write_ack(doc, because.strip(), verified)
+    rel = ack.relative_to(REPO_ROOT).as_posix()
+    print(f"Acked {doc_arg} against {len(verified)} tracked file(s) -> {rel}")
+    for fp in sorted(verified):
+        print(f"    verified: {fp.relative_to(REPO_ROOT).as_posix()}")
+    print("  COMMIT this ack with your change -- an uncommitted ack does not survive the PR.")
+
+    # Bulk acking is audit work, not closeout work. This is a hint, not a
+    # block: the honest bulk case (the corpus audit) has its own bead where
+    # the labor is priced, and a session quietly acking its way out of a
+    # closeout is exactly the failure this mechanism must not enable.
+    #
+    # SCOPED TO THIS BRANCH, deliberately. Counting every ack in the repo
+    # would fire forever the moment the corpus audit lands its ~20 acks --
+    # turning the one signal that catches ack-spam into permanent background
+    # noise. That is the same alarm-fatigue death the stale-doc flag already
+    # died of, and it would be self-inflicted.
+    branch_acks = branch_ack_count()
+    if branch_acks > ACK_RATE_HINT:
+        print(f"\n  NOTE: this branch now carries {branch_acks} acks. Acking several docs in")
+        print("  one branch is audit work -- see the docs-audit bead rather than clearing")
+        print("  them at closeout.")
+    return 0
+
+
+def _porcelain_ack_paths(line: str) -> set[str]:
+    """Ack paths named by one `git status --porcelain -uall` line.
+
+    Porcelain lines are `XY <path>`, and a RENAME is `R  <old> -> <new>` --
+    which names two paths, only one of which still exists. Keeping both is
+    deliberate: an ack renamed INTO this branch is new work here, and a set()
+    collapses any double-count. Quoted paths (git quotes names with spaces or
+    non-ASCII) are unquoted so the suffix test still matches.
+    """
+    if len(line) < 4:
+        return set()
+    payload = line[3:].strip()
+    # NOTE: this text-mode parser is the FALLBACK. branch_ack_count() reads
+    # `--porcelain -z`, where rename pairs are NUL-separated records and no
+    # arrow-splitting is needed at all -- see _porcelain_z_ack_paths(). Arrow
+    # splitting is unfixable in general: with `RM old.ack -> new -> weird.ack`
+    # you cannot tell which arrow separates the pair and which is part of the
+    # filename. So this path deliberately does NOT split; it reads the whole
+    # payload as one path. That under-counts a rename's old path in the text
+    # fallback (harmless -- the count only drives an advisory hint) rather
+    # than inventing a path that does not exist.
+    parts = [payload]
+    out: set[str] = set()
+    for part in parts:
+        if part.startswith('"') and part.endswith('"') and len(part) > 1:
+            part = part[1:-1]
+        if part.endswith(ACK_SUFFIX):
+            out.add(part)
+    return out
+
+
+def _porcelain_z_ack_paths(raw: str) -> set[str]:
+    """Ack paths from `git status --porcelain -z -uall` output.
+
+    THE POINT OF -z: records are NUL-separated and a rename/copy emits its two
+    paths as TWO records (`R  new\\0old\\0`), so there is no arrow to parse and
+    no ambiguity when a FILENAME itself contains " -> ". Text-mode parsing
+    cannot resolve that case even in principle -- given
+    `RM old.ack -> new -> weird.ack` you cannot tell which arrow is the
+    separator. Reading -z removes the ambiguity by construction rather than
+    guessing at it, which is why it is the primary path.
+
+    Each record is `XY <path>` except the second half of a rename/copy pair,
+    which is a bare path. Both forms are handled: anything ending in the ack
+    suffix counts, whether or not it carries a status prefix.
+    """
+    out: set[str] = set()
+    records = [r for r in raw.split("\0") if r]
+    i = 0
+    while i < len(records):
+        record = records[i]
+        # Slicing already yields "" for a record shorter than the prefix, so
+        # no length guard is needed. (An earlier `if len(record) > 3 else ""`
+        # was provably a no-op -- identical output for every input -- which is
+        # why no mutation of it could fail a test. Defensive clutter that
+        # cannot be wrong is also code that cannot be verified; dropped.)
+        status, path = record[:2], record[3:]
+        # DO NOT GUESS whether a record carries a status prefix. -z output has
+        # a determinate structure: every record is "XY <path>", EXCEPT that a
+        # rename/copy is followed by ONE extra record holding the bare source
+        # path. So consume that follow-up positionally, driven by the status
+        # code, instead of sniffing the string.
+        #
+        # An earlier version sniffed (`if record[2] == " "` -> strip 3 chars),
+        # which mangled a bare source path whose third character is a space:
+        # "ab cd/old.md.ack" became "cd/old.md.ack" -- an INVENTED path, and
+        # the string still ended in .ack so the fallback never noticed.
+        if path.endswith(ACK_SUFFIX):
+            out.add(path)
+        if status and status[0] in ("R", "C") and i + 1 < len(records):
+            source = records[i + 1]          # bare path, no status prefix
+            if source.endswith(ACK_SUFFIX):
+                out.add(source)
+            i += 2
+            continue
+        i += 1
+    return out
+
+
+def branch_ack_count(base: str = "origin/dev") -> int:
+    """How many ack files THIS branch adds or changes, vs its merge base.
+
+    Falls back to the working-tree count only if git cannot answer (a fresh
+    repo with no base, a detached state) -- a wrong-but-bounded number beats
+    crashing a warn-only tool.
+    """
+    try:
+        merge_base = subprocess.run(
+            ["git", "merge-base", base, "HEAD"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        committed = subprocess.run(
+            ["git", "diff", "--name-only", merge_base, "HEAD", "--", ACK_DIR],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        # Uncommitted acks count too: the session made them, they just have
+        # not landed yet.
+        pending = subprocess.run(
+            # -uall is REQUIRED: without it git collapses a wholly-untracked
+            # directory to ONE "?? docs/freshness/" line, so the first session
+            # ever to create acks parsed zero of them and the hint stayed
+            # silent for exactly the case it exists to catch.
+            ["git", "status", "--porcelain", "-z", "-uall", "--", ACK_DIR],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        names = {p for p in committed if p.endswith(ACK_SUFFIX)}
+        names |= _porcelain_z_ack_paths(pending)
+        return len(names)
+    except (subprocess.CalledProcessError, OSError):
+        ack_dir = REPO_ROOT / ACK_DIR
+        return len(list(ack_dir.glob("*" + ACK_SUFFIX))) if ack_dir.is_dir() else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -658,7 +1019,26 @@ def main() -> int:
         help="Scan every doc (default).",
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress 'OK' lines.")
+    parser.add_argument(
+        "--ack",
+        metavar="DOC",
+        help="Record that DOC was reviewed and is still accurate. Requires "
+             "--because. Writes docs/freshness/<slug>.ack listing the tracked "
+             "files that were stale, so the review is visible in the diff.",
+    )
+    parser.add_argument(
+        "--because",
+        metavar="REASON",
+        help="One line saying WHY the doc is still accurate. Mandatory with "
+             "--ack: a bare ack is indistinguishable from the stamp-bump-"
+             "without-reading habit this replaces.",
+    )
     args = parser.parse_args()
+
+    if args.ack:
+        return run_ack(args.ack, args.because)
+    if args.because:
+        parser.error("--because is only meaningful with --ack")
 
     only_staged = staged_files() if args.staged else None
     # find_docs() returns tier-1 (TIER1_DOCS) + tier-2 (docs/components,
