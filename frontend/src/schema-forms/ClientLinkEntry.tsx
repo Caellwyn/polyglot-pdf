@@ -141,11 +141,6 @@ export function ClientLinkEntry() {
     );
   }
 
-  // BOTH conditions, deliberately: `phase === "ready"` alone would let a
-  // future edit that sets the phase on an error path render the form with no
-  // redeemed link. Requiring `link` makes fail-closed structural rather than
-  // incidental -- a mutation setting phase="ready" in the catch block still
-  // lands here (verified).
   // On the RELOAD path `link` is null -- the /open response was consumed on
   // the first load and is not re-fetched -- so readiness alone is the right
   // gate here. Fail-closed still holds: `phase` reaches "ready" only after a

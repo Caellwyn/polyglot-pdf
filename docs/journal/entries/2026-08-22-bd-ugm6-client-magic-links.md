@@ -72,8 +72,23 @@ body, which would let a caller forge attribution onto a colleague.
 
 The collision audit also found a defect on MY side: this bead DECLARED
 `backend/services/auth.py` as a surface, the file most likely to look like a
-collision with an editor-auth epic. I do not modify it (I import `get_db`,
-read-only). Corrected, because the collision guard reads that declaration.
+collision with an editor-auth epic. AT THAT MOMENT I did not modify it (I
+imported `get_db`, read-only), so I narrowed the declaration.
+
+**That turned out to be premature, and the reversal is worth recording.**
+Fresh-eyes r2 found that the client tier still could not read anything over
+HTTP, and the fix was a credential-dispatch branch in `require_auth` -- in
+`backend/services/auth.py`, the very file I had just declared out of scope.
+So the surface declaration was RIGHT before I "corrected" it, and I re-added
+the file once the diff actually touched it.
+
+The lesson is not "declare everything": it is that a surface declaration
+describes where the work WILL land, which on a bead that keeps discovering
+layers is not knowable at claim time. Re-check it when the diff changes
+shape, not only at the start. The collision risk with epic ijntk stayed
+theoretical throughout -- that epic builds its own `editor_auth.py` and never
+touches `require_auth` -- but that was luck about their design, not a
+consequence of my declaration.
 
 ## The gap that would have made the whole feature unreachable
 

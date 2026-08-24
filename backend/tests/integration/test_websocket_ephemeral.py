@@ -362,9 +362,10 @@ async def test_an_UNREACHABLE_redemption_store_refuses_the_socket(
 async def test_the_COMPLETION_WINDOW_is_enforced_at_the_socket(
     mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
 ):
-    """verify_link_token knows only the OPEN deadline (~48h). The ~24h
-    COMPLETION clock starts at first open and lives in the store, so the
-    socket has to check it or a link opened 3 days ago still works.
+    """verify_link_token knows only the OPEN deadline (~48h). The COMPLETION
+    clock (7 days by default) starts at first open and lives in the store, so
+    the socket has to check it or a link opened long ago still works. This
+    test passes its own short window, so it is independent of the default.
 
     Mutation: drop the opened_at + cw check -- red.
     """
