@@ -1,6 +1,6 @@
 """Scan tier-1 + tier-2 docs for staleness AND enforce the sprint-archive protocol.
 
-This script does two warn-only checks in one pass:
+This script does four warn-only checks in one pass:
 
 1. **Doc freshness.** Each tier-1 doc (TIER1_DOCS: CLAUDE.md, docs/INDEX.md,
    docs/technical_guide.md) and each `docs/components/*.md` /
@@ -21,6 +21,16 @@ This script does two warn-only checks in one pass:
    files at root against the "Active sprint plans" row in `docs/INDEX.md`
    and warns on orphans (at root but unlisted — closeout missed) or
    missing files (listed but absent — stale INDEX reference).
+
+3. **Doc conventions.** No `Previously:`/`Prior:`/`Earlier:` chronological
+   chains and no "history section" headings in tier-1/tier-2 docs -- see
+   `check_doc_conventions` for the full rationale.
+
+4. **Code-citation bounds** (bd polyglot-pdf-3pii5). A `` `file.py:N` ``
+   citation whose line number has run past the cited file's current EOF --
+   the mechanical, false-positive-safe half of catching citation drift; see
+   `check_code_citations` for why it deliberately does NOT try to verify a
+   citation points at the SPECIFIC construct its prose names.
 
 Why both checks live in one script: they're two halves of the same doc
 discipline, and they want the same hook (warn-only on every commit, full
@@ -768,6 +778,115 @@ def check_doc_conventions(
     return findings
 
 
+# Matches a code citation like `pdf_fill_routes.py:142` or
+# `pdf_fill_routes.py:142-144` -- a backtick-quoted path fragment (with or
+# without directory segments) followed by `:` and a 1-indexed line number,
+# optionally a `-` and an end line for a range.
+CODE_CITATION_RE = re.compile(
+    r"`([\w./-]+\.(?:py|ts|tsx|js)):(\d+)(?:-(\d+))?`"
+)
+
+
+def _tracked_files_by_basename(repo_root: Path = REPO_ROOT) -> dict[str, list[str]]:
+    """basename -> list of tracked repo-relative paths sharing that basename.
+
+    Built from `git ls-files`, not a filesystem walk -- an untracked scratch
+    file must never resolve a citation (it could vanish and the check would
+    have "verified" against nothing).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return {}
+    by_basename: dict[str, list[str]] = {}
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        by_basename.setdefault(line.rsplit("/", 1)[-1], []).append(line)
+    return by_basename
+
+
+def check_code_citations(
+    docs: list[Path] | None = None,
+    repo_root: Path = REPO_ROOT,
+) -> list[tuple[Path, str]]:
+    """Flag `file.py:N` doc citations whose line number has run past EOF.
+
+    bd polyglot-pdf-3pii5: a line-number citation silently rots the moment
+    the cited file gains or loses lines above the citation -- nothing
+    mechanically checks it, so a doc can cite the wrong construct for
+    sprints with no signal. This is the narrowly-scoped, mechanical half of
+    that bead's fix: it catches the most severe form of drift (a citation
+    now pointing past the end of the file entirely) without trying to
+    verify the cited line contains the SPECIFIC construct the surrounding
+    prose names -- that would require inferring a claim from natural-
+    language prose, which is exactly the over-general-checker trap CLAUDE.md
+    warns about (a checker that infers a claim from text must scope the
+    evidence region to exactly the claim, and prose is not a reliable
+    scoping signal here). An in-bounds citation is not proven CORRECT by
+    this check; an out-of-bounds one is proven WRONG.
+
+    Resolution is deliberately conservative: a citation resolves only when
+    its path fragment names an EXACT tracked path, or its bare basename is
+    UNIQUE across the tracked tree (`git ls-files`, not a filesystem walk --
+    an untracked file must never "verify" a citation). Filenames repeat in
+    this repo (`form_models.py`, `secretary_context.py`, 19 others) -- a
+    citation whose basename is ambiguous is silently SKIPPED, not guessed
+    at, because guessing which of several same-named files a bare `:N`
+    citation means is the same shorthand-resolved-against-the-wrong-scope
+    trap that bit bd polyglot-pdf-abn4o three times. Known limitation: a
+    citation into an ambiguous-basename file goes unchecked until it either
+    gains enough path segments to disambiguate, or the collision is
+    resolved. This under-covers rather than over-claims.
+    """
+    findings: list[tuple[Path, str]] = []
+    if docs is None:
+        docs = find_docs()
+    by_basename = _tracked_files_by_basename(repo_root)
+    for doc in docs:
+        try:
+            text = doc.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for m in CODE_CITATION_RE.finditer(text):
+            fragment, start_s, end_s = m.group(1), m.group(2), m.group(3)
+            start = int(start_s)
+            end = int(end_s) if end_s else start
+            if "/" in fragment:
+                # A path fragment with directory segments must match a
+                # tracked path's TAIL exactly (not just contain it as a
+                # substring) -- "outes.py/foo.py" tail-matching "routes.py"
+                # would be a false resolution.
+                candidates = [
+                    p for p in by_basename.get(fragment.rsplit("/", 1)[-1], [])
+                    if p == fragment or p.endswith("/" + fragment)
+                ]
+            else:
+                candidates = by_basename.get(fragment, [])
+            if len(candidates) != 1:
+                continue  # unresolvable or ambiguous -- skip, don't guess
+            target = repo_root / candidates[0]
+            try:
+                line_count = sum(1 for _ in target.open(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            if end > line_count:
+                line_no = text.count("\n", 0, m.start()) + 1
+                findings.append((
+                    doc,
+                    f"line {line_no}: citation `{m.group(0)[1:-1]}` cites "
+                    f"line {end} but {candidates[0]} has only {line_count} "
+                    "lines -- the citation has drifted past EOF",
+                ))
+    return findings
+
+
 def report_doc_conventions(*, quiet: bool = False) -> bool:
     """Print convention-check findings. Returns True if anything was flagged.
 
@@ -790,6 +909,30 @@ def report_doc_conventions(*, quiet: bool = False) -> bool:
         print(f"  {rel}: {msg}")
     print()
     print("  See CLAUDE.md 'Doc maintenance rules' for the canonical one-line stamp shape.")
+    return True
+
+
+def report_code_citations(*, quiet: bool = False) -> bool:
+    """Print out-of-bounds `file.py:N` citation findings. Returns True if any.
+
+    Same warn-only severity as the other two checks. The CI test at
+    `tests/test_doc_freshness.py::test_no_out_of_bounds_code_citations`
+    fails CI on the same findings (bd polyglot-pdf-3pii5).
+    """
+    findings = check_code_citations()
+    if not findings:
+        if not quiet:
+            print("\nCode citations: clean (no `file.py:N` citation points past its file's current EOF).")
+        return False
+    print()
+    print("[code-citations] line-number citations that have drifted past EOF --")
+    print("                  the cited file has fewer lines than the citation claims.")
+    for doc, msg in findings:
+        rel = doc.relative_to(REPO_ROOT).as_posix()
+        print(f"  {rel}: {msg}")
+    print()
+    print("  Fix the line number, or re-anchor to a symbol name (preferred -- see")
+    print("  bd polyglot-pdf-3pii5 and CLAUDE.md scar #7).")
     return True
 
 
@@ -1120,6 +1263,11 @@ def main() -> int:
     # Doc-convention check (current-state-only enforcement). Same warn-only
     # severity; the CI test in tests/test_doc_freshness.py is the gate.
     report_doc_conventions(quiet=args.quiet)
+
+    # Out-of-bounds code-citation check (bd polyglot-pdf-3pii5). Same
+    # warn-only severity; the CI test in tests/test_doc_freshness.py is the
+    # gate.
+    report_code_citations(quiet=args.quiet)
 
     # Always exit 0 — this is a warn-only check.
     return 0
