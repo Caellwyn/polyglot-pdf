@@ -106,12 +106,30 @@ describe("the credential resolver is the ONLY token source", () => {
           continue;
         }
         if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) continue;
-        if (full.includes("sessionCredential")) continue;   // the resolver itself
+        // The two files legitimately allowed to touch getIdToken: the auth
+        // context that OWNS the Firebase user, and this resolver itself.
+        // Everything else must go through resolveSessionToken.
+        if (full.includes("sessionCredential")) continue;
+        if (full.includes("AuthContext")) continue;
         const src = readFileSync(full, "utf8");
-        // The inline pattern this module replaced. A bare getIdToken() call
-        // elsewhere (AuthContext's own plumbing) is fine -- what must not
-        // recur is deriving a BACKEND CALL's token inline.
-        if (src.includes("await user.getIdToken() : undefined")) {
+        // ALLOWLIST, not a banned string. This started as one exact
+        // spelling -- `await user.getIdToken() : undefined` -- so a tenth
+        // site written `await user?.getIdToken()`, or with different
+        // spacing, or falling back to "" instead of undefined, passed
+        // silently and left the client tier unauthenticated on that
+        // surface alone. The repo's own scar: banning a word is one
+        // synonym from defeat.
+        //
+        // ANY reference to getIdToken outside the permitted files is an
+        // offender, whatever its shape.
+        // Strip line comments first: spellbackPlayer.ts DISCUSSES getIdToken
+        // in two comments while correctly receiving its token through a
+        // getToken callback. Matching prose would have made this guard cry
+        // wolf, and a guard that cries wolf gets deleted.
+        const code = src.replace(/^\s*\/\/.*$/gm, "");
+        // A CALL, in any spelling: user.getIdToken(), user?.getIdToken(),
+        // await x.getIdToken() -- not a mention.
+        if (/\.\s*getIdToken\s*\(/.test(code) || /\?\.\s*getIdToken\s*\(/.test(code)) {
           offenders.push(full.slice(root.length + 1).replace(/\\/g, "/"));
         }
       }

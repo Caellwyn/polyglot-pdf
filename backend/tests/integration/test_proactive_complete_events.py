@@ -88,7 +88,7 @@ def _ws_yielding(messages: list[dict], hold_open: float = 0.0):
 
 
 async def _run(messages: list[dict], svc=None, hold_open: float = 0.0,
-               link_jti=None):
+               link_jti=None, link_employee_id=None, form_session_id=None):
     ws = _ws_yielding(messages, hold_open=hold_open)
     svc = svc or _mock_service()
     await _handle_fill_session(
@@ -99,6 +99,10 @@ async def _run(messages: list[dict], svc=None, hold_open: float = 0.0,
         accept_connection=False,
         schema=None,  # skip the heavy SI build; the control loop is what we exercise
         link_jti=link_jti,  # set for a CLIENT-LINK session (bd polyglot-pdf-ugm6)
+        link_employee_id=link_employee_id,
+        # Session telemetry is gated on having a form_session_id, so a test
+        # that wants to observe the RECORDERS must supply one.
+        form_session_id=form_session_id,
     )
     sent = [c.args[0] for c in ws.send_json.await_args_list]
     return ws, svc, sent
@@ -445,3 +449,44 @@ async def test_a_STAFF_session_never_touches_the_link_store(monkeypatch):
     ], hold_open=0.05, link_jti=None)
 
     assert burned == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recorder", ["log_form_session_start",
+                                      "log_form_session_end"])
+async def test_the_SOCKET_passes_the_join_key_to_both_records(
+    monkeypatch, recorder
+):
+    """PIN THE CALL SITES, not the logger's signature (bd polyglot-pdf-ugm6).
+
+    My first attempt at this tested confirmation_logger DIRECTLY -- it proved
+    the logger WRITES link_jti when handed it, and proved nothing about
+    whether the socket ever hands it over. Both "drop the kwargs from the
+    call site" mutations passed with that test green, which is the same
+    one-layer-removed mistake that let three earlier gaps through in this
+    bead.
+
+    This drives _handle_fill_session and inspects what the RECORDER actually
+    received.
+
+    Mutation: drop link_jti/employee_id from either call site -- that
+    parametrization goes red.
+    """
+    seen = {}
+
+    def _capture(**kwargs):
+        seen.update(kwargs)
+
+    monkeypatch.setattr("backend.routes.websocket_routes." + recorder, _capture)
+
+    await _run([
+        {"text": json.dumps({"type": "form_complete", "fields": []})},
+    ], hold_open=0.05, link_jti="jti-abc", link_employee_id="u-emp-7",
+        form_session_id="fss_test")
+
+    assert seen.get("link_jti") == "jti-abc", (
+        recorder + " must receive the firm's join key from the socket"
+    )
+    assert seen.get("employee_id") == "u-emp-7", (
+        recorder + " must receive the originating employee from the socket"
+    )

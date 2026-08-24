@@ -362,6 +362,13 @@ async def _handle_fill_session(
 			section_id=section_id,
 			firm_id=firm_id,
 			kit_id=kit_id,
+			# The START row is the ONE-PER-SESSION record, so it needs the
+			# join key MORE than the end row does (which fires per
+			# connection). Omitting it here left a client who abandons
+			# mid-form with a start row the firm cannot join on -- while the
+			# docs claimed both records carried it (Opus cross-surface r2).
+			link_jti=link_jti,
+			employee_id=link_employee_id,
 		)
 
 	# Set when the client reports the WHOLE form confirmed (the form_complete

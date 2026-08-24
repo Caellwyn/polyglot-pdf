@@ -184,4 +184,9 @@ def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
     if stamp >= opened_at + window:
         raise LinkWindowElapsed("completion window elapsed")
 
-    return record
+    # Return the record with a VALIDATED opened_at. Handing back the raw
+    # record made every caller re-read the unvalidated stamp and re-derive
+    # the fallback themselves -- which is how the deadline math and the
+    # validation drifted apart in the first place. One value, already
+    # checked, so a caller cannot accidentally use the bad one.
+    return {**record, "opened_at": opened_at}

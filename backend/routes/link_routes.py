@@ -33,8 +33,9 @@ from backend.services.auth import require_auth
 from backend.services.firms import get_allowed_kits
 from backend.services.link_redemptions import (
     LinkAlreadyUsed,
+    LinkWindowElapsed,
     RedemptionUnavailable,
-    open_link,
+    enforce_link_redemption,
 )
 from backend.services.link_tokens import (
     DEFAULT_COMPLETE_WINDOW_S,
@@ -209,10 +210,27 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
                   firm_id=firm_id, jti=payload["jti"])
         raise generic
 
+    # THE SHARED GATE (bd polyglot-pdf-ugm6, Opus cross-surface r2). This
+    # route used to hand-roll the same sequence the socket and require_auth
+    # run -- redeem, validate the stored open time, check the completion
+    # window -- and the copies HAD ALREADY DRIFTED: the helper refuses a
+    # credential whose completion window is unusable, this copy would have
+    # computed a deadline from whatever `cw` held. Not exploitable (the mint
+    # route bounds it and the verifier type-checks it), but drift-in-waiting
+    # is exactly what the extraction was for, and the docs claimed one helper
+    # served every door while two copies existed.
+    #
+    # The helper reads `link_kit_id`; the token payload spells it `kit_id`.
+    # Normalize rather than teaching the helper two spellings.
+    gate_claims = {**payload, "link_kit_id": kit_id}
     try:
-        record = open_link(payload["jti"], firm_id, kit_id)
+        record = await asyncio.to_thread(enforce_link_redemption, gate_claims)
     except LinkAlreadyUsed as exc:
         _log.info("link_open_refused", reason="already completed",
+                  jti=payload["jti"])
+        raise generic from exc
+    except LinkWindowElapsed as exc:
+        _log.info("link_open_refused", reason="completion window elapsed",
                   jti=payload["jti"])
         raise generic from exc
     except RedemptionUnavailable as exc:
@@ -222,24 +240,7 @@ async def open_client_link(body: OpenLinkRequest) -> OpenLinkResponse:
         _log.error("link_open_unavailable", jti=payload["jti"], error=str(exc))
         raise generic from exc
 
-    # VALIDATE opened_at rather than trusting the stored value. A corrupt or
-    # missing stamp must not silently become "opened at the epoch", which
-    # computes a deadline decades in the past and locks a legitimate client
-    # out of a link they just opened -- nor a far-future stamp, which would
-    # extend the window indefinitely. Fall back to NOW: the conservative
-    # reading is that this open is the first one.
-    opened_at = record.get("opened_at")
-    now_s = int(time.time())
-    if not isinstance(opened_at, int) or isinstance(opened_at, bool)             or opened_at <= 0 or opened_at > now_s + 300:
-        _log.warning("link_opened_at_implausible", jti=payload["jti"],
-                     opened_at=repr(opened_at))
-        opened_at = now_s
-
-    deadline = completion_deadline(payload, opened_at)
-    if now_s >= deadline:
-        _log.info("link_open_refused", reason="completion window elapsed",
-                  jti=payload["jti"])
-        raise generic
+    deadline = completion_deadline(payload, record["opened_at"])
 
     _log.info("link_opened_ok", firm_id=firm_id, kit_id=kit_id,
               jti=payload["jti"], employee_id=payload["employee_id"])

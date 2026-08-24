@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Optional
 
@@ -131,7 +132,15 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
             enforce_link_redemption,
         )
         try:
-            enforce_link_redemption(claims)
+            # OFF THE EVENT LOOP. This is a synchronous Admin-SDK Firestore
+            # read inside an async dependency, so calling it directly blocks
+            # the SHARED Cloud Run loop -- a slow (not failed) Firestore
+            # would stall every concurrent request in the container,
+            # including in-flight audio frames for other sessions. The
+            # fail-closed handling below covers the store being DOWN; only
+            # this covers it being SLOW. The socket already does it this way
+            # (websocket_routes) -- this was the one site that did not.
+            await asyncio.to_thread(enforce_link_redemption, claims)
         except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
             # ONE refusal for all three: already-used, window-closed, and
             # store-unreachable must be indistinguishable, and an unreachable

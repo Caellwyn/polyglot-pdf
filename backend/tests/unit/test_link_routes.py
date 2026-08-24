@@ -71,7 +71,12 @@ def client(monkeypatch):
     monkeypatch.setattr(lr, "get_allowed_kits",
                         lambda firm_id: list(_ALLOWED.get(firm_id, [])))
     store = _Redemptions()
-    monkeypatch.setattr(lr, "open_link", store.open_link)
+    # /open now goes through enforce_link_redemption, which calls open_link
+    # inside link_redemptions -- patch it THERE so these tests exercise the
+    # REAL gate (completion-window check included) rather than standing in
+    # for the whole thing.
+    monkeypatch.setattr("backend.services.link_redemptions.open_link",
+                        store.open_link)
 
     app = FastAPI()
     app.include_router(lr.router)
