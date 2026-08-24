@@ -8,6 +8,7 @@
  * - Responsive design
  * - Progress tracking
  */
+import { resolveSessionToken } from "../../shared/sessionCredential";
 import { useAuth } from "../../contexts/AuthContext";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -58,7 +59,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   // (bd polyglot-pdf-s1iex.5). Same shape as the one handed to
   // createConnectionManager below.
   const getIntroToken = useCallback(
-    async () => (user ? await user.getIdToken() : undefined),
+    async () => (await resolveSessionToken(user)),
     [user],
   );
   const [state, setState] = useState<SchemaFormState>(() => {
@@ -341,7 +342,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
       // Pass a fresh-token callback (not a one-shot token) so reconnects --
       // notably the post-disclaimer first-section switch -- re-fetch a valid
       // token instead of connecting tokenless and getting 403 (bd polyglot-pdf-wq0).
-      const getToken = async () => (user ? await user.getIdToken() : undefined);
+      const getToken = async () => (await resolveSessionToken(user));
 
       const manager = createConnectionManager(
         schema, // Use prop schema, not state.schema
@@ -634,7 +635,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
-        async () => (user ? await user.getIdToken() : undefined),
+        async () => (await resolveSessionToken(user)),
         pdfFile,
       );
 
@@ -671,7 +672,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
 
       const filledPDFBytes = await fillPDF(
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
-        async () => (user ? await user.getIdToken() : undefined),
+        async () => (await resolveSessionToken(user)),
         pdfFile,
       );
 

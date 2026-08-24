@@ -22,6 +22,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { saveOnboardingState } from "./onboardingStorage";
 import { getBackendUrl } from "../shared/config";
+import { setClientLinkToken } from "../shared/sessionCredential";
 
 /** What the backend tells us about a redeemed link. Deliberately NOT the
  *  firm's kit list -- the client sees exactly the one form they were sent. */
@@ -82,6 +83,13 @@ export function ClientLinkEntry() {
           return;
         }
         const opened: OpenedLink = await resp.json();
+
+        // STASH THE CREDENTIAL before rendering. The client has no Firebase
+        // account, so this token is what authenticates their WebSocket, PDF
+        // fetch, and every other backend call -- without it the app renders
+        // and then silently fails to connect (fresh-eyes r1 finding 1: the
+        // redeemed token was captured and then discarded).
+        setClientLinkToken(token);
 
         // Pin the form BEFORE rendering the app, so the client is never shown
         // a form picker. Language is deliberately left unset -- the client

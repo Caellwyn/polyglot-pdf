@@ -10,6 +10,7 @@
  * Form selection is locked after onboarding to prevent mid-session switches.
  */
 
+import { resolveSessionToken } from "../shared/sessionCredential";
 import { useState, useEffect } from "react";
 import { SchemaForm } from "./components/SchemaForm";
 import type { FormSchema } from "./types/schema";
@@ -70,7 +71,7 @@ export function SchemaFormDemo() {
           const backendUrl = getBackendHttpUrl();
           let token: string | undefined;
           try {
-            token = user ? await user.getIdToken() : undefined;
+            token = await resolveSessionToken(user);
           } catch {
             // A failed token REFRESH (revoked session, clock skew) is an auth
             // failure, not "backend unavailable" -- surface it like a 401
@@ -170,7 +171,7 @@ export function SchemaFormDemo() {
         // token either way, and resolve /api/ paths against the backend base
         // (a relative /api/ fetch works on Hosting via the rewrite but not
         // against the Vite dev server).
-        const token = user ? await user.getIdToken() : undefined;
+        const token = await resolveSessionToken(user);
         const response = await fetch(resolveKitAssetUrl(form.schemaPath), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });

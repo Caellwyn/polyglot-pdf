@@ -1086,11 +1086,40 @@ async def _handle_fill_session(
 				)
 			except Exception as e:
 				log.error("session_end_telemetry_failed", error=str(e))
+
+		# BURN THE LINK -- but only on a real completion (bd polyglot-pdf-ugm6,
+		# fresh-eyes r1 finding 2). Nothing called complete_link before this,
+		# so a link could never actually become "used" and the one-time
+		# guarantee could never take effect.
+		#
+		# ONLY on session_completed, deliberately: a dropped connection, a
+		# closed laptop, or a client coming back after lunch must NOT consume
+		# their one chance at the form. Abandoning is the common case on a
+		# 40-minute immigration form, and burning the link there would strand
+		# a client mid-intake with no recourse but to phone the firm.
+		# complete_link is best-effort by design -- failing to RECORD a
+		# completion costs at most one extra reopen of a form already
+		# finished, while failing to BLOCK an open costs a second paid
+		# session, so the risky direction is the one that refuses.
+		if session_completed and isinstance(claims, dict) 				and claims.get("is_client_link") and claims.get("jti"):
+			try:
+				await asyncio.to_thread(complete_link, claims["jti"])
+			except Exception as e:
+				log.error("link_complete_failed", jti=claims.get("jti"),
+						  error=str(e))
 		await service.end_session()
 
 
+import time as _time
+
 from ..services.auth import verify_token
 from ..services.link_tokens import LinkTokenError, verify_link_token
+from ..services.link_redemptions import (
+	LinkAlreadyUsed,
+	RedemptionUnavailable,
+	complete_link,
+	open_link,
+)
 
 
 def _verify_ws_credential(token: str) -> dict:
@@ -1115,6 +1144,7 @@ def _verify_ws_credential(token: str) -> dict:
 			"link_kit_id": payload["kit_id"],
 			"employee_id": payload["employee_id"],
 			"jti": payload["jti"],
+			"cw": payload["cw"],          # completion window, enforced at the socket
 			"is_client_link": True,
 		}
 	return verify_token(token)
@@ -1234,6 +1264,40 @@ async def fill_form_from_schema(
 	# not filling the form they were given, and quietly swapping it would
 	# produce a record naming a form the client never saw.
 	if isinstance(claims, dict) and claims.get("is_client_link"):
+		# REDEEM AT THE SOCKET, not only at /api/links/open (bd
+		# polyglot-pdf-ugm6, fresh-eyes r1 finding 2). verify_link_token
+		# checks the SIGNATURE and the open window -- it cannot know whether
+		# this link was already used, because that lives in the redemption
+		# store. Without this call the socket was reachable directly: anyone
+		# holding the raw token (a shared screenshot, a forwarded URL) could
+		# start UNLIMITED paid Gemini sessions for the full ~48h window,
+		# skipping /open entirely. The one-time-use guarantee the product
+		# promises was enforced only on a route an attacker need not call.
+		try:
+			_record = await asyncio.to_thread(
+				open_link, claims["jti"], firm_id, claims.get("link_kit_id")
+			)
+		except (LinkAlreadyUsed, RedemptionUnavailable) as exc:
+			# Same refusal for "already used" and "cannot confirm": the
+			# socket must not become an oracle either, and an unreachable
+			# store must FAIL CLOSED (the guarded failure is a replayed link
+			# starting a second paid session).
+			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
+						error=str(exc))
+			await websocket.close(code=1008, reason="Authentication failed")
+			return
+
+		# The COMPLETION window is enforced here too -- verify_link_token
+		# only knows the OPEN deadline.
+		_opened_at = _record.get("opened_at") if isinstance(_record, dict) else None
+		if not isinstance(_opened_at, int) or isinstance(_opened_at, bool) 				or _opened_at <= 0 or _opened_at > int(_time.time()) + 300:
+			_opened_at = int(_time.time())
+		if int(_time.time()) >= _opened_at + int(claims.get("cw") or 0):
+			log.warning("ws_link_completion_window_elapsed",
+						jti=claims.get("jti"))
+			await websocket.close(code=1008, reason="Authentication failed")
+			return
+
 		_link_kit = claims.get("link_kit_id")
 		if isinstance(kit_id, str) and kit_id and kit_id != _link_kit:
 			log.warning("ws_link_kit_mismatch", link_kit_id=_link_kit,

@@ -230,6 +230,16 @@ async def test_a_client_link_CANNOT_fill_a_form_it_does_not_name(
     from backend.services.link_tokens import mint_link_token
 
     token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    # Stub the store so this test proves the KIT MISMATCH refusal specifically,
+    # not an unstubbed-store fail-closed that would pass for the wrong reason.
+    import time as _t
+    monkeypatch.setattr(
+        "backend.routes.websocket_routes.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
     hostile = dict(handshake_message)
     hostile["kit_id"] = "n-400"          # NOT the form the link names
     mock_websocket.receive_text.return_value = json.dumps(hostile)
@@ -253,6 +263,18 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     from backend.services.link_tokens import mint_link_token
 
     token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    # The socket REDEEMS the link (not just verifies the signature), so a
+    # session test must supply the redemption store -- an unstubbed store
+    # fails closed, which is the correct behavior and is pinned separately
+    # below.
+    import time as _t
+    monkeypatch.setattr(
+        "backend.routes.websocket_routes.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
     ok = dict(handshake_message)
     ok["kit_id"] = "i-90"
     mock_websocket.receive_text.return_value = json.dumps(ok)
@@ -262,3 +284,111 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     mock_fill_session.assert_awaited()
     kwargs = mock_fill_session.await_args.kwargs
     assert kwargs.get("firm_id") == "firm-a"
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_COMPLETED_link_cannot_open_a_second_socket(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """ONE COMPLETION PER LINK, ENFORCED WHERE IT MATTERS (bd
+    polyglot-pdf-ugm6, fresh-eyes r1 finding 2).
+
+    The signature check alone cannot know a link was used -- that lives in the
+    redemption store. Before this, the socket only verified the signature, so
+    anyone holding the raw token (a forwarded URL, a screenshot) could start
+    UNLIMITED paid Gemini sessions for the full ~48h window by connecting
+    directly and never calling /api/links/open. The one-time guarantee was
+    enforced only on a route an attacker need not call.
+
+    Mutation: drop the open_link call in _verify_ws_credential's caller --
+    red.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services.link_redemptions import LinkAlreadyUsed
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+
+    def _already_used(jti, firm_id, kit_id, now=None):
+        raise LinkAlreadyUsed("already completed")
+
+    monkeypatch.setattr("backend.routes.websocket_routes.open_link",
+                        _already_used)
+    ok = dict(handshake_message)
+    ok["kit_id"] = "i-90"
+    mock_websocket.receive_text.return_value = json.dumps(ok)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_websocket.close.assert_awaited()
+    assert mock_websocket.close.await_args.kwargs.get("code") == 1008
+    mock_fill_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_an_UNREACHABLE_redemption_store_refuses_the_socket(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """FAIL CLOSED at the socket too. Unable to confirm a link is unredeemed
+    means we must not start a paid session -- the same polarity as /open.
+
+    Mutation: treat RedemptionUnavailable as "proceed" -- red.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services.link_redemptions import RedemptionUnavailable
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+
+    def _down(jti, firm_id, kit_id, now=None):
+        raise RedemptionUnavailable("firestore down")
+
+    monkeypatch.setattr("backend.routes.websocket_routes.open_link", _down)
+    ok = dict(handshake_message)
+    ok["kit_id"] = "i-90"
+    mock_websocket.receive_text.return_value = json.dumps(ok)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_websocket.close.assert_awaited()
+    assert mock_websocket.close.await_args.kwargs.get("code") == 1008
+    mock_fill_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_the_COMPLETION_WINDOW_is_enforced_at_the_socket(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """verify_link_token knows only the OPEN deadline (~48h). The ~24h
+    COMPLETION clock starts at first open and lives in the store, so the
+    socket has to check it or a link opened 3 days ago still works.
+
+    Mutation: drop the opened_at + cw check -- red.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    import time as _t
+
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7",
+                                  complete_window_s=3600)
+    opened_long_ago = int(_t.time()) - 10_000     # past the 1h window
+    monkeypatch.setattr(
+        "backend.routes.websocket_routes.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": opened_long_ago, "completed_at": None,
+        },
+    )
+    ok = dict(handshake_message)
+    ok["kit_id"] = "i-90"
+    mock_websocket.receive_text.return_value = json.dumps(ok)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_websocket.close.assert_awaited()
+    assert mock_websocket.close.await_args.kwargs.get("code") == 1008
+    mock_fill_session.assert_not_awaited()
