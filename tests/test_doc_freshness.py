@@ -16,7 +16,9 @@ These tests pin:
 """
 import datetime
 import importlib.util
+import os
 import pathlib
+import subprocess
 import sys
 
 import pytest
@@ -274,7 +276,7 @@ class TestFreshnessScanCoversTier1:
     # happened to motivate the first fix.
     _SITE_ANCHORS = [
         (
-            "This script does two warn-only checks in one pass:",
+            "This script does four warn-only checks in one pass:",
             "2. **Sprint-archive protocol.**",
             "module docstring",
         ),
@@ -1640,3 +1642,203 @@ class TestFreshnessAcks:
         assert "verified: backend/thing.py" in body
         assert "because: re-read against the handler; unchanged" in body
         assert "sha: abc1234" in body
+
+
+# --------------------------------------------------------------------------- #
+# check_code_citations (bd polyglot-pdf-3pii5)
+# --------------------------------------------------------------------------- #
+
+# Same real-git fixture as tests/test_closeout_prep.py's REAL-repo tests
+# (not shared via conftest.py -- see the docstring on
+# TestCheckCodeCitationsOnRealRepo for why duplicating this small helper was
+# the right call for this bead's scope rather than a conftest refactor).
+
+
+@pytest.fixture()
+def clean_git_env(monkeypatch):
+    """Drop every inherited GIT_* var for the whole test.
+
+    Without this, a real-repo test can inspect the WRONG repository (GIT_DIR
+    leaking from the ambient environment) or fail on `commit.gpgsign=true`
+    from the developer's global gitconfig -- see test_closeout_prep.py's
+    identical fixture for the full trap history.
+    """
+    for key in [k for k in os.environ if k.startswith("GIT_")]:
+        monkeypatch.delenv(key, raising=False)
+
+
+def _git_in(path):
+    """A git runner for a scratch repo, isolated from the ambient gitconfig."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    env["GIT_CONFIG_SYSTEM"] = os.devnull
+    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
+    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@t"
+
+    def run(*args):
+        r = subprocess.run(["git", *args], cwd=str(path), env=env,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise AssertionError("git {} failed ({}): {}".format(
+                " ".join(args), r.returncode, r.stderr.strip()))
+        return r
+
+    return run
+
+
+class TestCheckCodeCitationsOnRealRepo:
+    """check_code_citations() needs `git ls-files` to resolve a citation's
+    path fragment against real tracked files -- a stub can't exercise the
+    basename-uniqueness / ambiguity logic honestly, so this builds a real
+    scratch repo per test (same pattern as test_closeout_prep.py's REAL-repo
+    tests, duplicated locally rather than pulled into conftest.py: this is
+    the only other file that needs it, and a conftest move would touch a
+    working, unrelated test file for one new caller -- filed as a nit rather
+    than done here)."""
+
+    def test_in_bounds_citation_produces_no_finding(self, tmp_path, clean_git_env):
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text("\n".join(f"line{i}" for i in range(10)) + "\n",
+                                             encoding="utf-8")
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        doc = _make_doc(tmp_path, "See `widget.py:5` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert findings == []
+
+    def test_out_of_bounds_citation_is_flagged(self, tmp_path, clean_git_env):
+        """The mutation the bead itself prescribes: shrink the cited file
+        (not shift it -- this doc's citations are now symbol-anchored and
+        immune to a shift) until an existing citation's line number falls
+        past the new EOF, and confirm the check goes red."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text("\n".join(f"line{i}" for i in range(10)) + "\n",
+                                             encoding="utf-8")
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        doc = _make_doc(tmp_path, "See `widget.py:5` for the thing.\n")
+        assert freshness.check_code_citations(docs=[doc], repo_root=tmp_path) == []
+
+        # THE MUTATION: shrink widget.py to 3 lines -- the citation's line 5
+        # no longer exists.
+        (tmp_path / "widget.py").write_text("line0\nline1\nline2\n", encoding="utf-8")
+        g("add", "-A")
+        g("commit", "-q", "-m", "shrink")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert len(findings) == 1
+        assert findings[0][0] == doc
+        assert "widget.py" in findings[0][1]
+        assert "5" in findings[0][1]
+
+    def test_range_citation_flagged_only_when_the_end_is_out_of_bounds(
+        self, tmp_path, clean_git_env
+    ):
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text("\n".join(f"line{i}" for i in range(10)) + "\n",
+                                             encoding="utf-8")
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        # Range 3-9 is fully in-bounds (file has 10 lines).
+        doc_ok = _make_doc(tmp_path, "See `widget.py:3-9` for the thing.\n")
+        assert freshness.check_code_citations(docs=[doc_ok], repo_root=tmp_path) == []
+        # Range 3-15 runs past EOF.
+        doc_bad = _make_doc(tmp_path, "See `widget.py:3-15` for the thing.\n")
+        findings = freshness.check_code_citations(docs=[doc_bad], repo_root=tmp_path)
+        assert len(findings) == 1
+        assert "15" in findings[0][1]
+
+    def test_ambiguous_basename_is_silently_skipped_not_guessed(
+        self, tmp_path, clean_git_env
+    ):
+        """Two files sharing a basename: a bare `foo.py:N` citation must not
+        be resolved against either one by guessing -- the bead this fix
+        closes is itself a case of shorthand resolved against the wrong
+        scope elsewhere in this repo's history (bd polyglot-pdf-abn4o)."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        (tmp_path / "a" / "dup.py").write_text("x\n", encoding="utf-8")  # 1 line
+        (tmp_path / "b" / "dup.py").write_text("x\n" * 100, encoding="utf-8")  # 100 lines
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        # Cites line 50 -- out of bounds for a/dup.py, in bounds for b/dup.py.
+        # If the checker guessed either one it would produce a wrong verdict
+        # (a false positive against a/dup.py, or a false negative that
+        # silently trusts b/dup.py); the correct behavior is neither -- skip.
+        doc = _make_doc(tmp_path, "See `dup.py:50` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert findings == []
+
+    def test_untracked_file_does_not_verify_a_citation(self, tmp_path, clean_git_env):
+        """A file that exists on disk but was never `git add`ed must not
+        resolve a citation -- otherwise a scratch/generated file could make
+        a stale citation look verified.
+
+        The citation below cites line 8 against a 3-line untracked file --
+        deliberately OUT of bounds. If the checker wrongly resolved it
+        against the untracked file (bypassing `git ls-files`), it would
+        correctly-for-the-wrong-reason report a finding here; the only way
+        this test distinguishes "correctly skipped, untracked" from "resolved
+        against the wrong (in-bounds) file" is to make a wrong resolution
+        produce a WRONG-DIRECTION result -- an 8-line-only file citing line 8
+        would pass findings == [] whether it resolved correctly (skip) or
+        resolved wrongly-but-coincidentally-in-bounds, proving nothing either
+        way (caught only by mutation-testing this exact test: an earlier
+        version used a 10-line file and stayed green under a
+        `git ls-files --cached --others` mutation for exactly this reason)."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "committed.py").write_text("x\n", encoding="utf-8")
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        # untracked.py exists on disk (3 lines) but is never added/committed.
+        # The citation below (line 8) is out of bounds for it -- a wrong
+        # resolution against this file would produce a finding, which lets
+        # this test tell "skipped" from "wrongly resolved" apart.
+        (tmp_path / "untracked.py").write_text("line0\nline1\nline2\n", encoding="utf-8")
+        doc = _make_doc(tmp_path, "See `untracked.py:8` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert findings == []
+
+
+class TestCurrentRepoHasNoOutOfBoundsCodeCitations:
+    """CI gate: every `file.py:N` citation in this repo's tier-1/tier-2 docs
+    must still be within its cited file's current bounds.
+
+    This is the rule that prevents exactly the drift bd polyglot-pdf-3pii5
+    found (docs/technical_guide.md citing pdf_fill_routes.py lines that no
+    longer existed): the pre-commit hook surfaces a drifted citation as a
+    warning; this test fails CI if one is committed. Same pairing as
+    TestCurrentRepoIsCleanOfChainsAndHistorySections::
+    test_no_history_chains_in_current_state_docs for check_doc_conventions()
+    -- that check has a real-repo CI gate, and this one needs the same
+    pairing to make exit criterion 2 ("the drift cannot silently recur")
+    actually true rather than merely true-in-a-scratch-repo.
+    """
+
+    def test_no_out_of_bounds_code_citations(self):
+        findings = freshness.check_code_citations()
+        if findings:
+            lines = [
+                f"  {doc.relative_to(freshness.REPO_ROOT).as_posix()}: {msg}"
+                for doc, msg in findings
+            ]
+            raise AssertionError(
+                "One or more `file.py:N` doc citations have drifted past "
+                "their cited file's current EOF. Fix the line number, or "
+                "re-anchor to a symbol name (preferred -- see bd "
+                "polyglot-pdf-3pii5 and CLAUDE.md scar #7).\n\n"
+                "Violations:\n" + "\n".join(lines)
+            )
