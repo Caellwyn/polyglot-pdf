@@ -87,7 +87,8 @@ def _ws_yielding(messages: list[dict], hold_open: float = 0.0):
     return ws
 
 
-async def _run(messages: list[dict], svc=None, hold_open: float = 0.0):
+async def _run(messages: list[dict], svc=None, hold_open: float = 0.0,
+               link_jti=None):
     ws = _ws_yielding(messages, hold_open=hold_open)
     svc = svc or _mock_service()
     await _handle_fill_session(
@@ -97,6 +98,7 @@ async def _run(messages: list[dict], svc=None, hold_open: float = 0.0):
         send_transcript=False,
         accept_connection=False,
         schema=None,  # skip the heavy SI build; the control loop is what we exercise
+        link_jti=link_jti,  # set for a CLIENT-LINK session (bd polyglot-pdf-ugm6)
     )
     sent = [c.args[0] for c in ws.send_json.await_args_list]
     return ws, svc, sent
@@ -380,3 +382,66 @@ async def test_no_pii_in_proactive_complete_logs(monkeypatch):
         assert "SECRET_SSN_123" not in blob
         assert "SECRET_DOB_2020" not in blob
         assert "field_count" in kwargs
+
+
+@pytest.mark.asyncio
+async def test_a_COMPLETED_client_link_session_BURNS_the_link(monkeypatch):
+    """ONE COMPLETION PER LINK, from the other end (bd polyglot-pdf-ugm6).
+
+    Nothing called complete_link before fresh-eyes r1 -- so a link could
+    never actually become "used" and the one-time guarantee could never take
+    effect no matter how well the open path was guarded.
+
+    THIS TEST'S ABSENCE ALSO HID A NameError: the first version of the burn
+    reached for `claims`, which lives in fill_form_from_schema -- a DIFFERENT
+    function -- so every completed session raised at runtime. Six unrelated
+    tests in this file went red and pointed at it; nothing pinned the burn
+    itself. Now it does.
+
+    Mutation: drop the complete_link call -- red.
+    """
+    burned = []
+    monkeypatch.setattr("backend.routes.websocket_routes.complete_link",
+                        lambda jti: burned.append(jti))
+
+    await _run([
+        {"text": json.dumps({"type": "form_complete", "fields": []})},
+    ], hold_open=0.05, link_jti="jti-abc")
+
+    assert burned == ["jti-abc"]
+
+
+@pytest.mark.asyncio
+async def test_an_ABANDONED_client_link_session_does_NOT_burn_the_link(
+    monkeypatch,
+):
+    """A dropped connection, a closed laptop, or a client coming back after
+    lunch must NOT consume their one chance at the form. Abandonment is the
+    COMMON case on a 40-minute immigration form; burning there would strand a
+    client mid-intake with no recourse but to phone the firm.
+
+    Mutation: burn unconditionally (drop the session_completed guard) -- red.
+    """
+    burned = []
+    monkeypatch.setattr("backend.routes.websocket_routes.complete_link",
+                        lambda jti: burned.append(jti))
+
+    # No form_complete message -- the socket just ends.
+    await _run([], hold_open=0.05, link_jti="jti-abc")
+
+    assert burned == []
+
+
+@pytest.mark.asyncio
+async def test_a_STAFF_session_never_touches_the_link_store(monkeypatch):
+    """link_jti is None for a staff session, so the burn must not fire (and
+    must not raise on the None)."""
+    burned = []
+    monkeypatch.setattr("backend.routes.websocket_routes.complete_link",
+                        lambda jti: burned.append(jti))
+
+    await _run([
+        {"text": json.dumps({"type": "form_complete", "fields": []})},
+    ], hold_open=0.05, link_jti=None)
+
+    assert burned == []

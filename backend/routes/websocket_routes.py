@@ -234,6 +234,12 @@ async def _handle_fill_session(
 	kit_id: str | None = None,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
 	firm_id: str | None = None,  # Firm identity from the token claim (bd polyglot-pdf-xwlt)
 	is_reconnect: bool = False,  # True when handshake carries resume:true (mid-section reconnect)
+	# The CLIENT-LINK jti, when this session was opened with a magic link
+	# (bd polyglot-pdf-ugm6). None for a staff session. Passed explicitly
+	# rather than read from an outer scope -- the decoded claims live in
+	# fill_form_from_schema, a DIFFERENT function, and reaching for them here
+	# is a NameError at runtime that no import check catches.
+	link_jti: str | None = None,
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
 	
@@ -1101,12 +1107,11 @@ async def _handle_fill_session(
 		# completion costs at most one extra reopen of a form already
 		# finished, while failing to BLOCK an open costs a second paid
 		# session, so the risky direction is the one that refuses.
-		if session_completed and isinstance(claims, dict) 				and claims.get("is_client_link") and claims.get("jti"):
+		if session_completed and link_jti:
 			try:
-				await asyncio.to_thread(complete_link, claims["jti"])
+				await asyncio.to_thread(complete_link, link_jti)
 			except Exception as e:
-				log.error("link_complete_failed", jti=claims.get("jti"),
-						  error=str(e))
+				log.error("link_complete_failed", jti=link_jti, error=str(e))
 		await service.end_session()
 
 
@@ -1503,4 +1508,9 @@ async def fill_form_from_schema(
 		kit_id=kit_id,  # Kit identity for the confirmation audit trail (bd polyglot-pdf-47r3)
 		firm_id=firm_id,  # Firm identity from the token claim (bd polyglot-pdf-xwlt)
 		is_reconnect=is_reconnect,  # Suppresses greeting on mid-section reconnect (bd polyglot-pdf-vmxx)
+		# The client-link jti, so a COMPLETED session burns the link
+		# (bd polyglot-pdf-ugm6). None for a staff session.
+		link_jti=(claims.get("jti")
+				  if isinstance(claims, dict) and claims.get("is_client_link")
+				  else None),
 	)
