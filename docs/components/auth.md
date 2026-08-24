@@ -179,9 +179,15 @@ substitution would produce a confirmation record naming a form the client
 never saw). ~48h to open from issuance, then ~24h to complete from FIRST
 OPEN -- the completion clock starts at open, so a client who opens on hour 47
 still gets a full window. One-time use lives in the `link_redemptions` store,
-because a signed bearer string is inherently replayable; reopening an
-UNFINISHED link is allowed (a refresh or dropped connection must not strand a
-client), only COMPLETION burns it.
+because a signed bearer string is inherently replayable -- and it is enforced
+at BOTH doors, `/api/links/open` AND the WebSocket. That matters: the socket
+is where the paid session actually starts, so a token holder who skips
+`/open` and connects directly must be refused there too, or the guarantee is
+enforced only on a route an attacker need not call. Reopening an UNFINISHED
+link is allowed (a refresh or dropped connection must not strand a client);
+only COMPLETION burns it, and only a REAL completion -- an abandoned session
+leaves the link usable, because abandonment is the common case on a long form
+and burning there would strand a client mid-intake.
 
 **Every refusal is the same 404** -- forged, expired, replayed, suspended
 firm, kit no longer allowed. Distinguishable errors would make the

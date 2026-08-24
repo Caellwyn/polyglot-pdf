@@ -581,6 +581,15 @@ system that is NOT a Firebase account. Five coupled pieces:
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing
   either.
+- **BOTH doors redeem.** `/api/links/open` and `/ws/fill` each call
+  `open_link`, and the socket also enforces the COMPLETION window (which the
+  signature cannot know -- the token carries only the OPEN deadline). The
+  socket check is not redundant: it is where the paid session starts, so a
+  token holder who skips `/open` entirely must still be refused. Shipping the
+  redemption on `/open` alone left unlimited replays available for the full
+  ~48h window (fresh-eyes r1). `complete_link` fires ONLY on a genuine
+  completion -- an abandoned session must not consume the client's one
+  chance.
 
 Frontend: `/f` renders `ClientLinkEntry` OUTSIDE `ProtectedRoute`
 (`frontend/src/schema-forms/main.tsx`). Moving it inside bounces every client
