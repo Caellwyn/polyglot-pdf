@@ -156,6 +156,15 @@ dot, a Firebase JWT has two, so neither verifier can silently accept the
 other's token. `/ws/fill` dispatches on that shape (`_verify_ws_credential`),
 so a caller cannot opt into the weaker check by labelling their credential.
 
+**The `jti` reaches our records, or the split key is not a key.** Both
+session events (`form_session_started` / `form_session_ended`) carry
+`link_jti` and `employee_id`. Without that column the firm holds one half of
+a join with nothing on our side to join to, and the arrangement this whole
+design exists to provide -- the firm can re-identify, we cannot -- silently
+does not work. `employee_id` on the same records is what makes a CLIENT
+session satisfy the telemetry requirement (firm + form + originating
+employee) despite there being no account anywhere.
+
 **The token carries `{firm_id, kit_id, employee_id, jti, iat, exp, cw}` and
 DELIBERATELY no client identifier.** That absence is the product's legal
 posture, not privacy hygiene: WE hold a pseudonymous record keyed by `jti`,
@@ -187,11 +196,16 @@ without preventing any abuse. The client's browser tab also keeps the
 credential across a RELOAD (sessionStorage, tab-scoped), so the 7-day
 fallback is for a closed tab or a new device, not for an accidental
 refresh. One-time use lives in the `link_redemptions` store,
-because a signed bearer string is inherently replayable -- and it is enforced
-at BOTH doors, `/api/links/open` AND the WebSocket. That matters: the socket
-is where the paid session actually starts, so a token holder who skips
-`/open` and connects directly must be refused there too, or the guarantee is
-enforced only on a route an attacker need not call. Reopening an UNFINISHED
+because a signed bearer string is inherently replayable -- and it is enforced at EVERY
+door a client credential opens -- `/api/links/open`, the WebSocket, AND
+`require_auth` (so all nine HTTP routes). One shared
+`enforce_link_redemption` serves them, deliberately EXTRACTED rather than
+copied: two hand-written versions of a security check drift, and the drift is
+silent. That is not hypothetical here -- the socket redeemed while
+`require_auth` did not, so a COMPLETED link kept serving schema, PDF bytes,
+`/api/fill-pdf` and both PAID TTS routes for the rest of its ~48h `exp`,
+which is the same "enforced only on a door an attacker need not call" hole in
+a different place (bd polyglot-pdf-ugm6, Opus cross-surface r1). Reopening an UNFINISHED
 link is allowed (a refresh or dropped connection must not strand a client);
 only COMPLETION burns it, and only a REAL completion -- an abandoned session
 leaves the link usable, because abandonment is the common case on a long form

@@ -581,15 +581,21 @@ system that is NOT a Firebase account. Five coupled pieces:
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing
   either.
-- **BOTH doors redeem.** `/api/links/open` and `/ws/fill` each call
-  `open_link`, and the socket also enforces the COMPLETION window (which the
-  signature cannot know -- the token carries only the OPEN deadline). The
-  socket check is not redundant: it is where the paid session starts, so a
-  token holder who skips `/open` entirely must still be refused. Shipping the
-  redemption on `/open` alone left unlimited replays available for the full
-  ~48h window (fresh-eyes r1). `complete_link` fires ONLY on a genuine
-  completion -- an abandoned session must not consume the client's one
-  chance.
+- **EVERY door redeems, through ONE helper.**
+  `link_redemptions.enforce_link_redemption` is called by `/api/links/open`,
+  `/ws/fill`, AND `require_auth` (hence all nine HTTP routes). It runs the
+  redemption check AND the COMPLETION-window check, neither of which
+  `verify_link_token` can do -- the token carries only the OPEN deadline, and
+  one-time use lives in Firestore. Extracted, not copied: the socket redeemed
+  while `require_auth` did not, and a completed link kept serving schema, PDF
+  bytes, `/api/fill-pdf` and both PAID TTS routes until `exp` (Opus r1). A
+  future door that authenticates a client credential MUST call this helper.
+  `complete_link` fires ONLY on a genuine completion -- an abandoned session
+  must not consume the client's one chance.
+- **`link_jti` + `employee_id` ride both SESSION records** (contract 6). The
+  jti is the firm's join key; a record without it makes the split-key
+  arrangement inoperable, and `employee_id` is what carries "originating
+  employee" for a session with no account behind it.
 
 The redeemed token lives in `sessionStorage` via
 `shared/sessionCredential.ts` -- TAB-SCOPED, so it survives a reload (the
