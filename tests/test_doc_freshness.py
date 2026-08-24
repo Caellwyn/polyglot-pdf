@@ -1811,3 +1811,34 @@ class TestCheckCodeCitationsOnRealRepo:
         findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
 
         assert findings == []
+
+
+class TestCurrentRepoHasNoOutOfBoundsCodeCitations:
+    """CI gate: every `file.py:N` citation in this repo's tier-1/tier-2 docs
+    must still be within its cited file's current bounds.
+
+    This is the rule that prevents exactly the drift bd polyglot-pdf-3pii5
+    found (docs/technical_guide.md citing pdf_fill_routes.py lines that no
+    longer existed): the pre-commit hook surfaces a drifted citation as a
+    warning; this test fails CI if one is committed. Same pairing as
+    TestCurrentRepoIsCleanOfChainsAndHistorySections::
+    test_no_history_chains_in_current_state_docs for check_doc_conventions()
+    -- that check has a real-repo CI gate, and this one needs the same
+    pairing to make exit criterion 2 ("the drift cannot silently recur")
+    actually true rather than merely true-in-a-scratch-repo.
+    """
+
+    def test_no_out_of_bounds_code_citations(self):
+        findings = freshness.check_code_citations()
+        if findings:
+            lines = [
+                f"  {doc.relative_to(freshness.REPO_ROOT).as_posix()}: {msg}"
+                for doc, msg in findings
+            ]
+            raise AssertionError(
+                "One or more `file.py:N` doc citations have drifted past "
+                "their cited file's current EOF. Fix the line number, or "
+                "re-anchor to a symbol name (preferred -- see bd "
+                "polyglot-pdf-3pii5 and CLAUDE.md scar #7).\n\n"
+                "Violations:\n" + "\n".join(lines)
+            )

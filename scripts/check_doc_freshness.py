@@ -830,7 +830,14 @@ def check_code_citations(
     warns about (a checker that infers a claim from text must scope the
     evidence region to exactly the claim, and prose is not a reliable
     scoping signal here). An in-bounds citation is not proven CORRECT by
-    this check; an out-of-bounds one is proven WRONG.
+    this check; an out-of-bounds one is proven WRONG. Concretely: inserting
+    a line ABOVE a citation shifts it downward without ever pushing it past
+    EOF, so that drift (the more common real-world case -- a function added
+    earlier in the file, not the file truncated) stays invisible to this
+    check. Symbol-name anchors (this bead's OTHER, preferred fix) are immune
+    to that shift; a line-number citation never is, no matter how this check
+    is strengthened -- which is why re-anchoring, not a smarter citation
+    checker, is the durable answer for any citation this check can't reach.
 
     Resolution is deliberately conservative: a citation resolves only when
     its path fragment names an EXACT tracked path, or its bare basename is
