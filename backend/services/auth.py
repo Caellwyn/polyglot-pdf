@@ -74,6 +74,48 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
+
+    # TWO CREDENTIAL KINDS reach HTTP routes, exactly as on /ws/fill
+    # (bd polyglot-pdf-ugm6). A firm's CLIENT has no Firebase account and
+    # never will, so their signed magic-link token is what authenticates the
+    # manifest read, the schema read, and the PDF fill their session needs.
+    # Without this the client tier dead-ends at "Unable to load forms": the
+    # WS was taught to accept a link token, but every HTTP route it depends
+    # on still 401'd.
+    #
+    # Dispatch is on SHAPE and only on shape -- a link token has ONE dot, a
+    # Firebase JWT has two -- so neither verifier can be handed the other's
+    # token and a caller cannot opt into the weaker check by labelling
+    # theirs. See services/link_tokens.py for the credential boundary.
+    if token.count(".") == 1:
+        # Imported here, not at module scope: link_tokens imports nothing
+        # from this module, and keeping the edge one-way avoids a cycle.
+        from backend.services.link_tokens import (
+            LinkTokenError,
+            verify_link_token,
+        )
+        try:
+            payload = verify_link_token(token)
+        except LinkTokenError as exc:
+            logger.warning("link_token_rejected", error=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        # The claims a CLIENT gets. Note what is ABSENT: no uid (they have no
+        # account) and NO firm_role -- so every role-gated surface (the firm
+        # retire route, and anything added later) refuses them by the same
+        # check that refuses an ordinary employee. A client is not staff.
+        return {
+            "uid": None,
+            "firm_id": payload["firm_id"],
+            "link_kit_id": payload["kit_id"],
+            "employee_id": payload["employee_id"],
+            "jti": payload["jti"],
+            "is_client_link": True,
+        }
+
     return verify_token(token)
 
 

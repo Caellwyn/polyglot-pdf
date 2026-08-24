@@ -135,6 +135,25 @@ async def firm_allowed_kits(user: Optional[dict]) -> frozenset:
     firm_id = user.get("firm_id") if isinstance(user, dict) else None
     if not isinstance(firm_id, str) or not firm_id:
         return frozenset()
+
+    # A CLIENT SEES EXACTLY ONE KIT -- the one their link names (bd
+    # polyglot-pdf-ugm6). A client-link credential carries the firm's id
+    # because the session must be firm-keyed for telemetry, but the firm's
+    # ALLOWLIST is the set of kits the FIRM may use, which is emphatically
+    # not the set a client may read: resolving it here would hand every
+    # client a directory of that firm's private intake forms, and let them
+    # fetch the schema and blank PDF of forms they were never sent.
+    #
+    # Narrow to the single kit BEFORE the allowlist read (which is also one
+    # fewer Firestore round-trip per client request), and intersect with the
+    # allowlist so a kit the firm has since lost is still refused.
+    if user.get("is_client_link"):
+        link_kit = user.get("link_kit_id")
+        if not isinstance(link_kit, str) or not link_kit:
+            return frozenset()
+        allowed = await asyncio.to_thread(get_allowed_kits, firm_id)
+        return frozenset({link_kit} & set(allowed))
+
     return frozenset(await asyncio.to_thread(get_allowed_kits, firm_id))
 
 
