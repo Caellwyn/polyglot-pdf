@@ -117,6 +117,19 @@ def test_body_carves_out_bead_filing(path):
         f"{path.name}: the bead carve-out must still forbid hand-editing "
         ".beads/ files -- otherwise it licenses arbitrary writes there"
     )
+    # bd polyglot-pdf-tgohh: the sanctioned filing sequence documented further
+    # down every one of these files runs `bd dolt pull` FIRST, before
+    # `bd create`/`bd note`/`bd dolt push` -- but the carve-out's enumerated
+    # list originally named only those three, reading as exhaustive to
+    # exactly the literal-minded reader this whole rule exists for. Pin that
+    # `bd dolt pull` is now addressed here too (it needs no exception -- it
+    # writes only to the gitignored .beads/dolt/ -- but the carve-out must
+    # SAY so, not leave a fourth command silently outside the stated list).
+    assert "bd dolt pull" in section, (
+        f"{path.name}: the read-only section's bead-filing carve-out must "
+        "address `bd dolt pull` (the filing sequence's own first command), "
+        "not just bd create/note/dolt push -- see bd polyglot-pdf-tgohh"
+    )
 
 
 @pytest.mark.parametrize("path", REVIEWER_FILES, ids=lambda p: p.name)
