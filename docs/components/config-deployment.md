@@ -179,10 +179,14 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   or proxy logs. See [auth.md](auth.md) (Client magic links).
 
   **Per-request cost, for whoever sizes bd `polyglot-pdf-ik7e`:** a client
-  HTTP request costs TWO uncached Firestore reads -- `require_auth`'s
-  redemption check, plus the firm-allowlist read whenever the visibility
-  gate fires on a private kit. Neither is cached, deliberately: caching a
-  revocation check reopens the replay window the redemption gate closes.
+  HTTP request costs TWO uncached Firestore READS -- `require_auth`'s
+  redemption check, plus the firm-allowlist read whenever the visibility gate
+  fires on a private kit -- **plus ONE WRITE on the first open of a link**
+  (`open_link` creates the redemption record), and **one further write per
+  completed session** (`complete_link`). Writes cost more than reads, so size
+  from all four, not from the reads alone. None of it is cached,
+  deliberately: caching a revocation check reopens the replay window the
+  redemption gate closes.
 - **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
   for the token-gated `/api/editor/*` surface the hosted schema editor uses
   (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:

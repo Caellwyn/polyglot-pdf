@@ -150,10 +150,13 @@ async def firm_allowed_kits(user: Optional[dict]) -> frozenset:
     # round-trip. It does not: both branches make exactly one
     # get_allowed_kits call.)
     #
-    # COST NOTE for bd polyglot-pdf-ik7e: a client HTTP request that touches
-    # a private kit costs TWO uncached Firestore reads -- this one, plus
-    # require_auth's redemption read. Size the per-session datastore spend
-    # from that, not from one.
+    # COST NOTE for bd polyglot-pdf-ik7e. A client HTTP request that touches
+    # a private kit costs TWO uncached Firestore READS -- this one, plus
+    # require_auth's redemption read -- AND, on the first open of a link, ONE
+    # WRITE (open_link's document set). A completed session adds one more
+    # write (complete_link's update). Writes are the pricier operation, so
+    # sizing from the reads alone undercounts; an earlier version of this
+    # note said "TWO reads" full stop and was wrong.
     if user.get("is_client_link"):
         link_kit = user.get("link_kit_id")
         if not isinstance(link_kit, str) or not link_kit:

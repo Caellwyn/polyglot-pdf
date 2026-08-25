@@ -300,3 +300,53 @@ def test_the_complete_set_of_credential_resolution_sites_is_pinned():
         "dispatch on token shape and redeem a client link, or the client "
         "tier breaks on that surface only -- silently."
     )
+
+
+def test_every_link_verifying_site_also_REDEEMS():
+    """The other half of the door set, and the failure the first half cannot
+    see (Opus cross-surface r9).
+
+    The guard above counts `verify_token(` call sites. A new door that
+    dispatches on shape and calls `verify_link_token` DIRECTLY -- verifying
+    the signature but never redeeming -- adds no `verify_token(` call, so it
+    is invisible to that count. The reviewer built exactly that door on
+    /api/fill-pdf and the whole backend suite stayed green: a burned link
+    would keep rendering PDFs.
+
+    That is the hole this bead has closed three times over (r1 the socket, r2
+    require_auth, r6 the pdf route), so the SET that matters is "who verifies
+    a link", and every member must redeem.
+
+    Adding a link-verifying site? It must call enforce_link_redemption (or go
+    through resolve_client_link_credential, which does). Then add it here.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    sites = {}
+    call = re.compile(r"verify_link_token\s*\(")
+    for rel in ("backend/routes", "backend/services"):
+        for path in sorted((root / rel).rglob("*.py")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                stripped = line.lstrip()
+                if stripped.startswith(("#", "def ", "async def ", "from", "import")):
+                    continue
+                if call.search(line):
+                    key = path.relative_to(root).as_posix()
+                    sites[key] = sites.get(key, 0) + 1
+
+    assert sites == {
+        # mint re-reads its own token to return exp; /open verifies before
+        # handing the payload to the shared gate. Both redeem via
+        # enforce_link_redemption.
+        "backend/routes/link_routes.py": 2,
+        # the socket, which redeems immediately after.
+        "backend/routes/websocket_routes.py": 1,
+        # resolve_client_link_credential -- verifies AND redeems in one place.
+        "backend/services/auth.py": 1,
+    }, (
+        "a new site verifies a client link. It MUST also redeem it "
+        "(enforce_link_redemption), or a COMPLETED link keeps working on that "
+        "surface -- the exact hole closed three times in this bead."
+    )

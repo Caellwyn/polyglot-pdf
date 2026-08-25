@@ -93,9 +93,11 @@ describe("the client link route", () => {
     // link a firm has already sent -- no error, the client just lands on a
     // sign-in screen.
     //
-    // The backend half asserts the same literal (test_link_routes.py's
-    // fragment assertions), so the two are joined by this constant rather
-    // than by luck.
+    // Precisely: EACH SIDE is independently pinned to the same literal --
+    // this constant here, and test_link_routes.py'''s fragment assertions
+    // there. Not a single shared source of truth (the languages cannot share
+    // one), but a unilateral change on EITHER side goes red, which is the
+    // property that matters.
     expect(CLIENT_LINK_PATH).toBe("/f");
   });
 });
