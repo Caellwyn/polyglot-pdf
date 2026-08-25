@@ -639,7 +639,9 @@ def _routes_depending_on_require_auth() -> set:
     return gated
 
 
-# The seven routes that carry user data or gate paid work. Update this list ONLY
+# The routes that carry user data or gate paid work. Deliberately NO COUNT
+# in this comment: it was stale at "seven" while the set held eight, and
+# a number here just drifts again on the next route. Update this list ONLY
 # together with the prose enumerations in:
 #   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
 #   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)

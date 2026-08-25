@@ -22,12 +22,27 @@ The generalizable rule, and the reason for this file: FOR A FEATURE WITH A
 NEW KIND OF ACTOR, only a test that walks the actor's whole path proves the
 actor can act. Component tests prove components.
 
-This is the backend half of that walk: mint -> redeem -> authenticate a real
-gated route -> complete -> refuse the replay. The frontend half is
-ClientLinkEntry.test.tsx (which drives the gate, not a mock of it) plus
-sessionCredential.test.ts. What is deliberately NOT covered here is the
-browser's own wiring; that gap is what r4 lived in, and it is pinned by the
-URL-parsing assertion in ClientLinkEntry.test.tsx.
+WHAT THIS FILE ACTUALLY COVERS, stated precisely, because a coverage map
+that flatters itself is worse than none (an earlier version of this docstring
+claimed "a real gated route" and "complete", and both were false):
+
+  COVERED -- mint_link_token, the require_auth DEPENDENCY FUNCTION (called
+  directly, not through a route), enforce_link_redemption including its real
+  window/validation logic, and kit_gates.firm_allowed_kits.
+
+  NOT COVERED, and each needs its own test elsewhere:
+    - POST /api/links/mint and POST /api/links/open (the routes themselves)
+      -> test_link_routes.py
+    - the /ws/fill handshake and the claims -> telemetry wiring
+      -> test_websocket_ephemeral.py (r5 found that wiring UNPINNED: severing
+         it passed 104 tests)
+    - complete_link's production call site (the guard
+      `if session_completed and link_jti`)
+      -> test_proactive_complete_events.py. `journey.complete_link` below is
+         the FIXTURE's method, not production code.
+    - the real Firestore client -> nothing; the store is in-memory here.
+    - the browser's wiring (the fetch URL, the reload recovery)
+      -> ClientLinkEntry.test.tsx, where r4's bug lived.
 
 ASCII only.
 """

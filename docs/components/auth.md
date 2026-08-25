@@ -123,15 +123,17 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
-`verify_token` (so the same dev bypass applies). It gates EIGHT routes: `POST
+`verify_token` (so the same dev bypass applies). It gates NINE routes: `POST
 /api/fill-pdf` (the body carries user-entered field values), the kit-catalogue
 reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, the
 archived-revision reads `GET /api/form-kits/{kit_id}/archive` +
 `.../archive/{marker}/schema` (bd `polyglot-pdf-qfyxr`; same firm-visibility
 gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd
 `polyglot-pdf-z6bk9` -- the firm tier's only WRITE path; `require_auth` is
-necessary but nowhere near sufficient there, see below), and both TTS
-routes `POST /api/tts/spellback` + `POST /api/tts/intro` (each synthesizes
+necessary but nowhere near sufficient there, see below), `POST
+/api/links/mint` (bd `polyglot-pdf-ugm6` -- firm staff mint a CLIENT link; a
+client credential is refused here because minting needs a `uid` and a client
+has none), and both TTS routes `POST /api/tts/spellback` + `POST /api/tts/intro` (each synthesizes
 audio, so each is paid work as well as a user-data path). The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401

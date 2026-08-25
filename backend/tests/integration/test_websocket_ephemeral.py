@@ -284,6 +284,21 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     mock_fill_session.assert_awaited()
     kwargs = mock_fill_session.await_args.kwargs
     assert kwargs.get("firm_id") == "firm-a"
+    # THE CLAIMS -> TELEMETRY WIRING, at the REAL entry point. Asserting only
+    # firm_id left the jti/employee extraction unpinned: replacing both with
+    # literal None passed 104 tests (Opus cross-surface r5), which silently
+    # kills THREE guarantees at once -- the split-key join (link_jti on every
+    # record), the originating-employee requirement, and link burning (the
+    # completion guard is `if session_completed and link_jti`, so a None jti
+    # means no link is ever used up).
+    #
+    # The earlier test for this lives in test_proactive_complete_events and
+    # INJECTS link_jti as a parameter, so it proves _handle_fill_session
+    # forwards what it is handed -- one layer above the extraction, and blind
+    # to whether fill_form_from_schema ever hands it over. Same
+    # one-layer-removed shape this bead has now hit six times.
+    assert kwargs.get("link_jti") == _jti
+    assert kwargs.get("link_employee_id") == "u-emp-7"
 
 
 @pytest.mark.asyncio
@@ -393,3 +408,35 @@ async def test_the_COMPLETION_WINDOW_is_enforced_at_the_socket(
     mock_websocket.close.assert_awaited()
     assert mock_websocket.close.await_args.kwargs.get("code") == 1008
     mock_fill_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_STAFF_session_carries_NO_link_identity(
+    mock_fill_session, mock_verify_token, mock_websocket, mock_service,
+    handshake_message
+):
+    """The other half of the wiring: a Firebase session must pass None for
+    both, or a staff session would be attributed to a link that does not
+    exist -- and worse, a non-None jti would make the completion guard try to
+    burn one.
+
+    Mutation: pass claims.get("jti") unconditionally (dropping the
+    is_client_link check) -- red.
+    """
+    mock_verify_token.return_value = {
+        "uid": "u-staff", "firm_id": "firm-a", "firm_role": "manager",
+        # A Firebase token could carry its OWN jti claim; it must not be
+        # mistaken for a link's.
+        "jti": "firebase-jti", "employee_id": "not-a-link",
+    }
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service,
+                                token="header.payload.signature")
+
+    mock_fill_session.assert_awaited()
+    kwargs = mock_fill_session.await_args.kwargs
+    assert kwargs.get("link_jti") is None
+    assert kwargs.get("link_employee_id") is None
