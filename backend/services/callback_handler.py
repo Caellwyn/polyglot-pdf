@@ -17,62 +17,6 @@ from .request_coordinator import (
 from backend.services.ai_context import render_field_guidance
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
-from backend.utils.field_validator import _DATE_LAYOUTS
-
-
-def _is_reshapeable_date(value: Any, expected_directive: str) -> bool:
-    """True when a rejected date value is the RIGHT answer in the WRONG layout.
-
-    "Do not ask the user again" is only safe when a correct value demonstrably
-    exists. A constraint of "format" alone does not establish that:
-    _validate_date is a bare strptime in a try, so "banana" and "I do not
-    remember" reject identically to a real date written ISO-first. Reshaping
-    those is impossible, and the validation-error path resets the
-    unknown-rejection loop breaker, so an unbounded retry is the consequence.
-
-    Parsing the value against the other known layouts settles it -- but ONLY
-    layouts carrying THE SAME COMPONENTS as the field expects. _DATE_LAYOUTS is
-    a RESOLUTION table (which layout a field declares), not a completeness one:
-    it also holds "%Y" and "%m/%Y". Trying those indiscriminately made "1980"
-    and "1/2020" look reshapeable on a MM/DD/YYYY field -- there is no month or
-    day to reorder, so the only way for the model to comply with "do not ask the
-    user" is to INVENT one, writing a wrong date of birth onto a legal form.
-    That is worse than the pedantic re-ask this branch removes, and it directly
-    violates the SI's NEVER INVENT A VALUE rule (bd polyglot-pdf-3vc3n, caught
-    in review round 5).
-
-    Matching on the set of format DIRECTIVES means a same-components layout
-    added to _DATE_LAYOUTS is understood here automatically, while a
-    fewer-components one can never create a false positive.
-    """
-    from datetime import datetime
-
-    if value is None or not expected_directive:
-        return False
-    text = str(value).strip()
-    if not text:
-        return False
-
-    def _components(directive: str) -> frozenset:
-        # The DIRECTIVE LETTERS only ({"m","d","Y"}), never the separators --
-        # reordering is exactly a change of separators and order, so "%Y-%m-%d"
-        # and "%m/%d/%Y" must compare EQUAL. Splitting on "%" alone left the
-        # separator attached ("%d/" vs "%d") and made every cross-separator
-        # reshape look like a component mismatch.
-        import re as _re
-
-        return frozenset(_re.findall(r"%([A-Za-z])", directive))
-
-    expected_components = _components(expected_directive)
-    for directive, _label in _DATE_LAYOUTS.values():
-        if _components(directive) != expected_components:
-            continue
-        try:
-            datetime.strptime(text, directive)
-            return True
-        except ValueError:
-            continue
-    return False
 
 _log = structlog.get_logger().bind(module="callback_handler")
 _dev_log = get_dev_logger()
@@ -1942,66 +1886,12 @@ class CallbackHandler:
             # on the current field was silently re-used as the fill for the NEXT
             # field, overriding what the user actually said there. Tell the model
             # explicitly to discard it and re-ask.
-            # The RECOVERY half branches on constraint type (bd
-            # polyglot-pdf-mq2je). A FORMAT rejection is the one case where
-            # re-asking is WRONG: the user already gave a usable answer and only
-            # its SHAPE was wrong, so reshaping it is the model's job -- the DTI
-            # SI's DATES block explicitly forbids asking a user to restate a date
-            # in a different format. This line is read in the SAME turn as the
-            # error while that SI rule sits thousands of characters upstream, so
-            # an unconditional "ask the user again" wins on recency and
-            # reintroduces the pedantic re-ask the SI bans.
             if validation_errors:
-                # "Do not ask the user again" is only safe when a correct value
-                # DEMONSTRABLY exists -- i.e. the rejected value really is the
-                # right answer wearing the wrong shape. The constraint NAME
-                # cannot establish that, and two rounds of review were spent
-                # learning it (bd polyglot-pdf-9jp7z):
-                #
-                #  - `pattern` conflates punctuation with CONTENT: "12345" on a
-                #    7-9 digit A-Number, "A"/"A---" normalizing to empty, and a
-                #    malformed email all emit constraint="pattern".
-                #  - `format` is no better on its own. It comes solely from
-                #    _validate_date, but that is a bare strptime in a try, so
-                #    "banana", "I do not remember" and "never" emit exactly the
-                #    same constraint as a correctly-spoken date in ISO order.
-                #
-                # So RE-DERIVE reshapeability from the VALUE instead of trusting
-                # the label: a date is reshapeable only if it parses under some
-                # OTHER known layout, which proves the user gave a real date and
-                # only its order is wrong. Anything unparseable keeps the
-                # re-ask -- and that matters because the validation-error path
-                # deliberately RESETS the unknown-rejection loop breaker
-                # (see the reset above), so the re-ask is the ONLY bound on
-                # retries. Removing it for a value the model cannot fix
-                # re-opens the runaway bd polyglot-pdf-b1gj was filed for
-                # (observed live at 338 retries to idle timeout).
-                format_only = bool(validation_errors) and all(
-                    err.get("constraint") == "format"
-                    and _is_reshapeable_date(
-                        err.get("value"),
-                        # The error carries the field's own declared layout as
-                        # constraint_value ("MM/DD/YYYY"); map it back to the
-                        # strptime directive via the same table the validator
-                        # resolved it from.
-                        _DATE_LAYOUTS.get(
-                            str(err.get("constraint_value", "")).strip().lower(),
-                            ("", ""),
-                        )[0],
-                    )
-                    for err in validation_errors
-                )
-                recovery = (
-                    "Re-send the SAME answer corrected to the required format -- "
-                    "do NOT ask the user to say it again in a different format."
-                    if format_only
-                    else "Ask the user again for the current field and fill "
-                         "exactly what THEY say."
-                )
                 error_lines.append(
                     "DISCARD the rejected value(s) above -- they are not pending "
                     "answers. Never reuse a rejected value on another field or on "
-                    "the next field. " + recovery
+                    "the next field. Ask the user again for the current field and "
+                    "fill exactly what THEY say."
                 )
 
             # Format unknown fields. Two distinct failure modes with distinct
