@@ -88,10 +88,40 @@ exemption mean". Worth recording as the general shape: **an SI example phrase is
 not free text -- it shares a namespace with every string other tests assert the
 SI does or does not contain.**
 
+## Scar tissue: the example set pointed at the leak
+
+The fresh-eyes review caught the carve-out listing "what does exemption mean" as
+a SANCTIONED plain-meaning example. On the W-7, "exemption" and "exception 3"
+are not ordinary words -- they are rule labels whose meaning IS the eligibility
+condition. So the example held up rule-interpretation as the model of a safe
+definitional question, aimed squarely at the leak the boundary exists to close.
+
+The original boundary line ("what the word MEANS vs what APPLIES to them") did
+not resolve it either, because the "word" in question is the name of a legal
+condition. "What does exception 3 mean" is syntactically identical to "what does
+ITIN stand for" while requiring a completely different answer.
+
+Redrawn as ORDINARY WORD vs NAMED RULE, with a flat statement that a named rule
+is never plain meaning however the question is phrased, and the hard cases named
+explicitly. Ties break to "rule question".
+
+The general shape, and the third time a variant of it appeared today: **an
+example is not decoration -- it teaches the boundary more concretely than the
+rule does.** A wrong example silently widens the rule it illustrates, and it
+does so in the direction the reader is most likely to follow.
+
+The review also found a surviving mutation: the boundary tests asserted only
+that each clause was PRESENT in the SI, so relocating the tie-break to a
+different paragraph passed. A tie-break floating elsewhere no longer says which
+class of question it disambiguates. The tests now assert structural containment
+INSIDE the carve-out sentence.
+
 ## Verification
 
 - Full backend suite: 2551 passed, 2 skipped.
-- Both mutations above confirmed red, then restored.
+- FOUR mutations confirmed red, then restored: carve-out removed; boundary
+  stripped while the permission survives; tie-break relocated out of the
+  carve-out; named-rule guard dropped on its own.
 - SI size impact is one sentence, which matters under the SI-reduction epic
   (`polyglot-pdf-jnjj`): a short added clause rather than a new block.
 
