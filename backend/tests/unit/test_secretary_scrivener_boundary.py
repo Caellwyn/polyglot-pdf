@@ -454,3 +454,72 @@ def test_si_makes_hedge_and_defer_UNCONDITIONAL():
     assert "reviewed by a qualified human before filing" not in si, (
         "that phrasing asserts review as certain; the applicant UNDERTAKES "
         "review but we never guarantee it happened -- keep the SI conditional")
+
+
+# --------------------------------------------------------------------------- #
+# Layer 4 -- the PLAIN MEANING carve-out (bd polyglot-pdf-gs5f0)
+#
+# The maintainer hit this live: asked what "ITIN" stands for on the W-7, the
+# model refused and read from the instructions instead. The expansion is in the
+# form's own title. Expanding an acronym is not a legal determination -- one
+# correct answer, no dependence on the user's situation, no consequence -- but
+# the SI had no carve-out for it, so it fell into the hedge path by default.
+#
+# THE RISK THIS PAIR GUARDS. A carve-out written loosely is a licence to
+# interpret rules for the user, which would defeat the whole hedge policy and
+# the deployment invariant it rests on (docs/standards/confirmation-and-audit.md).
+# So BOTH halves are pinned: the permission must exist, AND the applicative
+# boundary must still hold. A future SI diet that drops either one fails here.
+# Testing only the permission would let the boundary rot silently -- that is the
+# redundant-guard trap (repo memory: redundant-guards-need-per-layer-tests).
+# --------------------------------------------------------------------------- #
+
+def test_si_allows_answering_a_plain_meaning_question_directly():
+    """The permission half. Without this the model hedges on 'what does ITIN
+    stand for', which is useless on the easy questions and erodes trust for the
+    hard ones where the hedge actually matters."""
+    si = _si_text()
+    assert "PLAIN MEANING" in si, (
+        "the SI must carve out definitional questions; without it every "
+        "'what does X mean' falls into the hedge path")
+    lowered = si.lower()
+    assert "what does itin stand for" in lowered, (
+        "the carve-out should name the maintainer's own reported example so a "
+        "future edit cannot narrow it past the case that motivated it")
+    # The sanctioned behavior, stated positively (allowlist, per this module's
+    # header): answer it, and skip the hedge machinery for THIS class only.
+    assert "do not hedge" in lowered
+    assert "do not call the secretary first" in lowered
+
+
+def test_si_keeps_the_applicative_boundary_inside_the_carve_out():
+    """The boundary half -- the load-bearing one.
+
+    The carve-out is only safe while it stays scoped to word meaning. This
+    pins that the SI names the distinction explicitly AND names applicative
+    questions as still-hedged, so 'plain meaning' cannot be read as 'you may
+    now explain rules'.
+    """
+    lowered = _si_text().lower()
+    assert "what the word means versus what applies to them" in lowered, (
+        "the carve-out must state its own boundary, not just its permission")
+    # Eligibility phrased as a question is the exact thing that must NOT be
+    # swept in by the carve-out.
+    assert "are you eligible for an itin" in lowered
+    assert "should you check box a" in lowered
+    # And the tie-break must fall on the SAFE side.
+    assert "treat it as the second and hedge" in lowered, (
+        "an ambiguous question must default to hedging, never to answering")
+
+
+def test_plain_meaning_carve_out_does_not_displace_the_hedge_rule():
+    """Ordering/coexistence: the carve-out is an EXCEPTION, so the general rule
+    must still be present and unweakened after it."""
+    si = _si_text()
+    assert "ALWAYS HEDGE AND DEFER" in si
+    assert "INFORMATION, NEVER ADVICE" in si
+    # The carve-out must come BEFORE the hedge rule so the hedge reads as the
+    # default and the carve-out as the narrow exception -- not the reverse.
+    assert si.index("PLAIN MEANING") < si.index("ALWAYS HEDGE AND DEFER"), (
+        "the carve-out must be scoped by the hedge rule that follows it, not "
+        "appear as a later override of it")
