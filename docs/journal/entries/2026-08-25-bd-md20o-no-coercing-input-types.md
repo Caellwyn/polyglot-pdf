@@ -1,0 +1,105 @@
+---
+date: 2026-08-25
+bead: polyglot-pdf-md20o
+title: "fix(schema-forms): a native <input type=date> was coercing every PDF date to ISO"
+tags: [schema-forms, validation, dates, pdf-filling]
+---
+
+## Trigger
+
+Live-testing the bd `polyglot-pdf-mpfmr` backend date fix, the maintainer
+answered the W-7 date of birth by voice and watched it store `1980-10-26` on a
+field whose kit declares `MM/DD/YYYY`. The backend fix was working -- validation
+correctly REJECTED that value -- and it reached storage anyway.
+
+Maintainer's call, which is the principle this bead implements: "since these are
+pdfs, we shouldn't be enforcing DOM types like that. We need to conform to the
+format hints in the form schema... this is just the wrong kind of validation to
+apply."
+
+## Root cause
+
+`DateField` rendered `<input type="date">`. Per the HTML spec that element's
+`.value` is ALWAYS `yyyy-mm-dd`; it physically cannot hold `10/26/1980`. So the
+widget coerced every date to ISO before the value ever reached the client's
+write path, which is why backend validation could reject it without stopping it.
+
+These are PDF AcroForm fields, not web-form fields. The kit schema's
+`help.format_hint` is the authority on a value's shape, and `pdf_fill_routes.py`
+writes the stored string verbatim.
+
+## Why this was not cosmetic
+
+`pdf_fill_routes.py:200-236` already documented this exact widget as an accepted
+cost -- "the two `type="date"` fields cannot be length-gated at all... so a W-7
+date of birth renders un-combed on every UI submission" -- because at the time it
+only affected APPEARANCE.
+
+The voice path changed that. The model reads the stored value back, so an ISO
+string is no longer a rendering nit: it is the stored answer, and it teaches the
+model the wrong format for every subsequent turn.
+
+The same docstring is also why ISO-everywhere is the WRONG architecture here,
+which settled an open question this work started with. An earlier cut of the PDF
+code normalized punctuation and was removed after three review rounds, because
+stripping separators REORDERED dates: `1990-03-14` -> `19900314`, which then FIT
+the comb-8 box and printed a plausible-looking WRONG date (month=19) on a filed
+ITIN application. An ISO value reaching a comb-8 date widget is that same
+failure. Canonical storage is the kit's format; the docstring even prescribes
+the fix ("Restoring the one-digit-per-cell look belongs in INPUT normalization,
+where the field's semantic type is known").
+
+## What shipped
+
+The scan the maintainer asked for covered every field widget:
+
+- **`DateField`** -- now `type="text"`, never `date`/`month`. Placeholder is the
+  `format_hint`, so the expected shape stays discoverable once the native
+  picker's implicit affordance is gone. Dropped `min`/`max`, which are inert on
+  a text input; `validateDateValue` already enforces `min_date`/`max_date` from
+  the field directly.
+- **`TextField`** -- `type="text"` for `email`/`tel`. The browser's own validity
+  check can reject a value the KIT considers valid, and the w7 tel fields
+  declare no layout constraint at all, so the browser's convention would win by
+  default.
+- **`TextField` maxLength** -- a field's top-level `max_length` is the PDF
+  widget's COMB CELL COUNT, not always a text limit. W-7 dates are comb-8 while
+  `MM/DD/YYYY` is 10 chars, so the old wiring truncated a correct date to
+  `10/26/19` -- a wrong year on a filed form, silently, as the user types. Now
+  the cap is only applied when the field's own declared format fits inside it; a
+  nested `validation.max_length` is a real author-set limit and is still
+  honored.
+- **`case "number"` (unchanged)** -- already renders as text with a comment
+  explaining the identical coercion reason. This was the PRECEDENT the rest now
+  follow, and it matters: f1040 has 57 number fields, and `<input type="number">`
+  strips leading zeros and rejects commas.
+- **checkbox / radio / select (unchanged)** -- genuine closed enumerations, not
+  free-text coercion. A native type is correct there.
+
+## Two existing tests pinned the bug
+
+`TextField.test.tsx` asserted `input.type === 'email'` and `=== 'tel'`. Those
+described what the code did, not what it should do -- exactly the "a test can
+PIN a bug as correct" shape. Updated to pin the text-type contract with their
+value assertions intact, rather than deleted.
+
+## Verification
+
+- New `no-coercing-input-types.test.tsx` enumerates the schema-type ->
+  input-type mapping and fails CI on any coercing type, so a future widget
+  cannot reintroduce the class.
+- Mutation-verified: restoring the native date input reddens 3 tests; restoring
+  the raw `maxLength` wiring reddens 1.
+- Rendered the REAL shipped W-7 `date_of_birth` through the REAL `FieldRenderer`
+  and asserted the DOM input actually holds `10/26/1980` -- with `max_length: 8`
+  present on the field and correctly not truncating. A synthetic fixture would
+  not have proven the comb-count interaction.
+- Frontend suite: 1575 passed. `tsc --noEmit` clean.
+
+## Still open
+
+The model sent ISO on a COLD FIRST ATTEMPT, before any validation error existed,
+despite guidance reading `Format: MM/DD/YYYY` plus booklet text. That is a
+model-compliance question this bead does not address -- tracked in
+`polyglot-pdf-mq2je`, along with the model relaying a rejection to the user as
+"I'm sorry, there was an error" while holding the specific reason.
