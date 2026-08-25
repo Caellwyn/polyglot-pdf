@@ -149,9 +149,52 @@ This is the pattern the whole session keeps hitting: the SI is rarely the thing
 being disobeyed. Look for the competing signal in the runtime path first (repo
 memory `error-messages-are-training-signal`).
 
+### And the bucket was too narrow
+
+Round 2 of the cross-surface review found `format` alone was the wrong
+discriminator. It is emitted ONLY by `_validate_date`, so the fix covered date
+fields and nothing else -- while `pattern` is the same class of failure, carries
+the message literally "Invalid format", and fires on 24 shipped i-90 fields
+where the answer is right and only the punctuation is not:
+
+- postal code `"K1A 0B1"` against `^[A-Z0-9]{3,10}$`
+- ZIP `"12345-6789"` against `^\d{5}$`
+
+Both reproduce as `constraint='pattern'`, `message='Invalid format'`. So the fix
+worked for dates and failed one field type over.
+
+Both are now in a RESHAPEABLE set, and the set is pinned as a PARTITION over
+every constraint the validator emits -- a new constraint fails CI until someone
+decides which bucket it belongs in, rather than silently defaulting to the
+re-ask.
+
+## Scar tissue: a "derived from source" test that derived nothing
+
+The partition test was supposed to extract the constraint list from
+`field_validator.py` rather than trust a hand-written copy. It searched for
+`constraint="..."` -- but `constraint` is the FOURTH POSITIONAL argument to
+`ValidationError`, never a keyword. The regex matched zero occurrences, the
+resulting empty set was trivially a subset of anything, and the test passed
+while checking NOTHING.
+
+It looked like the strongest test in the file. It was the weakest.
+
+Caught by mutating the validator to emit a new constraint and watching the test
+stay green. Now anchored on the real call shape, plus an explicit
+`assert emitted` so an extraction that finds nothing fails loudly instead of
+passing vacuously -- the same fail-loud polarity the earlier reviewer checked
+for on the plain-meaning example checker.
+
+Two mutation attempts in this bead ALSO silently failed to apply (a `ValueError`
+and an `AssertionError` inside the mutation script), each leaving a green suite
+that looked like "the mutation survived". Both were caught by `grep -c` on the
+mutated file afterward. **Confirm a mutation LANDED before reading its result** --
+a no-op mutation and a surviving mutation are indistinguishable from the test
+output alone.
+
 ## Verification
 
-- Full backend suite: 2590 passed, 2 skipped.
+- Full backend suite: 2603 passed, 2 skipped.
 - Mutation-verified: reverting the imperative reddens 1 test; removing the
   relay rule reddens 3; removing the prose/literal scoping reddens 7; disabling the format
   carve-out in the tool response reddens 1.

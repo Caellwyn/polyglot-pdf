@@ -8,6 +8,7 @@ the NEXT field, overriding the user's actual answer ('12'). The response
 message for a validation error must explicitly instruct the model to discard
 the rejected value and re-ask the user.
 """
+import pytest
 from unittest.mock import MagicMock
 
 from backend.services.callback_handler import CallbackHandler
@@ -133,3 +134,93 @@ def test_the_anti_leak_instruction_is_unconditional_across_both_branches():
         msg = _formatter(validation_errors=errors)["message"]
         assert "DISCARD the rejected value(s) above" in msg
         assert "Never reuse a rejected value" in msg
+
+
+# --------------------------------------------------------------------------- #
+# Which constraints are RESHAPEABLE -- pinned as a SET, not per-instance.
+#
+# Round 1 of this fix bucketed only "format", which is emitted solely by
+# _validate_date. But "pattern" is the same class of failure -- its message is
+# literally "Invalid format" -- and it fires on 24 shipped i-90 fields where the
+# user's answer is already right and only the punctuation is not (postal code
+# "K1A 0B1" vs ^[A-Z0-9]{3,10}$; ZIP "12345-6789" vs ^\d{5}$). Shipping only
+# "format" made the fix work for dates and fail one field type over.
+#
+# So the SET is pinned against the validator's own emitted constraints: a NEW
+# constraint fails here until someone decides which bucket it belongs in
+# (CLAUDE.md scar #7).
+# --------------------------------------------------------------------------- #
+
+# Every constraint the validator (or callback_handler) can put on an error.
+# Kept beside the classification so the two cannot drift apart silently.
+ALL_EMITTED_CONSTRAINTS = {
+    "type", "min", "max", "format", "date_constraint", "digits_only",
+    "minLength", "maxLength", "pattern", "options", "single_field_only",
+}
+
+# The user's answer is usable; only its written shape is wrong.
+RESHAPEABLE = {"format", "pattern"}
+
+# A different ANSWER is genuinely required -- reshaping cannot fix these.
+NEEDS_A_NEW_ANSWER = ALL_EMITTED_CONSTRAINTS - RESHAPEABLE
+
+
+def test_the_two_buckets_partition_every_emitted_constraint():
+    """Guard that makes this file self-maintaining: a constraint in neither
+    bucket is an unmade decision, and it fails here rather than silently
+    defaulting to the re-ask."""
+    assert RESHAPEABLE | NEEDS_A_NEW_ANSWER == ALL_EMITTED_CONSTRAINTS
+    assert not (RESHAPEABLE & NEEDS_A_NEW_ANSWER)
+
+
+def test_emitted_constraint_list_matches_the_validator():
+    """ALL_EMITTED_CONSTRAINTS must track the real emitter. Derived from the
+    source rather than trusted, so a newly-emitted constraint reddens this
+    instead of quietly landing in the wrong bucket."""
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[2] / "utils" / "field_validator.py").read_text(
+        encoding="utf-8"
+    )
+    # `constraint` is the 4TH POSITIONAL arg to ValidationError, not a keyword:
+    #     ValidationError(field_id, field_name, value, "type", "Not a number")
+    # An earlier cut of this test searched for `constraint="..."`, matched
+    # NOTHING, and so passed vacuously while claiming to derive the set from
+    # the source. Anchor on the real call shape, and assert the extraction
+    # found something before comparing against it.
+    emitted = set(
+        re.findall(
+            r"ValidationError\(\s*field_id,\s*field_name,\s*value,\s*[\"']([A-Za-z_]+)[\"']",
+            src,
+        )
+    )
+    assert emitted, (
+        "extracted NO constraints from field_validator -- the ValidationError "
+        "call shape changed and this check is now vacuous"
+    )
+    missing = emitted - ALL_EMITTED_CONSTRAINTS
+    assert not missing, (
+        f"field_validator emits constraint(s) {sorted(missing)} that this file "
+        "has not classified as reshapeable or needing-a-new-answer"
+    )
+
+
+@pytest.mark.parametrize("constraint", sorted(RESHAPEABLE))
+def test_reshapeable_constraints_tell_the_model_to_reshape(constraint):
+    resp = _formatter(validation_errors=[{
+        "field_id": "f", "field_name": "F", "value": "x",
+        "constraint": constraint, "message": "Invalid format",
+    }])
+    assert "Re-send the SAME answer corrected to the required format" in resp["message"]
+    assert "Ask the user again for the current field" not in resp["message"]
+
+
+@pytest.mark.parametrize("constraint", sorted(NEEDS_A_NEW_ANSWER))
+def test_other_constraints_still_ask_the_user_again(constraint):
+    resp = _formatter(validation_errors=[{
+        "field_id": "f", "field_name": "F", "value": "x",
+        "constraint": constraint, "message": "Invalid",
+    }])
+    assert "Ask the user again for the current field" in resp["message"]
+    assert "Re-send the SAME answer" not in resp["message"]

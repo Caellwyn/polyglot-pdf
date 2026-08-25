@@ -1896,8 +1896,25 @@ class CallbackHandler:
             # an unconditional "ask the user again" wins on recency and
             # reintroduces the pedantic re-ask the SI bans.
             if validation_errors:
+                # RESHAPEABLE constraints: the user's answer is USABLE and only
+                # its written shape is wrong, so the model can fix it without
+                # troubling them. Both members were verified against the
+                # complete set field_validator can emit (type, min, max, format,
+                # date_constraint, digits_only, minLength, maxLength, pattern,
+                # options) plus callback_handler's own single_field_only. The
+                # other nine genuinely need a DIFFERENT answer and keep the
+                # re-ask.
+                #
+                # `pattern` belongs here as much as `format` does -- its message
+                # is literally "Invalid format", and it fires on 24 shipped i-90
+                # fields where the answer is right and only the punctuation is
+                # not: postal code "K1A 0B1" against ^[A-Z0-9]{3,10}$, ZIP
+                # "12345-6789" against ^\d{5}$. Leaving it out made the fix work
+                # for dates and fail one field type over.
+                RESHAPEABLE_CONSTRAINTS = {"format", "pattern"}
                 format_only = all(
-                    err.get("constraint") == "format" for err in validation_errors
+                    err.get("constraint") in RESHAPEABLE_CONSTRAINTS
+                    for err in validation_errors
                 )
                 recovery = (
                     "Re-send the SAME answer corrected to the required format -- "
