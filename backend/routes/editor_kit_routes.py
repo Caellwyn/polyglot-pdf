@@ -7,22 +7,28 @@ are manifest-gated: in GCS mode they never list or serve a draft kit. The hosted
 schema-editor needs the opposite -- a contractor's job IS the drafts: see them,
 edit their schemas, flip their status. So this is a separate surface that
 enumerates the store directly (list_kit_files + per-kit metadata.json),
-bypassing the complete-only manifest ON PURPOSE, and gated by a shared-secret
-token instead of being public.
+bypassing the complete-only manifest ON PURPOSE, and gated by PER-USER identity
+instead of being public.
 
-Two access tiers (the 2026-07-01 goal's contractor permission levels), each its
-own token, both sent as the X-Editor-Token header:
+Two access tiers (the 2026-07-01 goal's contractor permission levels), now
+carried by a person rather than a shared secret (bd polyglot-pdf-hn0jq):
 
-  - editor (SCHEMA_EDITOR_TOKEN): list/read kits incl. drafts, save schemas,
-    flip status -- the "polish a provided collection" contractor.
-  - author (SCHEMA_AUTHOR_TOKEN): everything editor can do; onboarding + hosted
-    extraction routes (bd 92qe.3) additionally require this role.
+  - editor: list/read kits incl. drafts, save schemas, flip status -- the
+    "polish a provided collection" contractor.
+  - author: everything editor can do; onboarding + hosted extraction routes
+    (bd 92qe.3) additionally require this role.
 
-Fail-closed: 503 when the server has no tokens configured (the surface is off,
-not open), 401 on mismatch, compared with hmac.compare_digest. A shared secret
-(not per-user auth) is the approved 92qe design: it stops drive-by writes to the
-public Cloud Run service for a small set of trusted contractors; rotate by
-changing the secret.
+Authentication is a Firebase ID token carrying the editor's OWN role claim --
+see backend/services/editor_auth.py, which owns the whole mechanism. 401 for a
+token that does not verify, 403 for a valid account with no editor claim (they
+authenticated fine; they are simply not listed here). The former shared secrets
+were REPLACED, not deprecated: the maintainer had no live subcontractors, so
+this was a clean cutover rather than a coexistence path.
+
+WHY PER-USER: with two shared secrets every editor was one principal to the
+server. An audit could only ever say "an editor did it", two subcontractors
+could not be told apart by the kit lock, and removing one person meant rotating
+the token for everyone.
 
 Status semantics: marking a kit `complete` is the publish gate the deploy keys
 on, so THAT transition validates the schema against the canonical Pydantic
@@ -33,7 +39,6 @@ saves stay lenient (work-in-progress is allowed to be incomplete).
 import asyncio
 import fnmatch
 import hashlib
-import hmac
 import json
 import os
 import re
@@ -92,6 +97,11 @@ from backend.services.schema_repair import (
 )
 from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
 from backend.services.widget_picker import unclaimed_button_widgets
+from backend.services.editor_auth import (
+    EditorActor,
+    require_author_actor,
+    require_editor_actor,
+)
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -121,52 +131,33 @@ ROLE_AUTHOR = "author"
 _EXTRACT_EXIT_ISSUES = 3
 
 
-def _token_matches(supplied: str, expected: str) -> bool:
-    """Constant-time token compare over UTF-8 BYTES.
-
-    hmac.compare_digest on str raises TypeError for non-ASCII input, so a
-    pasted smart-quote in a wrong access code would turn an auth miss into a
-    500 instead of the documented 401 (Codex P1, PR #279). Bytes never raise.
-    """
-    return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
-
 
 async def require_editor_role(
-    x_editor_token: Annotated[Optional[str], Header()] = None,
-) -> str:
-    """FastAPI dependency: resolve the caller's role from X-Editor-Token.
+    actor: Annotated[EditorActor, Depends(require_editor_actor)],
+) -> EditorActor:
+    """FastAPI dependency: the caller, AS A PERSON, with role editor|author.
 
-    Returns "author" or "editor". Fail-closed: with NEITHER token configured the
-    surface is disabled (503, not open); a missing/wrong token is 401. Tokens are
-    compared constant-time over bytes (see _token_matches). The author token
-    implies every editor capability, so routes that need only editor accept both.
+    Was: a role string resolved from a shared X-Editor-Token, so every editor
+    was one principal to the server. Now: a Firebase ID token resolved to an
+    EditorActor carrying uid + email + role (bd polyglot-pdf-hn0jq).
+
+    The NAME is unchanged so the ~26 Depends() sites did not have to churn; what
+    changed is the type. Sites that only need the gate are unaffected; the ~10
+    that use the value read `.role`. Author still strictly includes editor.
+
+    `.label()` is used in LOG LINES ONLY -- no response carries a person yet.
+    KitLockResponse.heldBy still returns a role string, deliberately: putting a
+    person on the wire is child 2's job (bd polyglot-pdf-5tuas).
     """
-    settings = get_settings()
-    editor_token = settings.SCHEMA_EDITOR_TOKEN
-    author_token = settings.SCHEMA_AUTHOR_TOKEN
-    if not editor_token and not author_token:
-        raise HTTPException(
-            status_code=503,
-            detail="The editor surface is not configured on this server",
-        )
-    supplied = x_editor_token or ""
-    if author_token and _token_matches(supplied, author_token):
-        return ROLE_AUTHOR
-    if editor_token and _token_matches(supplied, editor_token):
-        return ROLE_EDITOR
-    raise HTTPException(status_code=401, detail="Invalid or missing access code")
+    return actor
 
 
 async def require_author_role(
-    role: Annotated[str, Depends(require_editor_role)],
-) -> str:
-    """Author-only gate (onboard/extract routes, bd 92qe.3). 403 for editor."""
-    if role != ROLE_AUTHOR:
-        raise HTTPException(
-            status_code=403,
-            detail="This action needs the author access code",
-        )
-    return role
+    actor: Annotated[EditorActor, Depends(require_author_actor)],
+) -> EditorActor:
+    """Author-only gate (onboard/extract routes, bd 92qe.3). 403 for an editor."""
+    return actor
+
 
 
 class EditorSessionResponse(BaseModel):
@@ -956,12 +947,12 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
 
 @router.get("/session", response_model=EditorSessionResponse)
 async def editor_session(
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> EditorSessionResponse:
     """Access-code probe: the hosted editor calls this once after code entry to
     learn the caller's role (author-only UI is gated on it) and to validate the
     code before any kit traffic."""
-    return EditorSessionResponse(role=role)
+    return EditorSessionResponse(role=role.role)
 
 
 # The handshake file the editor drops into the picked folder. Written and
@@ -972,7 +963,7 @@ _HANDSHAKE_FILE = ".editor-store-check.json"
 @router.post("/store-handshake", response_model=StoreHandshakeResponse)
 async def editor_store_handshake(
     body: StoreHandshakeBody,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> StoreHandshakeResponse:
     """Confirm the editor and the backend are looking at the SAME folder.
 
@@ -1022,7 +1013,7 @@ async def editor_store_handshake(
 
 @router.get("/kits", response_model=EditorKitListResponse)
 async def list_editor_kits(
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> EditorKitListResponse:
     """Every kit in the store, DRAFTS INCLUDED -- the contractor work list.
 
@@ -1070,7 +1061,7 @@ async def list_editor_kits(
                 readiness=_readiness_out(meta),
             )
         )
-    _log.info("editor_kits_listed", count=len(kits), role=role)
+    _log.info("editor_kits_listed", count=len(kits), role=role.role, actor=role.label())
     return EditorKitListResponse(kits=kits)
 
 
@@ -1232,7 +1223,7 @@ class RestoreSnapshotResponse(BaseModel):
             response_model=DraftSnapshotsResponse)
 async def list_kit_draft_snapshots(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> DraftSnapshotsResponse:
     """Prior saved states of this kit's draft, newest first.
 
@@ -1254,7 +1245,7 @@ async def list_kit_draft_snapshots(
         _log.error("draft_snapshots_list_failed", kit_id=kit_id, error=str(exc))
         raise HTTPException(
             status_code=502, detail="Unable to list earlier versions") from exc
-    _log.info("draft_snapshots_listed", kit_id=kit_id, count=len(snapshots), role=role)
+    _log.info("draft_snapshots_listed", kit_id=kit_id, count=len(snapshots), role=role.role, actor=role.label())
     return DraftSnapshotsResponse(
         snapshots=[DraftSnapshot(**s) for s in snapshots])
 
@@ -1283,7 +1274,7 @@ def _safe_archive_marker(marker: str) -> str:
 @router.get("/kits/{kit_id}/archive", response_model=ArchivedRevisionsResponse)
 async def list_kit_archive(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> ArchivedRevisionsResponse:
     """This kit's superseded revisions, NEWEST FIRST (bd polyglot-pdf-qfyxr).
 
@@ -1318,7 +1309,7 @@ async def list_kit_archive(
         key=lambda r: (r.published_at is not None, r.published_at or ""),
         reverse=True,
     )
-    _log.info("kit_archive_listed", kit_id=kit_id, count=len(revisions), role=role)
+    _log.info("kit_archive_listed", kit_id=kit_id, count=len(revisions), role=role.role, actor=role.label())
     return ArchivedRevisionsResponse(revisions=revisions)
 
 
@@ -1326,7 +1317,7 @@ async def list_kit_archive(
 async def get_archived_kit_schema(
     kit_id: str,
     marker: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> JSONResponse:
     """An archived revision's schema, READ-ONLY (bd polyglot-pdf-qfyxr).
 
@@ -1359,7 +1350,7 @@ async def get_archived_kit_schema(
 async def restore_kit_draft_snapshot(
     kit_id: str,
     snapshot_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> RestoreSnapshotResponse:
     """Put a snapshot's schema back as the live draft.
 
@@ -1382,7 +1373,7 @@ async def restore_kit_draft_snapshot(
     meta, _files = await _load_meta_or_404(store, kit_id)
     if _is_write_locked(meta):
         raise HTTPException(status_code=409, detail=_lock_reason(meta))
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
 
     try:
         restored = await store.load_draft_snapshot(kit_id, snapshot_id)
@@ -1447,7 +1438,7 @@ async def restore_kit_draft_snapshot(
             status_code=502, detail="Unable to restore that earlier version") from exc
 
     _log.info("draft_snapshot_restored", kit_id=kit_id, snapshot=snapshot_id,
-              replaced_snapshot=replaced_id, role=role)
+              replaced_snapshot=replaced_id, role=role.role, actor=role.label())
     return RestoreSnapshotResponse(
         ok=True, kitId=kit_id, restoredFrom=snapshot_id,
         snapshotOfReplaced=replaced_id)
@@ -1457,7 +1448,7 @@ async def restore_kit_draft_snapshot(
             response_model=RetireCandidatesResponse)
 async def get_retire_candidates(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
 ) -> RetireCandidatesResponse:
     """LIVE kits that plausibly serve the same form as this one.
 
@@ -1576,7 +1567,7 @@ async def get_retire_candidates(
 @router.get("/kits/{kit_id}/schema")
 async def get_editor_kit_schema(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> JSONResponse:
     """A kit's schema for editing -- unlike the public route this serves DRAFTS
     (filenames resolved from the kit's own metadata, not the manifest)."""
@@ -1599,7 +1590,7 @@ async def get_editor_kit_schema(
 @router.get("/kits/{kit_id}/pdf")
 async def get_editor_kit_pdf(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> Response:
     """A kit's PDF bytes for the editor's viewer (drafts included)."""
     kit_id = _safe_kit_id(kit_id)
@@ -1625,7 +1616,7 @@ async def get_editor_kit_pdf(
 @router.put("/kits/{kit_id}/schema")
 async def save_editor_kit_schema(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
     schema: Annotated[dict, Body()],
 ) -> dict:
     """Save a contractor's edited schema back to the store (the hosted Cmd+S).
@@ -1658,7 +1649,7 @@ async def save_editor_kit_schema(
     # they approve something they never saw (bd polyglot-pdf-hqztg). This is
     # also where an editor DISCOVERS they were preempted -- there is no channel
     # from server to editor, so the next save is the notification.
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
     schema_file, _pdf = _resolve_meta_names(meta)
 
     # SNAPSHOT THE CURRENT SCHEMA FIRST (bd polyglot-pdf-y2l0p). Maintainer
@@ -1684,7 +1675,7 @@ async def save_editor_kit_schema(
         try:
             snapshot_id = await store.put_draft_snapshot(kit_id, existing)
             _log.info("editor_draft_snapshotted",
-                      kit_id=kit_id, snapshot=snapshot_id, role=role)
+                      kit_id=kit_id, snapshot=snapshot_id, role=role.role, actor=role.label())
         except FormKitStoreError as exc:
             _log.warning("editor_draft_snapshot_failed",
                          kit_id=kit_id, error=str(exc))
@@ -1699,7 +1690,7 @@ async def save_editor_kit_schema(
     # display convenience, so a stamp failure leaves the card showing the verify
     # hint rather than losing the edit.
     stamp = await _stamp_readiness(store, kit_id, schema, meta, kit_files)
-    _log.info("editor_schema_saved", kit_id=kit_id, role=role,
+    _log.info("editor_schema_saved", kit_id=kit_id, role=role.role, actor=role.label(),
               field_count=len(schema.get("fields", [])),
               readiness_percent=(stamp or {}).get("percent"),
               readiness_verified=(stamp or {}).get("verified"))
@@ -1709,7 +1700,7 @@ async def save_editor_kit_schema(
 
 @router.post("/lint", response_model=LintResponse)
 async def lint_editor_schema(
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
     schema: Annotated[dict, Body()],
 ) -> LintResponse:
     """Lint a schema and return structured findings for load-time display.
@@ -1734,7 +1725,7 @@ async def lint_editor_schema(
     out = [LintFindingOut(**f.as_dict()) for f in findings]
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
-    _log.info("editor_schema_linted", role=role,
+    _log.info("editor_schema_linted", role=role.role, actor=role.label(),
               errors=error_count, warnings=warning_count)
     return LintResponse(
         findings=out, errorCount=error_count, warningCount=warning_count,
@@ -1744,7 +1735,7 @@ async def lint_editor_schema(
 @router.post("/kits/{kit_id}/lint", response_model=LintResponse)
 async def lint_editor_kit_schema(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
     schema: Annotated[dict, Body()],
 ) -> LintResponse:
     """Lint the POSTED schema WITH the kit's persisted AcroForm dump.
@@ -1807,7 +1798,7 @@ async def lint_editor_kit_schema(
     out = [LintFindingOut(**f.as_dict()) for f in findings]
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
-    _log.info("editor_kit_schema_linted", kit_id=kit_id, role=role,
+    _log.info("editor_kit_schema_linted", kit_id=kit_id, role=role.role, actor=role.label(),
               has_dump=dump_data is not None,
               errors=error_count, warnings=warning_count)
     return LintResponse(
@@ -1818,7 +1809,7 @@ async def lint_editor_kit_schema(
 @router.post("/kits/{kit_id}/repair", response_model=RepairResponse)
 async def repair_editor_kit(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
 ) -> RepairResponse:
     """One-click Repair-all for a kit's stored draft (bd polyglot-pdf-zgln, P5.3b).
 
@@ -1844,7 +1835,7 @@ async def repair_editor_kit(
             status_code=409,
             detail=f"{_lock_reason(meta)} (Repair rewrites the schema.)",
         )
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1883,7 +1874,7 @@ async def repair_editor_kit(
     findings = lint_schema(repaired, dump_data)
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
-    _log.info("editor_schema_repaired", kit_id=kit_id, role=role,
+    _log.info("editor_schema_repaired", kit_id=kit_id, role=role.role, actor=role.label(),
               applied=applied, dropped=dropped,
               errors_after=error_count, warnings_after=warning_count)
     return RepairResponse(
@@ -1896,7 +1887,7 @@ async def repair_editor_kit(
              response_model=TranslateOptionsResponse)
 async def translate_editor_kit_options(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
     force: bool = False,
 ) -> TranslateOptionsResponse:
     """Bake option label_translations into a kit's stored draft, standalone
@@ -1926,7 +1917,7 @@ async def translate_editor_kit_options(
             detail=f"{_lock_reason(meta)} (The translation bake rewrites the "
                    "schema.)",
         )
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -1969,7 +1960,7 @@ async def translate_editor_kit_options(
     findings = lint_schema(schema, dump_data)
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
-    _log.info("editor_kit_options_translated", kit_id=kit_id, role=role,
+    _log.info("editor_kit_options_translated", kit_id=kit_id, role=role.role, actor=role.label(),
               model=model, changed=report["changed"], force=force,
               failed_languages=report["failed_languages"],
               flag_count=len(flags),
@@ -2002,7 +1993,7 @@ def _load_derive_sections():
              response_model=DeriveDivisionsResponse)
 async def derive_editor_kit_divisions(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
 ) -> DeriveDivisionsResponse:
     """Regenerate the kit's form divisions deterministically (bd 6cfu.3).
 
@@ -2028,7 +2019,7 @@ async def derive_editor_kit_divisions(
             detail=f"{_lock_reason(meta)} (Regenerating divisions rewrites the "
                    "schema.)",
         )
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
     schema_file, pdf_file = _resolve_meta_names(meta)
     if pdf_file not in files:
         raise HTTPException(
@@ -2086,7 +2077,7 @@ async def derive_editor_kit_divisions(
     findings = lint_schema(schema, dump_data)
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
-    _log.info("editor_divisions_derived", kit_id=kit_id, role=role,
+    _log.info("editor_divisions_derived", kit_id=kit_id, role=role.role, actor=role.label(),
               strategy=summary["strategy"], sections=summary["sections"],
               to_review=len(summary["to_review_field_ids"]),
               errors_after=error_count, warnings_after=warning_count)
@@ -2180,7 +2171,7 @@ def _guidance_model(settings) -> str:
              response_model=RegenerateGuidanceResponse)
 async def regenerate_editor_kit_guidance(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
     body: RegenerateGuidanceBody | None = None,
 ) -> RegenerateGuidanceResponse:
     """Re-author field guidance from the kit's instruction booklet.
@@ -2219,7 +2210,7 @@ async def regenerate_editor_kit_guidance(
 
 async def _regenerate_guidance_locked(
     kit_id: str,
-    role: str,
+    role: EditorActor,
     body: RegenerateGuidanceBody | None,
 ) -> RegenerateGuidanceResponse:
     """The regenerate-guidance critical section (see the caller's lock note).
@@ -2237,7 +2228,7 @@ async def _regenerate_guidance_locked(
             detail=f"{_lock_reason(meta)} (Regenerating guidance rewrites the "
                    "schema.)",
         )
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         schema = await store.load_schema(kit_id, schema_file)
@@ -2426,7 +2417,7 @@ async def _regenerate_guidance_locked(
     findings = lint_schema(schema, dump_data)
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
-    _log.info("editor_guidance_regenerated", kit_id=kit_id, role=role,
+    _log.info("editor_guidance_regenerated", kit_id=kit_id, role=role.role, actor=role.label(),
               model=model, requested=len(requested),
               written=summary.get("written"),
               skipped_human=summary.get("skipped_human"),
@@ -2442,7 +2433,7 @@ async def _regenerate_guidance_locked(
             response_model=UnclaimedWidgetsResponse)
 async def get_unclaimed_widgets(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
 ) -> UnclaimedWidgetsResponse:
     """The kit's PDF button widgets that no field/option claims (bd nivy, P5.3c).
 
@@ -2470,7 +2461,7 @@ async def get_unclaimed_widgets(
 
     dump = await _load_kit_dump(store, kit_id)
     widgets = [UnclaimedWidget(**w) for w in unclaimed_button_widgets(schema, dump)]
-    _log.info("editor_unclaimed_widgets", kit_id=kit_id, role=role,
+    _log.info("editor_unclaimed_widgets", kit_id=kit_id, role=role.role, actor=role.label(),
               count=len(widgets), has_dump=dump is not None)
     return UnclaimedWidgetsResponse(widgets=widgets)
 
@@ -2558,7 +2549,7 @@ async def _sweep_drifted_translations(
 async def set_editor_kit_status(
     kit_id: str,
     body: KitStatusBody,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> KitStatusResponse:
     """Set a kit's status (draft | submitted | complete | unpublished),
     preserving other metadata keys.
@@ -2618,7 +2609,7 @@ async def set_editor_kit_status(
     # and worse: it also flipped the kit out of write-locked `submitted`, so
     # every later editor write was permitted too. Reproduced end to end before
     # this fix. It also now covers the archive hook below.
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
 
     # An UNPUBLISHED kit may never walk back to draft (bd polyglot-pdf-6dz0).
     # Draft is editable, and this kit's schema is what earlier confirmation
@@ -2649,7 +2640,7 @@ async def set_editor_kit_status(
     #   complete -> anything   author-only     (already covered below)
     #
     # Editors are subcontractors. Marking a form ready must not release it.
-    if body.status == "complete" and role != "author":
+    if body.status == "complete" and not role.is_author:
         raise HTTPException(
             status_code=403,
             detail=(
@@ -2670,7 +2661,7 @@ async def set_editor_kit_status(
     if (
         body.status in ("draft", "unpublished")
         and current_status in ("complete", "unpublished")
-        and role != "author"
+        and not role.is_author
     ):
         raise HTTPException(
             status_code=403,
@@ -2771,7 +2762,7 @@ async def set_editor_kit_status(
                 # the editor unable to reopen their own work.
                 _log.warning("editor_version_clear_failed", kit_id=kit_id, error=str(exc))
     if version_cleared:
-        _log.info("editor_rejected_version_cleared", kit_id=kit_id, role=role)
+        _log.info("editor_rejected_version_cleared", kit_id=kit_id, role=role.role, actor=role.label())
 
     # STRUCTURAL GATES apply to BOTH promotions. Submitting used to run
     # NOTHING: an editor could freeze a kit around a garbage, PDF-less,
@@ -3059,7 +3050,7 @@ async def set_editor_kit_status(
         # but it becomes a live hole the moment bd polyglot-pdf-ijntk makes
         # locks per-user, and it contradicts the helper's own "every schema
         # write" contract.
-        _require_edit_lock(superseded_meta, role)
+        _require_edit_lock(superseded_meta, role.role)
 
         # Archive its bytes now -- the archive is additive and harmless even if
         # the publish below fails, whereas the STATUS flip is not, so that is
@@ -3082,7 +3073,7 @@ async def set_editor_kit_status(
     # Editing is what the lock guards, and a status transition ends the editing
     # turn either way: handed to an author for review, handed back for changes,
     # or published and write-locked. Nobody holds it across that boundary.
-    kept_lock = _lock_after_transition(meta, current_status, body.status, role)
+    kept_lock = _lock_after_transition(meta, current_status, body.status, role.role)
     next_meta.pop(_LOCK_KEY, None)
     if kept_lock is not None:
         next_meta[_LOCK_KEY] = kept_lock
@@ -3180,7 +3171,7 @@ async def set_editor_kit_status(
             # applied to one site and silently not the other (round 10).
             retired_meta = {**(superseded_meta or {}), "status": "unpublished"}
             retired_kept = _lock_after_transition(
-                superseded_meta, _status_of(superseded_meta), "unpublished", role)
+                superseded_meta, _status_of(superseded_meta), "unpublished", role.role)
             retired_meta.pop(_LOCK_KEY, None)
             if retired_kept is not None:
                 retired_meta[_LOCK_KEY] = retired_kept
@@ -3195,9 +3186,9 @@ async def set_editor_kit_status(
                        f"Unpublish {superseded_kit} to finish the swap.",
             ) from exc
         _log.info("editor_kit_superseded", kit_id=kit_id,
-                  superseded=superseded_kit, role=role)
+                  superseded=superseded_kit, role=role.role, actor=role.label())
 
-    _log.info("editor_status_set", kit_id=kit_id, status=body.status, role=role,
+    _log.info("editor_status_set", kit_id=kit_id, status=body.status, role=role.role, actor=role.label(),
               retranslated=retranslated, translation_model=translation_model)
     return KitStatusResponse(
         ok=True, status=body.status,
@@ -3209,7 +3200,7 @@ async def set_editor_kit_status(
 @router.delete("/kits/{kit_id}", response_model=KitDeleteResponse)
 async def delete_editor_kit(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
 ) -> KitDeleteResponse:
     """Permanently remove a kit and everything under it, archives included.
 
@@ -3247,7 +3238,7 @@ async def delete_editor_kit(
         has_records = kit_has_confirmation_records(kit_id)
     except ConfirmationCheckUnavailable as exc:
         _log.warning(
-            "editor_kit_delete_unverifiable", kit_id=kit_id, role=role, error=str(exc)
+            "editor_kit_delete_unverifiable", kit_id=kit_id, role=role.role, actor=role.label(), error=str(exc)
         )
         raise HTTPException(
             status_code=409,
@@ -3261,7 +3252,7 @@ async def delete_editor_kit(
         ) from exc
 
     if has_records:
-        _log.info("editor_kit_delete_refused", kit_id=kit_id, role=role)
+        _log.info("editor_kit_delete_refused", kit_id=kit_id, role=role.role, actor=role.label())
         raise HTTPException(
             status_code=409,
             detail=(
@@ -3281,14 +3272,14 @@ async def delete_editor_kit(
             status_code=502, detail=f"Unable to delete the kit: {exc}"
         ) from exc
 
-    _log.info("editor_kit_deleted", kit_id=kit_id, role=role, objects_removed=removed)
+    _log.info("editor_kit_deleted", kit_id=kit_id, role=role.role, actor=role.label(), objects_removed=removed)
     return KitDeleteResponse(ok=True, kitId=kit_id, objectsRemoved=removed)
 
 
 @router.post("/kits/{kit_id}/lock", response_model=KitLockResponse)
 async def take_editor_kit_lock(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> KitLockResponse:
     """Take this kit for editing, or report who already has it.
 
@@ -3309,26 +3300,30 @@ async def take_editor_kit_lock(
     _refuse_if_metadata_unreadable(meta, files, kit_id, "taking the lock")
 
     holder = _lock_holder(meta)
-    refusal = _lock_refusal(holder, role) if holder else None
+    refusal = _lock_refusal(holder, role.role) if holder else None
     if refusal:
         raise HTTPException(status_code=409, detail=refusal)
 
-    preempted = holder is not None and holder != role
-    next_meta = {**(meta or {}), _LOCK_KEY: {"role": role}}
+    preempted = holder is not None and holder != role.role
+    # The lock still stores a ROLE STRING, not the actor. Re-scoping it to a
+    # PERSON is child 2's job (bd polyglot-pdf-5tuas) -- writing an object here
+    # would put a non-JSON-serializable value straight into metadata.json.
+    next_meta = {**(meta or {}), _LOCK_KEY: {"role": role.role}}
     try:
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to take the lock") from exc
 
     if preempted:
-        _log.info("editor_kit_lock_preempted", kit_id=kit_id, role=role, took_from=holder)
-    return KitLockResponse(ok=True, kitId=kit_id, heldBy=role, preempted=preempted)
+        _log.info("editor_kit_lock_preempted", kit_id=kit_id, role=role.role, actor=role.label(), took_from=holder)
+    return KitLockResponse(ok=True, kitId=kit_id, heldBy=role.role,
+                           preempted=preempted)
 
 
 @router.delete("/kits/{kit_id}/lock", response_model=KitLockResponse)
 async def release_editor_kit_lock(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> KitLockResponse:
     """Release this kit. An author may release anyone's lock; an editor only
     releases a lock an editor holds (they cannot evict an author)."""
@@ -3340,7 +3335,7 @@ async def release_editor_kit_lock(
     holder = _lock_holder(meta)
     if holder is None:
         return KitLockResponse(ok=True, kitId=kit_id, heldBy=None)
-    refusal = _lock_refusal(holder, role)
+    refusal = _lock_refusal(holder, role.role)
     if refusal:
         raise HTTPException(status_code=409, detail=refusal)
 
@@ -3349,6 +3344,11 @@ async def release_editor_kit_lock(
         await store.put_metadata(kit_id, next_meta)
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to release the lock") from exc
+    # Releasing a lock is a MUTATION of metadata.json and was the one such route
+    # that recorded nothing at all -- so "who released the lock on this kit"
+    # was unanswerable, which is the audit question this bead exists to answer.
+    _log.info("editor_kit_lock_released", kit_id=kit_id, role=role.role,
+              actor=role.label(), held_by=holder)
     return KitLockResponse(ok=True, kitId=kit_id, heldBy=None)
 
 
@@ -3356,7 +3356,7 @@ async def release_editor_kit_lock(
 async def set_editor_kit_label(
     kit_id: str,
     body: KitLabelBody,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> dict:
     """Rename a kit's DISPLAY label (bd polyglot-pdf-15ic), preserving every
     other metadata key -- the exact read-merge-write shape of the status flip.
@@ -3377,7 +3377,7 @@ async def set_editor_kit_label(
     except FormKitStoreError as exc:
         _log.error("editor_label_save_failed", kit_id=kit_id, error=str(exc))
         raise HTTPException(status_code=502, detail="Unable to update label") from exc
-    _log.info("editor_label_set", kit_id=kit_id, role=role)
+    _log.info("editor_label_set", kit_id=kit_id, role=role.role, actor=role.label())
     return {"ok": True, "label": label}
 
 
@@ -3543,7 +3543,7 @@ async def _read_upload_pdf(pdf: UploadFile, max_mb: float) -> bytes:
 
 @router.post("/kits", response_model=EditorKitInfo)
 async def onboard_editor_kit(
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
     pdf: Annotated[UploadFile, File(description="The blank AcroForm PDF")],
     label: Annotated[Optional[str], Form()] = None,
 ) -> EditorKitInfo:
@@ -3588,7 +3588,7 @@ async def onboard_editor_kit(
             _log.error("editor_onboard_failed", kit_id=kit_id, error=str(exc))
             raise HTTPException(status_code=502, detail="Unable to store the PDF") from exc
 
-    _log.info("editor_kit_onboarded", kit_id=kit_id, size_bytes=len(data), role=role)
+    _log.info("editor_kit_onboarded", kit_id=kit_id, size_bytes=len(data), role=role.role, actor=role.label())
     return EditorKitInfo(
         id=kit_id, label=kit_label, description=None, status="draft",
         hasSchema=False, hasPdf=True, schemaFile="schema.json", pdfFile="form.pdf",
@@ -3614,7 +3614,7 @@ class ExtractResponse(BaseModel):
 @router.post("/kits/{kit_id}/extract", response_model=ExtractResponse)
 async def extract_editor_kit(
     kit_id: str,
-    role: Annotated[str, Depends(require_author_role)],
+    role: Annotated[EditorActor, Depends(require_author_role)],
     force: Annotated[bool, Form()] = False,
     translate_options: Annotated[bool, Form(
         description="Also bake option label_translations (bd 2h9j; pro-tier, "
@@ -3689,7 +3689,7 @@ async def extract_editor_kit(
                    "in place, losing the revision its confirmation records "
                    "name.)",
         )
-    _require_edit_lock(meta, role)
+    _require_edit_lock(meta, role.role)
     if pdf_file not in files:
         raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
     if schema_file in files and not force:
@@ -3911,7 +3911,7 @@ async def extract_editor_kit(
             # response/log (fresh-eyes; same root cause as the floor above).
             field_count = len(real_fields)
             _log.info("editor_extract_done", kit_id=kit_id, fields=field_count,
-                      role=role, errors=error_count, warnings=warning_count,
+                      role=role.role, actor=role.label(), errors=error_count, warnings=warning_count,
                       stored_with_issues=stored_with_issues)
             return ExtractResponse(
                 ok=True, detail=last_line, schemaFile=schema_file,

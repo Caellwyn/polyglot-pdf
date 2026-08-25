@@ -22,6 +22,15 @@ launcher set no token, so the backend 503'd, and the frontend sent none, so it
 would have 401'd anyway. bd polyglot-pdf-cpiw (PR #522) fixed both. Nothing
 pinned the agreement, so a rename on either side could reintroduce it.
 
+WHAT CARRIES AUTHORITY NOW (bd polyglot-pdf-hn0jq): the shared secrets are
+gone, so the launcher's minted token is no longer a credential the backend can
+verify -- ANY non-empty value behaves the same. The local editor authenticates
+via VFF_DISABLE_AUTH, which the launcher exports and which editor_auth refuses
+outright on a deployed instance. The SYMPTOM these tests exist to prevent is
+unchanged (a silently unauthenticated editor whose empty lint panel reads as a
+clean schema); the mechanism that prevents it is now the bypass, so that is
+what they pin.
+
 These tests read the ACTUAL shipped files rather than a reimplementation.
 
 ASCII only.
@@ -94,21 +103,32 @@ def _code_only(text: str) -> str:
     return chr(10).join(out)
 
 
-def test_launcher_mints_a_token_when_the_operator_supplies_none():
-    """The fix for the ORIGINAL bug: no ambient env must still yield a token.
+def test_launcher_enables_the_dev_bypass_so_the_local_editor_authenticates():
+    """The fix for the ORIGINAL bug, at the layer that now carries it.
 
-    Without this the backend fail-closes with 503 'the editor surface is not
-    configured', which is exactly the symptom bd borq reported.
+    Per-user identity (bd polyglot-pdf-hn0jq) made the minted token unverifiable
+    -- it reaches Firebase's verify_id_token and 401s. Without the bypass every
+    /api/editor/* call fails, which is bd borq's symptom exactly: lint returns
+    nothing and an empty findings panel reads as a clean schema.
     """
     sh = _read(LAUNCHER)
-    # The mint is guarded so an operator-supplied token still wins.
-    assert re.search(rf'if \[ -z "\${BACKEND_ENV_VAR}" \]', sh), (
-        f"{LAUNCHER.name} no longer mints {BACKEND_ENV_VAR} when unset. With "
-        f"neither editor token in the environment, require_editor_role "
-        f"fail-closes 503 and every /api/editor call dies -- the original bug."
+    assert "VFF_DISABLE_AUTH" in sh, (
+        f"{LAUNCHER.name} no longer enables the local auth bypass. The token it "
+        f"mints is NOT a verifiable credential, so every /api/editor call 401s "
+        f"and the editor silently returns nothing -- the original bug."
     )
-    assert "token_urlsafe" in sh, (
-        f"{LAUNCHER.name}'s token mint no longer uses a random source."
+    # The uvicorn call uses an EXPLICIT env prefix list, so the variable must
+    # appear there -- riding on `export` alone made a one-word deletion break
+    # the whole local editor with this suite green.
+    assert re.search(r'VFF_DISABLE_AUTH="\$VFF_DISABLE_AUTH"', sh), (
+        f"{LAUNCHER.name} no longer passes VFF_DISABLE_AUTH to the uvicorn "
+        f"invocation. Its env prefix list is explicit, so a variable that is "
+        f"merely exported can silently fail to reach the backend."
+    )
+    # Defaulted, not forced: an operator who supplies a real setting keeps it.
+    assert re.search(r'VFF_DISABLE_AUTH="\$\{VFF_DISABLE_AUTH:-true\}"', sh), (
+        f"{LAUNCHER.name} must DEFAULT the bypass, not override an operator's "
+        f"explicit value."
     )
 
 

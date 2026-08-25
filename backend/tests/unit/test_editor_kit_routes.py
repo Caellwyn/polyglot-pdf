@@ -110,6 +110,58 @@ def _make_kit(root, kit_id, *, status="draft", schema=None, label=None, extra_me
 # --- the auth dependency (wired through a real FastAPI app) -----------------
 
 
+def _actor(role="editor"):
+    """An EditorActor for tests that call a route FUNCTION directly.
+
+    Those bypass FastAPI, so no dependency override reaches them.
+    """
+    from backend.services.editor_auth import EditorActor
+
+    return EditorActor(uid=f"uid-{role}", email=f"{role}@example.com", role=role)
+
+
+def _install_actor_auth(app):
+    """Map the suite's existing X-Editor-Token values to per-user actors.
+
+    bd polyglot-pdf-hn0jq replaced two shared tokens with per-user Firebase
+    identity. Rather than rewrite 155 tests' auth, override the dependency: the
+    tokens these tests already send become two DISTINCT people, which is closer
+    to reality than the shared-secret they modelled before.
+
+    "edit-tok" -> maria (editor), "auth-tok" -> josh (author). Anything else
+    401s, so the tests that assert a rejection still assert one.
+    """
+    from fastapi import Header, HTTPException
+    from backend.services.editor_auth import (
+        EditorActor, require_editor_actor, require_author_actor,
+    )
+
+    _PEOPLE = {
+        "edit-tok": EditorActor(uid="uid-maria", email="maria@example.com",
+                                role="editor"),
+        "auth-tok": EditorActor(uid="uid-josh", email="josh@example.com",
+                                role="author"),
+    }
+
+    async def _fake_editor(x_editor_token: str = Header(None)):
+        actor = _PEOPLE.get(x_editor_token or "")
+        if actor is None:
+            raise HTTPException(status_code=401,
+                                detail="Invalid or missing access code")
+        return actor
+
+    async def _fake_author(x_editor_token: str = Header(None)):
+        actor = await _fake_editor(x_editor_token)
+        if not actor.is_author:
+            raise HTTPException(status_code=403,
+                                detail="This action requires the author role")
+        return actor
+
+    app.dependency_overrides[require_editor_actor] = _fake_editor
+    app.dependency_overrides[require_author_actor] = _fake_author
+    return app
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     """A TestClient over ONLY the editor router, with a LocalFormKitStore on a
@@ -122,6 +174,7 @@ def client(tmp_path, monkeypatch):
     own dedicated tests that un-patch it."""
     app = FastAPI()
     app.include_router(ekr.router)
+    _install_actor_auth(app)
     store = LocalFormKitStore(tmp_path)
     monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
     monkeypatch.setattr(
@@ -135,13 +188,10 @@ def client(tmp_path, monkeypatch):
     return TestClient(app), store, tmp_path
 
 
-def test_no_tokens_configured_is_503(client, monkeypatch):
-    c, _store, _root = client
-    monkeypatch.setattr(ekr, "get_settings", lambda: _settings())
-    for path in ("/api/editor/session", "/api/editor/kits"):
-        resp = c.get(path, headers={"X-Editor-Token": "anything"})
-        assert resp.status_code == 503
-
+# NOTE: the "a valid non-editor account is 403, not 401" case moved to
+# backend/tests/unit/test_editor_identity.py. It has to run against the REAL
+# verifier, and this module is covered by the conftest shim that answers for it
+# -- keeping a copy here would have tested the shim, not the code.
 
 def test_missing_or_wrong_token_is_401(client):
     c, _store, _root = client
@@ -168,60 +218,33 @@ def test_session_reports_role_per_token(client):
     assert r_author.json() == {"role": "author"}
 
 
-def test_editor_only_deployment_still_works(client, monkeypatch):
-    # Only SCHEMA_EDITOR_TOKEN set (the polish-only deployment): editor code
-    # works, author code does not exist -> 401.
+def test_each_role_works_independently(client):
+    """Replaces the editor-only / author-only deployment pair.
+
+    Those tested that ONE configured shared token was enough to enable the
+    surface. With per-user identity the equivalent property is that each role
+    functions on its own account -- an editor is an editor, an author is an
+    author, and neither depends on the other existing.
+    """
     c, _store, _root = client
-    monkeypatch.setattr(ekr, "get_settings", lambda: _settings(editor="edit-tok"))
-    assert c.get(
-        "/api/editor/session", headers={"X-Editor-Token": "edit-tok"}
-    ).json() == {"role": "editor"}
-    assert c.get(
-        "/api/editor/session", headers={"X-Editor-Token": "auth-tok"}
-    ).status_code == 401
+    assert c.get("/api/editor/session",
+                 headers={"X-Editor-Token": "edit-tok"}).json() == {"role": "editor"}
+    assert c.get("/api/editor/session",
+                 headers={"X-Editor-Token": "auth-tok"}).json() == {"role": "author"}
 
 
-def test_author_only_deployment_still_works(client, monkeypatch):
-    # The symmetric case (fresh-eyes finding): only SCHEMA_AUTHOR_TOKEN set --
-    # the author code works (role author), anything else is 401, and the
-    # surface is NOT 503 (one configured token is enough to enable it).
-    c, _store, _root = client
-    monkeypatch.setattr(ekr, "get_settings", lambda: _settings(author="auth-tok"))
-    r = c.get("/api/editor/session", headers={"X-Editor-Token": "auth-tok"})
-    assert r.status_code == 200
-    assert r.json() == {"role": "author"}
-    assert c.get(
-        "/api/editor/session", headers={"X-Editor-Token": "edit-tok"}
-    ).status_code == 401
+def test_require_author_role_rejects_an_editor():
+    """The author gate still 403s an editor -- now at the person level.
 
+    Same property as before (onboarding/extraction is author-only, bd 92qe.3),
+    exercised against an actor rather than a role string.
+    """
+    from backend.services.editor_auth import require_author_actor
 
-def test_require_author_role_rejects_editor():
-    # The author gate (used by onboarding/extraction, bd 92qe.3) refuses the
-    # editor role with 403 -- tested directly at the dependency level.
     with pytest.raises(HTTPException) as exc:
-        _run(ekr.require_author_role("editor"))
+        _run(require_author_actor(_actor("editor")))
     assert exc.value.status_code == 403
-    assert _run(ekr.require_author_role("author")) == "author"
-
-
-def test_non_ascii_access_code_is_401_not_500(client, monkeypatch):
-    # hmac.compare_digest on str raises TypeError for non-ASCII (a pasted smart
-    # quote); the compare must run over bytes so a malformed wrong code stays a
-    # clean 401 (Codex P1, PR #279). Exercised at the dependency level (HTTP
-    # headers are latin-1 on the wire; the failure mode is the decoded str).
-    monkeypatch.setattr(
-        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
-    )
-    with pytest.raises(HTTPException) as exc:
-        # \u2019 = a right single "smart" quote; the escape keeps the
-        # SOURCE ASCII (repo rule) while the runtime string is non-ASCII.
-        _run(ekr.require_editor_role(x_editor_token="sm\u2019art-quote"))
-    assert exc.value.status_code == 401
-    # And a correct code containing non-ASCII still matches (bytes both sides).
-    monkeypatch.setattr(
-        ekr, "get_settings", lambda: _settings(editor="caf\u00e9-tok")
-    )
-    assert _run(ekr.require_editor_role(x_editor_token="caf\u00e9-tok")) == "editor"
+    assert _run(require_author_actor(_actor("author"))).is_author
 
 
 def test_parse_extra_origins_accepts_semicolons_and_commas():
@@ -2569,11 +2592,17 @@ def test_concurrent_onboards_of_same_filename_both_persist(tmp_path, monkeypatch
 
     async def _both():
         return await asyncio.gather(
+            # Calls the route FUNCTION directly, so FastAPI's dependency
+            # injection (and the suite's actor override) never runs -- the actor
+            # has to be passed by hand. bd polyglot-pdf-hn0jq changed this
+            # parameter from a role string to a person.
             ekr.onboard_editor_kit(
-                role="author", pdf=_upload_file(b"%PDF-1.7 AUTHOR-A"), label=None
+                role=_actor("author"), pdf=_upload_file(b"%PDF-1.7 AUTHOR-A"),
+                label=None
             ),
             ekr.onboard_editor_kit(
-                role="author", pdf=_upload_file(b"%PDF-1.7 AUTHOR-B"), label=None
+                role=_actor("author"), pdf=_upload_file(b"%PDF-1.7 AUTHOR-B"),
+                label=None
             ),
         )
 

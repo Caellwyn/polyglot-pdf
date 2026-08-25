@@ -122,6 +122,14 @@ if [ "$START_BACKEND" = "1" ]; then
     # author-tier because local dev is full author tier (App.tsx treats
     # !hosted as author), and it never leaves this machine: the backend binds
     # 127.0.0.1 only. Respect an operator-supplied token if there is one.
+    # bd polyglot-pdf-hn0jq replaced the shared secrets with per-user Firebase
+    # identity, so the minted token below is no longer a credential the backend
+    # can verify -- it would reach verify_id_token and 401 every /api/editor/*
+    # call. The local stack takes the same posture dev-local.ps1 already does:
+    # run with the auth bypass on. editor_auth refuses the bypass outright on a
+    # deployed instance (K_SERVICE), and this backend binds 127.0.0.1 only.
+    export VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}"
+
     if [ -z "$SCHEMA_AUTHOR_TOKEN" ]; then
         SCHEMA_AUTHOR_TOKEN="$(
             "$VENV_PYTHON" -c 'import secrets; print(secrets.token_urlsafe(24))' \
@@ -140,6 +148,7 @@ if [ "$START_BACKEND" = "1" ]; then
         PYTHONUNBUFFERED=1 \
         EDITOR_TEXT_PROVIDER="$EDITOR_PROVIDER" \
         SCHEMA_AUTHOR_TOKEN="$SCHEMA_AUTHOR_TOKEN" \
+        VFF_DISABLE_AUTH="$VFF_DISABLE_AUTH" \
         GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
         "$VENV_PYTHON" -m uvicorn backend.main:app \
             --host 127.0.0.1 --port "$BACKEND_PORT" --reload \

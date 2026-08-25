@@ -1120,10 +1120,20 @@ async def fill_form_from_schema(
 			# below keys session + confirmation records on it (bd
 			# polyglot-pdf-xwlt). Discarding the return value was why the
 			# WS path could not see firm identity at all.
-			claims = verify_token(token)
+			claims = verify_token(token, check_revoked=True)
 		except Exception as e:
-			log.warning("websocket_auth_failed", error=str(e))
-			await websocket.close(code=1008, reason="Authentication failed")
+			# Distinguish "not enrolled" from "bad token". This diff INTRODUCED
+			# the enrolment requirement, so collapsing both into
+			# "Authentication failed" would leave someone locked out of an app
+			# they can sign into, with nothing pointing at the remedy
+			# (scripts/bootstrap_voice_dev.py). Same 401-vs-403 distinction the
+			# HTTP side draws, carried onto the surface where it actually bites.
+			not_enrolled = getattr(e, "status_code", None) == 403
+			log.warning("websocket_auth_failed", error=str(e),
+						not_enrolled=not_enrolled)
+			reason = ("This account is not enrolled for the voice application"
+					  if not_enrolled else "Authentication failed")
+			await websocket.close(code=1008, reason=reason)
 			return
 
 		await websocket.accept()
