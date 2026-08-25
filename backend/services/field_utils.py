@@ -7,7 +7,7 @@ and can be used independently of the FormFillingService.
 """
 import re
 from typing import Any, Dict, List, Optional
-from backend.models.form_models import FormField, FieldType
+from backend.models.form_models import FormField, FieldType, DateFormat
 
 
 # The frontend's formatNextFieldHint (frontend/src/navigation.ts) appends a
@@ -97,6 +97,35 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
             except ValueError:
                 field_type = FieldType.TEXT
 
+            # Flat `format` key -> DateFormat enum, defensively (bd
+            # polyglot-pdf-mpfmr). DateFormat is a CLOSED enum of 4 exact,
+            # case-sensitive literals, but FormField construction is wrapped in
+            # a broad `except` that DROPS THE WHOLE FIELD from the session on
+            # any error -- so handing Pydantic an unrecognized string would make
+            # the field vanish entirely (silently, to stdout), which is far
+            # worse than the wrong-date-layout bug this bead fixes. The natural
+            # authoring casing "MM/DD/YYYY" -- the very string help.format_hint
+            # uses on the shipped kits -- is NOT a valid enum value, so this is
+            # a live hazard the moment any kit or editor writes the flat key.
+            #
+            # Resolve case-insensitively (field_validator's own _DATE_LAYOUTS
+            # lowercases before matching, so this matches how the layout is
+            # read downstream) and fall back to None -- an unresolvable format
+            # then leaves help.format_hint as the layout source, exactly as it
+            # was before the flat key was passed at all. Same
+            # coerce-or-fall-back shape as the FieldType handling above.
+            raw_format = field_data.get("format")
+            field_format = None
+            if raw_format is not None:
+                try:
+                    field_format = DateFormat(raw_format)
+                except ValueError:
+                    lowered = str(raw_format).strip().lower()
+                    for member in DateFormat:
+                        if member.value.lower() == lowered:
+                            field_format = member
+                            break
+
             # Handle SELECT/RADIO fields that require options
             options = field_data.get("options")
             if field_type in [FieldType.SELECT, FieldType.RADIO]:
@@ -135,7 +164,7 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
                 # The flat `format` key rides along because it is the FIRST
                 # source in that same priority chain.
                 help=field_data.get("help"),
-                format=field_data.get("format"),
+                format=field_format,
             )
             fields.append(field)
         except Exception as e:

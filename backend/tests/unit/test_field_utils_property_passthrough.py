@@ -62,10 +62,10 @@ EXPECTED_DROPPED = {
     "group_label": "presentation grouping",
     "hidden": "reactive/visibility -- follow-up, see module docstring",
     "max": "nested validation.max is the carrier the backend reads",
-    "max_date": "nested validation is the carrier the backend reads",
+    "max_date": "unread by field_validator (0 refs); no ValidationRules carrier exists either",
     "max_length": "nested validation.max_length is the carrier the backend reads",
     "min": "nested validation.min is the carrier the backend reads",
-    "min_date": "nested validation is the carrier the backend reads",
+    "min_date": "unread by field_validator (0 refs); no ValidationRules carrier exists either",
     "multi_entry": "client-side repeat behavior",
     "overflow_to_supplement": "PDF render concern, not session validation",
     "pdf_field_name": "PDF render concern, not session validation",
@@ -265,3 +265,110 @@ def test_error_message_never_names_iso_for_a_us_declared_field():
             assert "YYYY-MM-DD" not in err.message, (
                 f"input {bad!r} produced an ISO-naming error: {err.message!r}"
             )
+
+
+# --- flat `format` coercion -------------------------------------------------
+#
+# FormField.format is a CLOSED DateFormat enum of 4 case-sensitive literals, and
+# FormField construction sits inside a broad `except` that DROPS THE WHOLE FIELD
+# on any error. So passing an unrecognized `format` string straight through does
+# not merely lose the layout -- it removes the field from the session entirely,
+# a strictly worse failure than the ISO-fallback bug this bead fixes. Caught by
+# the fresh-eyes review of this diff: "MM/DD/YYYY" (the natural authoring
+# casing, and the exact string help.format_hint uses on the shipped kits) is NOT
+# a valid enum value.
+#
+# No shipped kit sets the flat key today, so these pin a hazard rather than a
+# live break -- which is precisely when it is cheap to pin.
+
+@pytest.mark.parametrize(
+    "raw_format,expected_value",
+    [
+        ("mm/dd/yyyy", "mm/dd/yyyy"),   # exact enum literal
+        ("MM/DD/YYYY", "mm/dd/yyyy"),   # natural authoring casing
+        ("YYYY-MM-DD", "YYYY-MM-DD"),   # exact enum literal
+        ("yyyy-mm-dd", "YYYY-MM-DD"),   # lowercased ISO
+        ("Mo/Yr", "Mo/Yr"),             # exact enum literal
+        ("mo/yr", "Mo/Yr"),             # lowercased
+        ("  MM/DD/YYYY  ", "mm/dd/yyyy"),  # surrounding whitespace
+    ],
+)
+def test_flat_format_resolves_case_insensitively(raw_format, expected_value):
+    """Any casing of a real layout resolves, and the field always survives.
+
+    Parametrized per casing so a mutation that handles only the exact-match
+    branch reddens the case-insensitive rows specifically.
+    """
+    schema = {
+        "fields": [
+            {
+                "id": "dob",
+                "name": "Date of birth",
+                "type": "date",
+                "section_id": "sec1",
+                "format": raw_format,
+            }
+        ]
+    }
+    built = build_fields_from_schema(schema)
+    assert len(built) == 1, (
+        f"format={raw_format!r} DROPPED THE ENTIRE FIELD from the session -- "
+        "an unrecognized enum value must degrade to None, never delete the field"
+    )
+    assert built[0].format is not None
+    assert built[0].format.value == expected_value
+
+
+@pytest.mark.parametrize("raw_format", ["garbage", "dd/mm/yyyy", "", "   ", 42])
+def test_unresolvable_flat_format_degrades_to_none_and_keeps_the_field(raw_format):
+    """An unusable `format` must not cost the field, and must not mask the hint.
+
+    Degrading to None leaves help.format_hint as the layout source -- exactly
+    the behavior before the flat key was passed through at all.
+    """
+    schema = {
+        "fields": [
+            {
+                "id": "dob",
+                "name": "Date of birth",
+                "type": "date",
+                "section_id": "sec1",
+                "help": {"format_hint": "MM/DD/YYYY"},
+                "format": raw_format,
+            }
+        ]
+    }
+    built = build_fields_from_schema(schema)
+    assert len(built) == 1, (
+        f"format={raw_format!r} dropped the whole field instead of degrading"
+    )
+    assert built[0].format is None
+    # The hint must still be the usable layout source.
+    assert built[0].help is not None
+    assert built[0].help.format_hint == "MM/DD/YYYY"
+
+
+def test_unresolvable_flat_format_still_validates_dates_by_the_hint():
+    """End-to-end: a junk `format` must not break date validation.
+
+    The hint carries the layout, so a correct MM/DD/YYYY date is still accepted.
+    """
+    schema = {
+        "fields": [
+            {
+                "id": "dob",
+                "name": "Date of birth",
+                "type": "date",
+                "section_id": "sec1",
+                "help": {"format_hint": "MM/DD/YYYY"},
+                "format": "not-a-layout",
+            }
+        ]
+    }
+    field = build_fields_from_schema(schema)[0]
+    handler = ValidationHandler.__new__(ValidationHandler)
+    handler._session_id = "test"
+    field_dict = handler._convert_fields_to_dicts([field])[0]
+
+    assert fv._resolve_date_format(field_dict) == ("%m/%d/%Y", "MM/DD/YYYY")
+    assert fv._validate_date(field_dict, "10/12/2005", "dob", "Date of birth") == []

@@ -100,11 +100,42 @@ reality (bd memory `mutation-verify-the-mutation-that-matters`).
 Also verified: the partition guard fails by name when a new `FormField` property
 is added, and each passthrough (`help`, `format`) is independently pinned.
 
+## Scar tissue: the fix that introduced a worse bug
+
+The fresh-eyes review caught a defect the first draft INTRODUCED. Passing the
+flat `format` key straight through looked like a free ride-along -- it is the
+first source in the same layout-resolution chain. But `FormField.format` is a
+CLOSED `DateFormat` enum of 4 case-sensitive literals, and `build_fields_from_
+schema` wraps construction in a broad `except` that DROPS THE WHOLE FIELD on any
+error.
+
+So a kit writing `"format": "MM/DD/YYYY"` -- the natural authoring casing, and
+the exact string `help.format_hint` already uses on every shipped kit -- would
+have made the entire field VANISH from the session. Silently, to stdout. That is
+strictly worse than the bug being fixed: a field with a wrong date layout is at
+least visible and fillable; a field that does not exist cannot be filled at all.
+
+On `origin/dev` the same bad value was harmless, because `format` was never
+passed. The fix created the hazard.
+
+Resolved by coercing case-insensitively (matching how `field_validator`'s own
+`_DATE_LAYOUTS` lowercases before matching) and falling back to `None`, so an
+unresolvable value leaves `help.format_hint` as the layout source -- exactly the
+behavior before the flat key was passed at all. Same coerce-or-fall-back shape
+as the `FieldType` handling directly above it in the same function.
+
+The general lesson: **widening an allowlist is not automatically safe when the
+receiving field is strictly typed and the construction is wrapped in a
+catch-all.** The blast radius of a passthrough is set by what the CONSUMER does
+with a bad value, not by how innocuous the key looks. No shipped kit sets the
+flat key today, so this pinned a hazard rather than a live break -- which is
+exactly when it is cheapest to pin.
+
 ## Verification
 
-- New tests: 15 passing; mutation-verified per passthrough and per
-  parametrization.
-- Full backend suite: 2563 passed, 2 skipped.
+- New tests: 28 passing; mutation-verified per passthrough, per casing, and
+  per parametrization.
+- Full backend suite: 2576 passed, 2 skipped.
 - Confirmed against the real W-7 field through the real call chain:
   `10/12/2005` validates OK, the error text names the field's own layout, and
   impossible dates (`13/45/2020`) still reject.
