@@ -11,6 +11,16 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# ENROLMENT CHECK (bd polyglot-pdf-hn0jq). The voice app now refuses any
+# account carrying neither firm_id nor the vff_dev claim, so a signed-in user
+# who was never enrolled gets a 1008 close the UI shows as a failed
+# connection. Custom claims only reach a NEWLY MINTED token, so enrol BEFORE
+# deploying, not after:
+#     python scripts/bootstrap_voice_dev.py --list
+#     python scripts/bootstrap_voice_dev.py --email you@example.com
+echo -e "${GREEN}[INFO]${NC} Reminder: voice accounts need firm_id or a dev claim."
+echo -e "${GREEN}[INFO]${NC}   check with: python scripts/bootstrap_voice_dev.py --list"
+
 # Verify account
 echo -e "${GREEN}[INFO]${NC} 👀 Checking gcloud account..."
 CURRENT_ACCOUNT=$(gcloud config get-value account)

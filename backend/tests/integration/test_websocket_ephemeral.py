@@ -197,10 +197,23 @@ async def test_a_handshake_supplied_firm_id_is_IGNORED(
 async def test_a_session_with_no_firm_claim_still_runs(
     mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message
 ):
-    """EXIT CRITERION 2: a legacy authed user (and the dev-bypass stub, which
-    returns a claims dict with no firm_id) connects unchanged, firm_id None.
-    Mutation: require a firm claim to proceed -- red."""
-    mock_verify_token.return_value = {"uid": "dev_user", "email": "dev@example.com"}
+    """A caller who CLEARED verify_token but carries no firm_id runs with
+    firm_id None -- the dev-bypass stub, and a dev-claim account.
+
+    SUPERSEDED IN PART by bd polyglot-pdf-hn0jq. This began as bd
+    polyglot-pdf-xwlt's EXIT CRITERION 2 ("a legacy authed user connects
+    unchanged"), and its mutation note read "require a firm claim to proceed --
+    red". Enrolment IS now required: verify_token refuses an account carrying
+    neither firm_id nor the dev claim ("2 separate auth lists", maintainer
+    2026-08-22).
+
+    What this route must still do is the part that survives: not INVENT a firm
+    for a caller who has none. The enrolment gate lives in verify_token and is
+    pinned in test_editor_identity.py; this test mocks verify_token, so it
+    covers the route's handling, not the gate.
+    """
+    mock_verify_token.return_value = {"uid": "dev_user", "email": "dev@example.com",
+                                      "vff_dev": True}
     mock_websocket.receive_text.return_value = json.dumps(handshake_message)
 
     await fill_form_from_schema(mock_websocket, service=mock_service, token="tok")

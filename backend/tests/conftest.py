@@ -59,6 +59,54 @@ def _isolate_k_service(monkeypatch):
     monkeypatch.delenv("K_SERVICE", raising=False)
 
 
+# bd polyglot-pdf-hn0jq: the editor moved from two shared tokens to per-user
+# Firebase identity. 28 test files mount the editor router, and every one of
+# them authenticates by sending an X-Editor-Token header -- so without a shim
+# they all 401. Rewriting 28 files' auth would be churn; overriding the
+# dependency once here is the same trick a single test file was using, hoisted
+# to where every file gets it.
+#
+# The two tokens the suite already sends become two DISTINCT PEOPLE, which is
+# strictly closer to reality than the shared secret they modelled before: tests
+# that need "another editor" now have one available.
+_TEST_PEOPLE = {
+    "edit-tok": ("uid-maria", "maria@example.com", "editor"),
+    "auth-tok": ("uid-josh", "josh@example.com", "author"),
+}
+
+
+@pytest.fixture(autouse=True)
+def _editor_actor_auth(monkeypatch, request):
+    """Resolve the suite's X-Editor-Token values to per-user actors.
+
+    Patches the verifier rather than the FastAPI dependency, so it reaches BOTH
+    apps built with TestClient AND tests that call a route function directly.
+    Anything other than the two known tokens still raises 401, so the tests that
+    assert a rejection keep asserting one.
+    """
+    # OPT OUT with @pytest.mark.real_editor_auth. A test of the verifier ITSELF
+    # must run against the real function -- otherwise this shim silently answers
+    # for it and the test passes without exercising a line of the code it names.
+    if request.node.get_closest_marker("real_editor_auth"):
+        return
+
+    from fastapi import HTTPException
+
+    import backend.services.editor_auth as ea
+
+    def _fake_verify(token: str):
+        person = _TEST_PEOPLE.get(token or "")
+        if person is None:
+            raise HTTPException(status_code=401,
+                                detail="Invalid or missing access code")
+        uid, email, role = person
+        return ea.EditorActor(uid=uid, email=email, role=role)
+
+    monkeypatch.setattr(ea, "verify_editor_token", _fake_verify)
+
+    monkeypatch.setattr(ea, "_dev_bypass_allowed", lambda: False)
+
+
 @pytest.fixture(autouse=True)
 def _reset_acceptance_dedupe():
     """Clear the disclaimer-acceptance dedupe between tests (bd polyglot-pdf-g3kui).

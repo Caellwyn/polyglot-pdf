@@ -39,6 +39,7 @@ import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.services.editor_auth import EditorActor
 from backend.routes.editor_kit_routes import (
     _is_write_locked,
     _lock_reason,
@@ -56,7 +57,7 @@ router = APIRouter(prefix="/api/editor", tags=["editor-readiness"])
 @router.post("/kits/{kit_id}/readiness")
 async def stamp_kit_readiness(
     kit_id: str,
-    role: Annotated[str, Depends(require_editor_role)],
+    role: Annotated[EditorActor, Depends(require_editor_role)],
     schema: Annotated[dict, Body()],
 ) -> dict:
     """Recompute and persist the kit's readiness stamp for the POSTED schema.
@@ -87,7 +88,7 @@ async def stamp_kit_readiness(
         # must not be told to use a publish flow that does not apply.
         raise HTTPException(status_code=409, detail=_lock_reason(meta))
     stamp = await _stamp_readiness(store, kit_id, schema, meta, files)
-    _log.info("editor_readiness_restamped", kit_id=kit_id, role=role,
+    _log.info("editor_readiness_restamped", kit_id=kit_id, role=role.role, actor=role.label(),
               readiness_percent=(stamp or {}).get("percent"),
               readiness_verified=(stamp or {}).get("verified"))
     return {"readiness": stamp}
