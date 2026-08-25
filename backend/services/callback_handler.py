@@ -1886,12 +1886,30 @@ class CallbackHandler:
             # on the current field was silently re-used as the fill for the NEXT
             # field, overriding what the user actually said there. Tell the model
             # explicitly to discard it and re-ask.
+            # The RECOVERY half branches on constraint type (bd
+            # polyglot-pdf-mq2je). A FORMAT rejection is the one case where
+            # re-asking is WRONG: the user already gave a usable answer and only
+            # its SHAPE was wrong, so reshaping it is the model's job -- the DTI
+            # SI's DATES block explicitly forbids asking a user to restate a date
+            # in a different format. This line is read in the SAME turn as the
+            # error while that SI rule sits thousands of characters upstream, so
+            # an unconditional "ask the user again" wins on recency and
+            # reintroduces the pedantic re-ask the SI bans.
             if validation_errors:
+                format_only = all(
+                    err.get("constraint") == "format" for err in validation_errors
+                )
+                recovery = (
+                    "Re-send the SAME answer corrected to the required format -- "
+                    "do NOT ask the user to say it again in a different format."
+                    if format_only
+                    else "Ask the user again for the current field and fill "
+                         "exactly what THEY say."
+                )
                 error_lines.append(
                     "DISCARD the rejected value(s) above -- they are not pending "
                     "answers. Never reuse a rejected value on another field or on "
-                    "the next field. Ask the user again for the current field and "
-                    "fill exactly what THEY say."
+                    "the next field. " + recovery
                 )
 
             # Format unknown fields. Two distinct failure modes with distinct

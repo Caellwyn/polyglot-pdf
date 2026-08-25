@@ -118,11 +118,43 @@ enumerating the real data first. The enumeration takes about a minute --
 `format_hint` values across three kits is one script -- and would have caught
 all three before review did.
 
+## Gap 3: the tool response was fighting the SI, in the same turn
+
+The cross-surface review found the real reason gap 1's SI rule might not have
+taken. The `update_form_fields` error response ends with:
+
+> DISCARD the rejected value(s) above ... **Ask the user again for the current
+> field and fill exactly what THEY say.**
+
+Unconditional, on every rejection including a pure FORMAT failure. That is the
+pedantic re-ask the DATES block already forbids -- and it is read in the SAME
+TURN as the error, while the SI rule sits thousands of characters upstream.
+Recency favours the wrong behavior. Adding an SI sentence while leaving this in
+place would have been the fourth round of prompt-strengthening against a signal
+the prompt was never beating.
+
+The recovery instruction now branches on constraint type: a format-only
+rejection says "re-send the SAME answer corrected to the required format -- do
+NOT ask the user to say it again in a different format"; anything else keeps the
+re-ask, because an out-of-options value genuinely needs a DIFFERENT answer, not
+a reshaped one. Mixed errors fall back to the re-ask, since reshaping cannot fix
+an invalid option.
+
+**The anti-leak half is untouched and still unconditional.** That is bd
+`polyglot-pdf-djnk`'s guarantee -- a rejected value silently became the fill for
+the NEXT field -- and a test now asserts it holds across every branch, so
+narrowing the recovery cannot erode it.
+
+This is the pattern the whole session keeps hitting: the SI is rarely the thing
+being disobeyed. Look for the competing signal in the runtime path first (repo
+memory `error-messages-are-training-signal`).
+
 ## Verification
 
-- Full backend suite: 2586 passed, 2 skipped.
+- Full backend suite: 2590 passed, 2 skipped.
 - Mutation-verified: reverting the imperative reddens 1 test; removing the
-  relay rule reddens 3; removing the prose/literal scoping reddens 7.
+  relay rule reddens 3; removing the prose/literal scoping reddens 7; disabling the format
+  carve-out in the tool response reddens 1.
 - **A mutation that silently no-op'd nearly passed as evidence.** The first
   attempt at the relay-rule mutation used string slicing that raised
   `ValueError: substring not found`, the edit never applied, and the suite came
