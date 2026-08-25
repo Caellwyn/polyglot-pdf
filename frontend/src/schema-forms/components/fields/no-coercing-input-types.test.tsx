@@ -136,3 +136,36 @@ describe("comb cell count is not applied as a text limit", () => {
     expect(container.querySelector("input")!.getAttribute("maxLength")).toBe("12");
   });
 });
+
+describe("max_length edge cases", () => {
+  it("preserves a max_length of 0 instead of treating it as absent", () => {
+    // 0 is falsy but MEANINGFUL. A `||` fallback here would silently swap a
+    // real zero-width cap for an unrelated validation.max_length, or drop it.
+    // No shipped kit sets 0 today -- this pins the branch before one does.
+    const { container } = renderField(
+      fieldOf("text", {
+        max_length: 0,
+        validation: { max_length: 25 },
+      } as Partial<FormField>)
+    );
+    expect(container.querySelector("input")!.getAttribute("maxLength")).toBe("0");
+  });
+
+  it("falls back to validation.max_length when no top-level cap exists", () => {
+    const { container } = renderField(
+      fieldOf("text", { validation: { max_length: 7 } } as Partial<FormField>)
+    );
+    expect(container.querySelector("input")!.getAttribute("maxLength")).toBe("7");
+  });
+
+  it("keeps the cap when the declared format fits exactly", () => {
+    // Boundary: format length === cap. Fits, so the cap must survive.
+    const { container } = renderField(
+      fieldOf("text", {
+        max_length: 10,
+        help: { format_hint: "MM/DD/YYYY" },
+      } as Partial<FormField>)
+    );
+    expect(container.querySelector("input")!.getAttribute("maxLength")).toBe("10");
+  });
+});

@@ -57,9 +57,12 @@ export function TextField({
     combCap !== undefined &&
     declaredFormat !== undefined &&
     declaredFormat.length > combCap;
+  // `??` not `||`: a cap of 0 is falsy but MEANINGFUL (a zero-width widget),
+  // and `||` would silently swap it for an unrelated validation.max_length or
+  // drop it entirely.
   const effectiveMaxLength = capWouldTruncateDeclaredFormat
     ? field.validation?.max_length
-    : combCap || field.validation?.max_length;
+    : combCap ?? field.validation?.max_length;
 
   return (
     <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>

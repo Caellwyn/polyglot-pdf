@@ -68,7 +68,8 @@ export function DateField({
 
       <input
         type="text"
-        inputMode="numeric"
+        // NOT inputMode="numeric": a correct value carries "/" separators, and
+        // a numeric keypad buries or omits them on mobile.
         id={field.id}
         name={field.id}
         value={displayValue}
