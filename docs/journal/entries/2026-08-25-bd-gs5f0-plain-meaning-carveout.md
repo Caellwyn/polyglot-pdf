@@ -33,8 +33,8 @@ different question types into one.
 
 ## The distinction now encoded
 
-- **Ordinary word** -- "what does ITIN stand for", "what is a surname", "what
-  does spouse mean". One correct answer, no dependence on the user's situation,
+- **Ordinary word** -- "what does ITIN stand for", "what is a surname". One
+  correct answer, no dependence on the user's situation,
   no legal consequence. **Answer plainly.**
 - **Named rule, or applicative** -- "what does exception 3 mean", "what counts
   as an exemption", "am I eligible for an ITIN", "should I check box a".
@@ -91,8 +91,7 @@ contained that spoken name verbatim and destroyed the discriminator.
 
 The test was right and the example was wrong, so the example moved -- first to
 "what does exemption mean", which review then showed was ALSO wrong for a
-different and more serious reason (see below), and finally to "what does spouse
-mean". Worth recording as the general shape: **an SI example phrase is
+different and more serious reason (see below), and finally dropped altogether. Worth recording as the general shape: **an SI example phrase is
 not free text -- it shares a namespace with every string other tests assert the
 SI does or does not contain.**
 
@@ -124,9 +123,34 @@ different paragraph passed. A tie-break floating elsewhere no longer says which
 class of question it disambiguates. The tests now assert structural containment
 INSIDE the carve-out sentence.
 
+## The same mistake twice, then a test instead
+
+Round 1 of review caught "what does exemption mean" as a sanctioned example --
+a rule label, not a word. I replaced it with "what does spouse mean". Round 2
+caught THAT too: "spouse" occurs 69 times in the W-7 and 66 in the f1040,
+naming reason-for-applying and filing-status categories. On those fields,
+asking what "spouse" means is asking which category applies to you -- the
+hedged question wearing definitional clothing, exactly like "exemption".
+
+Two reviewers, two rounds, each catching one instance by reading carefully.
+That is the tell from CLAUDE.md scar #7: when a finding differs from the last
+one only in WHICH INSTANCE it is, stop fixing instances.
+
+So the third fix is not a better example -- it is a TEST. It extracts the
+sanctioned examples from the SI, strips interrogative scaffolding, and checks
+every remaining content word against the vocabulary of every shipped kit. A
+term the forms use as their own category label fails CI with the count and the
+kit named. Verified by re-introducing BOTH real mistakes: each reddens it.
+
+The third example was dropped rather than replaced. Two safe examples make the
+point, and every additional one is another chance to pick a colliding term.
+
+ITIN is exempted by name, and that exemption is the whole reason this bead
+exists: an acronym the form expands in its own title is the paradigm SAFE case.
+
 ## Verification
 
-- Full backend suite: 2551 passed, 2 skipped.
+- Full backend suite: 2580 passed, 2 skipped.
 - FOUR mutations confirmed red, then restored: carve-out removed; boundary
   stripped while the permission survives; tie-break relocated out of the
   carve-out; named-rule guard dropped on its own.
