@@ -1,10 +1,15 @@
 """Firm-keyed telemetry (bd polyglot-pdf-xwlt, epic 02ye rubric #3).
 
 The firm tier needs per-firm usage answerable by an equality query, without
-ever touching client PII. That means three record types carry firm_id:
-session-start, session-end, and every field confirmation -- and the two
-session functions, which shipped under bd z2is with ZERO callers, finally
-have one.
+ever touching client PII. That means FOUR record types carry a firm_id key:
+session-start, session-end, every field confirmation, and (bd polyglot-pdf-
+0dsv4) disclaimer_accepted -- the two session functions, which shipped under
+bd z2is with ZERO callers, finally have one. disclaimer_accepted's firm_id is
+ALWAYS None (bd polyglot-pdf-g3kui): the route is unauthenticated by design,
+so it cannot carry a client's firm claim; the key is still written so the
+collection has one shape, and a firm's acceptances are reached by joining on
+form_session_id against the confirmation records that DO carry firm_id (see
+firm_of_events in confirmation_logger.py).
 
 The register these tests pin: firm_id names the CUSTOMER FIRM, never the
 client; a session with no firm claim still logs (firm_id None), unchanged
@@ -87,10 +92,13 @@ def test_session_start_and_end_carry_firm_and_kit(fake_db, monkeypatch):
     assert docs[1]["total_fields_confirmed"] == 7
 
 
-def test_all_three_record_types_share_the_firm_key(fake_db, monkeypatch):
+def test_all_three_firm_carrying_record_types_share_the_firm_key(fake_db, monkeypatch):
     """The per-firm query spans SESSIONS and CONFIRMATIONS -- one key name
-    across all three record types, or the query silently misses a type.
-    Mutation: rename firm_id in any one of the three events -- red."""
+    across all three FIRM-CARRYING record types, or the query silently misses
+    a type. (A fourth record type, disclaimer_accepted, also carries a
+    firm_id key but is ALWAYS None by design -- covered separately below,
+    since asserting it shares "firm-b" here would be asserting something
+    false.) Mutation: rename firm_id in any one of the three events -- red."""
     monkeypatch.setenv("CONFIRMATION_FIRESTORE_ENABLED", "true")
 
     cl.log_form_session_start(form_id="I-90", form_session_id="fss_2", firm_id="firm-b")
@@ -110,12 +118,37 @@ def test_all_three_record_types_share_the_firm_key(fake_db, monkeypatch):
     assert sum(1 for d in docs if d.get("firm_id") == "firm-b") == 3
 
 
+def test_disclaimer_accepted_carries_the_firm_key_always_none(fake_db, monkeypatch):
+    """bd polyglot-pdf-75nmm: disclaimer_accepted is the FOURTH firm_id-
+    carrying record type (bd polyglot-pdf-0dsv4), and the odd one out --
+    unlike the other three, its firm_id is ALWAYS None, by design (bd
+    polyglot-pdf-g3kui): the route is unauthenticated, so it structurally
+    cannot carry a client's firm claim. The key must still exist (a per-firm
+    query needs to tell 'no firm' from 'key absent', same as the session/
+    confirmation events) even though the VALUE is never a real firm.
+    Mutation: drop the firm_id key from the event dict in
+    confirmation_logger.log_disclaimer_acceptance -- red."""
+    monkeypatch.setenv("CONFIRMATION_FIRESTORE_ENABLED", "true")
+
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_5", language="English", timestamp_unix_ms=1_700_000_000_000,
+    )
+
+    docs = _drain(fake_db)
+    assert len(docs) == 1
+    assert docs[0]["event"] == "disclaimer_accepted"
+    assert "firm_id" in docs[0], "the key must exist even though the value is always None"
+    assert docs[0]["firm_id"] is None
+
+
 def test_sessions_without_a_firm_claim_still_log_with_firm_id_none(fake_db, monkeypatch):
     """EXIT CRITERION 2: a legacy authed user (no firm claim) logs exactly as
     before, with firm_id present-but-None -- never a missing key (a per-firm
     query must be able to tell 'no firm' from 'key absent') and never a
-    dropped record. Mutation: make any of the three events omit the key when
-    firm_id is None -- red."""
+    dropped record. Covers the three events that carry a REAL firm claim when
+    one exists (disclaimer_accepted's firm_id is always None regardless of
+    claim, covered separately below). Mutation: make any of these three
+    events omit the key when firm_id is None -- red."""
     monkeypatch.setenv("CONFIRMATION_FIRESTORE_ENABLED", "true")
 
     cl.log_form_session_start(form_id="I-90", form_session_id="fss_3")
