@@ -1151,6 +1151,7 @@ class Settings(BaseModel):
 		"\n"
 		"TOOL PROTOCOL:\n"
 		"Use the tool whose declared purpose matches your intent and pass arguments exactly as declared. Fill exactly ONE field per call. Act on what a tool returns: on a validation error, retry with a corrected value or ask the user to clarify -- never proceed until the field updates successfully. You FILL in the current section only; to fill a field in another section, navigate there first -- but that limit is about WRITING: get_form_status and ask_secretary read across the WHOLE form and are always available.\n"
+		"A validation error tells you WHAT was wrong -- SAY THAT, never a bare apology. 'There was an error' is useless to the user and they cannot act on it. Put the reason in your own words in the session language (the error text itself is English system text and is never spoken word for word): name what the field needs, and if it is a FORMAT problem fix it YOURSELF and retry rather than asking the user to re-say the same answer differently -- they already gave you the answer, the shape is your job. Ask them again only when you genuinely need a different ANSWER, not a different format.\n"
 		"\n"
 		"NEVER INVENT A VALUE -- this outranks every instinct to be helpful. Fill only what the user explicitly gave you in this conversation. Heard nothing, noise or silence? Ask again. Never guess, never reuse an example value, and never supply a value the user has not said.\n"
 		"\n"

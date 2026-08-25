@@ -139,7 +139,18 @@ def render_field_guidance(
     if guidance.get("instructions"):
         parts.append(f"Instructions: {guidance['instructions']}")
     if guidance.get("format_hint"):
-        parts.append(f"Format: {guidance['format_hint']}")
+        # IMPERATIVE, not a bare label (bd polyglot-pdf-mq2je). Observed live
+        # 2026-08-25: on a field rendering "Format: MM/DD/YYYY", the model sent
+        # "1980-10-26" on a COLD FIRST ATTEMPT -- no prior error to adapt to,
+        # and the same block also carried "Instructions: ... month, day, and
+        # year" plus booklet text naming the format again. A bare "Format:"
+        # label states a fact; the neighbouring "Type: date" token pulls toward
+        # the ISO-8601 convention models associate with a date type. Telling it
+        # what to DO with the value competes on the same footing instead of
+        # leaving an unowned fact next to a strong convention.
+        parts.append(
+            f"Store the value EXACTLY in this format: {guidance['format_hint']}"
+        )
 
     options = guidance.get("options")
     if options:

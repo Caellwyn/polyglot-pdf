@@ -1153,3 +1153,74 @@ def test_touched_constants_are_ascii_only():
         assert not re.search(r"[^\x00-\x7F]", value), (
             f"{name} contains non-ASCII characters (scar #6)"
         )
+
+
+# --------------------------------------------------------------------------- #
+# Format delivery + validation-error relay (bd polyglot-pdf-mq2je)
+#
+# Both pin a COMPETING-SIGNAL fix. Observed live 2026-08-25 on the W-7:
+#  1. The model sent "1980-10-26" on a COLD FIRST ATTEMPT -- no prior error to
+#     adapt to -- on a field whose guidance carried "Format: MM/DD/YYYY", an
+#     Instructions line saying "month, day, and year", AND booklet text naming
+#     the format a third time. A bare "Format:" LABEL states a fact and leaves
+#     it unowned; the neighbouring "Type: date" token pulls toward ISO-8601,
+#     which is the convention models associate with a date type.
+#  2. The backend returned a well-formed reason ("...: '1980-10-26' |
+#     format=MM/DD/YYYY", 604 chars on the wire) and the model relayed it to
+#     the user as "I'm sorry, there was an error."
+# --------------------------------------------------------------------------- #
+
+def test_format_hint_is_delivered_as_an_instruction_not_a_bare_label():
+    """A label competes badly with a convention; an imperative competes on the
+    same footing. Asserts the FRAMING, since the hint value's delivery is
+    already pinned elsewhere."""
+    text = render_field_guidance({
+        "id": "dob",
+        "name": "Date of birth",
+        "type": "date",
+        "help": {"format_hint": "MM/DD/YYYY"},
+    })
+    assert "MM/DD/YYYY" in text, "the declared format must reach the model"
+    assert "EXACTLY in this format" in text, (
+        "the format must be framed as an instruction to follow, not a bare "
+        "'Format:' label -- a label lost to the 'Type: date' ISO convention on "
+        "a cold first attempt")
+
+
+def test_si_requires_relaying_what_the_validation_error_said():
+    """The reason is ON THE WIRE and useless if swallowed. 'There was an error'
+    is not actionable."""
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    lowered = si.lower()
+    assert "a validation error tells you what was wrong -- say that" in lowered
+    assert "never a bare apology" in lowered, (
+        "the failure mode is a generic apology, so name it")
+    assert "'there was an error' is useless to the user" in lowered
+
+
+def test_si_says_to_fix_a_FORMAT_error_itself_rather_than_re_asking():
+    """The user already gave the answer; only its shape was wrong. Re-asking
+    for the same answer in a different format is the pedantic re-ask the DATES
+    block already forbids -- this restates it at the ERROR path, which is
+    where the model actually lands after a rejection."""
+    lowered = _settings().DTI_SYSTEM_INSTRUCTION.lower()
+    assert "fix it yourself and retry" in lowered  # SI says "fix it YOURSELF"
+    assert "rather than asking the user to re-say the same answer differently" in lowered
+    assert "the shape is your job" in lowered
+    # And the carve-out: a genuinely different ANSWER may still be requested.
+    assert "ask them again only when you genuinely need a different answer" in lowered
+
+
+def test_error_relay_rule_does_not_contradict_the_never_echo_system_text_rule():
+    """The SI says 'Never echo, quote or answer system text in English' -- and a
+    validation error IS system text. That is the COMPETING SIGNAL that made
+    swallowing the reason defensible. The relay rule must therefore say to put
+    it in the model's OWN words in the session language, not quote it."""
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    lowered = si.lower()
+    assert "never echo, quote or answer system text" in lowered, (
+        "the rule this must coexist with is gone -- re-check the interaction")
+    assert "in your own words in the session language" in lowered, (
+        "without this the relay rule reads as permission to speak English "
+        "system text aloud, contradicting the LANGUAGE block")
+    assert "never spoken word for word" in lowered
