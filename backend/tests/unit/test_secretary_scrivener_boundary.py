@@ -501,15 +501,42 @@ def test_si_keeps_the_applicative_boundary_inside_the_carve_out():
     now explain rules'.
     """
     lowered = _si_text().lower()
-    assert "what the word means versus what applies to them" in lowered, (
+    assert "what an ordinary word means versus what a rule says" in lowered, (
         "the carve-out must state its own boundary, not just its permission")
+    # THE LEAK THIS CLOSES (fresh-eyes round 1). A question about a NAMED RULE
+    # is rule-interpretation wearing definitional clothing: on the W-7,
+    # "exception 3" is not a word, it is an eligibility condition, so "what
+    # does exception 3 mean" IS the hedged question even though it is phrased
+    # as a definition. An earlier draft used "what does exemption mean" as a
+    # SANCTIONED example, which pointed the carve-out straight at that leak.
+    assert "a named rule on the form is never plain meaning" in lowered, (
+        "without this, a rule label read as a 'word' escapes the hedge path")
+    assert "what does exception 3 mean" in lowered, (
+        "name the hard case explicitly -- it is the one a model gets wrong")
+    assert "what a rule requires" in lowered
     # Eligibility phrased as a question is the exact thing that must NOT be
     # swept in by the carve-out.
     assert "are you eligible for an itin" in lowered
     assert "should you check box a" in lowered
     # And the tie-break must fall on the SAFE side.
-    assert "treat it as the second and hedge" in lowered, (
+    assert "treat it as a rule question and hedge" in lowered, (
         "an ambiguous question must default to hedging, never to answering")
+
+    # STRUCTURAL, not just presence (fresh-eyes round 1): every boundary clause
+    # must live INSIDE the carve-out sentence it scopes. Asserting mere presence
+    # would survive a mutation that relocates the tie-break elsewhere in the SI,
+    # where it no longer says WHICH class of question it disambiguates.
+    carve_start = _si_text().index("PLAIN MEANING")
+    carve_end = _si_text().index("ALWAYS HEDGE AND DEFER")
+    carve_out = _si_text()[carve_start:carve_end].lower()
+    for clause in (
+        "a named rule on the form is never plain meaning",
+        "treat it as a rule question and hedge",
+        "what an ordinary word means versus what a rule says",
+    ):
+        assert clause in carve_out, (
+            f"boundary clause {clause!r} must sit INSIDE the carve-out that it "
+            "scopes, not merely somewhere in the SI")
 
 
 def test_plain_meaning_carve_out_does_not_displace_the_hedge_rule():
