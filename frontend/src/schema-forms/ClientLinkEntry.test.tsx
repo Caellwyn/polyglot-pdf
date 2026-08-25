@@ -78,7 +78,15 @@ describe("ClientLinkEntry", () => {
     expect(await screen.findByTestId("form-app")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/api/links/open");
+    // PARSE IT, do not substring-match. `toContain("/api/links/open")`
+    // passed while the URL was
+    // "wss://host/ws/fill/api/links/open" -- built from the WEBSOCKET
+    // resolver -- which throws in fetch, so every valid link showed "not
+    // valid" (Opus cross-surface r4). The property that matters is that a
+    // browser can actually fetch it.
+    const parsed = new URL(String(url));
+    expect(parsed.protocol).toMatch(/^https?:$/);
+    expect(parsed.pathname).toBe("/api/links/open");
     expect(JSON.parse(init.body).token).toBe("good.token");
   });
 

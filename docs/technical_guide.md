@@ -583,7 +583,7 @@ system that is NOT a Firebase account. Five coupled pieces:
   either.
 - **EVERY door redeems, through ONE helper.**
   `link_redemptions.enforce_link_redemption` is called by `/api/links/open`,
-  `/ws/fill`, AND `require_auth` (hence all nine HTTP routes). It runs the
+  `/ws/fill`, AND `require_auth` (hence every `require_auth` route). It runs the
   redemption check AND the COMPLETION-window check, neither of which
   `verify_link_token` can do -- the token carries only the OPEN deadline, and
   one-time use lives in Firestore. Extracted, not copied: the socket redeemed

@@ -123,7 +123,7 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
         # a COMPLETED link -- or one whose completion window elapsed -- kept
         # serving schema, PDF bytes, /api/fill-pdf and the two PAID TTS
         # routes for the rest of its ~48h exp. The socket redeemed; these
-        # nine routes did not, which is the same "enforced only on a door an
+        # require_auth routes did not, which is the same "enforced only on a door an
         # attacker need not use" hole the socket fix closed.
         from backend.services.link_redemptions import (
             LinkAlreadyUsed,

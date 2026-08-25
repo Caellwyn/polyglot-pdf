@@ -21,7 +21,14 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { saveOnboardingState } from "./onboardingStorage";
-import { getBackendUrl } from "../shared/config";
+// getBackendHttpUrl, NOT getBackendUrl: the latter is the WEBSOCKET
+// resolver and returns e.g. ws://localhost:8000/ws/fill -- already a ws
+// scheme with a path appended. Using it here built
+// "wss://.../ws/fill/api/links/open", which throws in fetch and lands in the
+// catch below, so EVERY valid link showed "This link is not valid" (Opus
+// cross-surface r4). SchemaFormDemo already uses this helper for its own
+// HTTP calls.
+import { getBackendHttpUrl } from "./utils/pdfFiller";
 import {
   hasClientLinkToken,
   setClientLinkToken,
@@ -88,7 +95,7 @@ export function ClientLinkEntry() {
     let cancelled = false;
     (async () => {
       try {
-        const resp = await fetch(`${getBackendUrl()}/api/links/open`, {
+        const resp = await fetch(`${getBackendHttpUrl()}/api/links/open`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),

@@ -198,14 +198,20 @@ fallback is for a closed tab or a new device, not for an accidental
 refresh. One-time use lives in the `link_redemptions` store,
 because a signed bearer string is inherently replayable -- and it is enforced at EVERY
 door a client credential opens -- `/api/links/open`, the WebSocket, AND
-`require_auth` (so all nine HTTP routes). One shared
+`require_auth` (so every `require_auth` route). One shared
 `enforce_link_redemption` serves them, deliberately EXTRACTED rather than
 copied: two hand-written versions of a security check drift, and the drift is
 silent. That is not hypothetical here -- the socket redeemed while
 `require_auth` did not, so a COMPLETED link kept serving schema, PDF bytes,
 `/api/fill-pdf` and both PAID TTS routes for the rest of its ~48h `exp`,
 which is the same "enforced only on a door an attacker need not call" hole in
-a different place (bd polyglot-pdf-ugm6, Opus cross-surface r1). Reopening an UNFINISHED
+a different place (bd polyglot-pdf-ugm6, Opus cross-surface r1).
+
+Deliberately no ROUTE COUNT here: a hard number goes stale the next time a
+`require_auth` route lands, and one already did (a count of "nine" included
+`POST /api/links/mint`, which a client credential can never use -- it needs a
+`uid`, and a client has none). `test_http_route_auth.py` derives the gated set
+from the shipped sources; trust that, not a number in prose. Reopening an UNFINISHED
 link is allowed (a refresh or dropped connection must not strand a client);
 only COMPLETION burns it, and only a REAL completion -- an abandoned session
 leaves the link usable, because abandonment is the common case on a long form

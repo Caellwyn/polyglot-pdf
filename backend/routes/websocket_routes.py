@@ -1128,8 +1128,6 @@ async def _handle_fill_session(
 		await service.end_session()
 
 
-import time as _time
-
 from ..services.auth import verify_token
 from ..services.link_tokens import LinkTokenError, verify_link_token
 from ..services.link_redemptions import (

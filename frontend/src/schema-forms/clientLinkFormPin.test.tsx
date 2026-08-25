@@ -31,10 +31,18 @@ function pickLanguage(name = "English") {
   return match;
 }
 
+function form(id: string, label: string) {
+  return {
+    id, label,
+    schemaFile: "schema.json", schemaPath: "/form-kits/" + id + "/schema.json",
+    pdfFile: "form.pdf", pdfPath: "/form-kits/" + id + "/form.pdf",
+  };
+}
+
 const FORMS = [
-  { id: "firm-a-intake", label: "Firm A Intake" },
-  { id: "i-90", label: "I-90" },
-  { id: "n-400", label: "N-400" },
+  form("firm-a-intake", "Firm A Intake"),
+  form("i-90", "I-90"),
+  form("n-400", "N-400"),
 ];
 
 describe("client link form pinning", () => {

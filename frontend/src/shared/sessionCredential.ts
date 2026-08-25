@@ -7,10 +7,16 @@
  *   - A FIRM'S CLIENT: no account at all, ever. They hold a signed magic-link
  *     token, redeemed by ClientLinkEntry and stashed here.
  *
- * WHY A MODULE AND NOT A PROP: `user ? await user.getIdToken() : undefined`
- * appears at SIX call sites across SchemaFormDemo and SchemaForm (the WS
- * connect, reconnects, the manifest fetch, the PDF fetch, and both TTS
- * paths). Threading a prop through all six would leave the client tier
+ * WHY A MODULE AND NOT A PROP: the inline
+ * `user ? await user.getIdToken() : undefined` appeared at NINE call sites
+ * across FIVE files -- SchemaFormDemo, SchemaForm, ArchivedVersionsLink,
+ * usePDFDocument, and FilledPreviewModal. (A review named six across two;
+ * grepping the SET found nine, and the three it missed -- the PDF fetch, the
+ * filled-preview fetch, the archive read -- are ones a client link needs.
+ * That is why this file counts by grep, not from memory, and why
+ * sessionCredential.test.ts derives the set from the shipped sources so a
+ * TENTH fails CI.) Threading a prop through all of them would leave the
+ * client tier
  * working on whichever sites got updated and silently unauthenticated on the
  * rest -- and the next new call site would default to broken. Resolving it in
  * one function means a client session works everywhere or nowhere, which is a

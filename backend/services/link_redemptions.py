@@ -142,7 +142,7 @@ def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
     already COMPLETED, or whose completion window has elapsed, for the whole
     ~48h `exp`.
 
-    That was the state of the HTTP surface: the socket redeemed, the nine
+    That was the state of the HTTP surface: the socket redeemed, the
     require_auth routes did not, so a burned link kept serving schema, PDF
     bytes, fill-pdf, and the two PAID TTS routes until exp. The docs claimed
     one-time use was "enforced at BOTH doors" while the door this bead had
@@ -170,7 +170,8 @@ def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
     # value computes a deadline in 1970 and locks out a client who just
     # opened their link, while a far-future one extends the window forever.
     opened_at = record.get("opened_at") if isinstance(record, dict) else None
-    if not isinstance(opened_at, int) or isinstance(opened_at, bool)             or opened_at <= 0 or opened_at > stamp + 300:
+    if (not isinstance(opened_at, int) or isinstance(opened_at, bool)
+            or opened_at <= 0 or opened_at > stamp + 300):
         _log.warning("link_opened_at_implausible", jti=claims.get("jti"),
                      opened_at=repr(opened_at))
         opened_at = stamp
