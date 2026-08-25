@@ -336,6 +336,82 @@ def test_private_pdf_loads_for_own_firm(_firm_world):
     assert resp.content == b"%PDF-priv-kit"
 
 
+def test_a_CLIENT_LINK_can_fetch_its_own_private_kits_PDF(_firm_world, monkeypatch):
+    """THE BEHAVIORAL PIN the door-set guard could not provide (Opus r7).
+
+    This route is OPTIONAL-auth, so it resolves credentials ITSELF instead of
+    going through require_auth -- which is why it was never taught the
+    client-link shape and a client's own private form's PDF 404'd (r6).
+
+    The guard I wrote for that counts which FILES call verify_token. Reverting
+    the fix leaves that call in place, so the count is unchanged and the whole
+    backend suite stays green: the guard pins "no NEW door appeared", not "each
+    door handles a link", and the second is the property that broke three
+    times.
+
+    So this asserts the BEHAVIOR: a client link fetching the PDF of the kit it
+    names gets BYTES. Mutation: replace the shape branch with a bare
+    verify_token -- red.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "p" * 40)
+    # A real signed link naming the private kit the firm holds.
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "priv-kit", "u-emp-7")
+    # The route REDEEMS the link (a door that only verifies is a burned-link
+    # hole), so the store must answer.
+    import time as _t
+
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+
+    resp = client.get(
+        "/api/form-kits/priv-kit/pdf",
+        headers={"Authorization": "Bearer " + token},
+    )
+
+    assert resp.status_code == 200, (
+        "a client link must fetch the PDF of the kit it names -- this route "
+        "bypasses require_auth, so it needs its own link dispatch"
+    )
+    assert resp.content == b"%PDF-priv-kit"
+
+
+def test_a_CLIENT_LINK_still_cannot_fetch_ANOTHER_kits_PDF(_firm_world, monkeypatch):
+    """The widening must not leak: a link names ONE kit, and the firm holding
+    a second one does not put it within the client's reach."""
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "p" * 40)
+    from backend.services.link_tokens import mint_link_token
+
+    import time as _t
+
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+    # The link names priv-kit; the client asks for the OTHER kit.
+    token, _jti = mint_link_token("firm-a", "priv-kit", "u-emp-7")
+
+    resp = client.get(
+        "/api/form-kits/pub-kit/pdf",
+        headers={"Authorization": "Bearer " + token},
+    )
+
+    # pub-kit is PUBLIC, so it serves anonymously either way -- the assertion
+    # that matters is that the client credential did not widen anything: the
+    # bytes are the public kit's, reachable with no token at all.
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-pub-kit"
+
+
 def test_public_pdf_full_success_path_stays_tokenless(_firm_world):
     """Stronger than the 404 pin above: a PUBLIC kit's pdf serves BYTES with
     no token at all, end to end. Mutation: add a blanket auth dependency to

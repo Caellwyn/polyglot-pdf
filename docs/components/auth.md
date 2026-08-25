@@ -209,11 +209,13 @@ silent. That is not hypothetical here -- the socket redeemed while
 which is the same "enforced only on a door an attacker need not call" hole in
 a different place (bd polyglot-pdf-ugm6, Opus cross-surface r1).
 
-Deliberately no ROUTE COUNT here: a hard number goes stale the next time a
-`require_auth` route lands, and one already did (a count of "nine" included
-`POST /api/links/mint`, which a client credential can never use -- it needs a
-`uid`, and a client has none). `test_http_route_auth.py` derives the gated set
-from the shipped sources; trust that, not a number in prose. Reopening an UNFINISHED
+**Two different sets, easily conflated.** The count above is the
+`require_auth`-GATED set, and `POST /api/links/mint` belongs in it -- it is
+`Depends(require_auth)` like the rest. That is NOT the same as the set of
+doors a CLIENT credential can open: mint refuses a client, because minting
+needs a `uid` and a client has none. When a number here goes stale, fix it
+from `test_http_route_auth.py`, which derives the gated set from the shipped
+sources -- that test is the authority, not this prose. Reopening an UNFINISHED
 link is allowed (a refresh or dropped connection must not strand a client);
 only COMPLETION burns it, and only a REAL completion -- an abandoned session
 leaves the link usable, because abandonment is the common case on a long form

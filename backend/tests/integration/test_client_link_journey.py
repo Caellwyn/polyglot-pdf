@@ -151,7 +151,12 @@ def test_the_journey_survives_a_RELOAD_and_then_burns_on_completion(journey):
     """
     token, jti = mint_link_token(_FIRM, _KIT, _EMPLOYEE)
 
-    for _ in range(4):        # the manifest, the schema, the PDF, a reload
+    # The manifest, the schema, and a reload -- all three go through
+    # require_auth. NOT the PDF: that route is optional-auth and resolves
+    # credentials itself, which is exactly why it broke separately (r6).
+    # Its behavior is pinned in test_http_route_auth.py, by a test that
+    # drives the real route.
+    for _ in range(3):
         assert asyncio.run(_auth(token))["jti"] == jti
 
     journey.complete_link(jti)

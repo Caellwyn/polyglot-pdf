@@ -224,6 +224,25 @@ def test_a_client_opens_a_valid_link_with_NO_ACCOUNT(client):
     assert body["complete_by"] > 0
 
 
+def test_the_FIRST_OPEN_record_names_the_kit(client):
+    """The record the firm joins on must name the form.
+
+    /open normalizes the token's `kit_id` into the `link_kit_id` the shared
+    gate reads. Removing that normalization passed all 110 link tests while
+    writing `kit_id=None` into the first-open record -- silently corrupting
+    the audit record the split-key design exists to produce (Opus r7).
+
+    Mutation: drop the `link_kit_id` normalization in open_client_link -- red.
+    """
+    c, store = client
+
+    token = _mint(c).json()["url"].split("#t=", 1)[1]
+    jti = _open(c, token).json()["jti"]
+
+    assert store.records[jti]["kit_id"] == "firm-a-intake"
+    assert store.records[jti]["firm_id"] == "firm-a"
+
+
 def test_the_open_response_carries_NO_client_identifier_and_NO_kit_list(client):
     """Exit criterion 2, at the response boundary: the client sees exactly
     their one form. Leaking the firm's kit list here would hand every client
