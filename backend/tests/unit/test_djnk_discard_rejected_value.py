@@ -8,7 +8,6 @@ the NEXT field, overriding the user's actual answer ('12'). The response
 message for a validation error must explicitly instruct the model to discard
 the rejected value and re-ask the user.
 """
-import pytest
 from unittest.mock import MagicMock
 
 from backend.services.callback_handler import CallbackHandler
