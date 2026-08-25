@@ -48,15 +48,28 @@ export function TextField({
   // types. Over-long values are handled at RENDER by clearing the comb flag
   // (pdf_fill_routes.py), which prints un-combed but CORRECT.
   //
-  // So only enforce the cap when the field's own declared format can actually
-  // fit inside it. A nested validation.max_length is a real author-set text
-  // limit and is honored as-is.
+  // The suppression is gated on the hint being an actual LAYOUT LITERAL -- a
+  // string that IS the value's shape, so its length is the value's length.
+  //
+  // Gating on raw hint length instead is wrong and was caught in review: most
+  // shipped hints are PROSE, not literals ("5 digits", "Alphanumeric postal
+  // code", "9 digits (XXX-XX-XXXX)"), and prose is nearly always longer than
+  // the cap it describes. Across the shipped kits that mistake fired on 26
+  // fields when only 2 are dates -- it would have uncapped SSN, ZIP, phone and
+  // ITIN inputs, none of which carry a validation.max_length fallback, on a
+  // download path that runs no validation at all.
+  //
+  // A layout literal is made only of format placeholder characters and
+  // separators (MM/DD/YYYY, YYYY-MM-DD, MM/YYYY). Anything containing a letter
+  // that is not a placeholder token, or any digit, is prose.
   const combCap = field.max_length;
   const declaredFormat = field.help?.format_hint;
+  const isLayoutLiteral =
+    declaredFormat !== undefined && /^[MDYmdy]+([/\-.][MDYmdy]+)+$/.test(declaredFormat.trim());
   const capWouldTruncateDeclaredFormat =
     combCap !== undefined &&
-    declaredFormat !== undefined &&
-    declaredFormat.length > combCap;
+    isLayoutLiteral &&
+    declaredFormat!.trim().length > combCap;
   // `??` not `||`: a cap of 0 is falsy but MEANINGFUL (a zero-width widget),
   // and `||` would silently swap it for an unrelated validation.max_length or
   // drop it entirely.

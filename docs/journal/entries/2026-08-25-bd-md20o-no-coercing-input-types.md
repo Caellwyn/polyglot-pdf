@@ -83,6 +83,42 @@ described what the code did, not what it should do -- exactly the "a test can
 PIN a bug as correct" shape. Updated to pin the text-type contract with their
 value assertions intact, rather than deleted.
 
+## Scar tissue: a heuristic that fired on 26 fields to fix 2
+
+The cross-surface review caught the maxLength guard's first cut being badly
+wrong. It suppressed the cap when `help.format_hint.length > max_length` -- which
+is only meaningful if the hint IS the value's shape. Across the shipped kits it
+usually is not:
+
+| hint | len | cap |
+|---|---|---|
+| `"5 digits"` | 8 | 5 |
+| `"Alphanumeric postal code"` | 24 | 9 |
+| `"9 digits (XXX-XX-XXXX)"` | 22 | 9 |
+| `"10 digits (XXX-XXX-XXXX)"` | 24 | 13 |
+
+Prose is almost always longer than the cap it describes. So the guard fired on
+**26 fields when only 2 are dates**, uncapping SSN, ZIP, phone and ITIN inputs --
+none of which carry a `validation.max_length` fallback, on a download path
+(`SchemaForm.handleDownloadPDF`) that runs no validation at all. The fix for a
+truncation bug would have shipped an over-length bug on more fields than it
+repaired.
+
+Now gated on the hint being a LAYOUT LITERAL -- only placeholder characters and
+separators (`MM/DD/YYYY`, `YYYY-MM-DD`) -- so prose is never mistaken for a
+shape. Verified against the real kits: exactly the 2 date fields are suppressed,
+all 24 prose-hint fields keep their caps. Note `'MM/DD/YYYY or "Never Entered
+US"'` correctly classifies as PROSE: its `max_length: 16` is a genuine cap.
+
+**Why my own mutation testing missed it:** the fixtures used `"MM/DD/YYYY"` and
+`"ABCDE"` -- both layout-literal-shaped, so both branches behaved identically
+under the broken and correct versions. The bug lived entirely in the space of
+inputs the fixtures never sampled. The replacement cases are derived from the
+SHIPPED KITS rather than invented, and reverting to the raw-length heuristic now
+reddens 8 of them. General lesson, and the second time this exact shape bit in
+one PR: **a fixture drawn from imagination samples the cases you already thought
+of; a fixture drawn from production data samples the ones you did not.**
+
 ## Verification
 
 - New `no-coercing-input-types.test.tsx` enumerates the schema-type ->
@@ -94,7 +130,7 @@ value assertions intact, rather than deleted.
   and asserted the DOM input actually holds `10/26/1980` -- with `max_length: 8`
   present on the field and correctly not truncating. A synthetic fixture would
   not have proven the comb-count interaction.
-- Frontend suite: 1575 passed. `tsc --noEmit` clean.
+- Frontend suite: 1590 passed. `tsc --noEmit` clean.
 
 ## Still open
 

@@ -169,3 +169,56 @@ describe("max_length edge cases", () => {
     expect(container.querySelector("input")!.getAttribute("maxLength")).toBe("10");
   });
 });
+
+describe("cap suppression fires ONLY on layout-literal hints (real kits)", () => {
+  // Derived from the SHIPPED kits, not hand-written fixtures. The first cut of
+  // this guard gated on raw hint LENGTH, which fired on 26 real fields when
+  // only 2 are dates -- it would have uncapped SSN, ZIP, phone and ITIN inputs,
+  // none of which carry a validation.max_length fallback, on a download path
+  // that runs no validation. A synthetic fixture using "MM/DD/YYYY" and
+  // "ABCDE" passed that broken version, which is why these cases come from the
+  // kits themselves.
+  const PROSE_HINTS_WITH_CAPS: Array<[string, number]> = [
+    ["5 digits", 5],
+    ["Alphanumeric postal code", 9],
+    ["9 digits (XXX-XX-XXXX)", 9],
+    ["7-9 digits", 9],
+    ["10 digits (XXX-XXX-XXXX)", 13],
+    ["5 or 9 digits", 5],
+    ["2 digits", 2],
+    ['MM/DD/YYYY or "Never Entered US"', 16],
+  ];
+
+  it.each(PROSE_HINTS_WITH_CAPS)(
+    "prose hint %j keeps its max_length cap",
+    (hint, cap) => {
+      const { container } = renderField(
+        fieldOf("text", {
+          max_length: cap,
+          help: { format_hint: hint },
+        } as Partial<FormField>)
+      );
+      expect(
+        container.querySelector("input")!.getAttribute("maxLength"),
+        `prose hint ${JSON.stringify(hint)} must NOT be read as a layout literal -- ` +
+          `dropping this cap uncaps a real PDF field`
+      ).toBe(String(cap));
+    }
+  );
+
+  const LAYOUT_LITERALS: string[] = ["MM/DD/YYYY", "YYYY-MM-DD", "MM/YYYY", "DD.MM.YYYY"];
+
+  it.each(LAYOUT_LITERALS)(
+    "layout literal %s longer than the cap suppresses it",
+    (hint) => {
+      const { container } = renderField(
+        fieldOf("text", {
+          max_length: 4, // shorter than every literal above
+          help: { format_hint: hint },
+        } as Partial<FormField>)
+      );
+      const ml = container.querySelector("input")!.getAttribute("maxLength");
+      expect(ml, `layout literal ${hint} must not be truncated by a shorter cap`).toBeNull();
+    }
+  );
+});
