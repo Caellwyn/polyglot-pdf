@@ -115,6 +115,27 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
                 section_id=field_data.get("section_id", ""),  # Required field
                 validation=field_data.get("validation"),
                 options=options,
+                # Date/format LAYOUT sources (bd polyglot-pdf-mpfmr). This
+                # constructor passes an explicit ALLOWLIST of keys, so anything
+                # absent here is silently dropped from the session's FormField
+                # -- and `help` was absent. help.format_hint is the CANONICAL
+                # layout carrier (the schema editor's "Format Hint" box writes
+                # it, and the shipped i-90 / w7 kits populate it for dates), so
+                # every date field reached field_validator with no declared
+                # layout and fell back to the ISO default: a correct
+                # "10/12/2005" came back "Invalid date (expected YYYY-MM-DD)",
+                # and the voice model then adapted to that error text and
+                # started demanding year-first dates from users.
+                #
+                # validation_handler._convert_fields_to_dicts already forwards
+                # both of these downstream, and field_validator's layout
+                # resolution already reads format -> help.format_hint ->
+                # validation.hint. Those layers were correct; they were just
+                # operating on a FormField that no longer carried the hint.
+                # The flat `format` key rides along because it is the FIRST
+                # source in that same priority chain.
+                help=field_data.get("help"),
+                format=field_data.get("format"),
             )
             fields.append(field)
         except Exception as e:
