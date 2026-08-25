@@ -28,11 +28,24 @@ export function DateField({
   confirmed = false,
   required,
 }: DateFieldProps) {
-  // Determine input type based on date precision
-  const getInputType = (): string => {
-    if (field.date_precision === "month_year") return "month";
-    return "date"; // Default to full date
-  };
+  // ALWAYS a plain text input -- never <input type="date"> (bd polyglot-pdf-md20o).
+  //
+  // These are PDF AcroForm fields, not web-form fields: the KIT SCHEMA's
+  // help.format_hint is the authority on a value's shape, and the PDF layer
+  // writes the stored string VERBATIM (pdf_fill_routes.py never rewrites a
+  // value). A native date input's `.value` is ALWAYS yyyy-mm-dd per the HTML
+  // spec, so it physically cannot hold a W-7 date's declared MM/DD/YYYY -- it
+  // silently coerced every date to ISO, which then reached storage and the PDF.
+  //
+  // That is not cosmetic. An ISO string in a comb-8 date box renders as a
+  // plausible-looking WRONG date (the '1990-03-14' -> month=19 class documented
+  // at pdf_fill_routes.py:200-236), i.e. a wrong date of birth on a filed form.
+  // It also fed the voice model: it reads the stored value back, sees ISO, and
+  // learns the wrong format.
+  //
+  // Same reasoning as FieldRenderer's `case "number"`, which already renders
+  // number fields as text for the identical coercion reason.
+  const placeholder = field.help?.format_hint || field.placeholder;
 
   // Bug Fix: Unwrap FieldValue objects to get primitive value
   const displayValue = unwrapToString(value);
@@ -54,14 +67,25 @@ export function DateField({
       )}
 
       <input
-        type={getInputType()}
+        type="text"
+        // NOT inputMode="numeric": a correct value carries "/" separators, and
+        // a numeric keypad buries or omits them on mobile.
         id={field.id}
         name={field.id}
         value={displayValue}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
-        min={field.min_date}
-        max={field.max_date}
+        placeholder={placeholder}
+        // NO maxLength. field.max_length on a date is the PDF widget's COMB
+        // CELL COUNT (W-7 dates are comb-8), not a text limit -- and
+        // "MM/DD/YYYY" is 10 chars, so wiring it here would TRUNCATE a correct
+        // date to "10/26/19", a wrong year on a filed form. Over-long values
+        // are handled at render by clearing the comb flag (pdf_fill_routes.py),
+        // which prints the date un-combed but CORRECT.
+        //
+        // NO min/max either: those are native date-input attributes and are
+        // inert on a text input. min_date/max_date bounds are enforced by
+        // validateDateValue, which reads them from the field directly.
         disabled={disabled}
         className={`form-field__input form-field__input--date ${
           error ? "form-field__input--error" : ""
