@@ -313,7 +313,10 @@ The rule lives in each agent file as its first section; the short form:
 - ONE exception: **filing a bead**. `bd create`/`bd note`/`bd dolt push`
   write to the tracked `.beads/`, and that is the reviewer's sanctioned
   output channel -- the rule protects the author's IN-FLIGHT WORK, which
-  `.beads/` is not. Use the `bd` commands, never a hand edit of those files.
+  `.beads/` is not. (`bd dolt pull`, which the filing sequence runs first,
+  needs no exception -- it writes only to the gitignored `.beads/dolt/` and
+  `.beads/embeddeddolt/`, never a tracked path.) Use the `bd` commands,
+  never a hand edit of those files.
 - If a test run leaves an artifact behind, NAME IT in the report; do not tidy
   it away. Cleanup is indistinguishable from deleting the author's work.
 
