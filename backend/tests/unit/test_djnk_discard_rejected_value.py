@@ -158,18 +158,17 @@ ALL_EMITTED_CONSTRAINTS = {
     "minLength", "maxLength", "pattern", "options", "single_field_only",
 }
 
-# The user's answer is usable; only its written SHAPE is wrong.
-#
-# ONLY "format", and the exclusion of "pattern" is load-bearing (bd
-# polyglot-pdf-9jp7z -- it was added here, reviewed, and REVERTED). "format"
-# comes solely from _validate_date, where a rejection means the value parsed as
-# a real date in the wrong LAYOUT: a correct value provably exists and reshaping
-# reaches it. "pattern" cannot tell a punctuation failure from a CONTENT one --
-# "12345" on a 7-9 digit A-Number, "A"/"A---" normalizing to empty, and a
-# malformed email ALL emit constraint="pattern", message="Invalid format"
-# (verified against the shipped i-90 kit). Telling the model not to ask the user
-# on those orders it to retry something unfixable, and the validation-error path
-# RESETS the unknown-rejection loop breaker, so the re-ask is the only bound.
+# A rejection is reshapeable only when a correct value DEMONSTRABLY exists --
+# the right answer wearing the wrong shape. The constraint NAME cannot establish
+# that, which two review rounds were spent learning (bd polyglot-pdf-9jp7z):
+#   - "pattern" conflates punctuation with CONTENT ("12345" on a 7-9 digit
+#     A-Number; "A"/"A---" normalizing to empty; a malformed email).
+#   - "format" is no better ALONE: _validate_date is a bare strptime in a try,
+#     so "banana" and "I do not remember" emit exactly the same constraint as a
+#     real date written ISO-first.
+# So the shipped code re-derives reshapeability from the VALUE
+# (_is_reshapeable_date), and this set names only the constraint that can EVER
+# qualify. Membership here is necessary, not sufficient.
 RESHAPEABLE = {"format"}
 
 # A different ANSWER is genuinely required -- reshaping cannot fix these.
@@ -213,13 +212,26 @@ def test_emitted_constraint_list_matches_the_validator():
         and isinstance(node.func, ast.Name)
         and node.func.id == "ValidationError"
     ]
-    emitted = {
-        node.args[3].value
-        for node in call_sites
-        if len(node.args) >= 4
-        and isinstance(node.args[3], ast.Constant)
-        and isinstance(node.args[3].value, str)
-    }
+    def _constraint_of(node):
+        if (len(node.args) >= 4 and isinstance(node.args[3], ast.Constant)
+                and isinstance(node.args[3].value, str)):
+            return node.args[3].value
+        for kw in node.keywords:
+            if (kw.arg == "constraint" and isinstance(kw.value, ast.Constant)
+                    and isinstance(kw.value.value, str)):
+                return kw.value.value
+        return None
+
+    per_site = [(n.lineno, _constraint_of(n)) for n in call_sites]
+    unreadable = [ln for ln, c in per_site if c is None]
+    assert not unreadable, (
+        f"ValidationError call(s) at line(s) {unreadable} do not expose their "
+        "constraint as a literal (kwargs, a variable, or an f-string). This "
+        "check cannot classify them, so it would UNDER-REPORT silently -- "
+        "which is the failure it exists to prevent. Either write the "
+        "constraint as a literal or teach this extractor the new shape."
+    )
+    emitted = {c for _ln, c in per_site if c is not None}
     assert call_sites, (
         "found NO ValidationError calls in field_validator -- this check is "
         "vacuous; the emitter moved or was renamed"
@@ -237,12 +249,53 @@ def test_emitted_constraint_list_matches_the_validator():
 
 @pytest.mark.parametrize("constraint", sorted(RESHAPEABLE))
 def test_reshapeable_constraints_tell_the_model_to_reshape(constraint):
+    # A REAL date in the wrong layout -- membership in RESHAPEABLE is necessary
+    # but not sufficient; the value must also be reshapeable.
     resp = _formatter(validation_errors=[{
-        "field_id": "f", "field_name": "F", "value": "x",
+        "field_id": "f", "field_name": "F", "value": "1980-10-26",
         "constraint": constraint, "message": "Invalid format",
     }])
     assert "Re-send the SAME answer corrected to the required format" in resp["message"]
     assert "Ask the user again for the current field" not in resp["message"]
+
+
+@pytest.mark.parametrize("unfixable", [
+    "banana",
+    "I do not remember",
+    "never",
+    "13/45/2020",   # impossible date -- no layout accepts it
+    "10/26",        # incomplete: the YEAR is genuinely missing
+    "",
+])
+def test_a_format_error_the_model_CANNOT_reshape_still_asks_the_user(unfixable):
+    """The gap round 4 caught. _validate_date is a bare strptime in a try, so
+    "I do not remember" emits constraint="format" identically to a real date in
+    ISO order. Ordering the model not to ask the user about a value it cannot
+    fix is an unbounded retry: the validation-error path RESETS the
+    unknown-rejection loop breaker, so the re-ask is the only bound.
+    """
+    resp = _formatter(validation_errors=[{
+        "field_id": "dob", "field_name": "Date of birth", "value": unfixable,
+        "constraint": "format", "constraint_value": "MM/DD/YYYY",
+        "message": "Invalid date (expected MM/DD/YYYY)",
+    }])
+    msg = resp["message"]
+    assert "Ask the user again for the current field" in msg, (
+        f"{unfixable!r} cannot be reshaped into a date -- the model must be "
+        "allowed to ask the user, or it retries forever")
+    assert "do NOT ask the user" not in msg
+
+
+@pytest.mark.parametrize("wrong_layout", ["1980-10-26", "26/10/1980", "10-26-1980"])
+def test_a_real_date_in_the_wrong_layout_is_reshapeable(wrong_layout):
+    """The other side: these ARE the right answer wearing the wrong shape, so
+    re-asking would be the pedantic loop this bead exists to remove."""
+    resp = _formatter(validation_errors=[{
+        "field_id": "dob", "field_name": "Date of birth", "value": wrong_layout,
+        "constraint": "format", "constraint_value": "MM/DD/YYYY",
+        "message": "Invalid date (expected MM/DD/YYYY)",
+    }])
+    assert "Re-send the SAME answer corrected to the required format" in resp["message"]
 
 
 @pytest.mark.parametrize("constraint", sorted(NEEDS_A_NEW_ANSWER))

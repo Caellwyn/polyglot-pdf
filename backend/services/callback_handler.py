@@ -17,6 +17,39 @@ from .request_coordinator import (
 from backend.services.ai_context import render_field_guidance
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
+from backend.utils.field_validator import _DATE_LAYOUTS
+
+
+def _is_reshapeable_date(value: Any) -> bool:
+    """True when a rejected date value is the RIGHT answer in the WRONG layout.
+
+    "Do not ask the user again" is only safe when a correct value demonstrably
+    exists. A constraint of "format" alone does not establish that:
+    _validate_date is a bare strptime in a try, so "banana" and "I do not
+    remember" reject identically to a real date written ISO-first. Reshaping the
+    first two is impossible, and the validation-error path resets the
+    unknown-rejection loop breaker, so an unbounded retry is the consequence.
+
+    Parsing the value against the OTHER known layouts settles it directly: if
+    ANY of them accepts it, the user gave a real date and only its order is
+    wrong, so the model can fix it alone. Reuses field_validator's own
+    _DATE_LAYOUTS rather than a second copy, so a layout added there is
+    automatically understood here (bd polyglot-pdf-mq2je / 9jp7z).
+    """
+    from datetime import datetime
+
+    if value is None:
+        return False
+    text = str(value).strip()
+    if not text:
+        return False
+    for directive, _label in _DATE_LAYOUTS.values():
+        try:
+            datetime.strptime(text, directive)
+            return True
+        except ValueError:
+            continue
+    return False
 
 _log = structlog.get_logger().bind(module="callback_handler")
 _dev_log = get_dev_logger()
@@ -1896,30 +1929,33 @@ class CallbackHandler:
             # an unconditional "ask the user again" wins on recency and
             # reintroduces the pedantic re-ask the SI bans.
             if validation_errors:
-                # RESHAPEABLE constraints: the user's answer is USABLE and only
-                # its written shape is wrong, so the model can fix it without
-                # troubling them. Checked against the complete set
-                # field_validator emits (type, min, max, format, date_constraint,
-                # digits_only, minLength, maxLength, pattern, options) plus
-                # callback_handler's own single_field_only.
+                # "Do not ask the user again" is only safe when a correct value
+                # DEMONSTRABLY exists -- i.e. the rejected value really is the
+                # right answer wearing the wrong shape. The constraint NAME
+                # cannot establish that, and two rounds of review were spent
+                # learning it (bd polyglot-pdf-9jp7z):
                 #
-                # ONLY `format` qualifies, and the exclusion of `pattern` is
-                # deliberate -- it was tried and reverted (bd polyglot-pdf-9jp7z).
-                # `format` comes solely from _validate_date, where a rejection
-                # means the date PARSED as a real date in the wrong LAYOUT, so a
-                # correct value provably exists and reshaping reaches it.
-                # `pattern` cannot distinguish a punctuation failure from a
-                # CONTENT one: "12345" on a 7-9 digit A-Number, "A" or "A---"
-                # normalizing to empty, and a malformed email all emit exactly
-                # constraint="pattern", message="Invalid format". Telling the
-                # model "do NOT ask the user" on those orders it to retry a value
-                # it cannot fix -- and the validation-error path deliberately
-                # RESETS the unknown-rejection loop breaker, so the re-ask IS the
-                # only bound. Removing it there re-opens the runaway bd
-                # polyglot-pdf-b1gj was filed for (338 retries to idle timeout).
-                RESHAPEABLE_CONSTRAINTS = {"format"}
-                format_only = all(
-                    err.get("constraint") in RESHAPEABLE_CONSTRAINTS
+                #  - `pattern` conflates punctuation with CONTENT: "12345" on a
+                #    7-9 digit A-Number, "A"/"A---" normalizing to empty, and a
+                #    malformed email all emit constraint="pattern".
+                #  - `format` is no better on its own. It comes solely from
+                #    _validate_date, but that is a bare strptime in a try, so
+                #    "banana", "I do not remember" and "never" emit exactly the
+                #    same constraint as a correctly-spoken date in ISO order.
+                #
+                # So RE-DERIVE reshapeability from the VALUE instead of trusting
+                # the label: a date is reshapeable only if it parses under some
+                # OTHER known layout, which proves the user gave a real date and
+                # only its order is wrong. Anything unparseable keeps the
+                # re-ask -- and that matters because the validation-error path
+                # deliberately RESETS the unknown-rejection loop breaker
+                # (see the reset above), so the re-ask is the ONLY bound on
+                # retries. Removing it for a value the model cannot fix
+                # re-opens the runaway bd polyglot-pdf-b1gj was filed for
+                # (observed live at 338 retries to idle timeout).
+                format_only = bool(validation_errors) and all(
+                    err.get("constraint") == "format"
+                    and _is_reshapeable_date(err.get("value"))
                     for err in validation_errors
                 )
                 recovery = (

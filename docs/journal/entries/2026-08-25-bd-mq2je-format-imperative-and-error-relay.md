@@ -216,9 +216,52 @@ mutated file afterward. **Confirm a mutation LANDED before reading its result** 
 a no-op mutation and a surviving mutation are indistinguishable from the test
 output alone.
 
+### And `format` alone was wrong too
+
+Round 4 found the reverted position was *also* unsound. The code (and my own
+comment) claimed `format` was safe because "a rejection means the date PARSED as
+a real date in the wrong LAYOUT, so a correct value provably exists". The first
+clause is true; the second is false. `_validate_date` is a bare `strptime` in a
+`try`, so every one of these emits `constraint="format"` identically:
+
+| value | reshapeable? |
+|---|---|
+| `1980-10-26`, `26/10/1980` | YES -- a real date, wrong order |
+| `banana`, `I do not remember`, `never` | NO -- not a date at all |
+| `13/45/2020` | NO -- impossible date |
+| `10/26` | NO -- the year is genuinely missing |
+
+A user answering "I don't remember" on a date of birth would get a model ordered
+never to ask them again, with no retry bound.
+
+The real lesson across three rounds: **the constraint NAME cannot establish
+reshapeability, for any constraint.** So the check now re-derives it from the
+VALUE -- `_is_reshapeable_date` tries the other known layouts, and only a value
+some layout accepts is treated as the right answer in the wrong shape. It reuses
+`field_validator`'s own `_DATE_LAYOUTS`, so a layout added there is understood
+here automatically rather than drifting.
+
+That is the third framing of this fix, and the first that is actually true. Each
+round I reasoned from the motivating example -- a real date in ISO order -- and
+each round the population contained cases the example did not represent.
+
+## Scar tissue: a guard that was complete but not fail-loud
+
+Round 3 fixed the derived constraint-set guard from "matches nothing" to
+"matches 16 of 17 sites". Round 4 found the remaining hole was not coverage but
+POLARITY: a new `ValidationError` written with `constraint="x"` as a KEYWORD, or
+via `**kwargs`, is still counted as a call site but yields no constraint -- so
+the extracted set stays correct-looking, `missing` is empty, and the guard passes
+green while the new constraint ships unclassified.
+
+The `assert emitted` added in round 3 only fires when extraction finds NOTHING.
+Now the guard asserts PER SITE: every `ValidationError` call must expose its
+constraint as a literal, and one that does not fails by line number with an
+explanation. Three rounds to get one checker honest.
+
 ## Verification
 
-- Full backend suite: 2603 passed, 2 skipped.
+- Full backend suite: 2612 passed, 2 skipped.
 - Mutation-verified: reverting the imperative reddens 1 test; removing the
   relay rule reddens 3; removing the prose/literal scoping reddens 7; disabling the format
   carve-out in the tool response reddens 1.
