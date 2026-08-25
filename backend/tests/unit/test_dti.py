@@ -76,15 +76,10 @@ def test_render_field_guidance_surfaces_instructions():
     assert "ID: p1_line1_aliennumber" in text
     assert "Spoken: alien registration number" in text
     assert "Instructions: Your A-Number" in text
-    # The GUARANTEE is that the declared format reaches the model, not the
-    # label wording. The prefix became imperative under bd polyglot-pdf-mq2je
-    # ("Store the value EXACTLY in this format:") because a bare "Format:"
-    # label lost to the neighbouring "Type: date" convention on a cold first
-    # attempt. Assert the hint VALUE and that it is framed as an instruction,
-    # so a future rewording of the frame does not fail this while a DROPPED
-    # hint still does.
-    assert "7-9 digits" in text
-    assert "EXACTLY in this format" in text
+    # "7-9 digits" is PROSE, not a layout literal, so it keeps the descriptive
+    # "Format:" label -- only a literal shape like MM/DD/YYYY gets the
+    # imperative framing (bd polyglot-pdf-mq2je).
+    assert "Format: 7-9 digits" in text
 
 
 def test_render_field_guidance_identity_si_vs_confirm():

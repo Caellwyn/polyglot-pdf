@@ -94,11 +94,43 @@ the model -- the label wording is incidental. Updated to assert the hint value
 plus the imperative framing, so a future reword does not fail it while a DROPPED
 hint still does.
 
+## Scar tissue: the imperative was applied too widely
+
+Fresh-eyes review caught the first cut applying the imperative to EVERY
+format_hint. Most shipped hints are not shapes -- they are descriptions or
+examples. Enumerated from the kits:
+
+| hint | kind |
+|---|---|
+| `MM/DD/YYYY` | layout literal |
+| `5 digits`, `Alphanumeric postal code` | prose description |
+| `Phone Number`, `*@*.*` | prose / pattern gloss |
+| `e.g. parent, child, grandchild` | EXAMPLE LIST |
+| `MM/DD/YYYY or "Never Entered US"` | two alternatives, not one shape |
+
+"Store the value EXACTLY in this format: e.g. parent, child, grandchild" is
+incoherent, and worse than incoherent -- it invites the model to treat an
+example list as a literal template. Of 20 distinct shipped hints, exactly ONE
+is a layout literal.
+
+Now scoped with the same layout-literal test the frontend's maxLength guard
+uses (bd `polyglot-pdf-md20o`): a hint made only of placeholder characters and
+separators gets the imperative; everything else keeps the descriptive `Format:`
+label, which is the right register for a description.
+
+**This is the third time in one day that a fix was written to the shape of ONE
+case and then fired on the whole population.** The maxLength guard fired on 26
+fields to fix 2; the plain-meaning carve-out picked colliding examples twice.
+The common cause each time: reasoning from the motivating example instead of
+enumerating the real data first. The enumeration takes about a minute --
+`format_hint` values across three kits is one script -- and would have caught
+all three before review did.
+
 ## Verification
 
-- Full backend suite: 2580 passed, 2 skipped.
+- Full backend suite: 2586 passed, 2 skipped.
 - Mutation-verified: reverting the imperative reddens 1 test; removing the
-  relay rule reddens 3.
+  relay rule reddens 3; removing the prose/literal scoping reddens 7.
 - **A mutation that silently no-op'd nearly passed as evidence.** The first
   attempt at the relay-rule mutation used string slicing that raised
   `ValueError: substring not found`, the edit never applied, and the suite came

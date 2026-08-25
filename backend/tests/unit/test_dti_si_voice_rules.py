@@ -1187,6 +1187,33 @@ def test_format_hint_is_delivered_as_an_instruction_not_a_bare_label():
         "a cold first attempt")
 
 
+@pytest.mark.parametrize("prose_hint", [
+    "5 digits",
+    "Alphanumeric postal code",
+    "Phone Number",
+    "e.g. parent, child, grandchild",
+    "*@*.*",
+    'MM/DD/YYYY or "Never Entered US"',
+])
+def test_prose_format_hints_keep_the_descriptive_label(prose_hint):
+    """The imperative is ONLY for a hint that IS the value's shape.
+
+    Caught by fresh-eyes review of this bead: the unscoped version rendered
+    "Store the value EXACTLY in this format: e.g. parent, child, grandchild",
+    which is incoherent and risks the model treating an EXAMPLE LIST as a
+    literal template. Every hint here is real, taken from the shipped kits.
+    """
+    text = render_field_guidance({
+        "id": "f", "name": "F", "type": "text",
+        "help": {"format_hint": prose_hint},
+    })
+    assert f"Format: {prose_hint}" in text, (
+        f"prose hint {prose_hint!r} must keep the descriptive label")
+    assert "EXACTLY in this format" not in text, (
+        f"prose hint {prose_hint!r} was handed to the model as a literal "
+        "template -- it is a description, not a shape")
+
+
 def test_si_requires_relaying_what_the_validation_error_said():
     """The reason is ON THE WIRE and useless if swallowed. 'There was an error'
     is not actionable."""
