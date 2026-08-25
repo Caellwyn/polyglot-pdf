@@ -33,12 +33,14 @@ different question types into one.
 
 ## The distinction now encoded
 
-- **Definitional / orientational** -- "what does ITIN stand for", "what is a
-  surname", "what does exemption mean". One correct answer, no dependence on the
-  user's situation, no legal consequence. **Answer plainly.**
-- **Applicative** -- "am I eligible for an ITIN", "do I need one", "should I
-  check box a". Depends on the user's facts, carries legal consequence.
-  **Hedge and defer, unchanged.**
+- **Ordinary word** -- "what does ITIN stand for", "what is a surname", "what
+  does spouse mean". One correct answer, no dependence on the user's situation,
+  no legal consequence. **Answer plainly.**
+- **Named rule, or applicative** -- "what does exception 3 mean", "what counts
+  as an exemption", "am I eligible for an ITIN", "should I check box a".
+  Depends on the user's facts or on what a rule requires, carries legal
+  consequence. **Hedge and defer, unchanged.** Note the first two are phrased
+  as definitions and are still hedged; see the scar-tissue section below.
 
 ## Why the scoping is the load-bearing part
 
@@ -50,25 +52,29 @@ because of that. A carve-out written loosely -- "you may explain things" -- woul
 leak straight into the applicative side and defeat the policy.
 
 So the carve-out carries its own boundary rather than relying on the reader to
-infer one. It names the line (what the word MEANS vs what APPLIES to them),
-names eligibility questions as still hedged even when the answer feels obvious,
-and breaks ties toward hedging. It is placed **before** the hedge rule so the
+infer one. It names the line (what an ORDINARY WORD means vs
+what a RULE says or what applies to them), states flatly that a named rule is
+never plain meaning however the question is phrased, names eligibility questions
+as still hedged even when the answer feels obvious, and breaks ties toward
+treating a question as a rule question. It is placed **before** the hedge rule so the
 hedge reads as the default and this as the narrow exception -- not as a later
 override of it. (Ordering carries real weight in this SI: the spellback addendum
 is load-bearing partly *because* it is last, per bd `polyglot-pdf-ku69b`.)
 
 ## Testing both halves, not just the new one
 
-Three tests, and deliberately not one: the permission, the boundary, and their
-coexistence. Pinning only the permission would let the boundary rot silently
+Three tests, and deliberately not one: the permission, the boundary (including
+its structural containment), and their coexistence. Pinning only the permission would let the boundary rot silently
 under a future SI diet -- the redundant-guard trap (repo memory
 `redundant-guards-need-per-layer-tests`).
 
-Mutation-verified twice, and the second mutation is the one that matters:
+Mutation-verified four ways; the second is the one that matters most:
 
 1. Remove the carve-out entirely -> 3 tests red.
 2. **Keep the permission, strip the boundary** (replace the scoping sentence
    with "Answer these helpfully.") -> the boundary test goes red specifically.
+3. Relocate the tie-break clause elsewhere in the SI -> boundary test red.
+4. Drop the named-rule guard alone -> boundary test red.
 
 Mutation 2 is the realistic failure mode. A future editor trimming the SI for
 tokens would plausibly keep the useful-sounding permission and drop the
@@ -83,8 +89,10 @@ asserts a specific field's `spoken_name` is ABSENT from the DTI SI and uses that
 absence to discriminate the DTI branch from the legacy one. My example phrase
 contained that spoken name verbatim and destroyed the discriminator.
 
-The test was right and the example was wrong, so the example moved to "what does
-exemption mean". Worth recording as the general shape: **an SI example phrase is
+The test was right and the example was wrong, so the example moved -- first to
+"what does exemption mean", which review then showed was ALSO wrong for a
+different and more serious reason (see below), and finally to "what does spouse
+mean". Worth recording as the general shape: **an SI example phrase is
 not free text -- it shares a namespace with every string other tests assert the
 SI does or does not contain.**
 
