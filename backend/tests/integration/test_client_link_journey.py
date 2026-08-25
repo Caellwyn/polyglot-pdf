@@ -47,6 +47,7 @@ claimed "a real gated route" and "complete", and both were false):
 ASCII only.
 """
 import asyncio
+import time
 
 import pytest
 from fastapi import HTTPException
@@ -74,8 +75,18 @@ class _Store:
 
         rec = self.records.get(jti)
         if rec is not None:
-            if rec.get("completed_at"):
-                raise LinkAlreadyUsed("already completed")
+            # Mirror the REAL grace window (Opus r11): a completed link keeps
+            # working briefly, because the burn lands at socket teardown
+            # while the client is still downloading their finished form. A
+            # fake that refuses instantly would make this journey test assert
+            # the bug as correct -- which the earlier version did.
+            from backend.services.link_redemptions import COMPLETION_GRACE_S
+
+            done = rec.get("completed_at")
+            if isinstance(done, int) and not isinstance(done, bool):
+                stamp = int(now if now is not None else _t.time())
+                if stamp >= done + COMPLETION_GRACE_S:
+                    raise LinkAlreadyUsed("already completed")
             return rec
         rec = {"jti": jti, "firm_id": firm_id, "kit_id": kit_id,
                "opened_at": int(now if now is not None else _t.time()),
@@ -161,7 +172,19 @@ def test_the_journey_survives_a_RELOAD_and_then_burns_on_completion(journey):
 
     journey.complete_link(jti)
 
-    # The SAME token, now burned, is refused everywhere.
+    # THE SAME TOKEN STILL WORKS BRIEFLY -- and that is the requirement, not
+    # a leak. An earlier version of this test asserted the opposite ("now
+    # burned, is refused everywhere"), which pinned a real bug as correct:
+    # the burn lands at socket teardown while the client is still looking at
+    # Download/Print buttons, so refusing instantly made their finished form
+    # unreachable (Opus r11).
+    assert asyncio.run(_auth(token))["jti"] == jti
+
+    # Past the grace window it IS refused -- the replay guarantee, measured
+    # from the burn.
+    from backend.services.link_redemptions import COMPLETION_GRACE_S
+
+    journey.records[jti]["completed_at"] = int(time.time()) - COMPLETION_GRACE_S - 1
     with pytest.raises(HTTPException) as exc:
         asyncio.run(_auth(token))
     assert exc.value.status_code == 401

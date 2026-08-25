@@ -178,8 +178,14 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   The token rides in the URL FRAGMENT so it never reaches access, referrer,
   or proxy logs. See [auth.md](auth.md) (Client magic links).
 
-  **Per-request cost, for whoever sizes bd `polyglot-pdf-ik7e`:** a client
-  HTTP request costs TWO uncached Firestore READS -- `require_auth`'s
+  **Per-SESSION cost, for whoever sizes bd `polyglot-pdf-ik7e`.** THE
+  LARGEST TERM IS THE WEBSOCKET, not HTTP: the socket redeems on EVERY
+  connection, and the voice app opens one per SECTION -- the shipped I-90 kit
+  has 27 sections, so a single client session costs ~27 uncached reads on
+  that path alone, before idle-timeout reconnects (120s) and network drops.
+  Size from that first.
+
+  Per client HTTP request, additionally: TWO uncached Firestore READS -- `require_auth`'s
   redemption check, plus the firm-allowlist read whenever the visibility gate
   fires on a private kit -- **plus ONE WRITE on the first open of a link**
   (`open_link` creates the redemption record), and **one further write per

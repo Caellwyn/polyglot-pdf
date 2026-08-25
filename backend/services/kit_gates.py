@@ -150,7 +150,12 @@ async def firm_allowed_kits(user: Optional[dict]) -> frozenset:
     # round-trip. It does not: both branches make exactly one
     # get_allowed_kits call.)
     #
-    # COST NOTE for bd polyglot-pdf-ik7e. A client HTTP request that touches
+    # COST NOTE for bd polyglot-pdf-ik7e. The DOMINANT term is not here: the
+    # socket redeems per CONNECTION and the voice app reconnects per SECTION
+    # (~27 on I-90), so the WS path costs far more reads per session than
+    # this one does. See config-deployment.md.
+    #
+    # A client HTTP request that touches
     # a private kit costs TWO uncached Firestore READS -- this one, plus
     # require_auth's redemption read -- AND, on the first open of a link, ONE
     # WRITE (open_link's document set). A completed session adds one more

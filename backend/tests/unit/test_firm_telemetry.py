@@ -252,8 +252,16 @@ def test_BOTH_session_records_carry_the_link_join_key(monkeypatch, event_name):
     CONNECTION). Nothing pinned it, and the docs asserted both. Parametrized
     over both events so the next record cannot be forgotten either.
 
-    Mutation: drop link_jti from either call site -- that parametrization
-    goes red.
+    SCOPE, precisely: this pins that the LOGGER writes these keys when handed
+    them. It calls the logger directly, so it says NOTHING about whether the
+    socket ever passes them -- dropping the kwargs at the call sites leaves
+    this green. That property is pinned by
+    test_proactive_complete_events.py::test_the_SOCKET_passes_the_join_key_to_both_records,
+    which drives _handle_fill_session and inspects the recorder.
+
+    An earlier version of this docstring claimed the call-site mutation
+    reddens here. It does not -- the same one-layer-removed shape this bead
+    has now hit twelve times, in a test written to fix an instance of it.
     """
     from backend.utils import confirmation_logger as cl
 

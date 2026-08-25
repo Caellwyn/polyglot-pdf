@@ -143,14 +143,44 @@ def test_reopening_an_UNFINISHED_link_returns_the_ORIGINAL_open_time(store):
     assert again["opened_at"] == 1_000, "the completion clock must not restart"
 
 
-def test_a_COMPLETED_link_refuses_to_reopen(store):
-    """One completion per link, enforced by the real function rather than a
-    stand-in. Mutation: drop the completed_at check -- red."""
+def test_a_COMPLETED_link_still_works_INSIDE_the_grace_window(store):
+    """The client is STILL IN THE APP when the burn lands (Opus r11).
+
+    `form_complete` is a validator trigger -- the frontend emits it on every
+    confirm -- so the burn fires at socket teardown while the client is
+    looking at live Download/Print/Preview buttons. Refusing immediately made
+    a finished form undownloadable: 40 minutes of work unreachable, and the
+    7-day reopen does not help because the link is BURNED, not expired.
+
+    Mutation: refuse on any completed_at -- red.
+    """
+    from backend.services.link_redemptions import COMPLETION_GRACE_S
+
+    open_link("jti-1", "firm-a", "i-90", now=1_000)
+    complete_link("jti-1", now=2_000)
+
+    # A minute later: the client clicks Download. This must work.
+    assert open_link("jti-1", "firm-a", "i-90", now=2_060)
+    # Right up to the edge.
+    assert open_link("jti-1", "firm-a", "i-90",
+                     now=2_000 + COMPLETION_GRACE_S - 1)
+
+
+def test_a_COMPLETED_link_refuses_to_reopen_AFTER_the_grace_window(store):
+    """One completion per link -- the guarantee still holds, just measured
+    from the burn rather than instantly. Past the window a request is a
+    REPLAY (a forwarded link), not the client finishing up.
+
+    Mutation: drop the completed_at check entirely, or make the window
+    unbounded -- red.
+    """
+    from backend.services.link_redemptions import COMPLETION_GRACE_S
+
     open_link("jti-1", "firm-a", "i-90", now=1_000)
     complete_link("jti-1", now=2_000)
 
     with pytest.raises(LinkAlreadyUsed):
-        open_link("jti-1", "firm-a", "i-90", now=3_000)
+        open_link("jti-1", "firm-a", "i-90", now=2_000 + COMPLETION_GRACE_S)
 
 
 def test_complete_link_is_BEST_EFFORT_and_never_raises(store, monkeypatch):
@@ -195,11 +225,14 @@ def test_LinkAlreadyUsed_is_not_swallowed_by_the_generic_handler(store):
 
     Mutation: remove LinkAlreadyUsed from the re-raise tuple -- red.
     """
+    from backend.services.link_redemptions import COMPLETION_GRACE_S
+
     open_link("jti-1", "firm-a", "i-90", now=1_000)
     complete_link("jti-1", now=2_000)
 
     with pytest.raises(LinkAlreadyUsed):
-        open_link("jti-1", "firm-a", "i-90", now=3_000)
+        open_link("jti-1", "firm-a", "i-90",
+                  now=2_000 + COMPLETION_GRACE_S + 1)
 
 
 def test_separate_links_do_not_interfere(store):
@@ -272,11 +305,16 @@ def test_the_gate_refuses_a_COMPLETED_link(store):
         enforce_link_redemption,
     )
 
+    from backend.services.link_redemptions import COMPLETION_GRACE_S
+
     enforce_link_redemption(_claims(), now=1_000)
     complete_link("jti-1", now=2_000)
 
+    # Inside the grace window the client can still fetch their PDF...
+    assert enforce_link_redemption(_claims(), now=2_060)
+    # ...and past it, the replay is refused.
     with pytest.raises(LinkAlreadyUsed):
-        enforce_link_redemption(_claims(), now=3_000)
+        enforce_link_redemption(_claims(), now=2_000 + COMPLETION_GRACE_S + 1)
 
 
 @pytest.mark.parametrize(
