@@ -254,3 +254,49 @@ def test_an_UNREACHABLE_store_refuses_HTTP_too(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(_auth(token))
     assert exc.value.status_code == 401
+
+
+# --- the SET of credential doors, not one instance ---------------------------
+
+
+def test_the_complete_set_of_credential_resolution_sites_is_pinned():
+    """PIN THE SET (CLAUDE.md scar #7). This bead taught the client-link
+    shape to one door at a time and MISSED ONE THREE TIMES: the socket (r1),
+    the require_auth routes (r2), and finally GET /form-kits/{id}/pdf (r6),
+    which resolves credentials ITSELF because it is optional-auth and so
+    never went through require_auth at all. Each miss was invisible until a
+    reviewer walked the client's path.
+
+    Derived from the shipped sources, so a FOURTH door reddens here instead
+    of costing a review round. If you are adding one: it must dispatch on
+    token SHAPE and, for a link, call resolve_client_link_credential (which
+    redeems -- a door that only VERIFIES is a burned-link hole).
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    sites = {}
+    call = re.compile(r"(?<!def )verify_token\s*\(")
+    for rel in ("backend/routes", "backend/services"):
+        for path in sorted((root / rel).rglob("*.py")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                stripped = line.lstrip()
+                if stripped.startswith(("#", "def ", "async def ", "from", "import")):
+                    continue
+                if call.search(line):
+                    key = path.relative_to(root).as_posix()
+                    sites[key] = sites.get(key, 0) + 1
+
+    assert sites == {
+        # 1. the socket (_verify_ws_credential) -- taught in r1
+        "backend/routes/websocket_routes.py": 1,
+        # 2. require_auth, which every gated HTTP route inherits -- r2
+        "backend/services/auth.py": 1,
+        # 3. the OPTIONAL-auth pdf route, which bypasses require_auth -- r6
+        "backend/routes/form_kit_routes.py": 1,
+    }, (
+        "the set of credential-resolution sites changed. A new one must "
+        "dispatch on token shape and redeem a client link, or the client "
+        "tier breaks on that surface only -- silently."
+    )

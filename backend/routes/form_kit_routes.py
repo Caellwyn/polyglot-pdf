@@ -17,7 +17,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import structlog
 
-from backend.services.auth import require_auth, verify_token
+from backend.services.auth import (
+    require_auth,
+    resolve_client_link_credential,
+    verify_token,
+)
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -291,8 +295,21 @@ async def get_form_kit_pdf(
     # isinstance, not truthiness: a DIRECT call (tests) leaves the Header()
     # default object in the parameter, which is truthy but not a str.
     if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+        _bearer = authorization[7:].strip()
         try:
-            user = verify_token(authorization[7:].strip())
+            # THE THIRD credential-resolution door (bd polyglot-pdf-ugm6,
+            # Opus cross-surface r6). This route is OPTIONAL-auth -- a public
+            # kit's blank template is served anonymously -- so it resolves
+            # credentials itself instead of going through require_auth, and
+            # was therefore never taught the client-link shape. A client's
+            # token failed verify_token, degraded to anonymous, and their own
+            # PRIVATE form's PDF 404'd: they reached the form and got no
+            # document. Same shape dispatch as everywhere else: one dot is a
+            # link, two is a Firebase JWT.
+            if _bearer.count(".") == 1:
+                user = resolve_client_link_credential(_bearer)
+            else:
+                user = verify_token(_bearer)
         except HTTPException:
             user = None
     try:

@@ -89,72 +89,63 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     # token and a caller cannot opt into the weaker check by labelling
     # theirs. See services/link_tokens.py for the credential boundary.
     if token.count(".") == 1:
-        # Imported here, not at module scope: link_tokens imports nothing
-        # from this module, and keeping the edge one-way avoids a cycle.
-        from backend.services.link_tokens import (
-            LinkTokenError,
-            verify_link_token,
-        )
-        try:
-            payload = verify_link_token(token)
-        except LinkTokenError as exc:
-            logger.warning("link_token_rejected", error=str(exc))
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from exc
-        # The claims a CLIENT gets. Note what is ABSENT: no uid (they have no
-        # account) and NO firm_role -- so every role-gated surface (the firm
-        # retire route, and anything added later) refuses them by the same
-        # check that refuses an ordinary employee. A client is not staff.
-        claims = {
-            "uid": None,
-            "firm_id": payload["firm_id"],
-            "link_kit_id": payload["kit_id"],
-            "employee_id": payload["employee_id"],
-            "jti": payload["jti"],
-            "cw": payload["cw"],   # completion window, needed by the gate below
-            "is_client_link": True,
-        }
-
-        # REDEEM HERE TOO (Opus cross-surface r1). verify_link_token checks
-        # the signature and the OPEN window and nothing else, so without this
-        # a COMPLETED link -- or one whose completion window elapsed -- kept
-        # serving schema, PDF bytes, /api/fill-pdf and the two PAID TTS
-        # routes for the rest of its ~48h exp. The socket redeemed; these
-        # require_auth routes did not, which is the same "enforced only on a door an
-        # attacker need not use" hole the socket fix closed.
-        from backend.services.link_redemptions import (
-            LinkAlreadyUsed,
-            LinkWindowElapsed,
-            RedemptionUnavailable,
-            enforce_link_redemption,
-        )
-        try:
-            # OFF THE EVENT LOOP. This is a synchronous Admin-SDK Firestore
-            # read inside an async dependency, so calling it directly blocks
-            # the SHARED Cloud Run loop -- a slow (not failed) Firestore
-            # would stall every concurrent request in the container,
-            # including in-flight audio frames for other sessions. The
-            # fail-closed handling below covers the store being DOWN; only
-            # this covers it being SLOW. The socket already does it this way
-            # (websocket_routes) -- this was the one site that did not.
-            await asyncio.to_thread(enforce_link_redemption, claims)
-        except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
-            # ONE refusal for all three: already-used, window-closed, and
-            # store-unreachable must be indistinguishable, and an unreachable
-            # store must FAIL CLOSED here exactly as it does at the socket.
-            logger.warning("link_redemption_refused", error=str(exc))
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from exc
-
-        return claims
+        return await asyncio.to_thread(resolve_client_link_credential, token)
 
     return verify_token(token)
+
+
+def resolve_client_link_credential(token: str) -> dict:
+    """Resolve a CLIENT LINK token to claims, redeeming it. Raises 401.
+
+    THE ONE PLACE a link credential is turned into claims (bd
+    polyglot-pdf-ugm6). Extracted from require_auth because it is not the
+    only door: GET /api/form-kits/{kit_id}/pdf resolves credentials itself
+    (it is OPTIONAL-auth -- a public kit's blank template is served
+    anonymously), so it bypasses require_auth entirely and silently rejected
+    every client link, leaving a client staring at their form with no PDF
+    (Opus cross-surface r6).
+
+    The set of credential-resolution sites is exactly three -- this, the
+    socket's _verify_ws_credential, and the pdf route -- and it is PINNED BY
+    TEST so a fourth fails CI instead of a review round.
+
+    Synchronous on purpose: callers decide whether to hop off the loop
+    (require_auth does; the pdf route is already sync at that point).
+    """
+    from backend.services.link_redemptions import (
+        LinkAlreadyUsed,
+        LinkWindowElapsed,
+        RedemptionUnavailable,
+        enforce_link_redemption,
+    )
+    from backend.services.link_tokens import LinkTokenError, verify_link_token
+
+    _unauth = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = verify_link_token(token)
+    except LinkTokenError as exc:
+        logger.warning("link_token_rejected", error=str(exc))
+        raise _unauth from exc
+
+    claims = {
+        "uid": None,
+        "firm_id": payload["firm_id"],
+        "link_kit_id": payload["kit_id"],
+        "employee_id": payload["employee_id"],
+        "jti": payload["jti"],
+        "cw": payload["cw"],
+        "is_client_link": True,
+    }
+    try:
+        enforce_link_redemption(claims)
+    except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+        logger.warning("link_redemption_refused", error=str(exc))
+        raise _unauth from exc
+    return claims
 
 
 def get_db():
