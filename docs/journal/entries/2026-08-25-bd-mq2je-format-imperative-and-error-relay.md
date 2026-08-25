@@ -86,14 +86,6 @@ error, fix it yourself and retry rather than asking the user to re-say the same
 answer differently. They already gave the answer; the shape is ours. Re-asking
 is reserved for when a genuinely different ANSWER is needed.
 
-## A test that pinned wording, not the guarantee
-
-`test_render_field_guidance_surfaces_instructions` asserted the literal
-`"Format: 7-9 digits"`. Its real guarantee is that the declared format REACHES
-the model -- the label wording is incidental. Updated to assert the hint value
-plus the imperative framing, so a future reword does not fail it while a DROPPED
-hint still does.
-
 ## Scar tissue: the imperative was applied too widely
 
 Fresh-eyes review caught the first cut applying the imperative to EVERY
