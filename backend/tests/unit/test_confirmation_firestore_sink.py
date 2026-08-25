@@ -661,9 +661,11 @@ def test_disclaimer_acceptance_reaches_the_durable_sink(fake_db, monkeypatch):
     assert doc["event"] == "disclaimer_accepted"
     assert doc["form_session_id"] == "fss_test_1"
     assert doc["script_version"] == "deadbeefcafe0001"
-    # firm_id is present-but-None today (the route is unauthenticated). The
-    # KEY must exist so the collection has one shape and no migration is
-    # needed when firm auth reaches this route.
+    # firm_id is present-but-None PERMANENTLY: a client filling a form has no
+    # account by design, so this route can never carry a client token (bd
+    # polyglot-pdf-g3kui). The KEY must still exist so the collection has one
+    # shape; firm_of_events() recovers the firm from the session's other
+    # records, and that join is the long-term answer, not a stopgap.
     assert doc["firm_id"] is None
 
 
@@ -839,3 +841,131 @@ def test_a_legitimate_session_id_STILL_writes(tmp_path, monkeypatch):
     cl._write_confirmation_to_file("fss_good_1", {"event": "disclaimer_accepted"})
 
     assert (log_dir / "fss_good_1.jsonl").exists()
+
+
+# --- bounding an UNAUTHENTICATED writer (bd polyglot-pdf-g3kui) -----------
+#
+# POST /api/disclaimer-acceptance cannot be gated: a client filling a form has
+# no account by design -- the magic link is their only entry (maintainer,
+# 2026-08-24) -- so requiring a token would 401 every real user at Agree. Since
+# bd polyglot-pdf-0dsv4 it writes DURABLY to the legal-evidence collection, so
+# the write itself has to be bounded instead.
+
+def test_one_acceptance_per_session_is_recorded(fake_db):
+    """A session accepts ONCE. That domain fact is the bound."""
+    for _ in range(5):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_flood",
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "fss_flood"]
+    assert len(added) == 1, f"expected one acceptance, got {len(added)}"
+
+
+def test_a_duplicate_is_DROPPED_not_an_error(fake_db):
+    """A retry after a lost response is legitimate client behavior.
+
+    Raising would turn a normal retry into a user-visible failure at the Agree
+    button; the first record is the one that matters.
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_retry", language="English",
+        timestamp_unix_ms=1755000000000,
+    )
+    # Must not raise.
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_retry", language="English",
+        timestamp_unix_ms=1755000000001,
+    )
+
+
+def test_DISTINCT_sessions_are_each_recorded(fake_db):
+    """The bound must not swallow legitimate traffic.
+
+    Silently dropping a real acceptance is WORSE than the flood it guards
+    against -- it is evidence loss with no error at all.
+    """
+    for i in range(5):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_distinct_%d" % i,
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if str(d.get("form_session_id", "")).startswith("fss_distinct_")]
+    assert len(added) == 5
+
+
+def test_at_the_memory_cap_the_guard_STOPS_DEDUPING_not_writing():
+    """The memory bound must never discard evidence.
+
+    A flood of DISTINCT ids would otherwise grow the dedupe set without limit.
+    At the cap the guard gives up deduping and lets writes through, because a
+    duplicated row is a far better failure than a lost legal record.
+    """
+    cl._reset_acceptance_dedupe()
+    try:
+        for i in range(cl._ACCEPTED_SESSIONS_CAP):
+            cl._ACCEPTED_SESSIONS.add("filler_%d" % i)
+        # Already at capacity: a REPEAT id now returns True (write it) rather
+        # than being suppressed.
+        assert cl._claim_first_acceptance("filler_0") is True
+        assert cl._claim_first_acceptance("brand_new") is True
+    finally:
+        cl._reset_acceptance_dedupe()
+
+
+@pytest.mark.parametrize("placeholder", [
+    "unknown", "UNKNOWN", "Unknown", " unknown ",
+    "undefined", "null", "none", "",
+])
+def test_a_NON_UNIQUE_id_is_never_deduped(placeholder, fake_db):
+    """Two 'unknown' acceptances are two USERS, not a retry.
+
+    Both overlays send `state?.formSessionId || 'unknown'` on the acceptance
+    POST (four sites), so every session missing an id sends the SAME literal.
+    Deduping on it would keep the first and silently drop every later one --
+    evidence loss across DISTINCT users, far worse than the duplicate flood
+    this guard bounds.
+    """
+    assert cl._claim_first_acceptance(placeholder) is True
+    assert cl._claim_first_acceptance(placeholder) is True
+
+
+def test_placeholder_acceptances_ALL_reach_the_sink(fake_db):
+    """End-to-end: three 'unknown' sessions produce three records."""
+    for i in range(3):
+        cl.log_disclaimer_acceptance(
+            form_session_id="unknown",
+            language="English",
+            timestamp_unix_ms=1755000000000 + i,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "unknown"]
+    assert len(added) == 3, (
+        f"expected all 3 placeholder acceptances, got {len(added)} -- the "
+        f"dedupe collapsed distinct users into one record"
+    )
+
+
+def test_a_REAL_id_is_still_deduped(fake_db):
+    """The placeholder carve-out must not disable the guard generally."""
+    for _ in range(3):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_still_deduped",
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "fss_still_deduped"]
+    assert len(added) == 1

@@ -25,7 +25,10 @@ NEVER run: `git stash` (in any form, including `-u`), `git checkout`/`restore`/
 write to `.beads/`, which IS tracked in this repo -- so they are technically
 writes inside it. File beads anyway: that is your sanctioned output channel,
 and the rule above exists to protect the AUTHOR'S IN-FLIGHT WORK, which
-`.beads/` is not. Never hand-edit `.beads/` files; use the `bd` commands.
+`.beads/` is not. (`bd dolt pull`, which the filing sequence below runs
+first, needs no exception at all -- it writes only to `.beads/dolt/` and
+`.beads/embeddeddolt/`, both gitignored, never a tracked path.) Never
+hand-edit `.beads/` files; use the `bd` commands.
 
 **This bit for real** (bd polyglot-pdf-fytzi, 2026-08-22): a reviewer running
 experiments stashed the author's uncommitted fix mid-review and later restored

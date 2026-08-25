@@ -27,12 +27,35 @@ router = APIRouter(prefix="/api", tags=["disclaimer"])
 
 
 class DisclaimerAcceptanceRequest(BaseModel):
-	"""Request to log disclaimer acceptance"""
+	"""Request to log disclaimer acceptance.
 
-	form_session_id: str = Field(..., description="Frontend form session ID")
-	language: str = Field(..., description="Language user selected (e.g., 'Spanish', 'English')")
+	EVERY FIELD IS BOUNDED (bd polyglot-pdf-g3kui). This route is
+	UNAUTHENTICATED and cannot be gated: a client filling a form has no account
+	by design -- the magic link is their only entry (maintainer, 2026-08-24) --
+	so requiring a token would 401 every real user at the Agree button. Since
+	bd polyglot-pdf-0dsv4 the route also writes DURABLY to the legal-evidence
+	collection, so an unbounded body is an unbounded write to that collection.
+
+	None of these are free text: a session id is a generated token, a language
+	is one of a fixed set, a timestamp is a number, and the other two are a
+	user-agent string and a 16-char hash. The caps are set well above every
+	real value and reject at the MODEL, so an oversized body never reaches the
+	handler or the sink.
+	"""
+
+	form_session_id: str = Field(
+		..., min_length=1, max_length=128,
+		description="Frontend form session ID",
+	)
+	language: str = Field(
+		..., min_length=1, max_length=64,
+		description="Language user selected (e.g., 'Spanish', 'English')",
+	)
 	timestamp: int = Field(..., description="Unix timestamp (milliseconds) when user clicked 'I Agree'")
-	user_agent: Optional[str] = Field(None, description="Browser user agent string")
+	user_agent: Optional[str] = Field(
+		None, max_length=512,
+		description="Browser user agent string",
+	)
 	# Which exact disclaimer TEXT the user agreed to (sprint 20, bd
 	# polyglot-pdf-s1iex.7). Optional for two DIFFERENT reasons: a client one
 	# deploy behind simply predates the field, while the legacy model-read
@@ -41,7 +64,7 @@ class DisclaimerAcceptanceRequest(BaseModel):
 	# case is a KNOWN AUDIT GAP -- the user read deterministic scripted text
 	# and the record still names nothing (bd polyglot-pdf-pyebx).
 	script_version: Optional[str] = Field(
-		None,
+		None, max_length=64,
 		description="Hash of the scripted intro text the user saw/heard (intro_tts.script_version)",
 	)
 
@@ -111,10 +134,13 @@ async def log_disclaimer_acceptance(
 			timestamp_unix_ms=data.timestamp,
 			script_version=data.script_version,
 			user_agent=data.user_agent,
-			# No firm_id: this route carries no auth token (Agree fires before
-			# any authenticated session exists). Written as None so the record
-			# shape matches the rest of the collection; recoverable via
-			# firm_of_events() until firm auth reaches this route.
+			# No firm_id, PERMANENTLY: a client filling a form has no account
+			# by design -- the magic link is their only entry, and only firms,
+			# managers and devs have auth accounts (maintainer, 2026-08-24) --
+			# so this route can never carry a client token. Written as None so
+			# the record shape matches the rest of the collection; the firm is
+			# recovered via firm_of_events(), which is the long-term answer,
+			# not a stopgap (bd polyglot-pdf-g3kui).
 			firm_id=None,
 		)
 	except TypeError as e:
