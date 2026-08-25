@@ -259,9 +259,39 @@ Now the guard asserts PER SITE: every `ValidationError` call must expose its
 constraint as a literal, and one that does not fails by line number with an
 explanation. Three rounds to get one checker honest.
 
+### Round 5: the value check could order the model to INVENT a date
+
+The value-derived check was right in principle and wrong in its trial set. It
+tried EVERY layout in `_DATE_LAYOUTS` -- which is a RESOLUTION table (which
+layout a field declares), not a completeness one, and also holds `%Y` and
+`%m/%Y`. So on a MM/DD/YYYY field:
+
+- `"1980"` parses as `%Y` -> judged reshapeable
+- `"1/2020"` parses as `%m/%Y` -> judged reshapeable
+
+There is no month or day to reorder. The model, told "do NOT ask the user",
+has fabrication as its only compliant move -- a wrong date of birth on a legal
+form, and a direct violation of the SI's own NEVER INVENT A VALUE rule. That is
+worse than the pedantic re-ask this branch was written to remove, and worse than
+the behavior on `dev`.
+
+Fixed by trialling only layouts with the SAME COMPONENTS as the field declares,
+compared on directive LETTERS (`{m, d, Y}`) so separators and order -- the very
+things being reshaped -- do not count as differences. A same-components layout
+added to `_DATE_LAYOUTS` is still picked up automatically; a fewer-components
+one can never produce a false positive.
+
+**Five rounds, four blocking defects, all in one small branch.** The pattern is
+consistent: each fix was reasoned from the motivating example (a real date in
+ISO order) and each round the population held a case the example did not
+represent -- prose hints, content-deficient values, unparseable answers, partial
+dates. The reviewer found every one by enumerating the real data. The lesson is
+not "review more" but **enumerate the input population before writing the
+predicate, not after**.
+
 ## Verification
 
-- Full backend suite: 2612 passed, 2 skipped.
+- Full backend suite: 2615 passed, 2 skipped.
 - Mutation-verified: reverting the imperative reddens 1 test; removing the
   relay rule reddens 3; removing the prose/literal scoping reddens 7; disabling the format
   carve-out in the tool response reddens 1.

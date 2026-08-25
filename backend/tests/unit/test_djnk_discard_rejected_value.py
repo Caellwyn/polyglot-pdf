@@ -253,7 +253,8 @@ def test_reshapeable_constraints_tell_the_model_to_reshape(constraint):
     # but not sufficient; the value must also be reshapeable.
     resp = _formatter(validation_errors=[{
         "field_id": "f", "field_name": "F", "value": "1980-10-26",
-        "constraint": constraint, "message": "Invalid format",
+        "constraint": constraint, "constraint_value": "MM/DD/YYYY",
+        "message": "Invalid format",
     }])
     assert "Re-send the SAME answer corrected to the required format" in resp["message"]
     assert "Ask the user again for the current field" not in resp["message"]
@@ -266,6 +267,15 @@ def test_reshapeable_constraints_tell_the_model_to_reshape(constraint):
     "13/45/2020",   # impossible date -- no layout accepts it
     "10/26",        # incomplete: the YEAR is genuinely missing
     "",
+    # INVENT-RISK cases (bd polyglot-pdf-3vc3n, review round 5). These parse
+    # under a FEWER-COMPONENT layout in _DATE_LAYOUTS ("%Y", "%m/%Y"), so an
+    # any-layout trial called them reshapeable on an MM/DD/YYYY field. There is
+    # no month or day to reorder, so "do not ask the user" leaves FABRICATION as
+    # the only compliant move -- a wrong date of birth on a legal form, and a
+    # direct violation of the SI's NEVER INVENT A VALUE rule.
+    "1980",
+    "2020",
+    "1/2020",
 ])
 def test_a_format_error_the_model_CANNOT_reshape_still_asks_the_user(unfixable):
     """The gap round 4 caught. _validate_date is a bare strptime in a try, so

@@ -20,30 +20,53 @@ from backend.utils.confirmation_logger import log_field_confirmation
 from backend.utils.field_validator import _DATE_LAYOUTS
 
 
-def _is_reshapeable_date(value: Any) -> bool:
+def _is_reshapeable_date(value: Any, expected_directive: str) -> bool:
     """True when a rejected date value is the RIGHT answer in the WRONG layout.
 
     "Do not ask the user again" is only safe when a correct value demonstrably
     exists. A constraint of "format" alone does not establish that:
     _validate_date is a bare strptime in a try, so "banana" and "I do not
-    remember" reject identically to a real date written ISO-first. Reshaping the
-    first two is impossible, and the validation-error path resets the
+    remember" reject identically to a real date written ISO-first. Reshaping
+    those is impossible, and the validation-error path resets the
     unknown-rejection loop breaker, so an unbounded retry is the consequence.
 
-    Parsing the value against the OTHER known layouts settles it directly: if
-    ANY of them accepts it, the user gave a real date and only its order is
-    wrong, so the model can fix it alone. Reuses field_validator's own
-    _DATE_LAYOUTS rather than a second copy, so a layout added there is
-    automatically understood here (bd polyglot-pdf-mq2je / 9jp7z).
+    Parsing the value against the other known layouts settles it -- but ONLY
+    layouts carrying THE SAME COMPONENTS as the field expects. _DATE_LAYOUTS is
+    a RESOLUTION table (which layout a field declares), not a completeness one:
+    it also holds "%Y" and "%m/%Y". Trying those indiscriminately made "1980"
+    and "1/2020" look reshapeable on a MM/DD/YYYY field -- there is no month or
+    day to reorder, so the only way for the model to comply with "do not ask the
+    user" is to INVENT one, writing a wrong date of birth onto a legal form.
+    That is worse than the pedantic re-ask this branch removes, and it directly
+    violates the SI's NEVER INVENT A VALUE rule (bd polyglot-pdf-3vc3n, caught
+    in review round 5).
+
+    Matching on the set of format DIRECTIVES means a same-components layout
+    added to _DATE_LAYOUTS is understood here automatically, while a
+    fewer-components one can never create a false positive.
     """
     from datetime import datetime
 
-    if value is None:
+    if value is None or not expected_directive:
         return False
     text = str(value).strip()
     if not text:
         return False
+
+    def _components(directive: str) -> frozenset:
+        # The DIRECTIVE LETTERS only ({"m","d","Y"}), never the separators --
+        # reordering is exactly a change of separators and order, so "%Y-%m-%d"
+        # and "%m/%d/%Y" must compare EQUAL. Splitting on "%" alone left the
+        # separator attached ("%d/" vs "%d") and made every cross-separator
+        # reshape look like a component mismatch.
+        import re as _re
+
+        return frozenset(_re.findall(r"%([A-Za-z])", directive))
+
+    expected_components = _components(expected_directive)
     for directive, _label in _DATE_LAYOUTS.values():
+        if _components(directive) != expected_components:
+            continue
         try:
             datetime.strptime(text, directive)
             return True
@@ -1955,7 +1978,17 @@ class CallbackHandler:
                 # (observed live at 338 retries to idle timeout).
                 format_only = bool(validation_errors) and all(
                     err.get("constraint") == "format"
-                    and _is_reshapeable_date(err.get("value"))
+                    and _is_reshapeable_date(
+                        err.get("value"),
+                        # The error carries the field's own declared layout as
+                        # constraint_value ("MM/DD/YYYY"); map it back to the
+                        # strptime directive via the same table the validator
+                        # resolved it from.
+                        _DATE_LAYOUTS.get(
+                            str(err.get("constraint_value", "")).strip().lower(),
+                            ("", ""),
+                        )[0],
+                    )
                     for err in validation_errors
                 )
                 recovery = (
