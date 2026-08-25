@@ -149,24 +149,36 @@ This is the pattern the whole session keeps hitting: the SI is rarely the thing
 being disobeyed. Look for the competing signal in the runtime path first (repo
 memory `error-messages-are-training-signal`).
 
-### And the bucket was too narrow
+### The bucket was widened, then reverted
 
-Round 2 of the cross-surface review found `format` alone was the wrong
-discriminator. It is emitted ONLY by `_validate_date`, so the fix covered date
-fields and nothing else -- while `pattern` is the same class of failure, carries
-the message literally "Invalid format", and fires on 24 shipped i-90 fields
-where the answer is right and only the punctuation is not:
+Round 2 of review argued `format` was too narrow: it is emitted only by
+`_validate_date`, while `pattern` carries the message literally "Invalid format"
+and fires on 24 shipped i-90 fields where only the punctuation is wrong. That
+argument is half right, which made it convincing.
 
-- postal code `"K1A 0B1"` against `^[A-Z0-9]{3,10}$`
-- ZIP `"12345-6789"` against `^\d{5}$`
+Round 3 found the other half. `pattern` cannot distinguish a SHAPE failure from
+a CONTENT one -- all of these emit exactly `constraint="pattern"`,
+`message="Invalid format"`:
 
-Both reproduce as `constraint='pattern'`, `message='Invalid format'`. So the fix
-worked for dates and failed one field type over.
+| value | field | what is actually wrong |
+|---|---|---|
+| `"K1A 0B1"` | postal code | punctuation -- reshapeable |
+| `"12345"` | 7-9 digit A-Number | too few digits -- NOT reshapeable |
+| `"A"`, `"A---"` | A-Number | normalizes to empty -- no answer at all |
+| `"notanemail"` | email | not an address -- NOT reshapeable |
 
-Both are now in a RESHAPEABLE set, and the set is pinned as a PARTITION over
-every constraint the validator emits -- a new constraint fails CI until someone
-decides which bucket it belongs in, rather than silently defaulting to the
-re-ask.
+Telling the model "do NOT ask the user" on the bottom three orders it to retry
+a value it cannot fix. Worse, the validation-error path deliberately RESETS the
+unknown-rejection loop breaker, on the reasoning that a validation error is "a
+working path the model should keep retrying" -- which held only while the
+recovery said "ask the user again". **The re-ask WAS the bound.** Removing it
+for `pattern` re-opens the runaway bd `polyglot-pdf-b1gj` was filed for, which
+was observed live at 338 retries to idle timeout.
+
+So `pattern` is back in the re-ask bucket, with the reasoning recorded beside
+the set so the same convincing half-argument does not win next time. `format` is
+safe precisely because it comes from one place: a date that parsed as a real
+date in the wrong LAYOUT, where a correct value provably exists.
 
 ## Scar tissue: a "derived from source" test that derived nothing
 
@@ -184,6 +196,18 @@ stay green. Now anchored on the real call shape, plus an explicit
 `assert emitted` so an extraction that finds nothing fails loudly instead of
 passing vacuously -- the same fail-loud polarity the earlier reviewer checked
 for on the plain-meaning example checker.
+
+The same test then failed a SECOND way. Fixed to anchor on the real call shape,
+it matched 16 of 17 emission sites -- skipping exactly one, the
+normalize-to-empty guard, because that site spells its first arguments
+`field.get("id", "")` instead of `field_id`. A guard claiming to enumerate a
+complete set while missing a member is the CLAUDE.md scar-#7 failure it existed
+to prevent.
+
+Now it walks the AST for every `ValidationError` call and reads the 4th
+positional argument, which is immune to how the earlier arguments are written.
+Verified by planting a novel constraint at the previously-missed site: the regex
+version stayed green, the AST version reddens.
 
 Two mutation attempts in this bead ALSO silently failed to apply (a `ValueError`
 and an `AssertionError` inside the mutation script), each leaving a green suite

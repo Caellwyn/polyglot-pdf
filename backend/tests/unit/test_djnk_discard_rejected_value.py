@@ -139,16 +139,16 @@ def test_the_anti_leak_instruction_is_unconditional_across_both_branches():
 # --------------------------------------------------------------------------- #
 # Which constraints are RESHAPEABLE -- pinned as a SET, not per-instance.
 #
-# Round 1 of this fix bucketed only "format", which is emitted solely by
-# _validate_date. But "pattern" is the same class of failure -- its message is
-# literally "Invalid format" -- and it fires on 24 shipped i-90 fields where the
-# user's answer is already right and only the punctuation is not (postal code
-# "K1A 0B1" vs ^[A-Z0-9]{3,10}$; ZIP "12345-6789" vs ^\d{5}$). Shipping only
-# "format" made the fix work for dates and fail one field type over.
-#
-# So the SET is pinned against the validator's own emitted constraints: a NEW
+# The SET is pinned against the validator's own emitted constraints, so a NEW
 # constraint fails here until someone decides which bucket it belongs in
 # (CLAUDE.md scar #7).
+#
+# The membership question is genuinely subtle, and this file records a REVERSAL:
+# "pattern" was added to the reshapeable bucket on the argument that its message
+# is literally "Invalid format" and that it fires on 24 shipped i-90 fields where
+# only the punctuation is wrong. Review showed that argument is half right and
+# therefore wrong -- see the RESHAPEABLE comment below. Do not re-add it without
+# a way to distinguish a shape failure from a content one.
 # --------------------------------------------------------------------------- #
 
 # Every constraint the validator (or callback_handler) can put on an error.
@@ -158,8 +158,19 @@ ALL_EMITTED_CONSTRAINTS = {
     "minLength", "maxLength", "pattern", "options", "single_field_only",
 }
 
-# The user's answer is usable; only its written shape is wrong.
-RESHAPEABLE = {"format", "pattern"}
+# The user's answer is usable; only its written SHAPE is wrong.
+#
+# ONLY "format", and the exclusion of "pattern" is load-bearing (bd
+# polyglot-pdf-9jp7z -- it was added here, reviewed, and REVERTED). "format"
+# comes solely from _validate_date, where a rejection means the value parsed as
+# a real date in the wrong LAYOUT: a correct value provably exists and reshaping
+# reaches it. "pattern" cannot tell a punctuation failure from a CONTENT one --
+# "12345" on a 7-9 digit A-Number, "A"/"A---" normalizing to empty, and a
+# malformed email ALL emit constraint="pattern", message="Invalid format"
+# (verified against the shipped i-90 kit). Telling the model not to ask the user
+# on those orders it to retry something unfixable, and the validation-error path
+# RESETS the unknown-rejection loop breaker, so the re-ask is the only bound.
+RESHAPEABLE = {"format"}
 
 # A different ANSWER is genuinely required -- reshaping cannot fix these.
 NEEDS_A_NEW_ANSWER = ALL_EMITTED_CONSTRAINTS - RESHAPEABLE
@@ -177,23 +188,41 @@ def test_emitted_constraint_list_matches_the_validator():
     """ALL_EMITTED_CONSTRAINTS must track the real emitter. Derived from the
     source rather than trusted, so a newly-emitted constraint reddens this
     instead of quietly landing in the wrong bucket."""
-    import re
+    import ast
     from pathlib import Path
 
     src = (Path(__file__).resolve().parents[2] / "utils" / "field_validator.py").read_text(
         encoding="utf-8"
     )
-    # `constraint` is the 4TH POSITIONAL arg to ValidationError, not a keyword:
+    # PARSED, not regexed. `constraint` is the 4TH POSITIONAL arg to
+    # ValidationError, never a keyword:
     #     ValidationError(field_id, field_name, value, "type", "Not a number")
-    # An earlier cut of this test searched for `constraint="..."`, matched
-    # NOTHING, and so passed vacuously while claiming to derive the set from
-    # the source. Anchor on the real call shape, and assert the extraction
-    # found something before comparing against it.
-    emitted = set(
-        re.findall(
-            r"ValidationError\(\s*field_id,\s*field_name,\s*value,\s*[\"']([A-Za-z_]+)[\"']",
-            src,
-        )
+    # Two earlier cuts of this check were defeated by its own extraction:
+    #  - the first searched for `constraint="..."`, a keyword form that does not
+    #    exist, matched NOTHING, and passed vacuously while claiming to derive
+    #    the set from source;
+    #  - the second anchored on the literal argument NAMES and so skipped the
+    #    one site spelling them `field.get("id", "")` -- 16 of 17 sites, missing
+    #    exactly the normalize-to-empty guard.
+    # Walking the AST is immune to both: it finds every call regardless of how
+    # the earlier arguments are written.
+    tree = ast.parse(src)
+    call_sites = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "ValidationError"
+    ]
+    emitted = {
+        node.args[3].value
+        for node in call_sites
+        if len(node.args) >= 4
+        and isinstance(node.args[3], ast.Constant)
+        and isinstance(node.args[3].value, str)
+    }
+    assert call_sites, (
+        "found NO ValidationError calls in field_validator -- this check is "
+        "vacuous; the emitter moved or was renamed"
     )
     assert emitted, (
         "extracted NO constraints from field_validator -- the ValidationError "

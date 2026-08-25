@@ -1898,20 +1898,26 @@ class CallbackHandler:
             if validation_errors:
                 # RESHAPEABLE constraints: the user's answer is USABLE and only
                 # its written shape is wrong, so the model can fix it without
-                # troubling them. Both members were verified against the
-                # complete set field_validator can emit (type, min, max, format,
-                # date_constraint, digits_only, minLength, maxLength, pattern,
-                # options) plus callback_handler's own single_field_only. The
-                # other nine genuinely need a DIFFERENT answer and keep the
-                # re-ask.
+                # troubling them. Checked against the complete set
+                # field_validator emits (type, min, max, format, date_constraint,
+                # digits_only, minLength, maxLength, pattern, options) plus
+                # callback_handler's own single_field_only.
                 #
-                # `pattern` belongs here as much as `format` does -- its message
-                # is literally "Invalid format", and it fires on 24 shipped i-90
-                # fields where the answer is right and only the punctuation is
-                # not: postal code "K1A 0B1" against ^[A-Z0-9]{3,10}$, ZIP
-                # "12345-6789" against ^\d{5}$. Leaving it out made the fix work
-                # for dates and fail one field type over.
-                RESHAPEABLE_CONSTRAINTS = {"format", "pattern"}
+                # ONLY `format` qualifies, and the exclusion of `pattern` is
+                # deliberate -- it was tried and reverted (bd polyglot-pdf-9jp7z).
+                # `format` comes solely from _validate_date, where a rejection
+                # means the date PARSED as a real date in the wrong LAYOUT, so a
+                # correct value provably exists and reshaping reaches it.
+                # `pattern` cannot distinguish a punctuation failure from a
+                # CONTENT one: "12345" on a 7-9 digit A-Number, "A" or "A---"
+                # normalizing to empty, and a malformed email all emit exactly
+                # constraint="pattern", message="Invalid format". Telling the
+                # model "do NOT ask the user" on those orders it to retry a value
+                # it cannot fix -- and the validation-error path deliberately
+                # RESETS the unknown-rejection loop breaker, so the re-ask IS the
+                # only bound. Removing it there re-opens the runaway bd
+                # polyglot-pdf-b1gj was filed for (338 retries to idle timeout).
+                RESHAPEABLE_CONSTRAINTS = {"format"}
                 format_only = all(
                     err.get("constraint") in RESHAPEABLE_CONSTRAINTS
                     for err in validation_errors
