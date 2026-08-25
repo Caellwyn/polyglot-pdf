@@ -279,17 +279,50 @@ def test_the_gate_refuses_a_COMPLETED_link(store):
         enforce_link_redemption(_claims(), now=3_000)
 
 
-def test_the_gate_tolerates_an_IMPLAUSIBLE_stored_open_time(store, monkeypatch):
-    """A corrupt stamp must not lock out a client who just opened their link
-    (a 0 computes a deadline in 1970), nor extend the window forever."""
+@pytest.mark.parametrize(
+    "stored_at, why",
+    [
+        (0, "an epoch stamp computes a deadline in 1970 and would lock out a "
+            "client who JUST opened their link"),
+        (-1, "a negative stamp is the same failure with a different shape"),
+        (10_000_000_000, "a FAR-FUTURE stamp would extend the completion "
+                         "window indefinitely -- the other direction, and the "
+                         "one the docstring promised while no test fed it"),
+    ],
+    ids=["epoch", "negative", "far-future"],
+)
+def test_the_gate_tolerates_an_IMPLAUSIBLE_stored_open_time(
+    store, monkeypatch, stored_at, why
+):
+    """A corrupt stamp must not lock out a client who just opened their link,
+    NOR extend the window forever.
+
+    Both directions are now exercised. Opus r10 found the far-future half
+    deletable -- removing `or opened_at > stamp + 300` left 114 link tests
+    green, because every case fed 0. The property was asserted in prose and
+    nowhere in code.
+
+    Mutation, per parametrization: drop the `<= 0` half -> epoch/negative
+    red; drop the `> stamp + 300` half -> far-future red.
+    """
     from backend.services.link_redemptions import enforce_link_redemption
 
     monkeypatch.setattr(
         "backend.services.link_redemptions.open_link",
         lambda jti, firm_id, kit_id, now=None: {
             "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
-            "opened_at": 0, "completed_at": None,
+            "opened_at": stored_at, "completed_at": None,
         },
     )
 
-    assert enforce_link_redemption(_claims(), now=1_000_000)
+    now = 1_000_000
+    # The gate ADMITS it, falling back to NOW rather than trusting the stamp
+    # -- so a corrupt record never locks out a client mid-form.
+    record = enforce_link_redemption(_claims(cw=3600), now=now)
+    assert record, why
+
+    # And it REPLACES the stamp with the fallback rather than passing the
+    # corrupt value through. That is the assertion that covers BOTH
+    # directions: an epoch stamp would compute a 1970 deadline, a far-future
+    # one an unbounded window, and neither survives.
+    assert record["opened_at"] == now, why

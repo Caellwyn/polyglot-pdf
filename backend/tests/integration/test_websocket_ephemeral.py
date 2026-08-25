@@ -297,6 +297,11 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     # forwards what it is handed -- one layer above the extraction, and blind
     # to whether fill_form_from_schema ever hands it over. Same
     # one-layer-removed shape this bead has now hit six times.
+    # THE FORM, which this test's own title and docstring promise and which
+    # it did not check (Opus r10). The token's kit is authoritative: with the
+    # substitution deleted, a client-link session runs kit_id=None and every
+    # audit record names no form.
+    assert kwargs.get("kit_id") == "i-90"
     assert kwargs.get("link_jti") == _jti
     assert kwargs.get("link_employee_id") == "u-emp-7"
 
@@ -440,3 +445,52 @@ async def test_a_STAFF_session_carries_NO_link_identity(
     kwargs = mock_fill_session.await_args.kwargs
     assert kwargs.get("link_jti") is None
     assert kwargs.get("link_employee_id") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handshake_kit", [None, ""],
+                         ids=["absent", "blank"])
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_the_TOKENS_kit_is_used_when_the_handshake_omits_one(
+    mock_fill_session, mock_websocket, mock_service, handshake_message,
+    monkeypatch, handshake_kit
+):
+    """The token is authoritative when the handshake carries no kit.
+
+    `kit_id = _link_kit` exists for exactly this case, and deleting it left
+    332 tests green (Opus r10): every WS link test supplies a MATCHING
+    handshake kit, so the substitution the line performs was never exercised.
+    The consequence is not cosmetic -- a client-link session would run with
+    kit_id=None, and every session + confirmation record would name no form,
+    defeating the "firm + form + originating employee" requirement for
+    exactly the client whose handshake omitted it.
+
+    Mutation: replace `kit_id = _link_kit` with `pass` -- red, both cases.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    import time as _t
+
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+    hs = dict(handshake_message)
+    if handshake_kit is None:
+        hs.pop("kit_id", None)
+    else:
+        hs["kit_id"] = handshake_kit
+    mock_websocket.receive_text.return_value = json.dumps(hs)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_fill_session.assert_awaited()
+    assert mock_fill_session.await_args.kwargs.get("kit_id") == "i-90", (
+        "the token's kit must fill in for an absent handshake kit, or the "
+        "audit trail names no form"
+    )

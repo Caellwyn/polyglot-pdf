@@ -13,6 +13,8 @@
  */
 
 // Session storage keys for onboarding state.
+import { hasClientLinkToken } from "../shared/sessionCredential";
+
 export const ONBOARDING_FORM_KEY = "vff_selected_form_id";
 export const ONBOARDING_LANGUAGE_KEY = "vff_selected_language";
 
@@ -52,6 +54,25 @@ export function saveOnboardingState(state: Partial<OnboardingState>) {
 
 export function clearOnboardingState() {
   if (typeof window === "undefined") return;
-  sessionStorage.removeItem(ONBOARDING_FORM_KEY);
+
+  // A CLIENT-LINK SESSION KEEPS ITS FORM (bd polyglot-pdf-ugm6, Opus
+  // cross-surface r10). "Clear form" exists so STAFF can start a new client
+  // from scratch -- choosing a different form is the point. A client has no
+  // such choice: their link names ONE form, and clearing the pin hands them
+  // the firm's whole catalogue on the next render.
+  //
+  // That is not theoretical. The clear-form buttons reload the page, and
+  // ClientLinkEntry's reload recovery deliberately does NOT re-POST /open
+  // because "the form id is already pinned from the first open" -- so with
+  // the pin gone it renders the picker, the client picks something else, and
+  // the socket refuses them 1008 with no explanation. The r1 fix closed the
+  // initial-load door; this was the mid-session one.
+  //
+  // The language IS cleared either way: re-choosing a language is a
+  // legitimate thing for a client to want.
+  const keepPinnedForm = hasClientLinkToken();
+  if (!keepPinnedForm) {
+    sessionStorage.removeItem(ONBOARDING_FORM_KEY);
+  }
   sessionStorage.removeItem(ONBOARDING_LANGUAGE_KEY);
 }

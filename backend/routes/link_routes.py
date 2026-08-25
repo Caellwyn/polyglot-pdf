@@ -88,9 +88,16 @@ class OpenLinkResponse(BaseModel):
     """What the client's browser needs to start filling -- and NOTHING else.
 
     Specifically NOT the firm's kit list: the client sees exactly the one form
-    their link names. `firm_id` is included because the frontend must send it
-    on the WS handshake for firm-keyed telemetry (bd xwlt), and it is not a
-    secret from the person the firm sent the link to.
+    their link names.
+
+    `firm_id` is INFORMATIONAL ONLY. An earlier version of this docstring said
+    the frontend "must send it on the WS handshake for firm-keyed telemetry",
+    which was false in both directions (Opus r10): the frontend never reads
+    it, and it must not -- the socket derives firm identity from the signed
+    TOKEN CLAIM precisely so the handshake is never trusted for identity.
+    Wiring it the way that sentence described would have been a security
+    regression. It is kept because it is not a secret from the person the
+    firm sent the link to, and a console/debug view may want it.
     """
     kit_id: str
     firm_id: str

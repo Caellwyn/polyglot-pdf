@@ -26,7 +26,14 @@ import {
 } from "@testing-library/react";
 
 import { SchemaFormDemo } from "./SchemaFormDemo";
-import { ONBOARDING_FORM_KEY } from "./onboardingStorage";
+import {
+  ONBOARDING_FORM_KEY,
+  clearOnboardingState,
+} from "./onboardingStorage";
+import {
+  clearClientLinkToken,
+  setClientLinkToken,
+} from "../shared/sessionCredential";
 
 vi.mock("./components/SchemaForm", () => ({
   SchemaForm: () => <div data-testid="schema-form" />,
@@ -52,6 +59,7 @@ const MANIFEST = {
 
 afterEach(() => {
   cleanup();
+  clearClientLinkToken();
   vi.unstubAllGlobals();
   sessionStorage.clear();
 });
@@ -113,6 +121,47 @@ describe("SchemaFormDemo hands the client's pinned form to the modal", () => {
 
     // With NO pin, the staff flow must reach the form picker -- proving the
     // narrowing is driven by the pin and did not leak into the normal path.
+    await waitFor(() => expect(screen.getByText(/select form/i)).toBeTruthy());
+  });
+
+  it("keeps the pin when a CLIENT clears the form mid-session", async () => {
+    // THE MID-SESSION DOOR (Opus r10). "Clear form" reloads the page, and
+    // ClientLinkEntry's reload recovery deliberately does NOT re-POST /open
+    // because the form is "already pinned from the first open". So clearing
+    // the pin hands the client the firm's whole catalogue on the next
+    // render -- the r1 defect through a door the r1 fix never touched.
+    //
+    // Mutation: remove the hasClientLinkToken() guard in
+    // clearOnboardingState -- red.
+    setClientLinkToken("a-client-link");
+    sessionStorage.setItem(ONBOARDING_FORM_KEY, "firm-a-intake");
+    stubManifest();
+
+    clearOnboardingState();          // exactly what the overlay button does
+
+    render(<SchemaFormDemo />);
+    await pickEnglish();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/select form/i)).toBeNull();
+      for (const other of ["I-90", "N-400"]) {
+        expect(screen.queryByText(other)).toBeNull();
+      }
+    });
+  });
+
+  it("STILL clears the pin for STAFF, who need to pick a new form", async () => {
+    // The whole point of "clear form" for staff: start a new client on a
+    // DIFFERENT form. The client carve-out must not take that away.
+    clearClientLinkToken();
+    sessionStorage.setItem(ONBOARDING_FORM_KEY, "firm-a-intake");
+    stubManifest();
+
+    clearOnboardingState();
+
+    render(<SchemaFormDemo />);
+    await pickEnglish();
+
     await waitFor(() => expect(screen.getByText(/select form/i)).toBeTruthy());
   });
 });
