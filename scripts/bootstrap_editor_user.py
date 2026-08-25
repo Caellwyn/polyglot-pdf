@@ -18,7 +18,67 @@ the other's.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+
+
+def _project_python() -> str:
+    """Where the project's interpreter actually lives.
+
+    NOT relative to this script: a git WORKTREE has no .venv of its own -- it
+    lives in the main checkout -- so resolving from __file__ printed a path
+    that does not exist, which is worse than no suggestion at all. Ask git for
+    the common dir, and fall back to the script's own tree outside a repo.
+    """
+    import subprocess
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    try:
+        common = subprocess.run(
+            ["git", "-C", here, "rev-parse", "--path-format=absolute",
+             "--git-common-dir"],
+            capture_output=True, text=True, timeout=10)
+        if common.returncode == 0 and common.stdout.strip():
+            root = os.path.dirname(common.stdout.strip())
+    except Exception:  # pragma: no cover -- git absent or slow; fall back
+        pass
+
+    for rel in (("backend", ".venv", "Scripts", "python.exe"),
+                ("backend", ".venv", "bin", "python")):
+        cand = os.path.join(root, *rel)
+        if os.path.exists(cand):
+            return cand
+    return os.path.join(root, "backend", ".venv", "Scripts", "python.exe")
+
+
+def _require_project_python() -> None:
+    """A missing dependency here almost always means the WRONG interpreter.
+
+    Run this with system Python and the failure is a ModuleNotFoundError deep
+    in an import chain naming a LOGGING or web library -- which tells an
+    operator nothing about what actually went wrong. Say the real thing, and
+    print the command that works.
+
+    This runs at MODULE LOAD, before the backend import below, because that
+    import is what fails. A check inside main() is too late: the traceback has
+    already happened. (Measured -- the first version was in main() and never
+    ran.)
+    """
+    try:
+        import fastapi  # noqa: F401
+        import firebase_admin  # noqa: F401
+        import structlog  # noqa: F401
+    except ModuleNotFoundError as exc:
+        sys.stderr.write(
+            "\nThis needs the project's Python, not the system one "
+            "(missing: " + str(exc.name) + ").\n\nRun:\n  \""
+            + _project_python() + "\" \"" + os.path.abspath(__file__)
+            + "\" you@example.com\n\n")
+        raise SystemExit(2)
+
+
+_require_project_python()
 
 # The claim name is owned by the editor's auth service -- importing it keeps the
 # writer and the reader from drifting apart.
@@ -124,6 +184,12 @@ def list_editor_users() -> list[tuple[str, str]]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    # Accept the email POSITIONALLY as well as via --email. Running
+    # `bootstrap_editor_user.py someone@example.com` is the obvious
+    # invocation, and rejecting it with "unrecognized arguments" is a bad
+    # first experience for the one tool that grants access.
+    ap.add_argument("email_positional", nargs="?", metavar="EMAIL",
+                    help="the person's Firebase account email")
     ap.add_argument("--email", help="the person's Firebase account email")
     ap.add_argument("--role", choices=_VALID_ROLES, default=ROLE_EDITOR,
                     help="editor (default) or author")
@@ -132,10 +198,13 @@ def main(argv=None) -> int:
     ap.add_argument("--list", action="store_true",
                     help="show every account with editor access")
     args = ap.parse_args(argv)
+    if not args.email and args.email_positional:
+        args.email = args.email_positional
 
     if not args.list and not args.email:
-        ap.error("give --email, or --list")
+        ap.error("give an email (positionally or with --email), or --list")
 
+    _require_project_python()
     _init_firebase()
 
     if args.list:
