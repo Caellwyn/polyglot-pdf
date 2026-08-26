@@ -411,14 +411,27 @@ class Settings(BaseModel):
 	# head re-emits the session's FIRST spelled name at ~10% of spelled
 	# read-backs while text + tool calls stay correct).
 	#
-	# Default OFF: the tool lands dark, is validated on the W-7 harness with the
-	# flag set locally, and the demo cutover (flag default flip + SI wording
-	# replacement at the SI-slimming session's marker) is a separate, deliberate
-	# change. While ON, the DTI SI gets DTI_SPELLBACK_SI_ADDENDUM appended so
-	# the model stops spelling aloud itself (double delivery -- one corrupted,
-	# one correct -- is worse than either alone).
+	# Default ON since the cutover (bd polyglot-pdf-apkdl). It landed dark and
+	# ran on the demo from 2026-08-10 via deploy-demo.sh's BACKEND_EXTRA_ENV,
+	# which is the bake the dark launch was for.
+	#
+	# THE DEFAULT IS WHY THIS CUTOVER HAPPENED. Nothing local set the env var --
+	# not scripts/dev-local.ps1, not the run-local or voice-harness skills, not
+	# backend/.env.DEV -- so every local session ran WITHOUT the tool declared
+	# and without the SI addendum. The model cannot call a tool it was never
+	# given, so it fell back to speaking the spelling aloud, and local looked
+	# broken against a demo that worked. A default-off feature that only one
+	# deploy script turns on is a permanent local-vs-deployed divergence, and it
+	# cost a full investigation to rediscover.
+	#
+	# The env var is KEPT as an emergency rollback (SPELLBACK_TOOL_ENABLED=false)
+	# rather than removed, so the four gates it drives stay one switch: the tool
+	# declaration (form_filling_service._build_tool_declarations), the
+	# DTI_SPELLBACK_SI_ADDENDUM append (ai_context), the dispatch guard
+	# (callback_handler's get_spellback_enabled), and the /api/tts/spellback
+	# route's 503. Flipping the default flips all four together.
 	SPELLBACK_TOOL_ENABLED: bool = (
-		os.getenv("SPELLBACK_TOOL_ENABLED", "false").lower() == "true"
+		os.getenv("SPELLBACK_TOOL_ENABLED", "true").lower() == "true"
 	)
 	# Cloud TTS voice for the spell-back clip. Empty (the default) = follow the
 	# SESSION LANGUAGE with the Live model's persona:
@@ -816,10 +829,15 @@ class Settings(BaseModel):
 	]
 
 	# Deterministic spell-back tool declaration (bd polyglot-pdf-22h1f).
-	# Deliberately NOT in TOOL_DECLARATIONS: the flag defaults off, and
-	# TOOL_DECLARATIONS is the production contract the static tests pin.
-	# FormFillingService._build_tool_declarations appends this when
-	# SPELLBACK_TOOL_ENABLED; the cutover PR moves it into the main list.
+	# Deliberately kept OUT of TOOL_DECLARATIONS even though the flag now
+	# defaults ON (bd polyglot-pdf-apkdl). The earlier note here said the
+	# cutover would move it into the main list; it deliberately does not.
+	# _build_tool_declarations appending it under SPELLBACK_TOOL_ENABLED is what
+	# makes the flag a real rollback: setting the env var to false has to remove
+	# the tool from the declared set, and a constant merged into
+	# TOOL_DECLARATIONS could not be removed that way. TOOL_DECLARATIONS stays
+	# the unconditional production contract the static tests pin; this is the
+	# one conditional member.
 	#
 	# No parameters ON PURPOSE: the client resolves the CURRENT field itself
 	# (same pin-aware resolution the confirm path uses), so the model never

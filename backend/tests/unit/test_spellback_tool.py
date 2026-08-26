@@ -982,3 +982,74 @@ class TestSpellbackTtsRoute:
             ).status_code == 400
         finally:
             app.dependency_overrides.pop(require_auth, None)
+
+
+class TestSpellbackDefaultIsOn:
+    """The DEFAULT, not the explicitly-set flag (bd polyglot-pdf-apkdl).
+
+    Every other test in this file assigns SPELLBACK_TOOL_ENABLED before
+    asserting, so the whole suite passed identically with the default off and
+    the default on. Nothing pinned the default -- which is exactly how the
+    local-vs-deployed divergence survived: deploy-demo.sh set the env var,
+    nothing local did, and the model silently had no tool to call.
+
+    These pin the shipped default so a future edit flipping it back fails here
+    rather than being rediscovered from a voice session.
+    """
+
+    def test_default_settings_enable_the_spellback_tool(self):
+        # A Settings() built with no env override -- the local-run shape.
+        assert Settings().SPELLBACK_TOOL_ENABLED is True, (
+            "the spell-back tool must be ON by default; a default-off feature "
+            "that only deploy-demo.sh turns on makes every local session "
+            "diverge from the demo"
+        )
+
+    def test_a_default_session_declares_the_tool(self):
+        """End-to-end through the real builder, not just the flag value."""
+        from backend.services.form_filling_service import FormFillingService
+
+        svc = FormFillingService(live_ai=None, settings=Settings())
+        names = {d.get("name") for d in svc._build_tool_declarations()}
+        assert "name_spellback" in names, (
+            "a default local session must be given the tool -- without it the "
+            "model falls back to speaking the spelling aloud, which is the "
+            "audio defect bd polyglot-pdf-22h1f exists to remove"
+        )
+
+    def test_a_default_session_carries_the_SI_addendum(self, monkeypatch):
+        """Declaring the tool is not enough: the addendum is what TELLS the
+        model to call it instead of spelling aloud. Both must ride the same
+        default, or the model holds a tool it was never told to use -- which is
+        arguably worse than not having it, since the spoken fallback still
+        fires."""
+        from backend.services import ai_context
+
+        # build_form_context reads settings via get_settings(), so patch the
+        # module's own reference rather than passing an argument.
+        monkeypatch.setattr(ai_context, "get_settings", lambda: Settings())
+        si = ai_context.build_form_context(
+            schema={"fields": [], "form_title": "W-7"},
+            current_values={},
+        )
+        assert "SPELL-BACK AUDIO TOOL" in si, (
+            "a default session must carry the spell-back addendum; without it "
+            "the model has the tool but is never told to prefer it over "
+            "spelling the name aloud itself"
+        )
+
+    def test_the_env_var_still_disables_it(self, monkeypatch):
+        """The flag remains a real rollback. Flipping the default must not
+        remove the ability to turn the feature off in an emergency."""
+        import importlib
+
+        monkeypatch.setenv("SPELLBACK_TOOL_ENABLED", "false")
+        import backend.config as config_module
+
+        reloaded = importlib.reload(config_module)
+        try:
+            assert reloaded.Settings().SPELLBACK_TOOL_ENABLED is False
+        finally:
+            # Restore the module for every later test in the session.
+            monkeypatch.delenv("SPELLBACK_TOOL_ENABLED", raising=False)
+            importlib.reload(config_module)

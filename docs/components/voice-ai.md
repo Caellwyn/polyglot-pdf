@@ -327,7 +327,8 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   (bd polyglot-pdf-7yra), DISTINCT from not-applicable (which stays the
   `update_form_fields ""` path). Maps to the frontend `markFieldSkipped` (the
   `skipped` flag); the SI requires a verbal confirm first.
-- `name_spellback` -- FLAG-GATED (`SPELLBACK_TOOL_ENABLED`, default off; bd
+- `name_spellback` -- `SPELLBACK_TOOL_ENABLED`, default ON since the cutover
+  (bd polyglot-pdf-apkdl; the flag remains as a rollback -- bd
   polyglot-pdf-22h1f + 44ywm): deterministic spell-back for the current field.
   Takes NO arguments; the client resolves the current field, reads the stored
   value, fetches a Cloud TTS clip (`POST /api/tts/spellback`, carrying the
