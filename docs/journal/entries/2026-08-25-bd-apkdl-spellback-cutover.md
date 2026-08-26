@@ -132,4 +132,12 @@ is invisible to every later reader, including the reviewer.**
   byte-identical (it no longer does). Both were caught in review.
 - Docs corrected in five places that said "default off"
   (`config-deployment.md`, `tool-call-flow.md`, `voice-ai.md`,
-  `technical_guide.md` x2).
+  `technical_guide.md` x2), and in three more that stated the same fact as a
+  COUNT -- "the session ships 6 declarations, not 7" -- which the cutover makes
+  7. The count phrasing is why the first sweep missed them: grepping the flag
+  name does not find a sentence that never mentions it. That third site is
+  load-bearing rather than cosmetic: the declaration list feeds the
+  compression-window derivation, so a stale count misleads the next person
+  doing that arithmetic. Re-measured the derived figures rather than adjusting
+  them by hand -- 5499 floor / 6098 window / 7598 trigger, still well above the
+  API minimum of 5000.

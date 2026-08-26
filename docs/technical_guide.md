@@ -334,9 +334,10 @@ Known traps (all deliberate, all pinned only by comments):
 Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
 live config by `form_filling_service.py:222-228` (which drops `switch_section`
-in continuous mode -- the session ships 6 declarations, not 7 -- and appends
-the flag-gated `SPELLBACK_TOOL_DECLARATION` as a 7th only while
-`SPELLBACK_TOOL_ENABLED`, bd polyglot-pdf-22h1f) and declared to
+in continuous mode, and appends `SPELLBACK_TOOL_DECLARATION` under
+`SPELLBACK_TOOL_ENABLED` -- default ON since bd polyglot-pdf-apkdl, so a
+production session ships 7 declarations; setting the flag false rolls back to 6,
+bd polyglot-pdf-22h1f) and declared to
 Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
 tools assembled at :1752). Gemini's tool
 calls come back through the adapter (`self._on_tool_call(...)` call sites at
