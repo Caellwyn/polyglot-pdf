@@ -2,8 +2,17 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import json
+import re
 from backend.config import get_settings
 from backend.services.manifest_service import get_field_guidance
+
+
+# A format hint that IS the value's shape -- placeholder characters and
+# separators only (MM/DD/YYYY, YYYY-MM-DD, MM/YYYY). Anything else is a prose
+# DESCRIPTION of the value ("5 digits", "Alphanumeric postal code") or an
+# EXAMPLE ("e.g. parent, child, grandchild"), which must not be handed to the
+# model as a literal template (bd polyglot-pdf-mq2je).
+_LAYOUT_LITERAL_RE = re.compile(r"^[MDYmdy]+([/\-.][MDYmdy]+)+$")
 
 # A select/dropdown -- e.g. the 50-state lists, height feet/inches -- always
 # renders the ask-directly marker instead of the forced recital, regardless of
@@ -139,7 +148,29 @@ def render_field_guidance(
     if guidance.get("instructions"):
         parts.append(f"Instructions: {guidance['instructions']}")
     if guidance.get("format_hint"):
-        parts.append(f"Format: {guidance['format_hint']}")
+        # IMPERATIVE for a LAYOUT LITERAL, plain label otherwise (bd
+        # polyglot-pdf-mq2je). Observed live 2026-08-25: on a field rendering
+        # "Format: MM/DD/YYYY", the model sent "1980-10-26" on a COLD FIRST
+        # ATTEMPT -- no prior error to adapt to, and the same block also carried
+        # "Instructions: ... month, day, and year" plus booklet text naming the
+        # format again. A bare "Format:" label states an unowned fact; the
+        # neighbouring "Type: date" token pulls toward the ISO-8601 convention
+        # models associate with a date type, and a fact loses to a convention.
+        #
+        # SCOPED to hints that ARE the value's shape. Most shipped hints are
+        # PROSE or examples -- "5 digits", "Alphanumeric postal code",
+        # "Phone Number", "e.g. parent, child, grandchild", "*@*.*". Telling the
+        # model to store a value "EXACTLY in this format: e.g. parent, child,
+        # grandchild" is incoherent and risks it treating an EXAMPLE LIST as a
+        # literal template. Those keep the descriptive label, which is the right
+        # register for a description. (Fresh-eyes review of this bead caught the
+        # unscoped version; the same layout-literal-vs-prose distinction is used
+        # by the frontend's maxLength guard, bd polyglot-pdf-md20o.)
+        _hint = guidance["format_hint"]
+        if _LAYOUT_LITERAL_RE.match(str(_hint).strip()):
+            parts.append(f"Store the value EXACTLY in this format: {_hint}")
+        else:
+            parts.append(f"Format: {_hint}")
 
     options = guidance.get("options")
     if options:
