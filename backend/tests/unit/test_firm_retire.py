@@ -112,12 +112,12 @@ class _Store:
 def client(monkeypatch):
     store = _Store()
 
-    # **kwargs: verify_token carries check_revoked and require_enrolment. A
-    # double with a FIXED signature turns any future parameter into a
-    # TypeError -- and in THIS file that surfaced as
-    # "test_a_retired_kits_LIVE_schema_is_still_gone" failing, which reads as
-    # a retired kit being reachable. Alarming, and wrong. These tests are
-    # about retirement; that is what they should fail on.
+    # **kwargs, so a signature change upstream cannot masquerade as a
+    # retirement failure. When verify_token gained a parameter, this file's
+    # fixed-signature double turned it into a TypeError that surfaced as
+    # "test_a_retired_kits_LIVE_schema_is_still_gone" -- reading as a retired
+    # kit being reachable. Alarming, and wrong. These tests are about
+    # retirement; that is what they should fail on.
     def _verify(token, **_kw):
         claims = _TOKENS.get(token)
         if claims is None:

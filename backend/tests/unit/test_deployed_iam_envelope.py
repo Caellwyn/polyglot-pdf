@@ -17,7 +17,11 @@ logging.logWriter, secretmanager.secretAccessor, storage.objectViewer). None
 grants firebaseauth.users.get, so any Firebase Auth call beyond verifying a
 token's SIGNATURE fails in production, always, on the first request.
 
-SCOPE. backend/routes and backend/services are what Cloud Run executes. The
+SCOPE. Everything under backend/ that ships -- routes, services, adapters,
+utils, models, ports, and the module root -- derived by EXCLUSION, so a new
+package is covered the day it appears. (The first version scanned routes and
+services only; routes import adapters and utils transitively, so a privileged
+call there was invisible to the guard written to catch exactly that.) The
 scripts/ bootstrap tools are NOT in scope: they run under an operator's own
 gcloud credentials, where these calls are correct and necessary.
 
@@ -27,18 +31,33 @@ every change.
 import ast
 import pathlib
 
-# Calls needing a Firebase Auth permission the runtime SA does not hold.
-# verify_id_token(token) alone is FINE: signature verification needs no IAM.
-_PRIVILEGED = {
-    "get_user",
-    "get_user_by_email",
-    "list_users",
-    "set_custom_user_claims",
-    "revoke_refresh_tokens",
-    "delete_user",
-    "create_user",
-    "update_user",
+# DERIVED from the installed SDK, not hand-listed. My first version named
+# eight calls and missed twenty -- including generate_sign_in_with_email_link,
+# the magic-link flow the maintainer says future users will arrive through.
+# That is the same hand-list failure this repo has now hit four times.
+#
+# The rule is INVERTED: everything in firebase_admin.auth touches the Identity
+# Toolkit API and needs an IAM permission, EXCEPT verifying a token, which is
+# pure signature math against public keys. So allow-list the safe ones and
+# treat the rest as privileged -- a new SDK function is covered the day it
+# ships instead of the day someone remembers to add it.
+_SIGNATURE_ONLY = {
+    "verify_id_token",   # public-key signature check; no API call, no IAM
 }
+
+
+def _privileged_calls():
+    """Every firebase_admin.auth callable that needs an IAM permission."""
+    import firebase_admin.auth as fb_auth
+
+    return {
+        name for name in dir(fb_auth)
+        if not name.startswith("_")
+        and name[0].islower()
+        and callable(getattr(fb_auth, name, None))
+        and name not in _SIGNATURE_ONLY
+    }
+
 
 # EVERYTHING Cloud Run executes, not just where the bug happened to be. The
 # first version scanned routes/ + services/ only -- but routes import adapters
@@ -64,6 +83,7 @@ def _deployed_sources():
 
 def test_the_deployed_service_makes_no_privileged_firebase_auth_call():
     """A privileged call here fails on the FIRST request in production."""
+    privileged = _privileged_calls()
     offenders = []
     for f, root in _deployed_sources():
         tree = ast.parse(f.read_text(encoding="utf-8"))
@@ -72,7 +92,7 @@ def test_the_deployed_service_makes_no_privileged_firebase_auth_call():
                 continue
             fn = node.func
             name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
-            if name in _PRIVILEGED:
+            if name in privileged:
                 offenders.append("{}:{} calls {}()".format(
                     f.relative_to(root).as_posix(), node.lineno, name))
 

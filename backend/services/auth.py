@@ -83,16 +83,6 @@ def verify_token(token: str, require_enrolment: bool = True) -> dict:
             return {"uid": "dev_user", "email": "dev@example.com"}
 
     try:
-        # check_revoked costs a Firebase USER-RECORD FETCH per call, so it is
-        # opt-in per caller rather than always-on:
-        #   * SESSION START (the /ws/fill handshake) passes it -- that is where
-        #     revoking a compromised account must actually take effect, and it
-        #     happens once per session.
-        #   * The PER-REQUEST hot path (TTS spellback fires MID-CONVERSATION)
-        #     does not, because a round trip per utterance would be felt by the
-        #     person speaking.
-        # The window this leaves is one session, not the up-to-an-hour token
-        # lifetime -- and a revoked user cannot start a new one.
         # SIGNATURE VERIFICATION ONLY -- deliberately no check_revoked.
         #
         # That flag turns this into a USER-RECORD FETCH needing
@@ -170,8 +160,6 @@ async def require_signin(authorization: Optional[str] = Header(None)) -> dict:
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
-    # check_revoked stays off, as on the other per-request routes: it costs a
-    # Firebase round trip and this runs on every catalogue load.
     return verify_token(token, require_enrolment=False)
 
 
