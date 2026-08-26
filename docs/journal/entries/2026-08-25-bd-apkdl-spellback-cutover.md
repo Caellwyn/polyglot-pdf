@@ -100,11 +100,36 @@ COMPLIES with something, verify the something is actually present in the build
 you are measuring. A compliance rate against a feature that was never declared
 would have read as damning evidence about the model.
 
+## What this does NOT settle
+
+The compliance question is NARROWED, not answered. The only evidence the model
+complies when it *does* have the tool is the maintainer's report that the demo
+works -- which is anecdotal, and the demo has always been flag-on.
+
+If spell-back still misfires on a local build after this cutover, the original
+measurement plan is the right next step, and the competing-signal hypothesis in
+the bead's notes remains the leading candidate: WORKFLOW step 3 and the NAMES
+block both point forward with "Unless a later instruction gives you a different
+way to verify a name...", and a conditional the model must resolve across ~4,600
+characters is a weak construction. That is untested.
+
+Recorded on the bead rather than left in chat, because the fresh-eyes review of
+this PR could not verify the reframing from the tracker -- the "demo works,
+local does not" report existed only in the session, and without it the diff
+looks like it closes a P1 bead without touching the failure the bead describes.
+Worth remembering as a general point: **a re-diagnosis that lives only in chat
+is invisible to every later reader, including the reviewer.**
+
 ## Verification
 
 - Full backend suite: 2594 passed, 2 skipped.
 - Verified end to end that a plain local session -- no env vars at all --
   declares `name_spellback` AND carries the spell-back addendum.
+- Two stale code comments corrected in files the fix itself did not otherwise
+  touch: `form_filling_service.py` still said the cutover would move the
+  declaration into `TOOL_DECLARATIONS` (it deliberately did not), and
+  `ai_context.py` still said the default-off flag keeps the shipped SI
+  byte-identical (it no longer does). Both were caught in review.
 - Docs corrected in five places that said "default off"
   (`config-deployment.md`, `tool-call-flow.md`, `voice-ai.md`,
   `technical_guide.md` x2).

@@ -233,10 +233,12 @@ class FormFillingService:
         declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
         if getattr(self._settings, "CONTINUOUS_SESSION", False):
             declarations = [d for d in declarations if d.get("name") != "switch_section"]
-        # Deterministic spell-back tool (bd polyglot-pdf-22h1f): declared only
-        # while the flag is on -- the tool lands dark and the cutover PR moves
-        # it into TOOL_DECLARATIONS proper. Kept as a separate constant so the
-        # default declared contract stays byte-identical with the flag off.
+        # Deterministic spell-back tool (bd polyglot-pdf-22h1f): appended while
+        # the flag is on, which since the cutover (bd polyglot-pdf-apkdl) is by
+        # DEFAULT. An earlier note here said the cutover would move it into
+        # TOOL_DECLARATIONS proper; it deliberately did NOT. This append is what
+        # makes the flag a real rollback -- a constant merged into
+        # TOOL_DECLARATIONS could not be removed by setting the env var false.
         if getattr(self._settings, "SPELLBACK_TOOL_ENABLED", False):
             declarations.append(deepcopy(self._settings.SPELLBACK_TOOL_DECLARATION))
         return declarations
