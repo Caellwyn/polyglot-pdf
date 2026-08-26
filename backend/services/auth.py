@@ -54,7 +54,8 @@ def _require_voice_access(claims: dict) -> None:
     )
 
 
-def verify_token(token: str, check_revoked: bool = False) -> dict:
+def verify_token(token: str, check_revoked: bool = False,
+                 require_enrolment: bool = True) -> dict:
     """
     Verifies a Firebase ID Token.
     Returns the decoded token dict (claims) if valid.
@@ -106,7 +107,11 @@ def verify_token(token: str, check_revoked: bool = False) -> dict:
     # this 403 and re-raise it as a 401, collapsing "you are not enrolled" back
     # into "your credentials are bad" -- two different problems for whoever
     # reads the error.
-    _require_voice_access(decoded_token)
+    # Callers that only need to know WHO this is -- browsing the form
+    # catalogue -- pass require_enrolment=False. Enrolment gates ACTING
+    # on a form, not SELECTING one.
+    if require_enrolment:
+        _require_voice_access(decoded_token)
     return decoded_token
 
 async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
@@ -127,6 +132,37 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
     return verify_token(token)
+
+
+async def require_signin(authorization: Optional[str] = Header(None)) -> dict:
+    """Require a VALID sign-in, but NOT voice-app enrolment.
+
+    For the routes where a user SELECTS a form. Maintainer, 2026-08-25:
+
+      "choosing a form to work on is a fundamental part of using the voice app
+       and the whole app is blocked without access to that ... anyone using the
+       app must have access to at least one form kit."
+
+    A signed-in user with no firm and no dev claim otherwise lands in an app
+    with nothing to pick and no way out: the only remedy the UI can offer is
+    "sign in again", and signing in was never the problem.
+
+    THIS COSTS NO CONFIDENTIALITY. These routes filter by firm THEMSELVES --
+    list_form_kits returns only kits that are public or in the caller's own
+    firm allowlist, and the schema route 404s a private kit the caller cannot
+    see. The enrolment check never protected a private kit here; it only
+    decided whether someone saw the PUBLIC ones, which is exactly what they
+    need to use the app at all.
+
+    Enrolment still gates ACTING on a form -- /api/fill-pdf, /ws/fill, TTS,
+    and kit retirement -- through require_auth.
+    """
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    # check_revoked stays off, as on the other per-request routes: it costs a
+    # Firebase round trip and this runs on every catalogue load.
+    return verify_token(token, require_enrolment=False)
 
 
 def get_db():
