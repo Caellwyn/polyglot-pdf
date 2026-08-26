@@ -144,3 +144,9 @@ scripts/authoring/outputs/
 # material that isn't ready to share/commit). Everything else under pitch/ is
 # tracked as normal.
 pitch/ignored_pitch/
+
+# Scratch/in-progress kits: a kit with no metadata.json is unfinished work,
+# not a deliverable. Committing one puts a phantom form in every developer
+# local catalogue (LocalFormKitStore synthesizes the manifest by scanning
+# directories and treats absent metadata as public).
+form-kits/i-90_v2/
