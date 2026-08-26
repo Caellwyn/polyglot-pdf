@@ -40,14 +40,26 @@ _PRIVILEGED = {
     "update_user",
 }
 
-_DEPLOYED_DIRS = ("routes", "services")
+# EVERYTHING Cloud Run executes, not just where the bug happened to be. The
+# first version scanned routes/ + services/ only -- but routes import adapters
+# and utils transitively, so a privileged call added there would have been
+# invisible to the very guard written to prevent it. No live instance today;
+# the SCOPE hole was real.
+#
+# Derived by EXCLUSION (everything under backend/, minus what does not run in
+# the service) rather than by listing what to include, so a NEW top-level
+# package is covered the day it appears instead of silently skipped.
+_NOT_DEPLOYED = {"tests", ".venv", "__pycache__", "docs", "logs", "scripts"}
 
 
 def _deployed_sources():
+    """Every .py file the Cloud Run service can execute."""
     root = pathlib.Path(__file__).resolve().parents[2]
-    for d in _DEPLOYED_DIRS:
-        for f in sorted((root / d).rglob("*.py")):
-            yield f, root
+    for f in sorted(root.rglob("*.py")):
+        rel = f.relative_to(root)
+        if any(part in _NOT_DEPLOYED for part in rel.parts):
+            continue
+        yield f, root
 
 
 def test_the_deployed_service_makes_no_privileged_firebase_auth_call():
