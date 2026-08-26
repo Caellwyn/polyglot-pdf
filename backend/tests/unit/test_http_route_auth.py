@@ -116,11 +116,11 @@ def test_bypass_admits_tokenless_requests(_auth_bypassed, monkeypatch):
 def test_require_auth_passes_bearer_token_to_verifier(monkeypatch):
     seen = {}
 
-    # **kwargs: verify_token gained check_revoked and require_enrolment.
-    # A double with a fixed signature turns any future parameter into a
-    # TypeError that looks like a confidentiality failure -- these tests
-    # are about PRIVATE-KIT VISIBILITY, and that is what they should
-    # fail on.
+    # **kwargs, so a signature change upstream cannot masquerade as a
+    # confidentiality failure here. verify_token has been re-signed twice
+    # (check_revoked added, then removed); each time a fixed-signature double
+    # turned that into a TypeError. These tests are about PRIVATE-KIT
+    # VISIBILITY, and that is what they should fail on.
     def _fake_verify(token: str, **_kw) -> dict:
         seen["token"] = token
         return {"uid": "u1"}
@@ -236,11 +236,11 @@ class _TwoKitStore:
 def _firm_world(_auth_on, monkeypatch):
     """Wire the two-kit store, the token->claims map, and the firm allowlist."""
 
-    # **kwargs: verify_token gained check_revoked and require_enrolment.
-    # A double with a fixed signature turns any future parameter into a
-    # TypeError that looks like a confidentiality failure -- these tests
-    # are about PRIVATE-KIT VISIBILITY, and that is what they should
-    # fail on.
+    # **kwargs, so a signature change upstream cannot masquerade as a
+    # confidentiality failure here. verify_token has been re-signed twice
+    # (check_revoked added, then removed); each time a fixed-signature double
+    # turned that into a TypeError. These tests are about PRIVATE-KIT
+    # VISIBILITY, and that is what they should fail on.
     def _fake_verify(token: str, **_kw) -> dict:
         claims = _TOKENS.get(token)
         if claims is None:

@@ -530,22 +530,36 @@ def test_the_two_allowlists_share_no_claim():
 # claimed fix nothing pins is indistinguishable from no fix at all.
 
 
-def test_the_verifier_asks_firebase_whether_the_token_was_REVOKED(monkeypatch):
-    """Half a mechanism is no mechanism.
+def test_the_verifier_does_NOT_ask_firebase_to_check_revocation(monkeypatch):
+    """INVERTED 2026-08-26, and the reversal is the point.
 
-    revoke_refresh_tokens (in the bootstrap script) has NO effect unless the
-    verifier passes check_revoked=True. The script half was pinned; this half
-    was not, so deleting the flag left the suite green while quietly restoring
-    the up-to-an-hour window where a revoked contractor keeps write access.
+    This used to assert check_revoked is True, on the reasoning that
+    revoke_refresh_tokens is inert without it. That reasoning was sound and
+    the code was still unshippable: check_revoked forces a Firebase
+    USER-RECORD FETCH needing firebaseauth.users.get, and the editor API runs
+    on polyglot-backend, whose service account does not have it. Deployed,
+    EVERY editor sign-in failed with INSUFFICIENT_PERMISSION -- the same
+    failure that took the voice app down.
+
+    Neither this test nor any other could see it: the fake SDK below answers
+    happily, and the dev bypass skips the call locally. A test that stubs the
+    dependency cannot discover that the real dependency is forbidden.
+
+    THE COST, kept explicit rather than quietly dropped: revoking an editor
+    takes effect when their token expires (up to an hour), NOT immediately --
+    weaker than the shared secret this epic replaced. revoke_editor_role still
+    calls revoke_refresh_tokens, so a revoked user cannot MINT a new token.
+    The maintainer chose this over widening the deployed backend's IAM.
     """
     calls = _fake_firebase(monkeypatch, {"uid": "uid-maria",
                                          "email": "maria@example.com",
                                          EDITOR_ROLE_CLAIM: "editor"})
     ea.verify_editor_token("a-token")
 
-    assert calls["check_revoked"] is True, (
-        "the verifier did not ask whether the token was revoked -- revoking a "
-        "user is a no-op until their token expires")
+    assert calls["check_revoked"] is False, (
+        "the editor verifier asks Firebase to check revocation again -- that "
+        "needs firebaseauth.users.get, which the deployed service account "
+        "does not have, so every sign-in will fail with INSUFFICIENT_PERMISSION")
 
 
 def test_the_editor_initialises_firebase_ITSELF_when_nothing_else_has(monkeypatch):

@@ -167,69 +167,63 @@ def test_the_dev_claim_is_the_one_the_VOICE_GATE_actually_reads(monkeypatch):
         "an account the enrolment tool just stamped was refused by the gate")
 
 
-def test_the_SESSION_HANDSHAKE_asks_firebase_whether_the_token_was_REVOKED(monkeypatch):
-    """The other half of revocation, on the voice side, WHERE IT BELONGS.
+def test_the_handshake_does_NOT_ask_firebase_to_check_revocation():
+    """Pinned as an ABSENCE, which is the opposite of what this test used to say.
 
-    revoke_dev_claim calls revoke_refresh_tokens -- which does NOTHING unless
-    the verifier passes check_revoked. Without it this tool told an operator
-    "Revoked dev voice access" while the account kept working until its token
-    expired: a silent failure that REPORTS SUCCESS during exactly the incident
-    where someone is revoking a compromised account.
+    check_revoked forces a Firebase USER-RECORD FETCH, needing
+    firebaseauth.users.get. polyglot-backend-sa does not have it -- its roles
+    are aiplatform.user, datastore.user, logging.logWriter,
+    secretmanager.secretAccessor, storage.objectViewer -- so passing the flag
+    made EVERY deployed handshake fail with INSUFFICIENT_PERMISSION. The app
+    could not connect at all; the maintainer hit it on the live demo.
 
-    It is checked at SESSION START, not per request: check_revoked costs a
-    Firebase user-record fetch, and TTS spellback fires mid-conversation, so
-    paying a round trip per utterance would be felt by the person speaking.
-    Revoking therefore takes effect at the next session rather than the next
-    utterance -- and a revoked user cannot start one.
-    """
-    import backend.routes.websocket_routes as ws
+    WHY NO TEST CAUGHT IT, and why this one is a source assertion rather than a
+    behavioural one: VFF_DISABLE_AUTH returns before the call locally, and
+    every test stubs the Firebase SDK. The failure exists ONLY against real
+    Firebase with the real service account, so no amount of mocking reaches it.
+    Pinning the call SHAPE is the only thing that fails in CI rather than in
+    production.
 
-    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
-    seen = {}
-
-    def _capture(token, check_revoked=False):
-        seen["check_revoked"] = check_revoked
-        return {"uid": "uid-josh", VOICE_DEV_CLAIM: True}
-
-    monkeypatch.setattr(ws, "verify_token", _capture)
-
-    ws.verify_token("a-token", check_revoked=True)
-
-    assert seen.get("check_revoked") is True, (
-        "the session handshake did not ask whether the token was revoked -- "
-        "revoking a dev account would not take effect at the next session")
-
-
-def test_the_handshake_call_site_actually_passes_it():
-    """The test above drives the call itself, so it cannot see the CALL SITE.
-
-    Pin the real one: websocket_routes must pass the flag, or revocation is
-    inert no matter what verify_token supports.
+    THE ACCEPTED COST: revoking an account takes effect when its token expires
+    (up to an hour), not immediately. Chosen over granting the deployed backend
+    permission to read any user record (maintainer, 2026-08-26). The revoke
+    tools still call revoke_refresh_tokens, so a revoked user cannot MINT a new
+    token -- they keep the one they hold until it expires.
     """
     import pathlib as _p
 
-    src = (_p.Path(__file__).resolve().parents[3]
-           / "backend" / "routes" / "websocket_routes.py").read_text(encoding="utf-8")
-
-    assert "verify_token(token, check_revoked=True)" in src, (
-        "the /ws/fill handshake no longer asks Firebase whether the token was "
-        "revoked -- revoking a compromised account stops taking effect")
+    root = _p.Path(__file__).resolve().parents[3]
+    for rel in ("backend/routes/websocket_routes.py",
+                "backend/services/editor_auth.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        assert "check_revoked=True" not in src, (
+            "{} passes check_revoked=True again. That needs "
+            "firebaseauth.users.get, which the deployed service account does "
+            "not have -- every handshake will fail with INSUFFICIENT_PERMISSION "
+            "and the app will not connect. Grant the IAM role first, or leave "
+            "it off.".format(rel))
 
 
 def test_the_per_request_hot_path_does_NOT_pay_for_revocation(monkeypatch):
-    """The performance half of the same decision, pinned so it is not undone.
+    """verify_token must not even OFFER a revocation check.
 
-    require_auth guards TTS spellback, which fires mid-conversation. Turning
-    check_revoked on by default here would add a Firebase round trip to every
-    utterance.
+    The parameter is gone, not defaulted off. A knob nothing can safely turn
+    on is a trap: check_revoked needs firebaseauth.users.get, which the
+    deployed service account does not have, so any caller passing True
+    re-breaks production -- as it did on 2026-08-26, when every connection
+    failed with INSUFFICIENT_PERMISSION.
+
+    Asserting its ABSENCE (rather than its default) is what makes restoring it
+    a deliberate act: you have to delete this test, and its name says why.
     """
     import backend.services.auth as va
     import inspect
 
     sig = inspect.signature(va.verify_token)
-    assert sig.parameters["check_revoked"].default is False, (
-        "verify_token now checks revocation by DEFAULT, which puts a Firebase "
-        "round trip on the per-utterance hot path")
+    assert "check_revoked" not in sig.parameters, (
+        "verify_token accepts check_revoked again. It requires "
+        "firebaseauth.users.get, which polyglot-backend-sa does not have -- "
+        "grant the IAM role FIRST, or leave the parameter off")
 
     # The sibling parameter, pinned the same way and for a sharper reason: a
     # one-character flip to False un-gates /api/fill-pdf, /ws/fill, both TTS

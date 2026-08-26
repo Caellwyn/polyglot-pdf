@@ -54,8 +54,7 @@ def _require_voice_access(claims: dict) -> None:
     )
 
 
-def verify_token(token: str, check_revoked: bool = False,
-                 require_enrolment: bool = True) -> dict:
+def verify_token(token: str, require_enrolment: bool = True) -> dict:
     """
     Verifies a Firebase ID Token.
     Returns the decoded token dict (claims) if valid.
@@ -84,17 +83,18 @@ def verify_token(token: str, check_revoked: bool = False,
             return {"uid": "dev_user", "email": "dev@example.com"}
 
     try:
-        # check_revoked costs a Firebase USER-RECORD FETCH per call, so it is
-        # opt-in per caller rather than always-on:
-        #   * SESSION START (the /ws/fill handshake) passes it -- that is where
-        #     revoking a compromised account must actually take effect, and it
-        #     happens once per session.
-        #   * The PER-REQUEST hot path (TTS spellback fires MID-CONVERSATION)
-        #     does not, because a round trip per utterance would be felt by the
-        #     person speaking.
-        # The window this leaves is one session, not the up-to-an-hour token
-        # lifetime -- and a revoked user cannot start a new one.
-        decoded_token = auth.verify_id_token(token, check_revoked=check_revoked)
+        # SIGNATURE VERIFICATION ONLY -- deliberately no check_revoked.
+        #
+        # That flag turns this into a USER-RECORD FETCH needing
+        # firebaseauth.users.get, which polyglot-backend-sa does not have. It
+        # broke EVERY deployed connection with INSUFFICIENT_PERMISSION on
+        # 2026-08-26; the app could not connect at all, while local tests and
+        # CI stayed green because they stub this SDK.
+        #
+        # The PARAMETER is gone too, not just defaulted off: a knob nothing can
+        # safely turn on is a trap, and a caller passing True would re-break
+        # production. Restoring it means granting the IAM role FIRST.
+        decoded_token = auth.verify_id_token(token)
     except Exception as e:
         logger.warning("token_verification_failed", error=str(e))
         raise HTTPException(
@@ -160,8 +160,6 @@ async def require_signin(authorization: Optional[str] = Header(None)) -> dict:
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
-    # check_revoked stays off, as on the other per-request routes: it costs a
-    # Firebase round trip and this runs on every catalogue load.
     return verify_token(token, require_enrolment=False)
 
 

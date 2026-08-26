@@ -1120,7 +1120,23 @@ async def fill_form_from_schema(
 			# below keys session + confirmation records on it (bd
 			# polyglot-pdf-xwlt). Discarding the return value was why the
 			# WS path could not see firm identity at all.
-			claims = verify_token(token, check_revoked=True)
+			# NO check_revoked. It forces a Firebase USER-RECORD FETCH, needing
+			# firebaseauth.users.get -- a permission polyglot-backend-sa
+			# deliberately does NOT have (its roles: aiplatform.user,
+			# datastore.user, logging.logWriter, secretmanager.secretAccessor,
+			# storage.objectViewer). Deployed, EVERY handshake failed with
+			# INSUFFICIENT_PERMISSION and the app could not connect at all.
+			#
+			# STRUCTURALLY INVISIBLE locally and in tests: VFF_DISABLE_AUTH
+			# returns before this line, and every test stubs the Firebase SDK,
+			# so the failure exists only against real Firebase with the real
+			# service account.
+			#
+			# Cost of dropping it: revoking an account takes effect when its
+			# token expires (up to an hour) rather than immediately. The
+			# maintainer chose that over widening the deployed backend's
+			# permission to read any user record (2026-08-26).
+			claims = verify_token(token)
 		except Exception as e:
 			# Distinguish "not enrolled" from "bad token". This diff INTRODUCED
 			# the enrolment requirement, so collapsing both into
