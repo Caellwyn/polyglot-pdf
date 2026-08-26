@@ -1,0 +1,167 @@
+---
+date: 2026-08-25
+bead: polyglot-pdf-gs5f0
+title: "fix(voice-si): the model hedged on 'what does ITIN stand for' because nothing said definitional questions are different"
+tags: [voice-ai, system-instruction, confirmation-and-audit]
+---
+
+## Trigger
+
+Testing the live app, the maintainer asked what "ITIN" stands for while on the
+W-7. The model refused and read from the form's "What is an ITIN" instructions
+section instead of just expanding the acronym -- an expansion that is printed in
+the form's own title.
+
+Their read, which was right: "I'm not sure if this is a case of clinging too
+lightly to 'only what's on the instructions' or if this is appropriate. But,
+I'm sure the model does know what it means."
+
+## Root cause
+
+The DTI SI's `ANSWERING QUESTIONS` block had **no carve-out for definitional
+questions**. It says to ground answers in the current field's Official reference
+text, never invent legal or document requirements, route to `ask_secretary` when
+the text does not clearly answer, and then:
+
+> ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements,
+> documents, or what a rule means for THIS user
+
+Expanding an acronym is none of those things. But nothing in the block said so,
+so "what does ITIN stand for" had nowhere to land except the hedge path. The
+model was following its instructions correctly; the instructions collapsed two
+different question types into one.
+
+## The distinction now encoded
+
+- **Ordinary word** -- "what does ITIN stand for", "what is a surname". One
+  correct answer, no dependence on the user's situation,
+  no legal consequence. **Answer plainly.**
+- **Named rule, or applicative** -- "what does exception 3 mean", "what counts
+  as an exemption", "am I eligible for an ITIN", "should I check box a".
+  Depends on the user's facts or on what a rule requires, carries legal
+  consequence. **Hedge and defer, unchanged.** Note the first two are phrased
+  as definitions and are still hedged; see the scar-tissue section below.
+
+## Why the scoping is the load-bearing part
+
+The hedge policy is not stylistic. It rests on a deployment invariant -- the app
+produces a DRAFT, is never used for self-filing, and a qualified human reviews
+the form before filing (`docs/standards/confirmation-and-audit.md`). "Confirm
+with the firm or professional reviewing your form" points at a real person only
+because of that. A carve-out written loosely -- "you may explain things" -- would
+leak straight into the applicative side and defeat the policy.
+
+So the carve-out carries its own boundary rather than relying on the reader to
+infer one. It names the line (what an ORDINARY WORD means vs
+what a RULE says or what applies to them), states flatly that a named rule is
+never plain meaning however the question is phrased, names eligibility questions
+as still hedged even when the answer feels obvious, and breaks ties toward
+treating a question as a rule question. It is placed **before** the hedge rule so the
+hedge reads as the default and this as the narrow exception -- not as a later
+override of it. (Ordering carries real weight in this SI: the spellback addendum
+is load-bearing partly *because* it is last, per bd `polyglot-pdf-ku69b`.)
+
+## Testing both halves, not just the new one
+
+Three tests, and deliberately not one: the permission, the boundary (including
+its structural containment), and their coexistence. Pinning only the permission would let the boundary rot silently
+under a future SI diet -- the redundant-guard trap (repo memory
+`redundant-guards-need-per-layer-tests`).
+
+Mutation-verified four ways; the second is the one that matters most:
+
+1. Remove the carve-out entirely -> 3 tests red.
+2. **Keep the permission, strip the boundary** (replace the scoping sentence
+   with "Answer these helpfully.") -> the boundary test goes red specifically.
+3. Relocate the tie-break clause elsewhere in the SI -> boundary test red.
+4. Drop the named-rule guard alone -> boundary test red.
+
+Mutation 2 is the realistic failure mode. A future editor trimming the SI for
+tokens would plausibly keep the useful-sounding permission and drop the
+qualifying sentence as verbose -- which is exactly the edit that would turn this
+into a licence to interpret rules for applicants.
+
+## An existing test caught a collision
+
+The first draft used "what does alien registration number mean" as an example.
+That reddened `test_jit_mode_schema_routes_to_dti_si_when_dti_off`, which
+asserts a specific field's `spoken_name` is ABSENT from the DTI SI and uses that
+absence to discriminate the DTI branch from the legacy one. My example phrase
+contained that spoken name verbatim and destroyed the discriminator.
+
+The test was right and the example was wrong, so the example moved -- first to
+"what does exemption mean", which review then showed was ALSO wrong for a
+different and more serious reason (see below), and finally dropped altogether. Worth recording as the general shape: **an SI example phrase is
+not free text -- it shares a namespace with every string other tests assert the
+SI does or does not contain.**
+
+## Scar tissue: the example set pointed at the leak
+
+The fresh-eyes review caught the carve-out listing "what does exemption mean" as
+a SANCTIONED plain-meaning example. On the W-7, "exemption" and "exception 3"
+are not ordinary words -- they are rule labels whose meaning IS the eligibility
+condition. So the example held up rule-interpretation as the model of a safe
+definitional question, aimed squarely at the leak the boundary exists to close.
+
+The original boundary line ("what the word MEANS vs what APPLIES to them") did
+not resolve it either, because the "word" in question is the name of a legal
+condition. "What does exception 3 mean" is syntactically identical to "what does
+ITIN stand for" while requiring a completely different answer.
+
+Redrawn as ORDINARY WORD vs NAMED RULE, with a flat statement that a named rule
+is never plain meaning however the question is phrased, and the hard cases named
+explicitly. Ties break to "rule question".
+
+The general shape, and the third time a variant of it appeared today: **an
+example is not decoration -- it teaches the boundary more concretely than the
+rule does.** A wrong example silently widens the rule it illustrates, and it
+does so in the direction the reader is most likely to follow.
+
+The review also found a surviving mutation: the boundary tests asserted only
+that each clause was PRESENT in the SI, so relocating the tie-break to a
+different paragraph passed. A tie-break floating elsewhere no longer says which
+class of question it disambiguates. The tests now assert structural containment
+INSIDE the carve-out sentence.
+
+## The same mistake twice, then a test instead
+
+Round 1 of review caught "what does exemption mean" as a sanctioned example --
+a rule label, not a word. I replaced it with "what does spouse mean". Round 2
+caught THAT too: "spouse" occurs 69 times in the W-7 and 66 in the f1040,
+naming reason-for-applying and filing-status categories. On those fields,
+asking what "spouse" means is asking which category applies to you -- the
+hedged question wearing definitional clothing, exactly like "exemption".
+
+Two reviewers, two rounds, each catching one instance by reading carefully.
+That is the tell from CLAUDE.md scar #7: when a finding differs from the last
+one only in WHICH INSTANCE it is, stop fixing instances.
+
+So the third fix is not a better example -- it is a TEST. It extracts the
+sanctioned examples from the SI, strips interrogative scaffolding, and checks
+every remaining content word against the vocabulary of every shipped kit. A
+term the forms use as their own category label fails CI with the count and the
+kit named. Verified by re-introducing BOTH real mistakes: each reddens it.
+
+The third example was dropped rather than replaced. Two safe examples make the
+point, and every additional one is another chance to pick a colliding term.
+
+ITIN is exempted by name, and that exemption is the whole reason this bead
+exists: an acronym the form expands in its own title is the paradigm SAFE case.
+
+## Verification
+
+- Full backend suite: 2580 passed, 2 skipped.
+- FOUR mutations confirmed red, then restored: carve-out removed; boundary
+  stripped while the permission survives; tie-break relocated out of the
+  carve-out; named-rule guard dropped on its own.
+- SI size impact is one sentence, which matters under the SI-reduction epic
+  (`polyglot-pdf-jnjj`): a short added clause rather than a new block.
+
+## Not addressed here
+
+Whether the model actually COMPLIES with the new carve-out is unmeasured. This
+bead changes what it is told, not what it does -- and this session has now seen
+two separate cases (`polyglot-pdf-apkdl` spellback, `polyglot-pdf-mq2je` date
+format) where clear SI text was ignored in favor of a competing signal. If the
+ITIN question still hedges after this, the next step is measurement, not more
+prompt strengthening.

@@ -454,3 +454,175 @@ def test_si_makes_hedge_and_defer_UNCONDITIONAL():
     assert "reviewed by a qualified human before filing" not in si, (
         "that phrasing asserts review as certain; the applicant UNDERTAKES "
         "review but we never guarantee it happened -- keep the SI conditional")
+
+
+# --------------------------------------------------------------------------- #
+# Layer 4 -- the PLAIN MEANING carve-out (bd polyglot-pdf-gs5f0)
+#
+# The maintainer hit this live: asked what "ITIN" stands for on the W-7, the
+# model refused and read from the instructions instead. The expansion is in the
+# form's own title. Expanding an acronym is not a legal determination -- one
+# correct answer, no dependence on the user's situation, no consequence -- but
+# the SI had no carve-out for it, so it fell into the hedge path by default.
+#
+# THE RISK THIS PAIR GUARDS. A carve-out written loosely is a licence to
+# interpret rules for the user, which would defeat the whole hedge policy and
+# the deployment invariant it rests on (docs/standards/confirmation-and-audit.md).
+# So BOTH halves are pinned: the permission must exist, AND the applicative
+# boundary must still hold. A future SI diet that drops either one fails here.
+# Testing only the permission would let the boundary rot silently -- that is the
+# redundant-guard trap (repo memory: redundant-guards-need-per-layer-tests).
+# --------------------------------------------------------------------------- #
+
+def test_si_allows_answering_a_plain_meaning_question_directly():
+    """The permission half. Without this the model hedges on 'what does ITIN
+    stand for', which is useless on the easy questions and erodes trust for the
+    hard ones where the hedge actually matters."""
+    si = _si_text()
+    assert "PLAIN MEANING" in si, (
+        "the SI must carve out definitional questions; without it every "
+        "'what does X mean' falls into the hedge path")
+    lowered = si.lower()
+    assert "what does itin stand for" in lowered, (
+        "the carve-out should name the maintainer's own reported example so a "
+        "future edit cannot narrow it past the case that motivated it")
+    # The sanctioned behavior, stated positively (allowlist, per this module's
+    # header): answer it, and skip the hedge machinery for THIS class only.
+    assert "do not hedge" in lowered
+    assert "do not call the secretary first" in lowered
+
+
+def test_si_keeps_the_applicative_boundary_inside_the_carve_out():
+    """The boundary half -- the load-bearing one.
+
+    The carve-out is only safe while it stays scoped to word meaning. This
+    pins that the SI names the distinction explicitly AND names applicative
+    questions as still-hedged, so 'plain meaning' cannot be read as 'you may
+    now explain rules'.
+    """
+    lowered = _si_text().lower()
+    assert "what an ordinary word means versus what a rule says" in lowered, (
+        "the carve-out must state its own boundary, not just its permission")
+    # THE LEAK THIS CLOSES (fresh-eyes round 1). A question about a NAMED RULE
+    # is rule-interpretation wearing definitional clothing: on the W-7,
+    # "exception 3" is not a word, it is an eligibility condition, so "what
+    # does exception 3 mean" IS the hedged question even though it is phrased
+    # as a definition. An earlier draft used "what does exemption mean" as a
+    # SANCTIONED example, which pointed the carve-out straight at that leak.
+    assert "a named rule on the form is never plain meaning" in lowered, (
+        "without this, a rule label read as a 'word' escapes the hedge path")
+    assert "what does exception 3 mean" in lowered, (
+        "name the hard case explicitly -- it is the one a model gets wrong")
+    assert "what a rule requires" in lowered
+    # Eligibility phrased as a question is the exact thing that must NOT be
+    # swept in by the carve-out.
+    assert "are you eligible for an itin" in lowered
+    assert "should you check box a" in lowered
+    # And the tie-break must fall on the SAFE side.
+    assert "treat it as a rule question and hedge" in lowered, (
+        "an ambiguous question must default to hedging, never to answering")
+
+    # STRUCTURAL, not just presence (fresh-eyes round 1): every boundary clause
+    # must live INSIDE the carve-out sentence it scopes. Asserting mere presence
+    # would survive a mutation that relocates the tie-break elsewhere in the SI,
+    # where it no longer says WHICH class of question it disambiguates.
+    carve_start = _si_text().index("PLAIN MEANING")
+    carve_end = _si_text().index("ALWAYS HEDGE AND DEFER")
+    carve_out = _si_text()[carve_start:carve_end].lower()
+    for clause in (
+        "a named rule on the form is never plain meaning",
+        "treat it as a rule question and hedge",
+        "what an ordinary word means versus what a rule says",
+    ):
+        assert clause in carve_out, (
+            f"boundary clause {clause!r} must sit INSIDE the carve-out that it "
+            "scopes, not merely somewhere in the SI")
+
+
+def test_plain_meaning_carve_out_does_not_displace_the_hedge_rule():
+    """Ordering/coexistence: the carve-out is an EXCEPTION, so the general rule
+    must still be present and unweakened after it."""
+    si = _si_text()
+    assert "ALWAYS HEDGE AND DEFER" in si
+    assert "INFORMATION, NEVER ADVICE" in si
+    # The carve-out must come BEFORE the hedge rule so the hedge reads as the
+    # default and the carve-out as the narrow exception -- not the reverse.
+    assert si.index("PLAIN MEANING") < si.index("ALWAYS HEDGE AND DEFER"), (
+        "the carve-out must be scoped by the hedge rule that follows it, not "
+        "appear as a later override of it")
+
+
+def test_plain_meaning_examples_are_not_terms_the_shipped_KITS_use():
+    """Every SANCTIONED example must be a word no shipped form uses as a
+    category or rule label -- checked against the KITS, not by judgment.
+
+    THIS CAUGHT THE SAME MISTAKE TWICE (bd polyglot-pdf-gs5f0). The carve-out's
+    examples teach the boundary more concretely than its rule text does, so a
+    badly-chosen example silently widens it in exactly the direction a reader
+    will follow. Draft 1 offered "what does exemption mean"; draft 2 replaced it
+    with "what does spouse mean". BOTH are eligibility labels -- "spouse" occurs
+    69 times in the W-7 and 66 in the f1040, naming reason-for-applying and
+    filing-status categories. Asking what one MEANS on those fields is asking
+    which category applies to you: the hedged question, dressed as a definition.
+
+    Two reviewers each caught one instance by reading. This asserts the PROPERTY
+    instead, so instance three fails CI (repo memory:
+    guard-the-property-not-the-code-shape).
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    si = _si_text()
+    carve_out = si[si.index("PLAIN MEANING"):si.index("ALWAYS HEDGE AND DEFER")]
+
+    # The sanctioned examples are ONLY the quoted phrases in the opening
+    # permission sentence -- the ones offered as "ask me this and I answer".
+    # Everything after "The line is" is boundary prose: counter-examples that
+    # MUST use rule vocabulary, plus the ITIN expansion itself, which is
+    # legitimately full of form terms.
+    permission_region = carve_out.split("The line is")[0]
+    quoted = re.findall(r"'([^']+)'", permission_region)
+    assert quoted, "the carve-out must carry at least one sanctioned example"
+
+    # Content words from each example, minus the interrogative scaffolding that
+    # carries no domain meaning.
+    ACRONYM_EXEMPT = {"itin"}
+    STOPWORDS = {
+        "what", "does", "do", "is", "a", "an", "the", "mean", "means",
+        "stand", "for", "of", "on", "this", "form", "it",
+    }
+
+    kit_root = Path(__file__).resolve().parents[3] / "form-kits"
+    kit_texts = {
+        p.parent.name: p.read_text(encoding="utf-8").lower()
+        for p in kit_root.glob("*/schema.json")
+    }
+    assert kit_texts, f"no shipped kits found under {kit_root}"
+
+    offenders = []
+    for example in quoted:
+        for word in re.findall(r"[a-z]+", example.lower()):
+            if word in STOPWORDS or len(word) < 4:
+                continue
+            # An ACRONYM the form itself expands in its own title is the
+            # paradigm safe case, not a collision -- that is why "what does
+            # ITIN stand for" is the motivating example for this whole bead.
+            if word in ACRONYM_EXEMPT:
+                continue
+            for kit, text in kit_texts.items():
+                # Word-boundary match: a term the kit actually uses as its own
+                # vocabulary, not an incidental substring.
+                hits = len(re.findall(rf"\b{re.escape(word)}\b", text))
+                if hits:
+                    offenders.append((example, word, kit, hits))
+
+    assert not offenders, (
+        "a sanctioned plain-meaning example uses a term the shipped kits use as "
+        "their own vocabulary, so asking what it MEANS is plausibly asking which "
+        "category applies -- the hedged question wearing definitional clothing:\n"
+        + "\n".join(
+            f"  example {e!r}: '{w}' appears {n}x in {k}" for e, w, k, n in offenders
+        )
+        + "\nPick a term absent from every kit (e.g. 'surname', 'abbreviation')."
+    )
