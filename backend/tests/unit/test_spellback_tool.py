@@ -915,7 +915,11 @@ class TestSpellbackTtsRoute:
     def _client(self, monkeypatch, enabled: bool):
         from fastapi.testclient import TestClient
         from backend.main import app
-        from backend.services.auth import require_auth
+        # The TTS routes moved to the STRICTER dependency (bd
+        # polyglot-pdf-ugm6): they spend money, so a completed client link
+        # must buy no more synthesis. Override THAT, or every request here
+        # 401s on a real token check.
+        from backend.services.auth import require_paid_client_work as require_auth
         import backend.routes.tts_routes as tts_routes
 
         settings = Settings()

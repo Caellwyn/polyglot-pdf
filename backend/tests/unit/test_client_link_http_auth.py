@@ -44,7 +44,15 @@ def _secret(monkeypatch):
 
 
 async def _auth(token: str) -> dict:
+    """Retrieval: verified + kit-scoped, but NOT redeemed."""
     return await require_auth(authorization="Bearer " + token)
+
+
+async def _paid(token: str) -> dict:
+    """Paid work: verified AND redeemed."""
+    from backend.services.auth import require_paid_client_work
+
+    return await require_paid_client_work(authorization="Bearer " + token)
 
 
 # --- the credential is accepted at all ---------------------------------------
@@ -193,14 +201,17 @@ def test_a_client_link_with_no_kit_resolves_to_nothing(monkeypatch):
 # --- the r1 hole: HTTP accepted a BURNED link for the rest of its exp -------
 
 
-def test_a_COMPLETED_link_is_refused_by_HTTP_too(monkeypatch):
-    """THE CROSS-SURFACE HOLE (Opus r1). verify_link_token checks the
-    signature and the OPEN window only, so before this the socket refused a
-    burned link while every HTTP route kept serving it -- schema, PDF bytes,
-    /api/fill-pdf, and both PAID TTS routes -- for the rest of its ~48h exp.
-    One-time use enforced only on a door an attacker need not use.
+def test_a_COMPLETED_link_is_refused_by_PAID_routes(monkeypatch):
+    """A burned link buys NO MORE PAID WORK.
 
-    Mutation: drop the enforce_link_redemption call in require_auth -- red.
+    Scoped deliberately (maintainer, 2026-08-24): the TTL bounds a backend
+    CONNECTION, not the client's own document. So the refusal lives on
+    require_paid_client_work (the two TTS routes) and the socket -- NOT on
+    require_auth, which gates retrieval. The sibling test below pins the
+    other half: the same burned link still downloads the PDF it produced.
+
+    Mutation: drop the enforce_link_redemption call in
+    require_paid_client_work -- red.
     """
     from backend.services.link_redemptions import LinkAlreadyUsed
 
@@ -211,11 +222,36 @@ def test_a_COMPLETED_link_is_refused_by_HTTP_too(monkeypatch):
     token, _ = mint_link_token("firm-a", "i-90", "u-emp-7")
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(_auth(token))
+        asyncio.run(_paid(token))
     assert exc.value.status_code == 401
 
 
-def test_an_ELAPSED_completion_window_is_refused_by_HTTP_too(monkeypatch):
+def test_a_COMPLETED_link_can_STILL_DOWNLOAD_its_own_form(monkeypatch):
+    """THE OTHER HALF, and the point of the correction.
+
+    The burn lands at socket teardown -- an idle timeout, a section switch, a
+    network blip -- while the client sits in front of live Download, Print
+    and Preview buttons. Refusing them there took away the document they had
+    just spent 40 minutes filling, for no security benefit: /api/fill-pdf is
+    a pure PyMuPDF render with no model call.
+
+    Mutation: make require_auth redeem again -- red.
+    """
+    from backend.services.link_redemptions import LinkAlreadyUsed
+
+    def _burned(jti, firm_id, kit_id, now=None):
+        raise LinkAlreadyUsed("already completed")
+
+    monkeypatch.setattr("backend.services.link_redemptions.open_link", _burned)
+    token, _ = mint_link_token("firm-a", "i-90", "u-emp-7")
+
+    claims = asyncio.run(_auth(token))
+
+    assert claims["firm_id"] == "firm-a"
+    assert claims["link_kit_id"] == "i-90"
+
+
+def test_an_ELAPSED_completion_window_is_refused_by_PAID_routes(monkeypatch):
     """The socket enforced the completion clock; HTTP did not, so a link
     could outlive its window on every route except the one that starts the
     paid session.
@@ -236,12 +272,12 @@ def test_an_ELAPSED_completion_window_is_refused_by_HTTP_too(monkeypatch):
                                complete_window_s=3600)
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(_auth(token))
+        asyncio.run(_paid(token))
     assert exc.value.status_code == 401
 
 
-def test_an_UNREACHABLE_store_refuses_HTTP_too(monkeypatch):
-    """Fail closed on both doors. Mutation: admit on
+def test_an_UNREACHABLE_store_refuses_PAID_work(monkeypatch):
+    """Fail closed where money is at stake. Mutation: admit on
     RedemptionUnavailable -- red."""
     from backend.services.link_redemptions import RedemptionUnavailable
 
@@ -252,7 +288,7 @@ def test_an_UNREACHABLE_store_refuses_HTTP_too(monkeypatch):
     token, _ = mint_link_token("firm-a", "i-90", "u-emp-7")
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(_auth(token))
+        asyncio.run(_paid(token))
     assert exc.value.status_code == 401
 
 

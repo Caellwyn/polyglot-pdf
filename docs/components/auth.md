@@ -133,8 +133,19 @@ gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd
 necessary but nowhere near sufficient there, see below), `POST
 /api/links/mint` (bd `polyglot-pdf-ugm6` -- firm staff mint a CLIENT link; a
 client credential is refused here because minting needs a `uid` and a client
-has none), and both TTS routes `POST /api/tts/spellback` + `POST /api/tts/intro` (each synthesizes
-audio, so each is paid work as well as a user-data path). The frontend
+has none). The two TTS routes `POST /api/tts/spellback` + `POST
+/api/tts/intro` are gated by the STRICTER `require_paid_client_work`
+instead: each synthesizes audio, so each is real spend, and a completed
+client link must buy no more of it.
+
+**That split is the shape of the client TTL** (maintainer, 2026-08-24: "The
+TTL should be backend connection"). Completing a form bounds a new BACKEND
+CONNECTION -- a Gemini session, a synthesis call. It does NOT bound the
+client downloading, printing or previewing the document they just filled:
+`/api/fill-pdf` is a pure PyMuPDF render with no model call, so a clock on it
+buys no security and only loses the client their work. Retrieval still
+requires a valid signed link inside its open window, scoped to that link's
+single kit. The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).

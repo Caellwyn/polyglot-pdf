@@ -89,13 +89,27 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     # token and a caller cannot opt into the weaker check by labelling
     # theirs. See services/link_tokens.py for the credential boundary.
     if token.count(".") == 1:
+        # NO REDEMPTION: require_auth gates RETRIEVAL (the manifest, the
+        # schema, /api/fill-pdf's pure PyMuPDF render). Burning a link must
+        # not take away the document the client already filled. The two PAID
+        # routes it also gates (/api/tts/*) declare require_paid_client_work
+        # instead, which does redeem.
         return await asyncio.to_thread(resolve_client_link_credential, token)
 
     return verify_token(token)
 
 
-def resolve_client_link_credential(token: str) -> dict:
-    """Resolve a CLIENT LINK token to claims, redeeming it. Raises 401.
+def resolve_client_link_credential(token: str, *, redeem: bool = False) -> dict:
+    """Resolve a CLIENT LINK token to claims. Raises 401.
+
+    REDEEM=TRUE ONLY FOR PAID WORK (maintainer, 2026-08-24: "There's not
+    really any reason to have a time limit on saving or printing. That's all
+    client side. The TTL should be backend connection."). A completed link
+    must not start another Gemini session or buy another TTS synthesis -- but
+    downloading, printing and previewing are the client retrieving the
+    document they already produced, and a clock on that only loses them their
+    work. Retrieval still requires a VALID SIGNED link inside its open
+    window, scoped to that link's single kit.
 
     THE ONE PLACE a link credential is turned into claims (bd
     polyglot-pdf-ugm6). Extracted from require_auth because it is not the
@@ -140,14 +154,56 @@ def resolve_client_link_credential(token: str) -> dict:
         "cw": payload["cw"],
         "is_client_link": True,
     }
-    try:
-        enforce_link_redemption(claims)
-    except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
-        logger.warning("link_redemption_refused", error=str(exc))
-        raise _unauth from exc
+    if redeem:
+        try:
+            enforce_link_redemption(claims)
+        except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+            logger.warning("link_redemption_refused", error=str(exc))
+            raise _unauth from exc
     return claims
 
 
 def get_db():
     """Returns Firestore client"""
     return firestore.client()
+
+
+async def require_paid_client_work(
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """require_auth PLUS redemption -- for routes that SPEND MONEY.
+
+    The split is the whole point of the correction: "one time" bounds paid
+    work, not the client's access to their own document. A completed link
+    buys no further synthesis and starts no further session; it can still
+    download the PDF it already produced.
+
+    Declare this instead of require_auth on any route that calls a model.
+    The set is pinned by test_http_route_auth.py.
+    """
+    claims = await require_auth(authorization)
+    if not (isinstance(claims, dict) and claims.get("is_client_link")):
+        return claims          # staff: there is no link to redeem
+
+    from backend.services.link_redemptions import (
+        LinkAlreadyUsed,
+        LinkWindowElapsed,
+        RedemptionUnavailable,
+        enforce_link_redemption,
+    )
+    try:
+        # Off the event loop: a sync Admin-SDK read inside an async
+        # dependency blocks the SHARED Cloud Run loop, so a slow Firestore
+        # would stall every concurrent request, in-flight audio included.
+        await asyncio.to_thread(enforce_link_redemption, claims)
+    except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+        # One refusal for all three -- already-used, window-closed and
+        # store-unreachable must be indistinguishable, and an unreachable
+        # store FAILS CLOSED.
+        logger.warning("link_redemption_refused", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    return claims

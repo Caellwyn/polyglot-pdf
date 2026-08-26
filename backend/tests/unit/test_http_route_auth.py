@@ -740,9 +740,12 @@ _EXPECTED_GATED_ROUTES = {
     # ABSENT from this set: the client has no account, so the signed link IS
     # the credential.
     ("POST", "/api/links/mint"),
+    # NOTE: the two /api/tts/* routes LEFT this set (maintainer, 2026-08-24).
+    # They spend money, so they declare require_paid_client_work -- which is
+    # require_auth PLUS redemption. They are still auth-gated; they are just
+    # gated by the stricter dependency, pinned by
+    # test_the_PAID_route_set_is_pinned below.
     ("POST", "/api/fill-pdf"),
-    ("POST", "/api/tts/spellback"),
-    ("POST", "/api/tts/intro"),
 }
 
 
@@ -769,3 +772,38 @@ def test_spellback_requires_token(_auth_on):
     resp = client.post("/api/tts/spellback",
                        json={"value": "A1234", "language": "Spanish"})
     assert resp.status_code == 401
+
+
+def test_the_PAID_route_set_is_pinned():
+    """The routes that SPEND MONEY, and therefore redeem a client link.
+
+    The split (maintainer, 2026-08-24): "one time" bounds a backend
+    CONNECTION, not the client's own document. A completed link must buy no
+    further synthesis and start no further session -- but must still download
+    the PDF it already produced.
+
+    A new route that calls a model MUST declare require_paid_client_work, or
+    a burned link keeps spending. Derived from the shipped sources so a
+    fourth paid route reddens here.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    paid = {}
+    call = re.compile(r"Depends\(require_paid_client_work\)")
+    for path in sorted((root / "backend/routes").rglob("*.py")):
+        n = sum(1 for l in path.read_text(encoding="utf-8").splitlines()
+                if call.search(l))
+        if n:
+            paid[path.relative_to(root).as_posix()] = n
+
+    assert paid == {
+        # Both TTS routes synthesize audio -- real per-call spend.
+        "backend/routes/tts_routes.py": 2,
+    }, (
+        "the PAID route set changed. A route that calls a model must use "
+        "require_paid_client_work so a completed link cannot keep spending; "
+        "a retrieval route must NOT, or the client loses access to their own "
+        "finished form."
+    )

@@ -75,18 +75,11 @@ class _Store:
 
         rec = self.records.get(jti)
         if rec is not None:
-            # Mirror the REAL grace window (Opus r11): a completed link keeps
-            # working briefly, because the burn lands at socket teardown
-            # while the client is still downloading their finished form. A
-            # fake that refuses instantly would make this journey test assert
-            # the bug as correct -- which the earlier version did.
-            from backend.services.link_redemptions import COMPLETION_GRACE_S
-
-            done = rec.get("completed_at")
-            if isinstance(done, int) and not isinstance(done, bool):
-                stamp = int(now if now is not None else _t.time())
-                if stamp >= done + COMPLETION_GRACE_S:
-                    raise LinkAlreadyUsed("already completed")
+            # open_link is reached only from PAID paths now (the socket,
+            # /open, the TTS routes), so refusing a completed link here is
+            # correct -- and retrieval never calls it at all.
+            if rec.get("completed_at"):
+                raise LinkAlreadyUsed("already completed")
             return rec
         rec = {"jti": jti, "firm_id": firm_id, "kit_id": kit_id,
                "opened_at": int(now if now is not None else _t.time()),
@@ -145,8 +138,11 @@ def test_the_whole_client_journey_works_with_NO_ACCOUNT(journey):
     allowed = asyncio.run(kit_gates.firm_allowed_kits(claims))
     assert allowed == frozenset({_KIT})
 
-    # 3. The redemption record exists and names the firm + kit, with no
-    #    client identifier anywhere.
+    # 3. The redemption record is created by the PAID path (the socket), not
+    #    by retrieval -- require_auth no longer redeems. Open it the way the
+    #    socket does, then check the record's shape: no client identifier
+    #    anywhere.
+    journey.open_link(jti, _FIRM, _KIT)
     record = journey.records[jti]
     assert set(record) == {"jti", "firm_id", "kit_id", "opened_at",
                            "completed_at"}
@@ -170,23 +166,21 @@ def test_the_journey_survives_a_RELOAD_and_then_burns_on_completion(journey):
     for _ in range(3):
         assert asyncio.run(_auth(token))["jti"] == jti
 
+    journey.open_link(jti, _FIRM, _KIT)   # the socket opened the session
     journey.complete_link(jti)
 
-    # THE SAME TOKEN STILL WORKS BRIEFLY -- and that is the requirement, not
-    # a leak. An earlier version of this test asserted the opposite ("now
-    # burned, is refused everywhere"), which pinned a real bug as correct:
-    # the burn lands at socket teardown while the client is still looking at
-    # Download/Print buttons, so refusing instantly made their finished form
-    # unreachable (Opus r11).
+    # RETRIEVAL still works: the client downloads the form they just filled,
+    # for as long as their tab is open. An earlier version asserted the
+    # opposite ("now burned, is refused everywhere") and pinned a real bug as
+    # correct -- refusing here took away 40 minutes of the client's work for
+    # no security benefit, since /api/fill-pdf spends nothing.
     assert asyncio.run(_auth(token))["jti"] == jti
 
-    # Past the grace window it IS refused -- the replay guarantee, measured
-    # from the burn.
-    from backend.services.link_redemptions import COMPLETION_GRACE_S
+    # But PAID work is refused: no second Gemini session, no more synthesis.
+    from backend.services.auth import require_paid_client_work
 
-    journey.records[jti]["completed_at"] = int(time.time()) - COMPLETION_GRACE_S - 1
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(_auth(token))
+        asyncio.run(require_paid_client_work(authorization="Bearer " + token))
     assert exc.value.status_code == 401
 
 

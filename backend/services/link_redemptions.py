@@ -40,25 +40,28 @@ COLLECTION = "link_redemptions"
 # every link as fresh.
 _ENABLED_ENV = "LINK_REDEMPTIONS_FIRESTORE_ENABLED"
 
-# A COMPLETED LINK KEEPS WORKING BRIEFLY, because "completed" is not the
-# moment the client LEAVES (bd polyglot-pdf-ugm6, Opus cross-surface r11).
+# WHAT THE BURN ACTUALLY BOUNDS: a new BACKEND CONNECTION -- i.e. a new paid
+# Gemini session. Not saving, not printing, not previewing (maintainer,
+# 2026-08-24: "There's not really any reason to have a time limit on saving
+# or printing. That's all client side. The TTL should be backend
+# connection.").
 #
-# `form_complete` is a VALIDATOR TRIGGER: the frontend emits it on every
-# confirm, so it fires on the confirm that fills the last field. The burn
-# then lands at socket TEARDOWN -- an idle timeout (120s), a section switch,
-# or any network blip -- while the client is still sitting in front of live
-# "Download Filled PDF", "Print" and "Preview" buttons. Without a grace
-# window they click Download, /api/fill-pdf refuses them 401, and 40 minutes
-# of work is unreachable. The 7-day reopen does not help: the link is BURNED,
-# not expired.
+# The distinction the callers draw, and why one-time use is unaffected:
 #
-# 30 minutes is long enough for someone to read a completion screen, review
-# validator findings, and print -- and short enough that the threat this
-# guard exists for (a FORWARDED link starting a second paid Gemini session)
-# is still refused. The paid session itself is separately bounded: the socket
-# redeems on every connect, so a replay inside the window still cannot start
-# an unbounded new session once bd polyglot-pdf-ik7e lands its ceiling.
-COMPLETION_GRACE_S = 30 * 60
+#   PAID work -- /ws/fill (a Gemini session) and the two TTS routes
+#   (synthesis) -- redeems. A completed link cannot start another.
+#
+#   RETRIEVING YOUR OWN WORK -- /api/fill-pdf (a pure PyMuPDF render, no
+#   model call), the schema/manifest/PDF reads -- does NOT redeem. It still
+#   requires a VALID SIGNED link inside its open window, scoped to that
+#   link's one kit, so nothing is opened up: the same person, the same form,
+#   no model spend.
+#
+# This replaces a 30-minute grace window I added first (Opus r11 found that a
+# finished form was undownloadable). That was a band-aid on the wrong
+# boundary: it put a clock on the client's own document, when the thing worth
+# bounding was never the download.
+
 
 
 class RedemptionUnavailable(Exception):
@@ -114,14 +117,11 @@ def open_link(jti: str, firm_id: str, kit_id: str,
         snap = doc_ref.get()
         if snap.exists:
             rec = snap.to_dict() or {}
-            done = rec.get("completed_at")
-            if isinstance(done, int) and not isinstance(done, bool):
-                # Past the grace window this is a replay, not the client
-                # finishing up. A non-int/corrupt stamp is treated as "not
-                # completed" rather than locking someone out on bad data --
-                # the same fail-toward-the-user posture as opened_at.
-                if stamp >= done + COMPLETION_GRACE_S:
-                    raise LinkAlreadyUsed("link already completed")
+            if rec.get("completed_at"):
+                # A completed link starts no NEW paid session. Retrieval
+                # paths do not reach here at all (see the module header), so
+                # this refusal costs the client nothing they already own.
+                raise LinkAlreadyUsed("link already completed")
             return rec
         rec = {
             "jti": jti,
