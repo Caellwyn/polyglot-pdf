@@ -116,11 +116,14 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the
   `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
-  `/api/fill-pdf`, the form-kit list/schema reads, the archived-revision
+  `/api/fill-pdf`, the archived-revision
   reads `/api/form-kits/{kit_id}/archive` + `.../archive/{marker}/schema`
   (bd `polyglot-pdf-qfyxr`), the firm retire write path
   `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`), and both TTS routes
-  `/api/tts/spellback` + `/api/tts/intro`). **LOCAL ONLY, fail-closed on
+  `/api/tts/spellback` + `/api/tts/intro`; plus `require_signin` on the
+  form-kit list/schema reads, which need a valid sign-in but NOT voice-app
+  enrolment -- selecting a form is how the app is used, so it must stay
+  reachable for a magic-link user with no firm claim). **LOCAL ONLY, fail-closed on
   deploy** (bd `polyglot-pdf-knmp`): with `K_SERVICE` set, `Settings` refuses
   to start and `verify_token` ignores the flag — no override exists. Auth
   canon: [auth.md](auth.md).

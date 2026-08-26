@@ -1,8 +1,11 @@
 """Auth gating on the HTTP routes (bd polyglot-pdf-z2is).
 
-/api/fill-pdf renders user-entered field values and /api/form-kits{,/schema}
-serve the kit catalogue; all three now require a Firebase ID token via
-require_auth. /api/form-kits/{kit_id}/pdf stays DELIBERATELY public (blank
+/api/fill-pdf renders user-entered field values, so it requires a Firebase ID
+token via require_auth. /api/form-kits{,/schema} serve the kit catalogue and
+require only require_signin -- a valid sign-in, NOT voice-app enrolment:
+SELECTING a form is how the app is used, so gating it on a firm claim left a
+signed-in user with nothing to pick and no way out (2026-08-25). Enrolment
+gates ACTING on a form. /api/form-kits/{kit_id}/pdf stays DELIBERATELY public (blank
 template = public government form, also shipped in the static Hosting bundle)
 -- that non-gate is pinned here too so a future blanket-auth sweep can't
 silently break the pdfjs viewer path without failing a test.
@@ -113,7 +116,12 @@ def test_bypass_admits_tokenless_requests(_auth_bypassed, monkeypatch):
 def test_require_auth_passes_bearer_token_to_verifier(monkeypatch):
     seen = {}
 
-    def _fake_verify(token: str) -> dict:
+    # **kwargs: verify_token gained check_revoked and require_enrolment.
+    # A double with a fixed signature turns any future parameter into a
+    # TypeError that looks like a confidentiality failure -- these tests
+    # are about PRIVATE-KIT VISIBILITY, and that is what they should
+    # fail on.
+    def _fake_verify(token: str, **_kw) -> dict:
         seen["token"] = token
         return {"uid": "u1"}
 
@@ -228,7 +236,12 @@ class _TwoKitStore:
 def _firm_world(_auth_on, monkeypatch):
     """Wire the two-kit store, the token->claims map, and the firm allowlist."""
 
-    def _fake_verify(token: str) -> dict:
+    # **kwargs: verify_token gained check_revoked and require_enrolment.
+    # A double with a fixed signature turns any future parameter into a
+    # TypeError that looks like a confidentiality failure -- these tests
+    # are about PRIVATE-KIT VISIBILITY, and that is what they should
+    # fail on.
+    def _fake_verify(token: str, **_kw) -> dict:
         claims = _TOKENS.get(token)
         if claims is None:
             raise HTTPException(status_code=401, detail="bad token")
@@ -692,8 +705,8 @@ def test_empty_allowlist_hides_private_even_for_claimed_firm(_firm_world, monkey
 # reviewer happens to notice.
 
 
-def _routes_depending_on_require_auth() -> set:
-    """(method, path) for every app route wired to the require_auth dependency.
+def _routes_depending_on(target) -> set:
+    """(method, path) for every app route wired to `target` as a dependency.
 
     Reads the actual dependency objects off each route, so it cannot drift the
     way a hand-maintained list does.
@@ -701,7 +714,7 @@ def _routes_depending_on_require_auth() -> set:
     gated = set()
     for route in app.routes:
         for dep in getattr(route, "dependencies", []) or []:
-            if getattr(dep, "dependency", None) is require_auth:
+            if getattr(dep, "dependency", None) is target:
                 for method in sorted(route.methods or []):
                     gated.add((method, route.path))
         # The common spelling in this repo is a PARAMETER default
@@ -710,19 +723,33 @@ def _routes_depending_on_require_auth() -> set:
         dependant = getattr(route, "dependant", None)
         if dependant is not None:
             for sub in dependant.dependencies:
-                if sub.call is require_auth:
+                if sub.call is target:
                     for method in sorted(route.methods or []):
                         gated.add((method, route.path))
     return gated
 
 
-# The seven routes that carry user data or gate paid work. Update this list ONLY
+def _routes_depending_on_require_auth() -> set:
+    return _routes_depending_on(require_auth)
+
+
+# The SIX routes that carry user data or gate paid work. Update this list ONLY
 # together with the prose enumerations in:
 #   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
 #   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)
-_EXPECTED_GATED_ROUTES = {
+# SELECTING a form is deliberately NOT gated on enrolment (maintainer,
+# 2026-08-25). GET /api/form-kits and the live schema read use require_signin,
+# which verifies WHO the caller is without demanding a firm or dev claim.
+# Gating them left a signed-in user with no claims in an app with no form to
+# pick and no way out -- and it bought nothing, because both routes already
+# filter to kits that are PUBLIC or in the caller's own firm allowlist.
+# Enrolment gates ACTING on a form, which is everything in the set below.
+_EXPECTED_BROWSE_ROUTES = {
     ("GET", "/api/form-kits"),
     ("GET", "/api/form-kits/{kit_id}/schema"),
+}
+
+_EXPECTED_GATED_ROUTES = {
     # The archived-revisions reads (bd polyglot-pdf-qfyxr): same gates as the
     # live schema read, incl. firm visibility on the owning kit.
     ("GET", "/api/form-kits/{kit_id}/archive"),
@@ -737,6 +764,28 @@ _EXPECTED_GATED_ROUTES = {
     ("POST", "/api/tts/spellback"),
     ("POST", "/api/tts/intro"),
 }
+
+
+def test_the_browse_routes_do_NOT_require_enrolment():
+    """Selecting a form must stay reachable for any signed-in user.
+
+    The failure this prevents is silent and total: the catalogue 403s, the app
+    renders no forms, and the only remedy the UI can offer is "sign in again"
+    -- which was never the problem. Found on the live app by the maintainer,
+    after nine review rounds that all traced the blast radius and called it
+    clean. They were right that no code path BREAKS; nobody asked whether the
+    app stays USABLE for a caller with no claims.
+    """
+    from backend.services.auth import require_signin
+
+    actual = _routes_depending_on(require_signin)
+    assert actual == _EXPECTED_BROWSE_ROUTES, (
+        "The set of browse (sign-in only) routes changed.\n"
+        f"  added:   {sorted(actual - _EXPECTED_BROWSE_ROUTES)}\n"
+        f"  removed: {sorted(_EXPECTED_BROWSE_ROUTES - actual)}\n"
+        "A route REMOVED here has almost certainly moved to require_auth, "
+        "which locks a claimless signed-in user out of selecting a form."
+    )
 
 
 def test_the_complete_require_auth_route_set_is_pinned():
@@ -762,3 +811,69 @@ def test_spellback_requires_token(_auth_on):
     resp = client.post("/api/tts/spellback",
                        json={"value": "A1234", "language": "Spanish"})
     assert resp.status_code == 401
+
+
+def test_a_CLAIMLESS_user_can_actually_LOAD_the_catalogue(monkeypatch):
+    """END TO END through the real route, with the REAL enrolment check.
+
+    THE GAP THIS CLOSES: reverting the fix -- require_signin calling
+    verify_token(token) instead of verify_token(token, require_enrolment=False)
+    -- left all 3837 tests green. Every other test here either drives
+    verify_token DIRECTLY (so it pins that the flag is HONORED, never that the
+    call site PASSES it) or asserts which dependency object is wired (which does
+    not change under the revert).
+
+    So this drives the HTTP route, through require_signin, into the real
+    _require_voice_access, with a token whose claims carry no firm_id and no
+    vff_dev -- exactly the maintainer's account before enrolment, and exactly
+    the shape a magic-link user arrives with.
+    """
+    import backend.services.auth as va
+
+    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+
+    class _Auth:
+        @staticmethod
+        def verify_id_token(_tok, **_kw):
+            # Verified, real, and carrying NOTHING else.
+            return {"uid": "uid-newcomer", "email": "newcomer@example.com"}
+
+    # Patch the SDK, not verify_token -- the whole point is that
+    # _require_voice_access runs for real.
+    monkeypatch.setattr(va, "auth", _Auth)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _TwoKitStore())
+
+    resp = client.get("/api/form-kits",
+                      headers={"Authorization": "Bearer any-token"})
+
+    assert resp.status_code == 200, (
+        "a signed-in user with no claims got {} loading the form catalogue -- "
+        "the app shows no forms and the only remedy the UI offers is 'sign in "
+        "again', which was never the problem".format(resp.status_code))
+    assert "forms" in resp.json()
+
+
+def test_that_same_claimless_user_is_still_REFUSED_by_a_gated_route(monkeypatch):
+    """The other direction, also end to end.
+
+    If this stops refusing, the enrolment gate has been removed rather than
+    narrowed, and the two-allowlist decision is silently undone.
+    """
+    import backend.services.auth as va
+
+    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+
+    class _Auth:
+        @staticmethod
+        def verify_id_token(_tok, **_kw):
+            return {"uid": "uid-newcomer", "email": "newcomer@example.com"}
+
+    monkeypatch.setattr(va, "auth", _Auth)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _TwoKitStore())
+
+    resp = client.get("/api/form-kits/kit-public/archive",
+                      headers={"Authorization": "Bearer any-token"})
+
+    assert resp.status_code == 403, (
+        "a claimless user reached a gated route (got {})".format(resp.status_code))
+

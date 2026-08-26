@@ -231,6 +231,15 @@ def test_the_per_request_hot_path_does_NOT_pay_for_revocation(monkeypatch):
         "verify_token now checks revocation by DEFAULT, which puts a Firebase "
         "round trip on the per-utterance hot path")
 
+    # The sibling parameter, pinned the same way and for a sharper reason: a
+    # one-character flip to False un-gates /api/fill-pdf, /ws/fill, both TTS
+    # routes, the archive reads and the firm retire write ALL AT ONCE. Two
+    # behavioural tests happen to cover it; this pins it directly, because the
+    # blast radius of getting it wrong is every gated route in the app.
+    assert sig.parameters["require_enrolment"].default is True, (
+        "verify_token no longer requires enrolment by DEFAULT -- every route "
+        "using require_auth is now open to any signed-in account")
+
 
 def test_a_locked_out_user_is_TOLD_they_are_not_enrolled(monkeypatch):
     """A lockout you cannot diagnose is worse than the lockout.
@@ -269,3 +278,96 @@ def test_a_locked_out_user_is_TOLD_they_are_not_enrolled(monkeypatch):
     assert "not enrolled" in (closed.get("reason") or "").lower(), (
         "a locked-out user was told {!r} -- indistinguishable from a bad "
         "token".format(closed.get("reason")))
+
+
+# --- the invariant: an app you can reach is an app you can USE --------------
+#
+# bd polyglot-pdf-hn0jq gated six form-kit routes on voice enrolment, which
+# meant a signed-in user with no firm got 403 on /api/form-kits: an app with
+# no form to pick and no way out, since the only remedy the UI can offer is
+# "sign in again" and signing in was never the problem. Found by the
+# maintainer on the live app, not by nine rounds of review.
+#
+# Maintainer, 2026-08-25: "anyone using the app must have access to at least
+# one form kit."
+
+
+def test_a_signed_in_user_with_NO_claims_can_still_browse_forms(monkeypatch):
+    """Selecting a form is not the privileged act; filling one is."""
+    import backend.services.auth as va
+
+    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+
+    class _Auth:
+        @staticmethod
+        def verify_id_token(_tok, **_kw):
+            # A real, verified account -- no firm, no dev claim. The shape a
+            # magic-link user arrives with.
+            return {"uid": "uid-newcomer", "email": "someone@example.com"}
+
+    monkeypatch.setattr(va, "auth", _Auth)
+
+    claims = va.verify_token("a-token", require_enrolment=False)
+
+    assert claims["uid"] == "uid-newcomer", (
+        "a signed-in user was refused the form catalogue -- the app is "
+        "unusable for them, with nothing to select")
+
+
+def test_that_same_user_is_STILL_refused_when_acting_on_a_form(monkeypatch):
+    """The other half. Browsing opens; filling stays gated.
+
+    If this ever passes, the enrolment gate has been removed rather than
+    narrowed, and the two-allowlist decision is undone.
+    """
+    import backend.services.auth as va
+    from fastapi import HTTPException
+
+    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+
+    class _Auth:
+        @staticmethod
+        def verify_id_token(_tok, **_kw):
+            return {"uid": "uid-newcomer", "email": "someone@example.com"}
+
+    monkeypatch.setattr(va, "auth", _Auth)
+
+    with pytest.raises(HTTPException) as exc:
+        va.verify_token("a-token")  # default: enrolment REQUIRED
+    assert exc.value.status_code == 403
+
+
+def test_the_catalogue_routes_do_not_require_enrolment():
+    """Pin WHICH routes browse vs act, derived from the source.
+
+    A future route added to the catalogue with require_auth reintroduces the
+    lockout silently -- the app simply shows no forms, which reads as a data
+    problem rather than an auth one.
+    """
+    import ast
+    import pathlib as _p
+
+    src = (_p.Path(__file__).resolve().parents[3]
+           / "backend" / "routes" / "form_kit_routes.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    # SELECTING a form: these must never demand enrolment.
+    browse = {"list_form_kits", "get_form_kit_schema"}
+    seen = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        deps = [n.id for n in ast.walk(node)
+                if isinstance(n, ast.Name) and n.id.startswith("require_")]
+        if node.name in browse:
+            seen[node.name] = deps
+
+    assert set(seen) == browse, "a catalogue route was renamed or removed: {}".format(
+        sorted(seen))
+    for name, deps in seen.items():
+        assert "require_signin" in deps, (
+            "{} no longer uses require_signin -- a signed-in user with no firm "
+            "cannot select a form, and the app is unusable for them".format(name))
+        assert "require_auth" not in deps, (
+            "{} demands enrolment again".format(name))
+
