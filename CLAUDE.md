@@ -166,7 +166,25 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    consistency rule: one ASCII style across all source. **Markdown/docs are
    exempt** -- Unicode is fine there. Match the surrounding code's existing ASCII
    style.
-7. **ENUMERATE THE SET BEFORE FIXING ANY OF IT.** When a finding is an *instance*
+7. **A MOCK CANNOT TELL YOU THE REAL DEPENDENCY IS FORBIDDEN -- check the IAM
+   envelope.** Every test stubs the Firebase SDK, so a stub happily answers a
+   call the deployed service account is *not permitted* to make. On 2026-08-26
+   `check_revoked=True` turned a token signature check into a user-record fetch
+   needing `firebaseauth.users.get`; `polyglot-backend-sa` deliberately lacks
+   it, so **every deployed connection failed with INSUFFICIENT_PERMISSION and
+   the app could not connect** -- past 3839 green tests, green CI, nine
+   fresh-eyes rounds and a cross-surface pass. A mock proves the code CALLS
+   something; it cannot prove the caller is ALLOWED to. **When a change makes
+   the deployed service call a new external API, ask what PERMISSION it needs
+   and whether the runtime identity has it** -- two seconds, no deploy:
+   `gcloud projects get-iam-policy <project> --flatten='bindings[].members'
+   --filter='bindings.members:<runtime-sa>' --format='value(bindings.role)'`.
+   Guarded statically by
+   [`backend/tests/unit/test_deployed_iam_envelope.py`](backend/tests/unit/test_deployed_iam_envelope.py)
+   (`scripts/` is out of scope -- those run under an operator's own creds).
+   And **remove the parameter, don't just default it off**: a knob nothing can
+   safely turn on is a trap for the next caller.
+8. **ENUMERATE THE SET BEFORE FIXING ANY OF IT.** When a finding is an *instance*
    of something -- one write site, one restatement of a rule, one stale citation,
    one unprotected call -- **do not fix it until you have mechanically enumerated
    every member of its set** (grep / AST / a query, not recall), listed them in the
@@ -180,7 +198,7 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    the whole set, and the reviewer found the remainder one per round. **The tell
    you are in this trap:** a reviewer's new finding differs from the last one only
    in *location* or *wording*. When that happens, stop fixing and go enumerate.
-8. **Test the tests -- prove a new test FAILS before trusting that it passes.**
+9. **Test the tests -- prove a new test FAILS before trusting that it passes.**
    Writing the assertion is not the job; demonstrating it can fail is. Revert the
    production behavior it claims to pin (the *real* path, not a convenient
    neighbour) and watch it go red, then restore. **This is the author's job, not
