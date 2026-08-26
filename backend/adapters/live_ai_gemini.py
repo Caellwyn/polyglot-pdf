@@ -237,10 +237,10 @@ def derive_compression_window(
     and the session's tool list (7 declarations -- continuous mode drops
     switch_section, and name_spellback is appended by default since bd
     polyglot-pdf-apkdl), the CURRENT default DTI form derives a 5499 floor ->
-    6098 window -> 7598 trigger, above the API minimum 5000 (MEASURED
-    2026-08-25 by executing this function on the shipped config, not estimated). RE-EXECUTE these
-    rather than trusting them; they move whenever the SI or the tool list does
-    (they dropped
+    6098 window -> 7598 trigger, above the API minimum 5000. Those three are
+    MEASURED (2026-08-25, by executing this function on the shipped config),
+    not estimated -- RE-EXECUTE rather than trusting them, since they move
+    whenever the SI or the tool list does (they dropped
     ~1.4k when the v4 SI diet cut the SI to 11,994 chars, bd polyglot-pdf-6a79;
     the clamp-up + retune path in _build_live_config still fires only for forms
     with a much smaller SI floor). Re-execute this function rather than trusting
