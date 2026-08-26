@@ -16,8 +16,10 @@ These tests pin:
 """
 import datetime
 import importlib.util
+import inspect
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -1842,3 +1844,57 @@ class TestCurrentRepoHasNoOutOfBoundsCodeCitations:
                 "polyglot-pdf-3pii5 and CLAUDE.md scar #7).\n\n"
                 "Violations:\n" + "\n".join(lines)
             )
+
+
+class TestModuleDocstringCheckCountMatchesMain:
+    """CI gate: the module docstring's numbered check list must name exactly
+    as many checks as main() actually runs (bd polyglot-pdf-82rzp).
+
+    A prior paragraph ("Why both checks live in one script... two halves...")
+    and report_code_citations()'s own docstring ("the other two checks") both
+    desynced from the real count when check_doc_conventions (#3) and
+    check_code_citations (#4) were added -- the module docstring's numbered
+    list was updated each time, but the PROSE mentioning a count elsewhere in
+    the file was not. Rather than trust the next editor to catch every prose
+    site by hand again, pin the actual PROPERTY: the docstring's numbered-list
+    length must equal the number of distinct checks main() dispatches to.
+    Adding a fifth check without updating the numbered list now fails this
+    test instead of silently drifting.
+
+    Counted two independent ways, so THIS test cannot be satisfied by an
+    editor who bumps one count in lockstep with the other by habit rather
+    than by main() actually changing:
+    - the module docstring's `N. **Name.**` numbered items;
+    - main()'s source: the inline per-doc freshness loop (detected by a
+      `check_doc(doc` call, always check #1) plus each distinct `report_*(`
+      call main() makes (checks #2 onward).
+    """
+
+    def _numbered_docstring_items(self) -> int:
+        return len(re.findall(r"^\d+\.\s+\*\*", freshness.__doc__, re.MULTILINE))
+
+    def _mains_check_count(self) -> int:
+        src = inspect.getsource(freshness.main)
+        # Strip whole-line comments before matching -- a report_*(-shaped
+        # substring inside a TODO/example comment (e.g. "someday also call
+        # report_new_thing(...)") must not count as a real dispatch. A crude
+        # per-line strip is enough here: main() has no inline trailing
+        # comments after a report_*() call, only whole-line ones above them.
+        code_only = "\n".join(
+            line for line in src.splitlines() if not line.strip().startswith("#")
+        )
+        report_calls = set(re.findall(r"\breport_\w+\(", code_only))
+        has_inline_freshness_loop = bool(re.search(r"check_doc\(doc", code_only))
+        return len(report_calls) + (1 if has_inline_freshness_loop else 0)
+
+    def test_docstring_count_matches_mains_actual_check_count(self):
+        docstring_n = self._numbered_docstring_items()
+        main_n = self._mains_check_count()
+        assert docstring_n == main_n, (
+            f"scripts/check_doc_freshness.py's module docstring lists "
+            f"{docstring_n} numbered checks, but main() actually runs "
+            f"{main_n} (the inline freshness loop + report_*() calls). "
+            "Update the numbered list -- and grep the file for stale "
+            "prose mentioning a check COUNT (bd polyglot-pdf-82rzp) -- "
+            "whenever a check is added or removed."
+        )

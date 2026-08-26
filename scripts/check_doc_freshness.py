@@ -32,12 +32,14 @@ This script does four warn-only checks in one pass:
    `check_code_citations` for why it deliberately does NOT try to verify a
    citation points at the SPECIFIC construct its prose names.
 
-Why both checks live in one script: they're two halves of the same doc
-discipline, and they want the same hook (warn-only on every commit, full
-sweep at sprint closeout). Splitting them into two scripts would
-duplicate the argparse/exit-code/print plumbing; co-locating them means
-the closeout `python scripts/check_doc_freshness.py` invocation
-already covers both.
+Why every check lives in one script, not one script per check: they're
+all facets of the same doc discipline, and they all want the same hook
+(warn-only on every commit, full sweep at sprint closeout). Splitting
+them into separate scripts would duplicate the argparse/exit-code/print
+plumbing across each one; co-locating them means the closeout
+`python scripts/check_doc_freshness.py` invocation already covers all of
+them -- deliberately count-free phrasing (bd polyglot-pdf-82rzp), so
+adding a fifth check here never requires updating this paragraph.
 
 Why parse the stamp instead of using the doc's git commit time? Because the
 sprint-closeout checklist tells the user to "bump its *Last updated:* line"
@@ -922,7 +924,7 @@ def report_doc_conventions(*, quiet: bool = False) -> bool:
 def report_code_citations(*, quiet: bool = False) -> bool:
     """Print out-of-bounds `file.py:N` citation findings. Returns True if any.
 
-    Same warn-only severity as the other two checks. The CI test at
+    Same warn-only severity as the per-doc freshness pass. The CI test at
     `tests/test_doc_freshness.py::test_no_out_of_bounds_code_citations`
     fails CI on the same findings (bd polyglot-pdf-3pii5).
     """
