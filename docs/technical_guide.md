@@ -114,7 +114,7 @@ insertion point.
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
-| POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
+| POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (default ON since bd polyglot-pdf-apkdl; bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
@@ -334,9 +334,10 @@ Known traps (all deliberate, all pinned only by comments):
 Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
 live config by `form_filling_service.py:222-228` (which drops `switch_section`
-in continuous mode -- the session ships 6 declarations, not 7 -- and appends
-the flag-gated `SPELLBACK_TOOL_DECLARATION` as a 7th only while
-`SPELLBACK_TOOL_ENABLED`, bd polyglot-pdf-22h1f) and declared to
+in continuous mode, and appends `SPELLBACK_TOOL_DECLARATION` under
+`SPELLBACK_TOOL_ENABLED` -- default ON since bd polyglot-pdf-apkdl, so a
+production session ships 7 declarations; setting the flag false rolls back to 6,
+bd polyglot-pdf-22h1f) and declared to
 Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
 tools assembled at :1752). Gemini's tool
 calls come back through the adapter (`self._on_tool_call(...)` call sites at
@@ -354,7 +355,7 @@ client messages above. The coupling table (tool -> handler -> client message):
 | `switch_to_field` (`field`) | :531 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
 | `ask_secretary` (`query`) | :534 | none -- answered server-side from the cached `full_schema` |
 | `switch_section` (deprecated; dropped in continuous mode) | :516 | internal session restart + `section_switched` |
-| `name_spellback` (no args; FLAG-GATED `SPELLBACK_TOOL_ENABLED`, declared only while on via `SPELLBACK_TOOL_DECLARATION`) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
+| `name_spellback` (no args; `SPELLBACK_TOOL_ENABLED` default ON, declared via `SPELLBACK_TOOL_DECLARATION` -- kept out of `TOOL_DECLARATIONS` so the flag stays a real rollback) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`

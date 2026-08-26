@@ -783,8 +783,13 @@ def build_form_context(
     # not on USE_DTI -- a legacy-SI session with the flag on would otherwise
     # keep its spell-it-yourself NAMES wording while the tool is live
     # (fresh-eyes round 1). Interim addendum until the SI-slimming session's
-    # cutover marker replaces the base NAMES wording; default-off flag keeps
-    # the shipped SI byte-identical.
+    # cutover marker replaces the base NAMES wording.
+    #
+    # Appended BY DEFAULT since the cutover (bd polyglot-pdf-apkdl), so it is
+    # now part of the shipped SI baseline (~1,067 chars) rather than demo-only.
+    # It rides the SAME flag as the declaration ON PURPOSE: a session given the
+    # tool but not this text has a tool it was never told to prefer, and the
+    # spoken fallback still fires -- arguably worse than not having the tool.
     if getattr(settings, "SPELLBACK_TOOL_ENABLED", False):
         system_instruction = (
             system_instruction + settings.DTI_SPELLBACK_SI_ADDENDUM
