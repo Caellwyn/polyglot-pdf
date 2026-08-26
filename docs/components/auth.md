@@ -209,11 +209,13 @@ without preventing any abuse. The client's browser tab also keeps the
 credential across a RELOAD (sessionStorage, tab-scoped), so the 7-day
 fallback is for a closed tab or a new device, not for an accidental
 refresh. One-time use lives in the `link_redemptions` store,
-because a signed bearer string is inherently replayable -- and it is enforced at EVERY
-door a client credential opens -- `/api/links/open`, the WebSocket, AND
-`require_auth` (so every `require_auth` route). One shared
-`enforce_link_redemption` serves them, deliberately EXTRACTED rather than
-copied: two hand-written versions of a security check drift, and the drift is
+because a signed bearer string is inherently replayable -- and it is enforced
+at every door that can cause SPEND: `/api/links/open`, the WebSocket, and the
+two `/api/tts/*` routes via `require_paid_client_work`. It is deliberately
+NOT enforced on `require_auth`, which gates retrieval -- see the split above.
+One shared `enforce_link_redemption` serves every door that does redeem,
+EXTRACTED rather than copied: two hand-written versions of a security check
+drift, and the drift is
 silent. That is not hypothetical here -- the socket redeemed while
 `require_auth` did not, so a COMPLETED link kept serving schema, PDF bytes,
 `/api/fill-pdf` and both PAID TTS routes for the rest of its ~48h `exp`,

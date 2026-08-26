@@ -118,9 +118,11 @@ def open_link(jti: str, firm_id: str, kit_id: str,
         if snap.exists:
             rec = snap.to_dict() or {}
             if rec.get("completed_at"):
-                # A completed link starts no NEW paid session. Retrieval
-                # paths do not reach here at all (see the module header), so
-                # this refusal costs the client nothing they already own.
+                # A completed link starts no NEW paid session. The callers
+                # that reach here are the paid ones -- the socket, the TTS
+                # routes -- plus /api/links/open, which redeems because
+                # opening IS the start of a session. Retrieval never calls
+                # this, so the refusal costs the client nothing they own.
                 raise LinkAlreadyUsed("link already completed")
             return rec
         rec = {

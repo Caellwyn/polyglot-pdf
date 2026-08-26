@@ -178,17 +178,20 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   The token rides in the URL FRAGMENT so it never reaches access, referrer,
   or proxy logs. See [auth.md](auth.md) (Client magic links).
 
-  **Per-SESSION cost, for whoever sizes bd `polyglot-pdf-ik7e`.** THE
-  LARGEST TERM IS THE WEBSOCKET, not HTTP: the socket redeems on EVERY
-  connection, and the voice app opens one per SECTION -- the shipped I-90 kit
-  has 27 sections, so a single client session costs ~27 uncached reads on
-  that path alone, before idle-timeout reconnects (120s) and network drops.
-  Size from that first.
+  **Per-SESSION cost, for whoever sizes bd `polyglot-pdf-ik7e`.** The socket
+  redeems once per CONNECTION. Under the shipped default
+  (`CONTINUOUS_SESSION=true`) that is roughly ONE read per session, not one
+  per section -- an earlier version of this note said ~27 for an I-90 and was
+  wrong by that factor. Reconnects (the 120s idle timeout, network drops)
+  each add one; a deployment running `CONTINUOUS_SESSION=false` reverts to
+  per-section connects and the count rises accordingly.
 
-  Per client HTTP request, additionally: TWO uncached Firestore READS -- `require_auth`'s
-  redemption check, plus the firm-allowlist read whenever the visibility gate
-  fires on a private kit -- **plus ONE WRITE on the first open of a link**
-  (`open_link` creates the redemption record), and **one further write per
+  Per client HTTP request, additionally: ONE uncached Firestore READ -- the
+  firm-allowlist read, whenever the visibility gate fires on a private kit.
+  `require_auth` does NOT redeem (retrieval must not burn the client's own
+  document), so it costs no redemption read. The redemption WRITES belong to
+  the paid doors: **ONE on the first open of a link** (`open_link` creates
+  the record), and **one further write per
   completed session** (`complete_link`). Writes cost more than reads, so size
   from all four, not from the reads alone. None of it is cached,
   deliberately: caching a revocation check reopens the replay window the

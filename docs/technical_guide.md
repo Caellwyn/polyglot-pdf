@@ -582,14 +582,31 @@ system that is NOT a Firebase account. Five coupled pieces:
   by returning `[]`) -- note the two "fail closed" directions when changing
   either.
 - **EVERY door redeems, through ONE helper.**
-  `link_redemptions.enforce_link_redemption` is called by `/api/links/open`,
-  `/ws/fill`, AND `require_auth` (hence every `require_auth` route). It runs the
-  redemption check AND the COMPLETION-window check, neither of which
-  `verify_link_token` can do -- the token carries only the OPEN deadline, and
-  one-time use lives in Firestore. Extracted, not copied: the socket redeemed
-  while `require_auth` did not, and a completed link kept serving schema, PDF
-  bytes, `/api/fill-pdf` and both PAID TTS routes until `exp` (Opus r1). A
-  future door that authenticates a client credential MUST call this helper.
+  `link_redemptions.enforce_link_redemption` runs the redemption check AND the
+  COMPLETION-window check, neither of which `verify_link_token` can do -- the
+  token carries only the OPEN deadline, and one-time use lives in Firestore.
+
+  **WHICH DOORS CALL IT IS THE WHOLE DESIGN, so read this before adding one.**
+  The TTL bounds a BACKEND CONNECTION, not the client's access to their own
+  document (maintainer, 2026-08-24):
+  - **PAID work redeems** -- `/ws/fill` (a Gemini session), `/api/links/open`,
+    and both `/api/tts/*` routes via the `require_paid_client_work`
+    dependency. A completed link starts no new session and buys no more audio.
+  - **RETRIEVAL does NOT** -- `require_auth`, and therefore the schema and
+    manifest reads and `/api/fill-pdf`. That route is a pure PyMuPDF render
+    with no model call, so redeeming there spends nothing and only takes away
+    the document the client just filled. It still needs a valid SIGNED link
+    inside its open window, scoped to that link's single kit.
+
+  A new door that authenticates a client credential must decide which side it
+  is on: if it can cause SPEND, declare `require_paid_client_work`; if it
+  serves the client their own data, use `require_auth`. Both sets are pinned
+  by `test_http_route_auth.py`.
+
+  (History, so the split is not "corrected" back: the socket originally
+  redeemed while `require_auth` did not, and a completed link kept serving
+  everything until `exp` -- Opus r1. The over-correction then put redemption
+  on retrieval too, which made a finished form undownloadable -- Opus r11.)
   `complete_link` fires ONLY on a genuine completion -- an abandoned session
   must not consume the client's one chance.
 - **`link_jti` + `employee_id` ride both SESSION records** (contract 6). The
