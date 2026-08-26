@@ -205,19 +205,25 @@ def test_the_handshake_does_NOT_ask_firebase_to_check_revocation():
 
 
 def test_the_per_request_hot_path_does_NOT_pay_for_revocation(monkeypatch):
-    """The performance half of the same decision, pinned so it is not undone.
+    """verify_token must not even OFFER a revocation check.
 
-    require_auth guards TTS spellback, which fires mid-conversation. Turning
-    check_revoked on by default here would add a Firebase round trip to every
-    utterance.
+    The parameter is gone, not defaulted off. A knob nothing can safely turn
+    on is a trap: check_revoked needs firebaseauth.users.get, which the
+    deployed service account does not have, so any caller passing True
+    re-breaks production -- as it did on 2026-08-26, when every connection
+    failed with INSUFFICIENT_PERMISSION.
+
+    Asserting its ABSENCE (rather than its default) is what makes restoring it
+    a deliberate act: you have to delete this test, and its name says why.
     """
     import backend.services.auth as va
     import inspect
 
     sig = inspect.signature(va.verify_token)
-    assert sig.parameters["check_revoked"].default is False, (
-        "verify_token now checks revocation by DEFAULT, which puts a Firebase "
-        "round trip on the per-utterance hot path")
+    assert "check_revoked" not in sig.parameters, (
+        "verify_token accepts check_revoked again. It requires "
+        "firebaseauth.users.get, which polyglot-backend-sa does not have -- "
+        "grant the IAM role FIRST, or leave the parameter off")
 
     # The sibling parameter, pinned the same way and for a sharper reason: a
     # one-character flip to False un-gates /api/fill-pdf, /ws/fill, both TTS
