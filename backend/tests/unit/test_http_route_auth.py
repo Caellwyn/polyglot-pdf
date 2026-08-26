@@ -1,8 +1,11 @@
 """Auth gating on the HTTP routes (bd polyglot-pdf-z2is).
 
-/api/fill-pdf renders user-entered field values and /api/form-kits{,/schema}
-serve the kit catalogue; all three now require a Firebase ID token via
-require_auth. /api/form-kits/{kit_id}/pdf stays DELIBERATELY public (blank
+/api/fill-pdf renders user-entered field values, so it requires a Firebase ID
+token via require_auth. /api/form-kits{,/schema} serve the kit catalogue and
+require only require_signin -- a valid sign-in, NOT voice-app enrolment:
+SELECTING a form is how the app is used, so gating it on a firm claim left a
+signed-in user with nothing to pick and no way out (2026-08-25). Enrolment
+gates ACTING on a form. /api/form-kits/{kit_id}/pdf stays DELIBERATELY public (blank
 template = public government form, also shipped in the static Hosting bundle)
 -- that non-gate is pinned here too so a future blanket-auth sweep can't
 silently break the pdfjs viewer path without failing a test.
@@ -730,7 +733,7 @@ def _routes_depending_on_require_auth() -> set:
     return _routes_depending_on(require_auth)
 
 
-# The seven routes that carry user data or gate paid work. Update this list ONLY
+# The SIX routes that carry user data or gate paid work. Update this list ONLY
 # together with the prose enumerations in:
 #   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
 #   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)
@@ -808,3 +811,69 @@ def test_spellback_requires_token(_auth_on):
     resp = client.post("/api/tts/spellback",
                        json={"value": "A1234", "language": "Spanish"})
     assert resp.status_code == 401
+
+
+def test_a_CLAIMLESS_user_can_actually_LOAD_the_catalogue(monkeypatch):
+    """END TO END through the real route, with the REAL enrolment check.
+
+    THE GAP THIS CLOSES: reverting the fix -- require_signin calling
+    verify_token(token) instead of verify_token(token, require_enrolment=False)
+    -- left all 3837 tests green. Every other test here either drives
+    verify_token DIRECTLY (so it pins that the flag is HONORED, never that the
+    call site PASSES it) or asserts which dependency object is wired (which does
+    not change under the revert).
+
+    So this drives the HTTP route, through require_signin, into the real
+    _require_voice_access, with a token whose claims carry no firm_id and no
+    vff_dev -- exactly the maintainer's account before enrolment, and exactly
+    the shape a magic-link user arrives with.
+    """
+    import backend.services.auth as va
+
+    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+
+    class _Auth:
+        @staticmethod
+        def verify_id_token(_tok, **_kw):
+            # Verified, real, and carrying NOTHING else.
+            return {"uid": "uid-newcomer", "email": "newcomer@example.com"}
+
+    # Patch the SDK, not verify_token -- the whole point is that
+    # _require_voice_access runs for real.
+    monkeypatch.setattr(va, "auth", _Auth)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _TwoKitStore())
+
+    resp = client.get("/api/form-kits",
+                      headers={"Authorization": "Bearer any-token"})
+
+    assert resp.status_code == 200, (
+        "a signed-in user with no claims got {} loading the form catalogue -- "
+        "the app shows no forms and the only remedy the UI offers is 'sign in "
+        "again', which was never the problem".format(resp.status_code))
+    assert "forms" in resp.json()
+
+
+def test_that_same_claimless_user_is_still_REFUSED_by_a_gated_route(monkeypatch):
+    """The other direction, also end to end.
+
+    If this stops refusing, the enrolment gate has been removed rather than
+    narrowed, and the two-allowlist decision is silently undone.
+    """
+    import backend.services.auth as va
+
+    monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+
+    class _Auth:
+        @staticmethod
+        def verify_id_token(_tok, **_kw):
+            return {"uid": "uid-newcomer", "email": "newcomer@example.com"}
+
+    monkeypatch.setattr(va, "auth", _Auth)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _TwoKitStore())
+
+    resp = client.get("/api/form-kits/kit-public/archive",
+                      headers={"Authorization": "Bearer any-token"})
+
+    assert resp.status_code == 403, (
+        "a claimless user reached a gated route (got {})".format(resp.status_code))
+

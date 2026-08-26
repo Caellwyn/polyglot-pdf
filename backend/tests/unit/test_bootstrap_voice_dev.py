@@ -231,6 +231,15 @@ def test_the_per_request_hot_path_does_NOT_pay_for_revocation(monkeypatch):
         "verify_token now checks revocation by DEFAULT, which puts a Firebase "
         "round trip on the per-utterance hot path")
 
+    # The sibling parameter, pinned the same way and for a sharper reason: a
+    # one-character flip to False un-gates /api/fill-pdf, /ws/fill, both TTS
+    # routes, the archive reads and the firm retire write ALL AT ONCE. Two
+    # behavioural tests happen to cover it; this pins it directly, because the
+    # blast radius of getting it wrong is every gated route in the app.
+    assert sig.parameters["require_enrolment"].default is True, (
+        "verify_token no longer requires enrolment by DEFAULT -- every route "
+        "using require_auth is now open to any signed-in account")
+
 
 def test_a_locked_out_user_is_TOLD_they_are_not_enrolled(monkeypatch):
     """A lockout you cannot diagnose is worse than the lockout.
@@ -348,8 +357,6 @@ def test_the_catalogue_routes_do_not_require_enrolment():
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for arg in list(node.args.args) + list(node.args.kwonlyargs):
-            d = node.args.defaults + node.args.kw_defaults
         deps = [n.id for n in ast.walk(node)
                 if isinstance(n, ast.Name) and n.id.startswith("require_")]
         if node.name in browse:
