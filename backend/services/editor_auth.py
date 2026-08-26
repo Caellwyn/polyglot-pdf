@@ -111,11 +111,25 @@ def verify_editor_token(token: str) -> EditorActor:
         firebase_admin.initialize_app()
 
     try:
-        # check_revoked: a revoked user otherwise keeps access until their token
-        # expires (up to an hour) while the CLI has already said "Revoked". The
-        # shared secret this replaces revoked INSTANTLY on rotation, so without
-        # this the change regresses the very property it exists to improve.
-        claims = fb_auth.verify_id_token(token, check_revoked=True)
+        # NO check_revoked -- and this is a REGRESSION accepted on purpose.
+        #
+        # It forces a Firebase USER-RECORD FETCH, needing firebaseauth.users.get.
+        # The editor API runs on the SAME Cloud Run service as the voice app
+        # (polyglot-backend), whose service account deliberately lacks that
+        # permission, so every deployed sign-in failed with
+        # INSUFFICIENT_PERMISSION. Measured on the live service 2026-08-26.
+        #
+        # STRUCTURALLY INVISIBLE locally and in tests: the dev bypass returns
+        # before this line and every test stubs the SDK.
+        #
+        # THE COST, stated plainly: revoking an editor now takes effect when
+        # their token expires (up to an hour), NOT immediately -- which is
+        # weaker than the shared secret this replaced, where rotation was
+        # instant. bootstrap_editor_user.py still revokes refresh tokens, so a
+        # revoked user cannot MINT a new token; they simply keep the one they
+        # hold until it expires. The maintainer chose this over granting the
+        # deployed backend permission to read any user record (2026-08-26).
+        claims = fb_auth.verify_id_token(token)
     except Exception:
         # Deliberately opaque: the reason a token failed is not the caller's
         # business, and the specific exception types vary by SDK version.
