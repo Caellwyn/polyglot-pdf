@@ -1,8 +1,11 @@
 # Voice AI (Gemini Live adapter)
 
-**Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
+**Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-08-17 (bd polyglot-pdf-uxc6s: the speaking predicates are
+*Last updated: 2026-08-26 (bd polyglot-pdf-kvrfq: the `name_spellback` bullet
+now records the client-side stale-arrival guards and the wire-verified fact
+that holding the tool response open does NOT park the model. Also current,
+from bd polyglot-pdf-uxc6s: the speaking predicates are
 now THREE, not two -- `isModelSpeaking()` is what every barge-in / flush site
 reads, `isSpeaking()` is reserved for the VAD suspend/resume pair, and the
 complete call-site classification is pinned by
@@ -334,8 +337,21 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
   value, fetches a Cloud TTS clip (`POST /api/tts/spellback`, carrying the
   value + the session language), mutes the mic in every input mode, plays it
   BLOCKING, and acks delivered/interrupted/error. The tool response is
-  deliberately held open for the playback (90s coordinator cap) so the model
-  stays parked; while the flag is on the SI gets
+  deliberately held open for the playback (90s coordinator cap) -- but
+  holding it open does NOT park the model (bd polyglot-pdf-kvrfq,
+  wire-verified 2026-08-26): under user barge-in pressure the native-audio
+  model keeps emitting further `name_spellback` calls while earlier ones are
+  unanswered, and because the tool callback runs inline on the receive loop,
+  those calls QUEUE behind the in-flight round-trip and dispatch back-to-back
+  once it settles (the incident: ten calls on one field, each read 3-9ms
+  after the previous response went out). The client therefore refuses stale
+  arrivals up front (`spellbackPlayer.ts` -- guards run before any mic hold
+  or fetch): a request landing while PTT is held, or within the ~5s cooldown
+  after a PTT interrupt of a clip, is acked `interrupted` with no playback
+  and no mic hold (an unguarded arrival used to re-engage `setSpellbackHold`
+  OVER an active press, silencing the user mid-answer); a value+language
+  delivered within the last ~3s is acked `delivered` instead of replayed.
+  While the flag is on the SI gets
   `DTI_SPELLBACK_SI_ADDENDUM` (BOTH SI modes) so the model never spells aloud
   itself. Declared via `_build_tool_declarations` from
   `SPELLBACK_TOOL_DECLARATION` (kept OUT of `TOOL_DECLARATIONS` until cutover),

@@ -13,7 +13,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { computePlaybackCapMs, createSpellbackPlayer, SPELLBACK_MAX_CHARS } from './spellbackPlayer'
+import {
+  computePlaybackCapMs,
+  createSpellbackPlayer,
+  DELIVERED_DEDUP_WINDOW_MS,
+  PTT_INTERRUPT_COOLDOWN_MS,
+  SPELLBACK_MAX_CHARS,
+} from './spellbackPlayer'
 import type { AudioManager } from './audioManager'
 
 class FakeAudio {
@@ -44,6 +50,8 @@ interface Harness {
   holdLog: boolean[]
   audios: FakeAudio[]
   fetchImpl: ReturnType<typeof vi.fn>
+  /** Jump the fake clock forward (bd kvrfq: crossing guard windows). */
+  advance: (ms: number) => void
 }
 
 function makePlayer(overrides: {
@@ -51,6 +59,7 @@ function makePlayer(overrides: {
   am?: AudioManager | null
   watchdogs?: Array<{ ms: number; fn: () => void; cancel: ReturnType<typeof vi.fn> }>
   getToken?: () => Promise<string | undefined>
+  isPttHeld?: () => boolean
 } = {}): Harness {
   const holdLog: boolean[] = []
   const audios: FakeAudio[] = []
@@ -68,6 +77,7 @@ function makePlayer(overrides: {
         }
       : {}),
     ...(overrides.getToken ? { getToken: overrides.getToken } : {}),
+    ...(overrides.isPttHeld ? { isPttHeld: overrides.isPttHeld } : {}),
     getAudioManager: () => am,
     getHttpBase: () => 'http://test',
     fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -80,10 +90,11 @@ function makePlayer(overrides: {
     revokeClipUrl: () => {},
     // Fake monotonic clock: every read advances 1s, so the drain-wait's
     // sustained-quiet window passes immediately without real timers.
+    // advance() adds a one-off jump on top (guard-window boundary tests).
     now: () => (clock += 1000),
     sleep: async () => {},
   })
-  return { player, holdLog, audios, fetchImpl }
+  return { player, holdLog, audios, fetchImpl, advance: (ms: number) => { clock += ms } }
 }
 
 async function settleMicrotasks(): Promise<void> {
@@ -348,5 +359,208 @@ describe('spellbackPlayer (bd polyglot-pdf-22h1f)', () => {
 
     const noAm = makePlayer({ am: null })
     expect((await noAm.player.play('NGUYEN')).reason).toBe('no_audio_manager')
+  })
+
+  // Stale-arrival guards (bd polyglot-pdf-kvrfq). Wire-verified incident
+  // 2026-08-26: the model does NOT stay parked on the held-open tool
+  // response -- it queued ten name_spellback calls on one field behind the
+  // blocked backend receive loop, and each unguarded arrival replayed a
+  // full clip and re-engaged the mic hold OVER the user's active PTT press.
+  describe('stale-arrival guards (bd polyglot-pdf-kvrfq)', () => {
+    it('a request arriving while PTT is held is refused: no fetch, no clip, and the mic hold is NEVER engaged', async () => {
+      const { player, holdLog, audios, fetchImpl } = makePlayer({ isPttHeld: () => true })
+
+      const result = await player.play('NGUYEN')
+
+      expect(result).toEqual({ status: 'interrupted' })
+      expect(fetchImpl).not.toHaveBeenCalled()
+      expect(audios).toHaveLength(0)
+      // The pinned invariant: the spell-back hold must never engage while
+      // the user is holding PTT (the worklet gate would silence their own
+      // press mid-sentence).
+      expect(holdLog).toEqual([])
+    })
+
+    it('a held-arrival refusal cannot pre-empt a clip that is already playing', async () => {
+      let held = false
+      const { player, audios, fetchImpl } = makePlayer({ isPttHeld: () => held })
+
+      const first = player.play('NGUYEN') // starts while NOT held
+      await settleMicrotasks()
+      expect(player.isPlaying()).toBe(true)
+
+      // The press lands, and a stale queued request races in behind it
+      // BEFORE the press-edge interrupt is delivered: the refusal must not
+      // cancel the live clip (guards run ahead of the pre-emption).
+      held = true
+      const second = await player.play('NGUYEN')
+      expect(second).toEqual({ status: 'interrupted' })
+      expect(player.isPlaying()).toBe(true)
+      expect(audios).toHaveLength(1)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+
+      audios[0].onended?.()
+      expect((await first).status).toBe('delivered')
+    })
+
+    it('a held-arrival arms the cooldown, so the guard covers the release tail of a long hold', async () => {
+      let held = true
+      const { player, fetchImpl } = makePlayer({ isPttHeld: () => held })
+
+      expect((await player.play('NGUYEN')).status).toBe('interrupted')
+      held = false // the user releases; queued stragglers keep arriving
+
+      const result = await player.play('NGUYEN')
+      expect(result).toEqual({ status: 'interrupted' })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    })
+
+    it('requests inside the post-interrupt cooldown are refused instantly; one after the window plays', async () => {
+      const { player, holdLog, audios, fetchImpl, advance } = makePlayer()
+
+      const first = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(player.interruptForPtt()).toBe(true)
+      expect((await first).status).toBe('interrupted')
+
+      // A queued stale call lands moments later: instant refusal, no fetch,
+      // no new clip, no touch on the mic hold.
+      const holdsBefore = holdLog.length
+      const stale = await player.play('NGUYEN')
+      expect(stale).toEqual({ status: 'interrupted' })
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      expect(audios).toHaveLength(1)
+      expect(holdLog.length).toBe(holdsBefore)
+
+      // Past the window (plus slack for the fake clock's 1s-per-read tick),
+      // a fresh request plays normally.
+      advance(PTT_INTERRUPT_COOLDOWN_MS + 5000)
+      const done = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(2)
+      audios[1].onended?.()
+      expect((await done).status).toBe('delivered')
+    })
+
+    it('a PTT interrupt in the pre-playback (fetch) window arms the cooldown too', async () => {
+      let releaseFetch: (r: Response) => void = () => {}
+      let call = 0
+      const { player, fetchImpl } = makePlayer({
+        fetchImpl: () => {
+          call += 1
+          return call === 1
+            ? new Promise<Response>(resolve => { releaseFetch = resolve })
+            : Promise.resolve(okResponse())
+        },
+      })
+
+      const first = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(player.interruptForPtt()).toBe(true) // press during the fetch
+      releaseFetch(okResponse())
+      expect((await first).status).toBe('interrupted')
+
+      const stale = await player.play('NGUYEN')
+      expect(stale).toEqual({ status: 'interrupted' })
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+    })
+
+    it('cooldown refusals do NOT refresh the window, so a queued backlog always converges', async () => {
+      const { player, audios, fetchImpl, advance } = makePlayer()
+
+      const first = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(player.interruptForPtt()).toBe(true) // arms the cooldown: marker = T
+      expect((await first).status).toBe('interrupted')
+
+      // Tick accounting (the fake clock advances 1000 per now() read): the
+      // settled first call reads once after the arming (T+1000), and each
+      // refused play() reads exactly once (its cooldown check). So:
+      //   B checks at T+2000 -> inside the 5000 window, refused;
+      //   C checks at T+2000+1500+1000 = T+4500 -> LATE in the window, refused;
+      //   D checks at T+4500+1000+1000 = T+6500 -> past the ORIGINAL window,
+      //     plays. If refusals refreshed the marker (marker = T+4500), D's
+      //     delta would be 2000 and it would wrongly be refused.
+      // Refusals resolve instantly, so assert via the fetch count first --
+      // a mis-predicted tick then fails fast instead of hanging on a clip.
+      const b = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      expect((await b).status).toBe('interrupted')
+
+      advance(1500)
+      const c = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      expect((await c).status).toBe('interrupted')
+
+      advance(1000)
+      const done = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(2)
+      audios[audios.length - 1].onended?.()
+      expect((await done).status).toBe('delivered')
+    })
+
+    it('a value just delivered is deduped to an instant delivered ack; a different value plays, and so does the same value after the window', async () => {
+      const { player, audios, fetchImpl, advance } = makePlayer()
+
+      const first = player.play('NGUYEN')
+      await settleMicrotasks()
+      audios[0].onended?.()
+      expect((await first).status).toBe('delivered')
+
+      // The queued duplicate: acked 'delivered' (the user HAS heard it),
+      // nothing fetched, nothing replayed.
+      const dup = await player.play('NGUYEN')
+      expect(dup).toEqual({ status: 'delivered' })
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      expect(audios).toHaveLength(1)
+
+      // A DIFFERENT value inside the window is a fresh request.
+      const other = player.play('OKAFOR')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(2)
+      audios[1].onended?.()
+      expect((await other).status).toBe('delivered')
+
+      // The same value again PAST the window is a deliberate re-read.
+      advance(DELIVERED_DEDUP_WINDOW_MS + 5000)
+      const reread = player.play('OKAFOR')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(3)
+      audios[2].onended?.()
+      expect((await reread).status).toBe('delivered')
+    })
+
+    it('delivered dedup is language-sensitive (a language switch re-plays)', async () => {
+      const { player, audios, fetchImpl } = makePlayer()
+
+      const first = player.play('NGUYEN', 'Spanish')
+      await settleMicrotasks()
+      audios[0].onended?.()
+      expect((await first).status).toBe('delivered')
+
+      const other = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(2)
+      audios[1].onended?.()
+      expect((await other).status).toBe('delivered')
+    })
+
+    it('cancel() (teardown) does not arm the cooldown -- a fresh request after pause/unpause still plays', async () => {
+      const { player, audios, fetchImpl } = makePlayer()
+
+      const first = player.play('NGUYEN')
+      await settleMicrotasks()
+      player.cancel()
+      expect((await first).status).toBe('error')
+
+      const done = player.play('NGUYEN')
+      await settleMicrotasks()
+      expect(fetchImpl).toHaveBeenCalledTimes(2)
+      audios[audios.length - 1].onended?.()
+      expect((await done).status).toBe('delivered')
+    })
   })
 })
