@@ -769,6 +769,16 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   // For the header chip's scroll-to-first-finding (sprint-18 C1). Declared
   // unconditionally, before the no-field early return, per the rules of hooks.
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  // The export-code input's value BEFORE the current edit session (bd
+  // polyglot-pdf-alzbr). Unlike the label-rename path -- whose onChange writes
+  // only .label, leaving .value genuinely stale and safe to read at blur --
+  // this input's onChange writes .value ITSELF on every keystroke. So by blur
+  // time the option's .value is already the newly-typed string, and comparing
+  // against it finds no change and skips the dependent retarget entirely
+  // (measured: the code changed to 'WV' while a dependent still referenced
+  // 'WY'). Captured on focus instead. Declared unconditionally, before the
+  // no-field early return, per the rules of hooks.
+  const codeBeforeEditRef = React.useRef<string | null>(null);
 
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -1754,7 +1764,26 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                 className="font-mono border rounded px-1.5 py-0.5 w-28"
                                 value={option.value ?? ''}
                                 title="The code this dropdown writes into the PDF (e.g. 'WY'). It must match the form's own choice list exactly."
+                                onFocus={() => {
+                                  // Capture the TRUE pre-edit code: onChange
+                                  // below overwrites option.value on every
+                                  // keystroke, so by blur it is no longer the
+                                  // value dependents were authored against.
+                                  codeBeforeEditRef.current =
+                                    option.value ? String(option.value) : '';
+                                }}
                                 onChange={e => {
+                                  // Belt and braces: capture the pre-edit code
+                                  // on the FIRST keystroke too, not only on
+                                  // focus. A programmatic edit (or any path
+                                  // that reaches onChange without a focus
+                                  // event) would otherwise leave the ref unset
+                                  // and silently skip the dependent retarget --
+                                  // the exact failure this fix exists to close.
+                                  if (codeBeforeEditRef.current === null) {
+                                    codeBeforeEditRef.current =
+                                      option.value ? String(option.value) : '';
+                                  }
                                   const newOptions = [...safeOptions(field)];
                                   newOptions[idx] = {
                                     ...option,
@@ -1779,11 +1808,22 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                   // -- ' WY' is never a legal export code and
                                   // silently fails the /Opt match.
                                   const next = e.target.value.trim();
-                                  const old = option.value ? String(option.value) : '';
+                                  // NOT option.value -- that is already the
+                                  // typed string by now (see the ref's note).
+                                  const old = codeBeforeEditRef.current ?? '';
+                                  codeBeforeEditRef.current = null;
                                   const newOptions = [...safeOptions(field)];
                                   newOptions[idx] = { ...option, value: next };
                                   const updatedField = { ...field, options: newOptions };
-                                  if (onUpdateFields && old && next && next !== old) {
+                                  // Retarget whenever the code CHANGED and had
+                                  // dependents -- including a blank-out. An
+                                  // emptied code stops existing as a choice,
+                                  // which is what Remove BLOCKS over; leaving
+                                  // the reference pointing at it is the same
+                                  // dangling state by another route. Retarget
+                                  // to the empty value so the reference tracks
+                                  // the option rather than silently orphaning.
+                                  if (onUpdateFields && old && next !== old) {
                                     const withEdit = schema.fields.map(f =>
                                       f.id === field.id ? updatedField : f,
                                     );

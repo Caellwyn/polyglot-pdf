@@ -14,6 +14,7 @@
  * behaviour: they carry widget identity in pdf_field_name / pdf_on_value, so
  * their values really are internal join keys.
  */
+import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FieldEditor } from './FieldEditor';
@@ -150,6 +151,69 @@ describe('select option values are PDF export codes (bd polyglot-pdf-alzbr)', ()
     // A minted slug here would look valid and print WRONG; empty trips the
     // existing option-value-missing lint ERROR, which is the honest signal.
     expect(added.options[added.options.length - 1].value).toBe('');
+  });
+
+  it('retargets dependents when driven through a REAL state-holding parent', () => {
+    // The load-bearing test for the retarget (bd polyglot-pdf-alzbr).
+    //
+    // A vi.fn() parent never feeds an updated field prop back, so the row is
+    // never re-rendered between keystrokes and the handler's closed-over
+    // option.value stays pinned at the ORIGINAL code -- which is NOT what
+    // happens in the app. With a real parent, onChange commits every keystroke,
+    // so by blur the option's value is already the newly-typed string; reading
+    // "old" from it found no change and skipped the retarget entirely. Measured
+    // before the fix: code became 'WV' while the dependent still said 'WY'.
+    //
+    // This harness mirrors App.tsx: real useState, both callbacks wired.
+    function Harness() {
+      const [schema, setSchema] = React.useState<FormSchema>({
+        source: 'pdf',
+        form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
+        parts: [],
+        sections: [{ id: 's1', label: 'S1', order: 1, fields: ['mail_state', 'dep'] }],
+        fields: [
+          selectField(),
+          {
+            id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text',
+            section_id: 's1', pdf_field_name: 'form1[0].dep[0]',
+            show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
+          } as unknown as FormField,
+        ],
+      } as unknown as FormSchema);
+      const field = schema.fields.find(f => f.id === 'mail_state')!;
+      return (
+        <>
+          <FieldEditor
+            field={field}
+            schema={schema}
+            onUpdateField={(f: any) => setSchema(s => ({
+              ...s,
+              fields: s.fields.map(x => (x.id === 'mail_state' ? { ...x, ...f } : x)),
+            } as FormSchema))}
+            onUpdateFields={(fields: any, sections: any) => setSchema(s => ({
+              ...s, fields, sections: sections ?? s.sections,
+            } as FormSchema))}
+            authorTier
+          />
+          <pre data-testid="probe">{JSON.stringify({
+            code: (schema.fields.find(f => f.id === 'mail_state') as any).options[0].value,
+            depRef: (schema.fields.find(f => f.id === 'dep') as any).show_if?.value,
+          })}</pre>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const input = screen.getByDisplayValue('WY') as HTMLInputElement;
+    // Real keystrokes, and a real blur with NO target override -- overriding
+    // e.target.value at blur manufactures a mismatch that cannot occur live.
+    fireEvent.change(input, { target: { value: 'W' } });
+    fireEvent.change(input, { target: { value: 'WV' } });
+    fireEvent.blur(input);
+
+    const state = JSON.parse(screen.getByTestId('probe').textContent!);
+    expect(state.code).toBe('WV');
+    expect(state.depRef).toBe('WV');
   });
 
   it('editing an export code RETARGETS dependents that reference it', () => {
