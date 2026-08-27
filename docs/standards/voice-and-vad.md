@@ -2,8 +2,12 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the flag-gated
-spell-back mic hold to the Mic send gate section. Docs audit bd
+*Last updated: 2026-08-27 (bd polyglot-pdf-kvrfq: the spell-back hold
+paragraph no longer claims the model is parked on the pending tool response
+-- wire-verified false -- and records the client-side stale-arrival guards;
+see the [journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md).
+Also current: bd polyglot-pdf-22h1f's flag-gated
+spell-back mic hold in the Mic send gate section. Docs audit bd
 polyglot-pdf-2zk3: the tool-call-compliance caveat resolved as historical -- bd polyglot-pdf-i9q8 closed, root cause was an untyped tool param, not the system instruction. Also current: the Barge-in section describes the FORWARDED `interrupted` WS message + two-hold client drain via `resetPlaybackClock` (bd polyglot-pdf-s7uf), and the spoken language is PINNED per session -- mid-conversation switching is unsupported and `change_spoken_language` is a misnomer whose only live sender is the reconnect opener re-asserting the same pinned language (bd polyglot-pdf-87a9).)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
@@ -338,10 +342,18 @@ while the deterministic spell-back TTS clip plays, `audioManager.
 setSpellbackHold(true)` hard-gates the mic in EVERY input mode -- under native
 VAD it substitutes zeroed frames (the same silence pattern as PTT mute, so the
 continuous stream native VAD needs stays alive), and in the manual/client-VAD
-modes it drops frames outright. The model is parked on the pending
-`name_spellback` tool response for the whole clip, so nothing is lost. A PTT
+modes it drops frames outright. The tool response is held open for the whole
+clip, but that does NOT park the model (bd polyglot-pdf-kvrfq, wire-verified
+2026-08-26): under user barge-in pressure it keeps emitting further
+`name_spellback` calls, which queue behind the backend's blocked receive loop
+and arrive as stale duplicates once the round-trip settles. A PTT
 press mid-clip releases the hold FIRST (the user's barge-in audio flows), stops
-the clip, and resolves the round-trip as `interrupted`. NOTE: the E2E harness's
+the clip, and resolves the round-trip as `interrupted`; a request that ARRIVES
+while PTT is held, within the post-interrupt cooldown, or duplicating a
+just-delivered value is refused up front by `spellbackPlayer.play()` -- no
+playback, no mic hold (details in
+[voice-ai.md](../components/voice-ai.md)'s `name_spellback` bullet).
+NOTE: the E2E harness's
 injected audio bypasses the worklet and therefore this hold -- the hold is
 pinned by unit tests (`audioSpellbackHold.test.ts`), not by harness behavior.
 

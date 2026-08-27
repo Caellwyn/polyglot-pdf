@@ -67,7 +67,18 @@ load; a clean `dev` baseline on the same machine failed SIX rotating overlay
 files, and every flagged file passes in isolation -- pre-existing fork-load
 flakiness, not this diff (filed as bd `polyglot-pdf-qta6l`).
 
-Fresh-eyes triage breakdown: (folded in after the Step 5.5 loop.)
+Fresh-eyes triage breakdown: ONE round (sonnet), `NO-GAPS`. All three exit
+criteria PASS -- criterion 2 with an explicit caveat the assessor judged as
+meeting intent: the dedup key is value+language rather than field+value,
+because the player deliberately never receives a field id (the tool is
+no-argument by design) and two different fields sharing an identical value
+inside the 3s window would need a confirm round-trip in between. Adopted: 0
+fixes (no gaps). Deferred: 1 pre-existing finding the assessor filed itself
+-- bd `polyglot-pdf-98dsq`, the `request_spellback()` docstring in
+`backend/services/request_coordinator.py` still claims the model "generates
+nothing while a tool response is pending", the exact assumption this bead's
+wire evidence refuted (pre-existing on `origin/dev`, untouched file, so a
+bead rather than diff expansion). Rejected: 0.
 
 ## Lessons
 
@@ -98,8 +109,13 @@ Fresh-eyes triage breakdown: (folded in after the Step 5.5 loop.)
   parked" claim corrected to the verified behavior, the stale-arrival guards
   documented in the `name_spellback` bullet, and
   `frontend/src/shared/spellbackPlayer.ts` added to its **Tracks:** line.
+- `docs/standards/voice-and-vad.md`: bumped to 2026-08-27 -- its spell-back
+  hold paragraph carried the same "model is parked ... so nothing is lost"
+  claim; corrected and pointed at the guards.
 - Other docs flagged STALE by the checker track files this branch did not
-  touch; left as-is (pre-existing).
+  touch; left as-is (pre-existing). The five stale in-progress beads the
+  housekeeping audit lists are other sessions' parked claims (6-9 days old,
+  untouched by this branch); left for their owners.
 
 ## Files touched
 
