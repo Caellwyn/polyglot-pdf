@@ -310,3 +310,86 @@ constraints: the ceiling must span the whole FORM SESSION (not one
 connection, or reconnects hide an unbounded session), and a breach must
 preserve the client's work and say so plainly.
 
+## The maintainer corrected the TTL, and the correction was the right one
+
+I shipped a 30-minute grace window so a completed link could still download
+its PDF. The maintainer: *"There's not really any reason to have a time limit
+on saving or printing. That's all client side. The TTL should be backend
+connection."*
+
+That is right, and the diagnosis is sharper than "the number was wrong": I had
+put **a clock on the client's own document**. Checked before changing it --
+`/api/fill-pdf` is a pure PyMuPDF render with no model call, so redeeming
+there protected nothing and only took away work the client had already done.
+
+The shipped split:
+
+| | redeems? | why |
+|---|---|---|
+| `/ws/fill`, `/api/links/open`, both `/api/tts/*` | YES | each can cause SPEND -- a Gemini session, a synthesis call |
+| `require_auth` (schema, manifest, `/api/fill-pdf`) | NO | the client retrieving their OWN document; no model call is reachable |
+
+Retrieval still needs a valid signed link inside its open window, scoped to
+that link's single kit. So the client keeps Download/Print/Preview for as long
+as their tab is open, and a completed link still buys nothing.
+
+## Twelve review rounds, and what they were actually worth
+
+Rounds 1-11 found 3+4+2+3+4+4+4+2+3+4+4 findings; r12 returned NO-BLOCKERS.
+**Four separate times the feature was broken end-to-end with the full suite
+green** -- the socket (r1), the HTTP routes (r2), the reload path (r3), and
+the fetch URL (r4). Each time I had reported it complete.
+
+The single recurring cause, stated as plainly as I can: **every test I wrote
+verified something ADJACENT to the behavior.** A module round-trips a value.
+A component writes a key. A URL contains a substring. Each passed while the
+feature was dead for a real client.
+
+Ten one-layer-removed tests and thirteen false claims shipped in this bead
+before review caught them. The two structural fixes that ended it:
+
+1. `test_client_link_journey.py` -- walks the ACTOR'S WHOLE PATH rather than
+   one layer, and is verified against HISTORY (reintroducing r2's dead-end
+   reddens 3 of its 4 tests).
+2. Pinning SETS, not instances: the credential doors, the link-verifying
+   sites, the paid routes, the archive call sites. Each derived from the
+   shipped sources so a NEW member fails CI instead of a review round -- and
+   each verified by planting one.
+
+**The lesson worth carrying forward** (saved as bd memory
+`new-actor-needs-a-whole-path-test`): for a feature with a NEW KIND OF ACTOR,
+only a test that walks that actor's whole path proves the actor can act. The
+diagnostic for any test: name what would have to break for it to fail. If the
+answer is "the helper I just wrote", the test is one layer removed.
+
+## The live test found what review could not
+
+Against a real backend serving real kits, a client with no account: the form
+list, the schema, the blank PDF (508KB), and their FILLED PDF (774KB) all
+200. Paid TTS 401. Forged token 401. The retire route 404. The socket
+accepted a real minted token and threaded the correct firm, kit, jti and
+employee into the session -- then refused a replay after completion with
+1008.
+
+Two results worth recording because both looked like bugs and were not:
+
+- A client fetched ANOTHER kit's schema (200). Every local kit is PUBLIC, and
+  public forms are readable by any authenticated caller -- the same as for
+  staff. Verified the real guarantee separately: with private kits the client
+  resolves to ONE and staff to THREE.
+- The socket first refused 1008. The redemption store was unprovisioned
+  locally, and it FAILED CLOSED rather than admit an unbounded paid session
+  -- the exact operator scenario the guard was built for, confirmed by
+  accident and for real.
+
+## What is NOT done
+
+- **Minting stays OFF** (`LINK_MINTING_ENABLED`) until bd polyglot-pdf-ik7e
+  ships the per-session cost ceiling. That interlock is the whole reason this
+  can merge safely.
+- **No firm-facing UI.** Minting is an API call until the console (bd gob8l).
+- **Copy-link delivery only.** No email provider, by decision.
+- Open beads from review: `b5unb` (after completion, an idle timeout burns
+  the link so voice Reconnect is refused -- retrieval unaffected; a product
+  call), `tkfc5` (should a client see their form's revision history?).
+
