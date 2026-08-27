@@ -3,7 +3,12 @@ Unit tests for the deterministic spell-back tool (bd polyglot-pdf-22h1f).
 
 name_spellback routes spelled read-backs OUT of the Live model's speech path:
 the client plays a Cloud TTS letter-by-letter clip of the stored value while
-the model is parked on the pending tool response. These tests pin:
+the tool response stays open for the playback duration. Holding the response
+open does NOT park the model, though (bd polyglot-pdf-kvrfq, wire-verified
+2026-08-26): under barge-in pressure the model can keep emitting further
+name_spellback calls while earlier ones are unanswered, and those queue
+behind the in-flight round-trip (see docs/components/voice-ai.md's
+name_spellback bullet). These tests pin:
 
 - the tool handler's three response variants (delivered / interrupted / error)
   and that EVERY variant forbids the model from spelling itself (the whole

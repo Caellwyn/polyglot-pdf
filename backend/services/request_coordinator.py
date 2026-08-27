@@ -515,10 +515,18 @@ class RequestCoordinator:
 
         Unlike every other coordinator round-trip, this one deliberately holds
         the Gemini receive loop for the playback duration -- that is the whole
-        point: the model is parked awaiting the tool response and must not
-        speak or hear anything until the clip finishes (maintainer design,
-        2026-08-07). The model generates nothing while a tool response is
-        pending, so nothing queues behind the hold.
+        point: the model must not speak or hear anything until the clip
+        finishes (maintainer design, 2026-08-07). Holding the tool response
+        open does NOT park the model, though (bd polyglot-pdf-kvrfq,
+        wire-verified 2026-08-26): under user barge-in pressure the
+        native-audio model keeps emitting further name_spellback calls while
+        earlier ones are unanswered, and because the tool callback runs
+        inline on this receive loop, those calls QUEUE behind the in-flight
+        round-trip and dispatch back-to-back once it settles (measured: ten
+        calls on one field in one incident, each read 3-9ms after the
+        previous response). See docs/components/voice-ai.md's
+        `name_spellback` bullet for the full queueing behavior and the
+        client-side stale-arrival guards that handle it.
 
         Returns:
             - The frontend's ack dict ``{"status": "delivered"|"interrupted"|
