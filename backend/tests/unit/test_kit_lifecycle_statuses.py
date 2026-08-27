@@ -2026,15 +2026,19 @@ def test_EVERY_lock_helper_call_passes_an_ACTOR_not_a_role_string():
     src = (_p.Path(__file__).resolve().parents[2]
            / "routes" / "editor_kit_routes.py").read_text(encoding="utf-8")
 
-    # DERIVE the helper set from the source: any module-level def whose
-    # signature declares an EditorActor parameter. Hand-listing three names is
+    # DERIVE the helper set from the source: any def whose signature declares
+    # a BARE EditorActor parameter. Route handlers are excluded automatically,
+    # not by a name convention: they annotate Annotated[EditorActor, Depends(...)],
+    # which is an ast.Subscript, so the isinstance(ast.Name) test below skips
+    # them. I had also filtered on a leading underscore and justified it as
+    # load-bearing -- measured, the derived set is IDENTICAL either way, so it
+    # was a no-op that would have hidden a future PUBLIC helper. Hand-listing three names is
     # the failure this epic has now hit five times -- a fourth helper added
     # later would be invisible to a list I typed.
     tree = ast.parse(src)
     helpers = {
         n.name for n in ast.walk(tree)
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and n.name.startswith("_")
         and any(
             isinstance(arg.annotation, ast.Name)
             and arg.annotation.id == "EditorActor"

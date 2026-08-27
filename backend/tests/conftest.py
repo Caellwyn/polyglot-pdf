@@ -88,7 +88,7 @@ def _editor_actor_auth(monkeypatch, request):
 
     Patches the verifier rather than the FastAPI dependency, so it reaches BOTH
     apps built with TestClient AND tests that call a route function directly.
-    Anything other than the two known tokens still raises 401, so the tests that
+    Anything other than a known token still raises 401, so the tests that
     assert a rejection keep asserting one.
     """
     # OPT OUT with @pytest.mark.real_editor_auth. A test of the verifier ITSELF

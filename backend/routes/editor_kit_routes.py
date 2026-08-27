@@ -3136,10 +3136,13 @@ async def set_editor_kit_status(
         # supersede archived and retired a second kit that no guard had
         # checked (Opus fresh-eyes round 2). Inert today -- the lock is
         # role-scoped, so a same-role holder would not be refused anyway --
-        # and it is LIVE now that bd polyglot-pdf-5tuas made locks per-user:
-        # a same-role holder IS refused, so an unguarded supersede would write
-        # over someone's kit. It also contradicts the helper's own "every
-        # schema write" contract.
+        # STILL INERT after bd polyglot-pdf-5tuas, and I wrongly "corrected"
+        # this comment to say otherwise -- measured: publishing is author-only,
+        # and _lock_refusal returns None for every author actor, so the only
+        # callers who reach here are never refused. It stays because it
+        # contradicts the helper's own "every schema write" contract to omit
+        # it, and because the day author-vs-author is refused, this is the
+        # site that would silently write over someone's kit.
         _require_edit_lock(superseded_meta, role)
 
         # Archive its bytes now -- the archive is additive and harmless even if
@@ -3408,9 +3411,17 @@ async def take_editor_kit_lock(
     # The lock names a PERSON (bd polyglot-pdf-5tuas). Plain JSON strings only:
     # writing the actor OBJECT here would put a non-serializable value straight
     # into metadata.json -- that broke every lock take in an earlier round.
-    # "label" is the holder's EMAIL, and metadata.json ships to the form-kits
-    # GCS bucket (collect_publishable_kit_files takes everything not prefixed
-    # with "_"). Checked and decided rather than assumed:
+    # "label" is the holder's EMAIL. TWO publish surfaces, and they differ --
+    # a reviewer and I each had one half right, so both are named here:
+    #   * the GCS BUCKET (deploy-all.sh + scripts/deploy-form-kit.sh,
+    #     collect_publishable_kit_files) takes everything not "_"-prefixed, so
+    #     metadata.json DOES go there;
+    #   * the FRONTEND BUNDLE (frontend/scripts/kitAssetFilter.ts,
+    #     publishableKitFiles) is a strict two-file allowlist (schema + pdf),
+    #     so metadata.json NEVER reaches the public Hosting bundle -- that
+    #     module's docstring says it was excluded precisely because it carries
+    #     editing_lock.
+    # Checked and decided rather than assumed:
     #   * the bucket is NOT public -- uniform access, no allUsers, served
     #     through the authenticated backend;
     #   * docs/standards/hipaa-pii-policy.md governs APPLICANT data (A-numbers,
@@ -3431,7 +3442,14 @@ async def take_editor_kit_lock(
         raise HTTPException(status_code=502, detail="Unable to take the lock") from exc
 
     if preempted:
-        _log.info("editor_kit_lock_preempted", kit_id=kit_id, role=role.role, actor=role.label(), took_from=holder)
+        # took_from_label, not just the role: author-over-author preemption is
+        # newly reachable (bd polyglot-pdf-5tuas), so took_from="author" alone
+        # now means "some author, we will not say which" -- on the one log line
+        # that records a lock being TAKEN FROM a person, which is the audit
+        # artifact this epic exists to produce.
+        _log.info("editor_kit_lock_preempted", kit_id=kit_id, role=role.role,
+                  actor=role.label(), took_from=holder,
+                  took_from_label=_lock_holder_label(meta))
     return KitLockResponse(ok=True, kitId=kit_id, heldBy=role.role,
                            heldByLabel=role.label(), preempted=preempted)
 
