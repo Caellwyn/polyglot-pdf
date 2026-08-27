@@ -1,0 +1,98 @@
+---
+date: 2026-08-27
+bead: polyglot-pdf-b5nmq
+title: "fix(scripts): actually scope the local backend reload watch -- uvicorn drops a --reload-dir under the cwd"
+tags: [hotfix, harness, schema-editor, verification]
+---
+
+## Trigger
+
+The maintainer reported the SAME symptom the previous day's fix
+(bd polyglot-pdf-nukx2, PR #650) was supposed to have removed: the local
+schema-editor backend still reloading on other worktrees' edits --
+
+```
+WARNING:  WatchFiles detected changes in '.claude\worktrees\ik7e-cost-ceiling\backend\routes\websocket_routes.py'. Reloading...
+```
+
+-- mid-request, this time killing a translation-status call on `i-90_v2`.
+The running backend was confirmed to be launched with the #650 fix in
+place (absolute `--reload-dir C:/Users/caell/.../backend`), so the fix was
+present and not working.
+
+## Root cause
+
+`uvicorn.supervisors.watchfilesreload.WatchFilesReload.__init__` filters
+the configured reload dirs:
+
+```python
+for directory in config.reload_dirs:
+    if Path.cwd() not in directory.parents:
+        self.reload_dirs.append(directory)
+if Path.cwd() not in self.reload_dirs:
+    self.reload_dirs.append(Path.cwd())
+```
+
+Any reload dir that is a **child of the process cwd** is dropped, and the
+cwd is appended in its place. Both launchers ran uvicorn from the repo
+root with a reload dir of `backend/` underneath it, so the effective watch
+set was the whole repo root -- `.claude/worktrees/` and its ~130 sibling
+checkouts included. This is true for the relative form and the absolute
+form alike; #650's move from relative to absolute changed nothing, because
+the discriminator is the parent relationship, not the path's spelling.
+
+Reproduced against the installed uvicorn (0.24.0) by replaying that dir
+resolution:
+
+| cwd | `--reload-dir` | effective watch |
+|---|---|---|
+| repo root | `backend` | repo root |
+| repo root | `<abs>/backend` | repo root |
+| `<repo>/backend` | `<abs>/backend` | `<repo>/backend` |
+
+## Why #650 looked verified
+
+uvicorn's startup banner --
+`INFO: Will watch for changes in these directories: [...\backend]` --
+prints `config.reload_dirs`, the **configured** set, before the supervisor
+filters it. The log says the fix worked while the watcher watches
+something else entirely. Nothing downstream ever contradicts it, so the
+only way to catch this is to observe an actual reload (or replay the
+supervisor's own filter), never to read the banner.
+
+## Fix
+
+Launch uvicorn with `backend/` as its **working directory**, in both
+`scripts/run-schema-editor.sh` and `scripts/dev-local.ps1`. With
+`cwd == the reload dir` the supervisor's filter keeps exactly that dir.
+The absolute `--reload-dir` is retained: it is what newer uvicorns honor
+directly, and it is inert under the 0.24 filter now that the cwd matches.
+
+Moving the cwd is safe: `PYTHONPATH` already pins imports to the repo root
+(so `backend.main` still resolves to this checkout), and backend runtime
+paths anchor on `__file__` (`backend/config.py`'s `FORM_KITS` root), not
+the cwd. A sweep of non-test backend code found only `backend/logs/...`
+debug-dump paths and `backend/.env.DEV` as cwd-relative -- all dev-only
+diagnostics, none on a request path.
+
+`--reload-exclude` remains the wrong tool here, for a second reason beyond
+the one #650 recorded (its resolver takes relative patterns only and
+raises `NotImplementedError` on an absolute one): a relative exclude dir
+would never match the absolute changed paths the watcher reports.
+
+## Verification
+
+Started a backend the new way on a spare port and watched the log:
+
+- touching `.claude/worktrees/ik7e-cost-ceiling/backend/routes/websocket_routes.py`
+  (the exact file from the maintainer's report) produced **zero**
+  `WatchFiles detected` events;
+- touching this worktree's own `backend/main.py` reloaded immediately.
+
+## Lesson
+
+A log line that reports **configuration** is not evidence about
+**behavior**. #650 was verified by reading uvicorn's own claim about what
+it would watch, rather than by causing the event the fix was supposed to
+suppress. Where a fix suppresses an event, the verification is to fire the
+event.
