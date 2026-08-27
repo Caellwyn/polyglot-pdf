@@ -1673,7 +1673,14 @@ def test_reopening_a_live_kit_KEEPS_the_authors_own_lock(client):
 
     assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
 
-    assert _run(store.load_metadata("w7"))[ekr._LOCK_KEY] == {"role": "author"}
+    kept = _run(store.load_metadata("w7"))[ekr._LOCK_KEY]
+    assert kept["role"] == "author"
+    # The kept lock must RETAIN the uid (bd 5tuas). Rebuilding it as
+    # {"role": holder} stripped the person, downgrading it to the legacy shape
+    # -- which falls back to the permissive same-role rule, so reopening your
+    # own kit would quietly reopen it to every other author.
+    assert kept["uid"] == "uid-josh", (
+        "reopening stripped the person from the lock: {}".format(kept))
     # ...and nobody else can take it out from under them.
     assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 409
 
@@ -1901,3 +1908,31 @@ def test_a_PRE_5tuas_lock_does_not_strand_an_editor(client):
     assert resp.status_code == 200, (
         "an editor was stranded on a legacy lock with no uid: {}".format(
             resp.text))
+
+
+def test_reopening_does_NOT_hand_another_authors_lock_to_the_reopener(client):
+    """The silent-takeover case that role comparison could not see.
+
+    _lock_after_transition kept the lock when `holder == actor_role`. With two
+    authors that is TRUE for the wrong person: Dana reopens a kit Josh holds
+    and the "kept" lock becomes hers, with Josh's editing turn ended and no
+    signal to either of them. Indistinguishable under shared tokens; a real
+    takeover once uids exist.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+    assert c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR).status_code == 200
+
+    # A DIFFERENT author reopens it.
+    assert _status(c, "w7", "draft", headers=AUTH_HDR2).status_code == 200
+
+    kept = (_run(store.load_metadata("w7")) or {}).get(ekr._LOCK_KEY)
+
+    # ASSERT THE LOCK IS GONE, not that it fails to name Dana. My first
+    # assertion was `uid != "uid-dana"` -- which the BUG also satisfies, since
+    # the buggy version keeps JOSH's uid verbatim. It passed under the
+    # mutation, proving nothing. The property is that a transition by someone
+    # else ENDS the holder's turn: Josh's lock must not survive it.
+    assert kept is None, (
+        "another author's lock survived a transition THEY did not perform, so "
+        "Josh still holds a kit Dana reopened: {}".format(kept))

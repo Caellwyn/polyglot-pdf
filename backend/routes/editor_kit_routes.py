@@ -535,7 +535,7 @@ _LOCK_KEY = "editing_lock"
 
 
 def _lock_after_transition(
-    meta: Optional[dict], current: str, target: str, actor_role: str
+    meta: Optional[dict], current: str, target: str, actor: EditorActor
 ) -> Optional[dict]:
     """The `editing_lock` value a kit should carry AFTER a status transition.
 
@@ -563,9 +563,28 @@ def _lock_after_transition(
     reopening_a_live_kit = (
         target == "draft" and current in _PUBLISHED_STATUSES
     )
-    if reopening_a_live_kit and holder == actor_role:
-        return {"role": holder}
-    return None
+    if not reopening_a_live_kit:
+        return None
+    # "THEY are acting" is a PERSON test now, not a role test (bd 5tuas).
+    # Role comparison had author Dana reopening a kit author Josh holds KEEP
+    # HIS LOCK AS HERS -- indistinguishable to the old code, a silent
+    # takeover once uids exist.
+    holder_uid = _lock_holder_uid(meta)
+    if holder_uid:
+        if holder_uid != actor.uid:
+            return None
+    elif holder != actor.role:
+        # A legacy lock has no uid: fall back to the role test rather than
+        # dropping a lock we cannot attribute.
+        return None
+    # Return the lock UNCHANGED. Rebuilding it as {"role": holder} stripped
+    # the uid and label, downgrading a person-scoped lock to the legacy
+    # shape -- which falls back to the permissive same-role rule, so
+    # reopening your own kit would quietly reopen it to everyone else.
+    existing = (meta or {}).get(_LOCK_KEY)
+    if isinstance(existing, dict):
+        return dict(existing)
+    return {"role": holder}
 
 
 def _refuse_if_metadata_unreadable(
@@ -3135,7 +3154,7 @@ async def set_editor_kit_status(
     # Editing is what the lock guards, and a status transition ends the editing
     # turn either way: handed to an author for review, handed back for changes,
     # or published and write-locked. Nobody holds it across that boundary.
-    kept_lock = _lock_after_transition(meta, current_status, body.status, role.role)
+    kept_lock = _lock_after_transition(meta, current_status, body.status, role)
     next_meta.pop(_LOCK_KEY, None)
     if kept_lock is not None:
         next_meta[_LOCK_KEY] = kept_lock
