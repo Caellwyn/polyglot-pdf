@@ -608,12 +608,13 @@ system that is NOT a Firebase account. Five coupled pieces:
   - **PAID work redeems** -- `/ws/fill` (a Gemini session), `/api/links/open`,
     and both `/api/tts/*` routes via the `require_paid_client_work`
     dependency. A completed link starts no new session and buys no more audio.
-  - **RETRIEVAL does NOT** -- `require_auth` (the schema and manifest reads,
-    `/api/fill-pdf`) and `require_signin` (the kit catalogue: `GET
-    /api/form-kits` and `.../{kit_id}/schema`). `/api/fill-pdf` is a pure
-    PyMuPDF render with no model call, so redeeming there spends nothing and
-    only takes away the document the client just filled. All still need a
-    valid SIGNED link inside its open window, scoped to that link's single
+  - **RETRIEVAL does NOT** -- `require_auth` (the archived-revision reads and
+    `/api/fill-pdf`) and `require_signin` (choosing a form: `GET
+    /api/form-kits` and `.../{kit_id}/schema`, moved off `require_auth` by PR
+    #643). `/api/fill-pdf` is a pure PyMuPDF render with no model call, so
+    redeeming there spends nothing and only takes away the document the
+    client just filled. All still need a valid SIGNED link inside its open
+    window, scoped to that link's single
     kit.
 
   A new door that authenticates a client credential must decide which side it

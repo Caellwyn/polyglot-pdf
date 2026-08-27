@@ -396,9 +396,10 @@ def test_the_complete_set_of_link_verifying_sites_is_pinned():
                     sites[key] = sites.get(key, 0) + 1
 
     assert sites == {
-        # mint re-reads its own token to return exp; /open verifies before
-        # handing the payload to the shared gate. Both redeem via
-        # enforce_link_redemption.
+        # TWO sites, and only ONE redeems. mint re-reads its own token
+        # purely to return exp -- redeeming there would burn the link before
+        # the client ever clicked it. /open verifies, then hands the payload
+        # to enforce_link_redemption (the module's only call, at :234).
         "backend/routes/link_routes.py": 2,
         # the socket, which redeems immediately after.
         "backend/routes/websocket_routes.py": 1,

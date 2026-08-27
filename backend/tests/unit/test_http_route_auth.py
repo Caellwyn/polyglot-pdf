@@ -252,8 +252,9 @@ def _firm_world(_auth_on, monkeypatch):
         "backend.routes.pdf_fill_routes.get_form_kit_store",
         lambda: _TwoKitStore(),
     )
-    # require_auth (list/schema/fill routes) resolves verify_token inside the
-    # auth module; the pdf route uses the copy imported into form_kit_routes.
+    # require_auth (fill) and require_signin (list/schema) both resolve
+    # verify_token inside the auth module; the pdf route uses the copy
+    # imported into form_kit_routes.
     monkeypatch.setattr("backend.services.auth.verify_token", _fake_verify)
     monkeypatch.setattr(fkr, "verify_token", _fake_verify)
     # The gates live in backend/services/kit_gates.py (shared by ALL four

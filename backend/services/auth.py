@@ -146,9 +146,10 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     # token and a caller cannot opt into the weaker check by labelling
     # theirs. See services/link_tokens.py for the credential boundary.
     if token.count(".") == 1:
-        # NO REDEMPTION: require_auth gates RETRIEVAL (the manifest, the
-        # schema, /api/fill-pdf's pure PyMuPDF render). Burning a link must
-        # not take away the document the client already filled. The two PAID
+        # NO REDEMPTION: require_auth gates RETRIEVAL (the archived-revision
+        # reads and /api/fill-pdf's pure PyMuPDF render; the manifest and
+        # schema moved to require_signin in PR #643). Burning a link must not
+        # take away the document the client already filled. The two PAID
         # routes it also gates (/api/tts/*) declare require_paid_client_work
         # instead, which does redeem.
         return await asyncio.to_thread(resolve_client_link_credential, token)
