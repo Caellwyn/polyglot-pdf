@@ -955,7 +955,9 @@ def test_taking_a_free_lock_succeeds(client):
     assert resp.status_code == 200, resp.text
     assert resp.json()["heldBy"] == "editor"
     assert resp.json()["preempted"] is False
-    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "editor"}
+    lock = _run(store.load_metadata("w7"))["editing_lock"]
+    assert lock["role"] == "editor"
+    assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 def test_an_AUTHOR_can_take_a_lock_back_from_an_editor(client):
@@ -970,7 +972,9 @@ def test_an_AUTHOR_can_take_a_lock_back_from_an_editor(client):
     assert resp.json()["heldBy"] == "author"
     # Reported, so the UI can SAY it took the kit rather than silently winning.
     assert resp.json()["preempted"] is True
-    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+    lock = _run(store.load_metadata("w7"))["editing_lock"]
+    assert lock["role"] == "author"
+    assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
@@ -983,8 +987,17 @@ def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
     resp = _lock(c, "w7", HDR)
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
-    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
+    lock = _run(store.load_metadata("w7"))["editing_lock"]
+    assert lock["role"] == "author"
+    assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 def test_a_preempted_editor_DISCOVERS_it_on_their_next_save(client):
@@ -1000,7 +1013,14 @@ def test_a_preempted_editor_DISCOVERS_it_on_their_next_save(client):
                  json={"fields": [{"id": "f1"}]}, headers=HDR)
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
 
 
 def test_the_lock_holder_can_still_save(client):
@@ -1190,7 +1210,14 @@ def test_the_enumeration_is_anchored_to_a_REAL_refusal(client):
                  json={"fields": [{"id": "f1"}]}, headers=HDR)
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
 
 
 # --- rejection clears the version (bd polyglot-pdf-hqztg) --------------------
@@ -1280,7 +1307,14 @@ def test_an_editor_cannot_REJECT_out_from_under_an_author(client):
     resp = _status(c, "custom", "draft", headers=HDR)        # editor reopens
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
     # Nothing moved: still submitted, version intact.
     assert _run(store.load_metadata("custom"))["status"] == "submitted"
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -1360,14 +1394,17 @@ def test_a_supersede_honours_the_OUTGOING_kit_s_lock(client):
     # is author-only, so this drives the guard directly rather than the route.)
     holder = ekr._lock_holder(_run(store.load_metadata("w7-2024")))
     assert holder == "author"
-    assert ekr._lock_refusal(holder, "editor") is not None, (
+    from backend.services.editor_auth import EditorActor
+    _an_editor = EditorActor(uid="uid-someone", email="someone@example.com",
+                             role="editor")
+    assert ekr._lock_refusal(holder, _an_editor) is not None, (
         "an editor must be refused the outgoing kit while an author holds it"
     )
     # And the route calls that check -- pinned by the property test above plus
     # this explicit assertion that the call exists on the supersede path.
     import inspect
     src = inspect.getsource(ekr.set_editor_kit_status)
-    assert "_require_edit_lock(superseded_meta, role.role)" in src, (
+    assert "_require_edit_lock(superseded_meta, role)" in src, (
         "the supersede path must check the OUTGOING kit's lock"
     )
 
@@ -1566,7 +1603,9 @@ def test_taking_a_lock_on_a_kit_with_NO_metadata_still_works(client):
     resp = c.post("/api/editor/kits/fresh/lock", headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
-    assert _run(store.load_metadata("fresh"))["editing_lock"] == {"role": "author"}
+    _lock = _run(store.load_metadata("fresh"))["editing_lock"]
+    assert _lock["role"] == "author"
+    assert _lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 # --- a status change releases the lock (Opus fresh-eyes round 8) -------------
@@ -1662,7 +1701,14 @@ def test_reopening_a_live_kit_KEEPS_the_authors_own_lock(client):
 
     assert _status(c, "w7", "draft", headers=AUTH_HDR).status_code == 200
 
-    assert _run(store.load_metadata("w7"))[ekr._LOCK_KEY] == {"role": "author"}
+    kept = _run(store.load_metadata("w7"))[ekr._LOCK_KEY]
+    assert kept["role"] == "author"
+    # The kept lock must RETAIN the uid (bd 5tuas). Rebuilding it as
+    # {"role": holder} stripped the person, downgrading it to the legacy shape
+    # -- which falls back to the permissive same-role rule, so reopening your
+    # own kit would quietly reopen it to every other author.
+    assert kept["uid"] == "uid-josh", (
+        "reopening stripped the person from the lock: {}".format(kept))
     # ...and nobody else can take it out from under them.
     assert c.post("/api/editor/kits/w7/lock", headers=HDR).status_code == 409
 
@@ -1771,3 +1817,403 @@ def test_an_author_can_RELEASE_a_lock_held_by_another_author(client):
     resp = _unlock(c, "w7", AUTH_HDR)
     assert resp.status_code == 200, (
         "an author could not release an author-held lock: {}".format(resp.text))
+
+
+# --- bd polyglot-pdf-5tuas: the lock names a PERSON -------------------------
+#
+# Under shared tokens the server could not tell two editors apart, so same-role
+# contention was ALLOWED rather than pretended about. Now that a lock carries a
+# uid, editor-vs-editor is a real collision and is refused -- while author
+# preemption survives, including author-over-author, because that IS the
+# stale-lock release and there is no timer.
+
+HDR2 = {"X-Editor-Token": "edit2-tok"}        # a SECOND editor (sam)
+AUTH_HDR2 = {"X-Editor-Token": "auth2-tok"}   # a SECOND author (dana)
+
+
+def test_editor_B_is_REFUSED_a_kit_editor_A_holds(client):
+    """EXIT CRITERION 1. The whole point of the bead.
+
+    Before this, both editors looked identical to the server and the second
+    one silently stole the kit out from under the first.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _lock(c, "w7", HDR2)
+
+    assert resp.status_code == 409, (
+        "editor B took a kit editor A holds: {}".format(resp.text))
+    assert "maria@example.com" in resp.text, (
+        "the refusal must NAME who holds it, or the second editor cannot tell "
+        "whether to wait or go find them: {}".format(resp.text))
+
+
+def test_the_SAME_editor_may_re_take_their_own_lock(client):
+    """The other side of criterion 1, and the one that breaks a naive fix.
+
+    A refresh or a second tab re-takes the lock. Refusing that would lock a
+    person out of their OWN kit -- so the rule is person-vs-person, not
+    "a lock exists".
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    again = _lock(c, "w7", HDR)
+
+    assert again.status_code == 200, (
+        "an editor was refused their OWN lock: {}".format(again.text))
+    assert again.json().get("preempted") is False, (
+        "re-taking your own lock is not a preemption")
+
+
+def test_an_author_can_still_take_a_lock_from_ANOTHER_author(client):
+    """EXIT CRITERION 2. Author preemption survives the person-scoping.
+
+    Author-over-author is the stale-lock release: there is no timer, because a
+    clock that steals from someone actively working is worse than a human
+    deciding to take it. Person-scoping must not quietly remove that.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _lock(c, "w7", AUTH_HDR2)
+
+    assert resp.status_code == 200, (
+        "an author could not take a lock back from another author: {}".format(
+            resp.text))
+    assert resp.json().get("preempted") is True, (
+        "taking it from a different person IS a preemption and must say so")
+
+
+def test_an_author_can_still_take_a_lock_from_an_editor(client):
+    """EXIT CRITERION 2, the pairing that already worked -- pinned so the
+    person-scoping does not regress it."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _lock(c, "w7", AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("preempted") is True
+
+
+def test_the_lock_response_NAMES_the_person_holding_it(client):
+    """EXIT CRITERION 3. heldBy stays a ROLE (the editor catalogue compares it
+    to the literal strings 'author'/'editor'); heldByLabel carries the person,
+    additively, so the frontend bd polyglot-pdf-yswp3 owns keeps working."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    body = _lock(c, "w7", HDR).json()
+
+    assert body["heldBy"] == "editor", "heldBy must still be the ROLE"
+    assert body["heldByLabel"] == "maria@example.com", (
+        "the response must name the PERSON holding the kit")
+
+
+def test_a_PRE_5tuas_lock_does_not_strand_an_editor(client):
+    """The migration case, and the one a naive fix gets wrong.
+
+    A lock written before this bead stores only a role -- there is no uid to
+    compare. Treating that unattributable holder as "somebody else" would
+    permanently refuse every editor on a kit nobody can be shown to hold, with
+    no way to clear it. So same-role contention falls back to the old ALLOW.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    meta = _run(store.load_metadata("w7")) or {}
+    meta["editing_lock"] = {"role": "editor"}   # the OLD shape, no uid
+    _run(store.put_metadata("w7", meta))
+
+    resp = _lock(c, "w7", HDR2)
+
+    assert resp.status_code == 200, (
+        "an editor was stranded on a legacy lock with no uid: {}".format(
+            resp.text))
+
+
+def test_reopening_does_NOT_hand_another_authors_lock_to_the_reopener(client):
+    """The silent-takeover case that role comparison could not see.
+
+    _lock_after_transition kept the lock when `holder == actor_role`. With two
+    authors that is TRUE for the wrong person: Dana reopens a kit Josh holds
+    and the "kept" lock becomes hers, with Josh's editing turn ended and no
+    signal to either of them. Indistinguishable under shared tokens; a real
+    takeover once uids exist.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="complete")
+    assert c.post("/api/editor/kits/w7/lock", headers=AUTH_HDR).status_code == 200
+
+    # A DIFFERENT author reopens it.
+    assert _status(c, "w7", "draft", headers=AUTH_HDR2).status_code == 200
+
+    kept = (_run(store.load_metadata("w7")) or {}).get(ekr._LOCK_KEY)
+
+    # ASSERT THE LOCK IS GONE, not that it fails to name Dana. My first
+    # assertion was `uid != "uid-dana"` -- which the BUG also satisfies, since
+    # the buggy version keeps JOSH's uid verbatim. It passed under the
+    # mutation, proving nothing. The property is that a transition by someone
+    # else ENDS the holder's turn: Josh's lock must not survive it.
+    assert kept is None, (
+        "another author's lock survived a transition THEY did not perform, so "
+        "Josh still holds a kit Dana reopened: {}".format(kept))
+
+
+def test_the_preempted_flag_across_every_lock_and_actor_combination(client):
+    """`preempted` drives what the UI tells the person taking the lock, so a
+    wrong answer either cries wolf or hides a real takeover.
+
+    The expression has two branches (uid present vs a legacy lock with none)
+    crossed with same/different person -- five reachable combinations, and I
+    had only reasoned through two of them. Parametrized over the WHOLE
+    dimension rather than a sample: a mutation reddening SOME cases says
+    nothing about the rest.
+    """
+    c, store, root = client
+
+    def _take(kit, hdr):
+        return _lock(c, kit, hdr).json().get("preempted")
+
+    # 1. free kit -- nobody to preempt
+    _make_kit(root, "k1", status="draft")
+    assert _take("k1", HDR) is False
+
+    # 2. the SAME person re-taking (refresh, second tab)
+    assert _take("k1", HDR) is False, "re-taking your own lock is not a steal"
+
+    # 3. same ROLE, different PERSON -- an author takes it from another author
+    _make_kit(root, "k2", status="draft")
+    assert _take("k2", AUTH_HDR) is False
+    assert _take("k2", AUTH_HDR2) is True, "author-over-author IS a preemption"
+
+    # 4. different role -- an author takes an editor's kit
+    _make_kit(root, "k3", status="draft")
+    assert _take("k3", HDR) is False
+    assert _take("k3", AUTH_HDR) is True
+
+    # 5. LEGACY lock (no uid): falls back to the role comparison
+    _make_kit(root, "k4", status="draft")
+    meta = _run(store.load_metadata("k4")) or {}
+    meta[ekr._LOCK_KEY] = {"role": "editor"}      # pre-5tuas shape
+    _run(store.put_metadata("k4", meta))
+    assert _take("k4", HDR) is False, (
+        "a legacy same-role lock must not report a preemption -- there is no "
+        "person to have taken it from")
+
+
+def test_EVERY_lock_helper_call_passes_an_ACTOR_not_a_role_string():
+    """Derived from the AST, because grep could not see the one that broke.
+
+    The supersede site spans two lines, so my single-line sweep reported "all
+    converted" while it still passed role.role -- an AttributeError waiting on
+    a reachable path, found by a reviewer rather than by me. A parser sees a
+    call regardless of how it is wrapped.
+
+    Latent rather than live (the current status values return before the
+    attribute access), but it would have surfaced as a 500 AFTER the incoming
+    kit was already published -- the worst moment for a crash.
+    """
+    import ast
+    import pathlib as _p
+
+    src = (_p.Path(__file__).resolve().parents[2]
+           / "routes" / "editor_kit_routes.py").read_text(encoding="utf-8")
+
+    # DERIVE the helper set from the source: any def whose signature declares
+    # a BARE EditorActor parameter. Route handlers are excluded automatically,
+    # not by a name convention: they annotate Annotated[EditorActor, Depends(...)],
+    # which is an ast.Subscript, so the isinstance(ast.Name) test below skips
+    # them. I had also filtered on a leading underscore and justified it as
+    # load-bearing -- measured, the derived set is IDENTICAL either way, so it
+    # was a no-op that would have hidden a future PUBLIC helper. Hand-listing three names is
+    # the failure this epic has now hit five times -- a fourth helper added
+    # later would be invisible to a list I typed.
+    tree = ast.parse(src)
+    helpers = {
+        n.name for n in ast.walk(tree)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(
+            isinstance(arg.annotation, ast.Name)
+            and arg.annotation.id == "EditorActor"
+            for arg in list(n.args.args) + list(n.args.kwonlyargs)
+            if arg.annotation is not None
+        )
+    }
+    assert helpers, "no EditorActor-taking helpers found -- derivation broke"
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", None)
+        if name not in helpers:
+            continue
+        # POSITIONAL *and* KEYWORD. Checking only node.args let
+        # `actor=role.role` through -- found by accident, when a botched
+        # mutation restore left exactly that form in the tree and the guard
+        # stayed green. A guard that inspects one calling convention is a
+        # guard against one calling convention.
+        candidates = list(node.args) + [kw.value for kw in node.keywords]
+        for arg in candidates:
+            # `role.role` where an EditorActor is expected
+            if (isinstance(arg, ast.Attribute) and arg.attr == "role"
+                    and isinstance(arg.value, ast.Name) and arg.value.id == "role"):
+                offenders.append("{}() at line {}".format(name, node.lineno))
+
+    assert not offenders, (
+        "these lock helpers get a ROLE STRING where they now take an "
+        "EditorActor, which raises AttributeError on the person comparison:\n  "
+        + "\n  ".join(offenders))
+
+
+def test_an_editor_blocked_by_an_AUTHOR_is_told_WHICH_author(client):
+    """The refusal an editor most needs a name for.
+
+    They cannot preempt an author, so their only way forward is to go ask that
+    person. The first version named the other EDITOR (whom they could at least
+    wait out) and left "an author" anonymous -- exactly backwards.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200   # josh, an author
+
+    resp = _lock(c, "w7", HDR)                            # maria, an editor
+
+    assert resp.status_code == 409
+    assert "josh@example.com" in resp.text, (
+        "an editor was blocked by an author with no way to learn WHO: "
+        "{}".format(resp.text))
+
+
+def test_an_editor_cannot_RELEASE_another_editors_lock(client):
+    """The release half of the person-scoping.
+
+    The docstring claimed an editor may release "a lock an editor holds",
+    which was the pre-bead rule and became false the moment take became
+    person-scoped -- release shares the same _lock_refusal.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200          # maria holds it
+
+    resp = _unlock(c, "w7", HDR2)                          # sam tries to free it
+
+    assert resp.status_code == 409, (
+        "editor sam released editor maria's lock: {}".format(resp.text))
+    assert "maria@example.com" in resp.text
+
+
+def test_an_editor_CAN_release_their_own_lock(client):
+    """...and the person who holds it is not locked out of releasing it."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    assert _unlock(c, "w7", HDR).status_code == 200
+
+
+def test_a_credential_with_NO_uid_can_never_reach_the_lock():
+    """The magic-link intersection (bd ugm6 landed on dev mid-branch).
+
+    A link credential resolves to claims with uid=None, and this bead's lock
+    treats a falsy uid as UNATTRIBUTABLE -- falling back to the permissive
+    same-role rule so nobody is stranded on a pre-5tuas lock. Those two facts
+    are individually correct and catastrophic together: a client could take a
+    kit an editor holds.
+
+    It cannot happen, for two independent reasons, and this pins BOTH because
+    either one alone would be a single point of failure:
+      1. no editor route uses require_auth (the guard that accepts link
+         tokens) -- they use require_editor_role/require_author_role;
+      2. verify_editor_token refuses a credential with no uid outright.
+
+    Checked with a WORD-BOUNDARY match: my first attempt grepped "require_auth"
+    and matched "require_author_role", reporting a hole that did not exist.
+    """
+    import ast
+    import pathlib as _p
+    import re
+
+    root = _p.Path(__file__).resolve().parents[3]
+    routes = (root / "backend" / "routes" / "editor_kit_routes.py").read_text(
+        encoding="utf-8")
+
+    # 1. require_auth must not gate any editor route. \b so require_author_role
+    #    does not match.
+    assert not re.search(r"\brequire_auth\b", routes), (
+        "an editor route now uses require_auth, which accepts magic-link "
+        "credentials -- those carry uid=None, which the lock treats as "
+        "unattributable and lets through on the permissive path")
+
+    # 2. the editor verifier refuses a uid-less credential.
+    auth_src = (root / "backend" / "services" / "editor_auth.py").read_text(
+        encoding="utf-8")
+    tree = ast.parse(auth_src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and n.name == "verify_editor_token")
+    raises_on_missing_uid = any(
+        isinstance(n, ast.If) and isinstance(n.test, ast.UnaryOp)
+        and isinstance(n.test.op, ast.Not)
+        and any(isinstance(c, ast.Raise) for c in ast.walk(n))
+        for n in ast.walk(fn))
+    assert raises_on_missing_uid, (
+        "verify_editor_token no longer refuses a credential with no uid")
+
+
+def test_the_lock_never_writes_a_key_the_DEPLOY_GREP_would_publish(client):
+    """A contractor's email must not become a form's display NAME.
+
+    deploy-all.sh and scripts/deploy-form-kit.sh do:
+        grep -o '"label"...' metadata.json | head -1
+    and put the result in the published manifest as the form's display name.
+    The lock originally stored the holder's email under "label", so on a kit
+    with no TOP-LEVEL label the nested one wins the grep -- reproduced, and it
+    would show maria@example.com in the form picker.
+
+    Nothing but JSON KEY ORDER was preventing it (the lock is appended last,
+    so an existing top-level label wins), and no such kit exists today. Both
+    are luck, not design. The key is "holder_label" now.
+    """
+    import json
+    import re
+
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    meta = _run(store.load_metadata("w7")) or {}
+    # Drop any top-level label, which is the only thing that would otherwise
+    # win the grep -- this is the reachable shape.
+    meta.pop("label", None)
+    raw = json.dumps(meta)
+
+    hit = re.search(r'"label"\s*:\s*"([^"]*)"', raw)
+    assert hit is None, (
+        "the deploy grep would publish {!r} as this form's display name"
+        .format(hit.group(1)))
+    # ...and the holder is still recorded, just under a key the grep ignores.
+    assert meta[ekr._LOCK_KEY]["holder_label"] == "maria@example.com"
+
+
+def test_a_lock_written_before_the_rename_still_names_its_holder(client):
+    """The rename must not strand a holder whose lock predates it."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    meta = _run(store.load_metadata("w7")) or {}
+    meta[ekr._LOCK_KEY] = {"role": "editor", "uid": "uid-maria",
+                           "label": "maria@example.com"}   # the OLD key
+    _run(store.put_metadata("w7", meta))
+
+    resp = _lock(c, "w7", HDR2)     # a different editor tries to take it
+
+    assert resp.status_code == 409
+    assert "maria@example.com" in resp.text, (
+        "a pre-rename lock lost its holder's name: {}".format(resp.text))

@@ -1,6 +1,8 @@
 """Scan tier-1 + tier-2 docs for staleness AND enforce the sprint-archive protocol.
 
-This script does four warn-only checks in one pass:
+This script does the following warn-only checks in one pass (deliberately
+count-free -- bd polyglot-pdf-nlbck -- see the "Why every check lives in one
+script" paragraph below):
 
 1. **Doc freshness.** Each tier-1 doc (TIER1_DOCS: CLAUDE.md, docs/INDEX.md,
    docs/technical_guide.md) and each `docs/components/*.md` /
