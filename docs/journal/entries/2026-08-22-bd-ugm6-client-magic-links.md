@@ -393,3 +393,61 @@ Two results worth recording because both looked like bugs and were not:
   the link so voice Reconnect is refused -- retrieval unaffected; a product
   call), `tkfc5` (should a client see their form's revision history?).
 
+## The dev merge broke the client path a FIFTH time, and a guard caught it
+
+Merging `origin/dev` brought in PR #643, which moved `GET /api/form-kits` and
+`.../{kit_id}/schema` onto a new `require_signin` dependency so that SELECTING
+a form would not require enrolment. That dependency called `verify_token`
+directly, which only understands Firebase JWTs. A client link token has ONE
+dot; a JWT has two. So a client 401'd on their FIRST TWO CALLS -- the form
+list and the schema -- while every other door still worked.
+
+Neither side is at fault. #643 could not know about a credential system that
+did not exist on `dev`; this branch could not know a shared dependency would
+be added underneath it. **That is exactly the failure mode a merge produces
+and neither branch's tests can see.**
+
+What caught it: the credential-site set guard, on a count going 1 -> 2 in
+`auth.py`. Not a test about clients, not a test about the catalogue -- a guard
+that simply asserts the complete list of sites that resolve a credential. Its
+first real catch on someone else's change, and the argument for scar #7
+(`ENUMERATE THE SET`) in one data point.
+
+**What did NOT catch it: my whole-path journey test.** I wrote that test in r12
+specifically to end this failure mode, and it still called `_auth(token)` -- a
+dependency function -- rather than making an HTTP request. So when the routes
+moved to a DIFFERENT dependency, the test kept passing while the real path was
+dead. The fix I built for "tests verify something adjacent to the behavior"
+was itself an instance of it.
+
+It now drives the real routes over HTTP (mutation-verified: reverting the
+`require_signin` fix reddens it). The sharper lesson, layered on top of
+`new-actor-needs-a-whole-path-test`: **a whole-path test must enter through the
+same door the actor does.** Calling the dependency the route happens to use
+today pins today's wiring, not the actor's path.
+
+## The review found the trap I had left in the fix
+
+The Opus pass returned NO-GAPS on behavior but flagged that
+`resolve_client_link_credential` still carried `redeem: bool = False` with no
+caller passing `True`. Scar #7 again: "remove the parameter, don't just default
+it off." Here turning it on burns a client's link on a RETRIEVAL route -- the
+r11 regression the maintainer had already reverted once. Removed, along with
+the two guard docstrings that instructed the next author to redeem at every
+door.
+
+Enumerating rather than fixing the flagged instances found a fourth:
+`link_redemptions.py` -- the module that DEFINES redemption -- opened with
+"called by EVERY door a client credential opens." The most load-bearing place
+for that claim to be wrong.
+
+A second re-review then caught that my own fix had APPENDED the `require_signin`
+clause beside the pre-#643 wording instead of replacing it, listing the schema
+and manifest reads under both dependencies. Enumerating found a fourth instance
+of that too. The pattern is consistent enough to name: **when correcting a
+stale enumeration, replace the old members -- appending the new one leaves a
+document that contradicts itself.**
+
+Final state: backend 2725 passed, frontend 1623 passed, three review beads
+closed rather than deferred (`fzak5`, `ipas0`, `p2qi0`).
+
