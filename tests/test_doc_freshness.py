@@ -278,7 +278,7 @@ class TestFreshnessScanCoversTier1:
     # happened to motivate the first fix.
     _SITE_ANCHORS = [
         (
-            "This script does four warn-only checks in one pass:",
+            "warn-only checks in one pass",
             "2. **Sprint-archive protocol.**",
             "module docstring",
         ),
@@ -1897,4 +1897,55 @@ class TestModuleDocstringCheckCountMatchesMain:
             "Update the numbered list -- and grep the file for stale "
             "prose mentioning a check COUNT (bd polyglot-pdf-82rzp) -- "
             "whenever a check is added or removed."
+        )
+
+    def test_lead_sentence_names_no_count_word(self):
+        """bd polyglot-pdf-nlbck: the module docstring's LEAD SENTENCE ("This
+        script does N warn-only checks...") is a count-bearing site the
+        82rzp rewrite above did not reach -- adding a fifth check correctly
+        (numbered list + main() dispatch) while leaving this sentence saying
+        a stale number is invisible to
+        test_docstring_count_matches_mains_actual_check_count, which never
+        reads this sentence at all. Pinning the PROPERTY (no digit or spelled-
+        out number word directly describing the check COUNT) means the
+        sentence can never drift out of sync with the numbered list below
+        it, the same fix applied to the rest of this docstring by bd
+        polyglot-pdf-82rzp.
+
+        Scanned over the WHOLE docstring, not an extracted "lead sentence" --
+        a positional paragraph-index lookup (e.g. `__doc__.split("\\n\\n")[1]`)
+        is the exact vacuous-pass failure mode this same test file has paid
+        for twice before (bd polyglot-pdf-u3miz, bd polyglot-pdf-uquqs): a
+        future paragraph inserted before the lead sentence would silently
+        shift the index and this test would check the wrong text while still
+        passing. Scanning the whole docstring is immune to that shift and
+        cannot become MORE permissive by it -- the numbered list items below
+        (`1. **Doc freshness.**` etc.) don't use "N check(s)" phrasing, so
+        they can't false-positive here.
+
+        Scoped to a number word immediately before "check(s)" -- NOT any
+        number word anywhere in the docstring: "in one pass" is an idiom
+        ("a single sweep"), not a claim about how many checks there are, and
+        a broader scan would false-positive on it (verified manually: the
+        current, correct docstring text passes this test precisely because
+        the scope is narrowed this way).
+
+        The spelled-out word list only covers zero-twenty -- a doc claiming
+        "does thirty warn-only checks" would not be caught. Digits of any
+        length ARE caught, so this only under-covers spelled-out
+        numbers past twenty, which is far beyond this script's current or
+        realistically foreseeable check count; not worth the complexity of a
+        general English-number parser for that margin."""
+        number_words = (
+            "zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+            "eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+            "eighteen|nineteen|twenty"
+        )
+        pattern = rf"\b(?:\d+|{number_words})[\s-]+(?:warn-only[\s-]+)?checks?\b"
+        match = re.search(pattern, freshness.__doc__, re.IGNORECASE)
+        assert match is None, (
+            f"the module docstring names a check COUNT "
+            f"({match.group(0)!r}) -- make it count-free (bd "
+            "polyglot-pdf-nlbck), matching the rest of this docstring "
+            "(bd polyglot-pdf-82rzp)."
         )
