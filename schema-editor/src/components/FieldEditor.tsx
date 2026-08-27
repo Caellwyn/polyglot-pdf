@@ -1815,15 +1815,33 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                   const newOptions = [...safeOptions(field)];
                                   newOptions[idx] = { ...option, value: next };
                                   const updatedField = { ...field, options: newOptions };
-                                  // Retarget whenever the code CHANGED and had
-                                  // dependents -- including a blank-out. An
-                                  // emptied code stops existing as a choice,
-                                  // which is what Remove BLOCKS over; leaving
-                                  // the reference pointing at it is the same
-                                  // dangling state by another route. Retarget
-                                  // to the empty value so the reference tracks
-                                  // the option rather than silently orphaning.
-                                  if (onUpdateFields && old && next !== old) {
+                                  // Retarget when the code changed to another
+                                  // REAL code -- but never to empty.
+                                  //
+                                  // Empty looks like the tidy choice (the
+                                  // reference tracks the option) and is in
+                                  // fact the dangerous one: schema_lint SKIPS
+                                  // the ref-option-value dangling check for
+                                  // "" on purpose -- it is the v1 "field is
+                                  // empty" idiom, which the i-90 gold really
+                                  // uses on unit-type radios. So rewriting a
+                                  // dependent to "" converts an orphaned
+                                  // reference into a DIFFERENT, live condition
+                                  // that lint cannot see, and one that plausibly
+                                  // matches an unanswered dropdown. Measured:
+                                  // keeping the old code reports
+                                  // ref-option-value; rewriting to "" reports
+                                  // nothing at all.
+                                  //
+                                  // So on a blank-out the reference is left
+                                  // pointing at the old code, where lint
+                                  // catches it loudly. Clearing a referenced
+                                  // code is really an option removal, and
+                                  // Remove already BLOCKS that -- routing this
+                                  // through the same guard is bd
+                                  // polyglot-pdf-alzbr's follow-up, not a
+                                  // reason to hide the breakage now.
+                                  if (onUpdateFields && old && next && next !== old) {
                                     const withEdit = schema.fields.map(f =>
                                       f.id === field.id ? updatedField : f,
                                     );

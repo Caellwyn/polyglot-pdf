@@ -252,6 +252,67 @@ describe('select option values are PDF export codes (bd polyglot-pdf-alzbr)', ()
     expect(dep.show_if.value).toBe('WV');
   });
 
+  it('blanking a referenced code does NOT retarget the dependent to empty', () => {
+    // Deliberate: leaving the reference on the old code keeps it VISIBLE.
+    // schema_lint skips its dangling-reference check for "" on purpose (the v1
+    // "field is empty" idiom, used for real on the i-90's unit-type radios), so
+    // rewriting a dependent to "" turns an orphaned reference into a different,
+    // LIVE condition that lint cannot see -- and one that plausibly matches an
+    // unanswered dropdown. Measured against the real linter: old code ->
+    // ref-option-value ERROR; "" -> nothing at all.
+    const field = selectField();
+    const dependent = {
+      id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text', section_id: 's1',
+      pdf_field_name: 'form1[0].dep[0]',
+      show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
+    } as unknown as FormField;
+    const schema = {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['mail_state', 'dep'] }],
+      fields: [field, dependent],
+    } as unknown as FormSchema;
+
+    // Real state-holding parent: a vi.fn() parent never calls onUpdateFields
+    // here, so a loop over its calls would iterate ZERO times and assert
+    // nothing -- the test would pass against a blank-out that DID retarget.
+    function Harness() {
+      const [s, setS] = React.useState<FormSchema>(schema);
+      const f = s.fields.find(x => x.id === 'mail_state')!;
+      return (
+        <>
+          <FieldEditor
+            field={f}
+            schema={s}
+            onUpdateField={(patch: any) => setS(p => ({
+              ...p,
+              fields: p.fields.map(x => (x.id === 'mail_state' ? { ...x, ...patch } : x)),
+            } as FormSchema))}
+            onUpdateFields={(fields: any, sections: any) => setS(p => ({
+              ...p, fields, sections: sections ?? p.sections,
+            } as FormSchema))}
+            authorTier
+          />
+          <pre data-testid="probe">{JSON.stringify({
+            code: (s.fields.find(x => x.id === 'mail_state') as any).options[0].value,
+            depRef: (s.fields.find(x => x.id === 'dep') as any).show_if?.value,
+          })}</pre>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
+    fireEvent.focus(codeInput);
+    fireEvent.change(codeInput, { target: { value: '' } });
+    fireEvent.blur(codeInput);
+
+    const state = JSON.parse(screen.getByTestId('probe').textContent!);
+    expect(state.code).toBe('');        // the blank-out did take effect...
+    expect(state.depRef).toBe('WY');    // ...and the reference stayed VISIBLE
+  });
+
   it('an export code is trimmed on blur', () => {
     // ' WY' is never a legal export code -- it silently fails the /Opt match
     // and the form prints blank.
