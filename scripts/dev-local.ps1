@@ -236,9 +236,10 @@ if ($Model -eq 'premium') {
 }
 
 # --- Launch backend -----------------------------------------------------------
-# Run uvicorn on port 8000 to match the frontend's default WS URL. Run from the
-# SOURCE repo root (so backend.main imports this checkout's code) using the main
-# repo's venv interpreter.
+# Run uvicorn on port 8000 to match the frontend's default WS URL. Run with
+# backend/ as the working directory (reload-watch scoping -- see $BackendArgs)
+# using the main repo's venv interpreter; PYTHONPATH=$RepoRoot keeps
+# backend.main importing THIS checkout's code.
 #
 # Set the backend's env vars on THIS process before launching. Start-Process
 # inherits the parent environment, and -NoNewWindow keeps it in this console.
@@ -248,12 +249,20 @@ if ($Model -eq 'premium') {
 $BackendArgs = @(
     '-m', 'uvicorn', 'backend.main:app',
     '--host', '127.0.0.1', '--port', '8000', '--reload',
-    # Scope the reload watcher to backend/ (bare --reload watches the WHOLE cwd
-    # tree). The repo root holds .claude/worktrees/ with ~130 sibling worktrees,
-    # each a full checkout: an agent editing any .py in ANY of them restarted
-    # this backend. Safe to scope -- backend/ imports no other top-level package
-    # (shared/ is one JSON file, no Python).
-    '--reload-dir', 'backend'
+    # Scope the reload watcher to backend/. The scoping is done by launching
+    # uvicorn with backend/ as its WORKING DIRECTORY (see Start-Process below):
+    # uvicorn's WatchFiles supervisor DROPS any reload dir that is a child of
+    # the process cwd and watches the cwd instead (uvicorn 0.24, unchanged
+    # upstream), so with cwd at the repo root every --reload-dir form collapsed
+    # to watching the WHOLE root -- including .claude/worktrees/ with its ~130
+    # sibling checkouts, so an agent editing any .py in ANY of them restarted
+    # this backend. With cwd == the reload dir the supervisor keeps exactly
+    # that dir; the absolute --reload-dir is kept because newer uvicorns honor
+    # it directly. Safe to move the cwd: PYTHONPATH (set below) pins imports
+    # to the repo root, and backend runtime paths anchor on __file__, not cwd.
+    # backend/ imports no other top-level package (shared/ is one JSON file,
+    # no Python).
+    '--reload-dir', (Join-Path $RepoRoot 'backend')
 )
 # GOOGLE_CLOUD_PROJECT is used by the Vertex path (google-genai + ADC); harmless
 # on the Studio (premium) path, which uses GEMINI_API_KEY. Respect an already-set
@@ -316,7 +325,7 @@ Write-Host "  temperature=$TempLabel   transcripts=$TxLabel (LOCAL-DEV ONLY)   S
 
 try {
     $BackendProc = Start-Process -FilePath $VenvPython -ArgumentList $BackendArgs `
-        -WorkingDirectory $RepoRoot -PassThru -NoNewWindow
+        -WorkingDirectory (Join-Path $RepoRoot 'backend') -PassThru -NoNewWindow
 } finally {
     # Restore this shell's env immediately; the child already inherited the values.
     foreach ($k in $BackendEnvVars.Keys) {

@@ -137,21 +137,27 @@ if [ "$START_BACKEND" = "1" ]; then
         )"
     fi
 
-    # --reload-dir scopes the reload watcher to an ABSOLUTE path. A bare --reload
-    # watches the WHOLE cwd tree, and the repo root holds .claude/worktrees/ with
-    # ~130 sibling worktrees, each a full checkout -- so an agent editing any .py
-    # in ANY of them restarted this backend mid-request. A *relative* --reload-dir
-    # backend didn't fully fix this: it still let sibling-worktree edits through.
-    # An absolute path structurally cannot resolve into any other worktree's
-    # backend/, so it's the only form that actually scopes the watch. (Do NOT
-    # also pass --reload-exclude for the worktrees glob: uvicorn's exclude
-    # resolver only accepts RELATIVE patterns and raises NotImplementedError on
-    # an absolute one, crashing the backend before it binds -- and it would be
-    # redundant here anyway, since --reload-dir alone already excludes
-    # everything outside this path.) Safe to scope this narrowly: backend/
-    # imports no other top-level package (shared/ is one JSON file, no Python).
+    # Scope the reload watcher to backend/ by making backend/ the process CWD.
+    # --reload-dir ALONE cannot do this: uvicorn's WatchFiles supervisor drops
+    # any reload dir that is a CHILD of the process cwd and watches the cwd
+    # instead (uvicorn 0.24, unchanged upstream) -- so with cwd at the repo
+    # root, every --reload-dir form (relative or absolute) collapsed to
+    # watching the WHOLE root, including .claude/worktrees/ with its ~130
+    # sibling checkouts, and an agent editing any .py in ANY of them restarted
+    # this backend mid-request. The startup log "Will watch for changes in
+    # these directories: [...backend]" prints the CONFIG, not the effective
+    # watch set, which is how the earlier --reload-dir fix looked verified.
+    # With cwd == the reload dir, the supervisor keeps exactly that dir. Keep
+    # the absolute --reload-dir too: it is what newer uvicorns honor directly.
+    # (Do NOT reach for --reload-exclude: its resolver takes RELATIVE patterns
+    # only and raises NotImplementedError on an absolute one, and a relative
+    # exclude dir never matches the absolute changed paths anyway.)
+    # Safe to move the cwd: PYTHONPATH pins imports to the repo root, and
+    # backend runtime paths anchor on __file__ (backend/config.py FORM_KITS),
+    # not the cwd. backend/ imports no other top-level package (shared/ is one
+    # JSON file, no Python).
     (
-        cd "$ROOT_DIR"
+        cd "$ROOT_DIR/backend"
         PYTHONPATH="$ROOT_DIR" \
         PYTHONUNBUFFERED=1 \
         EDITOR_TEXT_PROVIDER="$EDITOR_PROVIDER" \
