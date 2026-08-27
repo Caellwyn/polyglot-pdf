@@ -2,13 +2,20 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-08-08 (the derived compression figures are RE-EXECUTED
-against the v4 SI (bd polyglot-pdf-6a79): floor 4289 -> window 4888 ->
-trigger 6388, still above the 5000 API bound so the clamp does not fire.
-NOTE (bd polyglot-pdf-6dn2n): the date is intentionally left at 2026-08-08 --
-tracked code has moved since then, so this doc is genuinely STALE and needs
-a real re-derivation of these figures against current backend/config.py, not
-a bump; a prose-only stamp-chain prune must not clear that signal.)
+*Last updated: 2026-08-27 (bd polyglot-pdf-l2kcp: the derived compression
+figures RE-EXECUTED against today's shipped config -- the spell-back cutover,
+bd polyglot-pdf-apkdl, made SPELLBACK_TOOL_ENABLED default true, so a session
+now ships 7 tool declarations, not 6: floor 5499 -> window 6098 -> trigger
+7598, still above the 5000 API bound so the clamp does not fire. These match
+`derive_compression_window`'s own docstring figures (measured 2026-08-25,
+bd polyglot-pdf-apkdl's cutover) exactly -- expected, since re-running the
+same function against an unchanged SI and tool list reproduces the same
+numbers; this stamp records that the re-execution was actually done today,
+not merely copied forward. Three sites across this repo still asserted the
+pre-cutover count; this doc was one of them. As with the prior stamp, these
+figures are a point-in-time reading -- RE-EXECUTE `derive_compression_window`
+rather than trusting any written-down number, since it moves with the SI
+text and the tool list.)
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -158,7 +165,7 @@ per-form** (below); the static token values are the override:
 | `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
 | `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (calibrated against the I-90's measured eviction floor -- see below) |
-| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~4888/6388 with the clamp NOT firing -- see below) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `1500` (bd polyglot-pdf-7872; on today's DTI SI this derives ~6098/7598 with the clamp NOT firing -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
 
@@ -182,13 +189,19 @@ trigger = clamp(trigger, 5000, 128000)   # Live API hard bound -- see below
 Two inputs are easy to miss and both move the result by thousands of tokens:
 
 - **The tool declarations are the SESSION's, not the raw settings list.**
-  `_build_tool_declarations` (`backend/services/form_filling_service.py:219-229`)
+  `_build_tool_declarations` (`backend/services/form_filling_service.py`)
   drops `switch_section` whenever `CONTINUOUS_SESSION` is on (the production
   default) and appends `name_spellback` under `SPELLBACK_TOOL_ENABLED` (default
-  ON since bd polyglot-pdf-apkdl) -- so the SESSION list is 7, while the raw
-  `settings.TOOL_DECLARATIONS` is 6 and contains a different member set.
-  Derive against the session's list, never the raw one: they differ in BOTH
-  directions, so neither is a safe stand-in for the other.
+  ON since bd polyglot-pdf-apkdl) -- so the SESSION list is 7 (measured
+  2026-08-27), while the raw `settings.TOOL_DECLARATIONS` is ALSO 7 today
+  (`update_form_fields`, `get_form_status`, `switch_section`, `confirm_field`,
+  `ask_secretary`, `skip_field`, `switch_to_field` -- verified by executing
+  `Settings().TOOL_DECLARATIONS`) but contains a DIFFERENT member set: it
+  still includes `switch_section` (dropped in continuous mode) and does NOT
+  include `name_spellback` (appended separately, never merged into the raw
+  list). Derive against the session's list, never the raw one: matching size
+  today is a coincidence of the spell-back cutover -- they still differ in
+  membership, and the counts can diverge again the moment either changes.
 - **`injection_budget_tokens` is a real third addend**, passed from
   `guidance_contract.inline_injection_budget_tokens(full_schema)`
   (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1787`).
@@ -215,23 +228,32 @@ current-field guidance DTI depends on (measured 2026-07-05: the 5000/2200 run
 drifted post-eviction; wider windows stayed coherent).
 
 **On the CURRENT default DTI form the clamp does NOT fire.** Even after the v4
-SI diet the derivation lands well above the API minimum on its own (trigger 6388
-vs the 5000 bound). Executed against the shipped config
-(`derive_compression_window`, today's `DTI_SYSTEM_INSTRUCTION`, the SESSION's 6
-tool declarations, headroom 599 / margin 1500): **floor 4289 -> window 4888 ->
-trigger 6388** with no injection budget (i-90, f1040), and **window 6540 ->
-trigger 8040** on the W-7 (injection budget 1652). These dropped ~1,390 tokens
-when the v4 SI diet cut the SI 17,555 -> 11,994 chars (bd polyglot-pdf-6a79). Since every one of those
-triggers is > 5000, neither the clamp nor the retune runs and neither log line
-appears -- don't go looking for them on a normal session. The clamp-and-retune
-path is reached only by a form with a much smaller SI floor. These numbers are
-derived from the SI TEXT and the kit, so they move whenever either grows: treat
-them as a point-in-time reading and RE-EXECUTE the function (with the session's
-filtered tool list and the kit's injection budget) rather than trusting any
-written-down figure -- including the rounded ones in
-`derive_compression_window`'s own docstring. The old 2800/2200
-"winning calibration" numbers were measured on AI Studio before the
-`[5000, 128000]` bound existed on the connect path and no longer apply.
+SI diet and the spell-back cutover (bd polyglot-pdf-apkdl, which appended a
+7th tool declaration) the derivation lands well above the API minimum on its
+own (trigger 7598 vs the 5000 bound). Executed against the shipped config
+(`derive_compression_window`, today's `DTI_SYSTEM_INSTRUCTION`, the SESSION's
+7 tool declarations -- continuous mode drops `switch_section`, `name_spellback`
+is appended by default): **floor 5499 -> window 6098 -> trigger 7598**
+with no injection budget (i-90, f1040), and roughly **window 7750 -> trigger
+9250** on a form needing the W-7's ~1652-token injection budget (the figure
+cited above, "on the W-7 it is 1652 tokens" -- carried forward from that
+measurement, not independently re-derived against a live W-7 kit here; the
+1652 figure itself dates to the bd polyglot-pdf-2zk3 docs audit -- re-derive
+both if it matters).
+These numbers RAISED ~1,210 tokens from the last recorded reading when the
+spell-back cutover added its tool declaration + SI addendum (bd
+polyglot-pdf-l2kcp, measured 2026-08-27), after having DROPPED ~1,390 tokens
+when the v4 SI diet cut the SI 17,555 -> 11,994 chars (bd polyglot-pdf-6a79).
+Since every one of those triggers is > 5000, neither the clamp nor the retune
+runs and neither log line appears -- don't go looking for them on a normal
+session. The clamp-and-retune path is reached only by a form with a much
+smaller SI floor. These numbers are derived from the SI TEXT and the tool
+list, so they move whenever either grows: treat them as a point-in-time
+reading and RE-EXECUTE the function (with the session's filtered tool list
+and the kit's injection budget) rather than trusting any written-down figure
+-- including the ones just given. The old 2800/2200 "winning calibration"
+numbers were measured on AI Studio before the `[5000, 128000]` bound existed
+on the connect path and no longer apply.
 
 The floor is the **rendered (filled) SI plus the tool declarations** -- both
 unevictable, both re-billed every turn -- NOT the SI template alone.
