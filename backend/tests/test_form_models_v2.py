@@ -218,6 +218,111 @@ def test_v2_radio_shared_pdf_field_with_on_values_validates():
     validate(v2_schema([radio]))
 
 
+def _select(options):
+    return {
+        "id": "mail_state",
+        "name": "Mailing Address - State",
+        "spoken_name": "state",
+        "type": "select",
+        "section_id": "s1",
+        "pdf_field_name": "P1_Line6e_State[0]",
+        "options": options,
+    }
+
+
+def test_v2_select_option_values_are_exempt_from_the_slug_shape_rule():
+    """A dropdown's option.value IS the PDF export code (bd polyglot-pdf-4we6j).
+
+    The filler writes str(value) verbatim into the combobox and never consults
+    pdf_on_value, so a select's values are 'WY'-shaped, not slug-shaped.
+    Enforcing the shape HERE made every correct dropdown unpublishable: the
+    publish route runs model_validate (422) before lint (409), so fixing only
+    the lint rule left the kit just as blocked.
+
+    Whether the value is legitimate is schema_lint's call -- it has the
+    acroform dump and checks against the widget's own /Opt list. This model
+    sees no dump, so it defers rather than guessing.
+    """
+    validate(v2_schema([_select([
+        {"value": "WY", "label": "Wyoming (WY)"},
+        {"value": "AL", "label": "Alabama (AL)"},
+    ])]))
+
+
+def test_v2_select_still_enforces_every_other_option_rule():
+    """The exemption is scoped to the slug SHAPE only -- uniqueness and arity
+    must still bite on a select, or this becomes a hole rather than a carve-out.
+    """
+    # Duplicate values.
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([_select([
+            {"value": "WY", "label": "a"},
+            {"value": "WY", "label": "b"},
+        ])]))
+    assert "duplicate option values" in str(exc.value)
+
+    # Fewer than 2 options.
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([_select([{"value": "WY", "label": "Wyoming"}])]))
+    assert "at least 2 options" in str(exc.value)
+
+
+def test_model_exemption_never_widens_what_actually_publishes():
+    """The model gate is now LOOSER than lint for selects. That is only safe if
+    lint is a superset on every path, including the one where lint runs WITHOUT
+    a dump (the publish gate loads it best-effort, so None is reachable).
+
+    Pins the full matrix rather than the one cell I changed -- the asymmetry
+    "model always runs, lint sometimes has no dump" is exactly the shape of the
+    gap that made the first cut of this fix incomplete (bd polyglot-pdf-4we6j).
+    """
+    from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
+
+    # The dump must name the SAME widget the field claims, or the exemption
+    # correctly never fires and this test would pass for the wrong reason.
+    dump = {"fields": [{"name": "P1_Line6e_State[0]", "widgets": [
+        {"choices": [{"value": "WY"}, {"value": "AL"}]}]}]}
+
+    def schema_with(values):
+        return v2_schema([_select(
+            [{"value": v, "label": "L" + v} for v in values])])
+
+    def blocks(schema, d):
+        return any(f.severity == SEVERITY_ERROR and f.rule == "option-value-slug"
+                   for f in lint_schema(schema, d))
+
+    legit, junk = schema_with(["WY", "AL"]), schema_with(["Wyoming!!", "AL"])
+
+    # The model passes both -- it cannot tell them apart with no dump.
+    validate(legit)
+    validate(junk)
+
+    # With a dump, lint separates them: that is where the judgment lives.
+    assert not blocks(legit, dump)
+    assert blocks(junk, dump)
+
+    # With NO dump, lint blocks BOTH -- it never lets an unverifiable dropdown
+    # value publish just because the model stopped objecting.
+    assert blocks(legit, None)
+    assert blocks(junk, None)
+
+
+def test_v2_non_select_choice_types_still_enforce_the_slug_shape():
+    """radio and checkbox_group carry widget identity in pdf_on_value, so their
+    values stay pure slugs -- the exemption must not leak to them."""
+    radio = {
+        "id": "sex", "name": "Sex", "spoken_name": "sex", "type": "radio",
+        "section_id": "s1", "pdf_field_name": "P1_Sex[0]",
+        "options": [
+            {"value": "WY", "label": "Male", "pdf_on_value": "1"},
+            {"value": "female", "label": "Female", "pdf_on_value": "2"},
+        ],
+    }
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([radio]))
+    assert "not a v2 slug" in str(exc.value)
+
+
 def test_v2_checkbox_group_pdf_on_value_only_option_is_not_fillable():
     """A checkbox_group option carrying ONLY pdf_on_value (the shared-NAME shape,
     no option pdf_field_name) is NOT fillable -- that shape is radio-only, and a

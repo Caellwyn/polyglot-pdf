@@ -103,7 +103,12 @@ export const RULE_REMEDIES: Record<string, string> = {
   'option-value-missing': 'Set a stored value for this answer choice.',
   'option-value-duplicate': 'Give each answer choice its own unique value.',
   'option-value-comma': 'Remove the comma from the answer value.',
-  'option-value-slug': 'Regenerate the value from the label.',
+  // Deliberately NOT "Regenerate the value from the label." -- this rule fires
+  // on dropdowns too, and for a dropdown the value is written verbatim into the
+  // PDF box, so regenerating it from the label is what makes the form print
+  // wrong ('Alabama (AL)' -> alabama_al -> prints clipped). The backend message
+  // beside this line carries the type-specific detail (bd polyglot-pdf-4we6j).
+  'option-value-slug': 'Fix the stored value as the message describes -- for a dropdown it must stay the PDF\'s own export code.',
   'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
   'operator-trigger': 'Pick a comparison type that is valid for this field.',
   'ref-option-value': 'Pick one of the trigger field\'s real answer choices.',
