@@ -106,6 +106,11 @@ gap, but never shadows a distinct real field that happens to lack its own
   option-slug rule -- evidence-based, keyed on the acroform dump's `/Opt`
   (shared helper `schema_repair.pdf_choice_values`), so a value the PDF does
   NOT declare is still an ERROR (bd `polyglot-pdf-4we6j`).
+  The same exemption exists at the MODEL gate
+  (`form_models._collect_v2_problems`), which runs BEFORE lint on the
+  publish route and validates a schema with no dump -- so it defers the
+  legitimacy call to lint rather than guessing. Fixing only one of the
+  two left the kit exactly as unpublishable, with a 422 instead of a 409.
 - **COMB widgets truncate on RENDER, not on read-back.** A text widget with the
   Comb flag (`field_flags & 1<<24`) splits its box into exactly `MaxLen` cells and
   prints ONE glyph per cell -- there is no cell `MaxLen+1`. PyMuPDF stores and

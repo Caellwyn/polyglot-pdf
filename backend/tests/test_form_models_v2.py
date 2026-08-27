@@ -218,6 +218,71 @@ def test_v2_radio_shared_pdf_field_with_on_values_validates():
     validate(v2_schema([radio]))
 
 
+def _select(options):
+    return {
+        "id": "mail_state",
+        "name": "Mailing Address - State",
+        "spoken_name": "state",
+        "type": "select",
+        "section_id": "s1",
+        "pdf_field_name": "P1_Line6e_State[0]",
+        "options": options,
+    }
+
+
+def test_v2_select_option_values_are_exempt_from_the_slug_shape_rule():
+    """A dropdown's option.value IS the PDF export code (bd polyglot-pdf-4we6j).
+
+    The filler writes str(value) verbatim into the combobox and never consults
+    pdf_on_value, so a select's values are 'WY'-shaped, not slug-shaped.
+    Enforcing the shape HERE made every correct dropdown unpublishable: the
+    publish route runs model_validate (422) before lint (409), so fixing only
+    the lint rule left the kit just as blocked.
+
+    Whether the value is legitimate is schema_lint's call -- it has the
+    acroform dump and checks against the widget's own /Opt list. This model
+    sees no dump, so it defers rather than guessing.
+    """
+    validate(v2_schema([_select([
+        {"value": "WY", "label": "Wyoming (WY)"},
+        {"value": "AL", "label": "Alabama (AL)"},
+    ])]))
+
+
+def test_v2_select_still_enforces_every_other_option_rule():
+    """The exemption is scoped to the slug SHAPE only -- uniqueness and arity
+    must still bite on a select, or this becomes a hole rather than a carve-out.
+    """
+    # Duplicate values.
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([_select([
+            {"value": "WY", "label": "a"},
+            {"value": "WY", "label": "b"},
+        ])]))
+    assert "duplicate option values" in str(exc.value)
+
+    # Fewer than 2 options.
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([_select([{"value": "WY", "label": "Wyoming"}])]))
+    assert "at least 2 options" in str(exc.value)
+
+
+def test_v2_non_select_choice_types_still_enforce_the_slug_shape():
+    """radio and checkbox_group carry widget identity in pdf_on_value, so their
+    values stay pure slugs -- the exemption must not leak to them."""
+    radio = {
+        "id": "sex", "name": "Sex", "spoken_name": "sex", "type": "radio",
+        "section_id": "s1", "pdf_field_name": "P1_Sex[0]",
+        "options": [
+            {"value": "WY", "label": "Male", "pdf_on_value": "1"},
+            {"value": "female", "label": "Female", "pdf_on_value": "2"},
+        ],
+    }
+    with pytest.raises(ValidationError) as exc:
+        validate(v2_schema([radio]))
+    assert "not a v2 slug" in str(exc.value)
+
+
 def test_v2_checkbox_group_pdf_on_value_only_option_is_not_fillable():
     """A checkbox_group option carrying ONLY pdf_on_value (the shared-NAME shape,
     no option pdf_field_name) is NOT fillable -- that shape is radio-only, and a

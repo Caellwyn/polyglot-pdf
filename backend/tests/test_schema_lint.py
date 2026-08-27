@@ -184,6 +184,36 @@ def test_dropdown_values_absent_from_pdf_choices_still_trip_slug_rule(bad):
     assert _rules(findings) == ["option-value-slug"]
 
 
+def test_dumpless_dropdown_finding_does_not_prescribe_the_harmful_remedy():
+    """A dropdown linted with NO dump cannot be judged -- and the generic
+    remedy ("regenerate it from the label") is the one action that silently
+    breaks the printed form, since a select's value is written verbatim into
+    the combobox. The dumpless POST /lint route has no kit identity and so can
+    never supply a dump, and the editor renders this text to a human.
+
+    Asserts the SANCTIONED remedy is present and the harmful instruction is
+    absent -- an allowlist, not a banned-word check, so a reworded version of
+    the same bad advice still fails.
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), None)
+                if f.rule == "option-value-slug"]
+    assert findings, "a dumpless dropdown lint must still report the value"
+    for f in findings:
+        assert "export code" in f.message
+        assert "do NOT regenerate it from the label" in f.message
+
+    # A non-select choice field keeps the plain remedy, which is correct there.
+    radio = _combo([{"value": "Bad Value", "label": "x", "pdf_on_value": "1"},
+                    {"value": "ok", "label": "y", "pdf_on_value": "2"}],
+                   ftype="radio")
+    rf = [f for f in _lint_structural(_schema(radio, version="2"), None)
+          if f.rule == "option-value-slug"]
+    assert rf and all("regenerate it from the label" in f.message
+                      and "export code" not in f.message for f in rf)
+
+
 def test_dropdown_code_exemption_requires_the_dump():
     """No dump means no evidence -- the linter must NOT start exempting values
     it cannot verify (a dumpless lint keeps the old, stricter behaviour).

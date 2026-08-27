@@ -126,6 +126,27 @@ exists only in the main checkout, and the skipif matched. A test that cannot
 find its fixture is not a passing test -- it resolves the kit from the git
 common dir now, and the run was re-confirmed as 4 passed.
 
+**I fixed two gates and there were three -- the cross-surface review caught it.**
+The publish route runs `FormSchema.model_validate` (422) BEFORE the lint gate
+(409), and `form_models._collect_v2_problems` carries its own copy of the v2
+slug rule. With lint and repair both fixed, the kit was still 100% unpublishable
+-- same 124 values rejected, just a different status code. My verification had
+called `lint_schema` directly and declared the gate passed; testing one gate in
+isolation cannot see a gate that runs before it. The pin is now a test that
+walks all four gates **in route order**, not the one rule I changed. This is
+scar #8 (enumerate the SET) wearing different clothes: the set was not "every
+site that rejects this value", it was "every gate on the path this value must
+survive."
+
+**The editor carried its own hardcoded copy of the harmful remedy.** Making the
+backend message type-aware was not enough: `lintFindings.ts` maps rule id ->
+remedy text independently, so the editor kept rendering "Regenerate the value
+from the label." -- the exact instruction that corrupts a dropdown. Enumerated
+the string across the repo before fixing; that was the only other copy. Pinned
+with an allowlist assertion (sanctioned remedy present, harmful instruction
+absent) rather than a banned-word check, since banning one phrasing is one
+synonym away from defeat.
+
 ## Follow-up filed
 
 `polyglot-pdf-g2fpr` (P1, blocked on this): give selects the same
@@ -143,8 +164,12 @@ asserting the exact per-module site count, so a fifth site fails CI.
 
 ## Files touched
 
+- `backend/models/form_models.py` -- select exempt from the slug-SHAPE rule at
+  the model gate (which runs BEFORE lint on the publish route, and has no dump)
 - `backend/services/schema_lint.py` -- evidence-scoped exemption in
-  `_check_options`; `dump` threaded through
+  `_check_options`; `dump` threaded through; type-aware remedy text
+- `schema-editor/src/utils/lintFindings.ts` -- the editor's own copy of the
+  remedy no longer tells the user to regenerate a dropdown value
 - `backend/services/schema_repair.py` -- new shared `pdf_choice_values`
   (first match only); per-option keep-guard with `seen_codes` dedupe, and the
   reserved-seed, in `_mint_slugs`

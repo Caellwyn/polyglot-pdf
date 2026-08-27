@@ -215,6 +215,35 @@ def test_a_spelled_out_state_name_would_print_clipped():
     )
 
 
+def test_the_whole_publish_gate_accepts_a_dropdown_kit_not_just_the_lint_half():
+    """EVERY gate on the publish path, in order -- not just the lint one.
+
+    The publish route runs FormSchema.model_validate (422) BEFORE lint (409),
+    and the model carries its own copy of the v2 slug rule with no dump to
+    check against. Fixing only lint left the kit just as unpublishable, with
+    a different status code -- which testing the lint rule in isolation could
+    not see. This asserts the sequence a real publish actually walks.
+    """
+    from backend.models import conditional_vocabulary as vocab
+    from backend.models.form_models import FormSchema, FormSource
+    from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
+
+    schema = _schema()
+
+    # Gate 1: the wire contract (editor_kit_routes -> 422).
+    parsed = FormSchema.model_validate(schema)
+
+    # Gate 2 + 3: extraction metadata and the v2 stamp (-> 422).
+    assert not (parsed.source == FormSource.PDF and parsed.extraction_info is None)
+    assert str(schema.get("schema_version")) == vocab.SCHEMA_VERSION_V2
+
+    # Gate 4: zero lint ERRORs (-> 409).
+    dump = json.loads(_dump_path().read_text(encoding="utf-8"))
+    errors = [f for f in lint_schema(schema, dump)
+              if f.severity == SEVERITY_ERROR]
+    assert not errors, [(f.rule, f.path) for f in errors[:5]]
+
+
 def test_ignored_field_selects_would_also_pass_the_gate_if_promoted():
     """The kit has 6 select fields, but 2 (interp_state, prep_state) live under
     _ignored_fields, which lint and repair never walk.

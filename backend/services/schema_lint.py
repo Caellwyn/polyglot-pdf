@@ -585,11 +585,30 @@ def _check_options(
             and value_str not in pdf_choices
             and not vocab.is_valid_option_slug(value_str)
         ):
+            # The remedy differs by field type, and giving the WRONG one here
+            # is actively harmful: for a dropdown, "regenerate from the label"
+            # is exactly what breaks the printed form (the value is written
+            # verbatim into the combobox, so 'Alabama (AL)' -> alabama_al ->
+            # prints clipped). A dropdown checked WITHOUT a dump cannot be
+            # judged at all -- this route may simply have no kit identity to
+            # load one from -- so say that instead of prescribing a fix that
+            # would silently corrupt the form (bd polyglot-pdf-4we6j).
+            if f.get("type") == "select":
+                remedy = (
+                    "for a dropdown this value must be the PDF's own export "
+                    "code (e.g. 'WY'), which is checked against the form's "
+                    "choice list -- if this kit has an acroform dump, lint it "
+                    "through the kit-scoped route so the code can be verified; "
+                    "do NOT regenerate it from the label, which would change "
+                    "what prints on the form"
+                )
+            else:
+                remedy = "regenerate it from the label"
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-slug", opt_path,
                 f"the value {_quoted(value_str)} is not in the required format "
                 "(lowercase letters, numbers, hyphens, underscores only) -- "
-                "regenerate it from the label",
+                + remedy,
             ))
         seen_values[value_str] = seen_values.get(value_str, 0) + 1
     for value_str, count in seen_values.items():
