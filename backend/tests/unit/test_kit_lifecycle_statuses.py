@@ -2166,3 +2166,54 @@ def test_a_credential_with_NO_uid_can_never_reach_the_lock():
         for n in ast.walk(fn))
     assert raises_on_missing_uid, (
         "verify_editor_token no longer refuses a credential with no uid")
+
+
+def test_the_lock_never_writes_a_key_the_DEPLOY_GREP_would_publish(client):
+    """A contractor's email must not become a form's display NAME.
+
+    deploy-all.sh and scripts/deploy-form-kit.sh do:
+        grep -o '"label"...' metadata.json | head -1
+    and put the result in the published manifest as the form's display name.
+    The lock originally stored the holder's email under "label", so on a kit
+    with no TOP-LEVEL label the nested one wins the grep -- reproduced, and it
+    would show maria@example.com in the form picker.
+
+    Nothing but JSON KEY ORDER was preventing it (the lock is appended last,
+    so an existing top-level label wins), and no such kit exists today. Both
+    are luck, not design. The key is "holder_label" now.
+    """
+    import json
+    import re
+
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    meta = _run(store.load_metadata("w7")) or {}
+    # Drop any top-level label, which is the only thing that would otherwise
+    # win the grep -- this is the reachable shape.
+    meta.pop("label", None)
+    raw = json.dumps(meta)
+
+    hit = re.search(r'"label"\s*:\s*"([^"]*)"', raw)
+    assert hit is None, (
+        "the deploy grep would publish {!r} as this form's display name"
+        .format(hit.group(1)))
+    # ...and the holder is still recorded, just under a key the grep ignores.
+    assert meta[ekr._LOCK_KEY]["holder_label"] == "maria@example.com"
+
+
+def test_a_lock_written_before_the_rename_still_names_its_holder(client):
+    """The rename must not strand a holder whose lock predates it."""
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    meta = _run(store.load_metadata("w7")) or {}
+    meta[ekr._LOCK_KEY] = {"role": "editor", "uid": "uid-maria",
+                           "label": "maria@example.com"}   # the OLD key
+    _run(store.put_metadata("w7", meta))
+
+    resp = _lock(c, "w7", HDR2)     # a different editor tries to take it
+
+    assert resp.status_code == 409
+    assert "maria@example.com" in resp.text, (
+        "a pre-rename lock lost its holder's name: {}".format(resp.text))

@@ -652,7 +652,13 @@ def _lock_holder_uid(meta: Optional[dict]) -> Optional[str]:
 def _lock_holder_label(meta: Optional[dict]) -> Optional[str]:
     """A human-readable name for the holder, for display only."""
     lock = (meta or {}).get(_LOCK_KEY)
-    label = lock.get("label") if isinstance(lock, dict) else None
+    if not isinstance(lock, dict):
+        return None
+    # "label" is read as a FALLBACK for any lock written between this bead's
+    # first commit and the rename below -- none should exist outside a dev
+    # tree, but reading both costs nothing and stranding a holder costs a
+    # person their kit.
+    label = lock.get("holder_label") or lock.get("label")
     return label if isinstance(label, str) and label else None
 
 
@@ -3434,7 +3440,15 @@ async def take_editor_kit_lock(
     next_meta = {**(meta or {}), _LOCK_KEY: {
         "role": role.role,
         "uid": role.uid,
-        "label": role.label(),
+        # NOT "label": deploy-all.sh and scripts/deploy-form-kit.sh grep
+        # metadata.json for '"label"' with head -1 and put the result in the
+        # published manifest as the form's DISPLAY NAME. A kit with no
+        # top-level label (none exist today, but nothing prevents one) would
+        # publish this contractor's EMAIL as the form's name in the picker --
+        # reproduced. Renaming the key is the fix that does not depend on JSON
+        # key ORDER, which is what currently saves it. bd polyglot-pdf-0ygyv
+        # still covers hardening the deploy-side grep.
+        "holder_label": role.label(),
     }}
     try:
         await store.put_metadata(kit_id, next_meta)
