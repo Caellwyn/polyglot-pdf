@@ -330,6 +330,12 @@ export function createConnectionManager(
 		getAudioManager: () => audioManager,
 		getHttpBase: getBackendHttpUrl,
 		getToken,
+		// Level check for the stale-arrival guard (bd polyglot-pdf-kvrfq): a
+		// spellback request that ARRIVES mid-hold is refused instead of played
+		// -- the press-edge interruptForPtt() below cannot catch those, and an
+		// unguarded play() would re-engage the mic hold over the user's own
+		// press (worklet: spellbackHold silences even an unmuted PTT mic).
+		isPttHeld: () => pushToTalkHeld,
 	})
 
 	// TEST-ONLY (bd polyglot-pdf-g8w): tracks the most recent field id Gemini
