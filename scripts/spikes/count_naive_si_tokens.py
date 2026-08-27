@@ -67,14 +67,31 @@ def build_naive_si_and_tools() -> tuple[str, list[dict]]:
     settings = _make_settings("naive", trigger=12_000, window=9_000,
                               compression=False, continuous=False,
                               derive_compression=False)
-    service = FormFillingService(live_ai=None, settings=settings)
-    arm_schema = {"form_metadata": schema.get("form_metadata", {}),
-                  "fields": schema["fields"]}
-    si = service.build_form_context_message(
-        arm_schema, {}, section_number=1, total_sections=1,
-        section_label="Full Form", previous_spoken_names=[])
-    si = apply_naive_si(si, schema)
-    tools = service._build_tool_declarations()
+    # Multi-module get_settings patch (the CLAUDE.md jnjj.25 trap, and the
+    # reason this script once over-counted by the spell-back addendum):
+    # ai_context reads its OWN module-level get_settings for the
+    # SPELLBACK_TOOL_ENABLED SI addendum, so without patching it this script
+    # rendered the addendum per the ENV flag while the real naive run (whose
+    # harness applies the full patch) renders it per the naive arm's pinned
+    # False -- a ~240-token drift from what the harness actually sends.
+    import backend.config as _config_mod
+    import backend.services.ai_context as _ai_context_mod
+    patch_targets = [_config_mod, _ai_context_mod]
+    originals = [(mod, mod.get_settings) for mod in patch_targets]
+    for mod, _ in originals:
+        mod.get_settings = lambda s=settings: s
+    try:
+        service = FormFillingService(live_ai=None, settings=settings)
+        arm_schema = {"form_metadata": schema.get("form_metadata", {}),
+                      "fields": schema["fields"]}
+        si = service.build_form_context_message(
+            arm_schema, {}, section_number=1, total_sections=1,
+            section_label="Full Form", previous_spoken_names=[])
+        si = apply_naive_si(si, schema)
+        tools = service._build_tool_declarations()
+    finally:
+        for mod, orig in originals:
+            mod.get_settings = orig
     return si, tools
 
 

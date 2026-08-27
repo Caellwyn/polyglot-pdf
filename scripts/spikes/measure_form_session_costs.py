@@ -1928,14 +1928,30 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
             "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR": False,
         })
     elif arm == "naive":
-        # The naive baseline (bd polyglot-pdf-89mt): same settings shape as
+        # The naive baseline (bd polyglot-pdf-wiadk): same settings shape as
         # unbounded (no DTI, no compression, no resets -- the `overrides`
         # dict above already pins exactly that), pinned again here explicitly
         # so a future default flip cannot silently relabel this arm's
         # measured configuration (same doctrine as every other branch in this
         # function). The SI mutation (booklet appended) happens at the driver
         # call site, not here -- Settings carries no "extra SI text" knob.
-        pass
+        #
+        # Tool catalog: a naive builder declares only the tools its own flow
+        # needs (fill, confirm, status, field navigation, skip). It has no
+        # secretary (ask_secretary is THIS app's architecture -- the first
+        # naive smoke measured the model actually calling it and burning a
+        # whole ~29k-token context re-send on the fail-open), no spell-back
+        # TTS pipeline, and no section machinery (a stray switch_section
+        # call would open a second session and violate the arm's
+        # single-session premise).
+        _naive_base = _config.Settings()
+        overrides.update({
+            "TOOL_DECLARATIONS": [
+                d for d in _naive_base.TOOL_DECLARATIONS
+                if d.get("name") not in ("ask_secretary", "switch_section")
+            ],
+            "SPELLBACK_TOOL_ENABLED": False,
+        })
     elif arm == "section-reset-jit":
         # The JIT SI mode was REMOVED (bd polyglot-pdf-en2j): USE_JIT_SCHEMA no
         # longer exists, so this arm can no longer render a distinct JIT manifest

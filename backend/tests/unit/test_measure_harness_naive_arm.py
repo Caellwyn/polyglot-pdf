@@ -171,12 +171,51 @@ class TestNaiveSiBookletAppend:
         assert _BOOKLET_MARKER not in si
 
     def test_unbounded_and_naive_si_identical_before_booklet(self, w7_schema):
-        """The naive arm's ONLY difference from unbounded is the appended
-        booklet suffix -- the production SI text itself must be byte-
-        identical between the two arms (same settings shape, same schema)."""
-        si_unbounded = _build_si("unbounded", w7_schema)
+        """The naive arm's differences from unbounded are exactly (a) the
+        appended booklet suffix and (b) the spell-back guidance paragraph,
+        which ai_context gates on SPELLBACK_TOOL_ENABLED and the naive arm
+        turns OFF (a naive competitor has no TTS spell-back pipeline).
+        Rebuilding the unbounded SI with the same flag off must therefore be
+        byte-identical to the naive base SI -- anything else is an
+        unaccounted SI divergence between the arms."""
+        import backend.config as _config_mod
         si_naive_base = _build_si("naive", w7_schema)
-        assert si_unbounded == si_naive_base
+        orig_settings_cls = _config_mod.Settings
+        # Build the unbounded comparator with spell-back off via the same
+        # _make_settings path, then hand-flip the one flag the naive arm
+        # legitimately differs on.
+        settings = harness._make_settings(
+            "unbounded", trigger=12_000, window=9_000,
+            compression=False, continuous=False, derive_compression=False)
+        assert orig_settings_cls is _config_mod.Settings  # no class swap
+        settings.SPELLBACK_TOOL_ENABLED = False
+        import backend.services.ai_context as ai_context_mod
+        from backend.services.form_filling_service import FormFillingService
+        patch_targets = [_config_mod, ai_context_mod]
+        orig = [(mod, mod.get_settings) for mod in patch_targets]
+        for mod, _ in orig:
+            mod.get_settings = lambda s=settings: s
+        try:
+            service = FormFillingService(live_ai=None, settings=settings)
+            arm_schema = {"form_metadata": w7_schema.get("form_metadata", {}),
+                          "fields": w7_schema["fields"]}
+            si_unbounded_no_spellback = service.build_form_context_message(
+                arm_schema, {}, section_number=1, total_sections=1,
+                section_label="Full Form", previous_spoken_names=[])
+        finally:
+            for mod, o in orig:
+                mod.get_settings = o
+        assert si_unbounded_no_spellback == si_naive_base
+
+    def test_naive_si_differs_from_unbounded_only_by_spellback_text(self, w7_schema):
+        """Companion pin: with spell-back at its default (ON) the unbounded
+        SI must CONTAIN the naive base SI's content as a strict superset
+        signature -- i.e. the two must actually differ (the gate is live),
+        guarding against a future edit that silently stops gating the
+        spell-back paragraph on the flag."""
+        si_unbounded_default = _build_si("unbounded", w7_schema)
+        si_naive_base = _build_si("naive", w7_schema)
+        assert si_unbounded_default != si_naive_base
 
 
 class TestQuestionsTruncation:
@@ -315,3 +354,41 @@ class TestSpellbackHandler:
         client.service = MagicMock()
         await client.send_json({"type": "spellback", "request_id": "req-3"})
         assert "spellback" in client.sent_messages
+
+
+class TestNaiveArmToolCatalog:
+    """The naive arm's tool catalog (bd polyglot-pdf-wiadk smoke finding):
+    the first naive smoke measured the model CALLING ask_secretary and
+    burning a whole ~29k-token context re-send on the fail-open answer. A
+    naive competitor has no secretary, no spell-back TTS pipeline, and no
+    section machinery, so the naive settings must not declare them. Pin the
+    catalog as the COMPLETE allowlist, not a blacklist (repo doctrine:
+    pin-message-tests-with-allowlists)."""
+
+    @staticmethod
+    def _settings(arm):
+        return harness._make_settings(
+            arm, trigger=12_000, window=9_000,
+            compression=False, continuous=False, derive_compression=False)
+
+    def test_naive_tool_catalog_is_exactly_the_allowlist(self):
+        names = [d.get("name") for d in self._settings("naive").TOOL_DECLARATIONS]
+        assert names == [
+            "update_form_fields",
+            "get_form_status",
+            "confirm_field",
+            "skip_field",
+            "switch_to_field",
+        ]
+
+    def test_naive_spellback_flag_off(self):
+        assert self._settings("naive").SPELLBACK_TOOL_ENABLED is False
+
+    def test_unbounded_catalog_unchanged_by_naive_filter(self):
+        """Regression guard: filtering must be naive-arm-only -- the
+        unbounded arm keeps the full production catalog (its June baselines
+        were measured with it)."""
+        names = [d.get("name") for d in
+                 self._settings("unbounded").TOOL_DECLARATIONS]
+        assert "ask_secretary" in names
+        assert "switch_section" in names
