@@ -818,28 +818,32 @@ def check_code_citations(
     docs: list[Path] | None = None,
     repo_root: Path = REPO_ROOT,
 ) -> list[tuple[Path, str]]:
-    """Flag `file.py:N` doc citations whose line number has run past EOF.
+    """Flag `file.py:N` doc citations that run past EOF or land on a blank line.
 
     bd polyglot-pdf-3pii5: a line-number citation silently rots the moment
     the cited file gains or loses lines above the citation -- nothing
     mechanically checks it, so a doc can cite the wrong construct for
     sprints with no signal. This is the narrowly-scoped, mechanical half of
-    that bead's fix: it catches the most severe form of drift (a citation
-    now pointing past the end of the file entirely) without trying to
+    that bead's fix: it catches the most severe forms of drift (a citation
+    now pointing past the end of the file entirely, bd polyglot-pdf-3pii5;
+    or landing on a blank line, bd polyglot-pdf-vdcm4) without trying to
     verify the cited line contains the SPECIFIC construct the surrounding
     prose names -- that would require inferring a claim from natural-
     language prose, which is exactly the over-general-checker trap CLAUDE.md
     warns about (a checker that infers a claim from text must scope the
     evidence region to exactly the claim, and prose is not a reliable
-    scoping signal here). An in-bounds citation is not proven CORRECT by
-    this check; an out-of-bounds one is proven WRONG. Concretely: inserting
-    a line ABOVE a citation shifts it downward without ever pushing it past
-    EOF, so that drift (the more common real-world case -- a function added
-    earlier in the file, not the file truncated) stays invisible to this
-    check. Symbol-name anchors (this bead's OTHER, preferred fix) are immune
-    to that shift; a line-number citation never is, no matter how this check
-    is strengthened -- which is why re-anchoring, not a smarter citation
-    checker, is the durable answer for any citation this check can't reach.
+    scoping signal here). An in-bounds, non-blank citation is not proven
+    CORRECT by this check -- it can still name the WRONG construct on a
+    real line (see bd polyglot-pdf-vdcm4's manual fixes, which this check
+    could not have caught) -- but an out-of-bounds or blank one is proven
+    WRONG. Concretely: inserting a line ABOVE a citation shifts it downward
+    without ever pushing it past EOF or onto a blank line, so that drift
+    (the more common real-world case -- a function added earlier in the
+    file, not the file truncated) stays invisible to this check. Symbol-name
+    anchors (this bead's OTHER, preferred fix) are immune to that shift; a
+    line-number citation never is, no matter how this check is strengthened
+    -- which is why re-anchoring, not a smarter citation checker, is the
+    durable answer for any citation this check can't reach.
 
     Resolution is deliberately conservative: a citation resolves only when
     its path fragment names an EXACT tracked path, or its bare basename is
@@ -882,9 +886,12 @@ def check_code_citations(
                 continue  # unresolvable or ambiguous -- skip, don't guess
             target = repo_root / candidates[0]
             try:
-                line_count = sum(1 for _ in target.open(encoding="utf-8", errors="replace"))
+                target_lines = target.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
             except OSError:
                 continue
+            line_count = len(target_lines)
             if end > line_count:
                 line_no = text.count("\n", 0, m.start()) + 1
                 findings.append((
@@ -892,6 +899,20 @@ def check_code_citations(
                     f"line {line_no}: citation `{m.group(0)[1:-1]}` cites "
                     f"line {end} but {candidates[0]} has only {line_count} "
                     "lines -- the citation has drifted past EOF",
+                ))
+            elif start == end and not target_lines[start - 1].strip():
+                # Single-line citation landing on a blank -- only checked for
+                # a SINGLE line (not a range): a range citing a blank line
+                # inside it (e.g. a blank separator line within a function
+                # body) is common and not a sign of drift, whereas a bare
+                # `:N` pointing at nothing is a strong drift signal no range
+                # citation shares.
+                line_no = text.count("\n", 0, m.start()) + 1
+                findings.append((
+                    doc,
+                    f"line {line_no}: citation `{m.group(0)[1:-1]}` cites "
+                    f"line {end} of {candidates[0]}, which is blank -- the "
+                    "citation has drifted off its target",
                 ))
     return findings
 
@@ -922,20 +943,21 @@ def report_doc_conventions(*, quiet: bool = False) -> bool:
 
 
 def report_code_citations(*, quiet: bool = False) -> bool:
-    """Print out-of-bounds `file.py:N` citation findings. Returns True if any.
+    """Print out-of-bounds or blank-line `file.py:N` citation findings.
 
     Same warn-only severity as the per-doc freshness pass. The CI test at
     `tests/test_doc_freshness.py::test_no_out_of_bounds_code_citations`
-    fails CI on the same findings (bd polyglot-pdf-3pii5).
+    fails CI on the same findings (bd polyglot-pdf-3pii5 for the past-EOF
+    check, bd polyglot-pdf-vdcm4 for the blank-line check).
     """
     findings = check_code_citations()
     if not findings:
         if not quiet:
-            print("\nCode citations: clean (no `file.py:N` citation points past its file's current EOF).")
+            print("\nCode citations: clean (no `file.py:N` citation points past its file's current EOF or at a blank line).")
         return False
     print()
-    print("[code-citations] line-number citations that have drifted past EOF --")
-    print("                  the cited file has fewer lines than the citation claims.")
+    print("[code-citations] line-number citations that have drifted --")
+    print("                  past EOF (the cited file is now shorter) or onto a blank line.")
     for doc, msg in findings:
         rel = doc.relative_to(REPO_ROOT).as_posix()
         print(f"  {rel}: {msg}")

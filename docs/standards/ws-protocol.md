@@ -2,26 +2,26 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-kvrfq: the `spellback_response`
-row now covers the guard-refusal arms -- `delivered`/`interrupted` acks that
-carry no timing fields because nothing played; see the
-[journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md).
-Also current, from bd polyglot-pdf-x82ii: every `(line N)` / `:N` code
-citation in this doc re-verified against the live source and corrected -- the
-whole file had drifted ~17 lines off a single code motion in
-`websocket_routes.py`, plus several independently-drifted citations into
-`callback_handler.py`, `request_coordinator.py`, `form_filling_service.py`,
-`schemaFormState.ts`, and `webFormConnection.ts`. Also current: the
-`initial_field_hint` row no longer claims both handshake builders send it --
-only the JIT builder does, the same asymmetry already documented for
-`section_id` and `kit_id` (bd polyglot-pdf-e3t7); the `spellback` /
-`spellback_response` round-trip pair, the flag-gated deterministic spell-back
-tool's wire messages (bd polyglot-pdf-22h1f). Also current: `kit_id` is now sent by
-BOTH handshake builders, not just the JIT one -- the legacy builder's
-omission silently dropped it from the audit trail once the intro path made
-Agree's connect the session's only handshake (bd polyglot-pdf-s1iex.6). This
-doc's message-type union is pinned by
-backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt.)*
+*Last updated: 2026-08-27 (bd polyglot-pdf-vdcm4: every remaining
+`websocket_routes.py:<line>` citation re-anchored to a symbol/arm name
+instead of a line number -- a prior line-number fix (bd polyglot-pdf-x82ii,
+2026-08-17) had re-drifted by 60-140 lines after further code motion in
+`websocket_routes.py`, the second time this exact doc has drifted this way.
+Line numbers elsewhere in this doc (schemaFormState.ts, webFormConnection.ts,
+etc.) were left as-is -- only the specific citations verified drifted were
+touched. The `spellback_response` row covers the guard-refusal arms --
+`delivered`/`interrupted` acks that carry no timing fields because nothing
+played (bd polyglot-pdf-kvrfq, 2026-08-27; see the
+[journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md)).
+The `initial_field_hint` row does not claim both handshake builders send it --
+only the JIT builder does, the same asymmetry documented for `section_id` and
+`kit_id` (bd polyglot-pdf-e3t7); the `spellback` / `spellback_response`
+round-trip pair is the flag-gated deterministic spell-back tool's wire
+messages (bd polyglot-pdf-22h1f). `kit_id` is sent by BOTH handshake builders,
+not just the JIT one -- the legacy builder's omission silently dropped it from
+the audit trail once the intro path made Agree's connect the session's only
+handshake (bd polyglot-pdf-s1iex.6). This doc's message-type union is pinned
+by backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -44,8 +44,9 @@ type names; F3 owns their payload shapes).
 ## Current state: the `/ws/fill` handshake
 
 The first text frame on `/ws/fill` is a JSON object. The backend reads it in
-`backend/routes/websocket_routes.py` (extraction at lines 1042-1223; dispatched
-into `_handle_fill_session` at line 1248). It branches on `type` into two
+`backend/routes/websocket_routes.py`'s `fill_form_from_schema` handler
+(`handshake = json.loads(first_frame)` onward), which dispatches into
+`_handle_fill_session`. It branches on `type` into two
 handshake shapes -- the **legacy** full-section-schema handshake and the
 **manifest-first transport** (`handshake_jit`: manifest + first field). The
 `jit` name is historical; the manifest-first transport is DTI's carrier, not the
@@ -55,26 +56,26 @@ removed JIT SI mode (bd polyglot-pdf-en2j).
 
 | Key | Type | Mode | Meaning |
 |-----|------|------|---------|
-| `type` | `"handshake"` \| `"handshake_jit"` | both | Selects the handshake shape. `handshake_jit` -> the manifest-first transport (DTI's carrier; line 1061-1062). Anything else (incl. missing) -> the legacy full-schema handshake. |
-| `form_session_id` | string | both | Persistent, frontend-managed ID; survives reconnects. Logging/metrics correlation only -- never used for server-side state (line 1065). |
-| `current_values` | object (field_id -> FieldValue) | both | Pre-filled values for reconnect; defaults to `{}` (line 1149). |
+| `type` | `"handshake"` \| `"handshake_jit"` | both | Selects the handshake shape. `handshake_jit` -> the manifest-first transport (DTI's carrier; the `is_jit_mode = handshake_type == "handshake_jit"` check). Anything else (incl. missing) -> the legacy full-schema handshake. |
+| `form_session_id` | string | both | Persistent, frontend-managed ID; survives reconnects. Logging/metrics correlation only -- never used for server-side state (the `form_session_id = handshake.get(...)` read). |
+| `current_values` | object (field_id -> FieldValue) | both | Pre-filled values for reconnect; defaults to `{}` (the `current_values` read, right after the legacy/JIT schema branch). |
 | `full_schema` | object (`{source, fields, sections, parts, ...}`) \| absent | both | The WHOLE form schema (all parts/sections/fields), for the secretary catalog (bd polyglot-pdf-p68s / jnjj.45d). Distinct from `schema`/`manifest`, which carry only the CURRENT section. The backend caches it in-session in `FormFillingService._full_schema` and `handle_ask_secretary` renders the secretary's static catalog from it; preserved across same-form section switches. Schema only -- no PII; rebuilt from this on every (re)connect (stateless invariant). Optional: an older client that omits it makes the secretary fall back to the per-section `schema`. |
-| `fill_language` | string | both | Language the AI fills/speaks in; defaults to `"English"` (line 1150). |
+| `fill_language` | string | both | Language the AI fills/speaks in; defaults to `"English"` (the `fill_language` read, immediately after `current_values`). |
 | `spoken_language` | string \| null | both | The user's app-start SPOKEN-language choice (bd polyglot-pdf-y25o). Read at handshake time -- BEFORE the Gemini connect -- to derive the per-connect ASR transcription `language_codes` bias (the later `change_spoken_language` control message arrives too late for per-connect config). Null/omitted -> no bias change (older clients). |
-| `section_number` | int (1-indexed) | both | Current section order (line 1175). |
-| `section_label` | string | both | Display label for the current section (line 1176). |
-| `total_sections` | int | both | Section count (line 1177). |
-| `section_id` | string \| null | both* | Section ID, e.g. `"part_1_2_addresses"` (line 1174). Used for the token-log context. *See DRIFT note below -- the primary builder does NOT send it. |
-| `previous_spoken_names` | string[] | both | Spoken names from completed sections; defaults to `[]` (line 1178). Sent by both builders (the JIT builder since A2). |
-| `initial_field_hint` | string \| null | both* | First-unfilled-field hint computed by the frontend; `null` when the form is complete (line 1181). *Only the JIT builder sends it (since A2, gap D-hint) -- `getHandshakePayload` (legacy) omits it, the same asymmetry as `section_id` elsewhere in this table (`kit_id` no longer belongs on that list -- bd `polyglot-pdf-s1iex.6` closed it for both builders). It reaches the backend on a section switch via `webFormConnection.ts`, but not on the legacy builder's initial connect. |
-| `resume` | bool | both | Reconnect flag. Read as `is_reconnect` (line 1185); suppresses the greeting/section-intro on a mid-section reconnect (bd polyglot-pdf-vmxx). |
+| `section_number` | int (1-indexed) | both | Current section order (the `section_number` read, in the section-metadata extraction block). |
+| `section_label` | string | both | Display label for the current section (the `section_label` read, same block). |
+| `total_sections` | int | both | Section count (the `total_sections` read, same block). |
+| `section_id` | string \| null | both* | Section ID, e.g. `"part_1_2_addresses"` (the `section_id` read, same block). Used for the token-log context. *See DRIFT note below -- the primary builder does NOT send it. |
+| `previous_spoken_names` | string[] | both | Spoken names from completed sections; defaults to `[]` (the `previous_spoken_names` read, same block). Sent by both builders (the JIT builder since A2). |
+| `initial_field_hint` | string \| null | both* | First-unfilled-field hint computed by the frontend; `null` when the form is complete (the `initial_field_hint` read, just after the section-metadata block). *Only the JIT builder sends it (since A2, gap D-hint) -- `getHandshakePayload` (legacy) omits it, the same asymmetry as `section_id` elsewhere in this table (`kit_id` no longer belongs on that list -- bd `polyglot-pdf-s1iex.6` closed it for both builders). It reaches the backend on a section switch via `webFormConnection.ts`, but not on the legacy builder's initial connect. |
+| `resume` | bool | both | Reconnect flag. Read as `is_reconnect` (the `is_reconnect = bool(handshake.get("resume", False))` read); suppresses the greeting/section-intro on a mid-section reconnect (bd polyglot-pdf-vmxx). |
 | `kit_id` | string \| null | both | The KIT identifier (e.g. `"w7"`) -- the catalogue key the user selected, read from `onboardingStorage`. Recorded in the confirmation audit trail because `form_number` is **not unique**: two kits can share one (a standard W-7 and a firm-specific variant, which the firm-tier epic anticipates), and only `kit_id` tells them apart in a liability record (bd `polyglot-pdf-47r3`). Read at the SHARED handshake scope -- it names the kit, not the form, so it is NOT a `form_metadata` key and is threaded as its own argument through `start_session` -> `CallbackHandler`. **BOTH `getHandshakePayload` builders send it** -- the JIT one since bd `polyglot-pdf-47r3`, the legacy one since bd `polyglot-pdf-s1iex.6` (before that, a session whose FIRST handshake took the legacy branch recorded `kit_id=None` for every confirmation; harmless while a second, JIT handshake always followed, and silent audit-trail loss once the intro path made Agree's connect the only one). The hand-rolled section-switch handshake in `webFormConnection.ts` (DEPRECATED path) still omits it -- bd `polyglot-pdf-d95y` criterion 2. Null on an older client. |
 
 ### Legacy-mode keys (`type: "handshake"`)
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `schema` | object (`{source, fields, sections, ...}`) | The WHOLE current section's schema. Required; an invalid/missing `schema` closes the socket with `invalid_schema` (lines 1141-1145). `schema.source` must be `"web"` or `"pdf"` (lines 1187-1191). |
+| `schema` | object (`{source, fields, sections, ...}`) | The WHOLE current section's schema. Required; an invalid/missing `schema` closes the socket with `invalid_schema` (the legacy-branch `schema_required` error send). `schema.source` must be `"web"` or `"pdf"` (the `source_must_be_web_or_pdf` error send). |
 
 ### Manifest-first transport keys (`type: "handshake_jit"`)
 
@@ -94,11 +95,13 @@ when `USE_DTI` is off) from it.
 | `edition_date` | string \| null | The form's GOVERNMENT EDITION (`schema.form_metadata.edition_date`, e.g. `"12/2024"`), stored into `schema["form_metadata"]["edition_date"]`. Agencies revise forms and enforce edition dates, so a disputed filing must be able to answer "which edition did the client confirm against?" (bd `polyglot-pdf-47r3`). Sourced from `edition_date`, **never** `form_metadata.version` -- `version` is a schema-AUTHORING field whose values differ in meaning per kit (`"v9_conformant"`, `"draft"`) and would put a version-shaped field with per-kit semantics into a legal record. Null when the kit has no government edition (a custom form) or on an older client -- the backend then records a content fingerprint of the kit's answerable shape instead, so a revision is always pinned (see [confirmation-and-audit.md](confirmation-and-audit.md)). |
 
 With this transport, `schema` is synthesized backend-side from `manifest` +
-`first_field_schema` (lines 1102-1109), so the legacy `schema` key is absent.
+`first_field_schema` (websocket_routes.py's JIT handshake branch), so the
+legacy `schema` key is absent.
 
 ### Handshake acknowledgement (backend -> frontend)
 
-The backend replies with `session_ready` (lines 1226-1245):
+The backend replies with `session_ready` (websocket_routes.py, the
+`session_ready` payload send):
 
 | Key | Type | Meaning |
 |-----|------|---------|
@@ -127,7 +130,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 
 | Type | Source | Purpose |
 |------|--------|---------|
-| `session_ready` | websocket_routes.py:1227 | Handshake ack (see above). |
+| `session_ready` | websocket_routes.py (session_ready payload send) | Handshake ack (see above). |
 | `form_updated` | callback_handler.py:242 | A field value changed; carries `data` payload. |
 | `transcript` | callback_handler.py:272 | AI/user transcript text. |
 | `turn_complete` | callback_handler.py:279 | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
@@ -135,10 +138,10 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `go_away` | callback_handler.py:403 | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
 | `interrupted` | callback_handler.py (`on_interrupted`) | Gemini stopped the current generation because the user barged in (bd polyglot-pdf-s7uf). The client drains BOTH its audio holds (staging queue + scheduled playback via `resetPlaybackClock`) so the dead generation's tail stops playing; without this, barge-in leaves seconds of stale audio playing behind the model's next generation. No payload; the connection stays live. |
 | `gemini_session_dropped` | callback_handler.py (`on_session_dropped`) | Gemini session died SPONTANEOUSLY behind the still-open WS (e.g. a 1011 "Input data processing failed") -- the client is otherwise frozen on "connected" (bd polyglot-pdf-ppfy). Drives the same pre-emptive reconnect as `go_away`, but the client surfaces a `reconnecting` status so the transient recovery modal shows. No payload. |
-| `idle_timeout` | websocket_routes.py:314 | Backend closing for inactivity; client must NOT auto-reconnect. |
+| `idle_timeout` | websocket_routes.py (`_handle_fill_session`'s `watchdog_task` -- NOT the same-named closures in `ws_echo`/`ws_audio`) | Backend closing for inactivity; client must NOT auto-reconnect. |
 | `section_switched` | form_filling_service.py:1446 | Same-socket section switch completed. |
-| `gemini_session_ended` | websocket_routes.py:746 | Gemini session ended. |
-| `gemini_session_restarted` | websocket_routes.py:759 | Gemini session restarted successfully. |
+| `gemini_session_ended` | websocket_routes.py (end_gemini_session arm) | Gemini session ended. |
+| `gemini_session_restarted` | websocket_routes.py (restart_gemini_session arm) | Gemini session restarted successfully. |
 | `get_form_state` | request_coordinator.py:173 | Backend asks the client for current form state. |
 | `get_next_field_hint` | request_coordinator.py:238 | Backend asks the client to compute the next-field hint. |
 | `confirm_field` | request_coordinator.py:315 | Backend asks the client to confirm a field. |
@@ -146,39 +149,39 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `spellback` | request_coordinator.py:541 | Backend asks the client to play the deterministic spell-back clip for the CURRENT field (the `name_spellback` tool, bd polyglot-pdf-22h1f). Carries ONLY `request_id` -- no field id (the client resolves the current field itself with the pin-aware NEXT-FIELD computation, `computeNextField` -- a client-only resolution, distinct from `confirm_field`'s backend-supplied-and-coerced `field_id`) and never a value. The client reads the stored value, fetches the Cloud TTS clip from `/api/tts/spellback` (POSTing the value + the session's spoken-language name, bd polyglot-pdf-44ywm -- the clip speaks the user's language and carries the whole verification question), mutes the mic, plays it BLOCKING, and replies `spellback_response`. Unlike every other round-trip this one deliberately holds the tool response for the playback duration (90s coordinator cap) -- the model must stay parked until the clip ends. |
 | `switch_field` | request_coordinator.py:455 | Backend asks the client to make ONE specific field current (the switch_to_field tool, bd polyglot-pdf-jnjj.36 -- field-level navigation for secretary-directed jumps + corrections). Carries `field` (a field_id or exact spoken name). The client resolves it WHOLE-schema, pins it so computeNextField returns it first (UI focus follows via onNextField), and replies `switch_field_response`. Unlike a section switch (the `switch_section` tool), the Gemini session is NOT restarted. |
 | `prepare_section_switch` | request_coordinator.py:612 | Backend asks the client to pre-stage a section switch. |
-| `form_state_ack` | websocket_routes.py:490 | Ack of a client `form_state`; carries `applied_fields`. |
-| `hint_ack` | websocket_routes.py:503 | Ack of a client `next_field_hint`. |
-| `completion_ack` | websocket_routes.py:658 | Ack of a client `completion_message`. |
-| `recovery_prompt_ack` | websocket_routes.py:672 | Ack of a client `recovery_prompt`. |
-| `section_completed_ack` | websocket_routes.py:829 | Ack of a client `section_completed` (legacy reactive). |
+| `form_state_ack` | websocket_routes.py (form_state arm) | Ack of a client `form_state`; carries `applied_fields`. |
+| `hint_ack` | websocket_routes.py (next_field_hint arm) | Ack of a client `next_field_hint`. |
+| `completion_ack` | websocket_routes.py (completion_message arm) | Ack of a client `completion_message`. |
+| `recovery_prompt_ack` | websocket_routes.py (recovery_prompt arm) | Ack of a client `recovery_prompt`. |
+| `section_completed_ack` | websocket_routes.py (section_completed arm) | Ack of a client `section_completed` (legacy reactive). |
 | `section_complete_ack` | websocket_routes.py (section_complete arm) | B / jnjj.16 (B4). Ack of the proactive `section_complete` event. |
 | `form_complete_ack` | websocket_routes.py (form_complete arm) | B / jnjj.16 (B4). Ack of the proactive `form_complete` event. |
 | `validate_windows_ack` | websocket_routes.py (validate_windows arm) | W1 / bd polyglot-pdf-xbl2. Immediate ack of the async stride `validate_windows` trigger. The validator runs OFF the receive loop (background task); the verdict follows as a separate `validation_result` push when the flash-lite batch lands. |
 | `drain_findings_ack` | websocket_routes.py (drain_findings arm) | W3 / bd polyglot-pdf-pr3i. Immediate ack of the client's `drain_findings`. The steer is composed + injected OFF the receive loop (background task); the delivery outcome follows as a separate `drain_findings_result`. |
 | `drain_findings_result` | websocket_routes.py (drain_findings background task) | W3 / bd polyglot-pdf-pr3i. `{type, conflicts}` -- the conflicts whose steer ACTUALLY DELIVERED into the live session. The client marks those fields `steered` + CONSUMES them from its validatorFindingsQueue; un-delivered conflicts (dead session) are absent, so the client keeps them queued to retry on a later drain (fail-OPEN). |
 | `validation_result` | websocket_routes.py (section_complete / form_complete / validate_windows arms, async) | B / jnjj.17 (B5), async since W1 / bd polyglot-pdf-xbl2, REPORT-ONLY since W3 / bd polyglot-pdf-pr3i. The validator verdict for a boundary: `{type, conflicts}` (clean = `[]`). W3: this is REPORT-ONLY -- it no longer injects a steer; a conflict is a CANDIDATE the client ENQUEUES into its validatorFindingsQueue and drains via `drain_findings`. Each conflict now also carries a `field_names` id->name rider for the drain payload. Pushed from a background task AFTER the boundary's `*_ack`. Payload shape -> [validation-delegation.md](validation-delegation.md) (F3, contract 1). |
-| `disclaimer_read_initiated` | websocket_routes.py:642 | Disclaimer read started; carries `language`. |
-| `language_changed` | websocket_routes.py:707 | Fill language changed. |
+| `disclaimer_read_initiated` | websocket_routes.py (read_disclaimer arm) | Disclaimer read started; carries `language`. |
+| `language_changed` | websocket_routes.py (change_fill_language arm) | Fill language changed. |
 | `spoken_language_changed` | websocket_routes.py | Ack of the re-assertion opener; the language did NOT change (see `change_spoken_language`). |
-| `pong` | websocket_routes.py:479 | Liveness reply to a client `ping`; echoes `ts`. |
-| `stats` | websocket_routes.py:481 | Reply to a client `stats` request (`{message: "ok"}`). |
+| `pong` | websocket_routes.py (`_handle_fill_session`'s `ping` arm -- NOT the same-named arms in the dev-only `ws_echo`/`ws_audio` sockets) | Liveness reply to a client `ping`; echoes `ts`. |
+| `stats` | websocket_routes.py (`_handle_fill_session`'s `stats` arm -- NOT `ws_audio`'s differently-shaped `stats` reply) | Reply to a client `stats` request (`{message: "ok"}`). |
 | `error` | many sites | Error with `code` (+ `reason`/`message`). |
 
 ### Frontend -> backend
 
 Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
-`websocket_routes.py` (lines 476-965).
+`websocket_routes.py`'s `if mtype == ...` receive-loop switch.
 
 | Type | Send site | Purpose |
 |------|-----------|---------|
 | `handshake` / `handshake_jit` | schemaFormState.ts:955 / :999 | Initial + section-switch handshake (see above). |
 | `form_state` | webFormConnection.ts:4097 | Push current form state; backend replies `form_state_ack`. |
 | `form_state_response` | webFormConnection.ts:1479 | Reply to backend `get_form_state`. Each `field_values[id]` entry carries `{value, confirmed, shown}`. `shown` (bd polyglot-pdf-p68s / jnjj.45d) is the field's current applicability, computed client-side via `shouldShowField` (the backend is stateless and cannot derive it); it feeds the secretary's `shown_map` so a value-bearing-but-now-hidden field is distinguishable from a visible one. An older client that omits `shown` leaves the field out of `shown_map` (renderer default = shown). |
-| `next_field_hint` | websocket_routes.py:494 | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). No live FE sender today (the FE only sends `next_field_hint_response`; caught by the ceyt contract tests) -- the arm is retained for back-compat. |
+| `next_field_hint` | websocket_routes.py (next_field_hint arm) | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). No live FE sender today (the FE only sends `next_field_hint_response`; caught by the ceyt contract tests) -- the arm is retained for back-compat. |
 | `next_field_hint_response` | webFormConnection.ts:1545 | Reply to backend `get_next_field_hint`. |
-| `read_disclaimer` | websocket_routes.py:622 (sent connection.ts:1129) | Client signals the disclaimer is being read; backend replies `disclaimer_read_initiated`. Carries `spoken_language` + `disclaimer_text` + optional `agree_button_label` (bd polyglot-pdf-s863) -- the TRANSLATED on-screen agree-button label (DisclaimerModal BUTTON_TRANSLATIONS), so the voice model names the button the user actually sees; the backend falls back to 'I Agree' when absent (old clients). |
-| `restart_gemini_session` | websocket_routes.py:749 (sent connection.ts:658) | Client asks the backend to restart the Gemini session; backend replies `gemini_session_restarted`. |
-| `section_completed` | websocket_routes.py:820 | LEGACY reactive section-complete signal; backend replies `section_completed_ack`. No live FE sender today (the FE drives section completion via the confirm handler) -- the arm is retained for back-compat. DISTINCT from the proactive `section_complete` below -- do not conflate. |
+| `read_disclaimer` | websocket_routes.py (read_disclaimer arm; sent connection.ts:1129) | Client signals the disclaimer is being read; backend replies `disclaimer_read_initiated`. Carries `spoken_language` + `disclaimer_text` + optional `agree_button_label` (bd polyglot-pdf-s863) -- the TRANSLATED on-screen agree-button label (DisclaimerModal BUTTON_TRANSLATIONS), so the voice model names the button the user actually sees; the backend falls back to 'I Agree' when absent (old clients). |
+| `restart_gemini_session` | websocket_routes.py (restart_gemini_session arm; sent connection.ts:658) | Client asks the backend to restart the Gemini session; backend replies `gemini_session_restarted`. |
+| `section_completed` | websocket_routes.py (section_completed arm) | LEGACY reactive section-complete signal; backend replies `section_completed_ack`. No live FE sender today (the FE drives section completion via the confirm handler) -- the arm is retained for back-compat. DISTINCT from the proactive `section_complete` below -- do not conflate. |
 | `section_complete` | webFormConnection.ts:2148 (confirm handler) / :2349 (skip handler) | B / jnjj.16 (B4). Proactive section-complete event: emitted the moment the last field of the current section is confirmed (a next section exists). Carries `section_id` + the contract-2 `fields` payload; backend replies `section_complete_ack`. Payload shape: [validation-delegation.md](validation-delegation.md) contract 4. |
 | `form_complete` | webFormConnection.ts:2938 (confirm handler + manual-edit path) | B / jnjj.16 (B4). Proactive form-complete event: emitted once when the whole form is confirmed, re-emitted after a post-completion edit (client-side once-only + dirty guard). Carries the whole-form contract-2 `fields`; backend replies `form_complete_ack`. Payload shape: [validation-delegation.md](validation-delegation.md) contract 4. |
 | `validate_windows` | webFormConnection.ts (maybeEmitValidateWindows, on the confirm/skip/edit seams) | W2 / bd polyglot-pdf-kxkw (backend arm W1 / xbl2). Async STRIDE validator trigger: carries `windows` -- a list of overlapping contract-2 field lists (size ~20, stride ~10 over SCHEMA FIELD ORDER). PAGE-AGNOSTIC (report-cadence revision 2026-07-13): the client emits a window once every field it covers is SETTLED (confirmed/skipped/not-applicable), keyed on schema order + the settled flags, NEVER pdf_position.page -- so a source:"web" / pageless form emits identically to a paginated one. Backend acks `validate_windows_ack` immediately and runs every window's flash-lite pass CONCURRENTLY off the receive loop, dedupes conflicts across the batch by field-id set, then pushes one `validation_result` (REPORT-ONLY since W3 -- it does NOT inject a steer; the client enqueues + drains). |
@@ -196,7 +199,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `change_fill_language` | webFormConnection.ts:3988 | Change the AI fill language. |
 | `change_spoken_language` | webFormConnection.ts (session_ready opener) | MISNOMER -- does NOT switch language. The spoken language is PINNED per session; this RE-ASSERTS the same pinned language on a fresh Gemini session after a socket teardown (reconnect / section switch), so the backend re-sends the initiating message. See [voice-and-vad.md](voice-and-vad.md) ("the spoken language is pinned per session"); bd polyglot-pdf-87a9. |
 | `vad_activity_start` / `vad_activity_end` | webFormConnection.ts:3889 / :3916 | Manual activity signals (non-native-VAD mode). |
-| `clear_thinking` | webFormConnection.ts:3435 / :4220 | Thinking-indicator desync guard (bd polyglot-pdf-wpw.5, Codex PR #273): sent when the client's max-duration safety timer fires or on a server error, so the backend resets its `_processing_active` state too (else it stays stuck True and dedups the next turn's `agent_processing:true`). Backend handler `clear_processing_state` (arm at websocket_routes.py:691, call at :697); fire-and-forget, no ack. |
+| `clear_thinking` | webFormConnection.ts:3435 / :4220 | Thinking-indicator desync guard (bd polyglot-pdf-wpw.5, Codex PR #273): sent when the client's max-duration safety timer fires or on a server error, so the backend resets its `_processing_active` state too (else it stays stuck True and dedups the next turn's `agent_processing:true`). Backend handler `clear_processing_state` (the `clear_thinking` arm calls `service.clear_processing_state()`); fire-and-forget, no ack. |
 | `end_gemini_session` | webFormConnection.ts:3971 | Ask the backend to end the Gemini session. |
 | `ping` | -- | Liveness; backend replies `pong` (echoing `ts`). |
 | `stats` | -- | Stats/health probe; backend replies `stats` (`{message: "ok"}`). |
@@ -261,7 +264,8 @@ verifying:
 
 1. **`section_id` is read by the backend but NOT sent by the primary handshake
    builders.** `getHandshakePayload` / `getJITHandshakePayload`
-   (`schemaFormState.ts`) omit it; the backend reads it (`websocket_routes.py:1174`)
+   (`schemaFormState.ts`) omit it; the backend reads it
+   (`handshake.get("section_id")` in websocket_routes.py's handshake handling)
    and falls back to `None`. It IS sent by the section-switch handshakes
    (`webFormConnection.ts`), so the backend sees it on a switch but not the initial
    connect. Benign today (the backend tolerates `None`); a pillar that depends on
@@ -274,7 +278,8 @@ verifying:
    `{previous_spoken_names}`, `{next_field_hint}`, and `{form_title}` wrong (gaps
    M/D-hint/O in [../components/jit-schema.md](../components/jit-schema.md)). A2
    added them to the JIT handshake; the backend already read the first two
-   (`websocket_routes.py:1178, 1181`) and now stores `form_title` into
+   (`previous_spoken_names` / `initial_field_hint` reads in websocket_routes.py's
+   handshake handling) and now stores `form_title` into
    `schema["form_metadata"]`. The legacy builder always sent `previous_spoken_names`
    (`schemaFormState.ts:984`); the JIT builder now matches (`schemaFormState.ts:1090`,
    with `form_title` at `schemaFormState.ts:1068`).

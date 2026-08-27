@@ -1781,6 +1781,51 @@ class TestCheckCodeCitationsOnRealRepo:
 
         assert findings == []
 
+    def test_single_line_citation_on_a_blank_line_is_flagged(
+        self, tmp_path, clean_git_env
+    ):
+        """bd polyglot-pdf-vdcm4: a citation can drift WITHIN a file's bounds
+        (code inserted above it shifts it onto a different, now-blank line)
+        without ever crossing EOF -- the out-of-bounds check alone cannot
+        catch that shape of drift, which is exactly the failure mode that
+        bit ws-protocol.md/technical_guide.md a second time after bd
+        polyglot-pdf-x82ii's line-number fix (2026-08-17) re-drifted."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text(
+            "line0\nline1\n\nline3\n", encoding="utf-8"
+        )  # line 3 (1-indexed) is blank
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        doc = _make_doc(tmp_path, "See `widget.py:3` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert len(findings) == 1
+        assert findings[0][0] == doc
+        assert "widget.py" in findings[0][1]
+        assert "blank" in findings[0][1]
+
+    def test_range_citation_with_a_blank_line_inside_it_is_not_flagged(
+        self, tmp_path, clean_git_env
+    ):
+        """A blank line INSIDE a range citation (e.g. a spacer line in a
+        function body) is normal and must not be flagged -- only a
+        single-line (`:N`, start == end) citation lands on exactly one line,
+        so only that shape is checked for blankness."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text(
+            "line0\nline1\n\nline3\nline4\n", encoding="utf-8"
+        )  # line 3 (1-indexed) is blank, inside the 2-4 range
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        doc = _make_doc(tmp_path, "See `widget.py:2-4` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert findings == []
+
     def test_untracked_file_does_not_verify_a_citation(self, tmp_path, clean_git_env):
         """A file that exists on disk but was never `git add`ed must not
         resolve a citation -- otherwise a scratch/generated file could make
