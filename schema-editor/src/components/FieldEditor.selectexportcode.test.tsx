@@ -375,6 +375,45 @@ describe('select option values are PDF export codes (bd polyglot-pdf-alzbr)', ()
     expect(screen.queryByDisplayValue('male')).toBeNull();
   });
 
+  it('the ZERO-OPTIONS "Add Option" also starts a select empty', () => {
+    // The third mint site: a structurally separate button rendered when the
+    // field has no options at all. A single mutation that flips BOTH add-sites
+    // reddens only the populated-options test, so without this the zero-options
+    // branch could be reverted to mintUniqueSlugs() and ship green.
+    const onUpdateField = vi.fn();
+    const empty = selectField([]);
+    render(
+      <FieldEditor field={empty} schema={makeSchema([empty])}
+        onUpdateField={onUpdateField} authorTier />,
+    );
+
+    fireEvent.click(screen.getByText('+ Add Option'));
+    const added = onUpdateField.mock.calls
+      .map(c => c[0])
+      .filter(p => p && Array.isArray(p.options))
+      .pop();
+    expect(added).toBeTruthy();
+    expect(added.options).toHaveLength(1);
+    expect(added.options[0].value).toBe('');
+  });
+
+  it('the ZERO-OPTIONS "Add Option" still mints for a radio', () => {
+    const onUpdateField = vi.fn();
+    const empty = { ...radioField(), options: [] } as unknown as FormField;
+    render(
+      <FieldEditor field={empty} schema={makeSchema([empty])}
+        onUpdateField={onUpdateField} authorTier />,
+    );
+
+    fireEvent.click(screen.getByText('+ Add Option'));
+    const added = onUpdateField.mock.calls
+      .map(c => c[0])
+      .filter(p => p && Array.isArray(p.options))
+      .pop();
+    expect(added).toBeTruthy();
+    expect(added.options[0].value).toBeTruthy();
+  });
+
   it('+ Add Option on a radio still mints a slug', () => {
     const onUpdateField = vi.fn();
     const field = radioField();
