@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 
 from backend.services.auth import require_auth
 from backend.services.firms import get_allowed_kits
+from backend.services.link_metering import record_mint
 from backend.services.link_redemptions import (
     LinkAlreadyUsed,
     LinkWindowElapsed,
@@ -173,10 +174,25 @@ async def mint_link(
                             detail="Link minting is not configured") from exc
 
     payload = verify_link_token(token)
+    # BILLING METER (bd polyglot-pdf-ik7e). Counted at MINT, because the
+    # redemption record is only created when a CLIENT OPENS a link -- so
+    # counting documents would miss every minted-but-unopened link, which is
+    # exactly the set a firm has been billed for.
+    #
+    # DELIBERATELY NOT A GATE. The allowance is a subscription tier
+    # ($500/mo for 30, then $15 each), not an abuse limit: a firm minting
+    # link 31 has PAID for link 31, and refusing it would break a paying
+    # customer over a number the maintainer has explicitly called provisional
+    # pending market research. Margin is protected by the per-LINK spend
+    # ceiling instead. record_mint never raises and never refuses.
+    usage = record_mint(firm_id)
+
     # AUDIT, keyed like the rest of the firm tier (bd xwlt): who minted what,
     # for which form. The jti is OUR pseudonym, never a client identifier.
     _log.info("link_minted", firm_id=firm_id, kit_id=body.kit_id,
-              employee_id=employee_id, jti=jti)
+              employee_id=employee_id, jti=jti,
+              period=usage["period"], minted_this_period=usage["minted"],
+              over_allowance=usage["over_allowance"])
 
     # The token rides in the FRAGMENT (#t=), which browsers do not send to
     # servers -- so it stays out of access logs, referrers, and proxy logs.
