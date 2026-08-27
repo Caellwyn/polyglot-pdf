@@ -2,10 +2,10 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-24 (bd polyglot-pdf-7hicd: noted the new
-`_safe_pdf_filename` guard in the request-flow step 3 -- `/fill-pdf` is the
-one route whose `pdf_filename` never went through the manifest allowlist,
-so it needed its own sanitiser rather than inheriting one.)*
+*Last updated: 2026-08-26 (bd polyglot-pdf-4we6j: documented the SELECT fill
+path -- it has no branch of its own, so a dropdown's `option.value` is
+written verbatim into the widget and IS the PDF export value, unchecked
+against the widget's `/Opt` list.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -69,6 +69,10 @@ gap, but never shadows a distinct real field that happens to lack its own
   directly (xref surgery) onto the kid whose appearance table carries that
   state (`find_widget_by_state`) -- only the SELECTED option writes; a radio
   field holds one value, so there is no per-kid Off pass.
+- **select (dropdown / combobox)** â€” has NO branch of its own: it
+  falls to the scalar path above, so `option.value` is written **verbatim**
+  into the widget and `pdf_on_value` is never consulted -- for a dropdown,
+  `option.value` IS the PDF export value. See the gotcha below.
 - **checkbox / checkbox_group** â€” a `bool` fills one widget; a `list` is a
   checkbox *group* (fill each selected option's widget). The v2
   `checkbox_group` TYPE (bd `h76m.17`) shares this branch -- it is the same
@@ -86,6 +90,27 @@ gap, but never shadows a distinct real field that happens to lack its own
 
 ### The widget gotchas (scar tissue)
 
+- **A dropdown's `option.value` is the PDF export value, and nothing validates
+  it.** A select has no fill branch of its own, so the filler writes
+  `str(option.value)` straight into the combobox and never reads
+  `pdf_on_value`. PyMuPDF does **not** check the write against the widget's
+  `/Opt` choice list, so any string is accepted silently and then renders
+  clipped to the box. Measured on `i-90_v2` `P1_Line6e_State[0]` (36x18pt):
+  `WY` renders `WY`; `wyoming` renders `wyomin`. No error, no warning -- the
+  same shape as the COMB gotcha below (the stored value round-trips fine while
+  the printed page is wrong). This CONTRADICTS the v2 option contract
+  (`conditional_vocabulary.py`: value is a semantic slug, widget identity lives
+  in `pdf_on_value`), which the select path never implemented. Until it does
+  (bd `polyglot-pdf-g2fpr`), a dropdown's values must be the PDF's own export
+  codes, and `schema_lint` / `schema_repair` exempt exactly those from the
+  option-slug rule -- evidence-based, keyed on the acroform dump's `/Opt`
+  (shared helper `schema_repair.pdf_choice_values`), so a value the PDF does
+  NOT declare is still an ERROR (bd `polyglot-pdf-4we6j`).
+  The same exemption exists at the MODEL gate
+  (`form_models._collect_v2_problems`), which runs BEFORE lint on the
+  publish route and validates a schema with no dump -- so it defers the
+  legitimacy call to lint rather than guessing. Fixing only one of the
+  two left the kit exactly as unpublishable, with a 422 instead of a 409.
 - **COMB widgets truncate on RENDER, not on read-back.** A text widget with the
   Comb flag (`field_flags & 1<<24`) splits its box into exactly `MaxLen` cells and
   prints ONE glyph per cell -- there is no cell `MaxLen+1`. PyMuPDF stores and

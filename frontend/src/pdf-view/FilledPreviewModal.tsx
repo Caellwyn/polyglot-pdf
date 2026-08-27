@@ -10,6 +10,7 @@
  * fetched only once the user actually opens a preview surface.
  */
 
+import { resolveSessionToken } from "../shared/sessionCredential";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import type { FormSchema } from '../schema-forms/types/schema';
@@ -64,7 +65,7 @@ export default function FilledPreviewModal({
     }
 
     fillPDF(kitId, pdfUrl, unwrapped, schema,
-      async () => (user ? await user.getIdToken() : undefined),
+      async () => (await resolveSessionToken(user)),
       pdfFile)
       .then((bytes) => {
         if (cancelled) return;

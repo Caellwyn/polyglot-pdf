@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: 'harness@test.local',
                 displayName: 'VFF Test Harness',
                 photoURL: null,
-                // getIdToken must resolve (SchemaForm calls user.getIdToken() for the
+                // getIdToken must resolve (resolveSessionToken falls through to it for a
                 // WS token). The local backend runs with VFF_DISABLE_AUTH=true so the
                 // value is ignored -- a dummy string is enough to avoid a throw.
                 getIdToken: async () => 'vff-test-harness-token',

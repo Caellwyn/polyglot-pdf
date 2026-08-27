@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import copy
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import SupplementType
@@ -223,7 +223,9 @@ def _strip_spoken_name_disambiguation(
 # Step 1: option-value slugs.
 # --------------------------------------------------------------------------- #
 
-def _mint_slugs(fields: List[dict], repairs: List[dict]) -> Dict[str, Dict[str, str]]:
+def _mint_slugs(
+    fields: List[dict], repairs: List[dict], dump: Optional[dict] = None
+) -> Dict[str, Dict[str, str]]:
     """Mint v2 slugs for choice fields whose option values violate the slug
     convention or collide. Returns per-field resolution maps: any known alias
     of an option (old value, widget full path, widget leaf, label) -> the
@@ -256,22 +258,74 @@ def _mint_slugs(fields: List[dict], repairs: List[dict]) -> Dict[str, Dict[str, 
             else:
                 res[key] = slug
 
+        # A dropdown's option.value is written verbatim into the PDF widget
+        # (pdf_fill_routes.fill_widget; no pdf_on_value channel on that path),
+        # and PyMuPDF does not validate the write against /Opt -- so minting a
+        # slug over a PDF-sanctioned export code silently makes the form PRINT
+        # WRONG ('WY' -> 'wyoming_wy' renders clipped in a 36pt box). Values
+        # the PDF itself declares legal are therefore NOT invalid here, even
+        # though they fail the slug pattern; mirrors schema_lint's carve-out
+        # via the shared helper. Dumpless repair sees an empty set and keeps
+        # the old behaviour exactly (bd polyglot-pdf-g2fpr).
+        pdf_choices: FrozenSet[str] = frozenset()
+        if f.get("type") == "select":
+            pdf_choices = pdf_choice_values(dump, f.get("pdf_field_name"))
+
         needs_mint = False
         if _is_choice_field(f):
             values = [str(o.get("value")) for o in dict_opts if o.get("value") is not None]
-            invalid = any(not vocab.is_valid_option_slug(v) for v in values)
+            invalid = any(
+                v not in pdf_choices and not vocab.is_valid_option_slug(v)
+                for v in values
+            )
             missing = any(o.get("value") in (None, "") for o in dict_opts)
             dupes = len(set(values)) != len(values)
             needs_mint = invalid or missing or dupes
 
         if needs_mint:
+            # Never mint over a PDF-sanctioned export code: minting is
+            # triggered per-FIELD, so without this an unrelated defect
+            # elsewhere in the same dropdown (one duplicate, one missing
+            # value) would rewrite ALL the good codes and break printing for
+            # every option. Preserved codes are held aside and re-registered
+            # as their own alias so conditions still resolve.
+            #
+            # Preserve at most ONE option per code: uniqueness outranks
+            # preservation. Two options sharing a code cannot both keep it --
+            # the PDF widget holds a single value, so the duplicate is a real
+            # defect either way -- and preserving both would let this branch
+            # no-op on the very duplicate it exists to repair, leaving the
+            # schema stuck (repair reports nothing to fix while lint still
+            # blocks on option-value-duplicate). First occurrence keeps the
+            # code; the rest fall through to minting.
+            seen_codes: set = set()
+            keep = []
+            for o in dict_opts:
+                v = o.get("value")
+                v = str(v) if v is not None else None
+                is_code = v is not None and v in pdf_choices and v not in seen_codes
+                if is_code:
+                    seen_codes.add(v)
+                keep.append(is_code)
+            # Mint ONLY for the options actually being replaced, and seed the
+            # dedupe with the preserved codes -- a slug minted from one label
+            # can otherwise equal a code kept on another option and
+            # manufacture the duplicate this whole branch exists to repair
+            # (a lowercase PDF code like 'wy' is itself slug-legal).
+            reserved = [str(o["value"]) for o, k in zip(dict_opts, keep) if k]
             labels = [
-                str(o.get("label") or o.get("value") or "option") for o in dict_opts
+                str(o.get("label") or o.get("value") or "option")
+                for o, k in zip(dict_opts, keep) if not k
             ]
-            slugs = vocab.mint_unique_slugs(labels)
+            minted = vocab.mint_unique_slugs(reserved + labels)[len(reserved):]
+            slug_iter = iter(minted)
             renames = []
-            for o, slug in zip(dict_opts, slugs):
+            for o, k in zip(dict_opts, keep):
                 old = o.get("value")
+                if k:
+                    _register(str(old), str(old))
+                    continue
+                slug = next(slug_iter)
                 if old is not None and str(old) != slug:
                     renames.append(f"{old!r} -> {slug!r}")
                 if old is not None:
@@ -820,6 +874,62 @@ def _complete_supplements(schema: dict, repairs: List[dict]) -> None:
             })
 
 
+def pdf_choice_values(dump: Optional[dict], claim: Optional[str]) -> FrozenSet[str]:
+    """The export values a combobox/listbox widget itself declares legal (/Opt).
+
+    Shared by schema_repair (skip minting over them) and schema_lint (exempt
+    them from the option-slug rule) so the two can never disagree on which
+    values the PDF sanctions -- the same reason is_fillable_widget is shared.
+
+    Name resolution mirrors the filler's find_widget: exact match first, else a
+    dot-boundary suffix match (schemas store the XFA leaf, dumps the full path).
+
+    Returns EMPTY when there is no dump, no claim, or the widget declares no
+    choices. Callers must read empty as "no evidence", never as "nothing is
+    legal" -- a dumpless lint/repair must not start exempting or erroring on
+    values it cannot check.
+    """
+    if not isinstance(dump, dict) or not isinstance(claim, str) or not claim:
+        return frozenset()
+    entries = dump.get("fields")
+    if not isinstance(entries, list):
+        return frozenset()
+    names = [
+        e.get("name") for e in entries
+        if isinstance(e, dict) and isinstance(e.get("name"), str)
+    ]
+    matched = [n for n in names if n == claim] or [
+        n for n in names if n.endswith("." + claim)
+    ]
+    if not matched:
+        return frozenset()
+    # FIRST matching entry only, never a union across duplicate-named ones:
+    # unioning would exempt a value that is legal on a DIFFERENT widget
+    # instance than the one this field claims -- a narrower rerun of the exact
+    # wrong-widget failure this helper exists to prevent. Mirrors
+    # schema_lint._dump_entry, which likewise takes the first name match.
+    #
+    # Selecting the entry FIRST (rather than filtering inside a loop and
+    # breaking) keeps one mechanism responsible for that choice. An earlier
+    # cut had both a name filter and a break; they were provably redundant
+    # -- exhaustively, no input separated them -- so a future reader could
+    # have deleted either one believing it was the load-bearing half.
+    target = matched[0]
+    entry = next(
+        (e for e in entries
+         if isinstance(e, dict) and e.get("name") == target),
+        None,
+    )
+    values: set = set()
+    for w in (entry or {}).get("widgets") or []:
+        if not isinstance(w, dict):
+            continue
+        for c in w.get("choices") or []:
+            if isinstance(c, dict) and isinstance(c.get("value"), str):
+                values.add(c["value"])
+    return frozenset(values)
+
+
 def _dump_tu_by_name(dump: Optional[dict]) -> Dict[str, str]:
     """pdf field name -> /TU tooltip, from an acroform dump (when given).
 
@@ -951,7 +1061,7 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
     _check_no_name_non_choice(fields,
                               str(repaired.get("source", "")) == "pdf")
 
-    resolution = _mint_slugs(fields, repairs)
+    resolution = _mint_slugs(fields, repairs, dump)
     fields_by_id = {str(f.get("id")): f for f in fields}
 
     tu_by_name = _dump_tu_by_name(dump)

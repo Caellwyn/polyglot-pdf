@@ -234,6 +234,16 @@ async def _handle_fill_session(
 	kit_id: str | None = None,  # Kit identity for the audit trail (bd polyglot-pdf-47r3)
 	firm_id: str | None = None,  # Firm identity from the token claim (bd polyglot-pdf-xwlt)
 	is_reconnect: bool = False,  # True when handshake carries resume:true (mid-section reconnect)
+	# The CLIENT-LINK jti, when this session was opened with a magic link
+	# (bd polyglot-pdf-ugm6). None for a staff session. Passed explicitly
+	# rather than read from an outer scope -- the decoded claims live in
+	# fill_form_from_schema, a DIFFERENT function, and reaching for them here
+	# is a NameError at runtime that no import check catches.
+	link_jti: str | None = None,
+	# The staff member who SENT the link (bd polyglot-pdf-ugm6). Rides the
+	# session records so a CLIENT session satisfies the telemetry requirement
+	# -- firm, form, AND originating employee -- with no account anywhere.
+	link_employee_id: str | None = None,
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
 	
@@ -352,6 +362,13 @@ async def _handle_fill_session(
 			section_id=section_id,
 			firm_id=firm_id,
 			kit_id=kit_id,
+			# The START row is the ONE-PER-SESSION record, so it needs the
+			# join key MORE than the end row does (which fires per
+			# connection). Omitting it here left a client who abandons
+			# mid-form with a start row the firm cannot join on -- while the
+			# docs claimed both records carried it (Opus cross-surface r2).
+			link_jti=link_jti,
+			employee_id=link_employee_id,
 		)
 
 	# Set when the client reports the WHOLE form confirmed (the form_complete
@@ -1077,6 +1094,8 @@ async def _handle_fill_session(
 		if should_log_session_end(form_session_id, is_reconnect):
 			try:
 				log_form_session_end(
+					link_jti=link_jti,
+					employee_id=link_employee_id,
 					form_id=_form_number_of(schema),
 					form_session_id=form_session_id,
 					completion_status="completed" if session_completed else "abandoned",
@@ -1086,10 +1105,66 @@ async def _handle_fill_session(
 				)
 			except Exception as e:
 				log.error("session_end_telemetry_failed", error=str(e))
+
+		# BURN THE LINK -- but only on a real completion (bd polyglot-pdf-ugm6,
+		# fresh-eyes r1 finding 2). Nothing called complete_link before this,
+		# so a link could never actually become "used" and the one-time
+		# guarantee could never take effect.
+		#
+		# ONLY on session_completed, deliberately: a dropped connection, a
+		# closed laptop, or a client coming back after lunch must NOT consume
+		# their one chance at the form. Abandoning is the common case on a
+		# 40-minute immigration form, and burning the link there would strand
+		# a client mid-intake with no recourse but to phone the firm.
+		# complete_link is best-effort by design -- failing to RECORD a
+		# completion costs at most one extra reopen of a form already
+		# finished, while failing to BLOCK an open costs a second paid
+		# session, so the risky direction is the one that refuses.
+		if session_completed and link_jti:
+			try:
+				await asyncio.to_thread(complete_link, link_jti)
+			except Exception as e:
+				log.error("link_complete_failed", jti=link_jti, error=str(e))
 		await service.end_session()
 
 
 from ..services.auth import verify_token
+from ..services.link_tokens import LinkTokenError, verify_link_token
+from ..services.link_redemptions import (
+	LinkAlreadyUsed,
+	LinkWindowElapsed,
+	RedemptionUnavailable,
+	complete_link,
+	enforce_link_redemption,
+)
+
+
+def _verify_ws_credential(token: str) -> dict:
+	"""Resolve a WS credential to claims: a client LINK token or a staff
+	Firebase ID token (bd polyglot-pdf-ugm6).
+
+	Returns a claims dict either way. For a link, the claims are the ones WE
+	signed -- firm_id, kit_id, employee_id, jti -- so the telemetry
+	requirement (firm + form + originating employee) is satisfied for client
+	sessions without the client ever holding an account.
+
+	Dispatch is on SHAPE, not on a caller-supplied hint: a link token has one
+	dot, a Firebase JWT has two. A caller cannot opt into the weaker check by
+	labelling their token, and a Firebase JWT can never be parsed as a link.
+	Raises on failure, which the caller turns into a 1008 close.
+	"""
+	if isinstance(token, str) and token.count(".") == 1:
+		payload = verify_link_token(token)   # raises LinkTokenError
+		return {
+			"uid": None,                     # a client has NO account
+			"firm_id": payload["firm_id"],
+			"link_kit_id": payload["kit_id"],
+			"employee_id": payload["employee_id"],
+			"jti": payload["jti"],
+			"cw": payload["cw"],          # completion window, enforced at the socket
+			"is_client_link": True,
+		}
+	return verify_token(token)
 
 @router.websocket("/fill")
 async def fill_form_from_schema(
@@ -1120,23 +1195,36 @@ async def fill_form_from_schema(
 			# below keys session + confirmation records on it (bd
 			# polyglot-pdf-xwlt). Discarding the return value was why the
 			# WS path could not see firm identity at all.
-			# NO check_revoked. It forces a Firebase USER-RECORD FETCH, needing
+			#
+			# TWO CREDENTIAL KINDS REACH THIS SOCKET (bd polyglot-pdf-ugm6):
+			# a firm STAFF member's Firebase ID token, or a CLIENT's signed
+			# magic-link token. A client has no Firebase account and must
+			# never have one, so without this branch the client tier could
+			# not open the voice socket at all -- the feature would be
+			# unreachable in exactly the case it exists for.
+			#
+			# The two formats are structurally distinct (a link token has ONE
+			# dot, a Firebase JWT has two), so neither verifier can silently
+			# accept the other's token. We try the LINK shape first and only
+			# by that shape; anything else goes to Firebase verification
+			# unchanged. Both paths end with claims we SIGNED or Firebase
+			# signed -- the handshake is never trusted for identity.
+			#
+			# NO check_revoked ON THE STAFF PATH (kept from #644, and
+			# _verify_ws_credential's Firebase branch is a plain
+			# verify_token(token) for exactly this reason). check_revoked
+			# forces a Firebase USER-RECORD FETCH needing
 			# firebaseauth.users.get -- a permission polyglot-backend-sa
-			# deliberately does NOT have (its roles: aiplatform.user,
-			# datastore.user, logging.logWriter, secretmanager.secretAccessor,
-			# storage.objectViewer). Deployed, EVERY handshake failed with
-			# INSUFFICIENT_PERMISSION and the app could not connect at all.
-			#
-			# STRUCTURALLY INVISIBLE locally and in tests: VFF_DISABLE_AUTH
-			# returns before this line, and every test stubs the Firebase SDK,
-			# so the failure exists only against real Firebase with the real
-			# service account.
-			#
-			# Cost of dropping it: revoking an account takes effect when its
-			# token expires (up to an hour) rather than immediately. The
-			# maintainer chose that over widening the deployed backend's
-			# permission to read any user record (2026-08-26).
-			claims = verify_token(token)
+			# deliberately does NOT have, so deployed, EVERY handshake failed
+			# with INSUFFICIENT_PERMISSION and the app could not connect at
+			# all. It is STRUCTURALLY INVISIBLE locally and in tests:
+			# VFF_DISABLE_AUTH returns earlier, and every test stubs the
+			# Firebase SDK, so the failure exists only against real Firebase
+			# with the real service account. Cost of dropping it: revoking an
+			# account takes effect when its token expires (up to an hour)
+			# rather than immediately -- the maintainer chose that over
+			# widening the deployed backend's permissions (2026-08-26).
+			claims = _verify_ws_credential(token)
 		except Exception as e:
 			# Distinguish "not enrolled" from "bad token". This diff INTRODUCED
 			# the enrolment requirement, so collapsing both into
@@ -1209,6 +1297,41 @@ async def fill_form_from_schema(
 	# dev-bypass stub and any legacy account carry no firm claim.
 	_firm_claim = claims.get("firm_id") if isinstance(claims, dict) else None
 	firm_id = _firm_claim if isinstance(_firm_claim, str) and _firm_claim else None
+
+	# A CLIENT LINK NAMES ONE FORM (bd polyglot-pdf-ugm6). The handshake's
+	# kit_id is client-controlled, so a link holder who edits it could
+	# otherwise fill a DIFFERENT form of the same firm -- including one they
+	# were never sent. Enforce the token's kit_id over the handshake's, and
+	# refuse rather than silently substituting: a mismatch means the client is
+	# not filling the form they were given, and quietly swapping it would
+	# produce a record naming a form the client never saw.
+	if isinstance(claims, dict) and claims.get("is_client_link"):
+		# REDEEM VIA THE SHARED GATE (bd polyglot-pdf-ugm6). This block used to
+		# hand-roll the redemption + completion-window checks, and
+		# require_auth hand-rolled nothing at all -- so the HTTP door accepted
+		# a burned link for the rest of its ~48h exp (Opus cross-surface r1).
+		# ONE helper now serves both doors: two copies of a security check
+		# drift, and the drift is silent.
+		try:
+			await asyncio.to_thread(enforce_link_redemption, claims)
+		except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+			# Same refusal for already-used, window-closed, and
+			# store-unreachable: the socket must not be an oracle either, and
+			# an unreachable store FAILS CLOSED (the guarded failure is a
+			# replayed link starting a second paid session).
+			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
+						error=str(exc))
+			await websocket.close(code=1008, reason="Authentication failed")
+			return
+
+		_link_kit = claims.get("link_kit_id")
+		if isinstance(kit_id, str) and kit_id and kit_id != _link_kit:
+			log.warning("ws_link_kit_mismatch", link_kit_id=_link_kit,
+						handshake_kit_id=kit_id, jti=claims.get("jti"))
+			await websocket.close(code=1008, reason="Authentication failed")
+			return
+		# Absent/blank handshake kit_id: the token's is authoritative anyway.
+		kit_id = _link_kit
 
 	if is_jit_mode:
 		# Manifest-first transport: extract the manifest + first field schema.
@@ -1406,4 +1529,13 @@ async def fill_form_from_schema(
 		kit_id=kit_id,  # Kit identity for the confirmation audit trail (bd polyglot-pdf-47r3)
 		firm_id=firm_id,  # Firm identity from the token claim (bd polyglot-pdf-xwlt)
 		is_reconnect=is_reconnect,  # Suppresses greeting on mid-section reconnect (bd polyglot-pdf-vmxx)
+		# The client-link jti, so a COMPLETED session burns the link
+		# (bd polyglot-pdf-ugm6). None for a staff session.
+		link_jti=(claims.get("jti")
+				  if isinstance(claims, dict) and claims.get("is_client_link")
+				  else None),
+		link_employee_id=(claims.get("employee_id")
+						  if isinstance(claims, dict)
+						  and claims.get("is_client_link")
+						  else None),
 	)

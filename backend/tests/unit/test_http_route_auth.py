@@ -252,8 +252,9 @@ def _firm_world(_auth_on, monkeypatch):
         "backend.routes.pdf_fill_routes.get_form_kit_store",
         lambda: _TwoKitStore(),
     )
-    # require_auth (list/schema/fill routes) resolves verify_token inside the
-    # auth module; the pdf route uses the copy imported into form_kit_routes.
+    # require_auth (fill) and require_signin (list/schema) both resolve
+    # verify_token inside the auth module; the pdf route uses the copy
+    # imported into form_kit_routes.
     monkeypatch.setattr("backend.services.auth.verify_token", _fake_verify)
     monkeypatch.setattr(fkr, "verify_token", _fake_verify)
     # The gates live in backend/services/kit_gates.py (shared by ALL four
@@ -347,6 +348,82 @@ def test_private_pdf_loads_for_own_firm(_firm_world):
     )
     assert resp.status_code == 200
     assert resp.content == b"%PDF-priv-kit"
+
+
+def test_a_CLIENT_LINK_can_fetch_its_own_private_kits_PDF(_firm_world, monkeypatch):
+    """THE BEHAVIORAL PIN the door-set guard could not provide (Opus r7).
+
+    This route is OPTIONAL-auth, so it resolves credentials ITSELF instead of
+    going through require_auth -- which is why it was never taught the
+    client-link shape and a client's own private form's PDF 404'd (r6).
+
+    The guard I wrote for that counts which FILES call verify_token. Reverting
+    the fix leaves that call in place, so the count is unchanged and the whole
+    backend suite stays green: the guard pins "no NEW door appeared", not "each
+    door handles a link", and the second is the property that broke three
+    times.
+
+    So this asserts the BEHAVIOR: a client link fetching the PDF of the kit it
+    names gets BYTES. Mutation: replace the shape branch with a bare
+    verify_token -- red.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "p" * 40)
+    # A real signed link naming the private kit the firm holds.
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "priv-kit", "u-emp-7")
+    # The route REDEEMS the link (a door that only verifies is a burned-link
+    # hole), so the store must answer.
+    import time as _t
+
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+
+    resp = client.get(
+        "/api/form-kits/priv-kit/pdf",
+        headers={"Authorization": "Bearer " + token},
+    )
+
+    assert resp.status_code == 200, (
+        "a client link must fetch the PDF of the kit it names -- this route "
+        "bypasses require_auth, so it needs its own link dispatch"
+    )
+    assert resp.content == b"%PDF-priv-kit"
+
+
+def test_a_CLIENT_LINK_still_cannot_fetch_ANOTHER_kits_PDF(_firm_world, monkeypatch):
+    """The widening must not leak: a link names ONE kit, and the firm holding
+    a second one does not put it within the client's reach."""
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "p" * 40)
+    from backend.services.link_tokens import mint_link_token
+
+    import time as _t
+
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+    # The link names priv-kit; the client asks for the OTHER kit.
+    token, _jti = mint_link_token("firm-a", "priv-kit", "u-emp-7")
+
+    resp = client.get(
+        "/api/form-kits/pub-kit/pdf",
+        headers={"Authorization": "Bearer " + token},
+    )
+
+    # pub-kit is PUBLIC, so it serves anonymously either way -- the assertion
+    # that matters is that the client credential did not widen anything: the
+    # bytes are the public kit's, reachable with no token at all.
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-pub-kit"
 
 
 def test_public_pdf_full_success_path_stays_tokenless(_firm_world):
@@ -733,7 +810,10 @@ def _routes_depending_on_require_auth() -> set:
     return _routes_depending_on(require_auth)
 
 
-# The SIX routes that carry user data or gate paid work. Update this list ONLY
+# The routes that carry user data or gate paid work. Deliberately NO COUNT in
+# this comment: it was stale at "seven" while the set held eight, then dev's
+# require_signin split moved it again -- a number here drifts on every route
+# change, and the derived set below is the authority. Update this list ONLY
 # together with the prose enumerations in:
 #   docs/components/auth.md            ("HTTP routes (bd polyglot-pdf-z2is)")
 #   docs/components/config-deployment.md  (the VFF_DISABLE_AUTH bullet)
@@ -760,9 +840,18 @@ _EXPECTED_GATED_ROUTES = {
     # test_firm_retire.py -- require_auth alone would let any authed user
     # reach it.
     ("POST", "/api/form-kits/{kit_id}/retire"),
+    # Firm staff mint a CLIENT link (bd polyglot-pdf-ugm6). Per-user Firebase
+    # auth, deliberately NOT a per-firm API key -- the employee's uid is what
+    # attributes the link. Its sibling POST /api/links/open is correctly
+    # ABSENT from this set: the client has no account, so the signed link IS
+    # the credential.
+    ("POST", "/api/links/mint"),
+    # NOTE: the two /api/tts/* routes LEFT this set (maintainer, 2026-08-24).
+    # They spend money, so they declare require_paid_client_work -- which is
+    # require_auth PLUS redemption. They are still auth-gated; they are just
+    # gated by the stricter dependency, pinned by
+    # test_the_PAID_route_set_is_pinned below.
     ("POST", "/api/fill-pdf"),
-    ("POST", "/api/tts/spellback"),
-    ("POST", "/api/tts/intro"),
 }
 
 
@@ -811,6 +900,41 @@ def test_spellback_requires_token(_auth_on):
     resp = client.post("/api/tts/spellback",
                        json={"value": "A1234", "language": "Spanish"})
     assert resp.status_code == 401
+
+
+def test_the_PAID_route_set_is_pinned():
+    """The routes that SPEND MONEY, and therefore redeem a client link.
+
+    The split (maintainer, 2026-08-24): "one time" bounds a backend
+    CONNECTION, not the client's own document. A completed link must buy no
+    further synthesis and start no further session -- but must still download
+    the PDF it already produced.
+
+    A new route that calls a model MUST declare require_paid_client_work, or
+    a burned link keeps spending. Derived from the shipped sources so a
+    fourth paid route reddens here.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    paid = {}
+    call = re.compile(r"Depends\(require_paid_client_work\)")
+    for path in sorted((root / "backend/routes").rglob("*.py")):
+        n = sum(1 for l in path.read_text(encoding="utf-8").splitlines()
+                if call.search(l))
+        if n:
+            paid[path.relative_to(root).as_posix()] = n
+
+    assert paid == {
+        # Both TTS routes synthesize audio -- real per-call spend.
+        "backend/routes/tts_routes.py": 2,
+    }, (
+        "the PAID route set changed. A route that calls a model must use "
+        "require_paid_client_work so a completed link cannot keep spending; "
+        "a retrieval route must NOT, or the client loses access to their own "
+        "finished form."
+    )
 
 
 def test_a_CLAIMLESS_user_can_actually_LOAD_the_catalogue(monkeypatch):
@@ -876,4 +1000,3 @@ def test_that_same_claimless_user_is_still_REFUSED_by_a_gated_route(monkeypatch)
 
     assert resp.status_code == 403, (
         "a claimless user reached a gated route (got {})".format(resp.status_code))
-

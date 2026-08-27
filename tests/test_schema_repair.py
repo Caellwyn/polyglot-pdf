@@ -28,7 +28,7 @@ sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
 
 from backend.services.schema_lint import has_errors, lint_schema  # noqa: E402
 from backend.services.schema_repair import (  # noqa: E402
-    RepairError, alias_hit_count, repair,
+    RepairError, alias_hit_count, pdf_choice_values, repair,
 )
 
 _FIXTURES = _REPO / "backend" / "tests" / "fixtures"
@@ -307,6 +307,176 @@ def test_colliding_labels_also_drop_ambiguous_references():
     dep = next(f for f in repaired["fields"] if f["id"] == "dep")
     assert "show_if" not in dep
     assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
+
+
+_COMBO_DUMP = {"fields": [{
+    "name": "form1[0].#subform[0].P1_Line6e_State[0]",
+    "widgets": [{"choices": [
+        {"value": " "}, {"value": "WY"}, {"value": "AL"}, {"value": "DC"},
+    ]}],
+}]}
+
+
+def _combo(options):
+    return [{"id": "mail_state", "type": "select",
+             "pdf_field_name": "P1_Line6e_State[0]", "options": list(options)}]
+
+
+def _values(repaired):
+    return [o["value"] for o in repaired["fields"][0]["options"]]
+
+
+def test_widget_name_matching_sites_are_a_known_closed_set():
+    """The "exact name, else dot-boundary suffix" convention (schemas store the
+    XFA leaf, dumps the full path) is open-coded at several sites rather than
+    shared. They agree today; nothing structural keeps them agreeing.
+
+    Pins the SET, not one instance (CLAUDE.md scar #8): adding a fifth site, or
+    dropping one, fails here and forces the author to decide deliberately
+    whether the new site needs the same semantics. Consolidation is filed as
+    polyglot-pdf-t9m9k -- this test is the net until then.
+    """
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    pattern = re.compile(r'endswith\("\." \+ \w+\)')
+    found = {}
+    for rel in ("backend/services/schema_lint.py",
+                "backend/services/schema_repair.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        n = len(pattern.findall(text))
+        if n:
+            found[rel] = n
+    assert found == {
+        "backend/services/schema_lint.py": 1,     # _match_dump_names
+        "backend/services/schema_repair.py": 3,   # exists / pdf_choice_values / tu lookup
+    }, (
+        "widget-name matching sites moved: %r. If you added one, give it the "
+        "same exact-then-suffix semantics (and the FIRST-match rule where it "
+        "resolves choices) and update this pin." % found
+    )
+
+
+def test_pdf_choice_values_never_unions_across_ambiguous_matches():
+    """One claim resolves to ONE widget's choice list.
+
+    Unioning across duplicate-named (or several suffix-matching) dump entries
+    would exempt a value legal on a DIFFERENT widget instance than the field
+    claims -- a narrower rerun of the wrong-widget failure this helper exists
+    to prevent. Mirrors schema_lint._dump_entry's first-match rule.
+    """
+    dup = {"fields": [
+        {"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]},
+        {"name": "X[0]", "widgets": [{"choices": [{"value": "AL"}]}]},
+    ]}
+    assert pdf_choice_values(dup, "X[0]") == frozenset({"WY"})
+
+    two_suffixes = {"fields": [
+        {"name": "a.S[0]", "widgets": [{"choices": [{"value": "WY"}]}]},
+        {"name": "b.S[0]", "widgets": [{"choices": [{"value": "AL"}]}]},
+    ]}
+    assert pdf_choice_values(two_suffixes, "S[0]") == frozenset({"WY"})
+
+    # The first match wins even when it carries NO choices: "first" is by dump
+    # order, and an empty result must not fall through to a later entry (that
+    # fall-through IS the union bug, just harder to see).
+    choiceless_first = {"fields": [
+        {"name": "b.S[0]"},
+        {"name": "a.S[0]", "widgets": [{"choices": [{"value": "X"}]}]},
+    ]}
+    assert pdf_choice_values(choiceless_first, "S[0]") == frozenset()
+
+
+@pytest.mark.parametrize("dump,claim", [
+    (None, "X[0]"),
+    ({}, "X[0]"),
+    ({"fields": "not-a-list"}, "X[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{}]}]}, "X[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": []}]}]}, "X[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]}]}, "NOPE[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]}]}, ""),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]}]}, None),
+])
+def test_pdf_choice_values_returns_empty_when_there_is_no_evidence(dump, claim):
+    """Empty means "no evidence", and every caller must read it that way --
+    a malformed or absent dump must never widen the exemption."""
+    assert pdf_choice_values(dump, claim) == frozenset()
+
+
+def test_pdf_sanctioned_dropdown_codes_survive_repair():
+    """Minting a slug over a dropdown's export code makes the PDF print wrong
+    (the value is written verbatim; PyMuPDF does not validate against /Opt).
+    Repair must leave PDF-declared codes alone (bd polyglot-pdf-g2fpr).
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _values(repaired) == ["WY", "AL"]
+    assert not any(r["action"] == "mint-option-slugs" for r in repairs)
+
+
+def test_dropdown_codes_survive_a_mint_triggered_by_a_sibling_defect():
+    """Minting is triggered per-FIELD: one duplicate anywhere in the dropdown
+    used to rewrite EVERY option, so a single unrelated defect broke printing
+    for all 62 state codes. The codes must survive their neighbour's repair.
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"},
+            {"value": "AL", "label": "Alabama duplicate"}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _values(repaired)[:2] == ["WY", "AL"]
+
+
+def test_preserved_code_cannot_collide_with_a_minted_sibling():
+    """A lowercase PDF code is itself slug-legal, so a slug minted from another
+    option's label can equal a preserved code -- manufacturing the very
+    duplicate this branch exists to repair. The minter must reserve them.
+    """
+    dump = {"fields": [{"name": "X[0]", "widgets": [
+        {"choices": [{"value": "wy"}, {"value": "al"}]}]}]}
+    fields = [{"id": "m", "type": "select", "pdf_field_name": "X[0]", "options": [
+        {"value": "wy", "label": "Wyoming"},
+        {"value": "", "label": "WY"},          # mints to 'wy' without the guard
+        {"value": "al", "label": "Alabama"},
+    ]}]
+    repaired, _ = repair(_schema(fields), dump)
+    vals = _values(repaired)
+    assert len(vals) == len(set(vals)), "repair manufactured a duplicate: %r" % vals
+    assert vals[0] == "wy"
+
+
+def test_duplicate_pdf_sanctioned_codes_are_still_resolved():
+    """Uniqueness outranks preservation.
+
+    Two options cannot both keep the same code -- the widget holds one value,
+    so it is a real defect either way. Preserving both made repair no-op on
+    the very duplicate it exists to fix: repairs == [] while lint still
+    blocked on option-value-duplicate, an unfixable deadlock with no
+    diagnostic. First occurrence keeps the code; the rest are minted.
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "WY", "label": "Wyoming again"}]
+    repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    vals = _values(repaired)
+    assert len(vals) == len(set(vals)), "duplicate survived repair: %r" % vals
+    assert vals[0] == "WY", "the first occurrence should keep the export code"
+    assert any(r["action"] == "mint-option-slugs" for r in repairs), \
+        "a repair that changes values must say so"
+    # And the repaired schema must actually clear the gate it was stuck at.
+    assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
+
+
+def test_dumpless_repair_still_mints_over_non_slug_dropdown_values():
+    """No dump means no evidence: repair keeps its old, stricter behaviour
+    rather than preserving values it cannot verify.
+    """
+    # 2+ options: _is_choice_field only treats an option-bearing field as a
+    # choice field at that size, so a single-option fixture would pass here
+    # for the wrong reason (no minting attempted at all).
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    repaired, repairs = repair(_schema(_combo(opts)), None)
+    assert _values(repaired) == ["wyoming_wy", "alabama_al"]
+    assert any(r["action"] == "mint-option-slugs" for r in repairs)
 
 
 def test_valid_slugs_are_left_alone():

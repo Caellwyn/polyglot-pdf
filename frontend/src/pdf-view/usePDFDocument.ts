@@ -5,6 +5,7 @@
  * bd polyglot-pdf-vfkv).
  */
 
+import { resolveSessionToken } from "../shared/sessionCredential";
 import { useState, useEffect } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { getPDFLib } from './pdfWorker';
@@ -62,7 +63,17 @@ export function usePDFDocument(pdfUrl: string | null): PDFDocumentState {
         // (bd polyglot-pdf-vccy). pdfjs getDocument cannot attach headers,
         // so fetch the bytes with the Bearer token and hand pdfjs a blob URL
         // (the same form FilledPreviewModal uses for filled bytes).
-        const token = user ? await user.getIdToken() : undefined;
+        // NO AWAIT ON THE SYNCHRONOUS PATH. This effect races its own
+        // cleanup: usePDFDocument.cancelledFetch.test.tsx unmounts while the
+        // fetch is pending, and even `await <non-promise>` costs a microtask
+        // -- enough for cleanup to win so the fetch never starts at all.
+        // resolveSessionToken returns a plain string for a client link and a
+        // promise only on the Firebase path, so await ONLY when it actually
+        // returned one.
+        const maybeToken = resolveSessionToken(user);
+        const token = typeof maybeToken === "string" || maybeToken === undefined
+          ? maybeToken
+          : await maybeToken;
         const resp = await fetch(resolveKitAssetUrl(pdfUrl), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });

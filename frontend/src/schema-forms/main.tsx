@@ -1,14 +1,17 @@
 /**
  * Schema Forms Entry Point
  *
- * Renders the SchemaFormDemo component
+ * This file is now ONLY the createRoot call. The route table lives in
+ * AppRoutes.tsx so it can be imported by a test -- while it lived here,
+ * nothing could pin it, and two shape-preserving mutations that break the
+ * client tier entirely passed the whole frontend suite (bd polyglot-pdf-ugm6,
+ * Opus cross-surface r8).
  */
 
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { SchemaFormDemo } from "./SchemaFormDemo";
-import { AuthProvider } from "../contexts/AuthContext";
-import { ProtectedRoute } from "../components/layout/ProtectedRoute";
+import { BrowserRouter } from "react-router-dom";
+import { AppRoutes } from "./AppRoutes";
 import { installDevConsoleCapture } from "../shared/devConsoleCapture";
 import "./styles/schema-form.css";
 
@@ -36,10 +39,8 @@ ReactDOM.createRoot(root).render(
   // Temporarily disabled StrictMode - it was causing double renders
   // and creating duplicate state objects
   // <React.StrictMode>
-  <AuthProvider>
-    <ProtectedRoute>
-      <SchemaFormDemo />
-    </ProtectedRoute>
-  </AuthProvider>
+  <BrowserRouter>
+    <AppRoutes />
+  </BrowserRouter>
   // </React.StrictMode>
 );

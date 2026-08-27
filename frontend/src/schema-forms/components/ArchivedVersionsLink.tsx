@@ -15,6 +15,7 @@
  * archive is deliberately absent from the static bundle, and a private
  * kit's history carries the kit's own firm-visibility gates server-side.
  */
+import { resolveSessionToken } from "../../shared/sessionCredential";
 import { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { resolveKitAssetUrl } from "../utils/pdfFiller";
@@ -44,7 +45,7 @@ export function ArchivedVersionsLink({ kitId, kitLabel }: { kitId: string; kitLa
   } | null>(null);
 
   const authedGet = async (path: string) => {
-    const token = user ? await user.getIdToken() : undefined;
+    const token = await resolveSessionToken(user);
     return fetch(resolveKitAssetUrl(path), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
