@@ -49,6 +49,11 @@ _EXCLUDED_DIRS = ("tests", "scripts")
 # Path("backend" + x). Those alternates were what a review round found missing
 # from the first version of this test, so they are covered explicitly rather
 # than trusted not to occur.
+# "join" is matched on the bare attribute name, so it catches os.path.join
+# without needing to resolve the module -- and would also catch an unrelated
+# .join() whose first argument happened to start with "backend". That is a
+# false POSITIVE (a spurious CI failure someone must read), never a false
+# negative, so it errs in the safe direction; no such call exists today.
 _PATH_BUILDERS = {"Path", "open", "join"}
 
 
@@ -75,10 +80,17 @@ def _leading_string(node: ast.AST):
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
-        for value in node.values:
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                return value.value
-            return None  # starts with an interpolation -- base is not a literal
+        # ONLY the first piece matters -- it is what decides the resolution
+        # base. If the f-string opens with an interpolation, the base is not a
+        # literal and there is nothing here to judge. (Deliberately not a loop:
+        # scanning further pieces would find "backend" mid-path, which is not
+        # cwd-relative and must not flag -- see the negative case for
+        # Path(f"{x}/backend/logs").)
+        if not node.values:
+            return None
+        first = node.values[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return first.value
         return None
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return _leading_string(node.left)
