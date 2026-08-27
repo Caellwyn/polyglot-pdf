@@ -3400,6 +3400,18 @@ async def take_editor_kit_lock(
     # The lock names a PERSON (bd polyglot-pdf-5tuas). Plain JSON strings only:
     # writing the actor OBJECT here would put a non-serializable value straight
     # into metadata.json -- that broke every lock take in an earlier round.
+    # "label" is the holder's EMAIL, and metadata.json ships to the form-kits
+    # GCS bucket (collect_publishable_kit_files takes everything not prefixed
+    # with "_"). Checked and decided rather than assumed:
+    #   * the bucket is NOT public -- uniform access, no allUsers, served
+    #     through the authenticated backend;
+    #   * docs/standards/hipaa-pii-policy.md governs APPLICANT data (A-numbers,
+    #     names, addresses, DOBs), not staff identity;
+    #   * naming the holder to a human IS the audit trail this epic exists to
+    #     create -- "an editor holds this" was the problem.
+    # Maintainer chose to store it (2026-08-27) over resolving uid -> email at
+    # display time, which would need the Firebase user-record permission the
+    # deployed service account deliberately lacks.
     next_meta = {**(meta or {}), _LOCK_KEY: {
         "role": role.role,
         "uid": role.uid,
