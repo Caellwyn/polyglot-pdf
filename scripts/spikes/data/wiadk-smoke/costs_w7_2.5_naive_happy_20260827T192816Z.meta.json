@@ -1,0 +1,202 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "w7",
+  "arm": "naive",
+  "path": "happy",
+  "questions": 2,
+  "compression": false,
+  "trigger": null,
+  "window": null,
+  "trigger_requested": null,
+  "window_requested": null,
+  "derive_compression": false,
+  "continuous": false,
+  "schema_scope": "full-form",
+  "started": "20260827T192816Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "field_id": "application_type",
+      "text_in": 28019,
+      "audio_in": 136,
+      "text_out": 26,
+      "audio_out": 0,
+      "total_tokens": 28181,
+      "cost_usd": 0.014469,
+      "cumulative_cost_usd": 0.030825,
+      "prompt_tokens": 28155,
+      "latency_s": 1.766
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "application_type",
+      "text_in": 84414,
+      "audio_in": 506,
+      "text_out": 32,
+      "audio_out": 57,
+      "total_tokens": 85009,
+      "cost_usd": 0.044473,
+      "cumulative_cost_usd": 0.075298,
+      "prompt_tokens": 28394,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "field_id": "reason",
+      "text_in": 56513,
+      "audio_in": 483,
+      "text_out": 33,
+      "audio_out": 0,
+      "total_tokens": 57029,
+      "cost_usd": 0.029771,
+      "cumulative_cost_usd": 0.10507,
+      "prompt_tokens": 28563,
+      "latency_s": 1.437
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "reason",
+      "text_in": 85095,
+      "audio_in": 1018,
+      "text_out": 30,
+      "audio_out": 44,
+      "total_tokens": 86187,
+      "cost_usd": 0.046189,
+      "cumulative_cost_usd": 0.151259,
+      "prompt_tokens": 28756,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ]
+  },
+  "prompt_curve": [
+    28009,
+    28155,
+    28235,
+    28291,
+    28394,
+    28433,
+    28563,
+    28644,
+    28713,
+    28756
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": false,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "spoken_language": "English",
+  "speech_language_code_enabled": true,
+  "transcription_language_hint_enabled": true,
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": false,
+  "session_count": 1,
+  "naive_si_booklet_chars": 81242,
+  "system_instruction_chars": 109722,
+  "greeting_tokens": 28205,
+  "greeting_cost_usd": 0.016356,
+  "greeting_breakdown": {
+    "text_in": 28009,
+    "audio_in": 0,
+    "text_out": 0,
+    "audio_out": 196
+  },
+  "event_records": [],
+  "seam_tool_records": [],
+  "text_ledger_calls": [],
+  "divergence_count": 0,
+  "divergence_pairs": [],
+  "spellback_count": 0,
+  "spellback_total_chars": 0,
+  "spellback_disabled": false,
+  "compression_effective": null,
+  "cached_curve": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "traffic_types": [],
+  "cache_summary": {
+    "reported": false,
+    "events": 10,
+    "events_with_cached_field": 0,
+    "events_with_nonzero_cache": 0,
+    "total_cached_tokens": 0,
+    "total_prompt_tokens": 284193
+  },
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "application_type",
+    "reason"
+  ],
+  "fill_accuracy": {
+    "matched": 2,
+    "total": 2,
+    "accuracy": 1.0,
+    "detail": [
+      {
+        "field_id": "application_type",
+        "expected": null,
+        "written": "apply_new_itin",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "reason",
+        "expected": null,
+        "written": "b_nonresident_alien_return",
+        "ok": true,
+        "scored": "lenient"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [],
+    "format": [],
+    "transcription": [],
+    "wrong-field": [],
+    "mismatch": [],
+    "spurious": []
+  },
+  "wall_clock_s": 27.8,
+  "auto_apply_fids": []
+}
