@@ -667,6 +667,15 @@ CSV_COLUMNS = [
     "total tokens", "total cost",
 ]
 
+# Column contract for the per-turn <base_name>.turns.csv sidecar (bd
+# polyglot-pdf-89mt/wiadk). Module-level, like CSV_COLUMNS above, so tests pin
+# the shipped shape instead of duplicating the list.
+TURNS_CSV_COLUMNS = [
+    "turn", "q", "field_id", "label", "stalled", "prompt_tokens",
+    "text_in", "audio_in", "text_out", "audio_out",
+    "total_tokens", "cost_usd", "cumulative_cost_usd", "latency_s",
+]
+
 
 # ---------------------------------------------------------------- audio cache
 
@@ -3366,11 +3375,9 @@ async def run(args) -> int:
     #      starts evicting, or grows without bound. prompt_tokens per turn is
     #      the curve to plot; eviction shows as a sawtooth, not a ramp.
     turns_path = out_dir / f"{base_name}.turns.csv"
-    _turn_cols = ["turn", "q", "field_id", "label", "stalled", "prompt_tokens",
-                  "text_in", "audio_in", "text_out", "audio_out",
-                  "total_tokens", "cost_usd", "cumulative_cost_usd", "latency_s"]
     with turns_path.open("w", newline="", encoding="utf-8") as fh:
-        tw = csv.DictWriter(fh, fieldnames=_turn_cols, extrasaction="ignore")
+        tw = csv.DictWriter(fh, fieldnames=TURNS_CSV_COLUMNS,
+                            extrasaction="ignore")
         tw.writeheader()
         for _i, _t in enumerate(meta.get("turns") or [], start=1):
             tw.writerow({"turn": _i, **_t})

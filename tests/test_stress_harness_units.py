@@ -870,10 +870,17 @@ def test_dry_run_i90_full_emits_summary(monkeypatch, tmp_path):
     assert s["run"]["text_ai_wired"] is True
     # the dry-run model filled '1' everywhere: the loop CONFIRMED all 4 steps
     assert h["fill_accuracy"]["total"] == 4
-    csvs = list(tmp_path.glob("*.csv"))
+    # run() writes TWO csvs per run since bd wiadk: the per-question CSV and
+    # the per-turn .turns.csv sidecar. Pin both shapes.
+    all_csvs = sorted(tmp_path.glob("*.csv"))
+    csvs = [p for p in all_csvs if not p.name.endswith(".turns.csv")]
+    turns_csvs = [p for p in all_csvs if p.name.endswith(".turns.csv")]
     assert len(csvs) == 1
+    assert len(turns_csvs) == 1
     header = csvs[0].read_text(encoding="utf-8").splitlines()[0]
     assert header.split(",") == mfc.CSV_COLUMNS
+    turns_header = turns_csvs[0].read_text(encoding="utf-8").splitlines()[0]
+    assert turns_header.split(",") == mfc.TURNS_CSV_COLUMNS
 
 
 def test_dry_run_i90_full_drain_round_trip():
