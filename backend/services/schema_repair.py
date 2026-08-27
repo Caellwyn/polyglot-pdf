@@ -903,23 +903,30 @@ def pdf_choice_values(dump: Optional[dict], claim: Optional[str]) -> FrozenSet[s
     ]
     if not matched:
         return frozenset()
-    # FIRST match only, never a union across duplicate-named entries: unioning
-    # would exempt a value that is legal on a DIFFERENT widget instance than
-    # the one this field claims -- a narrower rerun of the exact wrong-widget
-    # failure this helper exists to prevent. Mirrors schema_lint._dump_entry,
-    # which likewise takes the first name match.
+    # FIRST matching entry only, never a union across duplicate-named ones:
+    # unioning would exempt a value that is legal on a DIFFERENT widget
+    # instance than the one this field claims -- a narrower rerun of the exact
+    # wrong-widget failure this helper exists to prevent. Mirrors
+    # schema_lint._dump_entry, which likewise takes the first name match.
+    #
+    # Selecting the entry FIRST (rather than filtering inside a loop and
+    # breaking) keeps one mechanism responsible for that choice. An earlier
+    # cut had both a name filter and a break; they were provably redundant
+    # -- exhaustively, no input separated them -- so a future reader could
+    # have deleted either one believing it was the load-bearing half.
     target = matched[0]
+    entry = next(
+        (e for e in entries
+         if isinstance(e, dict) and e.get("name") == target),
+        None,
+    )
     values: set = set()
-    for e in entries:
-        if not isinstance(e, dict) or e.get("name") != target:
+    for w in (entry or {}).get("widgets") or []:
+        if not isinstance(w, dict):
             continue
-        for w in e.get("widgets") or []:
-            if not isinstance(w, dict):
-                continue
-            for c in w.get("choices") or []:
-                if isinstance(c, dict) and isinstance(c.get("value"), str):
-                    values.add(c["value"])
-        break
+        for c in w.get("choices") or []:
+            if isinstance(c, dict) and isinstance(c.get("value"), str):
+                values.add(c["value"])
     return frozenset(values)
 
 

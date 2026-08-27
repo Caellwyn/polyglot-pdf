@@ -134,21 +134,22 @@ def _fill(field_values: dict) -> bytes:
 
 
 def _options(field_id: str) -> list:
-    def walk(node):
-        if isinstance(node, dict):
-            if node.get("id") == field_id and node.get("options"):
-                return node["options"]
-            for v in node.values():
-                got = walk(v)
-                if got:
-                    return got
-        elif isinstance(node, list):
-            for v in node:
-                got = walk(v)
-                if got:
-                    return got
-        return None
-    return walk(_schema()) or []
+    """This field's options, read from the schema's top-level fields[] only.
+
+    Deliberately NOT a recursive walk: an id-colliding node elsewhere in the
+    schema (_ignored_fields, supplements, _bakeoff) would otherwise be picked
+    up by iteration order and silently validate the WRONG field's options.
+    Scoped to fields[] -- the list the filler actually resolves against -- and
+    asserts the id is unique there, so an ambiguity fails loudly instead.
+    """
+    fields = _schema().get("fields") or []
+    hits = [f for f in fields
+            if isinstance(f, dict) and f.get("id") == field_id]
+    assert len(hits) == 1, (
+        "expected exactly one top-level field with id=%r, found %d"
+        % (field_id, len(hits))
+    )
+    return hits[0].get("options") or []
 
 
 def test_source_state_widget_is_a_combobox_that_cannot_hold_a_full_name():
@@ -195,6 +196,40 @@ def test_a_spelled_out_state_name_would_print_clipped():
     assert printed != "wyoming", (
         "the state box now fits a full name; the export-code requirement (and "
         "the test above) no longer proves what it claims -- re-derive it"
+    )
+
+
+def test_ignored_field_selects_would_also_pass_the_gate_if_promoted():
+    """The kit has 6 select fields, but 2 (interp_state, prep_state) live under
+    _ignored_fields, which lint and repair never walk.
+
+    Those two therefore pass "lints clean" VACUOUSLY -- not because the
+    carve-out protects them. If they are ever promoted back into fields[]
+    (they are real interpreter/preparer address fields), that promotion would
+    be the first time their option values pass through this logic. Pin it now,
+    so a promotion cannot silently reintroduce 124 blocking errors.
+    """
+    schema = _schema()
+    promoted = json.loads(json.dumps(schema))
+    extra = [
+        e["field"] for e in promoted.get("_ignored_fields", [])
+        if isinstance(e, dict) and isinstance(e.get("field"), dict)
+        and e["field"].get("type") == "select"
+    ]
+    assert len(extra) == 2, (
+        "expected interp_state + prep_state under _ignored_fields, got %r"
+        % [f.get("id") for f in extra]
+    )
+    promoted["fields"].extend(extra)
+
+    from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
+    dump = json.loads(
+        (_KIT_ROOT / "tmpalrg958q_acroform.json").read_text(encoding="utf-8"))
+    errors = [f for f in lint_schema(promoted, dump)
+              if f.severity == SEVERITY_ERROR]
+    assert not errors, (
+        "promoting the ignored selects would block the publish gate: %r"
+        % [(f.rule, f.path) for f in errors[:5]]
     )
 
 

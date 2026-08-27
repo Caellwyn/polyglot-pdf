@@ -376,6 +376,15 @@ def test_pdf_choice_values_never_unions_across_ambiguous_matches():
     ]}
     assert pdf_choice_values(two_suffixes, "S[0]") == frozenset({"WY"})
 
+    # The first match wins even when it carries NO choices: "first" is by dump
+    # order, and an empty result must not fall through to a later entry (that
+    # fall-through IS the union bug, just harder to see).
+    choiceless_first = {"fields": [
+        {"name": "b.S[0]"},
+        {"name": "a.S[0]", "widgets": [{"choices": [{"value": "X"}]}]},
+    ]}
+    assert pdf_choice_values(choiceless_first, "S[0]") == frozenset()
+
 
 @pytest.mark.parametrize("dump,claim", [
     (None, "X[0]"),
