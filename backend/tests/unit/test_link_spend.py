@@ -1,0 +1,221 @@
+"""Per-link spend accumulation and the ceiling (bd polyglot-pdf-ik7e).
+
+The properties that matter, in order:
+
+  1. spend SURVIVES a reconnect. This is the entire reason the ceiling keys on
+     the signed jti rather than the browser-generated form_session_id -- a
+     ceiling a client can reset by refreshing the page is not a ceiling.
+  2. an unreachable store REFUSES, and never reads as "spent nothing".
+  3. a failed WRITE does not kill a live session (the deliberate asymmetry).
+  4. staff sessions are not subject to it at all.
+"""
+
+import pytest
+
+from backend.services import link_spend
+from backend.services.link_redemptions import RedemptionUnavailable
+
+
+class _Snap:
+    def __init__(self, data):
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return self._data
+
+
+class _Doc:
+    """A fake Firestore document that ACTUALLY APPLIES Increment.
+
+    A fake that merely records the call would let a broken increment pass: the
+    point of the store is that repeated writes ACCUMULATE, so the fake has to
+    accumulate too or the reconnect test proves nothing.
+    """
+
+    def __init__(self, store, key):
+        self._store = store
+        self._key = key
+
+    def get(self):
+        if self._store.read_error:
+            raise RuntimeError(self._store.read_error)
+        return _Snap(self._store.docs.get(self._key))
+
+    def update(self, updates):
+        if self._store.write_error:
+            raise RuntimeError(self._store.write_error)
+        rec = self._store.docs.setdefault(self._key, {})
+        for field, value in updates.items():
+            if hasattr(value, "value"):          # firestore.Increment
+                rec[field] = rec.get(field, 0) + value.value
+            else:
+                rec[field] = value
+        self._store.writes.append(dict(updates))
+
+
+class _Store:
+    def __init__(self, docs=None):
+        self.docs = dict(docs or {})
+        self.writes = []
+        self.read_error = None
+        self.write_error = None
+
+    def document(self, key):
+        return _Doc(self, key)
+
+
+@pytest.fixture
+def store(monkeypatch):
+    s = _Store()
+    monkeypatch.setattr(link_spend, "_enabled", lambda: True)
+    monkeypatch.setattr(link_spend, "_collection", lambda: s)
+    monkeypatch.delenv("LINK_COST_CEILING_USD", raising=False)
+    return s
+
+
+# ---------------------------------------------------------------------------
+# 1. The reconnect property -- why the key is the signed jti
+# ---------------------------------------------------------------------------
+
+
+def test_spend_ACCUMULATES_across_reconnects(store):
+    """Three sessions on one link add up. A per-connection counter would not.
+
+    This is the hole the bead named: live_ai_gemini resets its cost counter in
+    _run_session_loop, which runs once per CONNECTION, so today a reconnect
+    starts from zero.
+    """
+    for _ in range(3):
+        link_spend.record_spend("jti-a", 1.25, turns=10)
+    assert link_spend.spend_so_far("jti-a") == pytest.approx(3.75)
+    assert store.docs["jti-a"][link_spend.TURNS_FIELD] == 30
+
+
+def test_a_DIFFERENT_link_has_its_own_budget(store):
+    link_spend.record_spend("jti-a", 4.0)
+    link_spend.record_spend("jti-b", 0.5)
+    assert link_spend.spend_so_far("jti-a") == pytest.approx(4.0)
+    assert link_spend.spend_so_far("jti-b") == pytest.approx(0.5)
+
+
+def test_an_unknown_link_has_spent_nothing(store):
+    assert link_spend.spend_so_far("never-seen") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 2. The ceiling
+# ---------------------------------------------------------------------------
+
+
+def test_a_link_UNDER_its_ceiling_is_allowed_and_reports_headroom(store):
+    link_spend.record_spend("jti-a", 4.0)
+    assert link_spend.check_budget("jti-a") == pytest.approx(6.0)
+
+
+def test_a_link_AT_its_ceiling_is_refused(store):
+    """>= not >: at exactly $10 of a $10 ceiling there is no room left."""
+    link_spend.record_spend("jti-a", 10.0)
+    with pytest.raises(link_spend.LinkBudgetExhausted):
+        link_spend.check_budget("jti-a")
+
+
+def test_a_link_OVER_its_ceiling_is_refused(store):
+    link_spend.record_spend("jti-a", 12.34)
+    with pytest.raises(link_spend.LinkBudgetExhausted):
+        link_spend.check_budget("jti-a")
+
+
+def test_a_PER_FORM_ceiling_is_honoured(store):
+    """The per-form room: $5 on this kit refuses what $10 would allow."""
+    link_spend.record_spend("jti-a", 6.0)
+    link_spend.check_budget("jti-a")  # fine under the $10 default
+    with pytest.raises(link_spend.LinkBudgetExhausted):
+        link_spend.check_budget("jti-a", {"link_cost_ceiling_usd": 5})
+
+
+def test_a_retuned_env_ceiling_takes_effect(store, monkeypatch):
+    link_spend.record_spend("jti-a", 6.0)
+    monkeypatch.setenv("LINK_COST_CEILING_USD", "5")
+    with pytest.raises(link_spend.LinkBudgetExhausted):
+        link_spend.check_budget("jti-a")
+
+
+# ---------------------------------------------------------------------------
+# 3. Failure polarity
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreachable_store_REFUSES_rather_than_reading_as_zero(store):
+    """"We cannot tell" must never resolve to "nothing spent"."""
+    store.read_error = "firestore unavailable"
+    with pytest.raises(RedemptionUnavailable):
+        link_spend.spend_so_far("jti-a")
+    with pytest.raises(RedemptionUnavailable):
+        link_spend.check_budget("jti-a")
+
+
+def test_a_DISABLED_store_refuses_too(store, monkeypatch):
+    monkeypatch.setattr(link_spend, "_enabled", lambda: False)
+    with pytest.raises(RedemptionUnavailable):
+        link_spend.check_budget("jti-a")
+
+
+def test_a_failed_WRITE_does_not_raise_into_a_live_session(store):
+    """The deliberate asymmetry: reads refuse, writes degrade.
+
+    The client is mid-sentence and the spend is already incurred; dropping them
+    for a bookkeeping error costs a real person their work. The next check_budget
+    still refuses, so the ceiling holds within one session's overrun.
+    """
+    store.write_error = "firestore unavailable"
+    link_spend.record_spend("jti-a", 3.0)  # must not raise
+
+
+def test_a_corrupt_spend_value_reads_as_zero_not_as_a_crash(store):
+    """A hand-edited or half-written field must not 500 the socket."""
+    for bad in ("lots", None, True, [], {"a": 1}, -5):
+        store.docs["jti-x"] = {link_spend.SPEND_FIELD: bad}
+        assert link_spend.spend_so_far("jti-x") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 4. Scope + hygiene
+# ---------------------------------------------------------------------------
+
+
+def test_a_session_with_NO_jti_records_nothing(store):
+    """Staff have no jti and are not the abuse surface this defends."""
+    link_spend.record_spend("", 5.0)
+    link_spend.record_spend(None, 5.0)
+    assert store.writes == []
+
+
+def test_a_zero_or_negative_cost_is_not_recorded(store):
+    link_spend.record_spend("jti-a", 0.0)
+    link_spend.record_spend("jti-a", -1.0)
+    assert store.writes == []
+
+
+def test_the_spend_record_carries_NO_client_identity(store):
+    """Same privacy invariant as the redemption record: jti only, never a person."""
+    link_spend.record_spend("jti-a", 1.0, turns=3)
+    written = store.docs["jti-a"]
+    assert set(written) <= {
+        link_spend.SPEND_FIELD,
+        link_spend.TURNS_FIELD,
+        "spend_updated_at",
+    }
+
+
+def test_it_shares_the_redemption_stores_accessor(store):
+    """Pins the deliberate private import.
+
+    The spend fields live on link_redemptions' own documents. If that module
+    renames _collection or _enabled, this must fail loudly here rather than
+    writing to a second, divergent collection.
+    """
+    from backend.services import link_redemptions
+
+    assert hasattr(link_redemptions, "_collection")
+    assert hasattr(link_redemptions, "_enabled")
