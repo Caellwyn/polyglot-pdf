@@ -622,6 +622,35 @@ system that is NOT a Firebase account. Five coupled pieces:
     window, scoped to that link's single
     kit.
 
+- **SPEND is bounded per LINK, and metering is NOT a gate** (bd
+  polyglot-pdf-ik7e). Two different numbers, doing two different jobs:
+  - **Per-link cost ceiling ($10, `LINK_COST_CEILING_USD`) ENFORCES.**
+    `link_spend.check_budget` runs at the socket's paid gate -- after the link
+    verifies, before any Gemini session exists -- and a link at or over its
+    ceiling is closed with **1013 `budget_exhausted`**, deliberately NOT the
+    1008 "Authentication failed" the other refusals use: a client who spent
+    their allowance has a perfectly good link, and an auth error sends them to
+    the firm with the wrong problem. Retrieval never redeems, so their
+    download, print and preview keep working.
+  - **Per-firm monthly allowance (30, `LINK_FIRM_CAP`) only METERS.** It is a
+    subscription tier ($500/mo for 30 links, then $15 each -- provisional
+    pending market research), not an abuse limit. A firm minting link 31 has
+    PAID for link 31, so `link_metering.record_mint` counts, flags
+    `over_allowance` for billing, and **never refuses**. Adding a refusal there
+    breaks a paying customer; a test derived from the route source guards it.
+
+  Spend accumulates on the **signed `jti`**, not on `form_session_id`: the
+  latter is generated in the browser and lives in sessionStorage, so a ceiling
+  keyed on it is defeated by a page refresh. The adapter's own cost counter
+  resets per CONNECTION, which is why the running total lives in the store.
+
+  Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
+  and are tested in `link_budget.cost_ceiling_usd_for_kit`, but threading one
+  through costs a metadata load on every client connect for a feature no kit
+  uses yet. And the check is at CONNECT, so a single session that blows the
+  ceiling mid-call is caught on the NEXT connect -- overrun is bounded by one
+  session.
+
   A new door that authenticates a client credential must decide which side it
   is on. THREE dependencies exist, not two:
   - it can cause SPEND -> `require_paid_client_work` (redeems)
