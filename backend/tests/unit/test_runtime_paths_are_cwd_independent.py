@@ -25,6 +25,7 @@ this closes the shapes anyone is actually likely to write.
 """
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,20 @@ _EXCLUDED_DIRS = ("tests", "scripts")
 # negative, so it errs in the safe direction; no such call exists today.
 _PATH_BUILDERS = {"Path", "open", "join"}
 
+# Bare single-segment literals that are nonetheless cwd-relative PATHS, because
+# they name a real top-level directory of this repo. Everything else needs a
+# separator to count (see _is_cwd_relative_path).
+_REPO_TOP_LEVEL_DIRS = {"backend", "frontend", "logs", "form-kits", "shared"}
+
+# Callables whose LATER argument is a path default rather than a lookup key --
+# os.getenv("CONFIRMATION_LOG_DIR", "logs/confirmations") hides a cwd-relative
+# path in its second position, which is exactly where confirmation_logger.py
+# kept the audit-trail default that a review round found relocated.
+_DEFAULT_ARG_READERS = {"getenv", "environ_get", "get"}
+
+# Names that mark a constant as holding a path, for the assignment scan below.
+_PATHISH_NAME = re.compile(r"(DIR|PATH|ROOT|FILE|FOLDER|LOG)", re.IGNORECASE)
+
 
 def _runtime_py_files():
     for path in sorted(BACKEND.rglob("*.py")):
@@ -65,9 +80,31 @@ def _runtime_py_files():
         yield path
 
 
-def _is_backend_relative(text: str) -> bool:
+def _is_cwd_relative_path(text: str) -> bool:
+    """True for a literal that BUILDS a repo path and resolves against cwd.
+
+    Originally this only matched a leading "backend" segment -- and a review
+    round then found confirmation_logger.py writing the audit trail to a bare
+    "logs/confirmations", which is the identical hazard with a different first
+    word. The invariant is not "no backend/ literals"; it is "no cwd-relative
+    path literals", so match on the SHAPE (a relative path with a directory
+    separator) rather than on a hard-coded vocabulary of directory names.
+    """
     normalized = text.replace("\\", "/")
-    return normalized == "backend" or normalized.startswith("backend/")
+    if not normalized or normalized.startswith("/") or normalized.startswith("~"):
+        return False
+    if re.match(r"^[A-Za-z]:", normalized):  # absolute Windows path
+        return False
+    if normalized.startswith("."):  # ./x and ../x are explicit about cwd
+        return False
+    # A single bare token ("logs") is usually a name/segment being joined onto
+    # an already-anchored base, not a path being resolved -- so a separator is
+    # what normally marks a real path. The exception is a known top-level repo
+    # directory: "backend" alone IS a cwd-relative path, and it is the one that
+    # actually caused this bead.
+    if normalized.rstrip("/") in _REPO_TOP_LEVEL_DIRS:
+        return True
+    return "/" in normalized.rstrip("/")
 
 
 def _leading_string(node: ast.AST):
@@ -94,18 +131,50 @@ def _leading_string(node: ast.AST):
         return None
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return _leading_string(node.left)
+    if isinstance(node, ast.Call):
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        # os.getenv(KEY, "logs/x") -- the DEFAULT is the path, not the key, so
+        # look at the second argument rather than the first.
+        if name in _DEFAULT_ARG_READERS and len(node.args) >= 2:
+            return _leading_string(node.args[1])
     return None
 
 
-def _cwd_relative_backend_paths(path: Path):
-    """Yield (lineno, literal) for a path BUILT from a leading "backend/..".
+def _path_shaped_constants(tree: ast.AST):
+    """Yield (lineno, literal) for module/class-level NAME = "<relative path>".
 
-    Covers Path(...)/open(...)/os.path.join(...) whose first argument starts
-    with a cwd-relative "backend" segment, whether that argument is a plain
-    literal, an f-string, or a concatenation. Also follows a nested call, so
-    Path(os.path.join("backend", ...)) is caught once at the inner join.
+    A path literal does not have to sit inside the call that uses it: the
+    confirmation-log default lived in a module constant and only reached
+    os.getenv() as a variable, so a call-site-only scan saw nothing. Any
+    assignment whose name looks path-ish and whose value is a relative path is
+    the same hazard one indirection away.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        value = _leading_string(node.value)
+        if value is None or not _is_cwd_relative_path(value):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and _PATHISH_NAME.search(target.id):
+                yield node.lineno, value
+                break
+
+
+def _cwd_relative_backend_paths(path: Path):
+    """Yield (lineno, literal) for a cwd-relative path in this file.
+
+    Two shapes, because the hazard appears in both:
+      1. a path BUILT at a call site -- Path(...)/open(...)/os.path.join(...)
+         whose leading argument is a relative path (plain literal, f-string,
+         concatenation, a nested call, or an os.getenv default);
+      2. a path-shaped CONSTANT assigned a relative literal, which reaches its
+         call site as a variable. This is the shape that hid the
+         confirmation-log default from the first version of this scan.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    yield from _path_shaped_constants(tree)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -114,7 +183,7 @@ def _cwd_relative_backend_paths(path: Path):
         if name not in _PATH_BUILDERS or not node.args:
             continue
         leading = _leading_string(node.args[0])
-        if leading is not None and _is_backend_relative(leading):
+        if leading is not None and _is_cwd_relative_path(leading):
             yield node.lineno, leading
 
 
@@ -131,14 +200,26 @@ def _cwd_relative_backend_paths(path: Path):
         ('Path(f"backend/{x}/y")', True),
         ('Path("backend" + x)', True),
         ('Path("backend/logs/" + x)', True),
+        # NOT "backend"-prefixed, but the identical hazard -- this exact shape
+        # (confirmation_logger's audit trail) escaped the first detector.
+        ('Path("logs/confirmations")', True),
+        ('Path(os.getenv("X", "logs/confirmations"))', True),
+        ('open("data/cache/x.json")', True),
         # Shapes that must NOT be flagged -- a detector that fires on these is
         # noise that gets suppressed, which is its own way of going dead.
-        ('Path("logs")', False),
+        # Path("logs") IS cwd-relative -- "logs" is a real top-level dir, so a
+        # bare literal here resolves against the process cwd exactly like
+        # "logs/confirmations" does. It belongs with the positives.
+        ('Path("logs")', True),
+        # ...whereas a bare segment that is NOT a top-level repo dir reads as a
+        # name being joined onto an already-anchored base, not a path.
+        ('Path("audio_out")', False),
         ("Path(x)", False),
         ('Path(f"{x}/backend/logs")', False),
         ('Path(__file__).parent / "backend" / "logs"', False),
-        ('Path("backend_stuff/x")', False),
-        ('json.load("backend/x")', False),
+        ('Path("/var/run/x")', False),  # absolute
+        ('Path("./relative/x")', False),  # explicit about cwd on purpose
+        ('json.load("backend/x")', False),  # not a path builder
     ],
 )
 def test_detector_catches_each_path_building_shape(source, should_flag, tmp_path):

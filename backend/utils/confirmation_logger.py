@@ -32,7 +32,17 @@ _log = structlog.get_logger().bind(module="confirmation_logger")
 # the CONFIRMATION_LOG_DIR env var so tests can redirect writes to a tmp dir
 # instead of the repo tree. Resolved per-call (not cached at import) so the env
 # var / a test fixture can set it after this module is imported.
-_DEFAULT_CONFIRMATION_LOG_DIR = "logs/confirmations"
+#
+# Anchored on __file__, NOT the process cwd (bd polyglot-pdf-b5nmq): the local
+# launchers start uvicorn from backend/, so a cwd-relative default would write
+# this trail to backend/logs/confirmations while scripts/read_confirmations.py
+# -- run "from the repo root" per its own docs -- looks in logs/confirmations.
+# That split is silent: the reader reports "no events" for a session it simply
+# cannot see, which is indistinguishable from a real gap in an audit trail
+# whose whole purpose is liability protection.
+_DEFAULT_CONFIRMATION_LOG_DIR = str(
+    Path(__file__).resolve().parents[2] / "logs" / "confirmations"
+)
 
 # Firestore mirror (bd polyglot-pdf-z2is). Env-resolved per call, like the dir,
 # so tests and deploys control it without an import-order dance.
