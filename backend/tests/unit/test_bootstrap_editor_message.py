@@ -14,6 +14,7 @@ createUserWithEmailAndPassword / signInWithPopup), so a new person there
 genuinely can sign in once. Same words, different truth -- which is why this
 pins the EDITOR script specifically rather than banning a phrase repo-wide.
 """
+import ast
 import pathlib
 import re
 
@@ -26,22 +27,51 @@ _SCRIPT = (pathlib.Path(__file__).resolve().parents[3]
 
 
 def _grant_path_message() -> str:
-    """The unknown_email string on the GRANT path, unwrapped.
+    """The unknown_email string on the GRANT path, read with the PARSER.
 
-    Reads the source rather than importing: the module needs firebase_admin at
-    import time. Wrapped string literals are joined first -- a single-line
-    search missed this exact message when the bead was filed, because it spans
-    two lines.
+    Reads the source rather than importing, because the module needs
+    firebase_admin at import time -- but PARSES it rather than pattern-matching
+    it. Two versions of this helper were wrong before the parser:
+
+      * v1 took the LAST "unknown_email" match and got the REVOKE message,
+        which legitimately needs no remedy (that person already has an
+        account);
+      * v2 sliced from the grant call and joined wrapped literals with a
+        regex -- which reads COMMENTS too. My own comment on the fixed line
+        contains the literal "they must sign in once" as the thing NOT to say,
+        and a future comment mentioning the key hijacks the match entirely.
+        Measured: planting one made the extractor return the comment's text,
+        so the tests failed on prose while the code was correct. A guard that
+        cries wolf gets deleted.
+
+    ast sees dict VALUES, so a comment cannot be one.
     """
-    src = _SCRIPT.read_text(encoding="utf-8")
-    # Slice to the GRANT path FIRST. My first version took the last match and
-    # got the REVOKE message, which legitimately needs no remedy -- that person
-    # already has an account. Anchor on the grant call itself.
-    i = src.index("status, detail = stamp_editor_role(")
-    flat = re.sub(r'"\s*\n\s*(?:")?', "", src[i:])
-    hits = re.findall(r'"unknown_email":\s*\(?\s*f?"([^"]*)"', flat)
-    assert hits, "no unknown_email message on the grant path -- shape changed?"
-    return hits[0]
+    tree = ast.parse(_SCRIPT.read_text(encoding="utf-8"))
+
+    grant = next(
+        (n for n in ast.walk(tree)
+         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+         and n.name == "main"),
+        None)
+    assert grant is not None, "main() not found -- did the script change shape?"
+
+    # The grant dict is the one whose keys include "stamped"; the revoke dict
+    # has "revoked". Keying on CONTENT rather than position, so reordering the
+    # two blocks cannot silently swap which message is checked.
+    for node in ast.walk(grant):
+        if not isinstance(node, ast.Dict):
+            continue
+        keys = [k.value for k in node.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+        if "stamped" not in keys or "unknown_email" not in keys:
+            continue
+        value = node.values[keys.index("unknown_email")]
+        return "".join(
+            v.value for v in ast.walk(value)
+            if isinstance(v, ast.Constant) and isinstance(v.value, str))
+
+    raise AssertionError(
+        "no grant-path unknown_email message found -- the dict shape changed")
 
 
 def test_the_message_names_a_path_the_operator_can_actually_TAKE():
