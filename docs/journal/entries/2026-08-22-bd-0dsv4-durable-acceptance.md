@@ -28,6 +28,11 @@ a per-session file. Backwards for an evidence trail.
   token, so the firm cannot be read here, but the KEY is written so the
   collection has one shape and needs no migration when firm auth lands.
   `firm_of_events()` recovers it from the session's other records meanwhile.
+  **Corrected by bd `polyglot-pdf-g3kui`:** "needs no migration when firm auth
+  lands" framed the `None` as a temporary compromise. It is PERMANENT, by
+  design -- a client filling a form has no account at all, so this route
+  will never carry a token, and "firm auth" landing changes nothing here.
+  See `standards/confirmation-and-audit.md` for the corrected framing.
 - 12 tests, including an exact-key ALLOWLIST mirroring the one that guards the
   confirmation events, and a pin that the new event cannot match the
   kit-deletion guard.
