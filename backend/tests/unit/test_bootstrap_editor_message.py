@@ -66,9 +66,21 @@ def _grant_path_message() -> str:
         if "stamped" not in keys or "unknown_email" not in keys:
             continue
         value = node.values[keys.index("unknown_email")]
-        return "".join(
+        text = "".join(
             v.value for v in ast.walk(value)
             if isinstance(v, ast.Constant) and isinstance(v.value, str))
+        # An EMPTY result means the message moved somewhere this cannot read
+        # (a module constant, a call, an import) -- not that the message is
+        # wrong. Say which, or the failure sends the next reader to inspect a
+        # message that is fine. Measured: without this, moving the string to a
+        # module constant reported "does not tell the operator how to create
+        # the account: ''".
+        assert text, (
+            "the grant-path unknown_email value holds no literal text -- the "
+            "message has moved out of the dict (a module constant, a call, or "
+            "an import). This helper reads dict literals; teach it the new "
+            "shape rather than assuming the message is wrong.")
+        return text
 
     raise AssertionError(
         "no grant-path unknown_email message found -- the dict shape changed")
