@@ -19,7 +19,7 @@ net, ADDITIVE TO (not a replacement for) the in-system-instruction
 ADDRESS-CONSISTENCY prose the Live model still carries: the B-pillar rescope of
 2026-06-17 (bd polyglot-pdf-jnjj) found flash-lite contradiction recall (0.853)
 below the in-SI check's recall (1.000) and kept the prose as the primary check
-(`backend/config.py:872` and `:1116`; see `backend/services/validator_service.py`'s
+(the `"ADDRESS CONSISTENCY:"` block in `backend/config.py`; see `backend/services/validator_service.py`'s
 module docstring). The validator adds zero false positives on the G1 corpus, so
 it is safe to run as an extra pass, but it does not replace the SI prose.
 
@@ -332,7 +332,7 @@ Two invariants this shape MUST preserve:
    as the SI prose it augments: "Accept the user's answer if they confirm." A
    user who says "yes, both are correct" overrides the validator -- the validator
    flags a possible conflict, it does NOT block. (This is the same escape hatch
-   the in-SI ADDRESS-CONSISTENCY block carries at `config.py:872` / `:1116`.)
+   the in-SI ADDRESS-CONSISTENCY block carries in `backend/config.py`.)
 2. **Max-resteer bound: a given field is re-flagged at most ONCE.** After the
    live model has steered the user back to a field once and the user resolved or
    overrode it, that field is NOT re-flagged on a later validator pass -- no

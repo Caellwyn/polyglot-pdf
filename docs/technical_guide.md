@@ -1,6 +1,12 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-hn0jq: per-user editor identity; the editor rows now describe Firebase claims, not shared tokens).*
+*Last updated: 2026-08-27 (bd polyglot-pdf-vdcm4: every drifted
+`websocket_routes.py:<line>` / `confirmation_logger.py:<line>` citation in
+contracts 2, 3, and 6 re-anchored to a symbol/arm name instead of a line
+number -- all had drifted 60-140 lines past their real targets. The editor
+rows describe per-user Firebase claims, not shared tokens, per bd
+polyglot-pdf-hn0jq; the lock rows are person-scoped, per bd
+polyglot-pdf-5tuas.)*
 
 The [Surface contracts](#surface-contracts) section is the code-derived
 cross-surface data-contract map for blast-radius review. Continuous-DTI is the
@@ -259,23 +265,28 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
 / `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts:641`.
-Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py:993`;
-handshake keys parsed :1061-1185).
+Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py`'s
+`@router.websocket("/fill")` handler; handshake keys parsed in its
+`handshake_type`/JIT-branch block).
 **No Pydantic model or TS interface pins this shape** -- every key is read with
 `.get()` and a default, so a renamed key silently degrades (e.g. a dropped
 `form_metadata.form_number` logs `form_id="unknown"` in the audit trail; a
 dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
 - Key keys: `type` (`handshake` vs `handshake_jit` switches the whole parse,
-  :1061), `manifest`/`first_field_schema`/`loaded_field_ids` (JIT, :1076-1078),
-  `current_values` (:1149), `fill_language`/`spoken_language` (:1150/:1158),
-  `kit_id`/`form_number`/`edition_date` (:1072/:1090/:1099 -- the audit-trail
-  identity), `resume` (:1185).
+  the `is_jit_mode = handshake_type == "handshake_jit"` check),
+  `manifest`/`first_field_schema`/`loaded_field_ids` (JIT branch reads),
+  `current_values` (post-JIT-branch read), `fill_language`/`spoken_language`
+  (immediately after), `kit_id`/`form_number`/`edition_date` (the audit-trail
+  identity -- `kit_id` read before the JIT branch, `form_number`/`edition_date`
+  inside it as `jit_form_number`/`jit_edition_date`), `resume` (the
+  `is_reconnect` check, near the end of handshake parsing).
 - `full_schema` (sent at `schemaFormState.ts:979`/`:1054`): type-checked
-  `isinstance(dict)` only (`websocket_routes.py:1169-1170`), cached in
+  `isinstance(dict)` only (the `full_schema` type-check right after handshake
+  parsing), cached in
   `form_filling_service.py:296` (preserved across internal restarts), then read
-  by `handle_ask_secretary` (`form_filling_service.py:1612`, schema read at
-  `:1666`) and rendered into the secretary catalog by
+  by `handle_ask_secretary` (`form_filling_service.py`'s
+  `self._full_schema or self._schema` read) and rendered into the secretary catalog by
   `render_static_catalog(schema)` in `text_ai_gemini.py:302`, the edition fingerprint
   (`resolve_edition_marker` call at `form_filling_service.py:396`), the injection
   budget (`form_filling_service.py:513-514`), and runtime translation overrides
@@ -285,13 +296,14 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
   edition falls back to a fingerprint, translations revert to English).
 - The JIT `manifest.parts` key is the wire contract and its entries are
   SECTION-shaped (`frontend/src/schema-forms/utils/manifestUtils.ts:38-41`;
-  consumed at `websocket_routes.py:1110` (synthesized schema) and `:1139`
-  (session-start log line)). Do not "fix" the name and do not expect
-  `FormPart` objects in it.
+  consumed in websocket_routes.py's synthesized-schema build (the `"manifest":
+  manifest` dict entry) and its session-start JIT log line). Do not "fix" the
+  name and do not expect `FormPart` objects in it.
 
 ### 3. WS control messages: client <-> backend (post-handshake)
 
-Client->server: one `if mtype == ...` switch at `websocket_routes.py:476-965`.
+Client->server: one `if mtype == ...` switch in `websocket_routes.py`'s
+`/ws/fill` receive loop.
 Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:659-854`.
 Message senders are object literals; a renamed `type` logs
 `unknown_control_message_type` (or falls to the TS `default`) and a renamed
@@ -322,12 +334,14 @@ Known traps (all deliberate, all pinned only by comments):
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
-  session language, it does not change it (`websocket_routes.py:709` arm).
+  session language, it does not change it (websocket_routes.py's
+  `change_spoken_language` arm).
 - `validation_result` carries `conflicts` only; the Python-side `result_type`
-  label is deliberately never serialized (`websocket_routes.py:337-367`,
-  contract pinned in `standards/validation-delegation.md`).
-- The `session_ready` message's `native_vad` flag (`websocket_routes.py:1226-1245`)
-  must agree with the backend's `DISABLE_GEMINI_VAD` -- the client picks its
+  label is deliberately never serialized (`_run_validation_and_push` in
+  websocket_routes.py, contract pinned in `standards/validation-delegation.md`).
+- The `session_ready` message's `native_vad` flag (websocket_routes.py's
+  `session_ready` payload send) must agree with the backend's
+  `DISABLE_GEMINI_VAD` -- the client picks its
   activity-signal behavior from it (`webFormConnection.ts:864,951` ->
   `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
 
@@ -389,10 +403,10 @@ class).
   store is consulted only for the PDF bytes (`fill_pdf`'s `store.load_pdf_bytes`
   call), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
-  the editor/publish surface (`_load_kit_dump`,
-  `backend/routes/editor_kit_routes.py:687`, with 7 call sites across the
+  the editor/publish surface (`_load_kit_dump` in
+  `backend/routes/editor_kit_routes.py`, with 7 call sites across the
   lint routes; the mark-complete promotion gate's call is inside
-  `set_editor_kit_status` at :2451, feeding the pure-function
+  `set_editor_kit_status`, feeding the pure-function
   checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
@@ -422,19 +436,23 @@ has a usable value and acks (`webFormConnection.ts:1924`,
 :3197 -- `reason` is a fixed category token, never a field value) -> backend
 logs ONLY on a positive ack (the `recorded` guard at
 `callback_handler.py:961`; the `log_field_confirmation` call it protects at
-:1000-1009). Event shape (NO PII, no `value` key anywhere):
-`backend/utils/confirmation_logger.py:341-356` --
+:1000-1009). Event shape (NO PII, no `value` key anywhere), built in
+`confirmation_logger.log_field_confirmation`'s `confirmation_event` dict:
 `{timestamp, event, form_id, kit_id, edition_date, firm_id, form_session_id,
 field_id, field_name, confirmation_method}` (`firm_id` joined under bd
 polyglot-pdf-xwlt -- the CUSTOMER FIRM from the verified token claim, never a
-client identifier). Sinks: structured log (:363-366), local
-JSONL (`_write_confirmation_to_file` :374-389, dies with the instance),
-Firestore `confirmation_events` (`_firestore_write` :88-117, gated by
-`CONFIRMATION_FIRESTORE_ENABLED`, optional `expire_at` TTL). The
+client identifier). Sinks: structured log (the `_log.info("field_confirmed",
+**log_data)` call in the same function), local
+JSONL (`_write_confirmation_to_file`, dies with the instance),
+Firestore `confirmation_events` (`_submit_firestore_write` checks the
+`CONFIRMATION_FIRESTORE_ENABLED` gate via `_firestore_enabled()` and dispatches
+to `_firestore_write`, which does the actual write and sets the optional
+`expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
 handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
-`:1088` (kit_id), `:1089` (edition_date), read at
-`websocket_routes.py:1090`/`:1072`/`:1099` respectively -- see contract 2. The
+`:1088` (kit_id), `:1089` (edition_date), read as `kit_id`/`jit_form_number`/
+`jit_edition_date` in websocket_routes.py's handshake handling -- see
+contract 2. The
 `edition_date` COLUMN carries whichever revision marker won
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
