@@ -96,6 +96,10 @@ with pre-registered stop rules; actual live spend ~$10.17.
 - `scripts/spikes/w7_naive_vs_deployed_findings.md` is the new canonical
   citation for current W-7 session cost (supersedes the bd-89mt close-reason
   numbers).
+- The doc-freshness checker's other STALE flags (testing.md,
+  validation-delegation.md, voice-and-vad.md, ws-protocol.md,
+  technical_guide.md, schema_format.md) all track files this branch did NOT
+  touch -- pre-existing staleness, reviewed and left per the closeout rule.
 
 ## Files touched
 
