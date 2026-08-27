@@ -71,6 +71,22 @@ def _schema() -> dict:
     return json.loads(_SCHEMA.read_text(encoding="utf-8"))
 
 
+def _dump_path() -> Path:
+    """The kit's acroform dump, resolved by GLOB.
+
+    extract_form writes it through tempfile.mkstemp(suffix="_acroform.json"),
+    so the prefix is random per regeneration -- the same reason .gitignore
+    matches these by pattern rather than by name. Hardcoding today's name
+    would break this test the next time the dump is regenerated.
+    """
+    dumps = sorted(_KIT_ROOT.glob("*_acroform.json"))
+    assert len(dumps) == 1, (
+        "expected exactly one acroform dump in %s, found %r"
+        % (_KIT_ROOT, [d.name for d in dumps])
+    )
+    return dumps[0]
+
+
 def _widget_by_suffix(doc, suffix: str):
     for pno in range(doc.page_count):
         for w in doc[pno].widgets() or []:
@@ -223,8 +239,7 @@ def test_ignored_field_selects_would_also_pass_the_gate_if_promoted():
     promoted["fields"].extend(extra)
 
     from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
-    dump = json.loads(
-        (_KIT_ROOT / "tmpalrg958q_acroform.json").read_text(encoding="utf-8"))
+    dump = json.loads(_dump_path().read_text(encoding="utf-8"))
     errors = [f for f in lint_schema(promoted, dump)
               if f.severity == SEVERITY_ERROR]
     assert not errors, (
