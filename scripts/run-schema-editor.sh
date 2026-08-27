@@ -137,11 +137,19 @@ if [ "$START_BACKEND" = "1" ]; then
         )"
     fi
 
-    # --reload-dir backend scopes the reload watcher. A bare --reload watches the
-    # WHOLE cwd tree, and the repo root holds .claude/worktrees/ with ~130 sibling
-    # worktrees, each a full checkout -- so an agent editing any .py in ANY of them
-    # restarted this backend mid-request. Safe to scope: backend/ imports no other
-    # top-level package (shared/ is one JSON file, no Python).
+    # --reload-dir scopes the reload watcher to an ABSOLUTE path. A bare --reload
+    # watches the WHOLE cwd tree, and the repo root holds .claude/worktrees/ with
+    # ~130 sibling worktrees, each a full checkout -- so an agent editing any .py
+    # in ANY of them restarted this backend mid-request. A *relative* --reload-dir
+    # backend didn't fully fix this: it still let sibling-worktree edits through.
+    # An absolute path structurally cannot resolve into any other worktree's
+    # backend/, so it's the only form that actually scopes the watch. (Do NOT
+    # also pass --reload-exclude for the worktrees glob: uvicorn's exclude
+    # resolver only accepts RELATIVE patterns and raises NotImplementedError on
+    # an absolute one, crashing the backend before it binds -- and it would be
+    # redundant here anyway, since --reload-dir alone already excludes
+    # everything outside this path.) Safe to scope this narrowly: backend/
+    # imports no other top-level package (shared/ is one JSON file, no Python).
     (
         cd "$ROOT_DIR"
         PYTHONPATH="$ROOT_DIR" \
@@ -152,7 +160,7 @@ if [ "$START_BACKEND" = "1" ]; then
         GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
         "$VENV_PYTHON" -m uvicorn backend.main:app \
             --host 127.0.0.1 --port "$BACKEND_PORT" --reload \
-            --reload-dir backend
+            --reload-dir "$ROOT_DIR/backend"
     ) &
     BACKEND_PID=$!
 
