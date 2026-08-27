@@ -1384,8 +1384,17 @@ async def fill_form_from_schema(
 		# "Authentication failed" above: a client who used their allowance has
 		# a perfectly good link, and telling them authentication failed sends
 		# them to the firm with the wrong problem. 1013 ("try again later") is
-		# the honest code, and the frontend keys the message off the reason
-		# token, not off prose.
+		# the honest code, and the reason token is on the wire for a client
+		# that wants to branch on it.
+		#
+		# NOTE, and it is a real gap: the frontend does NOT read it today. No
+		# code in frontend/src reads event.code or event.reason, so a
+		# budget-exhausted client falls through to the generic bounded-retry
+		# path and lands on a "reconnect failed" modal offering a Reconnect
+		# that cannot work. Bounded, so not a runaway -- but the wrong
+		# message. bd polyglot-pdf-cke6v carries the fix, and it must branch
+		# on the REASON: budget_unavailable IS transient and should keep
+		# retrying, while budget_exhausted never will.
 		#
 		# The client keeps everything else: retrieval never redeems, so their
 		# download, print and preview still work and they can finish the

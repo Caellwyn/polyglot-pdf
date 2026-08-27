@@ -238,3 +238,68 @@ def test_it_shares_the_redemption_stores_accessor(store):
 
     assert hasattr(link_redemptions, "_collection")
     assert hasattr(link_redemptions, "_enabled")
+
+
+# ---------------------------------------------------------------------------
+# THE SECTION-SWITCH TRAP -- found by Opus cross-surface review, 2026-08-27
+# ---------------------------------------------------------------------------
+
+
+def test_the_cost_counter_SURVIVES_a_section_switch():
+    """A section switch must not zero the spend the ceiling is about to bank.
+
+    THE BUG THIS PINS: form_filling_service._switch_to_section_locked calls
+    finalize() then start_session() on the SAME adapter, without dropping the
+    WebSocket. start_session re-enters _run_session_loop, which zeroes
+    _session_total_cost. _bank_link_spend reads the cost ONCE at teardown, so
+    banking that counter would record only the LAST section.
+
+    Magnitude, from the shipped kits: 8 sections (W-7), 13 (f1040), 27 (i-90)
+    -- so 88% to 96% of a client's real spend was discarded, and a $10 ceiling
+    would have behaved like $80-$250 while LOOKING enforced. That is worse
+    than no ceiling, because it reports success.
+
+    session_cost_usd() must therefore read the counter that SURVIVES the
+    switch. Asserted on the real class, not a double.
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    ai = LiveAIGemini.__new__(LiveAIGemini)      # no network, no config
+    ai._session_total_cost = 0.0
+    ai._connection_total_cost = 0.0
+
+    # Section 1 costs $2.
+    ai._session_total_cost += 2.0
+    ai._connection_total_cost += 2.0
+    assert ai.session_cost_usd() == pytest.approx(2.0)
+
+    # SECTION SWITCH: _run_session_loop zeroes the per-session counter.
+    ai._session_total_cost = 0.0
+
+    # Section 2 costs $1.50.
+    ai._session_total_cost += 1.5
+    ai._connection_total_cost += 1.5
+
+    # The ceiling must see $3.50, not $1.50.
+    assert ai.session_cost_usd() == pytest.approx(3.5), (
+        "a section switch discarded earlier spend -- the ceiling would bank "
+        "only the last section of an 8-to-27 section form"
+    )
+
+
+def test_session_cost_usd_does_not_read_the_RESET_counter():
+    """Guards the specific regression: reading _session_total_cost again.
+
+    Derived from the shipped source, because the mistake is a one-token edit
+    and every other test would stay green.
+    """
+    import inspect
+
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    body = inspect.getsource(LiveAIGemini.session_cost_usd)
+    assert "_connection_total_cost" in body
+    assert "return float(self._session_total_cost)" not in body, (
+        "session_cost_usd reads the per-SESSION counter, which a section "
+        "switch resets -- see test_the_cost_counter_SURVIVES_a_section_switch"
+    )

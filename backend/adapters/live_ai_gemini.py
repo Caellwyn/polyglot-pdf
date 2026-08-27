@@ -508,6 +508,24 @@ class LiveAIGemini(ILiveAI):
         # Cumulative cost tracking
         self._session_total_cost: float = 0.0
 
+        # SPEND CEILING COUNTER (bd polyglot-pdf-ik7e). Deliberately SEPARATE
+        # from _session_total_cost, which _run_session_loop zeroes on every
+        # Gemini session start -- and a SECTION SWITCH starts a new Gemini
+        # session on this same adapter (form_filling_service
+        # _switch_to_section_locked: finalize() then start_session(), with the
+        # WebSocket left open). So _session_total_cost holds only the CURRENT
+        # section's spend.
+        #
+        # That is fine for the per-session cost LOG, which is what it feeds.
+        # It is fatally wrong for a ceiling: the shipped kits have 8 (W-7),
+        # 13 (f1040) and 27 (i-90) sections, so banking _session_total_cost at
+        # teardown would discard 88-96% of what a client actually spent, and a
+        # $10 ceiling would behave like $80-$250 while LOOKING enforced.
+        #
+        # This one is never reset for the life of the adapter, which is the
+        # life of the WebSocket connection.
+        self._connection_total_cost: float = 0.0
+
         # Cumulative modality tracking
         self._session_text_input_tokens: int = 0
         self._session_audio_input_tokens: int = 0
@@ -2095,13 +2113,19 @@ class LiveAIGemini(ILiveAI):
         """USD spent on THIS CONNECTION, live (bd polyglot-pdf-ik7e).
 
         Public because the spend ceiling needs it from the route at teardown,
-        and reaching through _session_total_cost from there would couple the
-        route to this adapter's internals. Note the scope: ONE connection.
-        _run_session_loop resets the counter on connect, so a reconnect starts
-        at zero -- which is exactly why the ceiling accumulates per-jti in the
+        and reaching through the counter from there would couple the route to
+        this adapter's internals.
+
+        Reads _connection_total_cost, NOT _session_total_cost: the latter is
+        zeroed on every Gemini session start, and a SECTION SWITCH starts a
+        new one on this same adapter without dropping the WebSocket -- so it
+        would report only the last section of an 8-to-27 section form.
+
+        Scope is ONE CONNECTION. A reconnect builds a new adapter and starts
+        at zero, which is exactly why the ceiling accumulates per-jti in the
         store rather than trusting any single connection's total.
         """
-        return float(self._session_total_cost)
+        return float(self._connection_total_cost)
 
     async def _run_session_loop(self):
         """Background loop that connects to Gemini Live and handles audio and events.
@@ -3154,6 +3178,9 @@ class LiveAIGemini(ILiveAI):
                                             self._session_candidate_tokens += response_tokens
                                             self._session_total_tokens += total_tokens
                                             self._session_total_cost += total_cost
+                                            # Survives a section switch; see
+                                            # the declaration (bd ik7e).
+                                            self._connection_total_cost += total_cost
                                             self._session_text_input_tokens += text_input_tokens
                                             self._session_audio_input_tokens += audio_input_tokens
                                             self._session_text_output_tokens += text_output_tokens
