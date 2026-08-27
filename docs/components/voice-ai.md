@@ -2,10 +2,11 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/shared/spellbackPlayer.ts
 
-*Last updated: 2026-08-26 (bd polyglot-pdf-kvrfq: the `name_spellback` bullet
+*Last updated: 2026-08-27 (bd polyglot-pdf-kvrfq: the `name_spellback` bullet
 now records the client-side stale-arrival guards and the wire-verified fact
-that holding the tool response open does NOT park the model. Also current,
-from bd polyglot-pdf-uxc6s: the speaking predicates are
+that holding the tool response open does NOT park the model -- see the
+[journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md).
+Also current, from bd polyglot-pdf-uxc6s: the speaking predicates are
 now THREE, not two -- `isModelSpeaking()` is what every barge-in / flush site
 reads, `isSpeaking()` is reserved for the VAD suspend/resume pair, and the
 complete call-site classification is pinned by
