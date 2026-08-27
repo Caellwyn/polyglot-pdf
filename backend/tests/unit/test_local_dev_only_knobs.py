@@ -183,7 +183,14 @@ def test_audio_dump_produces_readable_wav(tmp_path, monkeypatch):
     params (mono, 16-bit, AUDIO_OUT_RATE), and the generation counter advances."""
     import wave
 
-    monkeypatch.chdir(tmp_path)  # writes go under tmp backend/logs/audio_out
+    # Redirect the dump via the module's _LOG_ROOT anchor, NOT via chdir: the
+    # dump path is deliberately cwd-independent (bd polyglot-pdf-b5nmq -- the
+    # local launchers run uvicorn from backend/, so a cwd-relative path would
+    # write to backend/backend/logs). A chdir here would pin the very behavior
+    # that change removed.
+    from backend.adapters import live_ai_gemini
+
+    monkeypatch.setattr(live_ai_gemini, "_LOG_ROOT", tmp_path / "backend" / "logs")
     adapter = _build_dump(dev_marker=True, dump=True)
     assert adapter._dev_audio_dump is True
     adapter._dev_dump_audio(b"\x00\x01" * 2400)
