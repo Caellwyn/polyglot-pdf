@@ -1613,6 +1613,22 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // label is how it changes). bd h76m.10. An empty
                           // label mints nothing -- keep the old value so
                           // dependents' references stay intact.
+                          //
+                          // NOT for a select (bd polyglot-pdf-alzbr): a
+                          // dropdown has no fill branch of its own, so the
+                          // filler writes option.value VERBATIM into the
+                          // combobox and never reads pdf_on_value. The value
+                          // is therefore the PDF's own export code ('WY'), not
+                          // an internal join key -- re-minting it from the
+                          // label silently changes what PRINTS ('wyoming'
+                          // renders clipped as 'wyomin' in the 36pt box) and
+                          // makes the kit un-publishable, since the code is no
+                          // longer in the widget's /Opt list. Editing a select
+                          // option's label must leave its value alone; the
+                          // value is edited directly instead (see the Advanced
+                          // block below). Retire this branch when selects gain
+                          // a real pdf_on_value channel (bd polyglot-pdf-g2fpr).
+                          if (field.type === 'select') return;
                           const label = option.label || '';
                           if (!label.trim()) return;
                           const otherLabels = safeOptions(field)
@@ -1711,7 +1727,38 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             it beside the label confused editors (bd
                             polyglot-pdf-0x10.5). Author tier can still inspect
                             it; it re-mints from the label when an edit settles. */}
-                        {option.value && (
+                        {/* A SELECT's value is the PDF's own export code, not a
+                            minted slug (bd polyglot-pdf-alzbr): the filler
+                            writes it verbatim into the combobox, so it must
+                            match the widget's /Opt list exactly or the form
+                            prints wrong. It cannot be derived from the label,
+                            so it is EDITABLE here -- the only place to author
+                            it -- rather than shown as a read-only chip. */}
+                        {field.type === 'select' ? (
+                          <div className="mt-1 text-gray-500">
+                            <label className="block">
+                              PDF export code:{' '}
+                              <input
+                                type="text"
+                                className="font-mono border rounded px-1.5 py-0.5 w-28"
+                                value={option.value ?? ''}
+                                title="The code this dropdown writes into the PDF (e.g. 'WY'). It must match the form's own choice list exactly."
+                                onChange={e => {
+                                  const newOptions = [...safeOptions(field)];
+                                  newOptions[idx] = {
+                                    ...option,
+                                    value: e.target.value,
+                                  };
+                                  updateField({ options: newOptions });
+                                }}
+                              />
+                            </label>
+                            <p className="mt-0.5">
+                              Must match the form's own choice list (e.g.{' '}
+                              <span className="font-mono">WY</span>), not a name.
+                            </p>
+                          </div>
+                        ) : option.value ? (
                           <div className="mt-1 text-gray-500">
                             Internal value:{' '}
                             <span
@@ -1721,7 +1768,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               {option.value}
                             </span>
                           </div>
-                        )}
+                        ) : null}
                         {/* A `select` has NO per-option widget concept: it
                             writes its scalar value through the field-level
                             mapping and its options never carry a widget, so
@@ -1797,9 +1844,19 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     className="btn btn-secondary w-full text-sm"
                     onClick={() => {
                       const opts = safeOptions(field);
-                      const value = mintUniqueSlugs(
-                        [...opts.map(o => o.label || ''), 'option'],
-                      ).slice(-1)[0];
+                      // A select's value is the PDF export code, which cannot
+                      // be minted from anything -- only the form knows it. Add
+                      // the option with an EMPTY value so the author fills in
+                      // the code; a minted slug here would look valid and
+                      // print wrong (bd polyglot-pdf-alzbr). Empty trips the
+                      // existing option-value-missing lint ERROR, which is the
+                      // correct "you must supply this" signal.
+                      const value =
+                        field.type === 'select'
+                          ? ''
+                          : mintUniqueSlugs(
+                              [...opts.map(o => o.label || ''), 'option'],
+                            ).slice(-1)[0];
                       updateField({ options: [...opts, { label: '', value }] });
                     }}
                   >
@@ -1838,7 +1895,17 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 className="btn btn-secondary w-full"
                 onClick={() =>
                   updateField({
-                    options: [{ label: '', value: mintUniqueSlugs(['option'])[0] }],
+                    // Empty value for a select: the PDF export code cannot be
+                    // minted, only authored (bd polyglot-pdf-alzbr).
+                    options: [
+                      {
+                        label: '',
+                        value:
+                          field.type === 'select'
+                            ? ''
+                            : mintUniqueSlugs(['option'])[0],
+                      },
+                    ],
                   })
                 }
               >
