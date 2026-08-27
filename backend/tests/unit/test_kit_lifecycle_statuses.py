@@ -2113,3 +2113,52 @@ def test_an_editor_CAN_release_their_own_lock(client):
     assert _lock(c, "w7", HDR).status_code == 200
 
     assert _unlock(c, "w7", HDR).status_code == 200
+
+
+def test_a_credential_with_NO_uid_can_never_reach_the_lock():
+    """The magic-link intersection (bd ugm6 landed on dev mid-branch).
+
+    A link credential resolves to claims with uid=None, and this bead's lock
+    treats a falsy uid as UNATTRIBUTABLE -- falling back to the permissive
+    same-role rule so nobody is stranded on a pre-5tuas lock. Those two facts
+    are individually correct and catastrophic together: a client could take a
+    kit an editor holds.
+
+    It cannot happen, for two independent reasons, and this pins BOTH because
+    either one alone would be a single point of failure:
+      1. no editor route uses require_auth (the guard that accepts link
+         tokens) -- they use require_editor_role/require_author_role;
+      2. verify_editor_token refuses a credential with no uid outright.
+
+    Checked with a WORD-BOUNDARY match: my first attempt grepped "require_auth"
+    and matched "require_author_role", reporting a hole that did not exist.
+    """
+    import ast
+    import pathlib as _p
+    import re
+
+    root = _p.Path(__file__).resolve().parents[3]
+    routes = (root / "backend" / "routes" / "editor_kit_routes.py").read_text(
+        encoding="utf-8")
+
+    # 1. require_auth must not gate any editor route. \b so require_author_role
+    #    does not match.
+    assert not re.search(r"\brequire_auth\b", routes), (
+        "an editor route now uses require_auth, which accepts magic-link "
+        "credentials -- those carry uid=None, which the lock treats as "
+        "unattributable and lets through on the permissive path")
+
+    # 2. the editor verifier refuses a uid-less credential.
+    auth_src = (root / "backend" / "services" / "editor_auth.py").read_text(
+        encoding="utf-8")
+    tree = ast.parse(auth_src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and n.name == "verify_editor_token")
+    raises_on_missing_uid = any(
+        isinstance(n, ast.If) and isinstance(n.test, ast.UnaryOp)
+        and isinstance(n.test.op, ast.Not)
+        and any(isinstance(c, ast.Raise) for c in ast.walk(n))
+        for n in ast.walk(fn))
+    assert raises_on_missing_uid, (
+        "verify_editor_token no longer refuses a credential with no uid")
