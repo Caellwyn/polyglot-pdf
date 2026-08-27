@@ -289,10 +289,24 @@ def _mint_slugs(
             # value) would rewrite ALL the good codes and break printing for
             # every option. Preserved codes are held aside and re-registered
             # as their own alias so conditions still resolve.
-            keep = [
-                o.get("value") is not None and str(o.get("value")) in pdf_choices
-                for o in dict_opts
-            ]
+            #
+            # Preserve at most ONE option per code: uniqueness outranks
+            # preservation. Two options sharing a code cannot both keep it --
+            # the PDF widget holds a single value, so the duplicate is a real
+            # defect either way -- and preserving both would let this branch
+            # no-op on the very duplicate it exists to repair, leaving the
+            # schema stuck (repair reports nothing to fix while lint still
+            # blocks on option-value-duplicate). First occurrence keeps the
+            # code; the rest fall through to minting.
+            seen_codes: set = set()
+            keep = []
+            for o in dict_opts:
+                v = o.get("value")
+                v = str(v) if v is not None else None
+                is_code = v is not None and v in pdf_choices and v not in seen_codes
+                if is_code:
+                    seen_codes.add(v)
+                keep.append(is_code)
             # Mint ONLY for the options actually being replaced, and seed the
             # dedupe with the preserved codes -- a slug minted from one label
             # can otherwise equal a code kept on another option and
@@ -887,9 +901,17 @@ def pdf_choice_values(dump: Optional[dict], claim: Optional[str]) -> FrozenSet[s
     matched = [n for n in names if n == claim] or [
         n for n in names if n.endswith("." + claim)
     ]
+    if not matched:
+        return frozenset()
+    # FIRST match only, never a union across duplicate-named entries: unioning
+    # would exempt a value that is legal on a DIFFERENT widget instance than
+    # the one this field claims -- a narrower rerun of the exact wrong-widget
+    # failure this helper exists to prevent. Mirrors schema_lint._dump_entry,
+    # which likewise takes the first name match.
+    target = matched[0]
     values: set = set()
     for e in entries:
-        if not isinstance(e, dict) or e.get("name") not in matched:
+        if not isinstance(e, dict) or e.get("name") != target:
             continue
         for w in e.get("widgets") or []:
             if not isinstance(w, dict):
@@ -897,6 +919,7 @@ def pdf_choice_values(dump: Optional[dict], claim: Optional[str]) -> FrozenSet[s
             for c in w.get("choices") or []:
                 if isinstance(c, dict) and isinstance(c.get("value"), str):
                     values.add(c["value"])
+        break
     return frozenset(values)
 
 

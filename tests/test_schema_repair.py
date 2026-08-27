@@ -28,7 +28,7 @@ sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
 
 from backend.services.schema_lint import has_errors, lint_schema  # noqa: E402
 from backend.services.schema_repair import (  # noqa: E402
-    RepairError, alias_hit_count, repair,
+    RepairError, alias_hit_count, pdf_choice_values, repair,
 )
 
 _FIXTURES = _REPO / "backend" / "tests" / "fixtures"
@@ -326,6 +326,73 @@ def _values(repaired):
     return [o["value"] for o in repaired["fields"][0]["options"]]
 
 
+def test_widget_name_matching_sites_are_a_known_closed_set():
+    """The "exact name, else dot-boundary suffix" convention (schemas store the
+    XFA leaf, dumps the full path) is open-coded at several sites rather than
+    shared. They agree today; nothing structural keeps them agreeing.
+
+    Pins the SET, not one instance (CLAUDE.md scar #8): adding a fifth site, or
+    dropping one, fails here and forces the author to decide deliberately
+    whether the new site needs the same semantics. Consolidation is filed as
+    polyglot-pdf-t9m9k -- this test is the net until then.
+    """
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    pattern = re.compile(r'endswith\("\." \+ \w+\)')
+    found = {}
+    for rel in ("backend/services/schema_lint.py",
+                "backend/services/schema_repair.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        n = len(pattern.findall(text))
+        if n:
+            found[rel] = n
+    assert found == {
+        "backend/services/schema_lint.py": 1,     # _match_dump_names
+        "backend/services/schema_repair.py": 3,   # exists / pdf_choice_values / tu lookup
+    }, (
+        "widget-name matching sites moved: %r. If you added one, give it the "
+        "same exact-then-suffix semantics (and the FIRST-match rule where it "
+        "resolves choices) and update this pin." % found
+    )
+
+
+def test_pdf_choice_values_never_unions_across_ambiguous_matches():
+    """One claim resolves to ONE widget's choice list.
+
+    Unioning across duplicate-named (or several suffix-matching) dump entries
+    would exempt a value legal on a DIFFERENT widget instance than the field
+    claims -- a narrower rerun of the wrong-widget failure this helper exists
+    to prevent. Mirrors schema_lint._dump_entry's first-match rule.
+    """
+    dup = {"fields": [
+        {"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]},
+        {"name": "X[0]", "widgets": [{"choices": [{"value": "AL"}]}]},
+    ]}
+    assert pdf_choice_values(dup, "X[0]") == frozenset({"WY"})
+
+    two_suffixes = {"fields": [
+        {"name": "a.S[0]", "widgets": [{"choices": [{"value": "WY"}]}]},
+        {"name": "b.S[0]", "widgets": [{"choices": [{"value": "AL"}]}]},
+    ]}
+    assert pdf_choice_values(two_suffixes, "S[0]") == frozenset({"WY"})
+
+
+@pytest.mark.parametrize("dump,claim", [
+    (None, "X[0]"),
+    ({}, "X[0]"),
+    ({"fields": "not-a-list"}, "X[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{}]}]}, "X[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": []}]}]}, "X[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]}]}, "NOPE[0]"),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]}]}, ""),
+    ({"fields": [{"name": "X[0]", "widgets": [{"choices": [{"value": "WY"}]}]}]}, None),
+])
+def test_pdf_choice_values_returns_empty_when_there_is_no_evidence(dump, claim):
+    """Empty means "no evidence", and every caller must read it that way --
+    a malformed or absent dump must never widen the exemption."""
+    assert pdf_choice_values(dump, claim) == frozenset()
+
+
 def test_pdf_sanctioned_dropdown_codes_survive_repair():
     """Minting a slug over a dropdown's export code makes the PDF print wrong
     (the value is written verbatim; PyMuPDF does not validate against /Opt).
@@ -366,6 +433,27 @@ def test_preserved_code_cannot_collide_with_a_minted_sibling():
     vals = _values(repaired)
     assert len(vals) == len(set(vals)), "repair manufactured a duplicate: %r" % vals
     assert vals[0] == "wy"
+
+
+def test_duplicate_pdf_sanctioned_codes_are_still_resolved():
+    """Uniqueness outranks preservation.
+
+    Two options cannot both keep the same code -- the widget holds one value,
+    so it is a real defect either way. Preserving both made repair no-op on
+    the very duplicate it exists to fix: repairs == [] while lint still
+    blocked on option-value-duplicate, an unfixable deadlock with no
+    diagnostic. First occurrence keeps the code; the rest are minted.
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "WY", "label": "Wyoming again"}]
+    repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    vals = _values(repaired)
+    assert len(vals) == len(set(vals)), "duplicate survived repair: %r" % vals
+    assert vals[0] == "WY", "the first occurrence should keep the export code"
+    assert any(r["action"] == "mint-option-slugs" for r in repairs), \
+        "a repair that changes values must say so"
+    # And the repaired schema must actually clear the gate it was stuck at.
+    assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
 
 
 def test_dumpless_repair_still_mints_over_non_slug_dropdown_values():
