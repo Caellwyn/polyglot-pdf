@@ -267,6 +267,46 @@ def test_v2_select_still_enforces_every_other_option_rule():
     assert "at least 2 options" in str(exc.value)
 
 
+def test_model_exemption_never_widens_what_actually_publishes():
+    """The model gate is now LOOSER than lint for selects. That is only safe if
+    lint is a superset on every path, including the one where lint runs WITHOUT
+    a dump (the publish gate loads it best-effort, so None is reachable).
+
+    Pins the full matrix rather than the one cell I changed -- the asymmetry
+    "model always runs, lint sometimes has no dump" is exactly the shape of the
+    gap that made the first cut of this fix incomplete (bd polyglot-pdf-4we6j).
+    """
+    from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
+
+    # The dump must name the SAME widget the field claims, or the exemption
+    # correctly never fires and this test would pass for the wrong reason.
+    dump = {"fields": [{"name": "P1_Line6e_State[0]", "widgets": [
+        {"choices": [{"value": "WY"}, {"value": "AL"}]}]}]}
+
+    def schema_with(values):
+        return v2_schema([_select(
+            [{"value": v, "label": "L" + v} for v in values])])
+
+    def blocks(schema, d):
+        return any(f.severity == SEVERITY_ERROR and f.rule == "option-value-slug"
+                   for f in lint_schema(schema, d))
+
+    legit, junk = schema_with(["WY", "AL"]), schema_with(["Wyoming!!", "AL"])
+
+    # The model passes both -- it cannot tell them apart with no dump.
+    validate(legit)
+    validate(junk)
+
+    # With a dump, lint separates them: that is where the judgment lives.
+    assert not blocks(legit, dump)
+    assert blocks(junk, dump)
+
+    # With NO dump, lint blocks BOTH -- it never lets an unverifiable dropdown
+    # value publish just because the model stopped objecting.
+    assert blocks(legit, None)
+    assert blocks(junk, None)
+
+
 def test_v2_non_select_choice_types_still_enforce_the_slug_shape():
     """radio and checkbox_group carry widget identity in pdf_on_value, so their
     values stay pure slugs -- the exemption must not leak to them."""
