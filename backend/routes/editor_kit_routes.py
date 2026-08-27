@@ -3128,9 +3128,10 @@ async def set_editor_kit_status(
         # supersede archived and retired a second kit that no guard had
         # checked (Opus fresh-eyes round 2). Inert today -- the lock is
         # role-scoped, so a same-role holder would not be refused anyway --
-        # but it becomes a live hole the moment bd polyglot-pdf-ijntk makes
-        # locks per-user, and it contradicts the helper's own "every schema
-        # write" contract.
+        # and it is LIVE now that bd polyglot-pdf-5tuas made locks per-user:
+        # a same-role holder IS refused, so an unguarded supersede would write
+        # over someone's kit. It also contradicts the helper's own "every
+        # schema write" contract.
         _require_edit_lock(superseded_meta, role)
 
         # Archive its bytes now -- the archive is additive and harmless even if
@@ -3148,8 +3149,8 @@ async def set_editor_kit_status(
     # back to do (Opus fresh-eyes round 8, reproduced end to end).
     #
     # It also outlived a publish, so a live kit advertised "Editor editing"
-    # forever -- cosmetic today, a real hole once bd polyglot-pdf-ijntk makes
-    # locks per-user.
+    # forever -- and LIVE now that bd polyglot-pdf-5tuas made locks
+    # per-user, because that stale holder now actually refuses other people.
     #
     # Editing is what the lock guards, and a status transition ends the editing
     # turn either way: handed to an author for review, handed back for changes,
@@ -3252,7 +3253,7 @@ async def set_editor_kit_status(
             # applied to one site and silently not the other (round 10).
             retired_meta = {**(superseded_meta or {}), "status": "unpublished"}
             retired_kept = _lock_after_transition(
-                superseded_meta, _status_of(superseded_meta), "unpublished", role.role)
+                superseded_meta, _status_of(superseded_meta), "unpublished", role)
             retired_meta.pop(_LOCK_KEY, None)
             if retired_kept is not None:
                 retired_meta[_LOCK_KEY] = retired_kept
@@ -3369,11 +3370,15 @@ async def take_editor_kit_lock(
     is no timer. A clock that steals a lock from someone actively working is
     worse than a human choosing to take it.
 
-    Same-role contention is ALLOWED rather than pretended about: two callers
-    holding the same shared token are indistinguishable to the server, so
-    refusing would block a second author on a lock the first may have
-    abandoned, with no way to tell them apart. bd polyglot-pdf-ijntk is what
-    makes editor-vs-editor resolvable.
+    Same-role contention is REFUSED (bd polyglot-pdf-5tuas): the lock names a
+    PERSON, so a second editor taking a kit the first holds is a real
+    collision, and the refusal names the holder. Re-taking your OWN lock is
+    not a steal. An AUTHOR still preempts anyone, including another author --
+    that IS the stale-lock release, and there is no timer.
+
+    A lock written BEFORE 5tuas carries no uid; it is unattributable, so
+    same-role contention falls back to the old ALLOW for it rather than
+    stranding an editor on a kit nobody can be shown to hold.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()

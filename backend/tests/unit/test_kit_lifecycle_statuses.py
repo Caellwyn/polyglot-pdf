@@ -1978,3 +1978,42 @@ def test_the_preempted_flag_across_every_lock_and_actor_combination(client):
     assert _take("k4", HDR) is False, (
         "a legacy same-role lock must not report a preemption -- there is no "
         "person to have taken it from")
+
+
+def test_EVERY_lock_helper_call_passes_an_ACTOR_not_a_role_string():
+    """Derived from the AST, because grep could not see the one that broke.
+
+    The supersede site spans two lines, so my single-line sweep reported "all
+    converted" while it still passed role.role -- an AttributeError waiting on
+    a reachable path, found by a reviewer rather than by me. A parser sees a
+    call regardless of how it is wrapped.
+
+    Latent rather than live (the current status values return before the
+    attribute access), but it would have surfaced as a 500 AFTER the incoming
+    kit was already published -- the worst moment for a crash.
+    """
+    import ast
+    import pathlib as _p
+
+    src = (_p.Path(__file__).resolve().parents[2]
+           / "routes" / "editor_kit_routes.py").read_text(encoding="utf-8")
+
+    helpers = {"_lock_after_transition", "_lock_refusal", "_require_edit_lock"}
+    offenders = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", None)
+        if name not in helpers:
+            continue
+        for arg in node.args:
+            # `role.role` where an EditorActor is expected
+            if (isinstance(arg, ast.Attribute) and arg.attr == "role"
+                    and isinstance(arg.value, ast.Name) and arg.value.id == "role"):
+                offenders.append("{}() at line {}".format(name, node.lineno))
+
+    assert not offenders, (
+        "these lock helpers get a ROLE STRING where they now take an "
+        "EditorActor, which raises AttributeError on the person comparison:\n  "
+        + "\n  ".join(offenders))
