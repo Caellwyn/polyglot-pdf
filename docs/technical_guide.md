@@ -597,7 +597,7 @@ system that is NOT a Firebase account. Five coupled pieces:
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing
   either.
-- **EVERY door redeems, through ONE helper.**
+- **The doors that REDEEM do it through ONE helper.**
   `link_redemptions.enforce_link_redemption` runs the redemption check AND the
   COMPLETION-window check, neither of which `verify_link_token` can do -- the
   token carries only the OPEN deadline, and one-time use lives in Firestore.
@@ -608,16 +608,25 @@ system that is NOT a Firebase account. Five coupled pieces:
   - **PAID work redeems** -- `/ws/fill` (a Gemini session), `/api/links/open`,
     and both `/api/tts/*` routes via the `require_paid_client_work`
     dependency. A completed link starts no new session and buys no more audio.
-  - **RETRIEVAL does NOT** -- `require_auth`, and therefore the schema and
-    manifest reads and `/api/fill-pdf`. That route is a pure PyMuPDF render
-    with no model call, so redeeming there spends nothing and only takes away
-    the document the client just filled. It still needs a valid SIGNED link
-    inside its open window, scoped to that link's single kit.
+  - **RETRIEVAL does NOT** -- `require_auth` (the schema and manifest reads,
+    `/api/fill-pdf`) and `require_signin` (the kit catalogue: `GET
+    /api/form-kits` and `.../{kit_id}/schema`). `/api/fill-pdf` is a pure
+    PyMuPDF render with no model call, so redeeming there spends nothing and
+    only takes away the document the client just filled. All still need a
+    valid SIGNED link inside its open window, scoped to that link's single
+    kit.
 
   A new door that authenticates a client credential must decide which side it
-  is on: if it can cause SPEND, declare `require_paid_client_work`; if it
-  serves the client their own data, use `require_auth`. Both sets are pinned
-  by `test_http_route_auth.py`.
+  is on. THREE dependencies exist, not two:
+  - it can cause SPEND -> `require_paid_client_work` (redeems)
+  - it serves the client their own data, and the caller must be ENROLLED ->
+    `require_auth`
+  - it only lets someone CHOOSE a form, which must not require enrolment ->
+    `require_signin` (bd polyglot-pdf-ugm6 + PR #643)
+
+  Using `require_auth` on a catalogue-shaped route re-imposes the enrolment
+  gate #643 deliberately removed. The sets are pinned by
+  `test_http_route_auth.py` and `test_client_link_http_auth.py`.
 
   (History, so the split is not "corrected" back: the socket originally
   redeemed while `require_auth` did not, and a completed link kept serving

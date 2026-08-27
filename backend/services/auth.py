@@ -156,17 +156,23 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     return verify_token(token)
 
 
-def resolve_client_link_credential(token: str, *, redeem: bool = False) -> dict:
+def resolve_client_link_credential(token: str) -> dict:
     """Resolve a CLIENT LINK token to claims. Raises 401.
 
-    REDEEM=TRUE ONLY FOR PAID WORK (maintainer, 2026-08-24: "There's not
-    really any reason to have a time limit on saving or printing. That's all
-    client side. The TTL should be backend connection."). A completed link
-    must not start another Gemini session or buy another TTS synthesis -- but
-    downloading, printing and previewing are the client retrieving the
-    document they already produced, and a clock on that only loses them their
-    work. Retrieval still requires a VALID SIGNED link inside its open
-    window, scoped to that link's single kit.
+    THIS NEVER REDEEMS. Resolving a link proves who the client is; it does
+    not spend anything, so it must not burn their link (maintainer,
+    2026-08-24: "There's not really any reason to have a time limit on saving
+    or printing. That's all client side. The TTL should be backend
+    connection."). Downloading, printing and previewing are the client
+    retrieving the document they already produced, and a clock on that only
+    loses them their work. Redemption belongs to the doors that can SPEND,
+    and each calls enforce_link_redemption itself: /api/links/open, the
+    WebSocket, and require_paid_client_work (/api/tts/*). A `redeem=` flag
+    lived here briefly and was removed -- nothing could safely turn it on,
+    which is precisely the trap CLAUDE.md scar #7 names.
+
+    Retrieval still requires a VALID SIGNED link inside its open window,
+    scoped to that link's single kit.
 
     THE ONE PLACE a link credential is turned into claims (bd
     polyglot-pdf-ugm6). Extracted from require_auth because it is not the
@@ -176,19 +182,17 @@ def resolve_client_link_credential(token: str, *, redeem: bool = False) -> dict:
     every client link, leaving a client staring at their form with no PDF
     (Opus cross-surface r6).
 
-    The set of credential-resolution sites is exactly three -- this, the
-    socket's _verify_ws_credential, and the pdf route -- and it is PINNED BY
-    TEST so a fourth fails CI instead of a review round.
+    The set of credential-resolution sites is PINNED BY TEST
+    (test_client_link_http_auth.py) so a new one fails CI instead of a review
+    round. It earned that on the #643 merge: dev moved the catalogue routes
+    onto require_signin, which knew nothing about link tokens, and a client
+    401'd on their first two calls with every other test green. Do not just
+    bump the count when it fires -- the new site must dispatch on token
+    shape.
 
     Synchronous on purpose: callers decide whether to hop off the loop
     (require_auth does; the pdf route is already sync at that point).
     """
-    from backend.services.link_redemptions import (
-        LinkAlreadyUsed,
-        LinkWindowElapsed,
-        RedemptionUnavailable,
-        enforce_link_redemption,
-    )
     from backend.services.link_tokens import LinkTokenError, verify_link_token
 
     _unauth = HTTPException(
@@ -211,12 +215,6 @@ def resolve_client_link_credential(token: str, *, redeem: bool = False) -> dict:
         "cw": payload["cw"],
         "is_client_link": True,
     }
-    if redeem:
-        try:
-            enforce_link_redemption(claims)
-        except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
-            logger.warning("link_redemption_refused", error=str(exc))
-            raise _unauth from exc
     return claims
 
 

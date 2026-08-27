@@ -303,10 +303,13 @@ def test_the_complete_set_of_credential_resolution_sites_is_pinned():
     never went through require_auth at all. Each miss was invisible until a
     reviewer walked the client's path.
 
-    Derived from the shipped sources, so a FOURTH door reddens here instead
-    of costing a review round. If you are adding one: it must dispatch on
-    token SHAPE and, for a link, call resolve_client_link_credential (which
-    redeems -- a door that only VERIFIES is a burned-link hole).
+    Derived from the shipped sources, so a NEW door reddens here instead of
+    costing a review round -- which it did on the #643 merge, catching a
+    client 401 on the catalogue routes that no other test saw. If you are
+    adding one: it must dispatch on token SHAPE and, for a link, call
+    resolve_client_link_credential. That resolves ONLY; whether your door
+    also redeems depends on whether it can SPEND -- see the split in
+    test_the_complete_set_of_link_verifying_sites_is_pinned below.
     """
     import re
     from pathlib import Path
@@ -345,7 +348,7 @@ def test_the_complete_set_of_credential_resolution_sites_is_pinned():
     )
 
 
-def test_every_link_verifying_site_also_REDEEMS():
+def test_the_complete_set_of_link_verifying_sites_is_pinned():
     """The other half of the door set, and the failure the first half cannot
     see (Opus cross-surface r9).
 
@@ -358,10 +361,23 @@ def test_every_link_verifying_site_also_REDEEMS():
 
     That is the hole this bead has closed three times over (r1 the socket, r2
     require_auth, r6 the pdf route), so the SET that matters is "who verifies
-    a link", and every member must redeem.
+    a link".
 
-    Adding a link-verifying site? It must call enforce_link_redemption (or go
-    through resolve_client_link_credential, which does). Then add it here.
+    NOT every member redeems, and an earlier version of this docstring said
+    otherwise -- following it would re-introduce the r11 regression the
+    maintainer reverted (2026-08-24: "There's not really any reason to have a
+    time limit on saving or printing"). The real rule is a SPLIT:
+
+      * a door that can SPEND -- a Gemini session, a TTS synthesis -- must
+        call enforce_link_redemption. Today: /api/links/open, the WebSocket,
+        require_paid_client_work.
+      * a door that only RETRIEVES -- the manifest, the schema, the client's
+        own finished PDF -- must NOT. Burning a link there takes away work
+        the client already did and protects nothing, because those routes
+        spend nothing.
+
+    Adding a link-verifying site? Decide which half it is FIRST, wire it
+    accordingly, then add it here.
     """
     import re
     from pathlib import Path
@@ -386,10 +402,14 @@ def test_every_link_verifying_site_also_REDEEMS():
         "backend/routes/link_routes.py": 2,
         # the socket, which redeems immediately after.
         "backend/routes/websocket_routes.py": 1,
-        # resolve_client_link_credential -- verifies AND redeems in one place.
+        # resolve_client_link_credential -- verifies ONLY. It never redeems
+        # (a redeem= flag lived here and was removed: nothing could safely
+        # turn it on). The paid doors redeem themselves; see the split above.
         "backend/services/auth.py": 1,
     }, (
-        "a new site verifies a client link. It MUST also redeem it "
-        "(enforce_link_redemption), or a COMPLETED link keeps working on that "
-        "surface -- the exact hole closed three times in this bead."
+        "a new site verifies a client link. If it can SPEND, it must also "
+        "redeem (enforce_link_redemption) or a COMPLETED link keeps buying "
+        "work -- the hole closed three times in this bead. If it only "
+        "RETRIEVES, it must NOT redeem, or the client loses the document "
+        "they already filled. Decide which, then update this set."
     )

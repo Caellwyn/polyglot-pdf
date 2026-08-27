@@ -161,7 +161,7 @@ def complete_link(jti: str, now: Optional[float] = None) -> None:
 
 
 def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
-    """THE ONE redemption gate, called by EVERY door a client credential opens.
+    """THE ONE redemption gate, called by every door that can SPEND.
 
     bd polyglot-pdf-ugm6, Opus cross-surface r1. `verify_link_token` answers
     only "did we issue this, unmodified, and is it inside its OPEN window?"
@@ -175,6 +175,15 @@ def enforce_link_redemption(claims: dict, now: Optional[float] = None) -> dict:
     bytes, fill-pdf, and the two PAID TTS routes until exp. The docs claimed
     one-time use was "enforced at BOTH doors" while the door this bead had
     just opened enforced neither check.
+
+    THE FIX WAS THEN OVER-APPLIED, and the correction matters as much as the
+    original hole: redeeming on RETRIEVAL made a finished client unable to
+    download their own form (Opus r11; maintainer, 2026-08-24: "There's not
+    really any reason to have a time limit on saving or printing. That's all
+    client side. The TTL should be backend connection."). So this gate is
+    called by the SPEND doors only -- /api/links/open, the WebSocket, and
+    require_paid_client_work -- and NOT by require_auth or require_signin,
+    which serve the client their own data.
 
     Extracted rather than duplicated ON PURPOSE: two hand-written copies of a
     security check drift, and the drift is silent. Callers pass the claims
