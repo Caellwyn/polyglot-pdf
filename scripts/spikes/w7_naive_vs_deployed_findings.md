@@ -117,7 +117,21 @@ ledger total rather than broken out as its own numbered row here.
 | 6 | D full, unhappy run 1, --questions 22 | -- | 1.406226 | 22/22 fields correct + confirmed; secretary fired 3x |
 | 7 | D full, unhappy run 2, --questions 22 | -- | 1.328544 | 22/22 fields correct + confirmed; secretary fired 0x |
 | 8 | N full, happy, --questions 22 | 2.27 (band 1.90-2.63, pre-reg #1) | 1.839110 | 21/22 filled (missing `us_visa_type_number_expiration`), 22/22 confirmed; 2 platform force-trims; -19.0% vs. point prediction, $0.061 below band floor |
-| 9 | N full, unhappy, --questions 22 | see Estimator grading below (Estimator B: 3.678, Estimator A trim-aware: 1.362, Estimator A no-eviction: 8.514) | 3.281677 | 21/22 filled, 20/22 confirmed; 3 platform force-trims |
+| 9 | N full, unhappy, --questions 22 | ~4 (rough pre-run projection, stated in the session log BEFORE the run -- "projects to roughly $4, ~2x the naive-happy event count at the capped per-event prompt"; recorded there, not in this doc at the time, so it is a weaker pre-registration than row 8's -- noted honestly. Post-hoc estimators: B 3.678, A trim-aware 1.362, A no-eviction 8.514) | 3.281677 | 21/22 filled, 20/22 confirmed; 3 platform force-trims |
+
+**Greeting convention (applies to every dollar figure in this doc):** the
+headline `all_in_usd` = voice cost of the 22 questions + text-sidecar cost;
+the session GREETING (the model's opening turn before question 1) is measured
+and reported as its own line (`greeting_usd`: deployed ~$0.004-0.005/run,
+naive ~$0.016/run -- 3x dearer because the naive greeting re-bills the ~28.7k
+SI) but is NOT folded into `all_in_usd`. This matches the bd-89mt convention
+(comparability) and is conservative for the moat claim (excluding it
+understates the naive arm more than the deployed arm). `turns.csv`'s
+`cumulative_cost_usd` column DOES seed from the greeting and excludes the
+text sidecar -- reading its last row as "the session cost" mixes conventions
+(a fresh-eyes finding caught the comparison charts doing exactly that,
+drifting the naive endpoints ~1-2 cents high; `plot_wiadk_comparison.py` now
+reads the headline for bars and subtracts the greeting seed from curves).
 
 **Total actual spend: ~$10.173** (3 pipeline smokes $0.170 + $0.137 + $0.135
 = $0.442, plus the N-happy pilot $0.449, plus the 6 full runs summing to

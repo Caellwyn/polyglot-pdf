@@ -73,9 +73,19 @@ def _load(data_dir: str, pattern: str, label: str) -> dict:
         raise SystemExit(f"No file matching {pattern!r} in {data_dir} for {label}.")
     path = matches[-1]
     meta = json.loads(open(path, encoding="utf-8").read())
+    # The bars use the headline all-in (voice + text sidecar, greeting as its
+    # own separate line -- the SAME convention as the findings doc and the
+    # 89mt-comparable numbers). turns.csv's cumulative_cost_usd seeds from the
+    # greeting and excludes the text sidecar, so reading turns[-1] as "the
+    # session cost" mixed conventions and drifted the naive endpoints ~1-2
+    # cents high (fresh-eyes finding, bd polyglot-pdf-wiadk).
+    summary_path = path.replace(".meta.json", ".summary.json")
+    summary = json.loads(open(summary_path, encoding="utf-8").read())
+    meta["_headline_all_in_usd"] = float(summary["headline"]["all_in_usd"])
     print(f"  {label:28} <- {os.path.basename(path)} "
           f"(arm={meta.get('arm')} path={meta.get('path')} "
-          f"wall_clock_s={meta.get('wall_clock_s')})")
+          f"wall_clock_s={meta.get('wall_clock_s')} "
+          f"all_in=${meta['_headline_all_in_usd']:.6f})")
     return meta
 
 
@@ -107,13 +117,17 @@ def load_all(data_dir: str) -> dict:
 
 
 def _turn_cumulative_cost(meta: dict) -> tuple[list[int], list[float]]:
-    """Question index and running all-in cost, one point per question (last
-    turn seen for that q -- cumulative_cost_usd already accumulates)."""
+    """Question index and running VOICE cost, one point per question (last
+    turn seen for that q). turns.csv's cumulative_cost_usd is seeded with the
+    greeting cost; subtract that seed so the curve shows question-driven
+    accumulation in the same greeting-excluded convention as the headline
+    numbers (the greeting is reported as its own line in the findings doc)."""
+    greeting = float(meta.get("greeting_cost_usd") or 0.0)
     q_list: list[int] = []
     cost_list: list[float] = []
     seen: dict[int, float] = {}
     for t in meta["turns"]:
-        seen[int(t["q"])] = float(t["cumulative_cost_usd"])
+        seen[int(t["q"])] = float(t["cumulative_cost_usd"]) - greeting
     for q in sorted(seen):
         q_list.append(q)
         cost_list.append(seen[q])
@@ -193,12 +207,12 @@ def plot_cumulative_cost(runs: dict, path_tag: str, out_path: str) -> None:
 def plot_session_cost_bars(runs: dict, out_path: str) -> None:
     cv = _cross_form_cv()
 
-    dep_happy = [runs["deployed_happy_1"]["turns"][-1]["cumulative_cost_usd"],
-                 runs["deployed_happy_2"]["turns"][-1]["cumulative_cost_usd"]]
-    dep_unhappy = [runs["deployed_unhappy_1"]["turns"][-1]["cumulative_cost_usd"],
-                   runs["deployed_unhappy_2"]["turns"][-1]["cumulative_cost_usd"]]
-    naive_happy = runs["naive_happy"]["turns"][-1]["cumulative_cost_usd"]
-    naive_unhappy = runs["naive_unhappy"]["turns"][-1]["cumulative_cost_usd"]
+    dep_happy = [runs["deployed_happy_1"]["_headline_all_in_usd"],
+                 runs["deployed_happy_2"]["_headline_all_in_usd"]]
+    dep_unhappy = [runs["deployed_unhappy_1"]["_headline_all_in_usd"],
+                   runs["deployed_unhappy_2"]["_headline_all_in_usd"]]
+    naive_happy = runs["naive_happy"]["_headline_all_in_usd"]
+    naive_unhappy = runs["naive_unhappy"]["_headline_all_in_usd"]
 
     dep_happy_mean = statistics.mean(dep_happy)
     dep_unhappy_mean = statistics.mean(dep_unhappy)
