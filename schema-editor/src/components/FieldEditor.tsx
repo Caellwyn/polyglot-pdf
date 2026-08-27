@@ -1716,7 +1716,18 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         );
                       })()}
                     </div>
-                    {authorTier && (
+                    {/* Author tier sees the whole Advanced block. A SELECT
+                        opens it to the editor tier too (bd polyglot-pdf-alzbr):
+                        "+ Add Option" is deliberately enabled for editors on a
+                        select, and a select's new option now starts with an
+                        EMPTY value that only the author can supply -- so gating
+                        the export-code input behind authorTier would let an
+                        editor create an option they have no control to
+                        complete, leaving a lint error with no visible remedy.
+                        Non-select option values stay author-only: they are
+                        minted automatically, so there is nothing for an editor
+                        to fill in. */}
+                    {(authorTier || field.type === 'select') && (
                       <details className="text-xs pl-1">
                         <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
                           Advanced: PDF widget
@@ -1750,6 +1761,39 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                     value: e.target.value,
                                   };
                                   updateField({ options: newOptions });
+                                }}
+                                onBlur={e => {
+                                  // The option value is an IDENTITY a
+                                  // dependent's show_if/require_if can
+                                  // reference -- Remove even BLOCKS deleting a
+                                  // referenced option for exactly this reason.
+                                  // Changing it here must therefore retarget
+                                  // those references, the same way the
+                                  // radio/checkbox_group label-rename does,
+                                  // or a dependent silently dangles (or flips
+                                  // from hidden to shown-for-everyone).
+                                  // Retarget on BLUR, not per keystroke: an
+                                  // intermediate value ('W' on the way to
+                                  // 'WY') would rewrite dependents to a slug
+                                  // that never existed. Whitespace is trimmed
+                                  // -- ' WY' is never a legal export code and
+                                  // silently fails the /Opt match.
+                                  const next = e.target.value.trim();
+                                  const old = option.value ? String(option.value) : '';
+                                  const newOptions = [...safeOptions(field)];
+                                  newOptions[idx] = { ...option, value: next };
+                                  const updatedField = { ...field, options: newOptions };
+                                  if (onUpdateFields && old && next && next !== old) {
+                                    const withEdit = schema.fields.map(f =>
+                                      f.id === field.id ? updatedField : f,
+                                    );
+                                    const retargeted = retargetOptionValueReferences(
+                                      withEdit, field.id, old, next, schema.sections,
+                                    );
+                                    onUpdateFields(retargeted.fields, retargeted.sections);
+                                  } else if (next !== option.value) {
+                                    updateField({ options: newOptions });
+                                  }
                                 }}
                               />
                             </label>

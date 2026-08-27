@@ -152,6 +152,85 @@ describe('select option values are PDF export codes (bd polyglot-pdf-alzbr)', ()
     expect(added.options[added.options.length - 1].value).toBe('');
   });
 
+  it('editing an export code RETARGETS dependents that reference it', () => {
+    // option.value is an identity a dependent's show_if can reference -- Remove
+    // even BLOCKS deleting a referenced option over it. Changing the code must
+    // therefore move those references too, exactly as the radio label-rename
+    // does, or the dependent silently dangles (or flips from hidden to
+    // shown-for-everyone).
+    const field = selectField();
+    const dependent = {
+      id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text', section_id: 's1',
+      pdf_field_name: 'form1[0].dep[0]',
+      show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
+    } as unknown as FormField;
+    const schema = {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['mail_state', 'dep'] }],
+      fields: [field, dependent],
+    } as unknown as FormSchema;
+
+    const onUpdateFields = vi.fn();
+    render(
+      <FieldEditor field={field} schema={schema}
+        onUpdateField={vi.fn()} onUpdateFields={onUpdateFields} authorTier />,
+    );
+
+    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
+    fireEvent.change(codeInput, { target: { value: 'WV' } });
+    fireEvent.blur(codeInput, { target: { value: 'WV' } });
+
+    expect(onUpdateFields).toHaveBeenCalled();
+    const [fields] = onUpdateFields.mock.calls[onUpdateFields.mock.calls.length - 1];
+    const dep = fields.find((f: any) => f.id === 'dep');
+    expect(dep.show_if.value).toBe('WV');
+  });
+
+  it('an export code is trimmed on blur', () => {
+    // ' WY' is never a legal export code -- it silently fails the /Opt match
+    // and the form prints blank.
+    const onUpdateField = vi.fn();
+    const field = selectField();
+    render(
+      <FieldEditor field={field} schema={makeSchema([field])}
+        onUpdateField={onUpdateField} authorTier />,
+    );
+    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
+    fireEvent.change(codeInput, { target: { value: '  WV  ' } });
+    fireEvent.blur(codeInput, { target: { value: '  WV  ' } });
+
+    const committed = onUpdateField.mock.calls
+      .map(c => c[0])
+      .filter(f => f && Array.isArray(f.options))
+      .pop();
+    expect(committed.options[0].value).toBe('WV');
+  });
+
+  it('the export code input is available to the EDITOR tier, not just authors', () => {
+    // "+ Add Option" is enabled for editors on a select, and a new select
+    // option now starts EMPTY -- so an editor who cannot reach this input can
+    // create an option they have no way to complete.
+    // authorTier DEFAULTS TO TRUE, so omitting the prop does not simulate an
+    // editor -- it must be passed false explicitly or this asserts nothing.
+    const field = selectField();
+    render(
+      <FieldEditor field={field} schema={makeSchema([field])}
+        onUpdateField={vi.fn()} authorTier={false} />,
+    );
+    expect(screen.getByDisplayValue('WY')).toBeInTheDocument();
+  });
+
+  it('a radio option value stays author-only (no editor-tier value input)', () => {
+    const field = radioField();
+    render(
+      <FieldEditor field={field} schema={makeSchema([field])}
+        onUpdateField={vi.fn()} authorTier={false} />,
+    );
+    expect(screen.queryByDisplayValue('male')).toBeNull();
+  });
+
   it('+ Add Option on a radio still mints a slug', () => {
     const onUpdateField = vi.fn();
     const field = radioField();
