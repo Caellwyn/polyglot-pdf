@@ -106,9 +106,20 @@ Fixed sites, all now `__file__`-anchored:
 needed no change -- it is pinned rather than edited.
 
 The pin is on the SET, not the sites: `test_runtime_paths_are_cwd_independent.py`
-AST-scans runtime code for a `Path()`/`open()` built from a `"backend/..."`
-literal, so the next such path fails CI. That test is what found the third
-site, which is the argument for pinning the set over the instances.
+AST-scans runtime code for a path built from a leading `"backend"` literal,
+so the next such path fails CI. That test is what found the third site,
+which is the argument for pinning the set over the instances.
+
+The first version of that test scanned only for `Path("backend/...")` --
+and a second review round caught that its docstring claimed to "pin the
+set" while `os.path.join("backend", ...)`, `Path(f"backend/{x}")` and
+`Path("backend" + x)` all sailed through. Same overclaim, third time, now
+one layer further out: the guard against the unenumerated set was itself
+unenumerated. It now covers those shapes, and
+`test_detector_catches_each_path_building_shape` pins WHICH shapes it can
+see -- 8 that must flag, 6 that must not -- so the detector cannot quietly
+narrow again. Its docstring also now states the real limit: a path
+assembled entirely at runtime is still invisible to a static scan.
 
 ## Verification
 
@@ -132,9 +143,18 @@ watch, rather than by causing the event the fix was supposed to suppress.
 Where a fix suppresses an event, the verification is to fire the event.
 Stored as `bd remember verify-suppression-by-firing-the-event`.
 
-**A grep that comes back clean has not enumerated the set.** Both halves
-of this bead are the same error at different scales: #650 fixed the
-reported instance and generalized from a plausible-looking check, and then
-my own first commit did it again one layer down. The AST scan found what
-two rounds of grep did not -- when the claim is "there are no others,"
-the enumeration has to be structural, not textual.
+**A check that comes back clean has not enumerated the set.** This bead
+is the same error at three scales: #650 fixed the reported instance and
+generalized from a plausible-looking check; my first commit did it again
+one layer down with a grep; and my first version of the GUARD did it a
+third time, catching one path-building shape while claiming to cover them
+all. Each time the artifact was correct about what it checked and wrong
+about what it implied.
+
+The pattern worth extracting: an incomplete check is more dangerous than
+no check, because it converts "unverified" into "verified" in the reader's
+head. So the question to ask of any completeness claim is not "did it
+pass?" but **"what exactly can this see, and what would slip past it?"** --
+and then to pin that answer, as `test_detector_catches_each_path_building_shape`
+now does. Every round here was found by a reviewer, never by the check
+itself; a guard that cannot say what it misses will not tell you.
