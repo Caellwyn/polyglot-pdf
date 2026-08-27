@@ -1125,6 +1125,17 @@ async def _handle_fill_session(
 				await asyncio.to_thread(complete_link, link_jti)
 			except Exception as e:
 				log.error("link_complete_failed", jti=link_jti, error=str(e))
+
+		# BANK THIS CONNECTION'S SPEND against the link (bd polyglot-pdf-ik7e).
+		# On EVERY teardown, not only a completed one: the expensive case is
+		# precisely the client who keeps reconnecting, and skipping the
+		# abandoned ones would let an unbounded session hide behind reconnects.
+		#
+		# Read the cost BEFORE end_session() -- ending the session is what
+		# finalises the adapter, and reading after it would race the teardown
+		# for the number we are trying to record.
+		await _bank_link_spend(link_jti, service, log)
+
 		await service.end_session()
 
 
@@ -1137,6 +1148,46 @@ from ..services.link_redemptions import (
 	complete_link,
 	enforce_link_redemption,
 )
+from ..services.link_spend import (
+	LinkBudgetExhausted,
+	check_budget,
+	record_spend,
+)
+
+
+async def _bank_link_spend(link_jti, service, log) -> float:
+	"""Add this CONNECTION's AI spend to the link's running total.
+
+	Extracted from the teardown so it can be tested directly: the teardown
+	itself lives inside a receive loop, and a test that drives the whole loop
+	to reach it proves less about this logic than it costs to build. Returns
+	the banked amount (0.0 when nothing was banked) so a caller -- or a test --
+	can see what happened.
+
+	Called on EVERY teardown, not only a completed one: the expensive case is
+	precisely the client who keeps reconnecting, and skipping abandoned
+	sessions would let an unbounded session hide behind reconnects.
+
+	Must run BEFORE end_session(): ending the session finalises the adapter,
+	and reading the cost after would race the teardown for the number.
+
+	Never raises. Accounting must not break a teardown -- record_spend is
+	already best-effort internally, and this catches the READ too.
+	"""
+	if not link_jti:
+		return 0.0          # staff session: no link, nothing to bank
+	try:
+		ai = getattr(service, "live_ai", None)
+		cost = 0.0
+		if ai is not None and hasattr(ai, "session_cost_usd"):
+			cost = float(ai.session_cost_usd() or 0.0)
+		if cost > 0:
+			await asyncio.to_thread(record_spend, link_jti, cost)
+			return cost
+		return 0.0
+	except Exception as e:
+		log.error("link_spend_record_failed", jti=link_jti, error=str(e))
+		return 0.0
 
 
 def _verify_ws_credential(token: str) -> dict:
@@ -1322,6 +1373,41 @@ async def fill_form_from_schema(
 			log.warning("ws_link_redeem_refused", jti=claims.get("jti"),
 						error=str(exc))
 			await websocket.close(code=1008, reason="Authentication failed")
+			return
+
+		# SPEND CEILING (bd polyglot-pdf-ik7e). Checked HERE -- after the
+		# link is proven valid, before any Gemini session exists -- because the
+		# point is to refuse the session, not to discover afterwards that it
+		# should have been refused.
+		#
+		# A DISTINCT close code and reason, deliberately NOT the 1008
+		# "Authentication failed" above: a client who used their allowance has
+		# a perfectly good link, and telling them authentication failed sends
+		# them to the firm with the wrong problem. 1013 ("try again later") is
+		# the honest code, and the frontend keys the message off the reason
+		# token, not off prose.
+		#
+		# The client keeps everything else: retrieval never redeems, so their
+		# download, print and preview still work and they can finish the
+		# remaining fields by typing (maintainer, 2026-08-27).
+		# NOTE: the global ceiling, not a per-form one. cost_ceiling_usd_for_kit
+		# supports per-form values and is tested, but resolving one here means
+		# an extra metadata load on EVERY client connect to serve a feature no
+		# kit uses yet. Thread the kit metadata through when one does.
+		try:
+			await asyncio.to_thread(check_budget, claims.get("jti"))
+		except LinkBudgetExhausted as exc:
+			log.warning("ws_link_budget_exhausted", jti=claims.get("jti"),
+						firm_id=claims.get("firm_id"), error=str(exc))
+			await websocket.close(code=1013, reason="budget_exhausted")
+			return
+		except RedemptionUnavailable as exc:
+			# FAILS CLOSED, same polarity as the redemption gate: if we cannot
+			# tell how much this link has spent, we do not start an unbounded
+			# paid session on it.
+			log.warning("ws_link_budget_unavailable", jti=claims.get("jti"),
+						error=str(exc))
+			await websocket.close(code=1013, reason="budget_unavailable")
 			return
 
 		_link_kit = claims.get("link_kit_id")

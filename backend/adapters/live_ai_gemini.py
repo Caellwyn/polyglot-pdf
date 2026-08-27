@@ -2091,6 +2091,18 @@ class LiveAIGemini(ILiveAI):
             config["thinking_config"] = {"thinking_budget": 0}
         return config
 
+    def session_cost_usd(self) -> float:
+        """USD spent on THIS CONNECTION, live (bd polyglot-pdf-ik7e).
+
+        Public because the spend ceiling needs it from the route at teardown,
+        and reaching through _session_total_cost from there would couple the
+        route to this adapter's internals. Note the scope: ONE connection.
+        _run_session_loop resets the counter on connect, so a reconnect starts
+        at zero -- which is exactly why the ceiling accumulates per-jti in the
+        store rather than trusting any single connection's total.
+        """
+        return float(self._session_total_cost)
+
     async def _run_session_loop(self):
         """Background loop that connects to Gemini Live and handles audio and events.
 

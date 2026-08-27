@@ -155,10 +155,29 @@ def test_an_unreachable_store_REFUSES_rather_than_reading_as_zero(store):
         link_spend.check_budget("jti-a")
 
 
-def test_a_DISABLED_store_refuses_too(store, monkeypatch):
+def test_a_DISABLED_store_defers_to_the_REDEMPTION_gate(store, monkeypatch):
+    """A switched-off store is not a spend question, and this must not refuse.
+
+    enforce_link_redemption already fails closed on exactly this condition and
+    runs FIRST on every paid door, so a client-link session cannot reach the
+    spend check with the store disabled. Refusing here too would be a second
+    refusal for one condition -- and would break local dev and any test that
+    stubs the redemption path, which is how this was caught (4 socket tests
+    went red).
+
+    The invariant this pins is therefore: the ADMITTING door is the one that
+    fails closed.
+    """
     monkeypatch.setattr(link_spend, "_enabled", lambda: False)
+    assert link_spend.spend_so_far("jti-a") == 0.0
+    assert link_spend.check_budget("jti-a") == 10.0  # full headroom, no refusal
+
+    # ...and the gate that DOES refuse is still fail-closed on the same flag.
+    from backend.services import link_redemptions
+
+    monkeypatch.setattr(link_redemptions, "_enabled", lambda: False)
     with pytest.raises(RedemptionUnavailable):
-        link_spend.check_budget("jti-a")
+        link_redemptions.open_link("jti-a", "firm-a", "i-90")
 
 
 def test_a_failed_WRITE_does_not_raise_into_a_live_session(store):

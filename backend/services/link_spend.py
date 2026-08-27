@@ -83,7 +83,20 @@ def spend_so_far(jti: str) -> float:
     "this link has spent nothing" must never be the same answer.
     """
     if not _enabled():
-        raise RedemptionUnavailable("redemption store is not enabled")
+        # The store being switched OFF is not a spend question, and refusing
+        # here would be a SECOND refusal for a condition the redemption gate
+        # already fails closed on: enforce_link_redemption raises
+        # RedemptionUnavailable in exactly this case, and it runs FIRST on
+        # every paid door. So a client-link session cannot reach this line
+        # with the store disabled in production.
+        #
+        # Returning 0.0 rather than raising keeps this module honest about
+        # what it measures -- "no store, so no recorded spend" -- and stops it
+        # from breaking configurations (local dev, tests that stub the
+        # redemption path) where the gate above has already had its say.
+        # Enforcement is unaffected: the door that admits the session is the
+        # one that fails closed.
+        return 0.0
     try:
         snap = _collection().document(jti).get()
     except Exception as exc:  # noqa: BLE001 -- any store failure refuses

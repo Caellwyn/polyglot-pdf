@@ -166,6 +166,16 @@ class FormFillingService:
         # Rate-limit stamp for the switch-window audio-drop log (stream_audio).
         self._last_switch_drop_log: float = 0.0
 
+    @property
+    def live_ai(self):
+        """The live AI adapter, or None (bd polyglot-pdf-ik7e).
+
+        Public so the WebSocket route can read a finished session's cost at
+        teardown without reaching through _live_ai. Optional by design: unit
+        tests construct this service with no adapter at all.
+        """
+        return self._live_ai
+
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
 
