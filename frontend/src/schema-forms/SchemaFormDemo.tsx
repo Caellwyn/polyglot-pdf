@@ -10,6 +10,7 @@
  * Form selection is locked after onboarding to prevent mid-session switches.
  */
 
+import { resolveSessionToken } from "../shared/sessionCredential";
 import { useState, useEffect } from "react";
 import { SchemaForm } from "./components/SchemaForm";
 import type { FormSchema } from "./types/schema";
@@ -70,7 +71,7 @@ export function SchemaFormDemo() {
           const backendUrl = getBackendHttpUrl();
           let token: string | undefined;
           try {
-            token = user ? await user.getIdToken() : undefined;
+            token = await resolveSessionToken(user);
           } catch {
             // A failed token REFRESH (revoked session, clock skew) is an auth
             // failure, not "backend unavailable" -- surface it like a 401
@@ -170,7 +171,7 @@ export function SchemaFormDemo() {
         // token either way, and resolve /api/ paths against the backend base
         // (a relative /api/ fetch works on Hosting via the rewrite but not
         // against the Vite dev server).
-        const token = user ? await user.getIdToken() : undefined;
+        const token = await resolveSessionToken(user);
         const response = await fetch(resolveKitAssetUrl(form.schemaPath), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -276,6 +277,19 @@ export function SchemaFormDemo() {
         <LanguageSelectionModal
           forms={forms}
           onSelection={handleOnboardingSelection}
+          // A CLIENT LINK PINS THE FORM (bd polyglot-pdf-ugm6). The pin is
+          // written by ClientLinkEntry with NO language -- the form is the
+          // firm's choice, the language is the client's -- but the restore
+          // effect above only skips the modal when BOTH are set. So a client
+          // still reached the modal, and without this prop the modal fell
+          // through to its "Select Form" step and offered them the whole
+          // catalogue: for a PUBLIC kit that is every public form, and
+          // picking one overwrote the pin and got them refused at the socket
+          // with no explanation (Opus cross-surface r1).
+          //
+          // Passing the pin makes the modal ask ONLY for the language and
+          // then proceed with the form the link named.
+          preselectedFormId={loadOnboardingState().formId ?? undefined}
         />
       )}
 

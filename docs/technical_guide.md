@@ -113,6 +113,8 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`**, which stays false until the spend ceiling lands (bd `polyglot-pdf-ik7e`). `components/auth.md` |
+| POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (default ON since bd polyglot-pdf-apkdl; bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
@@ -568,7 +570,104 @@ assumptions, which is the trap for anyone changing either one:
 No UI consumes this route yet -- the button belongs to the firm console (bd
 polyglot-pdf-gob8l), per the maintainer's 2026-08-20 decision.
 
-### 9. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
+### 9. Client magic links (bd polyglot-pdf-ugm6)
+
+The CLIENT tier's entire contract surface, and the first credential in this
+system that is NOT a Firebase account. Five coupled pieces:
+
+- **The link token** (`backend/services/link_tokens.py`): HMAC-SHA256 over a
+  canonical JSON payload, `<payload_b64>.<sig>`. Producer: `POST
+  /api/links/mint`. Consumers: `POST /api/links/open` AND
+  `websocket_routes._verify_ws_credential`. **The ONE-DOT shape is load-
+  bearing** -- it is what keeps this credential and a Firebase JWT (two dots)
+  from ever being confused, in both directions. Giving the token a third
+  segment, or routing on a caller-supplied hint instead of shape, merges two
+  credential systems that must stay apart.
+- **The no-client-identifier invariant.** The payload's field set is CLOSED
+  and pinned by `test_link_tokens.py`. We hold the pseudonym (`jti`), the
+  firm holds identity; neither side alone re-identifies. Widening the payload
+  is a change to the product's legal posture (see
+  `docs/components/auth.md`).
+- **`employee_id` from the verified uid.** Producer: the mint route, reading
+  `user["uid"]` -- never `body`, which has no such field (also pinned).
+  Consumer: the session telemetry (contract 6), which is how a CLIENT session
+  satisfies "firm + form + originating employee" with no account involved.
+- **The kit_id the link names beats the handshake's.** The WS handshake is
+  client-controlled; a link holder editing `kit_id` is REFUSED (1008), not
+  silently corrected -- a substitution would produce a confirmation record
+  naming a form the client never saw. Any future code path that trusts the
+  handshake's `kit_id` for a link session reopens this.
+- **One-time use lives in Firestore** (`link_redemptions`), not the token: a
+  signed bearer string is replayable by construction. FAILS CLOSED BY
+  REFUSING (opposite polarity to the firms allowlist read, which fails closed
+  by returning `[]`) -- note the two "fail closed" directions when changing
+  either.
+- **The doors that REDEEM do it through ONE helper.**
+  `link_redemptions.enforce_link_redemption` runs the redemption check AND the
+  COMPLETION-window check, neither of which `verify_link_token` can do -- the
+  token carries only the OPEN deadline, and one-time use lives in Firestore.
+
+  **WHICH DOORS CALL IT IS THE WHOLE DESIGN, so read this before adding one.**
+  The TTL bounds a BACKEND CONNECTION, not the client's access to their own
+  document (maintainer, 2026-08-24):
+  - **PAID work redeems** -- `/ws/fill` (a Gemini session), `/api/links/open`,
+    and both `/api/tts/*` routes via the `require_paid_client_work`
+    dependency. A completed link starts no new session and buys no more audio.
+  - **RETRIEVAL does NOT** -- `require_auth` (the archived-revision reads and
+    `/api/fill-pdf`) and `require_signin` (choosing a form: `GET
+    /api/form-kits` and `.../{kit_id}/schema`, moved off `require_auth` by PR
+    #643). `/api/fill-pdf` is a pure PyMuPDF render with no model call, so
+    redeeming there spends nothing and only takes away the document the
+    client just filled. All still need a valid SIGNED link inside its open
+    window, scoped to that link's single
+    kit.
+
+  A new door that authenticates a client credential must decide which side it
+  is on. THREE dependencies exist, not two:
+  - it can cause SPEND -> `require_paid_client_work` (redeems)
+  - it serves the client their own data, and the caller must be ENROLLED ->
+    `require_auth`
+  - it only lets someone CHOOSE a form, which must not require enrolment ->
+    `require_signin` (bd polyglot-pdf-ugm6 + PR #643)
+
+  Using `require_auth` on a catalogue-shaped route re-imposes the enrolment
+  gate #643 deliberately removed. The sets are pinned by
+  `test_http_route_auth.py` and `test_client_link_http_auth.py`.
+
+  (History, so the split is not "corrected" back: the socket originally
+  redeemed while `require_auth` did not, and a completed link kept serving
+  everything until `exp` -- Opus r1. The over-correction then put redemption
+  on retrieval too, which made a finished form undownloadable -- Opus r11.)
+  `complete_link` fires ONLY on a genuine completion -- an abandoned session
+  must not consume the client's one chance.
+- **`link_jti` + `employee_id` ride both SESSION records** (contract 6). The
+  jti is the firm's join key; a record without it makes the split-key
+  arrangement inoperable, and `employee_id` is what carries "originating
+  employee" for a session with no account behind it.
+
+The redeemed token lives in `sessionStorage` via
+`shared/sessionCredential.ts` -- TAB-SCOPED, so it survives a reload (the
+entry gate clears it from the URL, so memory-only stranded a client on any
+refresh) and dies with the tab. Never `localStorage`, which would outlive the
+browser session. All NINE backend-calling sites resolve through that one
+module; a tenth inline `user.getIdToken()` fails CI.
+
+Frontend: `/f` renders `ClientLinkEntry` OUTSIDE `ProtectedRoute`
+(`frontend/src/schema-forms/AppRoutes.tsx` -- extracted from `main.tsx` so a
+test could import it, which is itself the fix for a defect: while the table
+lived beside `createRoot`, wrapping the client route in `ProtectedRoute` or
+renaming its path both passed the entire frontend suite). Moving it inside
+bounces every client to a sign-in they can never pass. The path is the
+exported `CLIENT_LINK_PATH`; `clientRoute.test.tsx` pins it against the same
+`/f` literal `link_routes.py` builds links from -- each side independently
+pinned, so a unilateral change on either reddens. The gate pins the form id via
+`saveOnboardingState` and leaves LANGUAGE unset -- the form is the firm's
+choice, the language is the client's.
+
+**Minting is off by default** until the spend ceiling ships (bd
+polyglot-pdf-ik7e): a live link is an unauthenticated door to a paid session.
+
+### 10. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 
 Producer: `backend/services/intro_agree_labels.json` (18 language ->
 agree-label entries). Consumer: `BUTTON_TRANSLATIONS` in
@@ -579,7 +678,7 @@ backend's copy of the label -- so a drift means Sol speaks a button name
 that is not the one on screen. Pinned by
 `backend/tests/unit/test_intro_route.py::TestIntroTables::test_agree_labels_match_frontend_mirror`.
 
-### 10. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
+### 11. `LIVE_VOICE_NAME` two-consumer coupling (bd polyglot-pdf-22h1f/44ywm)
 
 `Settings.LIVE_VOICE_NAME` (`backend/config.py:360`) has TWO independent
 consumers in different surfaces, so changing the env var moves both at

@@ -30,7 +30,7 @@ from pydantic import BaseModel
 import structlog
 
 from backend.config import get_settings
-from backend.services.auth import require_auth
+from backend.services.auth import require_paid_client_work
 from backend.services.intro_tts import (
     KNOWN_FORMS,
     resolve_intro_language,
@@ -57,7 +57,7 @@ class SpellbackRequest(BaseModel):
 
 @router.post("/api/tts/spellback")
 async def spellback_tts(
-    request: SpellbackRequest, _user: dict = Depends(require_auth)
+    request: SpellbackRequest, _user: dict = Depends(require_paid_client_work)
 ) -> Response:
     settings = get_settings()
     if not getattr(settings, "SPELLBACK_TOOL_ENABLED", False):
@@ -97,7 +97,7 @@ class IntroRequest(BaseModel):
 async def intro_tts(
     request: IntroRequest,
     http_request: Request,
-    _user: dict = Depends(require_auth),
+    _user: dict = Depends(require_paid_client_work),
 ) -> Response:
     settings = get_settings()
     if not getattr(settings, "INTRO_TTS_ENABLED", False):

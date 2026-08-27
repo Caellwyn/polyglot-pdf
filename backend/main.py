@@ -10,7 +10,7 @@ import structlog
 load_dotenv()
 
 from .config import Settings, get_settings, parse_extra_origins
-from .routes import websocket_routes
+from .routes import websocket_routes, link_routes
 from .routes import pdf_fill_routes
 from .routes import tts_routes
 from .routes import disclaimer_routes
@@ -90,6 +90,11 @@ app.include_router(pdf_fill_routes.router)
 app.include_router(tts_routes.router)  # TTS clips: spell-back (bd 22h1f; 503 unless SPELLBACK_TOOL_ENABLED) + Sol's intro (bd s1iex.3; 503 unless INTRO_TTS_ENABLED)
 app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
+# Client magic links (bd polyglot-pdf-ugm6): /mint is firm-staff-only and
+# /open is the CLIENT's unauthenticated entry. Both are inert until
+# LINK_MINTING_ENABLED, which stays false until the rate limits + session
+# cost ceiling land (bd polyglot-pdf-ik7e).
+app.include_router(link_routes.router)
 app.include_router(editor_kit_routes.router)  # token-gated hosted-editor surface (bd 92qe.1)
 app.include_router(editor_readiness_routes.router)  # local-save stamp refresh (bd na1zy)
 app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)

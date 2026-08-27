@@ -151,6 +151,54 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   enumeration. Reads fail CLOSED (`[]`) when unset or broken, so an outage
   hides private kits rather than exposing them. Firm records are created by
   `scripts/bootstrap_firm.py`; see [auth.md](auth.md) (Firm identity).
+- **CLIENT MAGIC LINKS (bd `polyglot-pdf-ugm6`) -- FOUR variables, and a
+  partial configuration is the hazard.** A live link is an unauthenticated
+  door to a paid Gemini session, so read all four together:
+  - **`LINK_MINTING_ENABLED=true`** — THE INTERLOCK. `POST /api/links/mint`
+    404s while this is unset, which is the default. **It must stay unset
+    until the per-jti/per-firm rate limits and the session cost ceiling ship
+    (bd `polyglot-pdf-ik7e`).** Turning it on earlier means an
+    unauthenticated entry point to a ~$3 session with nothing bounding spend.
+  - **`LINK_TOKEN_SECRET`** — the HMAC signing key (>=32 chars). Fails CLOSED
+    and loudly: minting and verification both refuse without it, deliberately
+    rather than defaulting (a default key would be forgeable by anyone
+    reading the source; a per-process random one would silently kill every
+    outstanding link on each restart, stranding a client mid-intake).
+    **Rotating it invalidates every unopened link**, so rotate only with that
+    understood.
+  - **`LINK_BASE_URL`** — origin the minted URL points at (e.g.
+    `https://forms.example.com`; the route appends `/f#t=<token>`).
+    Configured, never derived from the Host header -- trusting the header
+    would let a caller mint links pointing at a domain THEY control while
+    carrying our valid signature. Minting 503s when unset.
+  - **`LINK_REDEMPTIONS_FIRESTORE_ENABLED=true`** — the `link_redemptions`
+    collection enforcing ONE completion per link. Fails CLOSED by REFUSING
+    THE OPEN (note the opposite polarity to the firms read, which fails
+    closed by returning an empty list): unable to confirm a link is
+    unredeemed, we must not admit it, because the failure being guarded is a
+    replayed link starting a second paid session.
+
+  The token rides in the URL FRAGMENT so it never reaches access, referrer,
+  or proxy logs. See [auth.md](auth.md) (Client magic links).
+
+  **Per-SESSION cost, for whoever sizes bd `polyglot-pdf-ik7e`.** The socket
+  redeems once per CONNECTION. Under the shipped default
+  (`CONTINUOUS_SESSION=true`) that is roughly ONE read per session, not one
+  per section -- an earlier version of this note said ~27 for an I-90 and was
+  wrong by that factor. Reconnects (the 120s idle timeout, network drops)
+  each add one; a deployment running `CONTINUOUS_SESSION=false` reverts to
+  per-section connects and the count rises accordingly.
+
+  Per client HTTP request, additionally: ONE uncached Firestore READ -- the
+  firm-allowlist read, whenever the visibility gate fires on a private kit.
+  `require_auth` does NOT redeem (retrieval must not burn the client's own
+  document), so it costs no redemption read. The redemption WRITES belong to
+  the paid doors: **ONE on the first open of a link** (`open_link` creates
+  the record), and **one further write per
+  completed session** (`complete_link`). Writes cost more than reads, so size
+  from all four, not from the reads alone. None of it is cached,
+  deliberately: caching a revocation check reopens the replay window the
+  redemption gate closes.
 - **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
   for the token-gated `/api/editor/*` surface the hosted schema editor uses
   (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:

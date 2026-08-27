@@ -123,19 +123,31 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
-`verify_token` (so the same dev bypass applies). It gates SIX routes: `POST
+`verify_token` (so the same dev bypass applies). It gates `POST
 /api/fill-pdf` (the body carries user-entered field values), the
 archived-revision reads `GET /api/form-kits/{kit_id}/archive` +
 `.../archive/{marker}/schema` (bd `polyglot-pdf-qfyxr`; same firm-visibility
 gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd
 `polyglot-pdf-z6bk9` -- the firm tier's only WRITE path; `require_auth` is
-necessary but nowhere near sufficient there, see below), and both TTS
-routes `POST /api/tts/spellback` + `POST /api/tts/intro` (each synthesizes
-audio, so each is paid work as well as a user-data path). The frontend
+necessary but nowhere near sufficient there, see below), `POST
+/api/links/mint` (bd `polyglot-pdf-ugm6` -- firm staff mint a CLIENT link; a
+client credential is refused here because minting needs a `uid` and a client
+has none). The two TTS routes `POST /api/tts/spellback` + `POST
+/api/tts/intro` are gated by the STRICTER `require_paid_client_work`
+instead: each synthesizes audio, so each is real spend, and a completed
+client link must buy no more of it.
+
+**That split is the shape of the client TTL** (maintainer, 2026-08-24: "The
+TTL should be backend connection"). Completing a form bounds a new BACKEND
+CONNECTION -- a Gemini session, a synthesis call. It does NOT bound the
+client downloading, printing or previewing the document they just filled:
+`/api/fill-pdf` is a pure PyMuPDF render with no model call, so a clock on it
+buys no security and only loses the client their work. Retrieval still
+requires a valid signed link inside its open window, scoped to that link's
+single kit. The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
-
 **Selecting a form is NOT gated on enrolment.** The kit-catalogue reads --
 `GET /api/form-kits` and `GET /api/form-kits/{kit_id}/schema` -- use
 `require_signin` instead: a valid Firebase token is required, a firm or dev
@@ -153,6 +165,110 @@ protected a private kit here; it only decided whether someone saw the public
 ones. `backend/tests/unit/test_http_route_auth.py` pins BOTH sets -- the
 browse routes and the gated routes -- so a route moving between them fails
 loudly rather than as "no forms found".
+
+`require_signin` ALSO accepts a client link token, by the same shape dispatch
+`require_auth` uses (and likewise without redeeming -- browsing the form you
+were sent must not burn the link). It has to: these are the client's first
+two calls, so refusing a link here dead-ends the client tier on this surface
+alone, with every other door still working. That is not hypothetical -- it is
+what the ugm6/#643 merge produced, caught by the credential-site set guard in
+`test_client_link_http_auth.py` and now pinned over real HTTP by
+`backend/tests/integration/test_client_link_journey.py`.
+
+### Client magic links -- the THIRD credential system
+
+`bd polyglot-pdf-ugm6`. **A firm's CLIENT never signs in.** They are our
+customer's customer; they have no account and must never have one (maintainer,
+2026-08-17, who also explicitly rejected the alternative of a client working on
+a staff-signed-in machine). Their entry is a one-time link.
+
+**Three credential systems now exist, and they must not merge:**
+
+| # | Who | Credential | Where |
+|---|-----|-----------|-------|
+| 1 | Firm STAFF (voice app) | per-user Firebase ID token + `firm_id`/`firm_role` claims | `services/auth.py` |
+| 2 | Schema EDITOR | its own per-user identity (epic `polyglot-pdf-ijntk`) | `services/editor_auth.py` |
+| 3 | Firm CLIENT | a signed magic-link token | `services/link_tokens.py` |
+
+They are kept apart STRUCTURALLY, not by convention: a link token has ONE
+dot, a Firebase JWT has two, so neither verifier can silently accept the
+other's token. `/ws/fill` dispatches on that shape (`_verify_ws_credential`),
+so a caller cannot opt into the weaker check by labelling their credential.
+
+**The `jti` reaches our records, or the split key is not a key.** Both
+session events (`form_session_started` / `form_session_ended`) carry
+`link_jti` and `employee_id`. Without that column the firm holds one half of
+a join with nothing on our side to join to, and the arrangement this whole
+design exists to provide -- the firm can re-identify, we cannot -- silently
+does not work. `employee_id` on the same records is what makes a CLIENT
+session satisfy the telemetry requirement (firm + form + originating
+employee) despite there being no account anywhere.
+
+**The token carries `{firm_id, kit_id, employee_id, jti, iat, exp, cw}` and
+DELIBERATELY no client identifier.** That absence is the product's legal
+posture, not privacy hygiene: WE hold a pseudonymous record keyed by `jti`,
+THE FIRM holds the identity mapping, and neither side alone can connect a
+record to a person. Re-identification requires the firm to act, which puts
+the disclosure decision -- and the legal process behind it -- on the party
+with the attorney-client relationship. Adding a client identifier is a
+breaking change to that posture; the complete field set is pinned by
+`test_link_tokens.py` so it cannot be widened quietly.
+
+`employee_id` IS carried, from the minting employee's VERIFIED uid (never the
+request body, which could forge attribution). That is what makes the
+maintainer's telemetry requirement -- firm, form, and originating employee on
+every session -- true for CLIENT sessions, which have no account to read
+identity from.
+
+**One form, one completion, two clocks.** The link names one kit and the
+socket ENFORCES it: the handshake is client-controlled, so a link holder who
+edits `kit_id` is REFUSED, not silently given the right form (a silent
+substitution would produce a confirmation record naming a form the client
+never saw). ~48h to open from issuance, then SEVEN DAYS to complete from FIRST
+OPEN -- the completion clock starts at open, so a client who opens on hour 47
+still gets a full window. The 7 days is deliberate (maintainer, 2026-08-24):
+a client who loses their work returns to the original message and clicks the
+SAME link rather than phoning the firm for a new one. The bound is on
+FINISHING, not on how many times they may open it -- a long intake form is
+not filled in one sitting, and refusing a reopen creates firm staff work
+without preventing any abuse. The client's browser tab also keeps the
+credential across a RELOAD (sessionStorage, tab-scoped), so the 7-day
+fallback is for a closed tab or a new device, not for an accidental
+refresh. One-time use lives in the `link_redemptions` store,
+because a signed bearer string is inherently replayable -- and it is enforced
+at every door that can cause SPEND: `/api/links/open`, the WebSocket, and the
+two `/api/tts/*` routes via `require_paid_client_work`. It is deliberately
+NOT enforced on `require_auth`, which gates retrieval -- see the split above.
+One shared `enforce_link_redemption` serves every door that does redeem,
+EXTRACTED rather than copied: two hand-written versions of a security check
+drift, and the drift is
+silent. That is not hypothetical here -- the socket redeemed while
+`require_auth` did not, so a COMPLETED link kept serving schema, PDF bytes,
+`/api/fill-pdf` and both PAID TTS routes for the rest of its ~48h `exp`,
+which is the same "enforced only on a door an attacker need not call" hole in
+a different place (bd polyglot-pdf-ugm6, Opus cross-surface r1).
+
+**Two different sets, easily conflated.** The count above is the
+`require_auth`-GATED set, and `POST /api/links/mint` belongs in it -- it is
+`Depends(require_auth)` like the rest. That is NOT the same as the set of
+doors a CLIENT credential can open: mint refuses a client, because minting
+needs a `uid` and a client has none. When a number here goes stale, fix it
+from `test_http_route_auth.py`, which derives the gated set from the shipped
+sources -- that test is the authority, not this prose. Reopening an UNFINISHED
+link is allowed (a refresh or dropped connection must not strand a client);
+only COMPLETION burns it, and only a REAL completion -- an abandoned session
+leaves the link usable, because abandonment is the common case on a long form
+and burning there would strand a client mid-intake.
+
+**Every refusal is the same 404** -- forged, expired, replayed, suspended
+firm, kit no longer allowed. Distinguishable errors would make the
+unauthenticated endpoint an oracle for probing which links and firms exist.
+Entitlement is RE-CHECKED at open rather than trusted from the mint-time
+snapshot, since a firm can be suspended in the 48 hours in between.
+
+**Minting is OFF by default** (`LINK_MINTING_ENABLED`) until the spend
+ceiling ships (bd `polyglot-pdf-ik7e`) -- see
+[config-deployment.md](config-deployment.md).
 ### The firm WRITE path: authorization is not authentication
 
 `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`) is the firm

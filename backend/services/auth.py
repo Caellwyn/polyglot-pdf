@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Optional
 
@@ -131,7 +132,91 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
+
+    # TWO CREDENTIAL KINDS reach HTTP routes, exactly as on /ws/fill
+    # (bd polyglot-pdf-ugm6). A firm's CLIENT has no Firebase account and
+    # never will, so their signed magic-link token is what authenticates the
+    # manifest read, the schema read, and the PDF fill their session needs.
+    # Without this the client tier dead-ends at "Unable to load forms": the
+    # WS was taught to accept a link token, but every HTTP route it depends
+    # on still 401'd.
+    #
+    # Dispatch is on SHAPE and only on shape -- a link token has ONE dot, a
+    # Firebase JWT has two -- so neither verifier can be handed the other's
+    # token and a caller cannot opt into the weaker check by labelling
+    # theirs. See services/link_tokens.py for the credential boundary.
+    if token.count(".") == 1:
+        # NO REDEMPTION: require_auth gates RETRIEVAL (the archived-revision
+        # reads and /api/fill-pdf's pure PyMuPDF render; the manifest and
+        # schema moved to require_signin in PR #643). Burning a link must not
+        # take away the document the client already filled. The two PAID
+        # routes it also gates (/api/tts/*) declare require_paid_client_work
+        # instead, which does redeem.
+        return await asyncio.to_thread(resolve_client_link_credential, token)
+
     return verify_token(token)
+
+
+def resolve_client_link_credential(token: str) -> dict:
+    """Resolve a CLIENT LINK token to claims. Raises 401.
+
+    THIS NEVER REDEEMS. Resolving a link proves who the client is; it does
+    not spend anything, so it must not burn their link (maintainer,
+    2026-08-24: "There's not really any reason to have a time limit on saving
+    or printing. That's all client side. The TTL should be backend
+    connection."). Downloading, printing and previewing are the client
+    retrieving the document they already produced, and a clock on that only
+    loses them their work. Redemption belongs to the doors that can SPEND,
+    and each calls enforce_link_redemption itself: /api/links/open, the
+    WebSocket, and require_paid_client_work (/api/tts/*). A `redeem=` flag
+    lived here briefly and was removed -- nothing could safely turn it on,
+    which is precisely the trap CLAUDE.md scar #7 names.
+
+    Retrieval still requires a VALID SIGNED link inside its open window,
+    scoped to that link's single kit.
+
+    THE ONE PLACE a link credential is turned into claims (bd
+    polyglot-pdf-ugm6). Extracted from require_auth because it is not the
+    only door: GET /api/form-kits/{kit_id}/pdf resolves credentials itself
+    (it is OPTIONAL-auth -- a public kit's blank template is served
+    anonymously), so it bypasses require_auth entirely and silently rejected
+    every client link, leaving a client staring at their form with no PDF
+    (Opus cross-surface r6).
+
+    The set of credential-resolution sites is PINNED BY TEST
+    (test_client_link_http_auth.py) so a new one fails CI instead of a review
+    round. It earned that on the #643 merge: dev moved the catalogue routes
+    onto require_signin, which knew nothing about link tokens, and a client
+    401'd on their first two calls with every other test green. Do not just
+    bump the count when it fires -- the new site must dispatch on token
+    shape.
+
+    Synchronous on purpose: callers decide whether to hop off the loop
+    (require_auth does; the pdf route is already sync at that point).
+    """
+    from backend.services.link_tokens import LinkTokenError, verify_link_token
+
+    _unauth = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = verify_link_token(token)
+    except LinkTokenError as exc:
+        logger.warning("link_token_rejected", error=str(exc))
+        raise _unauth from exc
+
+    claims = {
+        "uid": None,
+        "firm_id": payload["firm_id"],
+        "link_kit_id": payload["kit_id"],
+        "employee_id": payload["employee_id"],
+        "jti": payload["jti"],
+        "cw": payload["cw"],
+        "is_client_link": True,
+    }
+    return claims
 
 
 async def require_signin(authorization: Optional[str] = Header(None)) -> dict:
@@ -156,13 +241,65 @@ async def require_signin(authorization: Optional[str] = Header(None)) -> dict:
 
     Enrolment still gates ACTING on a form -- /api/fill-pdf, /ws/fill, TTS,
     and kit retirement -- through require_auth.
+
+    A CLIENT LINK IS ALSO A VALID CREDENTIAL HERE (bd polyglot-pdf-ugm6).
+    These two routes are the client's FIRST TWO CALLS -- the form list and
+    its schema -- so refusing a link token here dead-ends the client tier
+    before it reaches the voice session, on this surface only. That is the
+    same failure the enrolment gate caused for claimless users and the same
+    remedy: dispatch on the token's SHAPE, never on a caller-supplied hint.
+    Retrieval, so NO REDEMPTION -- reading the form you were sent must not
+    burn the link that sent it.
     """
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
+    if token.count(".") == 1:
+        return await asyncio.to_thread(resolve_client_link_credential, token)
     return verify_token(token, require_enrolment=False)
 
 
 def get_db():
     """Returns Firestore client"""
     return firestore.client()
+
+
+async def require_paid_client_work(
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """require_auth PLUS redemption -- for routes that SPEND MONEY.
+
+    The split is the whole point of the correction: "one time" bounds paid
+    work, not the client's access to their own document. A completed link
+    buys no further synthesis and starts no further session; it can still
+    download the PDF it already produced.
+
+    Declare this instead of require_auth on any route that calls a model.
+    The set is pinned by test_http_route_auth.py.
+    """
+    claims = await require_auth(authorization)
+    if not (isinstance(claims, dict) and claims.get("is_client_link")):
+        return claims          # staff: there is no link to redeem
+
+    from backend.services.link_redemptions import (
+        LinkAlreadyUsed,
+        LinkWindowElapsed,
+        RedemptionUnavailable,
+        enforce_link_redemption,
+    )
+    try:
+        # Off the event loop: a sync Admin-SDK read inside an async
+        # dependency blocks the SHARED Cloud Run loop, so a slow Firestore
+        # would stall every concurrent request, in-flight audio included.
+        await asyncio.to_thread(enforce_link_redemption, claims)
+    except (LinkAlreadyUsed, LinkWindowElapsed, RedemptionUnavailable) as exc:
+        # One refusal for all three -- already-used, window-closed and
+        # store-unreachable must be indistinguishable, and an unreachable
+        # store FAILS CLOSED.
+        logger.warning("link_redemption_refused", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    return claims

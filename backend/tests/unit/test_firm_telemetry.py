@@ -269,3 +269,57 @@ def test_session_logging_decisions(form_session_id, is_reconnect, start, end):
 
     assert should_log_session_start(form_session_id, is_reconnect) is start
     assert should_log_session_end(form_session_id, is_reconnect) is end
+
+
+@pytest.mark.parametrize("event_name", ["form_session_started", "form_session_ended"])
+def test_BOTH_session_records_carry_the_link_join_key(monkeypatch, event_name):
+    """PIN THE SET, not one record (CLAUDE.md scar #7).
+
+    The jti is the FIRM'S JOIN KEY: they hold jti -> which client, we hold
+    the pseudonymous record. A record without it makes the split-key
+    arrangement inoperable -- the firm cannot match their client to our
+    record even under a court order.
+
+    I shipped this HALF DONE: the end record got the key, the START record
+    did not, and the START record is the one-per-session row (end fires per
+    CONNECTION). Nothing pinned it, and the docs asserted both. Parametrized
+    over both events so the next record cannot be forgotten either.
+
+    SCOPE, precisely: this pins that the LOGGER writes these keys when handed
+    them. It calls the logger directly, so it says NOTHING about whether the
+    socket ever passes them -- dropping the kwargs at the call sites leaves
+    this green. That property is pinned by
+    test_proactive_complete_events.py::test_the_SOCKET_passes_the_join_key_to_both_records,
+    which drives _handle_fill_session and inspects the recorder.
+
+    An earlier version of this docstring claimed the call-site mutation
+    reddens here. It does not -- the same one-layer-removed shape this bead
+    has now hit twelve times, in a test written to fix an instance of it.
+    """
+    from backend.utils import confirmation_logger as cl
+
+    written = []
+    monkeypatch.setattr(cl, "_write_confirmation_to_file",
+                        lambda sid, ev: written.append(ev))
+    monkeypatch.setattr(cl, "_submit_firestore_write", lambda ev: None)
+
+    if event_name == "form_session_started":
+        cl.log_form_session_start(
+            form_id="I-90", form_session_id="fss_1", firm_id="firm-a",
+            kit_id="i-90", link_jti="jti-abc", employee_id="u-emp-7",
+        )
+    else:
+        cl.log_form_session_end(
+            form_id="I-90", form_session_id="fss_1",
+            completion_status="completed", total_fields_confirmed=3,
+            firm_id="firm-a", kit_id="i-90",
+            link_jti="jti-abc", employee_id="u-emp-7",
+        )
+
+    record = next(e for e in written if e["event"] == event_name)
+    assert record["link_jti"] == "jti-abc", (
+        event_name + " must carry the firm's join key"
+    )
+    assert record["employee_id"] == "u-emp-7", (
+        event_name + " must name the originating employee"
+    )

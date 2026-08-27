@@ -26,7 +26,13 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
 ## /ws/fill handshake
 
 1. Connect with `?token=<auth>` (and optional `?send_transcript=`). The token is
-   verified (`verify_token`) **before** `accept()`; failure closes with `1008`.
+   verified **before** `accept()`; failure closes with `1008`. The verifier is
+   `_verify_ws_credential`, which dispatches on token SHAPE: a ONE-dot token
+   is a CLIENT MAGIC LINK (`verify_link_token`, bd `polyglot-pdf-ugm6`), a
+   TWO-dot JWT is firm staff (`verify_token`). A client has no Firebase
+   account and never will, so the socket must accept both -- see
+   [auth.md](auth.md) (Client magic links). A client link is additionally
+   REDEEMED here (one-time use + the completion window), not merely verified.
 2. The client's **first frame is the handshake itself** — a single JSON text frame
    (`receive_text()` → `json.loads`). There is no `hello`/`hello_ack` here.
 3. `type` selects the mode:
