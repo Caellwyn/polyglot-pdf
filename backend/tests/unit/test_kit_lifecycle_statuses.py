@@ -2023,7 +2023,13 @@ def test_EVERY_lock_helper_call_passes_an_ACTOR_not_a_role_string():
         name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", None)
         if name not in helpers:
             continue
-        for arg in node.args:
+        # POSITIONAL *and* KEYWORD. Checking only node.args let
+        # `actor=role.role` through -- found by accident, when a botched
+        # mutation restore left exactly that form in the tree and the guard
+        # stayed green. A guard that inspects one calling convention is a
+        # guard against one calling convention.
+        candidates = list(node.args) + [kw.value for kw in node.keywords]
+        for arg in candidates:
             # `role.role` where an EditorActor is expected
             if (isinstance(arg, ast.Attribute) and arg.attr == "role"
                     and isinstance(arg.value, ast.Name) and arg.value.id == "role"):
