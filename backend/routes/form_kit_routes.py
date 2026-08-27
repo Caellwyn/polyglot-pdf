@@ -19,6 +19,7 @@ import structlog
 
 from backend.services.auth import (
     require_auth,
+    require_signin,
     resolve_client_link_credential,
     verify_token,
 )
@@ -131,7 +132,7 @@ class FormKitManifestResponse(BaseModel):
 
 
 @router.get("/form-kits", response_model=FormKitManifestResponse)
-async def list_form_kits(user: dict = Depends(require_auth)) -> FormKitManifestResponse:
+async def list_form_kits(user: dict = Depends(require_signin)) -> FormKitManifestResponse:
     """
     List available form kits.
 
@@ -237,7 +238,7 @@ async def list_form_kits(user: dict = Depends(require_auth)) -> FormKitManifestR
 
 
 @router.get("/form-kits/{kit_id}/schema")
-async def get_form_kit_schema(kit_id: str, user: dict = Depends(require_auth)) -> JSONResponse:
+async def get_form_kit_schema(kit_id: str, user: dict = Depends(require_signin)) -> JSONResponse:
     """Return a single kit's schema JSON, streamed from the store.
 
     Works in both local and gcs mode. `Cache-Control: no-store` so a re-pull

@@ -136,7 +136,10 @@ describe('TextField - Bug 1: [object Object] Fix', () => {
       );
 
       const input = screen.getByRole('textbox') as HTMLInputElement;
-      expect(input.type).toBe('email');
+      // PDF-backed fields never take a coercing/validating native input type:
+      // the kit's format_hint is the authority, not the browser's notion of a
+      // valid address (bd polyglot-pdf-md20o). The VALUE must still round-trip.
+      expect(input.type).toBe('text');
       expect(input.value).toBe('test@example.com');
     });
 
@@ -149,7 +152,10 @@ describe('TextField - Bug 1: [object Object] Fix', () => {
       );
 
       const input = screen.getByRole('textbox') as HTMLInputElement;
-      expect(input.type).toBe('tel');
+      // As above: text, not tel (bd polyglot-pdf-md20o). The w7 tel fields
+      // declare no layout constraint at all, so a native type would let the
+      // browser's convention win over the kit's.
+      expect(input.type).toBe('text');
       expect(input.value).toBe('555-1234');
     });
   });

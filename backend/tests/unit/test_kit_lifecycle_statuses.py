@@ -1367,7 +1367,7 @@ def test_a_supersede_honours_the_OUTGOING_kit_s_lock(client):
     # this explicit assertion that the call exists on the supersede path.
     import inspect
     src = inspect.getsource(ekr.set_editor_kit_status)
-    assert "_require_edit_lock(superseded_meta, role)" in src, (
+    assert "_require_edit_lock(superseded_meta, role.role)" in src, (
         "the supersede path must check the OUTGOING kit's lock"
     )
 
@@ -1547,7 +1547,7 @@ def test_releasing_a_lock_never_destroys_unreadable_metadata(client):
     kit = _make_kit(root, "w7", status="complete")
     (kit / "metadata.json").write_text("{ not json", encoding="utf-8")
 
-    resp = c.delete("/api/editor/kits/w7/lock", headers=AUTH_HDR)
+    resp = _unlock(c, "w7", AUTH_HDR)
 
     assert resp.status_code == 409, resp.text
     assert (kit / "metadata.json").read_text(encoding="utf-8") == "{ not json"
@@ -1735,3 +1735,39 @@ def test_a_PUBLISH_refusal_still_says_marked_complete(client):
     detail = _status(c, "no-pdf", "complete", headers=AUTH_HDR).json()["detail"]
 
     assert "marked complete" in detail, detail
+
+
+def test_an_author_can_take_a_lock_held_by_ANOTHER_author(client):
+    """Same-role contention stays ALLOWED (bd polyglot-pdf-hn0jq).
+
+    _lock_refusal is documented as deliberately permitting this: with shared
+    tokens two authors were indistinguishable, so refusing would strand the
+    second on a lock the first may have abandoned, with no way to tell them
+    apart and no self-rescue.
+
+    Passing the ACTOR object instead of its role broke it silently -- the
+    comparison `role != "author"` is always True against an object, so every
+    author was refused every author-held lock. 99 tests stayed green.
+    Re-scoping the lock to a PERSON is child 2's job (bd polyglot-pdf-5tuas);
+    until then this must not regress.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    first = _lock(c, "w7", AUTH_HDR)
+    assert first.status_code == 200, first.text
+
+    second = _lock(c, "w7", AUTH_HDR)
+    assert second.status_code == 200, (
+        "an author was refused a lock held by an author: {}".format(second.text))
+
+
+def test_an_author_can_RELEASE_a_lock_held_by_another_author(client):
+    """The release path had the identical miss, one route apart."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _unlock(c, "w7", AUTH_HDR)
+    assert resp.status_code == 200, (
+        "an author could not release an author-held lock: {}".format(resp.text))

@@ -52,8 +52,13 @@ import time
 import pytest
 from fastapi import HTTPException
 
+from fastapi.testclient import TestClient
+
+from backend.main import app
 from backend.services import kit_gates
 from backend.services.auth import require_auth
+
+client = TestClient(app)
 from backend.services.link_redemptions import LinkAlreadyUsed
 from backend.services.link_tokens import mint_link_token
 
@@ -158,13 +163,25 @@ def test_the_journey_survives_a_RELOAD_and_then_burns_on_completion(journey):
     """
     token, jti = mint_link_token(_FIRM, _KIT, _EMPLOYEE)
 
-    # The manifest, the schema, and a reload -- all three go through
-    # require_auth. NOT the PDF: that route is optional-auth and resolves
-    # credentials itself, which is exactly why it broke separately (r6).
-    # Its behavior is pinned in test_http_route_auth.py, by a test that
-    # drives the real route.
+    # A reload re-authenticates, repeatedly, and keeps working.
     for _ in range(3):
         assert asyncio.run(_auth(token))["jti"] == jti
+
+    # AND THE CLIENT'S FIRST TWO CALLS GO OVER REAL HTTP. Asserting on a
+    # dependency function is what let this break: the catalogue routes were
+    # moved onto require_signin (PR #643), which knew nothing about link
+    # tokens, so a client 401'd on the form list -- while this test, calling
+    # require_auth directly, still passed. Drive the ROUTES, so moving them
+    # to another dependency reddens here instead of dead-ending a client.
+    auth = {"Authorization": "Bearer " + token}
+    listed = client.get("/api/form-kits", headers=auth)
+    assert listed.status_code == 200, listed.text
+    # The schema route shares that dependency. This fixture's kit is
+    # synthetic and has no schema FILE, so 404 (the handler ran and found
+    # nothing) is the pass here -- what must never come back is 401/403,
+    # which would mean the credential was refused at the door again.
+    schema = client.get("/api/form-kits/" + _KIT + "/schema", headers=auth)
+    assert schema.status_code not in (401, 403), schema.text
 
     journey.open_link(jti, _FIRM, _KIT)   # the socket opened the session
     journey.complete_link(jti)

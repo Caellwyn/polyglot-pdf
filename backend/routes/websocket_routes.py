@@ -1209,10 +1209,35 @@ async def fill_form_from_schema(
 			# by that shape; anything else goes to Firebase verification
 			# unchanged. Both paths end with claims we SIGNED or Firebase
 			# signed -- the handshake is never trusted for identity.
+			#
+			# NO check_revoked ON THE STAFF PATH (kept from #644, and
+			# _verify_ws_credential's Firebase branch is a plain
+			# verify_token(token) for exactly this reason). check_revoked
+			# forces a Firebase USER-RECORD FETCH needing
+			# firebaseauth.users.get -- a permission polyglot-backend-sa
+			# deliberately does NOT have, so deployed, EVERY handshake failed
+			# with INSUFFICIENT_PERMISSION and the app could not connect at
+			# all. It is STRUCTURALLY INVISIBLE locally and in tests:
+			# VFF_DISABLE_AUTH returns earlier, and every test stubs the
+			# Firebase SDK, so the failure exists only against real Firebase
+			# with the real service account. Cost of dropping it: revoking an
+			# account takes effect when its token expires (up to an hour)
+			# rather than immediately -- the maintainer chose that over
+			# widening the deployed backend's permissions (2026-08-26).
 			claims = _verify_ws_credential(token)
 		except Exception as e:
-			log.warning("websocket_auth_failed", error=str(e))
-			await websocket.close(code=1008, reason="Authentication failed")
+			# Distinguish "not enrolled" from "bad token". This diff INTRODUCED
+			# the enrolment requirement, so collapsing both into
+			# "Authentication failed" would leave someone locked out of an app
+			# they can sign into, with nothing pointing at the remedy
+			# (scripts/bootstrap_voice_dev.py). Same 401-vs-403 distinction the
+			# HTTP side draws, carried onto the surface where it actually bites.
+			not_enrolled = getattr(e, "status_code", None) == 403
+			log.warning("websocket_auth_failed", error=str(e),
+						not_enrolled=not_enrolled)
+			reason = ("This account is not enrolled for the voice application"
+					  if not_enrolled else "Authentication failed")
+			await websocket.close(code=1008, reason=reason)
 			return
 
 		await websocket.accept()

@@ -292,6 +292,42 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   step-2 escalation triggers; when unsure, ping. Full rule: CLAUDE.md "Auto-merge
   vs. maintainer merge". Force-push / `bd dolt push --force` stay barred.
 
+## Reviewers are read-only on the working tree
+
+All three reviewers produce a REPORT (and may file beads). None of them may
+change the repo. They are given `Bash`, so this is a discipline, not a tool
+limitation -- and they run inside a worktree whose session usually has
+UNCOMMITTED work in it, so any write, revert, stash, or checkout destroys that
+work silently.
+
+The rule lives in each agent file as its first section; the short form:
+
+- Read, `git diff`/`log`/`show`/`status`, and RUN TESTS freely -- verification
+  is most of a reviewer's value.
+- To test a mutation, copy the file OUTSIDE the repo and mutate there, or
+  report the mutation and its predicted result as an explicitly unverified
+  finding. An honestly-unverified finding beats a verified one that ate the
+  author's work.
+- Never `git stash`/`checkout`/`restore`/`reset`/`clean`/`add`/`commit`, and
+  never write inside the repo (redirects, `sed -i`, `mv`, `rm`).
+- ONE exception: **filing a bead**. `bd create`/`bd note`/`bd dolt push`
+  write to the tracked `.beads/`, and that is the reviewer's sanctioned
+  output channel -- the rule protects the author's IN-FLIGHT WORK, which
+  `.beads/` is not. (`bd dolt pull`, which the filing sequence runs first,
+  needs no exception -- it writes only to the gitignored `.beads/dolt/` and
+  `.beads/embeddeddolt/`, never a tracked path.) Use the `bd` commands,
+  never a hand edit of those files.
+- If a test run leaves an artifact behind, NAME IT in the report; do not tidy
+  it away. Cleanup is indistinguishable from deleting the author's work.
+
+Why this is doctrine and not a nit (bd polyglot-pdf-fytzi, 2026-08-22): a
+reviewer stashed an author's uncommitted fix mid-review and later restored
+files outright. The same two fixes had to be reconstructed twice, and the
+author burned the round chasing "my change vanished" rather than reviewing.
+The orchestrator's half of the same lesson: **commit before spawning a
+reviewer** -- an uncommitted edit is not safe while another agent holds the
+worktree.
+
 ## The three reviewers
 
 **Inner -- `.claude/agents/fresh-eyes-reviewer.md`** (spawn by type; Sonnet, or

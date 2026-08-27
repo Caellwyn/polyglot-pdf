@@ -184,8 +184,11 @@ Two inputs are easy to miss and both move the result by thousands of tokens:
 - **The tool declarations are the SESSION's, not the raw settings list.**
   `_build_tool_declarations` (`backend/services/form_filling_service.py:219-229`)
   drops `switch_section` whenever `CONTINUOUS_SESSION` is on (the production
-  default) -- 6 declarations, not 7. Deriving against the unfiltered
-  `settings.TOOL_DECLARATIONS` overstates the floor by ~92 tokens.
+  default) and appends `name_spellback` under `SPELLBACK_TOOL_ENABLED` (default
+  ON since bd polyglot-pdf-apkdl) -- so the SESSION list is 7, while the raw
+  `settings.TOOL_DECLARATIONS` is 6 and contains a different member set.
+  Derive against the session's list, never the raw one: they differ in BOTH
+  directions, so neither is a safe stand-in for the other.
 - **`injection_budget_tokens` is a real third addend**, passed from
   `guidance_contract.inline_injection_budget_tokens(full_schema)`
   (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1787`).

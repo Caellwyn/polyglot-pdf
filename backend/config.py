@@ -411,14 +411,27 @@ class Settings(BaseModel):
 	# head re-emits the session's FIRST spelled name at ~10% of spelled
 	# read-backs while text + tool calls stay correct).
 	#
-	# Default OFF: the tool lands dark, is validated on the W-7 harness with the
-	# flag set locally, and the demo cutover (flag default flip + SI wording
-	# replacement at the SI-slimming session's marker) is a separate, deliberate
-	# change. While ON, the DTI SI gets DTI_SPELLBACK_SI_ADDENDUM appended so
-	# the model stops spelling aloud itself (double delivery -- one corrupted,
-	# one correct -- is worse than either alone).
+	# Default ON since the cutover (bd polyglot-pdf-apkdl). It landed dark and
+	# ran on the demo from 2026-08-10 via deploy-demo.sh's BACKEND_EXTRA_ENV,
+	# which is the bake the dark launch was for.
+	#
+	# THE DEFAULT IS WHY THIS CUTOVER HAPPENED. Nothing local set the env var --
+	# not scripts/dev-local.ps1, not the run-local or voice-harness skills, not
+	# backend/.env.DEV -- so every local session ran WITHOUT the tool declared
+	# and without the SI addendum. The model cannot call a tool it was never
+	# given, so it fell back to speaking the spelling aloud, and local looked
+	# broken against a demo that worked. A default-off feature that only one
+	# deploy script turns on is a permanent local-vs-deployed divergence, and it
+	# cost a full investigation to rediscover.
+	#
+	# The env var is KEPT as an emergency rollback (SPELLBACK_TOOL_ENABLED=false)
+	# rather than removed, so the four gates it drives stay one switch: the tool
+	# declaration (form_filling_service._build_tool_declarations), the
+	# DTI_SPELLBACK_SI_ADDENDUM append (ai_context), the dispatch guard
+	# (callback_handler's get_spellback_enabled), and the /api/tts/spellback
+	# route's 503. Flipping the default flips all four together.
 	SPELLBACK_TOOL_ENABLED: bool = (
-		os.getenv("SPELLBACK_TOOL_ENABLED", "false").lower() == "true"
+		os.getenv("SPELLBACK_TOOL_ENABLED", "true").lower() == "true"
 	)
 	# Cloud TTS voice for the spell-back clip. Empty (the default) = follow the
 	# SESSION LANGUAGE with the Live model's persona:
@@ -816,10 +829,15 @@ class Settings(BaseModel):
 	]
 
 	# Deterministic spell-back tool declaration (bd polyglot-pdf-22h1f).
-	# Deliberately NOT in TOOL_DECLARATIONS: the flag defaults off, and
-	# TOOL_DECLARATIONS is the production contract the static tests pin.
-	# FormFillingService._build_tool_declarations appends this when
-	# SPELLBACK_TOOL_ENABLED; the cutover PR moves it into the main list.
+	# Deliberately kept OUT of TOOL_DECLARATIONS even though the flag now
+	# defaults ON (bd polyglot-pdf-apkdl). The earlier note here said the
+	# cutover would move it into the main list; it deliberately does not.
+	# _build_tool_declarations appending it under SPELLBACK_TOOL_ENABLED is what
+	# makes the flag a real rollback: setting the env var to false has to remove
+	# the tool from the declared set, and a constant merged into
+	# TOOL_DECLARATIONS could not be removed that way. TOOL_DECLARATIONS stays
+	# the unconditional production contract the static tests pin; this is the
+	# one conditional member.
 	#
 	# No parameters ON PURPOSE: the client resolves the CURRENT field itself
 	# (same pin-aware resolution the confirm path uses), so the model never
@@ -1151,6 +1169,7 @@ class Settings(BaseModel):
 		"\n"
 		"TOOL PROTOCOL:\n"
 		"Use the tool whose declared purpose matches your intent and pass arguments exactly as declared. Fill exactly ONE field per call. Act on what a tool returns: on a validation error, retry with a corrected value or ask the user to clarify -- never proceed until the field updates successfully. You FILL in the current section only; to fill a field in another section, navigate there first -- but that limit is about WRITING: get_form_status and ask_secretary read across the WHOLE form and are always available.\n"
+		"A validation error tells you WHAT was wrong -- SAY THAT, never a bare apology. 'There was an error' is useless to the user and they cannot act on it. Put the reason in your own words in the session language (the error text itself is English system text and is never spoken word for word): name what the field needs, and if it is a FORMAT problem fix it YOURSELF and retry rather than asking the user to re-say the same answer differently -- they already gave you the answer, the shape is your job. Ask them again only when you genuinely need a different ANSWER, not a different format.\n"
 		"\n"
 		"NEVER INVENT A VALUE -- this outranks every instinct to be helpful. Fill only what the user explicitly gave you in this conversation. Heard nothing, noise or silence? Ask again. Never guess, never reuse an example value, and never supply a value the user has not said.\n"
 		"\n"
@@ -1203,6 +1222,7 @@ class Settings(BaseModel):
 		# docs/standards/confirmation-and-audit.md ("The deployment invariant").
 		"ANSWERING QUESTIONS:\n"
 		"Ground answers about the current field in its 'Official reference text' from the guidance block -- never read that text aloud wholesale, and never invent legal or document requirements. If it does not clearly answer, or you hold none, call ask_secretary rather than guessing; the secretary quotes the form's official instructions back to you, and also holds the user's past answers and can identify a field you do not hold. Ask it what the instructions SAY, never what the user should do. Relay its answer FAITHFULLY AND WHOLE -- including every condition or exception it flags, and its closing deferral. Never trim the conditions to give a cleaner yes: the qualifier is the part that protects the user. Never add a conclusion of your own on top ('so yours should be fine') -- the guidance speaks, you do not decide their case.\n"
+		"PLAIN MEANING is not a determination -- just answer it. If they ask what a word or acronym on the form MEANS -- 'what does ITIN stand for', 'what is a surname' -- say it plainly, in one short sentence, and move on. These have one correct answer, it does not depend on their situation, and refusing makes you useless on the easy questions. Do not hedge, do not attribute, do not defer, and do not call the secretary first. The line is WHAT AN ORDINARY WORD MEANS versus WHAT A RULE SAYS OR WHAT APPLIES TO THEM: 'ITIN stands for Individual Taxpayer Identification Number' is plain meaning; 'are you eligible for an ITIN', 'do you need one', 'should you check box a' are NOT -- those hedge and defer exactly as below, even when the answer feels obvious. A NAMED RULE ON THE FORM IS NEVER PLAIN MEANING, however the question is phrased: 'what does exception 3 mean', 'what counts as an exemption', 'what does it mean that I need a tax return' are asking what a RULE REQUIRES, not what a word means -- hedge and defer on those exactly as below, and use the official text rather than your own words. When genuinely unsure which side a question is on, treat it as a rule question and hedge.\n"
 		"ALWAYS HEDGE AND DEFER on anything touching eligibility, requirements, documents, or what a rule means for THIS user -- even when the answer looks obvious, even if they press, and even if you are sure. Say what the official guidance says, attribute it ('according to the instructions for this form ...'), state the conditions it puts on it, and close by telling them to confirm their own situation with the firm or professional reviewing their form. A qualified human is expected to review this form before it is filed; that reviewer makes the determinations, never you. Do not promise the user that a review WILL happen -- the disclaimer has them AGREE to obtain review, which is their commitment, not our guarantee that it occurred.\n"
 		"INFORMATION, NEVER ADVICE: you explain what a field expects and what the official instructions say. You never tell the user what to enter, which option to choose, or what applies to their situation -- those decisions are theirs alone. 'The instructions say category a covers X' is information; 'you should check box a' is advice. Never give advice."
 	)

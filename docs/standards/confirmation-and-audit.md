@@ -371,12 +371,90 @@ modal renders exactly these paragraphs -- one source, no separate fullText" --
 is now TRUE of shipped behavior and may be cited as current.
 
 **The acceptance record now names WHICH text was agreed to.** `POST
-/api/disclaimer-acceptance` logs `script_version` (bd
+/api/disclaimer-acceptance` records `script_version` (bd
 `polyglot-pdf-s1iex.7`) -- the hash of the exact per-language script, taken
 from the intro route's `X-Intro-Script-Version` response header so the backend
 stays the single source of it. That is what turns the epic's determinism into
 EVIDENCE: without it the record proves someone clicked Agree but not what they
 were told.
+
+**The acceptance record is DURABLE** (bd `polyglot-pdf-0dsv4`). It goes to the
+same sink the field confirmations use -- the `confirmation_events` Firestore
+collection AND the per-session JSONL file -- keyed on `form_session_id`, so
+`read_confirmation_log(form_session_id)` returns the acceptance and the field
+confirmations as ONE timestamp-ordered session record: *this session accepted
+this exact text, then confirmed these fields*.
+
+It was a structlog line and nothing else until then, which meant the record
+that a user accepted the LEGAL TERMS aged out with the Cloud Run log bucket
+while the record of what they TYPED was durable -- backwards for an evidence
+trail.
+
+The write is FAIL-OPEN: a sink outage logs and continues rather than failing
+the request. Losing one audit record is bad; blocking every user from starting
+their form is worse, and the structlog line still records the acceptance
+either way. A signature mismatch logs distinctly
+(`disclaimer_acceptance_wiring_error`) from a transient failure
+(`disclaimer_acceptance_durable_write_failed`), because the former fails on
+EVERY request and must not hide inside degradation noise.
+
+**`firm_id` is written as `None` here, PERMANENTLY.** This route carries no
+auth token and never will: a client filling a form has NO ACCOUNT by design --
+the magic link (bd `polyglot-pdf-ugm6`) is their only entry, and only firms,
+managers and devs have auth accounts (maintainer, 2026-08-24). Requiring a
+token would 401 every real user at the Agree button and block them from filling
+a form at all. An earlier version of this paragraph called the `None` a
+temporary compromise pending firm auth; that was wrong.
+
+The key is still written so the collection has ONE shape, and
+`firm_of_events()` recovers the firm from the session's OTHER records, which do
+carry it -- that join is the long-term answer, not a stopgap. A session that
+accepted and abandoned before confirming any field has no firm anywhere and
+correctly reports `None` rather than guessing, as do records that DISAGREE.
+
+**The anonymous write is BOUNDED, not gated** (bd `polyglot-pdf-g3kui`).
+Because the route cannot require auth and writes durably to this collection,
+any caller could otherwise append unbounded documents to the evidence trail the
+kit-deletion guard and legal retrieval both read. Two controls:
+
+- **One acceptance per `form_session_id`**, with one deliberate exception. A
+  session accepts once; that domain fact is the bound, so a flood costs one row
+  per DISTINCT id rather than one per request. A duplicate is DROPPED silently,
+  not errored -- a retry after a lost response is legitimate client behavior.
+
+  **PLACEHOLDER IDS ARE NOT DEDUPED, so they are NOT BOUNDED.** Both overlays
+  send `state?.formSessionId || 'unknown'`, so every session missing an id
+  sends the same literal. Deduping on it would keep the first acceptance and
+  silently drop every later one -- from DIFFERENT USERS. Losing a real
+  acceptance is far worse than a duplicated row, so `unknown` / `undefined` /
+  `null` / `none` / empty are exempt (`_NON_UNIQUE_SESSION_IDS`).
+
+  The cost is explicit: a caller who sends `form_session_id=unknown` on every
+  request is bounded ONLY by the field caps below -- one row per request, the
+  flood this control otherwise prevents. That is the accepted trade, because
+  the alternative silently destroys evidence rather than merely accumulating
+  it. A real bound for that case needs a rate limit, which this backend does
+  not have (see KNOWN LIMIT below).
+- **Bounded fields**, enforced on the Pydantic model so an oversized body never
+  reaches the handler or the sink. Nothing here is free text.
+
+**They fail in OPPOSITE directions, both deliberately.** At the dedupe set's
+memory cap the guard stops DEDUPING rather than stops writing -- a duplicated
+row is a far better failure than a lost legal record. The field caps do the
+reverse and REJECT (422): an oversized body is not a real acceptance, and
+truncating one into the evidence trail would record something the user never
+sent. Caps are set well above every real value so a legitimate acceptance
+cannot hit them.
+
+**KNOWN LIMITS, stated rather than implied.** Three, in rising order of size:
+the dedupe is IN-PROCESS, so it does not survive a restart; it does not bound a
+flood spread across Cloud Run workers; and it does not bound a caller who sends
+a PLACEHOLDER id at all, since those are deliberately exempt (above). It is a
+cheap bound on the common case, NOT a rate limiter -- there is
+no rate limiting anywhere in this backend. A distributed limit would be new
+infrastructure and its own decision. Retention is separate again:
+`CONFIRMATION_RETENTION_DAYS` is unset, so nothing ages out (bd
+`polyglot-pdf-pol2`).
 
 **KNOWN GAP as of bd `polyglot-pdf-nsb4y`: on the DEFAULT deployment the
 record still logs `None`.** That clause used to read "the legacy model-read
@@ -434,7 +512,9 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-xwlt: `firm_id` joins the confirmation record and the session-lifecycle pair is WIRED -- see [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md). Previously bd polyglot-pdf-1dt9b: the Undertaken-register
-reachability claim was stale -- the frontend intro-clip player shipped in bd
-s1iex.5, so the real gate is now both flags defaulting off, not "no player
-exists").*
+*Last updated: 2026-08-24 (bd polyglot-pdf-g3kui: the anonymous acceptance
+write is BOUNDED -- one record per form_session_id plus field caps -- because
+the route can never require auth: a client filling a form has no account by
+design. firm_id is therefore PERMANENTLY None here, not pending firm auth.
+Also bd polyglot-pdf-0dsv4: the acceptance is durable, written to the same
+sink as the field confirmations and joined on form_session_id.)*

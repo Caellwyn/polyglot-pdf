@@ -11,18 +11,51 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 import structlog
 
+# ALIASED deliberately: the route handler below is also called
+# log_disclaimer_acceptance, and a bare import would be SHADOWED by it at
+# import time -- the call would resolve to the handler, raise TypeError on
+# the kwargs, and get swallowed by the fail-open except, so the durable
+# write would silently never happen (caught in fresh-eyes review of bd
+# polyglot-pdf-0dsv4, after tests that patched the shadowed name passed).
+from ..utils.confirmation_logger import (
+	log_disclaimer_acceptance as write_durable_acceptance_record,
+)
+
 _log = structlog.get_logger().bind(module="disclaimer_routes")
 
 router = APIRouter(prefix="/api", tags=["disclaimer"])
 
 
 class DisclaimerAcceptanceRequest(BaseModel):
-	"""Request to log disclaimer acceptance"""
+	"""Request to log disclaimer acceptance.
 
-	form_session_id: str = Field(..., description="Frontend form session ID")
-	language: str = Field(..., description="Language user selected (e.g., 'Spanish', 'English')")
+	EVERY FIELD IS BOUNDED (bd polyglot-pdf-g3kui). This route is
+	UNAUTHENTICATED and cannot be gated: a client filling a form has no account
+	by design -- the magic link is their only entry (maintainer, 2026-08-24) --
+	so requiring a token would 401 every real user at the Agree button. Since
+	bd polyglot-pdf-0dsv4 the route also writes DURABLY to the legal-evidence
+	collection, so an unbounded body is an unbounded write to that collection.
+
+	None of these are free text: a session id is a generated token, a language
+	is one of a fixed set, a timestamp is a number, and the other two are a
+	user-agent string and a 16-char hash. The caps are set well above every
+	real value and reject at the MODEL, so an oversized body never reaches the
+	handler or the sink.
+	"""
+
+	form_session_id: str = Field(
+		..., min_length=1, max_length=128,
+		description="Frontend form session ID",
+	)
+	language: str = Field(
+		..., min_length=1, max_length=64,
+		description="Language user selected (e.g., 'Spanish', 'English')",
+	)
 	timestamp: int = Field(..., description="Unix timestamp (milliseconds) when user clicked 'I Agree'")
-	user_agent: Optional[str] = Field(None, description="Browser user agent string")
+	user_agent: Optional[str] = Field(
+		None, max_length=512,
+		description="Browser user agent string",
+	)
 	# Which exact disclaimer TEXT the user agreed to (sprint 20, bd
 	# polyglot-pdf-s1iex.7). Optional for two DIFFERENT reasons: a client one
 	# deploy behind simply predates the field, while the legacy model-read
@@ -31,7 +64,7 @@ class DisclaimerAcceptanceRequest(BaseModel):
 	# case is a KNOWN AUDIT GAP -- the user read deterministic scripted text
 	# and the record still names nothing (bd polyglot-pdf-pyebx).
 	script_version: Optional[str] = Field(
-		None,
+		None, max_length=64,
 		description="Hash of the scripted intro text the user saw/heard (intro_tts.script_version)",
 	)
 
@@ -83,6 +116,53 @@ async def log_disclaimer_acceptance(
 		user_agent=data.user_agent,
 		script_version=data.script_version,
 	)
+
+	# DURABLE record (bd polyglot-pdf-0dsv4). The structlog line above ages out
+	# with the log bucket; this writes the same acceptance to the confirmation
+	# sink -- Firestore plus the per-session file -- keyed on form_session_id,
+	# so read_confirmation_log() returns the acceptance and the field
+	# confirmations as ONE timestamp-ordered session record.
+	#
+	# FAIL-OPEN, deliberately: a sink outage must never 500 an Agree click and
+	# block the user from starting their form. _submit_firestore_write already
+	# swallows and logs its own failures, but the file write and any import-time
+	# error are caught here so nothing on this path can reach the client.
+	try:
+		write_durable_acceptance_record(
+			form_session_id=data.form_session_id,
+			language=data.language,
+			timestamp_unix_ms=data.timestamp,
+			script_version=data.script_version,
+			user_agent=data.user_agent,
+			# No firm_id, PERMANENTLY: a client filling a form has no account
+			# by design -- the magic link is their only entry, and only firms,
+			# managers and devs have auth accounts (maintainer, 2026-08-24) --
+			# so this route can never carry a client token. Written as None so
+			# the record shape matches the rest of the collection; the firm is
+			# recovered via firm_of_events(), which is the long-term answer,
+			# not a stopgap (bd polyglot-pdf-g3kui).
+			firm_id=None,
+		)
+	except TypeError as e:
+		# A TypeError here is a WIRING error, not an outage: the call reached
+		# something with the wrong signature. That is exactly how this feature
+		# shipped broken once (the util was shadowed by this route handler,
+		# which shares its name -- bd polyglot-pdf-0dsv4), and it fails on
+		# EVERY request rather than intermittently. Logging it under the same
+		# event name as a transient sink failure would bury a 100%-failure
+		# bug inside normal degradation noise, so it gets its own name.
+		_log.error(
+			"disclaimer_acceptance_wiring_error",
+			form_session_id=data.form_session_id,
+			error=str(e),
+			note="the durable-write call has the wrong signature; this fails on every request",
+		)
+	except Exception as e:
+		_log.error(
+			"disclaimer_acceptance_durable_write_failed",
+			form_session_id=data.form_session_id,
+			error=str(e),
+		)
 
 	return {
 		"status": "logged",

@@ -1,8 +1,8 @@
 # Risk rating
 
-**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
+**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/routes/disclaimer_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-08-06 (docs audit bd polyglot-pdf-2zk3: added text_ai_gemini.py as High-risk and corrected the "only" google-genai-importer claim). See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
+*Last updated: 2026-08-24 (bd polyglot-pdf-suwud: gave disclaimer_routes.py its own Med-tier row, explaining why it stays med rather than high despite the durable evidence write bd polyglot-pdf-0dsv4 added; added the file to this doc's Tracks line, which had never named it).*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
@@ -80,7 +80,8 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 | `backend/services/ai_context.py` | Builds the system instruction / context for the adapter -- real behavior, but bugs surface in the adapter it feeds. |
 | `backend/models/conditional_vocabulary.py` | The schema-v2 operator/trigger registry + option-slug convention (bd h76m.3) driving the `form_models.py` v2 validators (and later the P1.2 contract render + P2.1 lint) -- a wrong matrix entry mis-validates, but bugs surface through the model validation it feeds. |
 | `backend/services/form_filling_service.py`, `manifest_service.py`, `validation_handler.py`, `request_coordinator.py` | Service-layer logic with callers, but not a cross-file contract or a money/PII surface on their own. |
-| `backend/routes/form_kit_routes.py`, `disclaimer_routes.py` | Route handlers with narrower blast radius than the WS/PDF routes. |
+| `backend/routes/form_kit_routes.py` | Route handlers with narrower blast radius than the WS/PDF routes. |
+| `backend/routes/disclaimer_routes.py` | Deliberately UNAUTHENTICATED (a client filling a form has no account by design, bd polyglot-pdf-g3kui), and since bd polyglot-pdf-0dsv4 it writes DURABLY to the confirmation-events legal-evidence collection -- the same trail the irreversible-kit-deletion guard depends on -- keyed on a client-supplied `form_session_id`. Stays **med**, not high, because the actual surface is narrow: every field is bounded at the Pydantic model (an oversized body never reaches the handler, bd g3kui), the session id is guarded again at the sink (`_is_safe_session_id` in `confirmation_logger.py` -- no traversal, no unsafe filename), and the write is fail-open (a sink outage never 500s the Agree click). The risk that remains is UNBOUNDED WRITE VOLUME, not a data-shape or path-traversal bug: no auth gate and no rate limit means nothing stops a flood of small, well-formed, legitimate-looking records into the evidence collection. |
 | `backend/main.py`, `backend/dependencies.py` | Wiring/bootstrap -- a break is loud and caught immediately at startup. |
 
 ### Low (illustrative -- the default)

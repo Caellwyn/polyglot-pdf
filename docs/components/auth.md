@@ -123,9 +123,8 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 **HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
-`verify_token` (so the same dev bypass applies). It gates NINE routes: `POST
-/api/fill-pdf` (the body carries user-entered field values), the kit-catalogue
-reads `GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`, the
+`verify_token` (so the same dev bypass applies). It gates `POST
+/api/fill-pdf` (the body carries user-entered field values), the
 archived-revision reads `GET /api/form-kits/{kit_id}/archive` +
 `.../archive/{marker}/schema` (bd `polyglot-pdf-qfyxr`; same firm-visibility
 gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd
@@ -149,6 +148,33 @@ single kit. The frontend
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
+**Selecting a form is NOT gated on enrolment.** The kit-catalogue reads --
+`GET /api/form-kits` and `GET /api/form-kits/{kit_id}/schema` -- use
+`require_signin` instead: a valid Firebase token is required, a firm or dev
+claim is not. Maintainer, 2026-08-25: *"choosing a form to work on is a
+fundamental part of using the voice app and the whole app is blocked without
+access to that ... anyone using the app must have access to at least one form
+kit."* Future users arrive by magic link with no firm claim, so gating the
+catalogue leaves them in an app with nothing to pick and no way out -- the
+only remedy the UI can offer is "sign in again", which was never the problem.
+
+This costs no confidentiality: both routes already filter to kits that are
+PUBLIC or in the caller's own firm allowlist (`_firm_allowed_kits`), and the
+schema route 404s a private kit the caller cannot see. Enrolment never
+protected a private kit here; it only decided whether someone saw the public
+ones. `backend/tests/unit/test_http_route_auth.py` pins BOTH sets -- the
+browse routes and the gated routes -- so a route moving between them fails
+loudly rather than as "no forms found".
+
+`require_signin` ALSO accepts a client link token, by the same shape dispatch
+`require_auth` uses (and likewise without redeeming -- browsing the form you
+were sent must not burn the link). It has to: these are the client's first
+two calls, so refusing a link here dead-ends the client tier on this surface
+alone, with every other door still working. That is not hypothetical -- it is
+what the ugm6/#643 merge produced, caught by the credential-site set guard in
+`test_client_link_http_auth.py` and now pinned over real HTTP by
+`backend/tests/integration/test_client_link_journey.py`.
+
 ### Client magic links -- the THIRD credential system
 
 `bd polyglot-pdf-ugm6`. **A firm's CLIENT never signs in.** They are our
@@ -243,7 +269,6 @@ snapshot, since a firm can be suspended in the 48 hours in between.
 **Minting is OFF by default** (`LINK_MINTING_ENABLED`) until the spend
 ceiling ships (bd `polyglot-pdf-ik7e`) -- see
 [config-deployment.md](config-deployment.md).
-
 ### The firm WRITE path: authorization is not authentication
 
 `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`) is the firm

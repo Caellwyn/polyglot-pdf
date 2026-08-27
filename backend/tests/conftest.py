@@ -57,3 +57,85 @@ def _isolate_k_service(monkeypatch):
     above, which runs before this fixture -- or any fixture -- ever could.
     """
     monkeypatch.delenv("K_SERVICE", raising=False)
+
+
+# bd polyglot-pdf-hn0jq: the editor moved from two shared tokens to per-user
+# Firebase identity. 28 test files mount the editor router, and every one of
+# them authenticates by sending an X-Editor-Token header -- so without a shim
+# they all 401. Rewriting 28 files' auth would be churn; overriding the
+# dependency once here is the same trick a single test file was using, hoisted
+# to where every file gets it.
+#
+# The two tokens the suite already sends become two DISTINCT PEOPLE, which is
+# strictly closer to reality than the shared secret they modelled before: tests
+# that need "another editor" now have one available.
+_TEST_PEOPLE = {
+    "edit-tok": ("uid-maria", "maria@example.com", "editor"),
+    "auth-tok": ("uid-josh", "josh@example.com", "author"),
+}
+
+
+@pytest.fixture(autouse=True)
+def _editor_actor_auth(monkeypatch, request):
+    """Resolve the suite's X-Editor-Token values to per-user actors.
+
+    Patches the verifier rather than the FastAPI dependency, so it reaches BOTH
+    apps built with TestClient AND tests that call a route function directly.
+    Anything other than the two known tokens still raises 401, so the tests that
+    assert a rejection keep asserting one.
+    """
+    # OPT OUT with @pytest.mark.real_editor_auth. A test of the verifier ITSELF
+    # must run against the real function -- otherwise this shim silently answers
+    # for it and the test passes without exercising a line of the code it names.
+    if request.node.get_closest_marker("real_editor_auth"):
+        return
+
+    from fastapi import HTTPException
+
+    import backend.services.editor_auth as ea
+
+    def _fake_verify(token: str):
+        person = _TEST_PEOPLE.get(token or "")
+        if person is None:
+            raise HTTPException(status_code=401,
+                                detail="Invalid or missing access code")
+        uid, email, role = person
+        return ea.EditorActor(uid=uid, email=email, role=role)
+
+    monkeypatch.setattr(ea, "verify_editor_token", _fake_verify)
+
+    monkeypatch.setattr(ea, "_dev_bypass_allowed", lambda: False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_acceptance_dedupe():
+    """Clear the disclaimer-acceptance dedupe between tests (bd polyglot-pdf-g3kui).
+
+    log_disclaimer_acceptance keeps MODULE-LEVEL state: the first acceptance for
+    a form_session_id writes, later ones are silently dropped. Without this
+    reset, a test whose session id another test already used has its write
+    dropped and then passes or fails depending on COLLECTION ORDER -- the
+    ordering flake this repo has been bitten by before.
+
+    It lives HERE rather than in one test file because TWO files reach this
+    path: test_confirmation_firestore_sink.py calls the writer directly, and 6
+    of the 12 test functions in test_disclaimer_acceptance_route.py post a real
+    body without mocking the writer (5 of those reach the writer; the sixth is
+    rejected at validation), so they populate the same set.
+
+    SCOPE, measured rather than asserted. The existing tests do not currently
+    collide: with every reset removed, all 93 still pass in both file orders,
+    because the ids in use happen to differ. But the leak is REAL and I
+    reproduced it -- two tests writing the same session id, with no reset, and
+    the second write is silently dropped; with this fixture, both land.
+
+    So the failure it prevents is live, not hypothetical, and it is the worst
+    shape: SILENT (a dropped write looks like a passing test asserting nothing)
+    and order-dependent. A test added later that reuses an existing session id
+    hits it with no obvious cause.
+    """
+    from backend.utils import confirmation_logger
+
+    confirmation_logger._reset_acceptance_dedupe()
+    yield
+    confirmation_logger._reset_acceptance_dedupe()

@@ -76,6 +76,9 @@ def test_render_field_guidance_surfaces_instructions():
     assert "ID: p1_line1_aliennumber" in text
     assert "Spoken: alien registration number" in text
     assert "Instructions: Your A-Number" in text
+    # "7-9 digits" is PROSE, not a layout literal, so it keeps the descriptive
+    # "Format:" label -- only a literal shape like MM/DD/YYYY gets the
+    # imperative framing (bd polyglot-pdf-mq2je).
     assert "Format: 7-9 digits" in text
 
 

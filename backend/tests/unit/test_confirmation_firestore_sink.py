@@ -619,3 +619,353 @@ def test_fingerprint_ignores_prose_edits():
 def test_no_edition_and_no_schema_yields_none():
     assert cl.resolve_edition_marker(None, None) is None
     assert cl.resolve_edition_marker(None, {"fields": []}) is None
+
+
+def test_disclaimer_acceptance_reaches_the_durable_sink(fake_db, monkeypatch):
+    """The acceptance is written to Firestore, not just to a log line.
+
+    bd polyglot-pdf-0dsv4: the record that a user accepted the LEGAL TERMS
+    used to be a structlog line only, while the record of what they TYPED
+    went to Firestore. That is backwards for an evidence trail.
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_test_1",
+        language="Spanish",
+        timestamp_unix_ms=1755000000000,
+        script_version="deadbeefcafe0001",
+        user_agent="Mozilla/5.0 (test)",
+        firm_id=None,
+    )
+    cl.flush_confirmation_sink()
+
+    added = fake_db.collections[cl._FIRESTORE_COLLECTION].added
+    assert len(added) == 1
+    doc = added[0]
+    # ALLOWLIST: exactly these keys, nothing else. A `value`, `client_ip`, or
+    # any client identifier appearing here would be a PII regression
+    # (pin-with-allowlist, never a blacklist -- banning one word is a synonym
+    # away from defeat). script_version is a HASH of copy that ships in the
+    # client bundle, so it names WHICH text was agreed to without carrying
+    # user content. firm_id names our CUSTOMER FIRM, never the person filling
+    # the form.
+    assert set(doc) == {
+        "timestamp",
+        "event",
+        "form_session_id",
+        "firm_id",
+        "language",
+        "timestamp_unix_ms",
+        "script_version",
+        "user_agent",
+    }
+    assert doc["event"] == "disclaimer_accepted"
+    assert doc["form_session_id"] == "fss_test_1"
+    assert doc["script_version"] == "deadbeefcafe0001"
+    # firm_id is present-but-None PERMANENTLY: a client filling a form has no
+    # account by design, so this route can never carry a client token (bd
+    # polyglot-pdf-g3kui). The KEY must still exist so the collection has one
+    # shape; firm_of_events() recovers the firm from the session's other
+    # records, and that join is the long-term answer, not a stopgap.
+    assert doc["firm_id"] is None
+
+
+def test_acceptance_and_confirmations_form_ONE_session_record(fake_db, monkeypatch):
+    """The whole point: both event kinds are retrievable together.
+
+    Keyed on form_session_id, so read_confirmation_log() returns the
+    acceptance and the field confirmations as one timestamp-ordered record --
+    "this session accepted this text, then confirmed these fields".
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_join_1",
+        language="English",
+        timestamp_unix_ms=1755000000000,
+        script_version="abc123def4567890",
+        user_agent="ua",
+        firm_id=None,
+    )
+    cl.log_field_confirmation(
+        form_id="I-90",
+        form_session_id="fss_join_1",
+        field_id="p1_line1_aliennumber",
+        field_name=None,
+        confirmation_method="verbal",
+        kit_id="i-90",
+        edition_date="01/20/25",
+        firm_id="firm-a",
+    )
+    cl.flush_confirmation_sink()
+
+    added = fake_db.collections[cl._FIRESTORE_COLLECTION].added
+    session = [d for d in added if d.get("form_session_id") == "fss_join_1"]
+    assert len(session) == 2
+    assert {d["event"] for d in session} == {"disclaimer_accepted", "field_confirmed"}
+
+
+def test_acceptance_does_NOT_match_the_kit_deletion_guard(fake_db, monkeypatch):
+    """A new event kind must not make a kit undeletable.
+
+    The deletion guard's own history is the reason this test exists: an
+    UNSCOPED kit query once matched session-lifecycle events, so a single
+    voice session made a kit permanently undeletable (bd polyglot-pdf-68s2q /
+    u66ka). Every guard query is now scoped to event == "field_confirmed".
+    The acceptance record carries NO kit_id at all, so it cannot match -- but
+    pin it, because the failure mode is silent and expensive.
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_guard_1",
+        language="English",
+        timestamp_unix_ms=1755000000000,
+        script_version="abc123def4567890",
+        user_agent="ua",
+        firm_id=None,
+    )
+    cl.flush_confirmation_sink()
+
+    doc = fake_db.collections[cl._FIRESTORE_COLLECTION].added[0]
+    assert "kit_id" not in doc
+    assert doc["event"] != "field_confirmed"
+
+
+def test_firm_attribution_recovers_the_firm_from_sibling_records():
+    """The JOIN fallback: the acceptance has no firm, its siblings do."""
+    events = [
+        {"event": "disclaimer_accepted", "firm_id": None},
+        {"event": "field_confirmed", "firm_id": "firm-a"},
+    ]
+    assert cl.firm_of_events(events) == "firm-a"
+
+
+def test_firm_attribution_is_None_when_the_session_has_no_firm():
+    """A session that accepted and abandoned before confirming a field has no
+    firm ANYWHERE. Report that honestly rather than inventing one."""
+    assert cl.firm_of_events([{"event": "disclaimer_accepted", "firm_id": None}]) is None
+    assert cl.firm_of_events([]) is None
+
+
+def test_firm_attribution_REFUSES_to_guess_when_records_disagree():
+    """Two firms on one session means something is wrong upstream.
+
+    Returning the first would launder a data problem into a confident wrong
+    answer on a legal-evidence path. "We do not know" is the honest result.
+    """
+    events = [
+        {"event": "field_confirmed", "firm_id": "firm-a"},
+        {"event": "field_confirmed", "firm_id": "firm-b"},
+    ]
+    assert cl.firm_of_events(events) is None
+
+
+# --- path traversal: form_session_id becomes a FILENAME -------------------
+#
+# POST /api/disclaimer-acceptance is UNAUTHENTICATED (Agree fires before any
+# session exists), and bd polyglot-pdf-0dsv4 made its client-supplied
+# form_session_id reach the filesystem. "../../PWNED" wrote a file two
+# directories outside CONFIRMATION_LOG_DIR and returned 200 -- reproduced in
+# the cross-surface review of that bead, before this guard existed.
+#
+# Validated at the SINK, not in the route, so every caller is covered --
+# including ones added later that forget.
+
+@pytest.mark.parametrize("unsafe", [
+    "../../PWNED",
+    ".." + chr(92) + ".." + chr(92) + "PWNED",   # Windows separators
+    "..",
+    "a/b",
+    "a" + chr(92) + "b",
+    "/etc/passwd",
+    "C:" + chr(92) + "evil",                            # drive-qualified
+    chr(92) + chr(92) + "server" + chr(92) + "share",   # UNC
+    "%2e%2e%2fPWNED",                                   # url-encoded
+    "%252e%252e%252f",                                  # double-encoded
+    "fss_x" + chr(0),                                   # NUL byte
+    "fss_x\n",   # the fullmatch-vs-match trap (bd polyglot-pdf-sbfk)
+    # Windows RESERVED DEVICE NAMES. "NUL.jsonl" opens the null device and
+    # discards every byte -- SILENT evidence loss, worse than a noisy failure.
+    # These passed the first version of this validator; found by attacking it
+    # rather than reasoning about it.
+    "CON", "con", "NUL", "nul.jsonl", "COM1", "LPT9", "PRN", "AUX",
+    "fss_x.",           # Windows strips trailing dots: "x." and "x" collide
+    ".",
+    "...",
+    "",
+    "x" * 129,          # length bound
+])
+def test_an_unsafe_session_id_is_refused_as_a_filename(unsafe):
+    assert cl._is_safe_session_id(unsafe) is False
+
+
+@pytest.mark.parametrize("safe", [
+    "fss_abc123_xyz789",   # the real shape from schemaFormState.ts
+    "fss_1755000000_ab12cd34",
+    "fss_a_b",
+    "a",
+    "A-Z_0.9",
+    "x" * 128,             # at the bound, not over it
+    # NEAR-MISSES on the device list: ordinary names that must NOT be refused.
+    # Silently dropping a legitimate id is WORSE than the traversal -- it is
+    # evidence loss with no error at all.
+    "CONSOLE", "NULLABLE", "COM10", "AUXILIARY",
+])
+def test_a_legitimate_session_id_is_accepted(safe):
+    assert cl._is_safe_session_id(safe) is True
+
+
+def test_an_unsafe_session_id_writes_NO_file(tmp_path, monkeypatch):
+    """The guard must actually prevent the write, not just return False.
+
+    NOTE THE DEPTH. "../../PWNED" escapes TWO levels above the log dir, so a
+    check that only globs the log dir -- or even its parent -- passes while
+    the file lands somewhere else entirely. My first version of this test did
+    exactly that and stayed green with the guard disabled. Nest the log dir
+    deep enough that every escape target is still inside tmp_path, then assert
+    NOTHING was written anywhere beneath it.
+    """
+    log_dir = tmp_path / "a" / "b" / "c" / "confirmations"
+    log_dir.mkdir(parents=True)
+    monkeypatch.setenv("CONFIRMATION_LOG_DIR", str(log_dir))
+
+    for unsafe in ("../../PWNED", "../ESCAPED", "..", "a/b"):
+        cl._write_confirmation_to_file(unsafe, {"event": "disclaimer_accepted"})
+
+    written = list(tmp_path.rglob("*.jsonl"))
+    assert written == [], f"files escaped the log dir: {written}"
+
+
+def test_a_legitimate_session_id_STILL_writes(tmp_path, monkeypatch):
+    """The guard must not break the normal path -- pin both directions."""
+    log_dir = tmp_path / "confirmations"
+    log_dir.mkdir()
+    monkeypatch.setenv("CONFIRMATION_LOG_DIR", str(log_dir))
+
+    cl._write_confirmation_to_file("fss_good_1", {"event": "disclaimer_accepted"})
+
+    assert (log_dir / "fss_good_1.jsonl").exists()
+
+
+# --- bounding an UNAUTHENTICATED writer (bd polyglot-pdf-g3kui) -----------
+#
+# POST /api/disclaimer-acceptance cannot be gated: a client filling a form has
+# no account by design -- the magic link is their only entry (maintainer,
+# 2026-08-24) -- so requiring a token would 401 every real user at Agree. Since
+# bd polyglot-pdf-0dsv4 it writes DURABLY to the legal-evidence collection, so
+# the write itself has to be bounded instead.
+
+def test_one_acceptance_per_session_is_recorded(fake_db):
+    """A session accepts ONCE. That domain fact is the bound."""
+    for _ in range(5):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_flood",
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "fss_flood"]
+    assert len(added) == 1, f"expected one acceptance, got {len(added)}"
+
+
+def test_a_duplicate_is_DROPPED_not_an_error(fake_db):
+    """A retry after a lost response is legitimate client behavior.
+
+    Raising would turn a normal retry into a user-visible failure at the Agree
+    button; the first record is the one that matters.
+    """
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_retry", language="English",
+        timestamp_unix_ms=1755000000000,
+    )
+    # Must not raise.
+    cl.log_disclaimer_acceptance(
+        form_session_id="fss_retry", language="English",
+        timestamp_unix_ms=1755000000001,
+    )
+
+
+def test_DISTINCT_sessions_are_each_recorded(fake_db):
+    """The bound must not swallow legitimate traffic.
+
+    Silently dropping a real acceptance is WORSE than the flood it guards
+    against -- it is evidence loss with no error at all.
+    """
+    for i in range(5):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_distinct_%d" % i,
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if str(d.get("form_session_id", "")).startswith("fss_distinct_")]
+    assert len(added) == 5
+
+
+def test_at_the_memory_cap_the_guard_STOPS_DEDUPING_not_writing():
+    """The memory bound must never discard evidence.
+
+    A flood of DISTINCT ids would otherwise grow the dedupe set without limit.
+    At the cap the guard gives up deduping and lets writes through, because a
+    duplicated row is a far better failure than a lost legal record.
+    """
+    cl._reset_acceptance_dedupe()
+    try:
+        for i in range(cl._ACCEPTED_SESSIONS_CAP):
+            cl._ACCEPTED_SESSIONS.add("filler_%d" % i)
+        # Already at capacity: a REPEAT id now returns True (write it) rather
+        # than being suppressed.
+        assert cl._claim_first_acceptance("filler_0") is True
+        assert cl._claim_first_acceptance("brand_new") is True
+    finally:
+        cl._reset_acceptance_dedupe()
+
+
+@pytest.mark.parametrize("placeholder", [
+    "unknown", "UNKNOWN", "Unknown", " unknown ",
+    "undefined", "null", "none", "",
+])
+def test_a_NON_UNIQUE_id_is_never_deduped(placeholder, fake_db):
+    """Two 'unknown' acceptances are two USERS, not a retry.
+
+    Both overlays send `state?.formSessionId || 'unknown'` on the acceptance
+    POST (four sites), so every session missing an id sends the SAME literal.
+    Deduping on it would keep the first and silently drop every later one --
+    evidence loss across DISTINCT users, far worse than the duplicate flood
+    this guard bounds.
+    """
+    assert cl._claim_first_acceptance(placeholder) is True
+    assert cl._claim_first_acceptance(placeholder) is True
+
+
+def test_placeholder_acceptances_ALL_reach_the_sink(fake_db):
+    """End-to-end: three 'unknown' sessions produce three records."""
+    for i in range(3):
+        cl.log_disclaimer_acceptance(
+            form_session_id="unknown",
+            language="English",
+            timestamp_unix_ms=1755000000000 + i,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "unknown"]
+    assert len(added) == 3, (
+        f"expected all 3 placeholder acceptances, got {len(added)} -- the "
+        f"dedupe collapsed distinct users into one record"
+    )
+
+
+def test_a_REAL_id_is_still_deduped(fake_db):
+    """The placeholder carve-out must not disable the guard generally."""
+    for _ in range(3):
+        cl.log_disclaimer_acceptance(
+            form_session_id="fss_still_deduped",
+            language="English",
+            timestamp_unix_ms=1755000000000,
+        )
+    cl.flush_confirmation_sink()
+
+    added = [d for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+             if d.get("form_session_id") == "fss_still_deduped"]
+    assert len(added) == 1

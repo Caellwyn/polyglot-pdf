@@ -115,6 +115,11 @@ async def test_auth_runs_before_accept_on_success(
 
     await fill_form_from_schema(mock_websocket, service=mock_service, token="good-token")
 
+    # NO check_revoked -- pinned as an ABSENCE, deliberately. It forces a
+    # Firebase user-record fetch needing firebaseauth.users.get, which
+    # polyglot-backend-sa does not have, so passing it broke EVERY deployed
+    # handshake with INSUFFICIENT_PERMISSION (2026-08-26). Asserting the exact
+    # call means re-adding the flag reddens here instead of on the live app.
     mock_verify_token.assert_called_once_with("good-token")
     # verify must precede accept in the actual call order.
     assert order[:2] == ["verify", "accept"], order

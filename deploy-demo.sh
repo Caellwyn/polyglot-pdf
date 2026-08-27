@@ -11,6 +11,16 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# ENROLMENT CHECK (bd polyglot-pdf-hn0jq). The voice app now refuses any
+# account carrying neither firm_id nor the vff_dev claim, so a signed-in user
+# who was never enrolled gets a 1008 close the UI shows as a failed
+# connection. Custom claims only reach a NEWLY MINTED token, so enrol BEFORE
+# deploying, not after:
+#     python scripts/bootstrap_voice_dev.py --list
+#     python scripts/bootstrap_voice_dev.py --email you@example.com
+echo -e "${GREEN}[INFO]${NC} Reminder: voice accounts need firm_id or a dev claim."
+echo -e "${GREEN}[INFO]${NC}   check with: python scripts/bootstrap_voice_dev.py --list"
+
 # Verify account
 echo -e "${GREEN}[INFO]${NC} 👀 Checking gcloud account..."
 CURRENT_ACCOUNT=$(gcloud config get-value account)
@@ -97,13 +107,20 @@ if [ "$DEPLOY_GCP" = true ]; then
     # on/1500 in backend/config.py now, so this deploy no longer sets them.
     # Emergency fallback to the legacy section-reset flow: add USE_DTI=false,
     # CONTINUOUS_SESSION=false,CONTEXT_COMPRESSION_ENABLED=false here.
-    # SPELL-BACK CUTOVER (bd polyglot-pdf-22h1f + 44ywm; maintainer go-ahead
-    # 2026-08-10). SPELLBACK_TOOL_ENABLED turns on the deterministic
-    # name_spellback tool: the model stops speaking spellings and the client
-    # plays a Cloud TTS clip built from the STORED value instead -- the fix for
-    # the bd 0rpu sticky-first-spelling defect, where the model's speech read
-    # back a WRONG name. Roll back by dropping this var and redeploying (the
-    # tool goes dark; the SI addendum and declaration go with it).
+    # SPELL-BACK (bd polyglot-pdf-22h1f + 44ywm; maintainer go-ahead
+    # 2026-08-10). The deterministic name_spellback tool: the model stops
+    # speaking spellings and the client plays a Cloud TTS clip built from the
+    # STORED value instead -- the fix for the bd 0rpu sticky-first-spelling
+    # defect, where the model's speech read back a WRONG name.
+    #
+    # SPELLBACK_TOOL_ENABLED=true is now REDUNDANT: the default flipped ON at
+    # the cutover (bd polyglot-pdf-apkdl), after this deploy baked it from
+    # 2026-08-10. It stays explicit ON PURPOSE -- this script should state the
+    # configuration it deploys rather than inherit it silently, so a later
+    # default change cannot alter the demo without touching this file.
+    # To roll back, set it to false HERE and redeploy: the declaration, the SI
+    # addendum, the dispatch guard and the /api/tts/spellback route all follow
+    # that one flag.
     #
     # LIVE_TEMPERATURE=0.4 is the maintainer's by-ear clarity setting, and the
     # temperature EVERY spell-back validation run used -- deploying at Google's

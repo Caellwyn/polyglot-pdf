@@ -930,6 +930,19 @@ class LocalFormKitStore(FormKitStore):
 		return list(reversed(out))
 
 	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		# snapshot_id is always the store's own monotonic counter
+		# (put_draft_snapshot's next_id) -- a plain ASCII decimal string, never
+		# caller-supplied content. The route already guards this
+		# (isascii()+isdigit()) before it ever reaches the store, but this
+		# method is a path-joining reader with no guard of its own: an
+		# untrusted value here escapes the kit directory entirely (bd
+		# polyglot-pdf-xddtl -- load_draft_snapshot('w7', '../../secret')
+		# returned another kit's schema.json). The archive's sibling reader
+		# never trusts its caller this way; match that posture rather than
+		# relying on the one call site staying the only one forever.
+		if not (isinstance(snapshot_id, str) and snapshot_id.isascii()
+				and snapshot_id.isdigit()):
+			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
 		path = self._drafts_dir(kit_id) / snapshot_id / "schema.json"
 		if not path.exists():
 			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
@@ -1405,6 +1418,13 @@ class GCSFormKitStore(FormKitStore):
 		return list(reversed(out))
 
 	async def load_draft_snapshot(self, kit_id: str, snapshot_id: str) -> dict:
+		# Same guard as LocalFormKitStore's twin, and for the same reason:
+		# snapshot_id is always the store's own monotonic counter, never
+		# caller-supplied content, and _build_blob_path does no sanitising of
+		# its own (bd polyglot-pdf-xddtl).
+		if not (isinstance(snapshot_id, str) and snapshot_id.isascii()
+				and snapshot_id.isdigit()):
+			raise FormKitNotFound(f"No draft snapshot {snapshot_id} for {kit_id}")
 		blob_path = self._build_blob_path(
 			kit_id, _DRAFTS_DIR, snapshot_id, "schema.json")
 

@@ -7,7 +7,7 @@ and can be used independently of the FormFillingService.
 """
 import re
 from typing import Any, Dict, List, Optional
-from backend.models.form_models import FormField, FieldType
+from backend.models.form_models import FormField, FieldType, DateFormat
 
 
 # The frontend's formatNextFieldHint (frontend/src/navigation.ts) appends a
@@ -97,6 +97,35 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
             except ValueError:
                 field_type = FieldType.TEXT
 
+            # Flat `format` key -> DateFormat enum, defensively (bd
+            # polyglot-pdf-mpfmr). DateFormat is a CLOSED enum of 4 exact,
+            # case-sensitive literals, but FormField construction is wrapped in
+            # a broad `except` that DROPS THE WHOLE FIELD from the session on
+            # any error -- so handing Pydantic an unrecognized string would make
+            # the field vanish entirely (silently, to stdout), which is far
+            # worse than the wrong-date-layout bug this bead fixes. The natural
+            # authoring casing "MM/DD/YYYY" -- the very string help.format_hint
+            # uses on the shipped kits -- is NOT a valid enum value, so this is
+            # a live hazard the moment any kit or editor writes the flat key.
+            #
+            # Resolve case-insensitively (field_validator's own _DATE_LAYOUTS
+            # lowercases before matching, so this matches how the layout is
+            # read downstream) and fall back to None -- an unresolvable format
+            # then leaves help.format_hint as the layout source, exactly as it
+            # was before the flat key was passed at all. Same
+            # coerce-or-fall-back shape as the FieldType handling above.
+            raw_format = field_data.get("format")
+            field_format = None
+            if raw_format is not None:
+                try:
+                    field_format = DateFormat(raw_format)
+                except ValueError:
+                    lowered = str(raw_format).strip().lower()
+                    for member in DateFormat:
+                        if member.value.lower() == lowered:
+                            field_format = member
+                            break
+
             # Handle SELECT/RADIO fields that require options
             options = field_data.get("options")
             if field_type in [FieldType.SELECT, FieldType.RADIO]:
@@ -115,6 +144,27 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
                 section_id=field_data.get("section_id", ""),  # Required field
                 validation=field_data.get("validation"),
                 options=options,
+                # Date/format LAYOUT sources (bd polyglot-pdf-mpfmr). This
+                # constructor passes an explicit ALLOWLIST of keys, so anything
+                # absent here is silently dropped from the session's FormField
+                # -- and `help` was absent. help.format_hint is the CANONICAL
+                # layout carrier (the schema editor's "Format Hint" box writes
+                # it, and the shipped i-90 / w7 kits populate it for dates), so
+                # every date field reached field_validator with no declared
+                # layout and fell back to the ISO default: a correct
+                # "10/12/2005" came back "Invalid date (expected YYYY-MM-DD)",
+                # and the voice model then adapted to that error text and
+                # started demanding year-first dates from users.
+                #
+                # validation_handler._convert_fields_to_dicts already forwards
+                # both of these downstream, and field_validator's layout
+                # resolution already reads format -> help.format_hint ->
+                # validation.hint. Those layers were correct; they were just
+                # operating on a FormField that no longer carried the hint.
+                # The flat `format` key rides along because it is the FIRST
+                # source in that same priority chain.
+                help=field_data.get("help"),
+                format=field_format,
             )
             fields.append(field)
         except Exception as e:

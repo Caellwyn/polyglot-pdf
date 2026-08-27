@@ -66,6 +66,20 @@ UTTERANCES = [
     ("answer_foreign_street.wav", "Avenida Reforma one hundred."),
     ("answer_foreign_city.wav", "Mexico City, Mexico."),
     ("answer_dob.wav", "January first, nineteen ninety."),
+    # Date-layout verification (bd polyglot-pdf-mpfmr). The maintainer's own
+    # reported utterance, on a form whose date fields declare MM/DD/YYYY. Two
+    # fixtures on purpose:
+    #   - answer_dob_oct12.wav is spoken MONTH-FIRST and unambiguous, so the
+    #     stored value must be exactly 10/12/2005. This is the regression probe:
+    #     before the help.format_hint passthrough fix, the backend rejected that
+    #     value as "Invalid date (expected YYYY-MM-DD)" and the model then began
+    #     demanding year-first dates.
+    #   - answer_dob_bare_digits.wav is the AMBIGUOUS case ("ten twelve two
+    #     thousand five"): the model must GUESS a layout rather than ask the user
+    #     to restate it, which is what bd polyglot-pdf-kt7c6's words read-back
+    #     exists to surface at verification time.
+    ("answer_dob_oct12.wav", "October twelfth, two thousand five."),
+    ("answer_dob_bare_digits.wav", "ten twelve two thousand five."),
     ("answer_country_birth.wav", "Mexico."),
     # Section-2 numeric value for the multi-section scenario (bd polyglot-pdf-8k8):
     # a 5-digit ZIP that fits p1_line6f_zipcode (max_length 5). Expected filled

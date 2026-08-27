@@ -1,5 +1,7 @@
 # Technical guide -- polyglot-pdf
 
+*Last updated: 2026-08-24 (bd polyglot-pdf-hn0jq: per-user editor identity; the editor rows now describe Firebase claims, not shared tokens).*
+
 The [Surface contracts](#surface-contracts) section is the code-derived
 cross-surface data-contract map for blast-radius review. Continuous-DTI is the
 production default (`USE_DTI` / `CONTINUOUS_SESSION` /
@@ -80,7 +82,7 @@ insertion point.
 
 | Method | Path | Surface doc |
 |--------|------|-------------|
-| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
+| POST | `/api/disclaimer-acceptance` | Record disclaimer acceptance DURABLY (bd polyglot-pdf-0dsv4: the `confirmation_events` Firestore collection + the per-session file, keyed on `form_session_id`, not a log line -- fail-open, so a sink outage cannot block an Agree click). UNAUTHENTICATED by design (Agree fires before any session exists), so `firm_id` is always `None` here and the `form_session_id` is validated as a single safe path segment before it becomes a filename. Anonymized; client IP deliberately NOT logged, bd z2is. Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
@@ -91,7 +93,7 @@ insertion point.
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). 409 on any write-locked kit -- complete OR unpublished -- with a revert-first message (`force=true` would overwrite the published schema in place, bd polyglot-pdf-w3zw). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
 | POST | `/api/editor/kits/{kit_id}/label` | Rename a kit's DISPLAY label (bd polyglot-pdf-15ic), preserving every other metadata key (the read-merge-write shape of the status flip). Pure display -- the catalogue and form picker render it, nothing keys on it; kit identity is the immutable `kit_id`/storage path and is deliberately NOT renameable here. Exists because onboarding derives labels from PDF filenames, so nameless uploads collide into "Form", "Form 2", ... Token-gated. |
 | DELETE | `/api/editor/kits/{kit_id}/lock` | Release a kit. An author may release anyone's lock; an editor cannot evict an author -- that is the stale-lock escape when someone closes their laptop. Token-gated. |
-| POST | `/api/editor/kits/{kit_id}/lock` | Take a kit for editing (bd polyglot-pdf-hqztg). An AUTHOR can always take a lock back from an editor; the reverse 409s. That preemption IS the stale-lock release -- there is no timer, because a clock that steals from someone actively working is worse than a human deciding to take it. ROLE-scoped, not user-scoped: the editor API has only two shared tokens, so two editors sharing one still collide with each other (bd polyglot-pdf-ijntk lifts that). Same-role contention is allowed rather than pretended about. Returns `{ok, kitId, heldBy, preempted}`. Token-gated. |
+| POST | `/api/editor/kits/{kit_id}/lock` | Take a kit for editing (bd polyglot-pdf-hqztg). An AUTHOR can always take a lock back from an editor; the reverse 409s. That preemption IS the stale-lock release -- there is no timer, because a clock that steals from someone actively working is worse than a human deciding to take it. ROLE-scoped, not user-scoped: the server now knows WHICH person acted (bd polyglot-pdf-hn0jq), but the lock itself still stores a role string, so two editors still collide with each other. Re-scoping the lock to a person is bd polyglot-pdf-5tuas. Same-role contention is allowed rather than pretended about. Returns `{ok, kitId, heldBy, preempted}`. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits/{kit_id}/regenerate-guidance` | Re-author field guidance from the kit's instruction booklet (bd polyglot-pdf-cpiw) -- the costly half of the staleness gate, opposite "acknowledge". Optional `fieldIds` scopes the rewrite (the natural call from the staleness banner); omitted means every askable field. Guidance a HUMAN edited is never clobbered (per-channel hashes vs. provenance). A successful rewrite re-stamps `identity_sha1`, which is what CLEARS the staleness flag. Author-only (spends model tokens + rewrites the schema); 409 on complete. |
 | POST | `/api/editor/kits/{kit_id}/repair` | One-click Repair-all for a stored draft (bd polyglot-pdf-zgln): runs the SAME deterministic `backend/services/schema_repair.repair()` the CLI extraction pass runs, against the schema + its persisted `acroform.json` dump, so the result equals CLI repair on the same input. Reports what changed plus POST-repair lint counts. **Author-only** (it mutates the stored schema). A draft referencing nonexistent PDF widgets is a 422 naming them, not a 500 -- repair cannot invent mappings. 409 on a complete kit. |
@@ -102,7 +104,7 @@ insertion point.
 | POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on any write-locked kit -- complete OR unpublished -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
 | GET | `/api/editor/kits/{kit_id}/unclaimed-widgets` | The kit's PDF button widgets that no field/option claims (bd nivy), powering the "Add from PDF widgets" picker when the extractor missed a checkbox/radio. Read from the persisted `acroform.json` dump; a pre-dump kit returns an empty list. Author-only (it feeds an author-only PDF-mapped option edit). |
 | POST | `/api/editor/lint`, `/api/editor/kits/{kit_id}/lint` | Lint the POSTED (possibly-unsaved) schema over the single Python ruleset (`backend/services/schema_lint.py`). The kit-scoped form additionally loads the kit's persisted `acroform.json` dump -- the SAME inputs as the `/status` promotion gate -- so the editor strip sees the dump-gated widget-claim rules live (sprint-18 C1, bd o7y9); the dumpless form remains for schemas with no kit identity. Token-gated. |
-| GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Token-gated (`X-Editor-Token`); the whole `/api/editor/*` surface is 503 when no token is configured. `components/pdf-filling.md` |
+| GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Per-user Firebase identity (bd polyglot-pdf-hn0jq): the ID token rides either `Authorization: Bearer` or `X-Editor-Token`. 401 for a token that does not verify, 403 for a valid account without the `schema_editor_role` claim. There is no unconfigured-surface 503 -- there is no shared secret left to omit. Grant access with `scripts/bootstrap_editor_user.py`. `components/pdf-filling.md` |
 | POST | `/api/editor/store-handshake` | Confirm the editor and the backend are looking at the SAME local folder: the editor writes a nonce file into the folder the human picked, this reads it from the backend's own root and reports whether it matches. Read-only on the backend side -- it never creates or deletes the marker, so an unwritable store simply reports no match rather than failing. The `reason` values it actually returns are `not-a-local-store` (GCS; hosted mode never calls it), `mismatch` (no marker observed -- the editor, having just attempted the write, picks the user-facing message) and `stale` (a marker from an earlier session in a different folder). Token-gated. |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is) + **firm-scoped** (bd vy6id: the body's caller-supplied `kit_id` runs the same visibility gate as the kit reads -- a private kit 404s for non-members). `components/pdf-filling.md` |
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy): PRIVATE kits appear only for callers whose `firm_id` claim resolves to an allowlist containing them, with paths rewritten to the authenticated backend routes. `components/pdf-filling.md` |
@@ -114,7 +116,7 @@ insertion point.
 | POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`**, which stays false until the spend ceiling lands (bd `polyglot-pdf-ik7e`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
-| POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
+| POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (default ON since bd polyglot-pdf-apkdl; bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
@@ -210,8 +212,9 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
     `schema.fields.find` by id). Duplicate ids silently drop a field (dict
     overwrite); an unknown id returns `undefined`.
   - `pdf_field_name` (field- and option-level): consumed only by the fill route
-    (`backend/routes/pdf_fill_routes.py:115-117`, options :434-442). Missing =
-    field silently absent from the filled PDF.
+    (`pdf_fill_routes.py`'s field-mapping build loop and, for radio options, the
+    `field_type == "radio"` branch's `option.get("pdf_field_name")` read).
+    Missing = field silently absent from the filled PDF.
   - `name` vs `spoken_name`: guidance builds speak
     `spoken_name || name || id` (`backend/services/manifest_service.py:125`).
     Swapped/empty values degrade to reading raw labels aloud, no error.
@@ -333,9 +336,10 @@ Known traps (all deliberate, all pinned only by comments):
 Tool names + arg schemas have ONE source of truth:
 `Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
 live config by `form_filling_service.py:222-228` (which drops `switch_section`
-in continuous mode -- the session ships 6 declarations, not 7 -- and appends
-the flag-gated `SPELLBACK_TOOL_DECLARATION` as a 7th only while
-`SPELLBACK_TOOL_ENABLED`, bd polyglot-pdf-22h1f) and declared to
+in continuous mode, and appends `SPELLBACK_TOOL_DECLARATION` under
+`SPELLBACK_TOOL_ENABLED` -- default ON since bd polyglot-pdf-apkdl, so a
+production session ships 7 declarations; setting the flag false rolls back to 6,
+bd polyglot-pdf-22h1f) and declared to
 Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
 tools assembled at :1752). Gemini's tool
 calls come back through the adapter (`self._on_tool_call(...)` call sites at
@@ -353,7 +357,7 @@ client messages above. The coupling table (tool -> handler -> client message):
 | `switch_to_field` (`field`) | :531 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
 | `ask_secretary` (`query`) | :534 | none -- answered server-side from the cached `full_schema` |
 | `switch_section` (deprecated; dropped in continuous mode) | :516 | internal session restart + `section_switched` |
-| `name_spellback` (no args; FLAG-GATED `SPELLBACK_TOOL_ENABLED`, declared only while on via `SPELLBACK_TOOL_DECLARATION`) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
+| `name_spellback` (no args; `SPELLBACK_TOOL_ENABLED` default ON, declared via `SPELLBACK_TOOL_DECLARATION` -- kept out of `TOOL_DECLARATIONS` so the flag stays a real rollback) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`
@@ -377,11 +381,13 @@ plus the in-browser preview
 `{kit_id, pdf_filename, field_values, form_schema}`
 (`frontend/src/schema-forms/utils/pdfFiller.ts:98-103`). A payload-shape change
 made against only one call site silently misses the other two.
-Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
+Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py`'s `PDFFillRequest`
+class).
 
 - **The backend fills from the CLIENT-SUBMITTED `form_schema`**, typed
   `Dict[str, Any]` -- no `FormSchema` validation runs at fill time, the kit
-  store is consulted only for the PDF bytes (:68), and the extraction-time
+  store is consulted only for the PDF bytes (`fill_pdf`'s `store.load_pdf_bytes`
+  call), and the extraction-time
   `acroform.json` ledger is never read on this path -- its readers all live on
   the editor/publish surface (`_load_kit_dump`,
   `backend/routes/editor_kit_routes.py:687`, with 7 call sites across the
@@ -391,16 +397,19 @@ Consumer: `PDFFillRequest` (`backend/routes/pdf_fill_routes.py:35-41`).
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
-  exact id always winning (`pdf_fill_routes.py:107-131`); widget dispatch by
-  `field_type` (`pdf_fill_routes.py:409-681`):
-  text via `fill_widget` (:217-277) with cosmetic-only Comb overflow handling
-  (:157-215), checkboxes via `get_button_on_state` (:136-152, defaults to
+  exact id always winning (`pdf_fill_routes.py`'s field-mapping build loop);
+  widget dispatch by `field_type` (the `for field_id, value in
+  request.field_values.items()` loop's `if field_type == "radio"` /
+  `elif field_type in ("checkbox", "checkbox_group")` / `else` branches):
+  text via `fill_widget` with cosmetic-only Comb overflow handling
+  (`fit_comb_value`), checkboxes via `get_button_on_state` (defaults to
   `"Yes"` when the widget's on-state is unreadable), v2 shared-name radios via
-  direct `xref_set_key` writes (:475-476, within the wider :459-495 branch).
+  direct `xref_set_key` writes.
 - A skipped field arrives as bare `null` (the `skipped` flag was unwrapped away)
   and is indistinguishable from never-asked -- both are silently omitted
-  (`pdf_fill_routes.py:410-412`).
-- `NeedAppearances` is deliberately NOT set (`pdf_fill_routes.py:691-697`); appearance regeneration
+  (the field-fill loop's `if value is None or value == "":` guard).
+- `NeedAppearances` is deliberately NOT set (the `need_appearances_skipped` log
+  site near the end of `fill_pdf`); appearance regeneration
   is left to the viewer. Verify checkbox/radio fixes by RENDERING the page, not
   by reading values back.
 
@@ -430,11 +439,17 @@ handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
 `resolve_edition_marker`'s three-rank precedence: the government
 `edition_date`, else the author's `author_version`, else a `sha256:` shape
 fingerprint (bd polyglot-pdf-xzw5) -- so the name is narrower than the values
-it holds. The SAME sink also carries two SESSION records per voice session
+it holds. The SAME sink carries FOUR event kinds. Two SESSION records per voice session
 (`form_session_started` / `form_session_ended`, wired from
 `_handle_fill_session` under bd polyglot-pdf-xwlt), keyed on the same
 `firm_id` + `kit_id` so per-firm usage spans sessions and confirmations in one
 equality query; the end record carries a confirmed-field COUNT, never values.
+And `disclaimer_accepted` (bd polyglot-pdf-0dsv4) -- the ONLY one written from
+an UNAUTHENTICATED route, so its `firm_id` is structurally always `None` and a
+per-firm query cannot see it; `firm_of_events()` recovers the firm from the
+session's other records. Every query against this collection that means
+"confirmations" must scope on `event == "field_confirmed"`: an unscoped one
+already made a kit permanently undeletable once (bd polyglot-pdf-68s2q).
 *Known gap:* a
 lost/timed-out ack leaves NO audit record for a confirmation the user saw
 succeed on screen (by design -- never log a confirmation that didn't happen).
@@ -456,23 +471,24 @@ tokens, not the client tier):
   string `"private"` coerces public). Producer: the kit's `metadata.json`
   (hand-authored / future publish UI). Consumers: the gates read LIVE
   metadata -- ONE `load_live_metadata` read per request feeds both the
-  publish and visibility gates (`kit_gates.py:28`; visibility coercion
-  `kit_visibility` `:84`; the manifest copy is deploy-time stale in GCS) --
+  publish and visibility gates (`kit_gates.py`'s `load_live_metadata`; visibility coercion in
+  `kit_gates.py`'s `kit_visibility`; the manifest copy is deploy-time stale in GCS) --
   and the store passes normalized `visibility` / `ownerFirmId` through both
-  manifest paths (`form_kits.py:226` normalize, `:516` local synthesis).
+  manifest paths (`form_kits.py`'s `normalize_manifest` and `LocalFormKitStore.load_manifest`).
   `owner_firm_id` is bookkeeping for the firm write path (bd z6bk9), NOT the
   read gate.
 - **The firm allowlist**: `firms/{firm_id}.allowed_kits` (producer:
-  `scripts/bootstrap_firm.py`) -> `firms.get_allowed_kits`
-  (`backend/services/firms.py:55`, fail-closed `[]`) -> resolved per request
-  off the `firm_id` ID-token claim (`kit_gates.py:67`, `firm_allowed_kits`;
-  run off the event loop) -> enforced by `require_visible` (`:99`, 404 =
+  `scripts/bootstrap_firm.py`) -> `firms.py`'s `get_allowed_kits`
+  (fail-closed `[]`) -> resolved per request
+  off the `firm_id` ID-token claim (`kit_gates.py`'s `firm_allowed_kits`;
+  run off the event loop) -> enforced by `kit_gates.py`'s `require_visible` (404 =
   invisibility) on the schema + pdf + fill reads
-  (`pdf_fill_routes.py:82`) and by the list filter inside `list_form_kits`
-  (`form_kit_routes.py:127`). The pdf route parses its bearer token
-  OPTIONALLY (`:293`); an invalid token degrades to anonymous rather
+  (`pdf_fill_routes.py`'s `fill_pdf`) and by the list filter inside
+  `list_form_kits` (`form_kit_routes.py`'s `list_form_kits`). The pdf route
+  parses its bearer token OPTIONALLY (`form_kit_routes.py`'s
+  `get_form_kit_pdf`); an invalid token degrades to anonymous rather
   than 401.
-- **The private-path rewrite**: `list_form_kits` (`form_kit_routes.py:193`)
+- **The private-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
   rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
   backend routes (`/api/form-kits/<id>/schema|pdf`) because the static
   Hosting bundle excludes private kits (bd kkos:
@@ -486,9 +502,9 @@ tokens, not the client tier):
   `resolveKitAssetUrl`, `pdfFiller.ts:59` -- a relative `/api/` fetch works on
   Hosting via the rewrite but not against the Vite dev server).
 - **Explicit filenames** `schema_file`/`pdf_file` on `FormKitInfo`
-  (`form_kit_routes.py:117`): under rewritten paths the URL's last segment is
+  (`form_kit_routes.py`, the `FormKitInfo` model): under rewritten paths the URL's last segment is
   a literal route word, so the client must STOP deriving filenames by URL
-  split. Consumers: `SchemaFormDemo.tsx:114`/`:116` (manifest mapping) and
+  split. Consumers: `SchemaFormDemo.tsx`'s manifest mapping (the `schemaFile`/`pdfFile` fallback derivation) and
   `fillPDF`'s explicit `pdfFile` param (`pdfFiller.ts:117` -- the fill POST's
   `pdf_filename` feeds `store.load_pdf_bytes`, contract 5). Breaking either
   half strands a private kit's fill/download while every public-kit test

@@ -327,8 +327,15 @@ def test_the_complete_set_of_credential_resolution_sites_is_pinned():
     assert sites == {
         # 1. the socket (_verify_ws_credential) -- taught in r1
         "backend/routes/websocket_routes.py": 1,
-        # 2. require_auth, which every gated HTTP route inherits -- r2
-        "backend/services/auth.py": 1,
+        # 2. require_auth, which every gated HTTP route inherits -- r2, AND
+        #    require_signin, the catalogue's dependency since PR #643. This
+        #    guard EARNED ITSELF on that merge: dev moved GET /api/form-kits
+        #    and .../schema onto a new dependency that knew nothing about
+        #    link tokens, and this count going 1 -> 2 is what surfaced it.
+        #    A client 401'd on their FIRST TWO CALLS with every other test
+        #    green. If this number changes again, the new site must dispatch
+        #    on token shape -- do not just bump the count.
+        "backend/services/auth.py": 2,
         # 3. the OPTIONAL-auth pdf route, which bypasses require_auth -- r6
         "backend/routes/form_kit_routes.py": 1,
     }, (
