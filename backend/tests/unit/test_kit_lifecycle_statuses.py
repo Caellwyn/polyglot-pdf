@@ -987,7 +987,14 @@ def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
     resp = _lock(c, "w7", HDR)
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
     lock = _run(store.load_metadata("w7"))["editing_lock"]
     assert lock["role"] == "author"
     assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
@@ -1006,7 +1013,14 @@ def test_a_preempted_editor_DISCOVERS_it_on_their_next_save(client):
                  json={"fields": [{"id": "f1"}]}, headers=HDR)
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
 
 
 def test_the_lock_holder_can_still_save(client):
@@ -1196,7 +1210,14 @@ def test_the_enumeration_is_anchored_to_a_REAL_refusal(client):
                  json={"fields": [{"id": "f1"}]}, headers=HDR)
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
 
 
 # --- rejection clears the version (bd polyglot-pdf-hqztg) --------------------
@@ -1286,7 +1307,14 @@ def test_an_editor_cannot_REJECT_out_from_under_an_author(client):
     resp = _status(c, "custom", "draft", headers=HDR)        # editor reopens
 
     assert resp.status_code == 409, resp.text
-    assert "author is working on this form" in resp.json()["detail"]
+    # Assert the PROPERTY -- the refusal says someone is working on it and
+    # says WHO -- not the exact wording. bd polyglot-pdf-5tuas replaced "An
+    # author" with the holder's name, and pinning the old phrase made a
+    # message IMPROVEMENT look like a regression.
+    _detail = resp.json()["detail"]
+    assert "is working on this form" in _detail
+    assert "josh@example.com" in _detail, (
+        "the refusal must name WHO holds it: {}".format(_detail))
     # Nothing moved: still submitted, version intact.
     assert _run(store.load_metadata("custom"))["status"] == "submitted"
     saved = _run(store.load_schema("custom", "schema.json"))
@@ -2039,3 +2067,49 @@ def test_EVERY_lock_helper_call_passes_an_ACTOR_not_a_role_string():
         "these lock helpers get a ROLE STRING where they now take an "
         "EditorActor, which raises AttributeError on the person comparison:\n  "
         + "\n  ".join(offenders))
+
+
+def test_an_editor_blocked_by_an_AUTHOR_is_told_WHICH_author(client):
+    """The refusal an editor most needs a name for.
+
+    They cannot preempt an author, so their only way forward is to go ask that
+    person. The first version named the other EDITOR (whom they could at least
+    wait out) and left "an author" anonymous -- exactly backwards.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200   # josh, an author
+
+    resp = _lock(c, "w7", HDR)                            # maria, an editor
+
+    assert resp.status_code == 409
+    assert "josh@example.com" in resp.text, (
+        "an editor was blocked by an author with no way to learn WHO: "
+        "{}".format(resp.text))
+
+
+def test_an_editor_cannot_RELEASE_another_editors_lock(client):
+    """The release half of the person-scoping.
+
+    The docstring claimed an editor may release "a lock an editor holds",
+    which was the pre-bead rule and became false the moment take became
+    person-scoped -- release shares the same _lock_refusal.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200          # maria holds it
+
+    resp = _unlock(c, "w7", HDR2)                          # sam tries to free it
+
+    assert resp.status_code == 409, (
+        "editor sam released editor maria's lock: {}".format(resp.text))
+    assert "maria@example.com" in resp.text
+
+
+def test_an_editor_CAN_release_their_own_lock(client):
+    """...and the person who holds it is not locked out of releasing it."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    assert _unlock(c, "w7", HDR).status_code == 200

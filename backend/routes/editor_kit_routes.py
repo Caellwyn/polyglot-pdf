@@ -250,10 +250,13 @@ class EditorKitInfo(BaseModel):
     # rides the listing rather than forcing a per-kit probe.
     #
     # heldBy stays a ROLE deliberately (bd polyglot-pdf-5tuas): the editor
-    # catalogue compares it to the literal strings "author"/"editor" in four
-    # places. WHO holds it rides alongside in heldByLabel, additively, so the
-    # server can name a person without breaking a frontend that bd
-    # polyglot-pdf-yswp3 owns.
+    # catalogue compares it to the literal strings "author"/"editor" at EVERY
+    # site that decides what the lock UI shows -- the badge, its tooltip, the
+    # label, the is-this-mine check that gates the Release button, and the
+    # take-back branches. Making heldBy a person makes all of them stop
+    # matching. (Counted 7 on 2026-08-27; grep rather than trust this number.)
+    # WHO holds it rides alongside in heldByLabel, additively, so the server
+    # names a person without breaking a frontend bd polyglot-pdf-yswp3 owns.
     heldBy: Optional[str] = None
     # The person holding it (email, else uid). None for a lock written before
     # 5tuas, which stored only a role.
@@ -621,12 +624,12 @@ def _refuse_if_metadata_unreadable(
 def _lock_holder(meta: Optional[dict]) -> Optional[str]:
     """The ROLE currently holding this kit, or None.
 
-    Still a role, because `heldBy` on the wire is still a role -- the editor
-    catalogue compares it to the literal strings "author"/"editor" in four
-    places (RemoteCatalogue.tsx: the badge, its tooltip, and the is-this-mine
-    check). Person identity rides alongside in `_lock_holder_uid`, additively,
-    so this bead does not reach into the frontend that bd polyglot-pdf-yswp3
-    owns.
+    Still a role, because `heldBy` on the wire is still a role -- every site
+    in RemoteCatalogue.tsx that decides what the lock UI shows compares it to
+    the literal strings "author"/"editor", including the is-this-mine check
+    that gates the Release button. Person identity rides alongside in
+    `_lock_holder_uid`, additively, so this bead does not reach into the
+    frontend that bd polyglot-pdf-yswp3 owns.
     """
     lock = (meta or {}).get(_LOCK_KEY)
     holder = lock.get("role") if isinstance(lock, dict) else None
@@ -675,15 +678,20 @@ def _lock_refusal(holder: str, actor: EditorActor,
     shown to hold.
     """
     if holder == "author" and not actor.is_author:
+        # NAME the author when we know them. This is the refusal an editor
+        # most needs a name for: they cannot preempt an author, so their only
+        # way forward is to go ask that person. Naming the other EDITOR while
+        # leaving "an author" anonymous had it exactly backwards.
+        who = holder_label or "An author"
         return (
-            "An author is working on this form right now, so it is locked. "
+            f"{who} is working on this form right now, so it is locked. "
             "They will release it when they are done."
         )
     # Author preemption: an author may always take over, from anyone.
     if actor.is_author:
         return None
     if holder_uid and holder_uid != actor.uid:
-        who = holder_label or "another editor"
+        who = holder_label or "Another editor"
         return (
             f"{who} is working on this form right now, so it is locked. "
             "They will release it when they are done."
@@ -3433,8 +3441,10 @@ async def release_editor_kit_lock(
     kit_id: str,
     role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> KitLockResponse:
-    """Release this kit. An author may release anyone's lock; an editor only
-    releases a lock an editor holds (they cannot evict an author)."""
+    """Release this kit. An author may release anyone's lock; an editor may
+    release only a lock THEY hold (bd polyglot-pdf-5tuas) -- they can neither
+    evict an author nor release another editor's kit. A legacy lock carrying
+    no uid falls back to the old role test, so nobody is stranded on one."""
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
