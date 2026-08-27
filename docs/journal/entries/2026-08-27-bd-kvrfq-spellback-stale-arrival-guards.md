@@ -80,6 +80,22 @@ nothing while a tool response is pending", the exact assumption this bead's
 wire evidence refuted (pre-existing on `origin/dev`, untouched file, so a
 bead rather than diff expansion). Rejected: 0.
 
+Outer review: ONE Opus cross-surface pass (the direct spawn hit the
+effort-400, so it ran via the standing one-agent Workflow fallback at
+effort high). Verdict `GAPS-FOUND (1)`: every wire consumer of the new
+bare-status shapes traced None-safe end to end, but
+`docs/standards/ws-protocol.md`'s `spellback_response` row was the one
+remaining restatement of the old delivered/interrupted semantics (the
+scar-#8 one-member-left-behind shape). Fixed inline -- a prose-only,
+non-behavioral correction the reviewer's own verdict pre-cleared ("does not
+require re-running behavioral review once corrected"), so the pass was not
+re-spawned. The reviewer also filed two out-of-scope beads: bd
+`polyglot-pdf-l5utv` (the `no_current_field`/`no_value` early returns in
+`handleSpellbackRequest` bypass the new guards -- the residual, pre-existing
+tail of the incident's symptom 4; likelihood much reduced by this fix but
+the path is untouched) and bd `polyglot-pdf-5r23a` (the ws-protocol row --
+resolved by this PR's inline fix, closed with it).
+
 ## Lessons
 
 - **A held-open tool response is not a parked model.** The design assumed
