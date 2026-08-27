@@ -103,6 +103,29 @@ and both evidence guards. The parametrized test pins the whole property (every
 `/Opt` value accepted), so a future carve-out that special-cases a subset fails
 CI rather than a review round.
 
+**The guard I added to fix a bug introduced a worse one, and review caught
+it.** Preserving EVERY option whose value was PDF-sanctioned meant two options
+sharing a code both kept it -- so `repair()` returned `repairs == []` ("nothing
+to fix") while lint still blocked on `option-value-duplicate`. An unfixable
+deadlock with no diagnostic, where the pre-diff behaviour had correctly minted
+both to distinct slugs. The lesson is the ordering: **uniqueness outranks
+preservation**, because the widget holds ONE value, so a duplicate is a defect
+no matter which spelling wins. A carve-out that exempts a value from rule A
+must not silently exempt it from unrelated rule B.
+
+**A no-op mutation nearly passed for verification.** Checking the first-match
+fix, reverting only the `!= target` filter left the `break` in place, so the
+behaviour was unchanged and the test "passed" -- proving nothing. The true
+revert (filter AND break together) reddens it. When a guard is enforced by two
+cooperating pieces, mutating one is not a test of the guard; mutate the
+behaviour, not a line.
+
+**The E2E test was silently skipping.** Its first run reported 4 skipped, which
+reads as green in a summary line. The kit is gitignored, so in a worktree it
+exists only in the main checkout, and the skipif matched. A test that cannot
+find its fixture is not a passing test -- it resolves the kit from the git
+common dir now, and the run was re-confirmed as 4 passed.
+
 ## Follow-up filed
 
 `polyglot-pdf-g2fpr` (P1, blocked on this): give selects the same
@@ -110,12 +133,25 @@ CI rather than a review round.
 slug on every field type and this carve-out can be retired. Cross-surface:
 filler, lint, repair, schema-editor, plus a kit migration.
 
+Also filed: `polyglot-pdf-t9m9k` (P2) -- the "exact name, else dot-boundary
+suffix" widget-name convention is open-coded at FOUR sites with three different
+return shapes. Deliberately NOT consolidated here: the semantics are not
+uniform (`pdf_choice_values` must take the FIRST match, `_match_dump_names`
+must return ALL matches for multiclaim detection), so consolidation needs a
+first-vs-all argument rather than a blind merge. Pinned meanwhile by a test
+asserting the exact per-module site count, so a fifth site fails CI.
+
 ## Files touched
 
 - `backend/services/schema_lint.py` -- evidence-scoped exemption in
   `_check_options`; `dump` threaded through
-- `backend/services/schema_repair.py` -- new shared `pdf_choice_values`;
-  per-option keep-guard and reserved-seed in `_mint_slugs`
+- `backend/services/schema_repair.py` -- new shared `pdf_choice_values`
+  (first match only); per-option keep-guard with `seen_codes` dedupe, and the
+  reserved-seed, in `_mint_slugs`
 - `backend/tests/test_schema_lint.py` -- 6 tests (incl. a 4-way parametrization)
-- `tests/test_schema_repair.py` -- 4 tests
+- `tests/test_schema_repair.py` -- 8 tests (incl. an 8-way parametrization and
+  the four-sites set pin)
+- `backend/tests/test_pdf_fill_dropdown_export_codes.py` -- live E2E through
+  the real `/fill-pdf` route, asserting on RENDERED text over all 62 state
+  codes and all 19 height values
 - `docs/components/pdf-filling.md` -- select fill path + dropdown gotcha
