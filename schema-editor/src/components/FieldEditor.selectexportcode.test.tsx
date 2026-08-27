@@ -54,29 +54,48 @@ function radioField(): FormField {
 
 describe('select option values are PDF export codes (bd polyglot-pdf-alzbr)', () => {
   it('editing a select option LABEL does not change its value', () => {
-    // Mirror the radio test's setup exactly: render with the label ALREADY
-    // edited, so the blur handler reads the new label from the current prop.
-    // Anything less and the handler reads the old label, takes its no-op
-    // early-return, and the test passes without exercising the fix at all.
-    const onUpdateField = vi.fn();
-    const edited = selectField();
-    (edited.options as any)[0].label = 'Wyoming';
-    render(
-      <FieldEditor field={edited} schema={makeSchema([edited])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
+    // Asserted on the RESULTING STATE, not on callback shapes. The correct
+    // behaviour here is to commit NOTHING (the value must not change), so any
+    // assertion that only inspects committed calls iterates zero times and
+    // passes against a broken guard -- which is exactly how an earlier cut of
+    // this test shipped vacuous. A real state-holding parent makes the
+    // post-edit value directly observable instead.
+    function Harness() {
+      const [s, setS] = React.useState<FormSchema>(
+        makeSchema([selectField()]),
+      );
+      const f = s.fields.find(x => x.id === 'mail_state')!;
+      return (
+        <>
+          <FieldEditor
+            field={f}
+            schema={s}
+            onUpdateField={(patch: any) => setS(p => ({
+              ...p,
+              fields: p.fields.map(x => (x.id === 'mail_state' ? { ...x, ...patch } : x)),
+            } as FormSchema))}
+            onUpdateFields={(fields: any, sections: any) => setS(p => ({
+              ...p, fields, sections: sections ?? p.sections,
+            } as FormSchema))}
+            authorTier
+          />
+          <pre data-testid="probe">{JSON.stringify(
+            (s.fields.find(x => x.id === 'mail_state') as any).options
+              .map((o: any) => [o.label, o.value]),
+          )}</pre>
+        </>
+      );
+    }
 
-    const input = screen.getByDisplayValue('Wyoming') as HTMLInputElement;
+    render(<Harness />);
+    const input = screen.getByDisplayValue('Wyoming (WY)') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Wyoming' } });
     fireEvent.blur(input);
 
-    // Every committed update must leave the export codes intact. The label may
-    // change; the value may not. (A minted slug would be 'wyoming'.)
-    const commits = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(f => f && Array.isArray(f.options));
-    for (const f of commits) {
-      expect(f.options.map((o: any) => o.value)).toEqual(['WY', 'AL']);
-    }
+    const opts = JSON.parse(screen.getByTestId('probe').textContent!);
+    expect(opts[0][0]).toBe('Wyoming');  // the label DID change...
+    expect(opts[0][1]).toBe('WY');       // ...and the export code did NOT
+    expect(opts[1][1]).toBe('AL');
   });
 
   it('a radio option label edit STILL re-mints its value (the carve-out is select-only)', () => {
