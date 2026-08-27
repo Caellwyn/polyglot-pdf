@@ -28,6 +28,13 @@ Outputs, per run:
 
 Arms (--arm):
   unbounded      one session, no compression, no resets (raw growth curve)
+  naive          same single-session shape as unbounded, but the SI is the
+                 full-schema SI with the form's OFFICIAL BOOKLET TEXT appended
+                 verbatim (form_metadata.booklet_text) -- the "give the model
+                 everything" baseline nobody would deploy, measured so every
+                 other arm's savings has an honest ceiling to be measured
+                 against (bd polyglot-pdf-89mt). Harness-only SI mutation;
+                 zero backend/ changes.
   section-reset  the CURRENT production flow: per-section sub-schema, session
                  restart at each section boundary via switch_to_section (the
                  restart + re-greeting tokens are attributed to the FIRST
@@ -708,6 +715,40 @@ def load_schema(schema_key: str = "demo") -> dict:
     return json.loads(SCHEMAS[schema_key]["path"].read_text(encoding="utf-8"))
 
 
+# NAIVE arm marker (bd polyglot-pdf-89mt): the naive baseline is "what would a
+# system instruction look like if nobody had ever done any SI-diet work" --
+# the full-schema legacy SI (production's own build_form_context_message,
+# full form, one session, exactly the unbounded arm's shape) PLUS the form's
+# own official booklet text pasted in as reference material, the way a naive
+# first implementation might reach for "just give the model everything." This
+# is harness-only: ZERO backend/ production code is touched, and the booklet
+# is appended AFTER build_form_context_message returns -- production's SI
+# builder never sees or knows about the booklet.
+NAIVE_SI_MARKER = "OFFICIAL FORM INSTRUCTIONS (reference):"
+
+
+def naive_si_booklet_suffix(schema: dict) -> str:
+    """The literal text appended to the production SI for --arm naive.
+
+    Pulled from schema['form_metadata']['booklet_text'] (the form kit's own
+    copy of the IRS/USCIS instruction booklet, when present -- the w7 kit
+    carries ~81k chars, bd polyglot-pdf-89mt). Returns '' (no-op suffix) if
+    the schema carries no booklet_text, so a naive run against a schema
+    without one degrades to the plain full-SI baseline rather than crashing.
+    """
+    booklet = (schema.get("form_metadata") or {}).get("booklet_text") or ""
+    if not booklet:
+        return ""
+    return f"\n\n{NAIVE_SI_MARKER}\n{booklet}"
+
+
+def apply_naive_si(si: str, schema: dict) -> str:
+    """Append the naive arm's booklet suffix to an already-built SI string.
+    Shared by the harness driver and count_naive_si_tokens.py so both measure
+    the EXACT same text -- never reimplement this concatenation elsewhere."""
+    return si + naive_si_booklet_suffix(schema)
+
+
 def sections_in_plan(schema: dict, plan: list[dict]) -> list[dict]:
     """Ordered distinct sections covered by the plan, with labels from the schema.
 
@@ -815,6 +856,14 @@ class FakeClientWebSocket:
         self.switch_events: list[dict] = []
         self.skip_events: list[dict] = []
         self.sent_messages: list[str] = []
+        # name_spellback tool round-trips (bd polyglot-pdf-22h1f wiring, harness
+        # fix bd polyglot-pdf-89mt): each entry {ts, request_id, status,
+        # value_chars}. value_chars is the length of the CURRENT field's value
+        # at ack time -- a proxy for TTS characters actually synthesized by the
+        # real client's /api/tts/spellback call, which this fake client never
+        # makes (see _handle_spellback docstring). No field VALUE is recorded,
+        # matching the real wire contract (never crosses this message).
+        self.spellback_events: list[dict] = []
         # W2 (bd polyglot-pdf-kxkw, mirrored bd polyglot-pdf-0cyu): settledness-
         # window indices already sent as validate_windows (mirrors the client's
         # persisted state.validatedWindowIndices). A window index, once sent,
@@ -949,6 +998,8 @@ class FakeClientWebSocket:
             self._handle_skip_field(msg)
         elif mtype == "switch_field":
             self._handle_switch_field(msg)
+        elif mtype == "spellback":
+            self._handle_spellback(msg)
         elif mtype == "validation_result":
             # W3 (bd polyglot-pdf-pr3i, mirrored 0cyu): REPORT-ONLY since W3 --
             # mirror handleValidationResult (webFormConnection.ts:2222-2257).
@@ -1184,6 +1235,54 @@ class FakeClientWebSocket:
         rec["outcome"] = "pinned"
         self.switch_events.append(rec)
         self._reply(lambda: self.service.handle_switch_field_response(rid, ack))
+
+    def _current_field_id(self) -> str | None:
+        """Mirror computeNextField's field resolution (pin honored, else first
+        unconfirmed in active_field_ids) -- same rule next_hint()/
+        next_field_schema() already use. Spell-back and next-field-hint
+        resolve the SAME "current field" in production; this is that shared
+        rule factored out so _handle_spellback doesn't duplicate it."""
+        pin = self._pin_active()
+        if pin:
+            return pin
+        for fid in self.active_field_ids:
+            entry = self.state.get(fid)
+            if not entry or not entry.get("confirmed"):
+                return fid
+        return None
+
+    def _handle_spellback(self, msg: dict):
+        """Mirror handleSpellbackRequest (webFormConnection.ts): ack the
+        name_spellback tool round-trip. The real client resolves the current
+        field itself, fetches a Cloud TTS clip of its value spelled out,
+        plays it BLOCKING, and reports only the outcome + timings -- no field
+        value crosses this message in either direction (see
+        RequestCoordinator.request_spellback's docstring). This fake client
+        never calls that route (no HTTP layer, no TTS client, ZERO spend): it
+        only needs to return a status the backend's tool-response mapping
+        branches on. 'delivered' is the correctness-relevant common case --
+        the model waits silently for the (simulated) clip to finish and then
+        proceeds -- so that's what this always acks, mirroring a healthy
+        client on every call.
+
+        Without this handler the message falls through every branch in
+        send_json and is silently dropped: request_spellback's future is
+        never resolved and RequestCoordinator blocks for the full 90s
+        SPELLBACK_ROUNDTRIP_TIMEOUT before returning CONFIRM_REQUEST_TIMEOUT,
+        which the callback handler then reports to the model as a hard error
+        (apologize, re-ask for spelling) -- a needless stall or a derailed
+        scripted answer sequence, per question, per run.
+        """
+        rid = msg.get("request_id")
+        fid = self._current_field_id()
+        value = self.state.get(fid, {}).get("value") if fid else None
+        value_chars = len(str(value)) if value not in (None, "") else 0
+        rec = {"ts": time.monotonic(), "request_id": rid,
+               "field_id": fid, "status": "delivered",
+               "value_chars": value_chars}
+        self.spellback_events.append(rec)
+        payload = {"status": "delivered", "playback_ms": 0, "fetch_ms": 0}
+        self._reply(lambda: self.service.handle_spellback_response(rid, payload))
 
     def validation_fields(self, up_to_fid: str | None = None,
                          field_ids: list[str] | None = None) -> list[dict]:
@@ -1828,6 +1927,15 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
             # the run metadata still records the requested fixed numbers.
             "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR": False,
         })
+    elif arm == "naive":
+        # The naive baseline (bd polyglot-pdf-89mt): same settings shape as
+        # unbounded (no DTI, no compression, no resets -- the `overrides`
+        # dict above already pins exactly that), pinned again here explicitly
+        # so a future default flip cannot silently relabel this arm's
+        # measured configuration (same doctrine as every other branch in this
+        # function). The SI mutation (booklet appended) happens at the driver
+        # call site, not here -- Settings carries no "extra SI text" knob.
+        pass
     elif arm == "section-reset-jit":
         # The JIT SI mode was REMOVED (bd polyglot-pdf-en2j): USE_JIT_SCHEMA no
         # longer exists, so this arm can no longer render a distinct JIT manifest
@@ -2386,7 +2494,24 @@ async def run(args) -> int:
             client.state[aa["field_id"]] = {
                 "value": aa["value"], "confirmed": True}
 
+        # session_count (bd polyglot-pdf-89mt): starts at 1 for the initial
+        # start_session below; each service.switch_to_section call later in the
+        # driver loop increments it (both call sites are gated on `continuous`
+        # or `is_section_reset`, neither of which the naive arm sets, so a
+        # naive run's count should stay exactly 1 -- asserted post-run below).
+        meta["session_count"] = 1
+
         si = service.build_form_context_message(arm_schema, {}, **si_kwargs)
+        if args.arm == "naive":
+            # bd polyglot-pdf-89mt: append the form's own official booklet text
+            # to the production SI, AFTER build_form_context_message returns --
+            # production's SI builder is never touched or made aware of this.
+            # arm_schema carries only the current section's fields (here: the
+            # whole form, since naive takes the same full-form else-branch as
+            # unbounded), but the booklet lives on the WHOLE schema's
+            # form_metadata, so read it off `schema`, not `arm_schema`.
+            si = apply_naive_si(si, schema)
+            meta["naive_si_booklet_chars"] = len(naive_si_booklet_suffix(schema))
         meta["system_instruction_chars"] = len(si)
         # Session SPOKEN language (bd polyglot-pdf-6mzi): mirror websocket_routes'
         # handshake seeding -- set BEFORE start_session so the per-connect ASR
@@ -2748,6 +2873,39 @@ async def run(args) -> int:
                                 "steer-override")
                     rec["outcome"] = "overridden_unplanted"
 
+        # Divergence tracking (bd polyglot-pdf-89mt): the harness injects
+        # answers in PLAN ORDER regardless of what the model does with them --
+        # this counts, without changing, the cases where the model confirmed a
+        # DIFFERENT field than the one the plan's current step targeted (e.g.
+        # it filled a field it inferred from context before being asked, or
+        # picked up a value the harness's answer incidentally also supplied).
+        # divergence_pairs holds (expected_field_id, actual_field_id) for
+        # every such mismatch; divergence_count is just its length, kept
+        # separately so meta consumers that only want the scalar don't need to
+        # len() the list themselves.
+        divergence_pairs: list[list[str]] = []
+
+        def _record_divergence(expected_fid: str | None,
+                               confirmed_before: set[str]) -> None:
+            if not expected_fid:
+                return
+            confirmed_after = {f for f, e in client.state.items()
+                               if e.get("confirmed")}
+            newly_confirmed = confirmed_after - confirmed_before
+            if expected_fid in newly_confirmed:
+                # The common case: exactly the expected field (plus possibly
+                # nothing else) got confirmed. Not a divergence.
+                newly_confirmed.discard(expected_fid)
+                for other in sorted(newly_confirmed):
+                    divergence_pairs.append([expected_fid, other])
+                return
+            # The expected field did NOT get newly confirmed this step (it may
+            # already have been confirmed by an earlier step, or the model
+            # skipped it entirely) -- if some OTHER field was confirmed
+            # instead, that is the field the model actually targeted.
+            for other in sorted(newly_confirmed):
+                divergence_pairs.append([expected_fid, other])
+
         sec_idx = 0
         for i, q in enumerate(steps, 1):
             current_q["n"] = i
@@ -2811,6 +2969,7 @@ async def run(args) -> int:
                          "section_label": "Full Form (continuous)",
                          "previous_spoken_names": []},
                         initial_field_hint=client.next_hint())
+                    meta["session_count"] += 1
                     for _ in range(150):
                         if getattr(adapter, "_session_ready", False):
                             break
@@ -2855,6 +3014,7 @@ async def run(args) -> int:
                      "total_sections": len(secs), "section_label": sec["label"],
                      "previous_spoken_names": spoken_prev},
                     initial_field_hint=client.next_hint())
+                meta["session_count"] += 1
                 for _ in range(150):
                     if getattr(adapter, "_session_ready", False):
                         break
@@ -2903,13 +3063,26 @@ async def run(args) -> int:
                 await speak(q["planted_say"], "plant-value")
                 await speak(confirm_utt, "confirm")
             elif (q.get("path") or args.path) == "happy":
+                # Divergence tracking (bd polyglot-pdf-89mt): snapshot which
+                # fields are already confirmed BEFORE this plan question's
+                # answer, so any field OTHER than the expected `fid` that
+                # becomes newly confirmed during this question's turns is
+                # attributable to this step, not an earlier one. Does not
+                # change injection: the harness still speaks the plan's
+                # scripted answer for `fid` regardless of what the model does.
+                _confirmed_before = {f for f, e in client.state.items()
+                                     if e.get("confirmed")}
                 await speak(q["say"], "value")
                 await speak(confirm_utt, "confirm")
+                _record_divergence(fid, _confirmed_before)
             else:
+                _confirmed_before = {f for f, e in client.state.items()
+                                     if e.get("confirmed")}
                 await speak(q["wrong"], "wrong-value")
                 await speak(reject_utt, "reject")
                 await speak(q["say"], "corrected-value")
                 await speak(confirm_utt, "confirm")
+                _record_divergence(fid, _confirmed_before)
             # End the window at the LAST user activity_end (set by speak), NOT now:
             # Gemini's confirm response after it carries the NEXT field's prompt, which
             # must fall into the next window's model_said (Codex PR #246 round 2).
@@ -3020,6 +3193,18 @@ async def run(args) -> int:
         meta["event_records"] = event_records
         meta["seam_tool_records"] = seam_tool_records
         meta["text_ledger_calls"] = text_ledger_calls
+        meta["divergence_count"] = len(divergence_pairs)
+        meta["divergence_pairs"] = divergence_pairs
+        # Spell-back accounting (bd polyglot-pdf-89mt / 22h1f): how many times
+        # the model invoked name_spellback this run, plus total spelled
+        # characters (a proxy for the real client's Cloud TTS character
+        # spend -- see FakeClientWebSocket._handle_spellback). Zero
+        # invocations is a legitimate outcome (nothing forces the model to
+        # ever spell back), not an error.
+        meta["spellback_count"] = len(client.spellback_events)
+        meta["spellback_total_chars"] = sum(
+            e.get("value_chars", 0) for e in client.spellback_events)
+        meta["spellback_disabled"] = False
 
         try:
             await adapter.finalize()
@@ -3088,6 +3273,20 @@ async def run(args) -> int:
                 "The measurement config is not what was intended -- refusing to "
                 "write artifacts that would be analysed as if it were."
             )
+
+    # naive arm invariant (bd polyglot-pdf-89mt): ONE continuous session, no
+    # section resets -- if this ever fires it means a new switch_to_section
+    # call site was added upstream of this check without updating the naive
+    # gating, and the naive numbers would silently be measuring a multi-
+    # session run mislabeled as single-session (the same failure class as the
+    # el92 section-reset-jit mislabeling this bead's docstring warns about).
+    if args.arm == "naive" and meta.get("session_count") != 1:
+        raise SystemExit(
+            f"ABORT (bd polyglot-pdf-89mt naive-arm invariant): --arm naive "
+            f"must run ONE continuous session; session_count="
+            f"{meta.get('session_count')!r}. Refusing to write artifacts that "
+            "would be analysed as a single-session naive run when they are not."
+        )
 
     prompts = [d["prompt"] or 0 for d in usage_dumps]
     meta["prompt_curve"] = prompts
@@ -3269,7 +3468,8 @@ def main() -> int:
                          "REAL form-kits/w7 kit, 22 questions on the common "
                          "nonresident-filer path; bd polyglot-pdf-89mt)")
     ap.add_argument("--arm",
-                    choices=["unbounded", "section-reset", "section-reset-jit", "dti", "sliding-window"],
+                    choices=["unbounded", "naive", "section-reset",
+                             "section-reset-jit", "dti", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
     ap.add_argument("--questions", type=int, default=None,
