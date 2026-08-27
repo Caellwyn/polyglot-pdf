@@ -67,11 +67,18 @@ def _isolate_k_service(monkeypatch):
 # to where every file gets it.
 #
 # The two tokens the suite already sends become two DISTINCT PEOPLE, which is
-# strictly closer to reality than the shared secret they modelled before: tests
-# that need "another editor" now have one available.
+# strictly closer to reality than the shared secret they modelled before.
+#
+# The second editor and second author exist so SAME-ROLE contention is testable
+# at all (bd polyglot-pdf-5tuas: editor B is refused a kit editor A holds, and
+# an author can still take it back from another author). The note above used to
+# claim tests needing "another editor" had one -- with only two identities that
+# was aspirational; these make it true.
 _TEST_PEOPLE = {
     "edit-tok": ("uid-maria", "maria@example.com", "editor"),
     "auth-tok": ("uid-josh", "josh@example.com", "author"),
+    "edit2-tok": ("uid-sam", "sam@example.com", "editor"),
+    "auth2-tok": ("uid-dana", "dana@example.com", "author"),
 }
 
 

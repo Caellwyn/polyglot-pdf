@@ -955,7 +955,9 @@ def test_taking_a_free_lock_succeeds(client):
     assert resp.status_code == 200, resp.text
     assert resp.json()["heldBy"] == "editor"
     assert resp.json()["preempted"] is False
-    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "editor"}
+    lock = _run(store.load_metadata("w7"))["editing_lock"]
+    assert lock["role"] == "editor"
+    assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 def test_an_AUTHOR_can_take_a_lock_back_from_an_editor(client):
@@ -970,7 +972,9 @@ def test_an_AUTHOR_can_take_a_lock_back_from_an_editor(client):
     assert resp.json()["heldBy"] == "author"
     # Reported, so the UI can SAY it took the kit rather than silently winning.
     assert resp.json()["preempted"] is True
-    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+    lock = _run(store.load_metadata("w7"))["editing_lock"]
+    assert lock["role"] == "author"
+    assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
@@ -984,7 +988,9 @@ def test_an_EDITOR_cannot_take_a_lock_from_an_author(client):
 
     assert resp.status_code == 409, resp.text
     assert "author is working on this form" in resp.json()["detail"]
-    assert _run(store.load_metadata("w7"))["editing_lock"] == {"role": "author"}
+    lock = _run(store.load_metadata("w7"))["editing_lock"]
+    assert lock["role"] == "author"
+    assert lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 def test_a_preempted_editor_DISCOVERS_it_on_their_next_save(client):
@@ -1360,14 +1366,17 @@ def test_a_supersede_honours_the_OUTGOING_kit_s_lock(client):
     # is author-only, so this drives the guard directly rather than the route.)
     holder = ekr._lock_holder(_run(store.load_metadata("w7-2024")))
     assert holder == "author"
-    assert ekr._lock_refusal(holder, "editor") is not None, (
+    from backend.services.editor_auth import EditorActor
+    _an_editor = EditorActor(uid="uid-someone", email="someone@example.com",
+                             role="editor")
+    assert ekr._lock_refusal(holder, _an_editor) is not None, (
         "an editor must be refused the outgoing kit while an author holds it"
     )
     # And the route calls that check -- pinned by the property test above plus
     # this explicit assertion that the call exists on the supersede path.
     import inspect
     src = inspect.getsource(ekr.set_editor_kit_status)
-    assert "_require_edit_lock(superseded_meta, role.role)" in src, (
+    assert "_require_edit_lock(superseded_meta, role)" in src, (
         "the supersede path must check the OUTGOING kit's lock"
     )
 
@@ -1566,7 +1575,9 @@ def test_taking_a_lock_on_a_kit_with_NO_metadata_still_works(client):
     resp = c.post("/api/editor/kits/fresh/lock", headers=AUTH_HDR)
 
     assert resp.status_code == 200, resp.text
-    assert _run(store.load_metadata("fresh"))["editing_lock"] == {"role": "author"}
+    _lock = _run(store.load_metadata("fresh"))["editing_lock"]
+    assert _lock["role"] == "author"
+    assert _lock["uid"], "the lock must name WHO holds it (bd 5tuas)"
 
 
 # --- a status change releases the lock (Opus fresh-eyes round 8) -------------
@@ -1771,3 +1782,122 @@ def test_an_author_can_RELEASE_a_lock_held_by_another_author(client):
     resp = _unlock(c, "w7", AUTH_HDR)
     assert resp.status_code == 200, (
         "an author could not release an author-held lock: {}".format(resp.text))
+
+
+# --- bd polyglot-pdf-5tuas: the lock names a PERSON -------------------------
+#
+# Under shared tokens the server could not tell two editors apart, so same-role
+# contention was ALLOWED rather than pretended about. Now that a lock carries a
+# uid, editor-vs-editor is a real collision and is refused -- while author
+# preemption survives, including author-over-author, because that IS the
+# stale-lock release and there is no timer.
+
+HDR2 = {"X-Editor-Token": "edit2-tok"}        # a SECOND editor (sam)
+AUTH_HDR2 = {"X-Editor-Token": "auth2-tok"}   # a SECOND author (dana)
+
+
+def test_editor_B_is_REFUSED_a_kit_editor_A_holds(client):
+    """EXIT CRITERION 1. The whole point of the bead.
+
+    Before this, both editors looked identical to the server and the second
+    one silently stole the kit out from under the first.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _lock(c, "w7", HDR2)
+
+    assert resp.status_code == 409, (
+        "editor B took a kit editor A holds: {}".format(resp.text))
+    assert "maria@example.com" in resp.text, (
+        "the refusal must NAME who holds it, or the second editor cannot tell "
+        "whether to wait or go find them: {}".format(resp.text))
+
+
+def test_the_SAME_editor_may_re_take_their_own_lock(client):
+    """The other side of criterion 1, and the one that breaks a naive fix.
+
+    A refresh or a second tab re-takes the lock. Refusing that would lock a
+    person out of their OWN kit -- so the rule is person-vs-person, not
+    "a lock exists".
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    again = _lock(c, "w7", HDR)
+
+    assert again.status_code == 200, (
+        "an editor was refused their OWN lock: {}".format(again.text))
+    assert again.json().get("preempted") is False, (
+        "re-taking your own lock is not a preemption")
+
+
+def test_an_author_can_still_take_a_lock_from_ANOTHER_author(client):
+    """EXIT CRITERION 2. Author preemption survives the person-scoping.
+
+    Author-over-author is the stale-lock release: there is no timer, because a
+    clock that steals from someone actively working is worse than a human
+    deciding to take it. Person-scoping must not quietly remove that.
+    """
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", AUTH_HDR).status_code == 200
+
+    resp = _lock(c, "w7", AUTH_HDR2)
+
+    assert resp.status_code == 200, (
+        "an author could not take a lock back from another author: {}".format(
+            resp.text))
+    assert resp.json().get("preempted") is True, (
+        "taking it from a different person IS a preemption and must say so")
+
+
+def test_an_author_can_still_take_a_lock_from_an_editor(client):
+    """EXIT CRITERION 2, the pairing that already worked -- pinned so the
+    person-scoping does not regress it."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+    assert _lock(c, "w7", HDR).status_code == 200
+
+    resp = _lock(c, "w7", AUTH_HDR)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("preempted") is True
+
+
+def test_the_lock_response_NAMES_the_person_holding_it(client):
+    """EXIT CRITERION 3. heldBy stays a ROLE (the editor catalogue compares it
+    to the literal strings 'author'/'editor'); heldByLabel carries the person,
+    additively, so the frontend bd polyglot-pdf-yswp3 owns keeps working."""
+    c, _store, root = client
+    _make_kit(root, "w7", status="draft")
+
+    body = _lock(c, "w7", HDR).json()
+
+    assert body["heldBy"] == "editor", "heldBy must still be the ROLE"
+    assert body["heldByLabel"] == "maria@example.com", (
+        "the response must name the PERSON holding the kit")
+
+
+def test_a_PRE_5tuas_lock_does_not_strand_an_editor(client):
+    """The migration case, and the one a naive fix gets wrong.
+
+    A lock written before this bead stores only a role -- there is no uid to
+    compare. Treating that unattributable holder as "somebody else" would
+    permanently refuse every editor on a kit nobody can be shown to hold, with
+    no way to clear it. So same-role contention falls back to the old ALLOW.
+    """
+    c, store, root = client
+    _make_kit(root, "w7", status="draft")
+    meta = _run(store.load_metadata("w7")) or {}
+    meta["editing_lock"] = {"role": "editor"}   # the OLD shape, no uid
+    _run(store.put_metadata("w7", meta))
+
+    resp = _lock(c, "w7", HDR2)
+
+    assert resp.status_code == 200, (
+        "an editor was stranded on a legacy lock with no uid: {}".format(
+            resp.text))
