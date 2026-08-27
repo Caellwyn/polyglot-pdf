@@ -142,6 +142,86 @@ def test_option_value_slug_trips_once_v2_only():
     assert _rules(findings) == ["option-value-slug"]
 
 
+_COMBO_CLAIM = "P1_Line6e_State[0]"
+_COMBO_DUMP = {"fields": [{
+    "name": "form1[0].#subform[0].P1_Line6e_State[0]",
+    "widgets": [{"choices": [
+        {"value": " "}, {"value": "WY"}, {"value": "AL"}, {"value": "DC"},
+    ]}],
+}]}
+
+
+def _combo(options, fid="mail_state", ftype="select", claim=_COMBO_CLAIM):
+    return [{"id": fid, "type": ftype, "pdf_field_name": claim,
+             "options": list(options)}]
+
+
+def test_pdf_sanctioned_dropdown_codes_are_exempt_from_slug_rule():
+    """A dropdown's option.value is written VERBATIM into the PDF widget, and
+    PyMuPDF does not validate it against /Opt -- so a slug prints wrong
+    ('wyoming' clips to 'wyomin' in the 36pt I-90 state box). Values the PDF
+    itself declares legal are therefore exempt (bd polyglot-pdf-g2fpr).
+
+    Pins the whole exemption PROPERTY, not one code: every /Opt value must be
+    accepted, so a carve-out that special-cases a subset fails here.
+    """
+    codes = [c["value"] for c in _COMBO_DUMP["fields"][0]["widgets"][0]["choices"]
+             if c["value"].strip()]
+    assert len(codes) >= 3, "fixture must exercise more than one code"
+    opts = [{"value": c, "label": "State %s" % c} for c in codes]
+    findings = _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+    assert [f.rule for f in findings if f.rule == "option-value-slug"] == []
+
+
+@pytest.mark.parametrize("bad", ["Wyoming!!", "NOT_A_CODE", "WYO", "Wy oming"])
+def test_dropdown_values_absent_from_pdf_choices_still_trip_slug_rule(bad):
+    """The carve-out is EVIDENCE-based: only values the widget declares are
+    exempt. Anything else is exactly what prints wrong, so the rule must still
+    bite -- otherwise this becomes a blanket type exemption.
+    """
+    findings = _lint_structural(
+        _schema(_combo([{"value": bad, "label": "X"}]), version="2"), _COMBO_DUMP)
+    assert _rules(findings) == ["option-value-slug"]
+
+
+def test_dropdown_code_exemption_requires_the_dump():
+    """No dump means no evidence -- the linter must NOT start exempting values
+    it cannot verify (a dumpless lint keeps the old, stricter behaviour).
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"}]
+    assert _rules(_lint_structural(
+        _schema(_combo(opts), version="2"), None)) == ["option-value-slug"]
+
+
+def test_dropdown_code_exemption_requires_the_matching_widget():
+    """The exemption is keyed on THIS field's pdf_field_name: claiming some
+    other widget must not borrow its choice list.
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"}]
+    findings = _lint_structural(
+        _schema(_combo(opts, claim="P9_Other[0]"), version="2"), _COMBO_DUMP)
+    assert "option-value-slug" in _rules(findings)
+
+
+def test_radio_options_are_not_exempted_by_dropdown_choices():
+    """Radios carry widget identity in pdf_on_value, so their values have a
+    second channel and stay pure slugs -- the carve-out is select-only.
+    """
+    opts = [{"value": "WY", "label": "Wyoming", "pdf_on_value": "WY"}]
+    findings = _lint_structural(
+        _schema(_combo(opts, ftype="radio"), version="2"), _COMBO_DUMP)
+    assert "option-value-slug" in _rules(findings)
+
+
+def test_duplicate_dropdown_codes_still_trip():
+    """Exempting a value from the SLUG rule must not exempt it from the
+    uniqueness rule.
+    """
+    opts = [{"value": "WY", "label": "a"}, {"value": "WY", "label": "b"}]
+    findings = _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+    assert _rules(findings) == ["option-value-duplicate"]
+
+
 def test_ref_unresolved_field_trips_once():
     fields = [
         {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",

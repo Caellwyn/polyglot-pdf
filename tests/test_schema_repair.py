@@ -309,6 +309,79 @@ def test_colliding_labels_also_drop_ambiguous_references():
     assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
 
 
+_COMBO_DUMP = {"fields": [{
+    "name": "form1[0].#subform[0].P1_Line6e_State[0]",
+    "widgets": [{"choices": [
+        {"value": " "}, {"value": "WY"}, {"value": "AL"}, {"value": "DC"},
+    ]}],
+}]}
+
+
+def _combo(options):
+    return [{"id": "mail_state", "type": "select",
+             "pdf_field_name": "P1_Line6e_State[0]", "options": list(options)}]
+
+
+def _values(repaired):
+    return [o["value"] for o in repaired["fields"][0]["options"]]
+
+
+def test_pdf_sanctioned_dropdown_codes_survive_repair():
+    """Minting a slug over a dropdown's export code makes the PDF print wrong
+    (the value is written verbatim; PyMuPDF does not validate against /Opt).
+    Repair must leave PDF-declared codes alone (bd polyglot-pdf-g2fpr).
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _values(repaired) == ["WY", "AL"]
+    assert not any(r["action"] == "mint-option-slugs" for r in repairs)
+
+
+def test_dropdown_codes_survive_a_mint_triggered_by_a_sibling_defect():
+    """Minting is triggered per-FIELD: one duplicate anywhere in the dropdown
+    used to rewrite EVERY option, so a single unrelated defect broke printing
+    for all 62 state codes. The codes must survive their neighbour's repair.
+    """
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"},
+            {"value": "AL", "label": "Alabama duplicate"}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _values(repaired)[:2] == ["WY", "AL"]
+
+
+def test_preserved_code_cannot_collide_with_a_minted_sibling():
+    """A lowercase PDF code is itself slug-legal, so a slug minted from another
+    option's label can equal a preserved code -- manufacturing the very
+    duplicate this branch exists to repair. The minter must reserve them.
+    """
+    dump = {"fields": [{"name": "X[0]", "widgets": [
+        {"choices": [{"value": "wy"}, {"value": "al"}]}]}]}
+    fields = [{"id": "m", "type": "select", "pdf_field_name": "X[0]", "options": [
+        {"value": "wy", "label": "Wyoming"},
+        {"value": "", "label": "WY"},          # mints to 'wy' without the guard
+        {"value": "al", "label": "Alabama"},
+    ]}]
+    repaired, _ = repair(_schema(fields), dump)
+    vals = _values(repaired)
+    assert len(vals) == len(set(vals)), "repair manufactured a duplicate: %r" % vals
+    assert vals[0] == "wy"
+
+
+def test_dumpless_repair_still_mints_over_non_slug_dropdown_values():
+    """No dump means no evidence: repair keeps its old, stricter behaviour
+    rather than preserving values it cannot verify.
+    """
+    # 2+ options: _is_choice_field only treats an option-bearing field as a
+    # choice field at that size, so a single-option fixture would pass here
+    # for the wrong reason (no minting attempted at all).
+    opts = [{"value": "WY", "label": "Wyoming (WY)"},
+            {"value": "AL", "label": "Alabama (AL)"}]
+    repaired, repairs = repair(_schema(_combo(opts)), None)
+    assert _values(repaired) == ["wyoming_wy", "alabama_al"]
+    assert any(r["action"] == "mint-option-slugs" for r in repairs)
+
+
 def test_valid_slugs_are_left_alone():
     fields = [_group()]  # values alpha/beta are already valid slugs
     repaired, repairs = repair(_schema(fields))

@@ -131,7 +131,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
 from backend.services import guidance_contract
@@ -140,7 +140,10 @@ from backend.services import guidance_contract
 # repair pass's no-name check so the two ledger gates can never drift
 # (bd polyglot-pdf-l1a9 / xazf). Import is cycle-safe: schema_repair imports
 # only vocab/form_models/controls_fields_mirror, never this module.
-from backend.services.schema_repair import FIELD_LEVEL_NAME_EXEMPT_TYPES
+from backend.services.schema_repair import (
+    FIELD_LEVEL_NAME_EXEMPT_TYPES,
+    pdf_choice_values,
+)
 
 SEVERITY_ERROR = "ERROR"
 SEVERITY_WARNING = "WARNING"
@@ -521,11 +524,34 @@ def _check_hidden_vs_show_if(
 # ---------------------------------------------------------------------------
 
 def _check_options(
-    field_path: str, f: Dict[str, Any], is_v2: bool, out: List[LintFinding]
+    field_path: str,
+    f: Dict[str, Any],
+    is_v2: bool,
+    out: List[LintFinding],
+    dump: Optional[Dict[str, Any]] = None,
 ) -> None:
     options = f.get("options")
     if not isinstance(options, list):
         return
+
+    # A dropdown's option.value is the ONLY thing that reaches the PDF: the
+    # filler writes str(value) straight into the widget for any non-radio,
+    # non-checkbox field (pdf_fill_routes.fill_widget), and it never consults
+    # pdf_on_value on that path. So for a select the v2 "value is a semantic
+    # slug, widget identity lives in pdf_on_value" contract has no second
+    # channel to put the export code in -- and PyMuPDF does NOT validate a
+    # write against the widget's /Opt list, so a slug is written verbatim and
+    # PRINTS WRONG (measured on I-90 P1_Line6e_State: 'wyoming' renders as
+    # 'wyomin', silently clipped by the 36pt box; 'WY' renders correctly).
+    # Exempt ONLY values the PDF itself declares legal, and only when the dump
+    # proves it -- an evidence-based carve-out, not a type-wide one, so the
+    # slug rule still catches genuine junk in the same field. Values absent
+    # from /Opt stay errors: those are exactly the ones that print wrong.
+    # This is the narrow unblock; the full fix is to give selects the same
+    # pdf_on_value channel radios have (bd polyglot-pdf-g2fpr).
+    pdf_choices: FrozenSet[str] = frozenset()
+    if is_v2 and f.get("type") == "select":
+        pdf_choices = pdf_choice_values(dump, f.get("pdf_field_name"))
     seen_values: Dict[str, int] = {}
     for i, o in enumerate(options):
         opt_path = f"{field_path}.options[{i}]"
@@ -554,7 +580,11 @@ def _check_options(
                 "multi-select answers spoken aloud -- remove the comma "
                 "from the value",
             ))
-        if is_v2 and not vocab.is_valid_option_slug(value_str):
+        if (
+            is_v2
+            and value_str not in pdf_choices
+            and not vocab.is_valid_option_slug(value_str)
+        ):
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-slug", opt_path,
                 f"the value {_quoted(value_str)} is not in the required format "
@@ -867,7 +897,7 @@ def lint_schema(
         field_path = f"fields[{i}] (id={f.get('id')})"
         fid = f.get("id")
 
-        _check_options(field_path, f, is_v2, out)
+        _check_options(field_path, f, is_v2, out, dump)
         _check_hidden_vs_show_if(field_path, f, out)
 
         show_if_atoms = _walk_condition(f.get("show_if"), f"{field_path}.show_if", out)
