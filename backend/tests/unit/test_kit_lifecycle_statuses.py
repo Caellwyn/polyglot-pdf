@@ -1936,3 +1936,45 @@ def test_reopening_does_NOT_hand_another_authors_lock_to_the_reopener(client):
     assert kept is None, (
         "another author's lock survived a transition THEY did not perform, so "
         "Josh still holds a kit Dana reopened: {}".format(kept))
+
+
+def test_the_preempted_flag_across_every_lock_and_actor_combination(client):
+    """`preempted` drives what the UI tells the person taking the lock, so a
+    wrong answer either cries wolf or hides a real takeover.
+
+    The expression has two branches (uid present vs a legacy lock with none)
+    crossed with same/different person -- five reachable combinations, and I
+    had only reasoned through two of them. Parametrized over the WHOLE
+    dimension rather than a sample: a mutation reddening SOME cases says
+    nothing about the rest.
+    """
+    c, store, root = client
+
+    def _take(kit, hdr):
+        return _lock(c, kit, hdr).json().get("preempted")
+
+    # 1. free kit -- nobody to preempt
+    _make_kit(root, "k1", status="draft")
+    assert _take("k1", HDR) is False
+
+    # 2. the SAME person re-taking (refresh, second tab)
+    assert _take("k1", HDR) is False, "re-taking your own lock is not a steal"
+
+    # 3. same ROLE, different PERSON -- an author takes it from another author
+    _make_kit(root, "k2", status="draft")
+    assert _take("k2", AUTH_HDR) is False
+    assert _take("k2", AUTH_HDR2) is True, "author-over-author IS a preemption"
+
+    # 4. different role -- an author takes an editor's kit
+    _make_kit(root, "k3", status="draft")
+    assert _take("k3", HDR) is False
+    assert _take("k3", AUTH_HDR) is True
+
+    # 5. LEGACY lock (no uid): falls back to the role comparison
+    _make_kit(root, "k4", status="draft")
+    meta = _run(store.load_metadata("k4")) or {}
+    meta[ekr._LOCK_KEY] = {"role": "editor"}      # pre-5tuas shape
+    _run(store.put_metadata("k4", meta))
+    assert _take("k4", HDR) is False, (
+        "a legacy same-role lock must not report a preemption -- there is no "
+        "person to have taken it from")
