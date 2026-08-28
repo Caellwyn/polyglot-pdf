@@ -172,6 +172,7 @@ def price_text_usage(prompt_tokens: int, cached_tokens: int,
 DEMO_SCHEMA_PATH = _REPO_ROOT / "frontend" / "public" / "adult_intake_demo_schema.json"
 I90_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "i-90" / "schema.json"
 W7_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "w7" / "schema.json"
+I90V2_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "i-90_v2" / "schema.json"
 AUDIO_CACHE = Path(__file__).resolve().parent / "fixtures" / "audio_cache"
 _AUDIO_RATE = 16000
 _CHUNK_MS = 40
@@ -650,12 +651,244 @@ W7_QUESTIONS = [
 # persona was chosen for cost realism rather than accuracy coverage.
 W7_EXPECTED: dict = {}
 
+# --------------------------------------------------------------------- I-90 v2
+# USCIS Form I-90 (Application to Replace Permanent Resident Card), the second-
+# generation form-kit at form-kits/i-90_v2/ (bd polyglot-pdf-2nikx, extending
+# the W-7 naive-vs-deployed cost measurement -- bd polyglot-pdf-wiadk, PR #661
+# -- to a second real form). 34 sections, 94 fields total.
+#
+# THE PERSONA IS DELIBERATE: a lawful permanent resident (not a conditional
+# resident, not a commuter) whose card was lost, stolen, or destroyed -- the
+# single most common reason to file this form, and the one that keeps every
+# OTHER reason-branch and every disability/interpreter/preparer branch closed.
+# One name, one A-Number, one date of birth, and one address are used
+# consistently everywhere they recur (mailing == physical; Part 8's read-only
+# name/A-Number header is a pre-populated copy of Part 1, not asked again).
+#
+# EXCLUDED FIELDS (bd memory option0-filler-manufactures-contradictions: a
+# prior auto-generated answer key picked option[0] everywhere and manufactured
+# contradictions a validator then flagged -- this plan instead follows the
+# schema's OWN show_if/read_only gates, so nothing here contradicts anything
+# else). 37 of the 94 fields are excluded, each because the persona's own
+# answers close off that branch, mirroring how W7_QUESTIONS above excludes 31
+# of W-7's 53 fields (the 7 conditional branches nobody hits on the common
+# nonresident-filer path, and the Acceptance-Agent-only block):
+#
+#   - card_name_family / card_name_given / card_name_middle: shown only when
+#     name_changed == "yes" (schema show_if); persona's name never changed.
+#   - poe_city_state: shown only when reason_section_a ==
+#     "taking_up_commuter_status"; persona's reason is "lost_stolen_destroyed".
+#   - reason_section_b: shown only when status ==
+#     "conditional_permanent_resident"; persona's status is
+#     "lawful_permanent_resident" (Section A applies, not Section B).
+#   - accommodation_deaf / accommodation_deaf_language,
+#     accommodation_blind / accommodation_blind_detail,
+#     accommodation_other / accommodation_other_detail: all six shown only
+#     when accommodation_requested == "yes"; persona needs no accommodation.
+#   - applicant_interpreter_language: shown only when
+#     applicant_reads_english == "used_interpreter"; persona reads English.
+#   - applicant_preparer_name: shown only when applicant_used_preparer is
+#     checked; persona filed this application without a preparer.
+#   - p8_family_name / p8_given_name / p8_middle_name / p8_a_number: schema
+#     marks these read_only with no show_if at all -- they are a pre-populated
+#     copy of the Part 1 name/A-Number onto the Part 8 continuation page, not
+#     a question anyone answers.
+#   - the 20 p8_{3,4,5,6,7}_{page,part,item}_number / additional_info fields:
+#     Part 8's "Additional Information" is literal extra scratch space for an
+#     answer that overflowed its box elsewhere on the form (page/part/item
+#     number of the question being continued, plus the continued text). A
+#     persona whose answers all fit -- true for every asked field above,
+#     since none of them hit a length-overflow -- has nothing to write here.
+#     Consistent with the kit editor's own judgment: the interpreter's-full-
+#     name/-mailing-address/-contact-information/-signature/-certification
+#     and preparer's-full-name/-mailing-address/-contact-information/-
+#     signature/-statement sections carry ZERO fields in schema["sections"]
+#     (their fields were moved to schema["_ignored_fields"] entirely) --
+#     the kit itself already treats the interpreter/preparer paperwork as
+#     out of scope for voice-filling; Part 8's scratch space is the same kind
+#     of "nothing to say here" as those.
+#
+# 57 of 94 fields are asked. (A rough "~93" was the planning estimate before
+# reading the actual schema; a realistic single-branch persona on a form this
+# conditional-heavy asks materially fewer -- same shape as W-7's 22-of-53.)
+#
+# The "wrong" values are plausible MIS-HEARINGS or misreadings of the SAME
+# answer, not arbitrary different values (the W-7 plan's own comment above:
+# an implausible wrong answer measures a correction the model would never
+# actually need to make).
+I90V2_QUESTIONS = [
+    # --- Part 1. Information About You ---
+    {"field_id": "a_number", "say": "My A-Number is 0 8 7 6 5 4 3 2 1.",
+     "wrong": "My A-Number is 0 8 7 6 5 4 3 2 8."},
+    {"field_id": "uscis_account",
+     "say": "I do not have a USCIS online account number.",
+     "wrong": "My USCIS online account number is 1 2 3 4 5 6 7 8 9 0 1 2."},
+    # --- Your Full Name ---
+    {"field_id": "family_name", "say": "My last name is Torres.",
+     "wrong": "My last name is Torrez."},
+    {"field_id": "given_name", "say": "My first name is Elena.",
+     "wrong": "My first name is Helena."},
+    {"field_id": "middle_name", "say": "My middle name is Marisol.",
+     "wrong": "My middle name is Maritza."},
+    {"field_id": "name_changed",
+     "say": "No, my name has not legally changed since my card was issued.",
+     "wrong": "Yes, my name has legally changed."},
+    # --- Mailing Address ---
+    {"field_id": "mail_in_care_of",
+     "say": "No one else needs to be listed for my mail.",
+     "wrong": "Care of my neighbor, Carla Ruiz."},
+    {"field_id": "mail_street", "say": "My street address is 2140 Elmwood Drive.",
+     "wrong": "My street address is 2140 Elmhurst Drive."},
+    {"field_id": "mail_unit_type", "say": "I do not have an apartment, suite, or floor.",
+     "wrong": "Apartment."},
+    {"field_id": "mail_unit_number", "say": "There is no unit number.",
+     "wrong": "Unit 4B."},
+    {"field_id": "mail_city", "say": "The city is Portland.",
+     "wrong": "The city is Portsmouth."},
+    {"field_id": "mail_state", "say": "The state is Oregon.",
+     "wrong": "The state is Ohio."},
+    {"field_id": "mail_zip", "say": "The ZIP code is 9 7 2 0 3.",
+     "wrong": "The ZIP code is 9 7 2 0 8."},
+    {"field_id": "mail_province", "say": "There is no province, that's not applicable.",
+     "wrong": "The province is Ontario."},
+    {"field_id": "mail_postal_code", "say": "There is no postal code, that's not applicable.",
+     "wrong": "The postal code is A1A 1A1."},
+    {"field_id": "mail_country", "say": "The country is the United States.",
+     "wrong": "The country is Canada."},
+    # --- Physical Address (same as mailing) ---
+    {"field_id": "phys_street", "say": "My physical address is the same, 2140 Elmwood Drive.",
+     "wrong": "My physical address is 2140 Elmhurst Drive."},
+    {"field_id": "phys_unit_number", "say": "There is no unit number.",
+     "wrong": "Unit 4B."},
+    {"field_id": "phys_city", "say": "The city is Portland.",
+     "wrong": "The city is Portsmouth."},
+    {"field_id": "phys_state", "say": "The state is Oregon.",
+     "wrong": "The state is Ohio."},
+    {"field_id": "phys_zip", "say": "The ZIP code is 9 7 2 0 3.",
+     "wrong": "The ZIP code is 9 7 2 0 8."},
+    {"field_id": "phys_province", "say": "There is no province, that's not applicable.",
+     "wrong": "The province is Ontario."},
+    {"field_id": "phys_postal_code", "say": "There is no postal code, that's not applicable.",
+     "wrong": "The postal code is A1A 1A1."},
+    {"field_id": "phys_country", "say": "The country is the United States.",
+     "wrong": "The country is Canada."},
+    {"field_id": "phys_unit_type", "say": "I do not have an apartment, suite, or floor.",
+     "wrong": "Apartment."},
+    # --- Additional Information (Part 1, continued) ---
+    {"field_id": "sex", "say": "Female.", "wrong": "Male."},
+    {"field_id": "date_of_birth", "say": "I was born on June 3rd, 1985.",
+     "wrong": "I was born on June 13th, 1985."},
+    {"field_id": "city_of_birth", "say": "I was born in Cebu City.",
+     "wrong": "I was born in Quezon City."},
+    {"field_id": "country_of_birth", "say": "I was born in the Philippines.",
+     "wrong": "I was born in Indonesia."},
+    {"field_id": "mother_given_name", "say": "My mother's first name is Corazon.",
+     "wrong": "My mother's first name is Consuelo."},
+    {"field_id": "father_given_name", "say": "My father's first name is Ramon.",
+     "wrong": "My father's first name is Raymond."},
+    {"field_id": "class_of_admission", "say": "My class of admission is I R 1.",
+     "wrong": "My class of admission is I R 2."},
+    {"field_id": "date_of_admission", "say": "I was admitted on August 15th, 2012.",
+     "wrong": "I was admitted on August 5th, 2012."},
+    {"field_id": "ssn", "say": "My Social Security Number is 1 2 3 4 5 6 7 8 9.",
+     "wrong": "My Social Security Number is 1 2 3 4 5 6 7 8 6."},
+    # --- Part 2. Application Type ---
+    {"field_id": "status", "say": "I am a lawful permanent resident.",
+     "wrong": "I am a conditional permanent resident."},
+    # --- Section A. Reason for Application ---
+    {"field_id": "reason_section_a",
+     "say": "My previous card has been lost, stolen, or destroyed.",
+     "wrong": "My existing card has been mutilated."},
+    # --- Part 3. Processing Information ---
+    {"field_id": "p3_location_applied",
+     "say": "I applied at the U.S. Embassy in Manila, Philippines.",
+     "wrong": "I applied at the U.S. Consulate in Cebu, Philippines."},
+    {"field_id": "p3_location_issued",
+     "say": "My immigrant visa was issued at the U.S. Embassy in Manila, Philippines.",
+     "wrong": "My immigrant visa was issued at the U.S. Embassy in Manado, Indonesia."},
+    {"field_id": "p3_destination",
+     "say": "My destination in the United States was Portland, Oregon.",
+     "wrong": "My destination in the United States was Portland, Maine."},
+    {"field_id": "p3_poe_city_state",
+     "say": "I was admitted at Portland, Oregon.",
+     "wrong": "I was admitted at Seattle, Washington."},
+    {"field_id": "p3_removal_proceedings",
+     "say": "No, I have never been in exclusion, deportation, or removal proceedings.",
+     "wrong": "Yes, I have been in removal proceedings."},
+    {"field_id": "p3_abandoned_status",
+     "say": "No, I have never abandoned my permanent resident status.",
+     "wrong": "Yes, I filed Form I-407 to abandon my status."},
+    # --- Biographic Information ---
+    {"field_id": "ethnicity", "say": "Not Hispanic or Latino.",
+     "wrong": "Hispanic or Latino."},
+    {"field_id": "race", "say": "Asian.", "wrong": "White."},
+    {"field_id": "height_feet", "say": "5 feet.", "wrong": "6 feet."},
+    {"field_id": "height_inches", "say": "4 inches.", "wrong": "6 inches."},
+    {"field_id": "weight_digit_1", "say": "The first digit of my weight is 1.",
+     "wrong": "The first digit of my weight is 2."},
+    {"field_id": "weight_digit_2", "say": "The second digit of my weight is 2.",
+     "wrong": "The second digit of my weight is 3."},
+    {"field_id": "weight_digit_3", "say": "The third digit of my weight is 8.",
+     "wrong": "The third digit of my weight is 9."},
+    {"field_id": "eye_color", "say": "Brown.", "wrong": "Hazel."},
+    {"field_id": "hair_color", "say": "Black.", "wrong": "Brown."},
+    # --- Part 4. Accommodations ---
+    {"field_id": "accommodation_requested",
+     "say": "No, I am not requesting any accommodation.",
+     "wrong": "Yes, I need an accommodation."},
+    # --- Part 5. Applicant's Statement ---
+    {"field_id": "applicant_reads_english",
+     "say": "I can read and understand English myself.",
+     "wrong": "I used an interpreter."},
+    {"field_id": "applicant_used_preparer",
+     "say": "No, I filled out this application myself without a preparer.",
+     "wrong": "Yes, a preparer filled this out for me."},
+    # --- Applicant's Contact Information ---
+    {"field_id": "applicant_daytime_phone",
+     "say": "My daytime phone number is 5 0 3, 5 5 5, 0 1 8 4.",
+     "wrong": "My daytime phone number is 5 0 3, 5 5 5, 0 1 8 9."},
+    {"field_id": "applicant_mobile_phone",
+     "say": "My mobile phone number is 5 0 3, 5 5 5, 0 2 9 7.",
+     "wrong": "My mobile phone number is 5 0 3, 5 5 5, 0 2 9 2."},
+    {"field_id": "applicant_email",
+     "say": "My email address is elena dot torres 85 at gmail dot com.",
+     "wrong": "My email address is elena dot torres 58 at gmail dot com."},
+]
+
+# No accuracy grading for this run -- same rationale as W7_EXPECTED above:
+# this measures COST realism on a chosen persona/branch, not fill accuracy
+# against a canon answer key.
+I90V2_EXPECTED: dict = {}
+
+# The 37 fields NOT asked above, kept as a flat module-level list so a test can
+# mechanically assert asked (len(I90V2_QUESTIONS)) + excluded (len below) ==
+# all 94 schema fields -- see the exclusion rationale in the I90V2_QUESTIONS
+# comment block above; every id below is explained there.
+I90V2_EXCLUDED = [
+    "card_name_family", "card_name_given", "card_name_middle",
+    "poe_city_state",
+    "reason_section_b",
+    "accommodation_deaf", "accommodation_deaf_language",
+    "accommodation_blind", "accommodation_blind_detail",
+    "accommodation_other", "accommodation_other_detail",
+    "applicant_interpreter_language",
+    "applicant_preparer_name",
+    "p8_family_name", "p8_given_name", "p8_middle_name", "p8_a_number",
+    "p8_3_page_number", "p8_3_part_number", "p8_3_item_number", "p8_3_additional_info",
+    "p8_4_page_number", "p8_4_part_number", "p8_4_item_number", "p8_4_additional_info",
+    "p8_5_page_number", "p8_5_part_number", "p8_5_item_number", "p8_5_additional_info",
+    "p8_6_page_number", "p8_6_part_number", "p8_6_item_number", "p8_6_additional_info",
+    "p8_7_page_number", "p8_7_part_number", "p8_7_item_number", "p8_7_additional_info",
+]
+
 SCHEMAS = {
     "demo": {"path": DEMO_SCHEMA_PATH, "questions": DEMO_QUESTIONS, "expected": {}},
     "i90": {"path": I90_SCHEMA_PATH, "questions": I90_QUESTIONS,
             "expected": I90_EXPECTED},
     "w7": {"path": W7_SCHEMA_PATH, "questions": W7_QUESTIONS,
            "expected": W7_EXPECTED},
+    "i90-v2": {"path": I90V2_SCHEMA_PATH, "questions": I90V2_QUESTIONS,
+               "expected": I90V2_EXPECTED},
 }
 
 CSV_COLUMNS = [
@@ -3479,7 +3712,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
-    ap.add_argument("--schema", choices=["demo", "i90", "i90-full", "w7"],
+    ap.add_argument("--schema", choices=["demo", "i90", "i90-full", "w7", "i90-v2"],
                     default="demo",
                     help="form schema + question plan: 'demo' (the legacy "
                          "adult-intake demo, default for back-compat), 'i90' "
@@ -3487,9 +3720,12 @@ def main() -> int:
                          "questions; bd polyglot-pdf-jnjj.24), 'i90-full' "
                          "(the WHOLE I-90 stress-test plan generated from the "
                          "g1b answer key -- ~113 questions; requires --arm dti "
-                         "--continuous; bd polyglot-pdf-n86b), or 'w7' (the "
+                         "--continuous; bd polyglot-pdf-n86b), 'w7' (the "
                          "REAL form-kits/w7 kit, 22 questions on the common "
-                         "nonresident-filer path; bd polyglot-pdf-89mt)")
+                         "nonresident-filer path; bd polyglot-pdf-89mt), or "
+                         "'i90-v2' (the REAL form-kits/i-90_v2 kit, 57 "
+                         "questions on a lost-card lawful-permanent-resident "
+                         "persona; bd polyglot-pdf-2nikx)")
     ap.add_argument("--arm",
                     choices=["unbounded", "naive", "section-reset",
                              "section-reset-jit", "dti", "sliding-window"],
@@ -3498,7 +3734,7 @@ def main() -> int:
     ap.add_argument("--questions", type=int, default=None,
                     help="cap the run to the first N questions; default runs the "
                          "WHOLE plan for the chosen --schema (demo=20, i90=34, "
-                         "i90-full=~113)")
+                         "i90-full=~113, w7=22, i90-v2=57)")
     ap.add_argument("--events", choices=["none", "standard", "unhappy"],
                     default="none",
                     help="i90-full only: weave the scenario-event script into "

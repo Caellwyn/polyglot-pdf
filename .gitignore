@@ -149,4 +149,4 @@ pitch/ignored_pitch/
 # not a deliverable. Committing one puts a phantom form in every developer
 # local catalogue (LocalFormKitStore synthesizes the manifest by scanning
 # directories and treats absent metadata as public).
-form-kits/i-90_v2/
+# (form-kits/i-90_v2/ graduated to a complete, tracked kit -- bd polyglot-pdf-2nikx.)
