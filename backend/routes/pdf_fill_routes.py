@@ -902,6 +902,19 @@ async def resume_form(
 			detail="That file does not match the form you were sent.",
 		) from exc
 
+	# The client's answers come back keyed by SCHEMA FIELD ID, never by PDF
+	# widget name. The two namespaces are disjoint -- measured on the shipped
+	# W-7, ZERO of 53 schema ids equal their pdf_field_name -- so returning
+	# widget names would hand the client 23 keys their form has never heard of
+	# and restore none of their work.
+	schema = await store.load_schema(kit_id)
+	by_widget: Dict[str, str] = {}
+	for field in (schema or {}).get("fields", []):
+		widget_name = field.get("pdf_field_name")
+		field_id = field.get("id")
+		if isinstance(widget_name, str) and widget_name and isinstance(field_id, str):
+			by_widget[widget_name] = field_id
+
 	doc = None
 	try:
 		doc = fitz.open(stream=uploaded, filetype="pdf")
@@ -910,8 +923,17 @@ async def resume_form(
 			for widget in page.widgets():
 				name = widget.field_name
 				value = widget.field_value
-				if name and isinstance(value, str) and value.strip():
-					values[name] = value
+				if not name or not isinstance(value, str) or not value.strip():
+					continue
+				# "Off" is PyMuPDF's UNCHECKED checkbox, not an answer. A blank
+				# W-7 already carries 21 of them (f1040: 73), so passing them
+				# through would mark every checkbox confirmed with a value no
+				# enum accepts -- on a form the client has not touched.
+				if value == "Off":
+					continue
+				field_id = by_widget.get(name)
+				if field_id:
+					values[field_id] = value
 		stamp = parse_stamp((doc.metadata or {}).get(STAMP_KEY))
 	finally:
 		if doc is not None:

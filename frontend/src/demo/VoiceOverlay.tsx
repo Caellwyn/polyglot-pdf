@@ -32,6 +32,7 @@ import { SaveNudge } from '../schema-forms/components/SaveNudge'
 import { ResumeUpload } from '../schema-forms/components/ResumeUpload'
 import type { ResumeResult } from '../schema-forms/components/ResumeUpload'
 import { applyResume } from '../schema-forms/applyResume'
+import { loadOnboardingState } from '../schema-forms/onboardingStorage'
 import { useSaveNudge } from '../schema-forms/useSaveNudge'
 import {
 	createNoticeSpeaker,
@@ -199,13 +200,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// The notice speech route is FREE (require_auth, not the paid dependency),
 	// so a budget-exhausted client still HEARS how to keep their work.
 	const speakNotice = useMemo(() => {
-		const speaker = createNoticeSpeaker({ backendUrl: getBackendHttpUrl() })
+		// getToken for the same reason: /api/tts/notice is auth-gated, so a
+		// tokenless call is silent in every deployed environment.
+		const speaker = createNoticeSpeaker({
+			backendUrl: getBackendHttpUrl(),
+			getToken,
+		})
 		return (text: string, language?: string) => speaker(
 			text,
 			language,
 			saveNudge.variant === 'ending' ? NOTICE_VOICE_ENDING : NOTICE_SAVE_EARLY,
 		)
-	}, [saveNudge.variant])
+	}, [saveNudge.variant, getToken])
 
 	const handleNudgeSave = useCallback(() => {
 		saveNudge.markSaved()
@@ -2669,10 +2675,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			    collects the file. */}
 			<ResumeUpload
 				isOpen={showResumeChoice}
-				kitId={formState?.schema?.form_metadata?.form_number ?? ''}
+				// The kit id the LINK pinned at open time. NOT
+				// form_metadata.form_number, which is the printed form NAME
+				// ("W-7") and not the kit directory ("w7") -- every resume
+				// would 404 and read as "that is not your form".
+				kitId={loadOnboardingState().formId ?? ''}
 				pdfFilename="form.pdf"
 				selectedLanguage={selectedLanguage}
 				backendUrl={getBackendHttpUrl()}
+				// /api/resume-form is auth-gated: without a token it 401s in
+				// every deployed environment, working only under the local
+				// VFF_DISABLE_AUTH bypass.
+				getToken={getToken}
 				onResumed={handleResumed}
 				onStartOver={() => setResumeDismissed(true)}
 			/>

@@ -54,16 +54,21 @@ def _filled(values: dict[str, str]) -> bytes:
         doc.close()
 
 
-def _first_text_field() -> str:
-    doc = fitz.open(str(_W7))
-    try:
-        for page in doc:
-            for widget in page.widgets():
-                if widget.field_type == fitz.PDF_WIDGET_TYPE_TEXT:
-                    return widget.field_name
-    finally:
-        doc.close()
-    raise AssertionError("no text widget in the W-7 kit")
+def _first_text_field() -> tuple[str, str]:
+    """(pdf widget name, schema field id) for a real text field.
+
+    Returns BOTH because they are different strings -- zero of the W-7's 53
+    schema ids equal their pdf_field_name. Tests that conflated them are why
+    a resume returning widget names shipped: they filled by widget name and
+    then asserted the SAME string came back.
+    """
+    import json
+
+    schema = json.loads((_KITS / "w7" / "schema.json").read_text(encoding="utf-8"))
+    for field in schema["fields"]:
+        if field.get("pdf_field_name") and field.get("type") == "text":
+            return field["pdf_field_name"], field["id"]
+    raise AssertionError("no mapped text field in the W-7 kit")
 
 
 # ---------------------------------------------------------------------------
@@ -72,19 +77,19 @@ def _first_text_field() -> str:
 
 
 def test_a_client_gets_their_ANSWERS_back():
-    name = _first_text_field()
-    result = _call(_filled({name: "Okonkwo"}))
+    widget, field_id = _first_text_field()
+    result = _call(_filled({widget: "Okonkwo"}))
 
     assert result["kit_id"] == "w7"
-    assert result["field_values"].get(name) == "Okonkwo"
+    assert result["field_values"].get(field_id) == "Okonkwo"
 
 
 def test_the_resume_carries_the_form_session_id_forward():
     """So both halves of one client's form aggregate as one record (bd 1uyof)."""
     from backend.services.resume_stamp import STAMP_KEY, build_stamp
 
-    name = _first_text_field()
-    doc = fitz.open(stream=_filled({name: "Okonkwo"}), filetype="pdf")
+    widget, _field_id = _first_text_field()
+    doc = fitz.open(stream=_filled({widget: "Okonkwo"}), filetype="pdf")
     try:
         meta = doc.metadata or {}
         meta[STAMP_KEY] = build_stamp("fss_1_abc", "w7", ["jti-a"])
@@ -104,9 +109,9 @@ def test_an_UNSTAMPED_but_valid_form_still_resumes():
     A client whose file lost its metadata (some viewers strip it on save)
     must still get their work back.
     """
-    name = _first_text_field()
-    result = _call(_filled({name: "Okonkwo"}))
-    assert result["field_values"].get(name) == "Okonkwo"
+    widget, field_id = _first_text_field()
+    result = _call(_filled({widget: "Okonkwo"}))
+    assert result["field_values"].get(field_id) == "Okonkwo"
     assert result["form_session_id"] is None
 
 
@@ -198,3 +203,61 @@ def test_the_refusal_does_not_say_WHICH_check_failed():
             _call(hostile)
         messages.add(str(exc.value.detail))
     assert len(messages) == 1, f"refusals leak which check failed: {messages}"
+
+
+# ---------------------------------------------------------------------------
+# The KEY NAMESPACE -- found in cross-surface review
+# ---------------------------------------------------------------------------
+
+
+def _schema() -> dict:
+    import json
+    return json.loads((_KITS / "w7" / "schema.json").read_text(encoding="utf-8"))
+
+
+def test_answers_come_back_keyed_by_SCHEMA_FIELD_ID_not_widget_name():
+    """The two namespaces are DISJOINT on the shipped W-7: zero of 53 schema
+    ids equal their pdf_field_name.
+
+    Returning widget names hands the client keys their form has never heard of
+    and restores NONE of their work -- while every unit test stays green,
+    because they used fixtures where the two namespaces happened to match.
+    """
+    schema = _schema()
+    ids = {f["id"] for f in schema["fields"]}
+    target = next(
+        f for f in schema["fields"]
+        if f.get("pdf_field_name") and f.get("type") == "text"
+    )
+
+    result = _call(_filled({target["pdf_field_name"]: "Okonkwo"}))
+    returned = result["field_values"]
+
+    assert returned, "the client got no answers back at all"
+    unknown = [k for k in returned if k not in ids]
+    assert not unknown, f"returned keys the schema does not know: {unknown[:5]}"
+    assert returned[target["id"]] == "Okonkwo"
+
+
+def test_a_BLANK_form_resumes_as_blank():
+    """An untouched W-7 already carries 21 'Off' checkbox widgets.
+
+    Passing those through marks every checkbox confirmed with a value no enum
+    accepts, on a form the client has not filled in.
+    """
+    result = _call(_W7.read_bytes())
+    assert result["field_values"] == {}
+
+
+def test_unchecked_checkboxes_never_arrive_as_answers():
+    schema = _schema()
+    ids = {f["id"] for f in schema["fields"]}
+    target = next(
+        f for f in schema["fields"]
+        if f.get("pdf_field_name") and f.get("type") == "text"
+    )
+
+    returned = _call(_filled({target["pdf_field_name"]: "Okonkwo"}))["field_values"]
+
+    assert "Off" not in returned.values()
+    assert set(returned) <= ids

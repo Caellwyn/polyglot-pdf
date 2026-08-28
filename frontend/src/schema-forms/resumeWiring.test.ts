@@ -104,4 +104,33 @@ describe('dft1 wiring', () => {
     const component = read('schema-forms/components/ResumeUpload.tsx');
     expect(component).toContain('/api/resume-form');
   });
+
+  it('the resume upload uses the LINK kit id, not the printed form name', () => {
+    // form_metadata.form_number is "W-7"; the kit directory is "w7". Using
+    // the former 404s every resume and reads to the client as "that is not
+    // your form". Found in cross-surface review.
+    const overlay = read('demo/VoiceOverlay.tsx');
+    expect(overlay).toContain('loadOnboardingState().formId');
+    expect(overlay).not.toMatch(/kitId=\{[^}]*form_number/);
+  });
+
+  it('BOTH new routes are given a token -- they are auth-gated', () => {
+    // Without one they 401 in every deployed environment and work only under
+    // the local VFF_DISABLE_AUTH bypass, which is why "not exercised in a
+    // live browser" mattered. Found in cross-surface review.
+    const overlay = read('demo/VoiceOverlay.tsx');
+    expect(overlay).toMatch(/getToken=\{getToken\}/);
+    expect(overlay).toMatch(/createNoticeSpeaker\(\{[\s\S]*?getToken,/);
+  });
+
+  it("the nudge's Save button reaches a real download", () => {
+    // It dispatches an event; something must listen. Without a listener the
+    // button silences both nudges while saving nothing, and the ending
+    // variant has no dismiss, so that dead button is the client's only exit.
+    const overlay = read('demo/VoiceOverlay.tsx');
+    expect(overlay).toContain("dispatchEvent(new CustomEvent('polyglot:save-form')");
+    const form = read('schema-forms/components/SchemaForm.tsx');
+    expect(form).toContain("addEventListener('polyglot:save-form'");
+    expect(form).toContain('handleDownloadPDF');
+  });
 });
