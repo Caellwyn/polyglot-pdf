@@ -446,15 +446,23 @@ class FormKitStore:
 		number of objects removed.
 
 		The store's only destructive operation (bd polyglot-pdf-6x1j) -- every
-		other method here creates or reads. The caller is responsible for the
-		guard: deletion is refused unless the confirmation record has been
-		consulted AND is empty (see confirmation_logger.kit_has_confirmation_
-		records, which raises rather than returning False when it cannot check).
+		other method here creates or reads. The caller owns the guard, and that
+		guard is GRADUATED rather than absolute (bd polyglot-pdf-6zhaf): a kit
+		WITH confirmation records, or one whose records cannot be consulted, can
+		reach this method once an author has explicitly acknowledged the
+		consequences. It refuses only until that acknowledgement, never forever
+		-- an un-attributable legacy record used to make every kit permanently
+		undeletable, which is its own bug.
 
-		Deleting the archives is the point, not an oversight: a kit with no
-		confirmation records has nothing pointing at its superseded revisions,
-		so leaving them would strand bytes no record can ever name. A kit WITH
-		records must never reach this method.
+		So do NOT assume a caller has proven the kit is unreferenced. What this
+		method must guarantee is CONTAINMENT (below), not that deletion was a
+		good idea -- that judgement belongs to the route and the human it asked.
+
+		Deleting the archives is the point, not an oversight: what a delete
+		costs is precisely those superseded revisions. The confirmation records
+		themselves live in a different store and SURVIVE, so a delete does not
+		erase anyone's agreement -- it erases the revision that agreement names,
+		leaving a record pointing at bytes nobody can produce.
 
 		Implementations MUST confine the delete to the kit's own prefix -- an
 		unvalidated kit_id is a path-traversal vector here in a way it is not

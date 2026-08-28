@@ -96,7 +96,7 @@ insertion point.
 | POST | `/api/disclaimer-acceptance` | Record disclaimer acceptance DURABLY (bd polyglot-pdf-0dsv4: the `confirmation_events` Firestore collection + the per-session file, keyed on `form_session_id`, not a log line -- fail-open, so a sink outage cannot block an Agree click). UNAUTHENTICATED by design (Agree fires before any session exists), so `firm_id` is always `None` here and the `form_session_id` is validated as a single safe path segment before it becomes a filename. One acceptance per `form_session_id` -- a duplicate POST is dropped silently, not errored -- except PLACEHOLDER ids (`unknown`/`undefined`/`null`/`none`/empty), which are deliberately NOT deduped (bd polyglot-pdf-g3kui: `confirmation_logger._claim_first_acceptance`); every request field is bounded at the Pydantic model so an oversized body 422s before reaching the sink. Anonymized; client IP deliberately NOT logged, bd z2is. Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
-| DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
+| DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). GRADUATED FRICTION, never a permanent block (bd polyglot-pdf-6zhaf): risk decides how firmly the caller is asked, not whether the door exists. Never live + no records + the check SUCCEEDED -> deleted. Never live but records exist OR the check could not run -> 409 prefixed `DELETE_NEEDS_ACK:`. EVER LIVE (`complete`/`unpublished`, or any `published_at` -- either signal alone is sufficient, since `w7` is complete with no stamp while `unpublished` means RETIRED-formerly-live; a kit with NO metadata.json is never-live, but one whose metadata is PRESENT and unparseable is treated as live) -> 409 prefixed `DELETE_NEEDS_DOUBLE_ACK:`. Each refusal names the acknowledgement that clears it, and the two are DISTINCT values -- `?acknowledged=understood` for the single, `understood-published` for the double. The weaker does NOT satisfy an ever-live delete: one shared boolean would put "double confirmation" in the client's checkbox only, where any direct API call skips it. The editor sends the level the server asked for, and the double additionally requires an explicit tick before it will send. The old design refused outright when the check was positive or unavailable -- and un-attributable legacy records make it permanently unavailable, so EVERY kit became undeletable forever. The check itself is unchanged and its outcome still grades the warning; the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`) whose local JSONL fallback dies with the instance, so silence there is still not evidence of absence. NOTE what a delete destroys: only this kit's prefix -- confirmation records live in a separate collection and SURVIVE, so what is lost is the revision those records name, not the agreement itself. Every delete logs actor + acknowledged + ever_live + had_records. Editors are refused server-side, not merely hidden from in the UI. |
 | GET | `/api/editor/kits/{kit_id}/archive`, `.../archive/{marker}/schema` | The editor's archive reads (bd qfyxr): superseded revisions newest-first + one revision's schema, READ-ONLY (returning to an old revision goes through draft/publish, never the archive). Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/derive-divisions` | Regenerate the kit's parts/sections deterministically (bd 6cfu.3) -- re-runs `derive_sections.derive_and_apply` on the STORED schema + PDF (widget-name conventions -> printed headings -> page fallback) and re-files every field's `section_id`. **DESTRUCTIVE to manual division edits by design**; the editor fronts it with a confirm dialog, field content untouched. Author-only; 409 on complete or on a kit with no PDF; a corrupt/0-page PDF is a 422 data defect, not a 500. |
 | GET | `/api/editor/kits/{kit_id}/draft-snapshots` | Prior saved states of this kit's draft, newest-first (bd polyglot-pdf-y2l0p). EDITOR-accessible by deliberate maintainer decision (2026-08-18): routing recovery through an author means the person who lost the work cannot get it back themselves. 404 (not an empty list) for a kit that does not exist -- "no earlier versions" and "no such form" are different answers. Token-gated. |
@@ -189,18 +189,19 @@ The canonical shape is Pydantic `FormSchema` (`backend/models/form_models.py:883
 rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 - **Validation happens ONLY at the publish gate.** Draft saves
-  (`save_editor_kit_schema`, `backend/routes/editor_kit_routes.py:1617-1700`)
-  check just that `fields` is a list and write the raw dict via the store
+  (`save_editor_kit_schema` in `editor_kit_routes.py`) check just that
+  `fields` is a list and write the raw dict via the store
   (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
   `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
-  :1172 GCS). The one chokepoint is "mark complete":
-  `FormSchema.model_validate` at `editor_kit_routes.py:2809` plus the
-  zero-ERROR schema-lint gate
-  (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
-  `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
-  dict unvalidated (`get_form_kit_schema`,
-  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema`,
-  `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
+  :1172 GCS). The one chokepoint is "mark complete"
+  (`set_editor_kit_status` in `editor_kit_routes.py`):
+  `FormSchema.model_validate` plus the zero-ERROR schema-lint gate
+  (`lint_schema`, `backend/services/schema_lint.py:833`, checked via its own
+  `lint_schema` call further down the same function). Every read path
+  streams the raw stored dict unvalidated (`get_form_kit_schema`,
+  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema` in
+  `editor_kit_routes.py`, which loads and returns the schema with no
+  validation at all). *Breaks if bypassed:* a hand-edited or
   draft kit reaching the voice path carries whatever shape it has -- e.g. a
   field without `pdf_field_name` is silently never written to the output PDF.
 - **The frontend type is a hand-maintained mirror.**
@@ -447,13 +448,13 @@ class).
 ### 6. Confirmation audit trail
 
 The chain: Gemini `confirm_field` tool -> backend request
-(`request_coordinator.py:279`, `request_confirm_field`) -> client verifies it
+(`request_coordinator.py`'s `request_confirm_field`) -> client verifies it
 has a usable value and acks (`webFormConnection.ts`'s
 `handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse`
 -- `reason` is a fixed category token, never a field value) -> backend
-logs ONLY on a positive ack (the `recorded` guard at
-`callback_handler.py:961`; the `log_field_confirmation` call it protects at
-:1000-1009). Event shape (NO PII, no `value` key anywhere), built in
+logs ONLY on a positive ack (the "Recorded" guard inside
+`callback_handler.py`'s `_handle_confirm_field_tool`, which protects the
+`log_field_confirmation` call immediately below it). Event shape (NO PII, no `value` key anywhere), built in
 `confirmation_logger.log_field_confirmation`'s `confirmation_event` dict:
 `{timestamp, event, form_id, kit_id, edition_date, firm_id, form_session_id,
 field_id, field_name, confirmation_method}` (`firm_id` joined under bd

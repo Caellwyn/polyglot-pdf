@@ -913,12 +913,12 @@ class Settings(BaseModel):
 		"letters they gave -> call name_spellback -> stay silent."
 	)
 
-	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
-	# tiers checked by the /api/editor/* routes: EDITOR (polish provided kits:
-	# list/read drafts, save schemas, flip status) and AUTHOR (editor + onboard
-	# PDFs + run hosted extraction). Unset -> the editor surface is disabled
-	# (routes fail closed with 503). On Cloud Run these arrive via Secret
-	# Manager (--set-secrets), never plaintext env.
+	# RETIRED (bd polyglot-pdf-hn0jq): these were the original shared-secret
+	# gate for /api/editor/* (EDITOR / AUTHOR tiers). The routes now
+	# authenticate per-person via backend/services/editor_auth.py (a Firebase
+	# ID token + the schema_editor_role custom claim, granted by
+	# scripts/bootstrap_editor_user.py) -- nothing reads these two settings
+	# any more. Left declared for bd polyglot-pdf-rhc2v to remove outright.
 	SCHEMA_EDITOR_TOKEN: str | None = os.getenv("SCHEMA_EDITOR_TOKEN")
 	SCHEMA_AUTHOR_TOKEN: str | None = os.getenv("SCHEMA_AUTHOR_TOKEN")
 	# Extra CORS origins (comma-separated), e.g. the hosted schema-editor site.

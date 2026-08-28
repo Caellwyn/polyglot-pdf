@@ -2,16 +2,28 @@
 
 Deletion is the ONLY destructive operation in the editor API, and it takes the
 revision archive with it -- the bytes bd polyglot-pdf-w3zw/xzw5 exist to keep
-retrievable. So the guard, not the delete, is the feature:
+retrievable. So the guard, not the delete, is the feature -- but it GRADES rather than
+blocks (bd polyglot-pdf-6zhaf). An absolute refusal turned out to be its own
+bug: un-attributable legacy records made the check permanently unavailable, so
+every kit became undeletable forever and the store filled with junk nobody
+could clear. Risk decides how firmly the caller is asked, never whether the
+door exists:
 
-  records exist        -> 409, offering unpublish
-  no records, VERIFIED -> deleted
-  could not check      -> 409, refusing
+  never live, no records, VERIFIED  -> deleted
+  never live, records OR unverified -> 409 DELETE_NEEDS_ACK
+  EVER LIVE (any check result)      -> 409 DELETE_NEEDS_DOUBLE_ACK
 
-The third case is the one that needs pinning hardest. The confirmation sink is
-Firestore, enabled only by the deploy env; with it off the check falls back to
-a local JSONL file that dies with the instance. Treating that silence as "no
-records" would let an author working locally destroy evidence that exists.
+Each refusal names the acknowledgement that clears it, and the two levels are
+DISTINCT values on the wire -- the weaker one must not satisfy an ever-live
+delete, or "double confirmation" lives only in the client and any direct API
+call skips it.
+
+Unverified still is not safe, which is why tier B exists at all. The
+confirmation sink is Firestore, enabled only by the deploy env; with it off the
+check falls back to a local JSONL file that dies with the instance. Treating
+that silence as "no records" would let an author working locally destroy
+evidence that exists -- so it warns, and says the cause is GLOBAL rather than
+about the kit in front of them.
 """
 import asyncio
 import json
@@ -94,9 +106,10 @@ def test_a_kit_with_NO_records_is_deleted(client, monkeypatch):
     assert not (root / "scratch").exists()
 
 
-def test_a_kit_WITH_records_is_refused_and_offered_unpublish(client, monkeypatch):
-    """Those records name the exact revision a client agreed to; deleting the
-    kit destroys the evidence behind them."""
+def test_an_EVER_LIVE_kit_needs_a_DOUBLE_ack(client, monkeypatch):
+    """Tier C. A published kit may have been filled and agreed to, so the first
+    attempt refuses -- but it refuses with a MARKER the client can act on, not
+    a dead end (bd polyglot-pdf-6zhaf)."""
     c, _store, root = client
     _make_kit(root, "in-use", status="complete")
     _has_records(monkeypatch)
@@ -105,26 +118,187 @@ def test_a_kit_WITH_records_is_refused_and_offered_unpublish(client, monkeypatch
 
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
-    assert "confirmation records" in detail
-    assert "Unpublish" in detail          # the safe alternative is NAMED
+    assert detail.startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+    assert "Unpublishing" in detail       # the safe alternative is still NAMED
     assert (root / "in-use" / "schema.json").exists()   # nothing removed
 
+    # WHAT THE WARNING CLAIMS MUST BE TRUE. delete_kit removes only this kit's
+    # own prefix; the confirmation records live in a separate Firestore
+    # collection and survive. Saying "this deletes their agreement records"
+    # would be false, and false warnings teach people to click through true
+    # ones -- so pin that the copy says the accurate thing instead.
+    assert "will survive" in detail
+    assert "no longer be able to show what they agreed to" in detail
 
-def test_an_UNVERIFIABLE_kit_is_refused_not_deleted(client, monkeypatch):
-    """The case that makes this guard honest. A local editor pointed at the
-    real bucket queries a JSONL file that dies with the instance -- empty is
-    not the same as none. "Cannot verify" must read as NO."""
+
+def test_an_EVER_LIVE_kit_IS_deletable_once_acknowledged(client, monkeypatch):
+    """The half that makes this a safeguard rather than a wall. Nothing may be
+    permanently invulnerable (maintainer, 2026-08-28)."""
     c, _store, root = client
-    _make_kit(root, "unknown-history", status="complete")
+    _make_kit(root, "in-use", status="complete")
+    _has_records(monkeypatch)
+
+    resp = c.delete(
+        f"/api/editor/kits/in-use?acknowledged={ekr.ACK_UNDERSTOOD_PUBLISHED}",
+        headers=AUTH)
+
+    assert resp.status_code == 200, resp.text
+    assert not (root / "in-use").exists()
+
+
+def test_the_WEAKER_ack_does_NOT_clear_an_ever_live_delete(client, monkeypatch):
+    """The two levels must be DISTINCT on the wire, or the "double" in double
+    confirmation lives only in the client's checkbox and any direct API call
+    skips it (fresh-eyes, bd polyglot-pdf-6zhaf). One boolean cannot express
+    two levels -- that is exactly how the first cut of this got it wrong."""
+    c, _store, root = client
+    _make_kit(root, "in-use", status="complete")
+    _has_records(monkeypatch)
+
+    resp = c.delete(f"/api/editor/kits/in-use?acknowledged={ekr.ACK_UNDERSTOOD}",
+                    headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"].startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+    assert (root / "in-use" / "schema.json").exists()
+
+    # And a junk value is not a skeleton key either.
+    junk = c.delete("/api/editor/kits/in-use?acknowledged=true", headers=AUTH)
+    assert junk.status_code == 409, junk.text
+    assert (root / "in-use" / "schema.json").exists()
+
+
+def test_a_kit_with_NO_metadata_is_tier_A_not_tier_C(client, monkeypatch):
+    """ABSENT metadata is not UNREADABLE metadata.
+
+    A kit with no metadata.json is a NORMAL shipped state (form-kits/w9-heldout
+    is exactly that: a PDF and a note), and it has manifestly never been
+    published -- there is no status to say so. The first cut of _kit_was_ever_live
+    collapsed "no dict" into "assume the worst", which handed the scariest
+    possible warning ("This form has been published") to precisely the
+    junk-cleanup case this bead exists to unblock. Every fixture wrote a
+    metadata.json, so nothing caught it (fresh-eyes round 2).
+    """
+    c, _store, root = client
+    kit = root / "bare"
+    kit.mkdir(parents=True, exist_ok=True)
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.4 ")
+    _no_records(monkeypatch)
+
+    resp = c.delete("/api/editor/kits/bare", headers=AUTH)
+
+    assert resp.status_code == 200, resp.text
+    assert not (root / "bare").exists()
+
+
+def test_metadata_that_is_PRESENT_but_unreadable_stays_strict(client, monkeypatch):
+    """The other half. A metadata.json that exists and did not parse IS
+    suspicious -- we cannot see a status, and something wrote that file. It
+    keeps the strictest tier, so the absent-vs-unreadable distinction cannot be
+    read as "unparseable is fine now"."""
+    c, _store, root = client
+    kit = root / "corrupt"
+    kit.mkdir(parents=True, exist_ok=True)
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text("{not json at all", encoding="utf-8")
+    _no_records(monkeypatch)
+
+    resp = c.delete("/api/editor/kits/corrupt", headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"].startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+
+
+def test_a_RETIRED_kit_is_treated_as_ever_live(client, monkeypatch):
+    """`unpublished` means a RETIRED FORMERLY-LIVE revision (bd 6dz0), NOT
+    "never published" -- so it belongs in the STRICTEST tier despite the
+    reassuring word. Reading the status string naively puts a form clients have
+    seen on the light path, which is the exact inversion to guard against."""
+    c, _store, root = client
+    _make_kit(root, "retired", status="unpublished")
+    _no_records(monkeypatch)      # even with a CLEAN check
+
+    resp = c.delete("/api/editor/kits/retired", headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"].startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+
+
+def test_a_kit_with_published_at_is_ever_live_whatever_its_status(client, monkeypatch):
+    """The second half of the ever-live test. Status alone is not enough: a kit
+    can carry published_at while reading `draft` (reopened after publication),
+    and it has still been seen."""
+    c, _store, root = client
+    kit = root / "reopened"
+    kit.mkdir(parents=True, exist_ok=True)
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text(json.dumps({
+        "status": "draft", "label": "Reopened",
+        "published_at": "2026-08-01T00:00:00+00:00",
+    }), encoding="utf-8")
+    _no_records(monkeypatch)
+
+    resp = c.delete("/api/editor/kits/reopened", headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"].startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+
+
+def test_a_NEVER_LIVE_kit_WITH_records_needs_a_single_ack(client, monkeypatch):
+    """Tier B. Never published, but someone filled it -- warn, do not block."""
+    c, _store, root = client
+    _make_kit(root, "draft-but-filled", status="draft")
+    _has_records(monkeypatch)
+
+    resp = c.delete("/api/editor/kits/draft-but-filled", headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert detail.startswith(ekr.DELETE_NEEDS_ACK_PREFIX)
+    assert "confirmation records" in detail
+
+    ok = c.delete(
+        f"/api/editor/kits/draft-but-filled?acknowledged={ekr.ACK_UNDERSTOOD}",
+        headers=AUTH)
+    assert ok.status_code == 200, ok.text
+    assert not (root / "draft-but-filled").exists()
+
+
+def test_an_UNVERIFIABLE_never_live_kit_warns_then_deletes(client, monkeypatch):
+    """THE BUG THIS BEAD EXISTS FOR. Un-attributable legacy records make the
+    check permanently unavailable, so under the old rule EVERY kit was
+    undeletable forever and the store filled with junk nobody could clear.
+
+    Unverified still is not the same as safe -- the sink can be disabled, and a
+    local instance reading an empty JSONL would otherwise conclude "no records".
+    So it warns, names what it could not check, and lets an author through."""
+    c, _store, root = client
+    _make_kit(root, "unknown-history", status="draft")
     _cannot_check(monkeypatch)
 
     resp = c.delete("/api/editor/kits/unknown-history", headers=AUTH)
 
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
-    assert "Cannot verify" in detail
-    assert "Unpublish" in detail
+    assert detail.startswith(ekr.DELETE_NEEDS_ACK_PREFIX)
+    # It names the REASON it could not check, rather than implying something
+    # about this kit specifically -- the old message read as a per-kit verdict
+    # when the cause was global, which is why the maintainer tried other forms.
+    # The cause is GLOBAL. The old message read as a verdict on this kit, which
+    # is why the maintainer worked through every form in the catalogue looking
+    # for one that would delete -- so the wording must say so, and must NOT
+    # echo the raw exception ("...so THIS KIT cannot be cleared"), which would
+    # relocate the same bug into a parenthetical.
+    assert "not specific to this one" in detail
+    assert "cannot be cleared for deletion" not in detail
     assert (root / "unknown-history" / "schema.json").exists()
+
+    ok = c.delete(
+        f"/api/editor/kits/unknown-history?acknowledged={ekr.ACK_UNDERSTOOD}",
+        headers=AUTH)
+    assert ok.status_code == 200, ok.text
+    assert not (root / "unknown-history").exists()
 
 
 # --- who may delete ---------------------------------------------------------

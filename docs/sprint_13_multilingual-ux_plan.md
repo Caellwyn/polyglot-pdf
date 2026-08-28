@@ -84,19 +84,27 @@ Mirror the proven option-label pipeline (ow1e runtime + 2h9j extraction-time
 bake) for per-field `spoken_name_translations` (lowercase language-name keys,
 same convention as option `label_translations`). Supersedes bd 37le (closed).
 
-Threading map (verified): override hook at `manifest_service.py:116`;
-`render_field_guidance` `Spoken:` line at `ai_context.py:52`; the 6
-option-override call sites (`form_filling_service.py:342,:709-714`;
-`callback_handler.py:153-159,:997-1000,:1150-1153,:1429-1432`) PLUS the
-channels the option list misses: switch success message
-(`callback_handler.py:1417/:1447`), switch candidate/clarify lists
-(`:1381/:1392`), ask_secretary `fields` arrays (`:755/:1325-1334`),
-backend-side hint substitution (`_resolve_hint_field_schema`), and
-`previous_spoken_names` (`ai_context.py:148-158`). The runtime build change
-is a NAMED contract change to `get_option_label_overrides` (flat-dict return
-+ one-call pins in `test_option_translation.py`): one overrides object, one
+Threading map (re-verified against current code, symbol-anchored so it
+survives line drift): override hook `_apply_label_overrides` in
+`manifest_service.py`; `render_field_guidance`'s `Spoken:` line in
+`ai_context.py`; the option-override call sites (`form_filling_service.py`'s
+`get_option_label_overrides` injection and its `option_label_overrides=`
+call into `render_field_guidance`; `callback_handler.py`'s
+`_option_overrides`/`_spoken_overrides` helpers and their three call sites)
+PLUS the channels the option list misses: switch success message
+(`callback_handler.py`'s `_switch_success_response`), switch
+candidate/clarify lists (`_switch_degrade_response`), ask_secretary `fields`
+arrays (`_handle_ask_secretary_tool`'s `response["fields"]` assembly),
+backend-side hint substitution (`FormFillingService._resolve_hint_field_schema`
+in `form_filling_service.py`), and `previous_spoken_names`
+(`ai_context.py`'s `render_section_metadata` and `build_form_context`
+parameters). The runtime build change is a NAMED contract change to
+`option_translation.py`'s `get_translation_overrides` (returns one
+`TranslationOverrides` dataclass with `.option_labels` / `.spoken_names`
+dicts, pinned in `test_option_translation.py`): one overrides object, one
 batched call over the UNION of missing strings. Editor: stale-drop on
-spoken_name rename mirroring `FieldEditor.tsx:823-831`.
+spoken_name rename in `FieldEditor.tsx`'s spoken-name `onChange` handler
+(`delete edited.spoken_name_translations` alongside the edit).
 
 Out of scope: the legacy non-DTI SI FIELDS block stays English; visual
 on-screen form translation stays parked (maintainer decision 2026-07-17).
