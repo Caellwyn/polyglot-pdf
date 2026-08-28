@@ -504,6 +504,30 @@ def test_every_shape_lint_calls_MISSING_is_held_aside(blank):
     assert has_errors(lint_schema(repaired, _COMBO_DUMP)),         "repair cleared the publish gate it must preserve"
 
 
+def test_a_FALSY_but_real_export_code_still_seeds_the_dedupe():
+    """A kept value of 0 / False is a REAL code (a dump can declare "0"), so it
+    must seed the mint dedupe like any other.
+
+    Guarding the reserved list with `x or ""` instead of `x is not None` drops
+    it, and mint_unique_slugs then hands a sibling the same slug -- manufacturing
+    the exact option-value-duplicate this branch exists to prevent. Found in
+    review; measured: options came back [0, '0'] with a duplicate ERROR on the
+    schema repair had just "fixed".
+    """
+    dump = {"fields": [{
+        "name": "form1[0].P1_Line6e_State[0]",
+        "widgets": [{"choices": [{"value": "0"}, {"value": "WY"}]}],
+    }]}
+    # The second option's LABEL mints to '0', colliding with the first's code.
+    opts = [{"value": 0, "label": "Zero-code"},
+            {"value": "!!!", "label": "0"}]
+    repaired, _ = repair(_schema(_combo(opts)), dump)
+    vals = [o.get("value") for o in repaired["fields"][0]["options"]]
+    assert vals[0] == 0, "the real falsy code must be preserved"
+    assert len({str(v) for v in vals}) == len(vals),         "repair manufactured a duplicate: %r" % (vals,)
+    assert not has_errors(lint_schema(repaired, dump))
+
+
 def test_a_select_option_with_NO_value_key_does_not_crash_repair():
     """Regression: holding empty values aside made a keyed-absent option
     "kept", but the reserved-list builder still subscripted o["value"] --

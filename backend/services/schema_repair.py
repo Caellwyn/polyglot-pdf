@@ -348,8 +348,15 @@ def _mint_slugs(
             # with no key at all (which schema_lint treats as an ordinary
             # missing value) is kept too, and subscripting it aborted the whole
             # repair() call for every field in the schema.
+            # `is not None`, NOT truthiness: a kept value of 0 / False / 0.0 is
+            # a REAL export code (the dump can declare "0"), and `x or ""`
+            # would drop it from the dedupe seed -- letting mint_unique_slugs
+            # hand a sibling the same slug and manufacture the very duplicate
+            # this branch exists to prevent. Every other value test in this
+            # function uses `is not None` for the same reason.
             reserved = [
-                str(o.get("value") or "") for o, k in zip(dict_opts, keep) if k
+                str(o.get("value")) if o.get("value") is not None else ""
+                for o, k in zip(dict_opts, keep) if k
             ]
             labels = [
                 str(o.get("label") or o.get("value") or "option")
