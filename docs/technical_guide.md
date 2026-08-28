@@ -1,10 +1,15 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-vdcm4: every drifted
-`websocket_routes.py:<line>` / `confirmation_logger.py:<line>` citation in
-contracts 2, 3, and 6 re-anchored to a symbol/arm name instead of a line
-number -- all had drifted 60-140 lines past their real targets. The editor
-rows describe per-user Firebase claims, not shared tokens, per bd
+*Last updated: 2026-08-27 (bd polyglot-pdf-nyc5j/qn8wv/x6dq1: every drifted
+`config.py`/`form_filling_service.py`/`live_ai_gemini.py`/`ai_context.py`/
+`spellback_tts.py`/`callback_handler.py` citation in contracts 1, 2, 4, and 11
+re-anchored to a symbol name instead of a line number -- including the
+`form_metadata` bullet, the tool coupling table, and the `LIVE_VOICE_NAME`
+two-consumer section. This whole doc keeps drifting the same way, so line
+numbers here are no longer trustworthy without re-verifying against source
+-- bd polyglot-pdf-vdcm4 already re-anchored the same class of citation in
+contracts 2, 3, and 6 once, and this pass had to do contract 2 again. The
+editor rows describe per-user Firebase claims, not shared tokens, per bd
 polyglot-pdf-hn0jq; the lock rows are person-scoped, per bd
 polyglot-pdf-5tuas.)*
 
@@ -253,7 +258,8 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
   - `form_metadata` (`form_number`, `edition_date`, `details`, `booklet_text`):
     consumed by the secretary reference block (`secretary_context.py:220-243`)
     and the audit-trail edition marker
-    (`backend/services/form_filling_service.py:362-368`). The key is
+    (`resolve_edition_marker`, defined in `backend/utils/confirmation_logger.py`,
+    called from `form_filling_service.py`). The key is
     `form_metadata`, NOT `metadata` -- the wrong name no-ops the whole reference
     block with zero signal (in-source note at `secretary_context.py:227-230`).
   - Legacy `controls_fields`/`conditional_fields`: REMOVED from the model and
@@ -284,13 +290,15 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 - `full_schema` (sent at `schemaFormState.ts:979`/`:1054`): type-checked
   `isinstance(dict)` only (the `full_schema` type-check right after handshake
   parsing), cached in
-  `form_filling_service.py:296` (preserved across internal restarts), then read
+  `form_filling_service.py`'s `self._full_schema = full_schema` assignment
+  (preserved across internal restarts), then read
   by `handle_ask_secretary` (`form_filling_service.py`'s
   `self._full_schema or self._schema` read) and rendered into the secretary catalog by
   `render_static_catalog(schema)` in `text_ai_gemini.py:302`, the edition fingerprint
-  (`resolve_edition_marker` call at `form_filling_service.py:396`), the injection
-  budget (`form_filling_service.py:513-514`), and runtime translation overrides
-  (`_maybe_start_option_translation` call at `form_filling_service.py:464` ->
+  (`resolve_edition_marker` call in `form_filling_service.py`), the injection
+  budget (`guidance_contract.inline_injection_budget_tokens` calls in
+  `form_filling_service.py`, two call sites), and runtime translation overrides
+  (`_maybe_start_option_translation` call in `form_filling_service.py` ->
   `option_translation.py`). *Breaks if malformed:* each consumer degrades
   independently and silently (secretary falls back to per-section schema, audit
   edition falls back to a fingerprint, translations revert to English).
@@ -348,38 +356,41 @@ Known traps (all deliberate, all pinned only by comments):
 ### 4. Backend <-> Gemini Live (tools + session config)
 
 Tool names + arg schemas have ONE source of truth:
-`Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
-live config by `form_filling_service.py:222-228` (which drops `switch_section`
+`Settings.TOOL_DECLARATIONS` (the list literal in `backend/config.py`),
+deep-copied into the live config by `form_filling_service.py`'s
+`_build_tool_declarations` (which drops `switch_section`
 in continuous mode, and appends `SPELLBACK_TOOL_DECLARATION` under
 `SPELLBACK_TOOL_ENABLED` -- default ON since bd polyglot-pdf-apkdl, so a
 production session ships 7 declarations; setting the flag false rolls back to 6,
 bd polyglot-pdf-22h1f) and declared to
-Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
-tools assembled at :1752). Gemini's tool
-calls come back through the adapter (`self._on_tool_call(...)` call sites at
-`live_ai_gemini.py:2736` and `:2917`)
-into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:448`),
-which dispatches to the `form_filling_service` handlers that emit the Leg-A
-client messages above. The coupling table (tool -> handler -> client message):
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py`;
+tools assembled into `tools_config` in the same method). Gemini's tool
+calls come back through the adapter (`self._on_tool_call(...)` call sites in
+`live_ai_gemini.py`, two sites)
+into `CallbackHandler.on_tool_call`, which dispatches to the
+`form_filling_service` handlers that emit the Leg-A
+client messages above. The coupling table (tool -> handler -> client message);
+each row's branch is `on_tool_call`'s `if normalized == "<tool>"` (or, for
+`get_form_status`, `if normalized in {"get_form_status", "get_form_state"}`):
 
 | Gemini tool (args) | Handler (`callback_handler.py`, dispatch branch) | Client message |
 |---|---|---|
-| `update_form_fields` (`field_id`, `value`) | :507 | `form_updated` |
-| `get_form_status` (`field_ids`) | :510 | `get_form_state` round-trip |
-| `confirm_field` (`field_id`, `confirmation_method`) | :522 | `confirm_field` round-trip |
-| `skip_field` (`field_id`) | :525 | `skip_field` round-trip |
-| `switch_to_field` (`field`) | :531 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
-| `ask_secretary` (`query`) | :534 | none -- answered server-side from the cached `full_schema` |
-| `switch_section` (deprecated; dropped in continuous mode) | :516 | internal session restart + `section_switched` |
+| `update_form_fields` (`field_id`, `value`) | `normalized == "update_form_fields"` | `form_updated` |
+| `get_form_status` (`field_ids`) | `normalized in {"get_form_status", "get_form_state"}` | `get_form_state` round-trip |
+| `confirm_field` (`field_id`, `confirmation_method`) | `normalized == "confirm_field"` | `confirm_field` round-trip |
+| `skip_field` (`field_id`) | `normalized == "skip_field"` | `skip_field` round-trip |
+| `switch_to_field` (`field`) | `normalized == "switch_to_field"` | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
+| `ask_secretary` (`query`) | `normalized == "ask_secretary"` | none -- answered server-side from the cached `full_schema` |
+| `switch_section` (deprecated; dropped in continuous mode) | `normalized == "switch_section"` | internal session restart + `section_switched` |
 | `name_spellback` (no args; `SPELLBACK_TOOL_ENABLED` default ON, declared via `SPELLBACK_TOOL_DECLARATION` -- kept out of `TOOL_DECLARATIONS` so the flag stays a real rollback) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`
-(`backend/services/ai_context.py:79`); the contract there is between the SI
+(`backend/services/ai_context.py`); the contract there is between the SI
 templates and the prose, not key names. System instruction:
 `form_filling_service.build_form_context_message`
-(`form_filling_service.py:1214`) ->
-`ai_context.build_form_context` (:444).
+(`form_filling_service.py`) ->
+`ai_context.build_form_context`.
 
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
 
@@ -702,12 +713,13 @@ that is not the one on screen. Pinned by
 consumers in different surfaces, so changing the env var moves both at
 once:
 
-- `backend/adapters/live_ai_gemini.py:1866` -- the Gemini Live session's
+- `backend/adapters/live_ai_gemini.py`'s `voice_name = (getattr(settings,
+  "LIVE_VOICE_NAME", "") or "").strip()` read -- feeds the Gemini Live session's
   `speech_config.voice_config.prebuilt_voice_config.voice_name`. An
   unaccepted name is a hard `1007 Invalid voice name` at connect that
   breaks EVERY session.
-- `backend/services/spellback_tts.py:269`
-  (`resolve_spellback_voice`) -- the PERSONA half of the spell-back clip's
+- `backend/services/spellback_tts.py`'s
+  `resolve_spellback_voice` -- the PERSONA half of the spell-back clip's
   Cloud TTS voice (`{locale}-Chirp3-HD-{persona}`), which in turn selects
   the clip's loudness gain via `spellback_gain_db` /
   `_MEASURED_GAIN_DB` (`spellback_tts.py:91-98`).
