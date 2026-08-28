@@ -255,8 +255,11 @@ FIELD SHAPE (the unit the scorer grades hardest):
   "max_length": int, "read_only": bool, "multiline": bool,
   "options": [ {{"value": str(SLUG), "label": str,
                 "pdf_field_name": str(optional), "pdf_on_value": str(optional)}} ],
-                             // radio/select/checkbox_group choices -- see
+                             // radio/checkbox_group choices -- see
                              // CHOICE-FIELD RULES; option.value is a SEMANTIC SLUG.
+                             // A SELECT is different: omit options entirely --
+                             // its values are the PDF's own export codes and
+                             // are filled in from the PDF after extraction.
 
   // RELATIONSHIP / LOGIC keys (recover from printed conditional text like
   // "Yes (Proceed to Item 5)" and form structure):
@@ -327,10 +330,14 @@ CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
   full choice list is copied from the PDF itself after extraction, and the
   choices shown to you in the field list are only a SAMPLE. Emit the field with
   its type, name and help text; leave options[] out.
-- Any show_if / require_if that references a choice field's option MUST use
-  that option's SLUG as the value, with a membership operator (includes /
-  not_includes) for a checkbox_group trigger, or equals / in for a radio/select
-  trigger.
+- Any show_if / require_if that references a RADIO or CHECKBOX_GROUP option MUST
+  use that option's SLUG as the value, with a membership operator (includes /
+  not_includes) for a checkbox_group trigger, or equals / in for a radio one.
+  A condition on a SELECT trigger uses that dropdown's PDF EXPORT CODE (e.g.
+  "WY") with equals / in -- there is no slug to reference, since a select's
+  options are filled in from the PDF after extraction. If you cannot see the
+  exact code in the sampled choice list, omit the condition rather than guess
+  it: a condition naming a value the dropdown does not have is dropped.
 
 CANONICAL v2 EXAMPLE (imitate its conventions: slug option values, per-box
 pdf_field_name, and an `includes` membership show_if referencing an option
