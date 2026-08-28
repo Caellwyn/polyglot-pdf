@@ -124,7 +124,12 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
 `verify_token` (so the same dev bypass applies). It gates `POST
-/api/fill-pdf` (the body carries user-entered field values), the
+/api/fill-pdf` (the body carries user-entered field values), `POST
+/api/resume-form` (bd `polyglot-pdf-dft1` -- a client uploads the PDF they
+saved earlier; it reads the kit's own form.pdf as the REFERENCE to verify
+that upload against, so it carries the same gates as the fill route.
+Deliberately NOT `require_paid_client_work`: resuming your own saved work
+spends nothing and must not burn the link), the
 archived-revision reads `GET /api/form-kits/{kit_id}/archive` +
 `.../archive/{marker}/schema` (bd `polyglot-pdf-qfyxr`; same firm-visibility
 gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd

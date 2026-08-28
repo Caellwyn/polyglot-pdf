@@ -679,6 +679,13 @@ def test_every_client_tier_kit_read_is_visibility_gated():
         ("form_kit_routes.py", "get_form_kit_pdf"),
         ("form_kit_routes.py", "get_archived_kit_schema"),
         ("pdf_fill_routes.py", "fill_pdf"),
+        # resume_form joined with bd polyglot-pdf-dft1: it reads the kit's own
+        # form.pdf as the REFERENCE to verify a client's uploaded resume file
+        # against. Gated identically to fill_pdf (require_auth ->
+        # require_published -> require_visible) BEFORE the read, so a client
+        # link resolves to the one kit it was minted for and cannot aim the
+        # comparison at another firm's form.
+        ("pdf_fill_routes.py", "resume_form"),
     }
     # load_archived_revision joined the read set with bd polyglot-pdf-qfyxr:
     # an archived schema is the same secret as the live one.
@@ -852,6 +859,13 @@ _EXPECTED_GATED_ROUTES = {
     # gated by the stricter dependency, pinned by
     # test_the_PAID_route_set_is_pinned below.
     ("POST", "/api/fill-pdf"),
+    # A client resumes from the PDF they saved (bd polyglot-pdf-dft1). It
+    # reads the kit's own form.pdf as the reference to verify the UPLOAD
+    # against, so it carries the same gates as /api/fill-pdf. Deliberately
+    # require_auth and NOT require_paid_client_work: resuming your own saved
+    # work spends nothing and must not burn the link -- the same
+    # retrieval-vs-spend split the TTL correction established.
+    ("POST", "/api/resume-form"),
 }
 
 

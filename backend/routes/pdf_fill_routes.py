@@ -16,7 +16,11 @@ import fitz  # PyMuPDF
 import structlog
 
 from backend.routes.form_kit_routes import _safe_kit_id
-from backend.services.resume_stamp import STAMP_KEY, build_stamp
+from backend.services.pdf_structure import (
+	StructureMismatch,
+	assert_matches_reference,
+)
+from backend.services.resume_stamp import STAMP_KEY, build_stamp, parse_stamp
 from backend.services.auth import require_auth
 from backend.services.kit_gates import (
 	load_live_metadata,
@@ -31,6 +35,13 @@ from backend.services.form_kits import (
 )
 
 _log = structlog.get_logger().bind(module="pdf_fill_routes")
+
+
+# Upper bound on a resume upload (bd polyglot-pdf-dft1). The shipped kits are
+# ~150KB (W-7) to a few MB filled; 25MB is far above any real saved form and
+# far below a size that would hurt to decode. Anything larger is not a saved
+# form, and handing it to a PDF parser is a cheap denial vector.
+_MAX_RESUME_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 def _safe_pdf_filename(pdf_filename: str) -> str:
@@ -822,3 +833,96 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 			doc.close()
 		if temp_path and os.path.exists(temp_path):
 			os.remove(temp_path)
+
+
+class ResumeUploadRequest(BaseModel):
+	"""A client re-opening the PDF they saved earlier (bd polyglot-pdf-dft1)."""
+
+	kit_id: str = Field(..., description="Kit the client is resuming")
+	pdf_filename: str = Field(..., description="The kit's PDF filename")
+	pdf_base64: str = Field(..., description="The client's saved PDF, base64")
+
+
+@router.post("/resume-form")
+async def resume_form(
+	request: ResumeUploadRequest, user: dict = Depends(require_auth)
+) -> Dict[str, Any]:
+	"""Verify a client's saved PDF and hand back the answers inside it.
+
+	THE UPLOAD IS ATTACKER-CONTROLLED. A client picked this file off their own
+	disk, so "it parsed" is not "it is the form we sent them". Before anything
+	is read out of it, it must be STRUCTURALLY IDENTICAL to the kit's own form
+	-- see services/pdf_structure.py for what that covers and why a literal
+	byte match cannot work.
+
+	THE COMPARISON TARGET CARRIES NO CLIENT INPUT. kit_id runs the same gate
+	chain as /fill-pdf (require_published + require_visible), and for a client
+	link require_visible resolves to the ONE kit that link was minted for --
+	so a client cannot aim this at another firm's form, and the reference
+	bytes come from our own store.
+
+	Returns the field values found; the client merges them into their form.
+	Field values are NEVER logged (PII/PHI).
+	"""
+	import base64
+
+	kit_id = _safe_kit_id(request.kit_id)
+	pdf_filename = _safe_pdf_filename(request.pdf_filename)
+	store = get_form_kit_store()
+
+	try:
+		uploaded = base64.b64decode(request.pdf_base64, validate=True)
+	except Exception as exc:  # noqa: BLE001
+		_log.info("resume_upload_undecodable", kit=kit_id)
+		raise HTTPException(status_code=400, detail="Unreadable file") from exc
+
+	# Bound the upload. These forms are ~150KB-2MB; anything far larger is not
+	# a saved form, and decoding it into a PDF parser is a cheap denial vector.
+	if len(uploaded) > _MAX_RESUME_UPLOAD_BYTES:
+		_log.warning("resume_upload_too_large", kit=kit_id, size=len(uploaded))
+		raise HTTPException(status_code=413, detail="File too large")
+
+	try:
+		meta = await load_live_metadata(store, kit_id)
+		require_published(store, kit_id, meta)
+		await require_visible(kit_id, meta, user)
+		reference = await store.load_pdf_bytes(kit_id, pdf_filename)
+	except FormKitNotFound as exc:
+		raise HTTPException(status_code=404, detail="Not found") from exc
+
+	try:
+		assert_matches_reference(uploaded, reference)
+	except StructureMismatch as exc:
+		# ONE refusal for every structural failure -- wrong form, tampered
+		# form, unreadable form. Distinguishing them would tell an attacker
+		# which part of their file to fix.
+		_log.warning("resume_upload_refused", kit=kit_id, reason=str(exc))
+		raise HTTPException(
+			status_code=400,
+			detail="That file does not match the form you were sent.",
+		) from exc
+
+	doc = None
+	try:
+		doc = fitz.open(stream=uploaded, filetype="pdf")
+		values: Dict[str, str] = {}
+		for page in doc:
+			for widget in page.widgets():
+				name = widget.field_name
+				value = widget.field_value
+				if name and isinstance(value, str) and value.strip():
+					values[name] = value
+		stamp = parse_stamp((doc.metadata or {}).get(STAMP_KEY))
+	finally:
+		if doc is not None:
+			doc.close()
+
+	# Field COUNT only. The values are the client's answers.
+	_log.info("resume_upload_accepted", kit=kit_id, field_count=len(values))
+
+	return {
+		"kit_id": kit_id,
+		"field_values": values,
+		"form_session_id": (stamp or {}).get("fsid"),
+		"link_jtis": (stamp or {}).get("jtis", []),
+	}

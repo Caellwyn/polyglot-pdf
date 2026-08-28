@@ -126,7 +126,8 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the
   `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
-  `/api/fill-pdf`, the archived-revision
+  `/api/fill-pdf`, the client resume upload `/api/resume-form`
+  (bd `polyglot-pdf-dft1`), the archived-revision
   reads `/api/form-kits/{kit_id}/archive` + `.../archive/{marker}/schema`
   (bd `polyglot-pdf-qfyxr`), the firm retire write path
   `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`), and both TTS routes

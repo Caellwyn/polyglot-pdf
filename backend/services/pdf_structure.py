@@ -150,6 +150,38 @@ def digest_of_bytes(pdf_bytes: bytes) -> Optional[str]:
                 pass
 
 
+def assert_matches_reference(
+    uploaded_bytes: bytes,
+    reference_bytes: bytes,
+) -> None:
+    """Raise StructureMismatch unless the upload IS the reference form.
+
+    The bytes variant, for callers that reach kits through the store rather
+    than the filesystem (a private kit lives in GCS, not on disk). The
+    reference bytes must come from the LINK's kit -- never from anything the
+    uploader supplied.
+    """
+    uploaded = digest_of_bytes(uploaded_bytes)
+    if uploaded is None:
+        raise StructureMismatch("unreadable pdf")
+
+    reference = digest_of_bytes(reference_bytes)
+    if reference is None:
+        # FAIL CLOSED: with no reference we cannot tell a good upload from a
+        # hostile one, and admitting it "because the check could not run" is
+        # the condition an attacker would try to induce.
+        _log.error("reference_form_unreadable")
+        raise StructureMismatch("reference form unavailable")
+
+    if uploaded != reference:
+        _log.warning(
+            "resume_upload_structure_mismatch",
+            uploaded=uploaded[:16],
+            expected=reference[:16],
+        )
+        raise StructureMismatch("upload does not match the assigned form")
+
+
 def assert_matches_kit_form(
     uploaded_bytes: bytes,
     kit_form_path: str,
