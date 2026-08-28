@@ -2979,6 +2979,47 @@ async def run(args) -> int:
             if stalled:
                 print(f"    [warn] turn stalled: q{current_q['n']} {label}")
 
+        async def _settle_confirm(fid, wait_s: float = 12.0,
+                                  nudge_wait_s: float = 20.0):
+            """Adaptive confirm-gate (bd polyglot-pdf-2nikx). The scripted
+            cadence assumes the model settles each question within its
+            allotted turns; on the 57-question i90-v2 the correction cycle
+            plus secretary/spell-back bursts sometimes need one more turn,
+            and a fixed cadence then outruns the model -- lag compounds one
+            question per burst until the session desyncs (measured: the
+            first D-unhappy run fell ~7 questions behind and the stagnation
+            guard aborted it at q33). A real user does not barge on; they
+            wait for the read-back, and repeat the yes if the assistant is
+            still mid-exchange. Mirror that: wait bounded for `fid` to
+            confirm; if it has not, speak ONE extra confirm nudge and wait
+            again; then move on regardless (bounded -- an unsettled question
+            is recorded, never looped on). On runs whose confirms land
+            in-cadence (both W-7 arms, i90-v2 happy) the first poll returns
+            immediately and this is a no-op."""
+            if not fid:
+                return
+            # LIVE sessions only: the offline dry-run tests drive run() with a
+            # stub adapter whose fake model never confirms fields -- gating
+            # there turns a 28s test into ~32s PER QUESTION of dead waiting
+            # (caught as a 5-minute pytest timeout the first time this gate
+            # ran under the suite).
+            if adapter.__class__.__name__ != "LiveAIGemini":
+                return
+            deadline = time.monotonic() + wait_s
+            while time.monotonic() < deadline:
+                if client.state.get(fid, {}).get("confirmed"):
+                    return
+                await asyncio.sleep(0.3)
+            meta.setdefault("confirm_nudges", 0)
+            meta["confirm_nudges"] += 1
+            await speak(confirm_utt, "confirm-nudge")
+            deadline = time.monotonic() + nudge_wait_s
+            while time.monotonic() < deadline:
+                if client.state.get(fid, {}).get("confirmed"):
+                    return
+                await asyncio.sleep(0.3)
+            meta.setdefault("unsettled_questions", []).append(fid)
+
         # ------- stress-test event machinery (bd polyglot-pdf-eh1h) -------
         event_records: list[dict] = []   # recall / navigate_back / skip outcomes
         steer_records: list[dict] = []   # validator steer -> switch compliance
@@ -3351,6 +3392,7 @@ async def run(args) -> int:
                                      if e.get("confirmed")}
                 await speak(q["say"], "value")
                 await speak(confirm_utt, "confirm")
+                await _settle_confirm(fid)
                 _record_divergence(fid, _confirmed_before)
             else:
                 _confirmed_before = {f for f, e in client.state.items()
@@ -3359,6 +3401,7 @@ async def run(args) -> int:
                 await speak(reject_utt, "reject")
                 await speak(q["say"], "corrected-value")
                 await speak(confirm_utt, "confirm")
+                await _settle_confirm(fid)
                 _record_divergence(fid, _confirmed_before)
             # End the window at the LAST user activity_end (set by speak), NOT now:
             # Gemini's confirm response after it carries the NEXT field's prompt, which
