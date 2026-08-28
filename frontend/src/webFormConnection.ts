@@ -161,8 +161,12 @@ export interface ConnectionCallbacks {
   // manager (which owns the audio manager + auth token) fetches the Cloud TTS
   // letter-by-letter clip for `value`, mutes the mic, plays it BLOCKING, and
   // resolves with the outcome. The promise resolves -- never rejects -- and
-  // the resolution is what completes the backend tool round-trip, so the model
-  // stays parked until playback truly ends. Unwired (undefined) means this
+  // the resolution is what completes the backend tool round-trip. That does
+  // NOT mean the model stays parked until playback ends, though (bd
+  // polyglot-pdf-kvrfq, wire-verified 2026-08-26): under barge-in pressure
+  // the model can keep emitting further name_spellback calls while this one
+  // is unanswered, queueing behind it (see docs/components/voice-ai.md's
+  // name_spellback bullet). Unwired (undefined) means this
   // client has no playback path and the handler acks an error variant.
   // `language` is the session's spoken-language name ("Spanish") so the clip
   // speaks the user's language with the regional voice (bd 44ywm); undefined
@@ -3228,8 +3232,14 @@ export class WebFormConnection {
    * The playback itself (mic hold, TTS fetch, blocking play, PTT interrupt)
    * lives in the connection manager via the onSpellbackRequest callback; this
    * handler owns field/value resolution and the WS ack. The ack is sent in
-   * EVERY path -- an unacked request leaves the model parked until the
-   * backend's 90s timeout.
+   * EVERY path -- an unacked request leaves the backend's tool response
+   * unanswered until its 90s timeout. That does NOT mean the model is
+   * parked meanwhile, though (bd polyglot-pdf-kvrfq, wire-verified
+   * 2026-08-26): under barge-in pressure the model can keep emitting
+   * further name_spellback calls while earlier ones are unanswered,
+   * queueing behind the in-flight round-trip (see
+   * docs/components/voice-ai.md's name_spellback bullet) -- which is
+   * exactly why every ack path matters, not just the happy one.
    */
   private async handleSpellbackRequest(message: any): Promise<void> {
     const request_id = message.request_id;
