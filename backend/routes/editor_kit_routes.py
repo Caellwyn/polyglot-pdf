@@ -3632,6 +3632,10 @@ async def set_editor_kit_label(
     label = _safe_label(body.label)
     store = get_form_kit_store()
     meta, _files = await _load_meta_or_404(store, kit_id)
+    # bd polyglot-pdf-c63tu: every sibling schema/metadata write route calls
+    # this -- an editor with no lock could otherwise rename a kit's label out
+    # from under a different editor's in-progress edit.
+    _require_edit_lock(meta, role)
     next_meta = {**(meta or {}), "label": label}
     try:
         await store.put_metadata(kit_id, next_meta)
