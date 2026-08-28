@@ -45,6 +45,21 @@ export function DateField({
   //
   // Same reasoning as FieldRenderer's `case "number"`, which already renders
   // number fields as text for the identical coercion reason.
+  //
+  // KNOWN PRIORITY-CHAIN GAP (bd polyglot-pdf-vs15o), deliberately left as a
+  // documented gap rather than a behavior change: the BACKEND's
+  // _resolve_date_format (backend/utils/field_validator.py) reads a field's
+  // flat `format` key FIRST, ahead of help.format_hint. This frontend never
+  // reads `field.format` at all -- a date field declaring only a flat
+  // `format` (no help.format_hint) gets no placeholder/layout affordance here
+  // while the backend still validates against that flat format. Across all 8
+  // shipped date fields (form-kits/i-90, /w7, /f1040), NONE sets the flat
+  // `format` key, so this specific priority-inversion is latent, not a live
+  // bug -- 2 of those 8 (f1040's fld_deceased_date, fld_spouse_deceased_date)
+  // set NEITHER key and get no placeholder on either surface, a separate,
+  // pre-existing gap this bead does not address. Fixing the priority chain
+  // to match the backend is out of scope for this bead and left for whoever
+  // changes DateField's placeholder logic next.
   const placeholder = field.help?.format_hint || field.placeholder;
 
   // Bug Fix: Unwrap FieldValue objects to get primitive value

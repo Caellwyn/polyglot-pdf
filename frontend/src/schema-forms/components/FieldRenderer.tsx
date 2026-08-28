@@ -178,8 +178,13 @@ export function FieldRenderer({
       );
 
     case "number":
-      // Number fields render as a plain text input. TextField only special-cases
-      // email/tel for its HTML input type; everything else (incl. this) is type="text".
+      // Number fields render as a plain text input. TextField's own inputType
+      // is now unconditionally "text" for every field it renders (bd
+      // polyglot-pdf-md20o), so this {...field, type: "text"} rewrite is
+      // redundant for the HTML input type specifically -- it is passed only
+      // to TextField's own props, not written back to the field in state, so
+      // callers that still read the ORIGINAL field.type (e.g. validation.ts)
+      // are unaffected either way.
       return (
         <TextField
           field={{ ...field, type: "text" }}
