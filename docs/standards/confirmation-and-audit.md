@@ -149,10 +149,24 @@ Two properties of `author_version` matter for the audit trail:
 
 **Deleting a kit is guarded by these records** (bd `polyglot-pdf-6x1j`).
 `DELETE /api/editor/kits/{kit_id}` is author-only and removes the kit *and its
-revision archive*, so it asks first: any confirmation event naming the kit ->
-409 offering unpublish instead. Crucially, a check that CANNOT RUN is also a
-refusal -- `kit_has_confirmation_records` raises rather than returning False in
-THREE cases:
+revision archive*, so it asks first: a confirmation event naming the kit, or a
+check that CANNOT RUN, escalates to a 409 the author must acknowledge -- and an
+EVER-LIVE kit escalates further, to a second, explicit confirmation (bd
+`polyglot-pdf-6zhaf`).
+
+**It escalates; it does not refuse forever.** That distinction is load-bearing
+and was learned the hard way: the original design made an unrunnable check a
+permanent refusal, and because un-attributable legacy records make it
+permanently unrunnable, every kit became undeletable by anyone. A safeguard must
+make a destructive act deliberate, not impossible -- do not "restore" the
+absolute refusal.
+
+What a delete actually costs is the revision archive, NOT the records: those
+live here, in their own store, and survive. So the danger is a surviving record
+that names a revision nobody can produce any more.
+
+`kit_has_confirmation_records` still raises rather than returning False in THREE
+cases, and each still escalates the warning:
 
 1. **The sink is disabled** (`CONFIRMATION_FIRESTORE_ENABLED` defaults false).
    The local JSONL fallback dies with the instance, so its silence is not
@@ -512,9 +526,7 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-24 (bd polyglot-pdf-g3kui: the anonymous acceptance
-write is BOUNDED -- one record per form_session_id plus field caps -- because
-the route can never require auth: a client filling a form has no account by
-design. firm_id is therefore PERMANENTLY None here, not pending firm auth.
-Also bd polyglot-pdf-0dsv4: the acceptance is durable, written to the same
-sink as the field confirmations and joined on form_session_id.)*
+*Last updated: 2026-08-28 (bd polyglot-pdf-6zhaf: the delete guard
+ESCALATES rather than refusing forever -- an unrunnable check is a warning to
+acknowledge, not a permanent block, and what a delete costs is the revision
+archive the records NAME, never the records themselves.)*

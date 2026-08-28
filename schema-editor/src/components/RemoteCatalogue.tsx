@@ -2,7 +2,7 @@ import React from 'react';
 import {
   AuthError,
   ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  deleteRemoteKit,
+  deleteRemoteKit, DeleteNeedsAcknowledgement, type DeleteEscalation,
   listArchivedRevisions, loadArchivedSchema,
   onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
   translateRemoteKitOptions, fetchRetireCandidates,
@@ -132,6 +132,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // be deleted has to be read next to the form it names.
   const [deletePrompt, setDeletePrompt] = React.useState<RemoteKitEntry | null>(null);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  // The server asked for confirmation rather than refusing outright (bd
+  // polyglot-pdf-6zhaf). Holds its OWN wording -- it names what is at risk for
+  // this specific kit, which a generic client warning cannot.
+  const [deleteWarning, setDeleteWarning] =
+    React.useState<{ text: string; escalation: DeleteEscalation } | null>(null);
+  // A warning belongs to ONE kit. Leaking it into the next dialog is not a
+  // display glitch: a tier-B warning arms "Delete anyway" immediately, so kit
+  // B's dialog would open one click from deleting a kit whose id was never
+  // typed -- bypassing the type-to-confirm guard entirely, on the exact action
+  // where deleting the wrong row is the mistake that actually happens.
+  // Cleared HERE, keyed on the kit, so every path that opens the dialog is
+  // covered rather than each remembering to (fresh-eyes, bd 6zhaf).
+  React.useEffect(() => { setDeleteWarning(null); setDeleteError(null); },
+                  [deletePrompt?.id]);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   // The kit whose lock is being taken/released right now (bd
   // polyglot-pdf-hqztg), so its buttons can disable without freezing the
@@ -297,7 +311,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // server's guard decides (records exist / verified clean / could not check),
   // and a 409 is the guard WORKING, so it renders inside the dialog rather
   // than dismissing it.
-  const handleDelete = React.useCallback(async (kit: RemoteKitEntry) => {
+  const handleDelete = React.useCallback(async (
+    kit: RemoteKitEntry, acknowledged: DeleteEscalation | null = null,
+  ) => {
     setDeleteError(null);
     // Clear any stale success banner, as every sibling handler does. Without
     // it, deleting kit A and then being REFUSED on kit B showed a green
@@ -307,8 +323,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setNotice(null);
     setDeletingId(kit.id);
     try {
-      await deleteRemoteKit(kit.id);
+      await deleteRemoteKit(kit.id, { acknowledged });
       setDeletePrompt(null);
+      setDeleteWarning(null);
       setNotice(`"${kit.label}" was deleted permanently.`);
       // Close the editor pane if the deleted kit was the OPEN one (bd
       // polyglot-pdf-hbfky) -- without this, the card vanishes from the
@@ -318,9 +335,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       await refresh();
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
-      // The guard refusing (409) is the NORMAL outcome for a form anyone has
-      // filled, and for one whose records cannot be checked. Keep the dialog
-      // open and show the server's own words -- it names the safe alternative.
+      // NOT a refusal -- a request to confirm. The server decided how risky
+      // this delete is; the dialog escalates instead of dead-ending, because a
+      // form nobody can ever delete is its own bug (bd polyglot-pdf-6zhaf).
+      if (err instanceof DeleteNeedsAcknowledgement) {
+        setDeleteWarning({ text: err.message, escalation: err.escalation });
+        return;
+      }
+      // A genuine failure (502, a broken store). Keep the dialog open and show
+      // the server's own words.
       setDeleteError(err instanceof Error ? err.message : 'Could not delete the form');
     } finally {
       setDeletingId(null);
@@ -1484,7 +1507,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           kitLabel={deletePrompt.label}
           busy={deletingId === deletePrompt.id}
           error={deleteError}
-          onCancel={() => { setDeletePrompt(null); setDeleteError(null); }}
+          warning={deleteWarning}
+          onAcknowledge={() => {
+            // Confirm the level the SERVER asked for, never a fixed one.
+            if (deleteWarning) void handleDelete(deletePrompt, deleteWarning.escalation);
+          }}
+          onCancel={() => { setDeletePrompt(null); setDeleteError(null); setDeleteWarning(null); }}
           onConfirm={() => { void handleDelete(deletePrompt); }}
         />
       )}
