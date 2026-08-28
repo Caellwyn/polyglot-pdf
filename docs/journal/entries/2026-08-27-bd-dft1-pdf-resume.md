@@ -40,24 +40,47 @@ literally it would refuse every legitimate resume.
 
 The structure digest is what "everything except the field data" means in
 practice: page count and geometry, the complete widget inventory (name, type,
-rounded rect, sorted so file order cannot matter), and each page's STATIC text.
-Refused, each pinned against the real W-7 kit: a different form, injected page
-text, an added widget, a moved widget, an added page, a removed page, anything
-unreadable. A missing reference form FAILS CLOSED.
+rounded rect, sorted so file order cannot matter), and each page's CONTENT
+STREAM. Refused, pinned against all three shipped kits: a different form,
+injected page text, an added widget, a moved widget, an added page, a removed
+page, anything unreadable. A missing reference form FAILS CLOSED.
 
-### The near-miss worth remembering
+### Two wrong answers before the right one
 
-The first digest **passed all eight attack tests and rejected every legitimate
-resume.** A filled field renders its value into the page's text layer, so
-hashing page text hashed the client's own answers -- the one thing the digest
-must ignore.
+**First version: hashed the extracted page TEXT.** It passed all eight attack
+tests and rejected every legitimate resume -- a filled field renders its value
+into the text layer, so the hash included the client's own answers. *A security
+check that refuses everything passes every attack test perfectly.* Only the
+happy-path test caught it.
 
-**A security check that refuses everything passes every attack test perfectly.**
-Only the happy-path test caught it, which is why it was written alongside them.
-The fix hashes static text with words inside widget rects excluded; injection is
-still caught because text added where the form has no field lands outside every
-rect, and text hidden UNDER a widget is covered from the other side by the
-widget inventory pinning every rect.
+**Second version: excluded words inside a widget's rect.** That worked for
+short answers and failed for real ones. A value too long for its box renders
+OUTSIDE it, so a client typing "public safety officer exclusion" into a narrow
+f1040 field had their own saved PDF refused -- work gone. Widening the
+exclusion margin to fix that let injected text through on the f1040 while 47
+tests stayed green, because the injection tests only used the W-7.
+
+**The maintainer's reframing is what solved it.** The schema, instructions and
+translations never leave the server -- they live in the form kit -- so a
+client's file is just the AcroForm PDF: a round-trip reconstruction of the
+blank form plus their answers. The question is *is this OUR document*, and by
+"byte match" he meant pdf-to-pdf.
+
+Measured: a page's **content stream** -- the drawing instructions for every
+printed line, label and box -- is BYTE-IDENTICAL regardless of what the client
+typed, because answers live in widget annotations rather than page content. So
+"byte match on everything except the field data" is literally achievable rather
+than approximated, and the margin constant is deleted: **a knob I could not set
+correctly should not exist.**
+
+Verified directly on all three kits rather than inferred from a green suite:
+long overflowing answers ACCEPTED; injected text (mid-page and margin) and
+added pages REFUSED, twelve for twelve.
+
+I had also recommended dropping the text check entirely. That was the right
+instinct about the HEURISTIC and the wrong conclusion about the GOAL -- I was
+choosing between two bad options because I had assumed extracted text was the
+only way to see the document.
 
 ## The paid-TTS conflict, and the maintainer's call
 
