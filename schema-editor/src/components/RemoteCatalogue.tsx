@@ -546,9 +546,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
 
   handleSetStatusRef.current = handleSetStatus;
 
-  // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
-  // ANY selected kit (no open involved -- unlike the status actions, which
-  // need the parent-confirmed open). renamingId gates the inline input.
+  // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it needs no
+  // parent-confirmed open (unlike the status actions below). It CAN still be
+  // refused -- a 409 when a different editor holds the kit's edit lock (bd
+  // polyglot-pdf-c63tu), surfaced via setError same as any other refusal.
+  // renamingId gates the inline input.
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
   const handleRename = React.useCallback(async (kit: RemoteKitEntry) => {
@@ -848,9 +850,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             })}
           </select>
           {(() => {
-            // Rename (bd 15ic): metadata-only, safe for ANY selected kit --
-            // no open involved, so it is deliberately NOT gated on the
-            // parent-confirmed open (unlike the status actions below).
+            // Rename (bd 15ic): metadata-only, so it is deliberately NOT
+            // gated on the parent-confirmed open (unlike the status actions
+            // below) -- but it CAN still be refused, a 409 when a different
+            // editor holds the kit's edit lock (bd polyglot-pdf-c63tu).
             const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
             if (!kit) return null;
             if (renamingId === kit.id) {
