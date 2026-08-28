@@ -298,7 +298,201 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
     onReport?.(report);
   }, [report, onReport]);
 
-  const errorCount = report?.errorCount ?? 0;
+  // Repair-all's count and enablement must reflect only ERRORs the
+  // deterministic repair pass can actually fix (bd polyglot-pdf-9g698).
+  // ENUMERATED, not hand-picked (CLAUDE.md scar #7): every ERROR-severity
+  // rule schema_lint.py can emit was run through backend/services/
+  // schema_repair.py's repair() against a synthetic finding, BOTH dumpless
+  // (the bare /api/editor/lint route) AND dump-present (the kit-scoped
+  // route ValidationPanel actually uses whenever a kit is open -- App.tsx
+  // only wires onRepairAll when a kit is selected, so dump-present is the
+  // NORMAL case here, not an edge case -- Opus cross-surface review round
+  // 2), to empirically confirm which ones repair() actually clears vs.
+  // leaves standing. The rules below never clear, confirmed by direct
+  // execution (not read from the repair code's own comments, which do not
+  // exhaustively state every rule they do or do not cover):
+  //
+  //   - option-value-missing on a SELECT field specifically (radio/
+  //     checkbox_group's option-value-missing IS minted -- bd ot284's
+  //     hold-aside is scoped to select only: only the author can supply a
+  //     dropdown's PDF export code).
+  //   - hidden-with-show-if, ref-unresolved-field, to-review-pending,
+  //     dump-widget-multiclaim: no branch in repair() addresses any of
+  //     these (confirmed: the fields/condition/widget-claim state comes
+  //     back completely unchanged; repairs is empty for each, WITH a dump
+  //     present for dump-widget-multiclaim specifically).
+  //   - condition-malformed AND value-arity both carry multiple distinct
+  //     sub-shapes under one rule id, with no sub-shape signal LintFinding
+  //     carries besides message text -- a wholesale exclusion for either
+  //     would under-count the sub-shapes repair() DOES fix (the SAME
+  //     wrong-direction mistake option-value-slug's rule-level exclusion
+  //     would have made -- see below). Round 5 (Opus cross-surface review)
+  //     is what finally isolated value-arity correctly: rounds 3-4 each
+  //     tested its three sub-shapes but never in FULL isolation from one
+  //     another, so a genuinely-repairable sub-shape's result got
+  //     conflated with the other two's. Testing each sub-shape completely
+  //     alone (one schema, one finding, nothing else) is what surfaced it.
+  //       * condition-malformed: a non-dict show_if/require_if value
+  //         ("this condition is a ... not a set of rules") and a missing
+  //         field reference ("this rule does not say which field triggers
+  //         it") survive repair() unchanged. The other four sub-shapes (a
+  //         non-list bucket, a non-dict bucket member, an empty bucket, a
+  //         missing operator) ARE minted/dropped. (A 7th sub-shape -- a
+  //         non-dict TOP-LEVEL schema payload -- exists in schema_lint.py
+  //         too, but repair() RAISES an AttributeError on it rather than
+  //         silently no-op-ing, and ValidationPanel never sends a
+  //         non-object payload in the first place, so it needs no entry
+  //         here -- the six above are the only sub-shapes reachable
+  //         through this component's normal operation.)
+  //       * value-arity: a list-arity operator (in/not_in) missing its
+  //         list ("needs a list of one or more values") and a scalar-arity
+  //         operator given a list or nothing ("needs a single comparison
+  //         value") survive repair() unchanged. The third sub-shape -- a
+  //         stray value left on a no-value operator (is_empty/
+  //         is_not_empty/is_checked), message "does not take a comparison
+  //         value, but one is set" -- IS silently cleared by repair()'s
+  //         _rewrite_atom (unconditionally drops the stray value for any
+  //         no-value operator) and must NOT be excluded.
+  //     Every substring below is the LITERAL prose schema_lint.py emits
+  //     for exactly the sub-shape it targets, verified against the
+  //     current source -- confirmed (via a full-file search) to appear in
+  //     no OTHER rule's message anywhere in the file, so there is no
+  //     cross-rule false-positive risk from matching on message content.
+  //
+  // Deliberately NOT excluded, despite being ERROR-severity: option-value-
+  // slug on a select. Unlike option-value-missing, this rule's
+  // repairability is DUMP-CONDITIONAL, not type-conditional -- pdf_choice_
+  // values() (shared by lint and repair, per schema_repair.py's own
+  // docstring) treats a missing dump as "no evidence" and the value gets
+  // minted anyway, exactly the same as radio/checkbox_group. A dumpless
+  // repair genuinely fixes a select's option-value-slug (confirmed
+  // empirically) -- excluding it here would UNDER-count and hide a real,
+  // working repair, the opposite failure direction from this bead's bug.
+  // field-unbacked and field-claim-unresolvable are likewise NOT excluded:
+  // repair() does not silently no-op on either, it RAISES (RepairError),
+  // which editor_kit_routes.py already converts to a real 422 the author
+  // sees -- a different, already-handled failure mode than the silent
+  // no-op this bead targets.
+  const UNREPAIRABLE_ERROR_RULES = new Set([
+    'hidden-with-show-if',
+    'ref-unresolved-field',
+    'to-review-pending',
+    'dump-widget-multiclaim',
+  ]);
+  // The exact prose schema_lint.py emits for the condition-malformed /
+  // value-arity sub-shapes repair() never touches -- see the comment above.
+  const UNREPAIRABLE_MESSAGE_SNIPPETS_BY_RULE: Record<string, string[]> = {
+    'condition-malformed': [
+      'not a set of rules',
+      'does not say which field triggers it',
+    ],
+    'value-arity': [
+      'needs a list of one or more values',
+      'needs a single comparison value',
+    ],
+    // operator-trigger's "cannot trigger a condition" sub-shape (a trigger
+    // TYPE repair() has no rewrite for, e.g. signature/table) is
+    // unrepairable; its sibling "cannot be used on a ... field" sub-shape
+    // (a wrong OPERATOR for an otherwise-legal trigger type) IS aliased by
+    // repair()'s _rewrite_atom and must not be matched here.
+    'operator-trigger': [
+      'cannot trigger a condition',
+    ],
+  };
+  const unrepairableFieldTypes = React.useMemo(() => {
+    const types = new Map<string, string>();
+    for (const f of schema.fields) types.set(f.id, f.type);
+    return types;
+  }, [schema.fields]);
+  // legacy-trigger-side-logic (bd polyglot-pdf-9g698, rounds 6-7, Opus
+  // cross-surface review): a field can carry BOTH controls_fields AND
+  // conditional_fields at once, which lint reports as TWO separate
+  // findings sharing one field_id but distinguished by `path`
+  // (".controls_fields" vs ".conditional_fields", schema_lint.py:1003).
+  // conditional_fields is a plain legacy id list with no action keys at
+  // all -- repair() ALWAYS drops it unconditionally (schema_repair.py's
+  // own comment: "there is nothing target-side to convert it INTO; it is
+  // simply removed"). So a mixed field's .conditional_fields finding is
+  // always repairable even when its sibling .controls_fields finding is
+  // not; excluding both by field_id alone (round 6's version) would
+  // wrongly hide the conditional_fields repair too -- this round scopes
+  // the check to the exact PATH suffix the unconvertible controls_fields
+  // finding carries, not merely "this field has controls_fields at all".
+  //
+  // Within controls_fields itself: repairs.controls_fields.ACTION_KEYS are
+  // shows, hides, unlocks, locks, makes_required, makes_optional --
+  // repair() mirrors 4 of them (shows/makes_required directly; hides/
+  // unlocks via schema_repair.py's REPAIR_CONVERTIBLE_ACTIONS, which reads
+  // that constant from backend/services/controls_fields_mirror.py) onto a
+  // target's show_if/require_if/conditional_behavior, clearing the
+  // finding. `locks` and `makes_optional` have NO v2 target-side encoding
+  // at all (schema_repair.py's own comment: "RETAINED on the field...
+  // needs human review") -- repair() explicitly keeps controls_fields on
+  // the field and the lint ERROR stands. The finding's message is
+  // IDENTICAL regardless of which action triggered it, so message-
+  // matching (the technique used for condition-malformed/value-arity)
+  // cannot work here -- the only signal is the field's OWN
+  // controls_fields array, cross-referenced via field_id.
+  const fieldsWithUnconvertibleControlsFields = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const f of schema.fields as unknown as Array<Record<string, unknown>>) {
+      const controls = f.controls_fields;
+      if (!Array.isArray(controls)) continue;
+      // PYTHON truthiness, not JS truthiness and not mere key presence (bd
+      // polyglot-pdf-jri5i, round 8, Opus cross-surface review):
+      // schema_repair.py's rump-retention keys on `control.get(k)` --
+      // Python-falsy, so an explicitly-present-but-EMPTY locks: []  /
+      // makes_optional: [] drops the whole entry there (repaired). JS
+      // arrays are ALWAYS truthy regardless of length (`!![]` is `true`),
+      // so a naive `c.locks` check would silently keep matching Python's
+      // "falsy empty list" case as truthy -- must check the value is a
+      // non-empty array (or any other Python-truthy non-array value)
+      // explicitly, not just presence or JS truthiness.
+      const isPythonTruthy = (v: unknown): boolean =>
+        Array.isArray(v) ? v.length > 0 : Boolean(v);
+      const hasUnconvertible = controls.some(
+        (c) => c && typeof c === 'object' &&
+          (isPythonTruthy((c as Record<string, unknown>).locks) ||
+           isPythonTruthy((c as Record<string, unknown>).makes_optional)));
+      if (hasUnconvertible && typeof f.id === 'string') ids.add(f.id);
+    }
+    return ids;
+  }, [schema.fields]);
+  // operator-trigger (round 7, Opus cross-surface review): schema_lint.py
+  // emits this rule for TWO distinct sub-shapes with distinct messages --
+  // a trigger field whose TYPE can never trigger any condition ("a 'TYPE'
+  // field cannot trigger a condition"), which repair() has no rewrite for
+  // and leaves standing; and an operator merely invalid for an otherwise
+  // legal trigger type ("'OP' cannot be used on a 'TYPE' field"), which
+  // repair()'s _rewrite_atom DOES alias/fix. Matched by message substring
+  // like condition-malformed/value-arity.
+  const isUnrepairableError = React.useCallback(
+    (f: LintFinding) => {
+      if (f.severity !== 'ERROR') return false;
+      if (UNREPAIRABLE_ERROR_RULES.has(f.rule)) return true;
+      if (f.rule === 'option-value-missing') {
+        return f.field_id !== null &&
+          unrepairableFieldTypes.get(f.field_id) === 'select';
+      }
+      if (f.rule === 'legacy-trigger-side-logic') {
+        return f.field_id !== null &&
+          f.path.endsWith('.controls_fields') &&
+          fieldsWithUnconvertibleControlsFields.has(f.field_id);
+      }
+      const snippets = UNREPAIRABLE_MESSAGE_SNIPPETS_BY_RULE[f.rule];
+      if (snippets) {
+        return snippets.some((snippet) => f.message.includes(snippet));
+      }
+      return false;
+    },
+    [unrepairableFieldTypes, fieldsWithUnconvertibleControlsFields],
+  );
+  const repairableErrorCount = React.useMemo(() => {
+    if (!report) return 0;
+    const unrepairable = report.findings.filter(isUnrepairableError).length;
+    return Math.max(0, report.errorCount - unrepairable);
+  }, [report, isUnrepairableError]);
+  const errorCount = repairableErrorCount;
 
   const handleRepairAll = React.useCallback(async () => {
     if (!onRepairAll || repairing) return;
@@ -404,7 +598,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
             className="btn-sm btn-primary ml-auto"
             onClick={() => void handleRepairAll()}
             disabled={repairing}
-            title="Automatically repair the fixable errors (mint option slugs, rewrite invented operators, drop dead conditions)"
+            title="Automatically repair the fixable errors (mint option slugs, rewrite invented operators, drop dead conditions). Some errors need the author directly -- a blank select answer's export code, a hidden-and-conditional field, a malformed comparison, a reference to a missing field, a field still awaiting review, or a PDF box claimed by more than one field."
           >
             {repairing ? 'Repairing...' : `Repair all (${errorCount})`}
           </button>
