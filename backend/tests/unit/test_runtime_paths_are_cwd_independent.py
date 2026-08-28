@@ -69,7 +69,14 @@ _REPO_TOP_LEVEL_DIRS = {"backend", "frontend", "logs", "form-kits", "shared"}
 _DEFAULT_ARG_READERS = {"getenv", "environ_get", "get"}
 
 # Names that mark a constant as holding a path, for the assignment scan below.
-_PATHISH_NAME = re.compile(r"(DIR|PATH|ROOT|FILE|FOLDER|LOG)", re.IGNORECASE)
+# "LOG" alone is deliberately NOT here: it matches LOG_LEVEL / LOG_FORMAT,
+# whose values ("info/debug") are path-shaped enough to false-positive. The
+# path-carrying constants in this repo all end in one of these nouns
+# (_DEFAULT_CONFIRMATION_LOG_DIR, _LOG_ROOT, FORM_KITS_LOCAL_ROOT), so the
+# noun is what identifies a path, not the "LOG" qualifier in front of it.
+_PATHISH_NAME = re.compile(
+    r"(?:^|_)(DIR|DIRS|PATH|PATHS|ROOT|FILE|FOLDER)(?:_|$)", re.IGNORECASE
+)
 
 
 def _runtime_py_files():
@@ -151,12 +158,22 @@ def _path_shaped_constants(tree: ast.AST):
     the same hazard one indirection away.
     """
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
+        # BOTH assignment forms. AnnAssign ("LOG_DIR: str = ...") is not a
+        # stylistic variant here -- every field of backend/config.py's Settings
+        # is annotated, so a scan that only walks Assign is blind to the single
+        # most likely home for a new path default.
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        if node.value is None:  # a bare annotation declares no value
             continue
         value = _leading_string(node.value)
         if value is None or not _is_cwd_relative_path(value):
             continue
-        for target in node.targets:
+        for target in targets:
             if isinstance(target, ast.Name) and _PATHISH_NAME.search(target.id):
                 yield node.lineno, value
                 break
@@ -220,6 +237,17 @@ def _cwd_relative_backend_paths(path: Path):
         ('Path("/var/run/x")', False),  # absolute
         ('Path("./relative/x")', False),  # explicit about cwd on purpose
         ('json.load("backend/x")', False),  # not a path builder
+        # Path-shaped CONSTANTS -- the literal never touches a call here, which
+        # is how the confirmation-log default hid. Both assignment forms must
+        # be seen: every backend/config.py Settings field is ANNOTATED, so an
+        # Assign-only scan would be blind to the likeliest place for a new one.
+        ('_DEFAULT_LOG_DIR = "logs/confirmations"', True),
+        ('LOG_DIR: str = "logs/confirmations"', True),
+        ('FORM_KITS_ROOT: str = os.getenv("X", "form-kits/local")', True),
+        # ...but only when the NAME reads as a path and the VALUE is one.
+        ('LOG_LEVEL: str = "info/debug"', False),  # not a pathish name
+        ('_DEFAULT_LOG_DIR = "/var/log/app"', False),  # absolute
+        ('SOME_MIME = "application/json"', False),  # pathish value, not name
     ],
 )
 def test_detector_catches_each_path_building_shape(source, should_flag, tmp_path):
