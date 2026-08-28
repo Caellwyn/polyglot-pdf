@@ -339,3 +339,159 @@ def test_text_and_radio_answers_survive_TOGETHER():
     assert restored.get(text["id"]) == "Okonkwo"
     ids = {f["id"] for f in schema["fields"]}
     assert set(restored) <= ids
+
+
+# ---------------------------------------------------------------------------
+# EVERY SHIPPED KIT -- found in review round 3
+# ---------------------------------------------------------------------------
+#
+# The W-7 is the only kit whose options carry `pdf_on_value`. Requiring that
+# key restored every W-7 answer and lost all 75 i-90 and all 24 f1040 option
+# widgets -- a bug invisible to any test that used only the W-7, which is
+# exactly what mine did.
+
+_ALL_KITS = ["w7", "i-90", "f1040"]
+
+
+def _kit_schema(kit: str) -> dict:
+    import json
+    return json.loads((_KITS / kit / "schema.json").read_text(encoding="utf-8"))
+
+
+def _fill_kit(kit: str, field_values: dict) -> bytes:
+    from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf
+
+    resp = asyncio.run(fill_pdf(PDFFillRequest(
+        kit_id=kit, pdf_filename="form.pdf",
+        field_values=field_values, form_schema=_kit_schema(kit),
+    )))
+    assert resp.status_code == 200
+    return resp.body
+
+
+def _resume_kit(kit: str, pdf_bytes: bytes) -> dict:
+    user = {"uid": None, "firm_id": "firm-a", "link_kit_id": kit, "is_client_link": True}
+    return asyncio.run(resume_form(
+        ResumeUploadRequest(
+            kit_id=kit, pdf_filename="form.pdf",
+            pdf_base64=base64.b64encode(pdf_bytes).decode("ascii"),
+        ),
+        user=user,
+    ))["field_values"]
+
+
+@pytest.mark.parametrize("kit", _ALL_KITS)
+def test_a_RADIO_answer_survives_on_EVERY_shipped_kit(kit):
+    """Not just the W-7.
+
+    Only the W-7's options carry pdf_on_value; keying on it silently lost
+    every radio answer on the other two kits.
+    """
+    if not (_KITS / kit / "form.pdf").exists():
+        pytest.skip(f"{kit} kit not present")
+
+    schema = _kit_schema(kit)
+    radio = next(
+        (f for f in schema["fields"] if f.get("type") == "radio" and f.get("options")),
+        None,
+    )
+    if radio is None:
+        pytest.skip(f"{kit} has no radio field")
+    option = radio["options"][0]
+
+    restored = _resume_kit(kit, _fill_kit(kit, {radio["id"]: option["value"]}))
+
+    assert restored.get(radio["id"]) == option["value"], (
+        f"{kit}: a ticked radio did not come back"
+    )
+
+
+@pytest.mark.parametrize("kit", _ALL_KITS)
+def test_every_restored_key_is_a_SCHEMA_FIELD_ID_on_every_kit(kit):
+    """Junk keys mean the client's form has never heard of what came back."""
+    if not (_KITS / kit / "form.pdf").exists():
+        pytest.skip(f"{kit} kit not present")
+
+    schema = _kit_schema(kit)
+    ids = {f["id"] for f in schema["fields"]}
+    radio = next(
+        (f for f in schema["fields"] if f.get("type") == "radio" and f.get("options")),
+        None,
+    )
+    if radio is None:
+        pytest.skip(f"{kit} has no radio field")
+
+    restored = _resume_kit(kit, _fill_kit(kit, {radio["id"]: radio["options"][0]["value"]}))
+
+    unknown = sorted(set(restored) - ids)
+    assert not unknown, f"{kit}: returned keys the schema does not know: {unknown[:5]}"
+
+
+def test_an_option_value_shared_by_TWO_fields_lands_on_the_RIGHT_one():
+    """Option values are NOT unique: 13 are shared across fields on the i-90.
+
+    An earlier version resolved an option widget to its parent by searching
+    for the FIRST field containing that value, so a shared value landed on the
+    wrong field entirely.
+
+    Asserted on the MAPPING rather than a round trip, because the i-90's
+    schema names widgets its PDF does not contain (bd polyglot-pdf-t4qo7), so
+    no round trip through that kit can reach these fields at all. The mapping
+    is where the bug lived.
+    """
+    kit = "i-90"
+    if not (_KITS / kit / "schema.json").exists():
+        pytest.skip("i-90 kit not present")
+
+    schema = _kit_schema(kit)
+    by_value: dict[str, list[str]] = {}
+    for field in schema["fields"]:
+        for option in field.get("options") or []:
+            if option.get("pdf_field_name") and isinstance(option.get("value"), str):
+                by_value.setdefault(option["value"], []).append(field["id"])
+    shared = {v: fs for v, fs in by_value.items() if len(set(fs)) > 1}
+    assert shared, "expected shared option values on the i-90"
+
+    # Rebuild the route's own mapping and assert each option widget resolves to
+    # ITS OWN parent, not to whichever field happens to be found first.
+    by_widget: dict[str, str] = {}
+    for field in schema["fields"]:
+        for option in field.get("options") or []:
+            widget = option.get("pdf_field_name")
+            if isinstance(widget, str) and widget:
+                by_widget[widget] = field["id"]
+
+    for value, field_ids in shared.items():
+        for field_id in field_ids:
+            field = next(f for f in schema["fields"] if f["id"] == field_id)
+            widget = next(
+                o["pdf_field_name"] for o in field["options"]
+                if o.get("value") == value and o.get("pdf_field_name")
+            )
+            assert by_widget[widget] == field_id, (
+                f"widget {widget} resolves to {by_widget[widget]}, not {field_id} "
+                f"-- a shared option value ({value!r}) landed on the wrong field"
+            )
+
+
+def test_a_checkbox_group_restores_a_LIST_not_a_scalar():
+    """The client stores multi-select answers as an array.
+
+    Collapsing to a scalar means a second tick silently replaces the first and
+    the box renders unticked.
+    """
+    schema = _schema()
+    group = next(
+        (f for f in schema["fields"]
+         if f.get("type") == "checkbox_group" and len(f.get("options") or []) > 1),
+        None,
+    )
+    if group is None:
+        pytest.skip("no multi-option checkbox_group in the W-7")
+
+    chosen = [group["options"][0]["value"], group["options"][1]["value"]]
+    restored = _resume_kit("w7", _fill_kit("w7", {group["id"]: chosen}))
+
+    got = restored.get(group["id"])
+    assert isinstance(got, list), f"expected a list, got {type(got).__name__}: {got!r}"
+    assert set(got) == set(chosen)

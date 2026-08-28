@@ -915,41 +915,51 @@ async def resume_form(
 		# stack trace to a client trying to recover their work.
 		raise HTTPException(status_code=404, detail="Not found") from exc
 
-	# widget name -> (schema field id, expected on-value or None).
+	# widget name -> what that widget means.
 	#
-	# TWO MAPPING SHAPES, and missing the second silently drops answers. Most
-	# fields carry a top-level pdf_field_name, but RADIO and CHECKBOX_GROUP
-	# fields map per OPTION -- each option has its own widget and pdf_on_value.
-	# On the shipped W-7 that is 6 of 53 fields, including application_type,
-	# reason and sex: the form's core routing questions. Reading only the
-	# top-level mapping restored a client's text and silently lost every box
-	# they ticked.
-	by_widget: Dict[str, tuple[str, Optional[str]]] = {}
+	# THREE SHAPES, and missing any one loses answers:
+	#   direct   -- field.pdf_field_name; the widget holds the value
+	#   option   -- options[].pdf_field_name; the widget is ONE choice of a
+	#               radio or checkbox_group, and being "on" selects it
+	#
+	# The option shape covers 21 widgets on the W-7, 75 on the i-90 and 24 on
+	# the f1040. Reading only the direct shape lost every box a client ticked.
+	#
+	# The OPTION entry carries its PARENT field id explicitly. An earlier
+	# version looked the parent up by searching for a field containing that
+	# option VALUE, which is wrong because values are not unique: 13 values are
+	# shared across fields on the i-90 and 3 on the f1040, so answers landed on
+	# the wrong field entirely.
+	#
+	# multi is True for checkbox_group, whose answer is a LIST client-side.
+	by_widget: Dict[str, dict] = {}
 	for field in (schema or {}).get("fields", []):
 		field_id = field.get("id")
 		if not isinstance(field_id, str) or not field_id:
 			continue
 		widget_name = field.get("pdf_field_name")
 		if isinstance(widget_name, str) and widget_name:
-			by_widget[widget_name] = (field_id, None)
+			by_widget[widget_name] = {"kind": "direct", "field_id": field_id}
+		multi = field.get("type") == "checkbox_group"
 		for option in field.get("options") or []:
 			if not isinstance(option, dict):
 				continue
 			opt_widget = option.get("pdf_field_name")
 			opt_value = option.get("value")
-			on_value = option.get("pdf_on_value")
 			if isinstance(opt_widget, str) and opt_widget and isinstance(opt_value, str):
-				# The VALUE the schema uses, not the PDF's on-state: the client's
-				# form stores "apply_new_itin", while the widget holds "2".
-				by_widget[opt_widget] = (
-					opt_value,
-					on_value if isinstance(on_value, str) else None,
-				)
+				by_widget[opt_widget] = {
+					"kind": "option",
+					"field_id": field_id,
+					"option_value": opt_value,
+					"multi": multi,
+				}
 
 	doc = None
 	try:
 		doc = fitz.open(stream=uploaded, filetype="pdf")
-		values: Dict[str, str] = {}
+		values: Dict[str, Any] = {}
+		# checkbox_group answers accumulate: the client stores a LIST.
+		multi_values: Dict[str, list] = {}
 		for page in doc:
 			for widget in page.widgets():
 				name = widget.field_name
@@ -958,10 +968,9 @@ async def resume_form(
 				# A CHECKED BOX HIDES IN /AS, NOT IN field_value. On these XFA
 				# forms the fill path writes the on-state to the appearance key
 				# and deliberately does not call update(), so /V stays "Off"
-				# while /AS holds "/2" -- and PyMuPDF reports field_value as
-				# "Off" for a box the client genuinely ticked. Measured through
-				# the REAL /api/fill-pdf route; reading field_value alone lost
-				# every checkbox and radio answer.
+				# while /AS holds the on-state -- and PyMuPDF reports
+				# field_value as "Off" for a box the client genuinely ticked.
+				# Measured through the REAL /api/fill-pdf route.
 				if widget.field_type == 2 and name in by_widget:
 					try:
 						raw = doc.xref_get_key(widget.xref, "AS")
@@ -972,33 +981,36 @@ async def resume_form(
 
 				if not name or not isinstance(value, str) or not value.strip():
 					continue
-				# "Off" is PyMuPDF's UNCHECKED checkbox, not an answer. A blank
-				# W-7 already carries 21 of them (f1040: 73), so passing them
-				# through would mark every checkbox confirmed with a value no
-				# enum accepts -- on a form the client has not touched.
-				if value == "Off":
-					continue
+
 				mapped = by_widget.get(name)
 				if not mapped:
 					continue
-				field_id, on_value = mapped
-				if on_value is None:
-					# A directly-mapped field: the widget holds the answer.
-					values[field_id] = value
+
+				if mapped["kind"] == "direct":
+					if value == "Off":
+						continue      # an unchecked box is not an answer
+					values[mapped["field_id"]] = value
+					continue
+
+				# An OPTION widget. It is selected when it shows ANY state
+				# other than Off -- derived from the widget, exactly as the
+				# FILL path does (get_button_on_state), rather than from a
+				# pdf_on_value key that only the W-7 carries: it is absent
+				# from all 75 i-90 and all 24 f1040 option widgets, so
+				# requiring it lost every one of their answers.
+				if value == "Off":
+					continue
+				if mapped.get("multi"):
+					# checkbox_group answers are a LIST client-side; collapsing
+					# to a scalar means a second tick silently replaces the
+					# first and the box renders unticked.
+					bucket = multi_values.setdefault(mapped["field_id"], [])
+					if mapped["option_value"] not in bucket:
+						bucket.append(mapped["option_value"])
 				else:
-					# An OPTION widget. It is only an answer when the widget
-					# actually carries this option's on-value -- a box showing
-					# some other state is not this option being chosen. The
-					# field id here is the parent field, and the value is the
-					# SCHEMA's option value.
-					parent = next(
-						(f for f in (schema or {}).get("fields", [])
-						 if any((o or {}).get("value") == field_id
-								for o in (f.get("options") or []))),
-						None,
-					)
-					if parent and value == on_value:
-						values[parent["id"]] = field_id
+					values[mapped["field_id"]] = mapped["option_value"]
+
+		values.update(multi_values)
 		stamp = parse_stamp((doc.metadata or {}).get(STAMP_KEY))
 	finally:
 		if doc is not None:
