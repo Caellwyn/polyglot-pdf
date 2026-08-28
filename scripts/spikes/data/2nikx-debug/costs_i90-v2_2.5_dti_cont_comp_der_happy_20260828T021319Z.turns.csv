@@ -1,0 +1,17 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,a_number,value,False,4231,4001,230,36,0,4267,0.002763,0.007494,1.39
+2,1,a_number,confirm,False,4389,8193,519,34,84,8830,0.00673,0.014223,
+3,2,uscis_account,value,False,4976,8888,811,53,52,9804,0.007607,0.02183,
+4,2,uscis_account,confirm,False,5228,4706,522,6,36,5270,0.004363,0.026193,
+5,3,family_name,value,False,5286,4713,573,26,84,5396,0.005136,0.031329,
+6,3,family_name,confirm,False,5440,9445,1363,49,100,10957,0.01011,0.041438,
+7,4,given_name,value,False,5692,4978,714,9,34,5735,0.005057,0.046495,
+8,4,given_name,confirm,False,5762,4984,778,16,86,5864,0.00589,0.052385,
+9,5,middle_name,value,False,5837,4991,846,22,102,5961,0.006301,0.058687,
+10,5,middle_name,confirm,False,5918,4998,920,19,91,6028,0.006389,0.065076,
+11,6,name_changed,value,False,5983,5005,978,18,89,6090,0.00654,0.071616,
+12,6,name_changed,confirm,False,6127,5019,1108,29,93,6249,0.007007,0.078624,
+13,7,mail_in_care_of,value,False,6195,5026,1169,19,96,6310,0.00721,0.085834,
+14,7,mail_in_care_of,confirm,False,6293,5037,1256,24,99,6416,0.007523,0.093356,
+15,8,mail_street,value,False,6362,5044,1318,18,94,6474,0.00764,0.100996,
+16,8,mail_street,confirm,False,6502,5058,1444,27,99,6628,0.008103,0.109099,

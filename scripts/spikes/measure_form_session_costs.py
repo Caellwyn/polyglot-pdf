@@ -730,8 +730,14 @@ I90V2_QUESTIONS = [
     # province on a US address) stay -- if the model wedges on one of those,
     # the derailment guard below caps the spend and the wedge is REPORTED as a
     # reliability datum, not discarded.
+    # No leading zeros (bd polyglot-pdf-2nikx debug run 20260828T...): gTTS
+    # "0 0 9 4 4..." was TRANSCRIBED by the live model as "OON 9447312586" --
+    # the fused hearing produced an 11-digit value, the strict ^[0-9]{12}$
+    # validation rejected it, and the scripted session desynced one-behind for
+    # the rest of the form (a real user would just repeat the number; the
+    # script cannot). Digits that start with a clear non-zero survive ASR.
     {"field_id": "uscis_account",
-     "say": "My USCIS online account number is 0 0 9 4 4 7 3 1 2 5 8 6.",
+     "say": "My USCIS online account number is 9 4 4 7 3 1 2 5 8 6 0 2.",
      "wrong": "My USCIS online account number is 1 2 3 4 5 6 7 8 9 0 1 2."},
     # --- Your Full Name ---
     {"field_id": "family_name", "say": "My last name is Torres.",
@@ -3176,6 +3182,8 @@ async def run(args) -> int:
 
         sec_idx = 0
         _tool_silent_run = 0  # derailment guard state (bd polyglot-pdf-2nikx)
+        _confirm_stagnant_run = 0
+        _last_confirmed_count = 0
         for i, q in enumerate(steps, 1):
             current_q["n"] = i
             is_event = "event" in q
@@ -3413,12 +3421,26 @@ async def run(args) -> int:
                 _tool_silent_run += 1
             else:
                 _tool_silent_run = 0
-            if _tool_silent_run >= 6:
+            # Second wedge shape (attempt-2 evidence): a desynced model KEEPS
+            # making (failing) tool calls, so tool silence alone misses it --
+            # but no NEW field gets confirmed for the rest of the run. Track
+            # confirmed-count stagnation across questions.
+            _confirmed_now = (sum(1 for e in client.state.values() if e.get("confirmed"))
+                              if hasattr(client, "state") else None)
+            if _confirmed_now is not None:
+                if _confirmed_now > _last_confirmed_count:
+                    _last_confirmed_count = _confirmed_now
+                    _confirm_stagnant_run = 0
+                else:
+                    _confirm_stagnant_run += 1
+            if _tool_silent_run >= 6 or _confirm_stagnant_run >= 8:
                 meta["derailed_at_q"] = i
-                meta["derailed_reason"] = "6 consecutive tool-silent questions"
+                meta["derailed_reason"] = (
+                    "6 consecutive tool-silent questions" if _tool_silent_run >= 6
+                    else "8 consecutive questions with no new confirmed field")
                 print(f"[derailment-guard] aborting run at q{i:02d}: "
-                      f"{_tool_silent_run} consecutive questions with zero "
-                      f"tool calls (model wedged; artifacts kept)", flush=True)
+                      f"{meta['derailed_reason']} (model wedged/desynced; "
+                      f"artifacts kept)", flush=True)
                 break
 
         # Terminal boundary (mirror form_complete, the terminal drain): a final
