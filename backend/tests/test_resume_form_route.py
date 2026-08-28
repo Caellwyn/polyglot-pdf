@@ -495,3 +495,79 @@ def test_a_checkbox_group_restores_a_LIST_not_a_scalar():
     got = restored.get(group["id"])
     assert isinstance(got, list), f"expected a list, got {type(got).__name__}: {got!r}"
     assert set(got) == set(chosen)
+
+
+def test_a_MULTI_TICKED_single_choice_field_is_dropped_not_guessed():
+    """A file with two options of one radio ticked is not a valid form state.
+
+    Our own fill path writes exactly one, so this can only come from a
+    hand-edited file. Letting whichever widget came last silently win would
+    resume a legal form with a choice the client never made; dropping the
+    field asks them to answer it again.
+
+    Not a security boundary -- every value is a real option of the correct
+    field and a client can only do it to their own draft.
+    """
+    schema = _schema()
+    radio = next(
+        f for f in schema["fields"]
+        if f.get("type") == "radio" and len(f.get("options") or []) > 1
+    )
+    targets = {o["pdf_field_name"] for o in radio["options"] if o.get("pdf_field_name")}
+
+    doc = fitz.open(str(_W7))
+    try:
+        for page in doc:
+            for widget in page.widgets():
+                if widget.field_name in targets:
+                    states = widget.button_states() or {}
+                    on = next(
+                        (x for x in (states.get("normal") or []) if x.lower() != "off"),
+                        None,
+                    )
+                    if on:
+                        widget.field_value = on
+                        doc.xref_set_key(widget.xref, "AS", f"/{on}")
+        hostile = doc.tobytes()
+    finally:
+        doc.close()
+
+    restored = _call(hostile)["field_values"]
+
+    assert radio["id"] not in restored, (
+        "a conflicting multi-tick resumed an answer the client never made"
+    )
+
+
+def test_an_UNREADABLE_kit_is_a_502_not_an_unhandled_500():
+    """Matches /api/fill-pdf, which maps the same store error the same way.
+
+    An earlier version caught only FormKitNotFound while its comment claimed
+    both, so an unreadable kit leaked a stack trace to a client trying to
+    recover their work.
+    """
+    from unittest.mock import patch
+
+    from backend.services.form_kits import FormKitStoreError
+
+    with patch(
+        "backend.routes.pdf_fill_routes.get_form_kit_store"
+    ) as store_factory:
+        store = store_factory.return_value
+
+        async def _boom(*_a, **_k):
+            raise FormKitStoreError("bucket unreachable")
+
+        async def _meta(*_a, **_k):
+            return {"status": "complete"}
+
+        store.load_schema = _boom
+        store.load_pdf_bytes = _boom
+        store.load_metadata = _meta
+
+        with pytest.raises(HTTPException) as exc:
+            _call(_W7.read_bytes())
+
+    assert exc.value.status_code in (404, 502), (
+        f"an unreadable kit produced {exc.value.status_code}, not a handled error"
+    )

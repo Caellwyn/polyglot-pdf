@@ -889,6 +889,14 @@ async def resume_form(
 		reference = await store.load_pdf_bytes(kit_id, pdf_filename)
 	except FormKitNotFound as exc:
 		raise HTTPException(status_code=404, detail="Not found") from exc
+	except FormKitStoreError as exc:
+		# The REFERENCE form is what an upload is checked against, so an
+		# unreadable one must fail closed with a handled error -- never an
+		# unhandled 500, and never by admitting the upload unchecked.
+		_log.error("resume_reference_load_failed", kit=kit_id, error=str(exc))
+		raise HTTPException(
+			status_code=502, detail="Unable to load the form for this kit"
+		) from exc
 
 	try:
 		assert_matches_reference(uploaded, reference)
@@ -910,10 +918,17 @@ async def resume_form(
 	try:
 		schema = await store.load_schema(kit_id)
 	except FormKitNotFound as exc:
-		# Same mapping /api/fill-pdf uses (bd polyglot-pdf-sbfk): a missing or
-		# unreadable schema is a 404, never an unhandled 500 that leaks a
-		# stack trace to a client trying to recover their work.
+		# Same mapping /api/fill-pdf uses (bd polyglot-pdf-sbfk): a MISSING kit
+		# is a 404, and an UNREADABLE one is a 502 -- never an unhandled 500
+		# that leaks a stack trace to a client trying to recover their work.
+		# The two are caught separately because they are different facts, and
+		# an earlier version caught only the first while claiming both.
 		raise HTTPException(status_code=404, detail="Not found") from exc
+	except FormKitStoreError as exc:
+		_log.error("resume_schema_load_failed", kit=kit_id, error=str(exc))
+		raise HTTPException(
+			status_code=502, detail="Unable to load the form for this kit"
+		) from exc
 
 	# widget name -> what that widget means.
 	#
@@ -960,6 +975,8 @@ async def resume_form(
 		values: Dict[str, Any] = {}
 		# checkbox_group answers accumulate: the client stores a LIST.
 		multi_values: Dict[str, list] = {}
+		# Single-choice fields showing MORE THAN ONE ticked option.
+		conflicted: set = set()
 		for page in doc:
 			for widget in page.widgets():
 				name = widget.field_name
@@ -1008,8 +1025,28 @@ async def resume_form(
 					if mapped["option_value"] not in bucket:
 						bucket.append(mapped["option_value"])
 				else:
+					# A single-choice field. A file with SEVERAL options of the
+					# same radio ticked is not a valid form state -- our own
+					# fill path writes exactly one -- so rather than letting
+					# whichever widget came last silently win, drop the field
+					# and let the client answer it again. They lose one answer
+					# they could not have produced legitimately, instead of
+					# resuming with a choice they never made.
+					#
+					# Not a security boundary: every value here is a real
+					# option of the CORRECT field, and a client can only do
+					# this to their own draft. It is about not inventing an
+					# answer on a legal form.
+					previous = values.get(mapped["field_id"])
+					if previous is not None and previous != mapped["option_value"]:
+						conflicted.add(mapped["field_id"])
 					values[mapped["field_id"]] = mapped["option_value"]
 
+		for field_id in conflicted:
+			values.pop(field_id, None)
+		if conflicted:
+			_log.warning("resume_conflicting_options", kit=kit_id,
+						 field_count=len(conflicted))
 		values.update(multi_values)
 		stamp = parse_stamp((doc.metadata or {}).get(STAMP_KEY))
 	finally:
