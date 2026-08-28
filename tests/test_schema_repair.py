@@ -465,6 +465,53 @@ def test_duplicate_pdf_sanctioned_codes_are_still_resolved():
     assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
 
 
+def test_repair_leaves_a_selects_EMPTY_export_code_empty():
+    """Repair must not invent a code only the PDF can supply (bd ot284).
+
+    A dropdown's value goes verbatim into the combobox, so a minted 'option'
+    is absent from the widget's /Opt list and the form PRINTS "option" --
+    and because 'option' IS a valid slug, lint then reports nothing at all.
+    Repairing would convert a loud, blocking option-value-missing ERROR into
+    a silent mis-print. The schema editor creates a select option this way on
+    purpose (bd alzbr), so the guard has to survive a Repair click.
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "AL", "label": "Alabama"},
+            {"value": "", "label": ""}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _values(repaired) == ["WY", "AL", ""]
+    # ...and the blocking ERROR is still standing afterwards.
+    assert any(f.rule == "option-value-missing" and f.severity == "ERROR"
+               for f in lint_schema(repaired, _COMBO_DUMP))
+
+
+def test_an_empty_select_code_does_not_block_repair_of_its_NEIGHBOURS():
+    """Holding the empty value aside must not suppress the whole branch: a
+    real defect sharing the field is still repaired around it."""
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "WY", "label": "Wyoming again"},
+            {"value": "", "label": ""}]
+    repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    vals = _values(repaired)
+    assert vals[0] == "WY"          # first occurrence keeps the code
+    assert vals[1] not in ("WY", "")  # the duplicate WAS repaired
+    assert vals[2] == ""            # the empty one was left alone
+    assert any(r["action"] == "mint-option-slugs" for r in repairs)
+
+
+def test_radio_and_checkbox_group_still_mint_over_an_empty_value():
+    """Scoped to select ONLY: radio/checkbox_group carry widget identity in
+    pdf_on_value, so minting a slug is the correct repair for them."""
+    for ftype in ("radio", "checkbox_group"):
+        fields = [{"id": "f", "type": ftype, "options": [
+            {"value": "", "label": "Male", "pdf_on_value": "1"},
+            {"value": "female", "label": "Female", "pdf_on_value": "2"},
+        ]}]
+        repaired, _ = repair(_schema(fields), None)
+        vals = [o["value"] for o in repaired["fields"][0]["options"]]
+        assert vals[0] == "male", "%s should still mint: %r" % (ftype, vals)
+
+
 def test_dumpless_repair_still_mints_over_non_slug_dropdown_values():
     """No dump means no evidence: repair keeps its old, stricter behaviour
     rather than preserving values it cannot verify.

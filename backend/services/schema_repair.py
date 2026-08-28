@@ -278,6 +278,12 @@ def _mint_slugs(
                 v not in pdf_choices and not vocab.is_valid_option_slug(v)
                 for v in values
             )
+            # NOTE: a select's empty value still sets `missing` and so still
+            # TRIGGERS this branch -- that is deliberate. Suppressing the
+            # trigger would also suppress the repair of any real defect
+            # sharing the field (a duplicate, a junk value). The empty value
+            # is instead held aside inside the loop below, so its neighbours
+            # are still repaired while it stays empty (bd polyglot-pdf-ot284).
             missing = any(o.get("value") in (None, "") for o in dict_opts)
             dupes = len(set(values)) != len(values)
             needs_mint = invalid or missing or dupes
@@ -298,6 +304,21 @@ def _mint_slugs(
             # schema stuck (repair reports nothing to fix while lint still
             # blocks on option-value-duplicate). First occurrence keeps the
             # code; the rest fall through to minting.
+            #
+            # A SELECT's EMPTY value is likewise held aside (bd
+            # polyglot-pdf-ot284). Minting invents a slug, and a dropdown's
+            # value goes verbatim into the combobox -- so the minted 'option'
+            # is absent from the widget's /Opt list and the form PRINTS
+            # "option". Worse, 'option' IS a valid slug, so lint then reports
+            # nothing: repairing would convert a loud, blocking
+            # option-value-missing ERROR into a silent mis-print. Only the PDF
+            # knows the real code, so the author must supply it -- leaving the
+            # value empty keeps that ERROR standing until they do. The schema
+            # editor creates a select option this way on purpose (bd
+            # polyglot-pdf-alzbr). radio/checkbox_group are unaffected: they
+            # carry widget identity in pdf_field_name/pdf_on_value, so a
+            # minted slug is the correct repair for them.
+            is_select = f.get("type") == "select"
             seen_codes: set = set()
             keep = []
             for o in dict_opts:
@@ -306,6 +327,8 @@ def _mint_slugs(
                 is_code = v is not None and v in pdf_choices and v not in seen_codes
                 if is_code:
                     seen_codes.add(v)
+                elif is_select and (v is None or v == ""):
+                    is_code = True  # hold aside; do NOT mint a fake code
                 keep.append(is_code)
             # Mint ONLY for the options actually being replaced, and seed the
             # dedupe with the preserved codes -- a slug minted from one label
