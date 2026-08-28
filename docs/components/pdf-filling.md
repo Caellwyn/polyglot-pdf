@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-26 (bd polyglot-pdf-4we6j: documented the SELECT fill
+*Last updated: 2026-08-27 (bd polyglot-pdf-4we6j: documented the SELECT fill
 path -- it has no branch of its own, so a dropdown's `option.value` is
 written verbatim into the widget and IS the PDF export value, unchecked
 against the widget's `/Opt` list.)*
@@ -279,9 +279,14 @@ replace-publish is released too. The one exception is REOPENING a live kit
 the author who reopened it keeps their own lock; a stale lock held by anyone
 else is still cleared. Without the release, an author who sent a kit back left
 the editor unable to touch their own draft, with no control offered to
-self-rescue. It is ROLE-scoped, not
-user-scoped, because the editor API has only two shared tokens -- two editors
-sharing one still collide (bd `polyglot-pdf-ijntk`). A preempted editor finds
+self-rescue. It is USER-scoped (bd
+`polyglot-pdf-5tuas`): the lock stores the holder's uid, so a second editor
+taking a kit the first holds is refused 409 and the refusal NAMES the holder.
+An author still preempts anyone, including another author -- that IS the
+stale-lock release. Re-taking your OWN lock is not a steal. A lock written
+before 5tuas carries no uid; it is unattributable, so same-role contention
+falls back to the old ALLOW for it rather than stranding an editor on a kit
+nobody can be shown to hold. A preempted editor finds
 out on their NEXT SAVE, which 409s: there is no channel from server to editor,
 so the save is the notification. Every route that rewrites a schema honours the
 lock, enforced through one `_require_edit_lock` helper and pinned by a property

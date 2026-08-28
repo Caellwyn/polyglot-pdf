@@ -278,7 +278,7 @@ class TestFreshnessScanCoversTier1:
     # happened to motivate the first fix.
     _SITE_ANCHORS = [
         (
-            "This script does four warn-only checks in one pass:",
+            "warn-only checks in one pass",
             "2. **Sprint-archive protocol.**",
             "module docstring",
         ),
@@ -1781,6 +1781,51 @@ class TestCheckCodeCitationsOnRealRepo:
 
         assert findings == []
 
+    def test_single_line_citation_on_a_blank_line_is_flagged(
+        self, tmp_path, clean_git_env
+    ):
+        """bd polyglot-pdf-vdcm4: a citation can drift WITHIN a file's bounds
+        (code inserted above it shifts it onto a different, now-blank line)
+        without ever crossing EOF -- the out-of-bounds check alone cannot
+        catch that shape of drift, which is exactly the failure mode that
+        bit ws-protocol.md/technical_guide.md a second time after bd
+        polyglot-pdf-x82ii's line-number fix (2026-08-17) re-drifted."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text(
+            "line0\nline1\n\nline3\n", encoding="utf-8"
+        )  # line 3 (1-indexed) is blank
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        doc = _make_doc(tmp_path, "See `widget.py:3` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert len(findings) == 1
+        assert findings[0][0] == doc
+        assert "widget.py" in findings[0][1]
+        assert "blank" in findings[0][1]
+
+    def test_range_citation_with_a_blank_line_inside_it_is_not_flagged(
+        self, tmp_path, clean_git_env
+    ):
+        """A blank line INSIDE a range citation (e.g. a spacer line in a
+        function body) is normal and must not be flagged -- only a
+        single-line (`:N`, start == end) citation lands on exactly one line,
+        so only that shape is checked for blankness."""
+        g = _git_in(tmp_path)
+        g("init", "-q", "-b", "main", ".")
+        (tmp_path / "widget.py").write_text(
+            "line0\nline1\n\nline3\nline4\n", encoding="utf-8"
+        )  # line 3 (1-indexed) is blank, inside the 2-4 range
+        g("add", "-A")
+        g("commit", "-q", "-m", "c1")
+        doc = _make_doc(tmp_path, "See `widget.py:2-4` for the thing.\n")
+
+        findings = freshness.check_code_citations(docs=[doc], repo_root=tmp_path)
+
+        assert findings == []
+
     def test_untracked_file_does_not_verify_a_citation(self, tmp_path, clean_git_env):
         """A file that exists on disk but was never `git add`ed must not
         resolve a citation -- otherwise a scratch/generated file could make
@@ -1897,4 +1942,55 @@ class TestModuleDocstringCheckCountMatchesMain:
             "Update the numbered list -- and grep the file for stale "
             "prose mentioning a check COUNT (bd polyglot-pdf-82rzp) -- "
             "whenever a check is added or removed."
+        )
+
+    def test_lead_sentence_names_no_count_word(self):
+        """bd polyglot-pdf-nlbck: the module docstring's LEAD SENTENCE ("This
+        script does N warn-only checks...") is a count-bearing site the
+        82rzp rewrite above did not reach -- adding a fifth check correctly
+        (numbered list + main() dispatch) while leaving this sentence saying
+        a stale number is invisible to
+        test_docstring_count_matches_mains_actual_check_count, which never
+        reads this sentence at all. Pinning the PROPERTY (no digit or spelled-
+        out number word directly describing the check COUNT) means the
+        sentence can never drift out of sync with the numbered list below
+        it, the same fix applied to the rest of this docstring by bd
+        polyglot-pdf-82rzp.
+
+        Scanned over the WHOLE docstring, not an extracted "lead sentence" --
+        a positional paragraph-index lookup (e.g. `__doc__.split("\\n\\n")[1]`)
+        is the exact vacuous-pass failure mode this same test file has paid
+        for twice before (bd polyglot-pdf-u3miz, bd polyglot-pdf-uquqs): a
+        future paragraph inserted before the lead sentence would silently
+        shift the index and this test would check the wrong text while still
+        passing. Scanning the whole docstring is immune to that shift and
+        cannot become MORE permissive by it -- the numbered list items below
+        (`1. **Doc freshness.**` etc.) don't use "N check(s)" phrasing, so
+        they can't false-positive here.
+
+        Scoped to a number word immediately before "check(s)" -- NOT any
+        number word anywhere in the docstring: "in one pass" is an idiom
+        ("a single sweep"), not a claim about how many checks there are, and
+        a broader scan would false-positive on it (verified manually: the
+        current, correct docstring text passes this test precisely because
+        the scope is narrowed this way).
+
+        The spelled-out word list only covers zero-twenty -- a doc claiming
+        "does thirty warn-only checks" would not be caught. Digits of any
+        length ARE caught, so this only under-covers spelled-out
+        numbers past twenty, which is far beyond this script's current or
+        realistically foreseeable check count; not worth the complexity of a
+        general English-number parser for that margin."""
+        number_words = (
+            "zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+            "eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+            "eighteen|nineteen|twenty"
+        )
+        pattern = rf"\b(?:\d+|{number_words})[\s-]+(?:warn-only[\s-]+)?checks?\b"
+        match = re.search(pattern, freshness.__doc__, re.IGNORECASE)
+        assert match is None, (
+            f"the module docstring names a check COUNT "
+            f"({match.group(0)!r}) -- make it count-free (bd "
+            "polyglot-pdf-nlbck), matching the rest of this docstring "
+            "(bd polyglot-pdf-82rzp)."
         )
