@@ -954,7 +954,11 @@ async def resume_form(
 			continue
 		widget_name = field.get("pdf_field_name")
 		if isinstance(widget_name, str) and widget_name:
-			by_widget[widget_name] = {"kind": "direct", "field_id": field_id}
+			by_widget[widget_name] = {
+				"kind": "direct",
+				"field_id": field_id,
+				"checkbox": field.get("type") == "checkbox",
+			}
 		multi = field.get("type") == "checkbox_group"
 		for option in field.get("options") or []:
 			if not isinstance(option, dict):
@@ -1030,7 +1034,16 @@ async def resume_form(
 				if mapped["kind"] == "direct":
 					if value == "Off":
 						continue      # an unchecked box is not an answer
-					values[mapped["field_id"]] = value
+					if mapped.get("checkbox"):
+						# A STANDALONE checkbox restores as the client's own
+						# TRUE, not the PDF's on-state ("Y" on the i-90, "1" on
+						# the f1040). Returning the raw state means the next
+						# fill rejects it as checkbox_unsupported_value and the
+						# tick vanishes from the printed legal form, while the
+						# preview and the form UI disagree about it.
+						values[mapped["field_id"]] = True
+					else:
+						values[mapped["field_id"]] = value
 					continue
 
 				# An OPTION widget. It is selected when it shows ANY state

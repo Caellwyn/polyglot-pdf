@@ -584,19 +584,60 @@ def test_an_UNREADABLE_kit_is_a_502_not_an_unhandled_500():
 
 
 def _answer_everything(kit: str) -> dict:
-    """One answer for every fillable field in the kit."""
+    """One answer for every fillable field in the kit.
+
+    EVERY TYPE, derived from the schema rather than a hand-written list. An
+    earlier version was an if/elif over text/radio/checkbox_group with no
+    else, so `number` (57 on the f1040), `checkbox` (49), `date`, `textarea`
+    and `select` fell through unfilled -- and the "whole-form, nothing lost"
+    claim silently covered 68 of the f1040's 176 fields. Found in review; the
+    skipped types all worked, so it was a coverage ceiling rather than a bug,
+    which is exactly the kind of hole that hides the next one.
+
+    A type this does not know how to answer RAISES rather than being skipped,
+    so a future kit introducing one cannot quietly shrink the guarantee.
+    """
     schema = _kit_schema(kit)
     answers: dict = {}
+    unhandled: set = set()
+
     for field in schema["fields"]:
         kind = field.get("type")
-        if kind == "text" and field.get("pdf_field_name"):
-            answers[field["id"]] = "X"
-        elif kind in ("radio", "checkbox_group"):
+
+        if kind in ("radio", "checkbox_group"):
             options = field.get("options") or []
-            if options and options[0].get("pdf_field_name"):
-                value = options[0]["value"]
-                answers[field["id"]] = [value] if kind == "checkbox_group" else value
+            if not options or not options[0].get("pdf_field_name"):
+                continue
+            value = options[0]["value"]
+            answers[field["id"]] = [value] if kind == "checkbox_group" else value
+            continue
+
+        if not field.get("pdf_field_name"):
+            continue
+
+        if kind in ("text", "textarea", "tel", "select"):
+            # `select` values must be a real option where the schema lists any.
+            options = field.get("options") or []
+            answers[field["id"]] = (
+                options[0].get("value", "X") if options else "X"
+            )
+        elif kind == "number":
+            answers[field["id"]] = "42"
+        elif kind == "date":
+            answers[field["id"]] = "01/02/2026"
+        elif kind == "checkbox":
+            answers[field["id"]] = True
+        elif kind == "signature":
+            continue          # not client-fillable
+        else:
+            unhandled.add(kind)
+
+    assert not unhandled, (
+        f"{kit}: _answer_everything does not know how to fill {sorted(unhandled)} "
+        "-- add it rather than letting the whole-form guarantee shrink silently"
+    )
     return answers
+
 
 
 @pytest.mark.parametrize("kit", _ALL_KITS)
@@ -610,7 +651,21 @@ def test_EVERY_answer_survives_a_whole_form_round_trip(kit):
         pytest.skip(f"{kit} kit not present")
 
     answers = _answer_everything(kit)
-    assert len(answers) > 20, f"{kit}: only {len(answers)} fillable fields found"
+
+    # Derived from the schema, not a hand-picked floor: a >20 threshold let the
+    # f1040 drop from 68 fields to 21 and still pass.
+    schema = _kit_schema(kit)
+    fillable = [
+        f for f in schema["fields"]
+        if f.get("type") != "signature" and (
+            f.get("pdf_field_name")
+            or (f.get("options") or [{}])[0].get("pdf_field_name")
+        )
+    ]
+    assert len(answers) >= len(fillable), (
+        f"{kit}: filled {len(answers)} of {len(fillable)} fillable fields -- "
+        "the whole-form guarantee shrank"
+    )
 
     restored = _resume_kit(kit, _fill_kit(kit, answers))
 
