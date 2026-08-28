@@ -860,6 +860,17 @@ export const App: React.FC = () => {
           } catch {
             /* fall through to the log below */
           }
+          // An AUTH failure is not a stamp problem and must not be swallowed
+          // into a console line: it is the same 401/403 every other call site
+          // routes (bd polyglot-pdf-yswp3). stampKitReadinessRemote is the
+          // editor's OTHER direct fetch site -- it does not go through
+          // editorFetch -- which is exactly why this catch was missed for four
+          // review rounds. The stamp still degrades gracefully above; this only
+          // adds the routing.
+          if (stampErr instanceof AuthError || stampErr instanceof ForbiddenError) {
+            handleAuthExpired(stampErr);
+            return;
+          }
           console.warn('Could not refresh the kit readiness stamp:', stampErr);
         }
       }

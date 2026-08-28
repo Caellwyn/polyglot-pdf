@@ -139,6 +139,28 @@ Reloading cannot fix a missing role, so the two messages now split by cause.
 Local is not a bypass-only mode -- `run-schema-editor.sh` starts the real
 backend, and its author-only routes can refuse a real token on role.
 
+**Round 4: the guard passes trivially for a big file.** The last member was
+in `App.tsx` itself -- the readiness-stamp catch swallowed a 401/403 into a
+`console.warn` while the six catches above it all routed properly. Two
+reasons it survived four rounds: `stampKitReadinessRemote` lives in
+`localStamp.ts`, not the store, so the guard's function list never named it;
+and even after adding that module, `App.tsx` satisfies a per-FILE substring
+check many times over from unrelated imports.
+
+Both were fixed, but the second cannot be fixed by a source scan at all: a
+per-file check cannot express a per-call-site obligation. Verified rather
+than assumed -- re-deleting the routing leaves the guard green, and only the
+new behavioural test in `App.local-stamp.test.ts` goes red. The guard's
+docstring now says this outright, so the next reader treats it as a floor
+and not a ceiling.
+
+**The honest summary of four rounds on one set:** every round found a real
+bug, and every round I believed the set was closed. What actually converged
+it was not trying harder to enumerate -- it was moving the check to the
+OBLIGATION side (who calls something that can fail this way), and accepting
+that the residue needs behavioural tests per site. The cost was four review
+rounds on a bead whose feature work was done in the first commit.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;

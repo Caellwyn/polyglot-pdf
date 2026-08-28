@@ -26,6 +26,15 @@
  * to handle auth. A brand-new component that calls the store and ignores auth
  * entirely now fails, which is the case that actually shipped twice.
  *
+ * WHAT THIS FILE CANNOT DO, stated plainly so nobody trusts it too far: the
+ * check is per-FILE, not per-CALL-SITE. A file that handles auth on one call
+ * and swallows it on another passes -- which is exactly how App.tsx hid a
+ * swallowed 403 in its readiness-stamp catch through four review rounds (the
+ * file mentions AuthError many times over). Only a BEHAVIOURAL test pins an
+ * individual call site; see App.local-stamp.test.ts. This guard catches the
+ * whole-file omission, which is the failure that actually shipped twice, and
+ * is a floor rather than a ceiling.
+ *
  * The two secondary tests catch the narrower degradations of a site that IS
  * handling auth:
  *   - a narrow predicate (`instanceof AuthError` with no ForbiddenError);
@@ -38,7 +47,15 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const SRC = join(__dirname, '..');
-const STORE = join(SRC, 'utils', 'remoteKitStore.ts');
+// The store is the main network surface, but NOT the only one: localStamp.ts
+// builds its own request rather than going through editorFetch, and App's call
+// to it swallowed auth failures for four review rounds precisely because a
+// store-only scan could not see it. Any module that talks to the editor API
+// belongs here.
+const NETWORK_MODULES = [
+  join(SRC, 'utils', 'remoteKitStore.ts'),
+  join(SRC, 'utils', 'localStamp.ts'),
+];
 
 /** Every non-test source file under schema-editor/src.
  *
@@ -62,12 +79,21 @@ function sourceFiles(dir: string = SRC): string[] {
 
 const base = (f: string) => f.split(/[\\/]/).pop() as string;
 
-/** The store's network functions -- everything that goes through editorFetch
- * and can therefore raise AuthError/ForbiddenError. Read from the store
- * ITSELF so a newly added route is covered the day it lands. */
+/** Every exported network function across NETWORK_MODULES -- anything that can
+ * raise AuthError/ForbiddenError at a caller. Read from the modules THEMSELVES
+ * so a newly added route is covered the day it lands, and matched in both
+ * declaration styles (`export async function` and `export const x = async`) so
+ * a style change cannot silently shrink the set. */
 function networkFunctions(): string[] {
-  const src = readFileSync(STORE, 'utf8');
-  return [...src.matchAll(/^export async function (\w+)/gm)].map((m) => m[1]);
+  const names = new Set<string>();
+  for (const mod of NETWORK_MODULES) {
+    const src = readFileSync(mod, 'utf8');
+    for (const m of src.matchAll(/^export async function (\w+)/gm)) names.add(m[1]);
+    for (const m of src.matchAll(/^export const (\w+)\s*[:=][^=]*=>/gm)) names.add(m[1]);
+  }
+  // Not network calls -- pure local helpers exported from the same modules.
+  names.delete('invalidateLocalStamp');
+  return [...names];
 }
 
 describe('auth-failure routing (the SET, not an instance)', () => {
@@ -83,7 +109,7 @@ describe('auth-failure routing (the SET, not an instance)', () => {
 
     const offenders: string[] = [];
     for (const file of files) {
-      if (file === STORE) continue;
+      if (NETWORK_MODULES.includes(file)) continue;
       const src = readFileSync(file, 'utf8');
       const called = net.filter((fn) => new RegExp(`\\b${fn}\\s*\\(`).test(src));
       if (called.length === 0) continue;
