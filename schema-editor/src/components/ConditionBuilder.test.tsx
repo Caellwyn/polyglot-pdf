@@ -383,8 +383,13 @@ describe('ConditionBuilder: an unfilled select export code is never seeded (bd p
       source: 'pdf',
       form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
       parts: [],
-      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['state', 'target'] }],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['txt', 'state', 'target'] }],
       fields: [
+        // A text trigger FIRST, so "Add condition" lands here and the
+        // coerceAtom test has something to switch AWAY from. A text trigger's
+        // seeded value is '' -- which is exactly the value that must not be
+        // carried onto the half-authored select.
+        field({ id: 'txt', spoken_name: 'txt' }),
         field({
           id: 'state', type: 'select', spoken_name: 'state',
           options: [
@@ -411,8 +416,46 @@ describe('ConditionBuilder: an unfilled select export code is never seeded (bd p
     );
   }
 
-  it('seeds the first option that HAS a value, not the empty one', () => {
+  it('coerceAtom: SWITCHING the trigger to a half-authored select also skips the empty code', () => {
+    // defaultAtom runs on "Add condition"; coerceAtom runs on a trigger or
+    // operator CHANGE. They are separate code paths and need separate pins --
+    // reverting coerceAtom alone left the whole suite green (per-layer trap,
+    // CLAUDE.md scar: redundant guards need per-layer tests).
     render(<LocalHarness />);
+    fireEvent.click(screen.getByRole('button', { name: /Add condition/i }));
+    // Row starts on the first triggerable field; switch it to the select.
+    const triggerSel = screen.getByLabelText(/trigger field/i) as HTMLSelectElement;
+    fireEvent.change(triggerSel, { target: { value: 'state' } });
+
+    const atom: any = lastCondition;
+    const row = atom?.all_of?.[0] ?? atom;
+    expect(row.field).toBe('state');
+    expect(row.value).toBe('WY');
+    expect(row.value).not.toBe('');
+  });
+
+  it('defaultAtom: seeds the first option that HAS a value, not the empty one', () => {
+    // Only the select is triggerable here, so "Add condition" seeds from it
+    // directly -- this pins defaultAtom, the coerceAtom case is above.
+    function OnlySelectHarness() {
+      const base = schemaWithHalfAuthoredSelect();
+      const schema = {
+        ...base,
+        fields: base.fields.filter(f => f.id !== 'txt'),
+      } as unknown as FormSchema;
+      const [condition, setCondition] = useState<FieldCondition | undefined>(undefined);
+      lastCondition = condition;
+      return (
+        <ConditionBuilder
+          title="Shown when"
+          condition={condition}
+          selfId="target"
+          schema={schema}
+          onChange={(next) => { lastCondition = next; setCondition(next); }}
+        />
+      );
+    }
+    render(<OnlySelectHarness />);
     fireEvent.click(screen.getByRole('button', { name: /Add condition/i }));
     const atom: any = lastCondition;
     const seeded = atom?.all_of?.[0] ?? atom;

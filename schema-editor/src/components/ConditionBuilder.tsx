@@ -217,9 +217,16 @@ function coerceAtom(atom: ConditionalDisplay, trigger: FormField | undefined): C
     // Reads through safeOptions (not the local alias) so the options-consumer
     // guard test can see the read is protected.
     const seed = safeOptions(trigger!).find(o => o.value !== '' && o.value != null);
-    next.value = options.some(o => o.value === atom.value)
-      ? atom.value
-      : (seed?.value ?? options[0].value);
+    // An empty incoming value must NOT be kept just because a half-authored
+    // option happens to carry '' -- that is the invisible-condition case
+    // (schema_lint skips "" as the v1 emptiness idiom, so `equals ""` publishes
+    // clean while matching an unanswered dropdown live). It is reachable by
+    // switching a row's trigger from a text field, whose value is '', onto a
+    // select with an unfilled export code. Treat '' as "no value carried over"
+    // and re-seed; only a NON-empty in-set value is preserved.
+    const keep = atom.value !== '' && atom.value != null
+      && options.some(o => o.value === atom.value);
+    next.value = keep ? atom.value : (seed?.value ?? options[0].value);
   } else {
     next.value = Array.isArray(atom.value) ? '' : atom.value ?? '';
   }
