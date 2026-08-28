@@ -392,8 +392,21 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
     if not kits_root.is_dir():
         pytest.skip("form-kits/ not present in this checkout")
 
+    # SHIPPED kits = git-TRACKED kits (bd polyglot-pdf-2nikx, same fix as
+    # test_translation_lint's sweep): the on-disk tree can also hold untracked
+    # kits (bucket pulls via scripts/pull-form-kits.sh, editor scratch kits
+    # like form-3), which are non-deliverables -- sweeping them made this
+    # suite red on any machine that had pulled the bucket while green in CI.
+    import subprocess
+    tracked = subprocess.run(
+        ["git", "ls-files", "form-kits"], capture_output=True, text=True,
+        cwd=str(_REPO), check=True).stdout
+    tracked_kit_ids = {line.split("/")[1] for line in tracked.splitlines()
+                       if line.count("/") >= 2}
+
     checked_kits = 0
-    for kit in sorted(p for p in kits_root.iterdir() if p.is_dir()):
+    for kit in sorted(p for p in kits_root.iterdir()
+                      if p.is_dir() and p.name in tracked_kit_ids):
         schema_path = kit / "schema.json"
         # form.pdf BY CONVENTION, never glob order: a kit can ship extra PDFs
         # (i-90 has i-90-annotated.pdf), and comparing geometry against the
