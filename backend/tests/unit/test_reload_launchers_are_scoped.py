@@ -103,11 +103,17 @@ def _files_launching_uvicorn_reload():
 def test_the_launcher_set_is_non_empty():
     """Guard the guard: if the discovery pattern silently stops matching, the
     per-launcher test below would vacuously pass with nothing to check."""
+    # Bare Paths, NOT (path, text) pairs -- unpacking as a 2-tuple here raised
+    # TypeError instead of printing the diagnostic, and only a TOTAL discovery
+    # failure hid it (an empty generator never iterates). A partial regression,
+    # which is the likely one, would have lost the message it exists to give.
     found = _files_launching_uvicorn_reload()
-    assert len(found) >= 4, (
-        "expected to discover the known uvicorn --reload launchers "
-        "(dev-local.sh, dev-local.ps1, dev_env.ps1, README.md); found: "
-        + ", ".join(str(p.relative_to(REPO_ROOT)) for p, _ in found)
+    rendered = ", ".join(p.relative_to(REPO_ROOT).as_posix() for p in found)
+    assert len(found) >= 5, (
+        "expected to discover the known uvicorn --reload launcher FILES "
+        "(dev-local.sh, dev-local.ps1, dev_env.ps1, start-token-monitor.sh, "
+        "README.md, DEBUG_PDF_FILLING.md, test-pdf-filling.md); found "
+        f"{len(found)}: {rendered}"
     )
 
 
