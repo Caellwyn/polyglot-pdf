@@ -1,0 +1,194 @@
+"""Structural identity of a PDF form, ignoring what anyone typed into it.
+
+bd polyglot-pdf-dft1. An uploaded resume PDF is ATTACKER-CONTROLLED INPUT. The
+client picked it off their own disk, so "it parsed" is not "it is the form we
+sent them". Maintainer, 2026-08-27: *"a thorough check that it matches the form
+they were assigned. I'd want a byte match on everything except the field data
+to help prevent bad actors from using this for prompt injection or some other
+attack."*
+
+WHY NOT AN ACTUAL BYTE MATCH. Measured before this was written: filling the
+SAME kit twice with identical values produces DIFFERENT bytes -- same length,
+different sha256 -- because PDFs embed creation timestamps and internal object
+ids. A literal byte comparison would refuse every legitimate resume. So this
+digests the STRUCTURE, which is what "everything except the field data"
+actually means:
+
+  - page count, and each page's geometry
+  - the complete widget inventory: field name, type, and position
+  - a hash of each page's STATIC text -- the form's own printed labels, with
+    every word inside a widget's area excluded, because a filled field renders
+    its value into the page and that value is exactly what must NOT count
+
+Measured properties: stable across runs, and IDENTICAL for the same form
+carrying completely different answers.
+
+WHAT IT CATCHES (each verified against the shipped W-7 kit):
+  - a different form entirely
+  - text injected onto a page -- the prompt-injection vector
+  - an added widget, i.e. a smuggled field
+  - a moved widget, i.e. relabelling one field as another's position
+  - an added page
+
+THE COMPARISON TARGET CONTAINS NO CLIENT INPUT. The kit is resolved from the
+LINK's kit_id, which is already authoritative (bd ugm6: the token's kit beats
+the handshake's), and compared against that kit's own form.pdf on disk. The
+uploaded file never chooses what it is checked against.
+
+THIS BELONGS SERVER-SIDE. A client-side check is defeated by a client-side
+attacker. The browser may compute a digest for a fast local hint, but the
+decision is made here.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from typing import Any, Optional
+
+import structlog
+
+_log = structlog.get_logger(__name__)
+
+# Widget rects are floats; round before hashing so trivial re-serialisation
+# noise does not read as tampering. Two decimal places is ~1/50th of a point,
+# far finer than any meaningful field move.
+_RECT_PRECISION = 2
+
+
+class StructureMismatch(Exception):
+    """An upload is not structurally the form it claims to resume."""
+
+
+def _widget_line(widget: Any) -> str:
+    rect = getattr(widget, "rect", None)
+    coords = (
+        [round(float(v), _RECT_PRECISION) for v in rect] if rect is not None else []
+    )
+    return "{name}|{ftype}|{rect}".format(
+        name=getattr(widget, "field_name", "") or "",
+        ftype=getattr(widget, "field_type", ""),
+        rect=coords,
+    )
+
+
+def _static_text_digest(page: Any) -> str:
+    """Hash the page's printed text, excluding anything inside a widget.
+
+    Word-level rather than block-level: a block can span both a label and the
+    field beside it, which would drag the client's answer back into the hash.
+    """
+    import fitz
+
+    widget_rects = [w.rect for w in page.widgets()]
+    words: list[str] = []
+    for x0, y0, x1, y1, word, *_rest in page.get_text("words"):
+        rect = fitz.Rect(x0, y0, x1, y1)
+        if any(rect.intersects(box) for box in widget_rects):
+            continue
+        words.append(word)
+    return hashlib.sha256(" ".join(words).encode("utf-8")).hexdigest()
+
+
+def structure_digest(doc: Any) -> str:
+    """A stable fingerprint of everything about this PDF except field VALUES.
+
+    Takes an open PyMuPDF document. The caller owns opening and closing it --
+    this must not close a document it did not open.
+    """
+    parts: list[str] = [str(doc.page_count)]
+    for index, page in enumerate(doc):
+        parts.append("P{i}:{rect}".format(i=index, rect=page.rect))
+        # Sorted by field name so widget ORDER in the file cannot change the
+        # digest -- re-saving a PDF may reorder objects without changing what
+        # the form is.
+        widgets = sorted(
+            page.widgets(), key=lambda w: (getattr(w, "field_name", "") or "")
+        )
+        for widget in widgets:
+            parts.append(_widget_line(widget))
+        # The page's STATIC text -- the form's own printed labels and
+        # instructions -- with every word inside a widget's rect excluded.
+        #
+        # WHY EXCLUDE WIDGET AREAS. A filled field renders its value INTO the
+        # page, so hashing raw page text would hash the client's answers and
+        # refuse every legitimate resume. Caught by the happy-path test, which
+        # is why that test exists alongside the attack ones: the first version
+        # of this digest passed all 8 attack tests and rejected every real
+        # client.
+        #
+        # Injection is still caught: text added anywhere the form does not
+        # already have a field lands OUTSIDE every widget rect and changes
+        # this hash. Text hidden UNDER a widget would be covered by that
+        # field's own rendering, and the widget inventory above pins the
+        # rects themselves.
+        parts.append(_static_text_digest(page))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
+def digest_of_bytes(pdf_bytes: bytes) -> Optional[str]:
+    """Digest raw PDF bytes. Returns None when they are not a readable PDF.
+
+    Never raises: this is fed a file a client chose, which may be a photo, a
+    truncated download, or something hostile. The caller turns None into "we
+    could not read that file", which is a different message from "that is not
+    your form".
+    """
+    import fitz  # local import: PyMuPDF is heavy and only needed on this path
+
+    doc = None
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        return structure_digest(doc)
+    except Exception as exc:  # noqa: BLE001 -- any unreadable file is just None
+        _log.info("pdf_structure_unreadable", error=str(exc))
+        return None
+    finally:
+        if doc is not None:
+            try:
+                doc.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def assert_matches_kit_form(
+    uploaded_bytes: bytes,
+    kit_form_path: str,
+) -> None:
+    """Raise StructureMismatch unless the upload IS the kit's form.
+
+    `kit_form_path` comes from the link's kit, never from the upload. On
+    mismatch we refuse outright rather than attempting partial recovery: a
+    structural difference means either the wrong file or a tampered one, and
+    neither should reach form state.
+    """
+    import fitz
+
+    uploaded = digest_of_bytes(uploaded_bytes)
+    if uploaded is None:
+        raise StructureMismatch("unreadable pdf")
+
+    reference = None
+    doc = None
+    try:
+        doc = fitz.open(kit_form_path)
+        reference = structure_digest(doc)
+    except Exception as exc:  # noqa: BLE001
+        # The kit's own form is missing or broken. FAIL CLOSED: without a
+        # reference we cannot tell a good upload from a hostile one, and
+        # admitting it "because we could not check" is the wrong direction.
+        _log.error("kit_form_unreadable", path=kit_form_path, error=str(exc))
+        raise StructureMismatch("reference form unavailable") from exc
+    finally:
+        if doc is not None:
+            try:
+                doc.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    if uploaded != reference:
+        _log.warning(
+            "resume_upload_structure_mismatch",
+            uploaded=uploaded[:16],
+            expected=reference[:16],
+        )
+        raise StructureMismatch("upload does not match the assigned form")
