@@ -357,6 +357,67 @@ function validateNumberValue(field: FormField, value: any, rules: ValidationRule
 }
 
 /**
+ * Parse a date string against the field's declared layout, falling back to
+ * ISO (YYYY-MM-DD) -- mirrors the backend's _parse_bound
+ * (backend/utils/field_validator.py), which tries the field's own layout AND
+ * ISO before giving up on a min/max bound. Returns plain {year, month, day}
+ * components (month 1-indexed) rather than a Date, so callers compare dates
+ * numerically instead of through `new Date()` (see bd polyglot-pdf-8i3rs:
+ * `new Date("2007-10-13")` parses as UTC midnight while
+ * `new Date("10/13/2007")` parses as LOCAL midnight, so comparing two Date
+ * objects built from a mixed value/bound format pair is timezone-dependent
+ * and can wrongly reject a value exactly equal to its bound). Returns null
+ * if neither layout matches.
+ *
+ * Only the two layouts this repo's shipped kits + this bug's exit criterion
+ * actually need (MM/DD/YYYY, the declared-layout case; YYYY-MM-DD, the ISO
+ * fallback every bound may be authored in) are covered -- this is
+ * deliberately narrower than the backend's full _DATE_LAYOUTS/prose-matching
+ * chain (_resolve_date_format), which is a much larger port out of scope for
+ * this bead. A value/bound pair in some other layout falls through to the
+ * pre-existing `new Date()` behavior via the caller's fallback.
+ */
+function parseDateComponents(
+  raw: string,
+  declaredFormat: string | undefined
+): { year: number; month: number; day: number } | null {
+  const trimmed = raw.trim();
+
+  const isMmDdYyyy =
+    declaredFormat !== undefined &&
+    /^mm\/dd\/yyyy$/i.test(declaredFormat.trim());
+  if (isMmDdYyyy) {
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+    if (m) {
+      return { year: Number(m[3]), month: Number(m[1]), day: Number(m[2]) };
+    }
+  }
+
+  // ISO (YYYY-MM-DD) -- the default layout, and every bound's fallback.
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
+  if (iso) {
+    return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) };
+  }
+
+  return null;
+}
+
+/** year*10000 + month*100 + day -- a numeric key two {year,month,day} dates
+ * can compare directly, with no timezone conversion involved anywhere. */
+function dateComponentsKey(c: { year: number; month: number; day: number }): number {
+  return c.year * 10000 + c.month * 100 + c.day;
+}
+
+/** MM/DD/YYYY display string from components, matching formatDate's style
+ * without constructing a Date (which would reintroduce the same
+ * UTC/local-midnight ambiguity this fix exists to avoid). */
+function formatDateComponents(c: { year: number; month: number; day: number }): string {
+  const mm = String(c.month).padStart(2, "0");
+  const dd = String(c.day).padStart(2, "0");
+  return `${mm}/${dd}/${c.year}`;
+}
+
+/**
  * Validate date values
  */
 function validateDateValue(field: FormField, value: string, rules: ValidationRules): string | null {
@@ -397,6 +458,12 @@ function validateDateValue(field: FormField, value: string, rules: ValidationRul
     }
   }
 
+  // Declared layout (e.g. "MM/DD/YYYY"), for parsing the VALUE and BOUNDS
+  // against the same layout instead of handing mixed-format strings to
+  // `new Date()` (bd polyglot-pdf-8i3rs -- see parseDateComponents).
+  const declaredFormat = field.help?.format_hint;
+  const valueComponents = parseDateComponents(value, declaredFormat);
+
   // Min date. Prefer the canonical field.min_date; fall back to a top-level
   // min folded into the rules (Codex PR #145 round 2): some date fields carry
   // their bounds as top-level min/max string dates (e.g. adult_intake `dob`:
@@ -405,18 +472,40 @@ function validateDateValue(field: FormField, value: string, rules: ValidationRul
   // number (numeric fields) -- guard to strings/date-likes only.
   const minDateSource = field.min_date ?? asDateBound(rules.min);
   if (minDateSource) {
-    const minDate = new Date(minDateSource);
-    if (!isNaN(minDate.getTime()) && dateValue < minDate) {
-      return `${field.name} must be on or after ${formatDate(minDate)}`;
+    const minComponents = valueComponents
+      ? parseDateComponents(minDateSource, declaredFormat)
+      : null;
+    if (valueComponents && minComponents) {
+      if (dateComponentsKey(valueComponents) < dateComponentsKey(minComponents)) {
+        return `${field.name} must be on or after ${formatDateComponents(minComponents)}`;
+      }
+    } else {
+      // Fallback: either the value or the bound did not parse against the
+      // declared/ISO layout pair (an unusual layout this narrower fix does
+      // not cover) -- preserve the PRE-EXISTING new Date() comparison so
+      // that case is no worse off than before this fix.
+      const minDate = new Date(minDateSource);
+      if (!isNaN(minDate.getTime()) && dateValue < minDate) {
+        return `${field.name} must be on or after ${formatDate(minDate)}`;
+      }
     }
   }
 
   // Max date (same fallback to a top-level max).
   const maxDateSource = field.max_date ?? asDateBound(rules.max);
   if (maxDateSource) {
-    const maxDate = new Date(maxDateSource);
-    if (!isNaN(maxDate.getTime()) && dateValue > maxDate) {
-      return `${field.name} must be on or before ${formatDate(maxDate)}`;
+    const maxComponents = valueComponents
+      ? parseDateComponents(maxDateSource, declaredFormat)
+      : null;
+    if (valueComponents && maxComponents) {
+      if (dateComponentsKey(valueComponents) > dateComponentsKey(maxComponents)) {
+        return `${field.name} must be on or before ${formatDateComponents(maxComponents)}`;
+      }
+    } else {
+      const maxDate = new Date(maxDateSource);
+      if (!isNaN(maxDate.getTime()) && dateValue > maxDate) {
+        return `${field.name} must be on or before ${formatDate(maxDate)}`;
+      }
     }
   }
 
