@@ -571,3 +571,87 @@ def test_an_UNREADABLE_kit_is_a_502_not_an_unhandled_500():
     assert exc.value.status_code in (404, 502), (
         f"an unreadable kit produced {exc.value.status_code}, not a handled error"
     )
+
+
+# ---------------------------------------------------------------------------
+# WHOLE-FORM round trip -- found in review round 4
+# ---------------------------------------------------------------------------
+#
+# Every earlier test filled ONE field. That is how an i-90 client losing 98 of
+# 110 answers survived four rounds: the widget lookup was exact-key, the i-90
+# names widgets fully-qualified while its schema maps the bare leaf, and a
+# single-field test on the W-7 (which matches exactly) could never see it.
+
+
+def _answer_everything(kit: str) -> dict:
+    """One answer for every fillable field in the kit."""
+    schema = _kit_schema(kit)
+    answers: dict = {}
+    for field in schema["fields"]:
+        kind = field.get("type")
+        if kind == "text" and field.get("pdf_field_name"):
+            answers[field["id"]] = "X"
+        elif kind in ("radio", "checkbox_group"):
+            options = field.get("options") or []
+            if options and options[0].get("pdf_field_name"):
+                value = options[0]["value"]
+                answers[field["id"]] = [value] if kind == "checkbox_group" else value
+    return answers
+
+
+@pytest.mark.parametrize("kit", _ALL_KITS)
+def test_EVERY_answer_survives_a_whole_form_round_trip(kit):
+    """Fill the entire form, save, resume: nothing lost, nothing altered.
+
+    The strongest statement of what this feature promises, and the only shape
+    that catches a lookup which works on one kit's naming and not another's.
+    """
+    if not (_KITS / kit / "form.pdf").exists():
+        pytest.skip(f"{kit} kit not present")
+
+    answers = _answer_everything(kit)
+    assert len(answers) > 20, f"{kit}: only {len(answers)} fillable fields found"
+
+    restored = _resume_kit(kit, _fill_kit(kit, answers))
+
+    lost = sorted(set(answers) - set(restored))
+    assert not lost, f"{kit}: {len(lost)} of {len(answers)} answers lost, e.g. {lost[:5]}"
+
+    wrong = {
+        k: (answers[k], restored[k])
+        for k in answers
+        if restored.get(k) != answers[k]
+    }
+    assert not wrong, f"{kit}: answers came back CHANGED: {list(wrong.items())[:3]}"
+
+
+@pytest.mark.parametrize("kit", _ALL_KITS)
+def test_a_SUFFIX_named_widget_still_resolves(kit):
+    """XFA PDFs name widgets with a full path; schemas may map the bare leaf.
+
+    On the i-90 that is ALL 114 direct mappings -- 0 exact, 114 suffix-only.
+    An exact-key lookup lost every text answer on the only status:complete
+    kit while the fill path wrote them correctly, because find_widget already
+    falls back to endswith.
+    """
+    if not (_KITS / kit / "form.pdf").exists():
+        pytest.skip(f"{kit} kit not present")
+
+    import fitz as _fitz
+
+    schema = _kit_schema(kit)
+    doc = _fitz.open(str(_KITS / kit / "form.pdf"))
+    try:
+        present = [w.field_name for page in doc for w in page.widgets()]
+    finally:
+        doc.close()
+
+    named = [f["pdf_field_name"] for f in schema["fields"] if f.get("pdf_field_name")]
+    unresolvable = [
+        n for n in named
+        if n not in present and not any(w.endswith(n) for w in present)
+    ]
+    assert not unresolvable, (
+        f"{kit}: schema names widgets that resolve NEITHER exactly nor by "
+        f"suffix: {unresolvable[:5]}"
+    )

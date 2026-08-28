@@ -982,25 +982,49 @@ async def resume_form(
 				name = widget.field_name
 				value = widget.field_value
 
+				# RESOLVE THE MAPPING FIRST. The /AS read below was gated on an
+				# EXACT key match, but the i-90's widgets match only by suffix
+				# -- so the read was skipped for every one of them and 7 real
+				# radio answers stayed lost even after the fallback was added.
+				# Resolve, then read.
+				mapped = by_widget.get(name)
+				if not mapped:
+					# SUFFIX FALLBACK, mirroring find_widget in the FILL path:
+					# XFA PDFs name widgets with a full path
+					# ("form1[0].#subform[0].P1_Line1_AlienNumber[0]") while a
+					# schema may map the bare leaf. On the i-90 that is ALL 114
+					# direct mappings -- 0 exact, 114 suffix-only -- so an
+					# exact-key lookup lost every text answer on the only
+					# status:complete kit, while the fill path wrote them
+					# correctly. Exact wins first, the same precedence
+					# find_widget uses.
+					mapped = next(
+						(m for widget_name, m in by_widget.items()
+						 if name.endswith(widget_name)),
+						None,
+					)
+				if not mapped:
+					continue
+
 				# A CHECKED BOX HIDES IN /AS, NOT IN field_value. On these XFA
 				# forms the fill path writes the on-state to the appearance key
 				# and deliberately does not call update(), so /V stays "Off"
 				# while /AS holds the on-state -- and PyMuPDF reports
 				# field_value as "Off" for a box the client genuinely ticked.
 				# Measured through the REAL /api/fill-pdf route.
-				if widget.field_type == 2 and name in by_widget:
+				if widget.field_type == 2:
 					try:
 						raw = doc.xref_get_key(widget.xref, "AS")
 					except Exception:  # noqa: BLE001 -- a missing key is not an answer
 						raw = None
 					if raw and raw[0] == "name" and isinstance(raw[1], str):
-						value = raw[1].lstrip("/")
+						# Strip the leading "/" AND surrounding whitespace: the
+						# i-90 has on-states like "/ STE " and "/ APT ", so a
+						# bare lstrip("/") left " STE " and the emptiness check
+						# below discarded it.
+						value = raw[1].lstrip("/").strip()
 
 				if not name or not isinstance(value, str) or not value.strip():
-					continue
-
-				mapped = by_widget.get(name)
-				if not mapped:
 					continue
 
 				if mapped["kind"] == "direct":
