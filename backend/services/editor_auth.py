@@ -173,19 +173,19 @@ def verify_editor_token(token: str) -> EditorActor:
 
 async def require_editor_actor(
     authorization: Annotated[Optional[str], Header()] = None,
-    x_editor_token: Annotated[Optional[str], Header()] = None,
 ) -> EditorActor:
     """FastAPI dependency: the caller, as a person, with editor or author role.
 
     Author strictly includes editor, so routes needing only editor accept both --
     the same rule the shared-token guards used.
 
-    Reads the ID token from EITHER `Authorization: Bearer` (the standard, and
-    what a Firebase client sends) or `X-Editor-Token` (the header this surface
-    has always used). Accepting both is what lets the frontend move over in its
-    own child bead rather than having to land in the same commit as the server
-    -- the header carries a per-user ID token either way, so this is a transport
-    detail, not a second auth path.
+    `Authorization: Bearer` ONLY. The `X-Editor-Token` header this surface used
+    to accept is gone (bd polyglot-pdf-rhc2v): it existed so the frontend could
+    move to per-user sign-in in its own bead without landing in the same commit
+    as the server, and that move has shipped and is proven on the live editor.
+    Keeping a second accepted header past its cutover is how a retired path
+    comes back silently -- the server would have gone on accepting it, so
+    nothing would have failed loudly.
     """
     # The bypass is checked FIRST, as backend/services/auth.py does for the
     # voice app. Behind the header check it was unreachable without a token, so
@@ -200,8 +200,6 @@ async def require_editor_actor(
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization[7:]
-    elif x_editor_token:
-        token = x_editor_token
     if not token:
         raise HTTPException(status_code=401, detail="Sign-in required")
     return verify_editor_token(token)

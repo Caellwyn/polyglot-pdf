@@ -17,9 +17,10 @@
 #      (Mappings persist in .firebaserc "targets"; this repo ships the demo
 #      mapping already -- re-run target:apply only for a NEW project/site.)
 #   3. Grant each person editor access (bd polyglot-pdf-hn0jq): there is no
-#      shared secret any more (a SCHEMA_EDITOR_TOKEN / SCHEMA_AUTHOR_TOKEN
-#      env var, if still set on the backend, is dead config nothing reads --
-#      per-person Firebase custom claims are the only gate now). REQUIRED
+#      shared secret any more -- per-person Firebase custom claims are the
+#      only gate, and the old SCHEMA_EDITOR_TOKEN / SCHEMA_AUTHOR_TOKEN env
+#      vars were deleted outright in bd polyglot-pdf-rhc2v (inert if still
+#      attached to a deployed service; drop them at the next deploy). REQUIRED
 #      before anyone's first sign-in: the editor signs them in with Firebase
 #      (bd polyglot-pdf-yswp3), and a valid account with no role claim is then
 #      refused with 403 ("This account does not have schema editor access"):

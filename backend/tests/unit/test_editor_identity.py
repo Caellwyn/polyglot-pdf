@@ -256,6 +256,86 @@ def test_a_missing_bearer_header_is_401(monkeypatch):
     assert exc.value.status_code == 401
 
 
+def test_the_RETIRED_X_Editor_Token_header_is_refused(monkeypatch):
+    """Exit criterion 2 (bd polyglot-pdf-rhc2v): the shared-secret header is
+    GONE, not merely unused.
+
+    It was accepted alongside Authorization: Bearer purely so the frontend
+    could cut over in its own bead without landing in the same commit as the
+    server. That cutover shipped and is proven on the live editor, so the
+    second door closes -- and it has to close LOUDLY. While the server still
+    accepted the header, a client that regressed to sending it would have kept
+    working, so nothing would have failed until someone noticed the shared
+    secret had quietly come back.
+
+    Asked of the DEPENDENCY, not of a route: FastAPI binds header params by
+    name, so the only way to prove the header is no longer read is that the
+    signature no longer takes it and a caller supplying it gets 401.
+    """
+    import inspect
+
+    # It cannot be passed at all any more.
+    params = inspect.signature(ea.require_editor_actor).parameters
+    assert "x_editor_token" not in params, (
+        "require_editor_actor still declares an x_editor_token header param, so "
+        "FastAPI still binds X-Editor-Token and the retired shared-secret path "
+        "is still open: " + repr(list(params))
+    )
+
+    # And with the bypass off, a caller who sends nothing else is refused.
+    monkeypatch.delenv("VFF_DISABLE_AUTH", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        _run(ea.require_editor_actor(authorization=None))
+    assert exc.value.status_code == 401
+
+
+def test_the_test_shim_handles_BOTH_header_shapes():
+    """The conftest bearer shim is autouse across the WHOLE backend suite.
+
+    httpx accepts headers as a mapping OR as a list of (name, value) pairs. The
+    first cut called .items() unconditionally, so a future non-editor test using
+    the list form would have crashed with an AttributeError raised from
+    conftest -- nowhere near its own subject, and mystifying to whoever hit it
+    (cross-surface review, bd polyglot-pdf-rhc2v).
+
+    Imports THE REAL function rather than re-implementing it: a test that
+    copies the logic guards a copy, and a copy drifts.
+    """
+    from backend.tests.conftest import bearerize_headers
+
+    # Mapping form.
+    out = bearerize_headers({"X-Editor-Token": "tok"})
+    assert out["Authorization"] == "Bearer tok"
+
+    # THE CASE THAT USED TO CRASH.
+    out = bearerize_headers([("X-Editor-Token", "tok")])
+    assert ("Authorization", "Bearer tok") in out
+
+    # An existing Authorization always wins -- the shim fills a gap, it never
+    # overrides a credential a test deliberately set.
+    out = bearerize_headers({"X-Editor-Token": "tok", "Authorization": "Bearer real"})
+    assert out["Authorization"] == "Bearer real"
+    out = bearerize_headers([("X-Editor-Token", "tok"), ("Authorization", "Bearer real")])
+    assert sum(1 for k, _ in out if k.lower() == "authorization") == 1
+
+    # No token -> untouched, so non-editor tests are unaffected.
+    assert bearerize_headers({"Accept": "application/json"}) == {"Accept": "application/json"}
+
+
+def test_the_shared_token_SETTINGS_are_gone(monkeypatch):
+    """The other half of criterion 1: dead config is a trap for the next
+    author, who reads a setting's presence as "this is how auth works here"."""
+    from backend.config import Settings
+
+    fields = set(Settings.model_fields)
+    for name in ("SCHEMA_EDITOR_TOKEN", "SCHEMA_AUTHOR_TOKEN"):
+        assert name not in fields, (
+            name + " is still a Settings field. Nothing reads it -- per-user "
+            "Firebase identity replaced it -- so its presence only teaches the "
+            "next reader a mechanism that no longer exists."
+        )
+
+
 def test_an_editor_is_refused_the_author_gate():
     with pytest.raises(HTTPException) as exc:
         _run(require_author_actor(EditorActor(uid="u", role="editor")))
@@ -486,7 +566,9 @@ def test_a_mutating_action_records_WHICH_person_acted(tmp_path, monkeypatch):
     c = TestClient(app)
     for token in ("maria-token", "sam-token"):
         r = c.put("/api/editor/kits/w7/schema", json={"fields": []},
-                  headers={"X-Editor-Token": token})
+                  # Bearer, as a real client sends -- the X-Editor-Token path
+                  # was retired with the shared tokens (bd polyglot-pdf-rhc2v).
+                  headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200, r.text
 
     saves = [e for e in captured if e.get("event") == "editor_schema_saved"]
@@ -1006,7 +1088,7 @@ def test_the_local_bypass_works_with_NO_header_at_all(monkeypatch):
     """
     monkeypatch.setattr(ea, "_dev_bypass_allowed", lambda: True)
 
-    actor = _run(ea.require_editor_actor(authorization=None, x_editor_token=None))
+    actor = _run(ea.require_editor_actor(authorization=None))
 
     assert actor.role == ea.ROLE_AUTHOR
     assert actor.label(), "the bypass actor must still name somebody"

@@ -944,14 +944,6 @@ class Settings(BaseModel):
 		"letters they gave -> call name_spellback -> stay silent."
 	)
 
-	# RETIRED (bd polyglot-pdf-hn0jq): these were the original shared-secret
-	# gate for /api/editor/* (EDITOR / AUTHOR tiers). The routes now
-	# authenticate per-person via backend/services/editor_auth.py (a Firebase
-	# ID token + the schema_editor_role custom claim, granted by
-	# scripts/bootstrap_editor_user.py) -- nothing reads these two settings
-	# any more. Left declared for bd polyglot-pdf-rhc2v to remove outright.
-	SCHEMA_EDITOR_TOKEN: str | None = os.getenv("SCHEMA_EDITOR_TOKEN")
-	SCHEMA_AUTHOR_TOKEN: str | None = os.getenv("SCHEMA_AUTHOR_TOKEN")
 	# Extra CORS origins (comma-separated), e.g. the hosted schema-editor site.
 	# The editor calls Cloud Run directly (not via the Hosting /api rewrite,
 	# whose 60s cap would kill minutes-long extraction), so its origin must be

@@ -111,31 +111,22 @@ if [ "$START_BACKEND" = "1" ]; then
     fi
     echo "  Text provider: ${EDITOR_PROVIDER}"
 
-    # The editor API is fail-CLOSED: with NEITHER token configured every
-    # /api/editor route 503s ("the editor surface is not configured"), and a
-    # request without a matching X-Editor-Token is 401. So a local backend
-    # started with no tokens is a backend the editor cannot actually use -- the
-    # lint would silently return nothing and the staleness gate would look
-    # clean, which is the exact failure this whole change exists to remove.
+    # WHAT AUTHENTICATES THE LOCAL EDITOR: the dev bypass, and nothing else.
+    # There is no shared secret left to mint -- bd polyglot-pdf-hn0jq moved the
+    # surface to per-user Firebase identity and bd polyglot-pdf-rhc2v deleted
+    # the tokens outright. A minted value would reach verify_id_token and 401
+    # every /api/editor/* call.
     #
-    # Mint a random per-run token and hand the SAME value to both sides. It is
-    # author-tier because local dev is full author tier (App.tsx treats
-    # !hosted as author), and it never leaves this machine: the backend binds
-    # 127.0.0.1 only. Respect an operator-supplied token if there is one.
-    # bd polyglot-pdf-hn0jq replaced the shared secrets with per-user Firebase
-    # identity, so the minted token below is no longer a credential the backend
-    # can verify -- it would reach verify_id_token and 401 every /api/editor/*
-    # call. The local stack takes the same posture dev-local.ps1 already does:
-    # run with the auth bypass on. editor_auth refuses the bypass outright on a
-    # deployed instance (K_SERVICE), and this backend binds 127.0.0.1 only.
+    # Getting this wrong is not loud, which is why it is spelled out: a local
+    # backend the editor cannot authenticate against still SERVES -- the lint
+    # just returns nothing, and an empty findings panel reads as a clean schema
+    # rather than an auth failure (bd borq, the bug this whole launcher path
+    # exists to prevent).
+    #
+    # Same posture dev-local.ps1 takes. editor_auth refuses the bypass outright
+    # on a deployed instance (K_SERVICE), and this backend binds 127.0.0.1 only,
+    # so it cannot leak past this machine.
     export VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}"
-
-    if [ -z "$SCHEMA_AUTHOR_TOKEN" ]; then
-        SCHEMA_AUTHOR_TOKEN="$(
-            "$VENV_PYTHON" -c 'import secrets; print(secrets.token_urlsafe(24))' \
-            2>/dev/null || echo "local-dev-$$"
-        )"
-    fi
 
     # Scope the reload watcher to backend/ by making backend/ the process CWD.
     # --reload-dir ALONE cannot do this: uvicorn's WatchFiles supervisor drops
@@ -161,7 +152,6 @@ if [ "$START_BACKEND" = "1" ]; then
         PYTHONPATH="$ROOT_DIR" \
         PYTHONUNBUFFERED=1 \
         EDITOR_TEXT_PROVIDER="$EDITOR_PROVIDER" \
-        SCHEMA_AUTHOR_TOKEN="$SCHEMA_AUTHOR_TOKEN" \
         VFF_DISABLE_AUTH="$VFF_DISABLE_AUTH" \
         GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
         "$VENV_PYTHON" -m uvicorn backend.main:app \
@@ -177,8 +167,8 @@ if [ "$START_BACKEND" = "1" ]; then
     # `uvicorn --reload` forks a reloader child under it -- killing the parent
     # alone orphans that child, which keeps :8000 bound. The next launch then
     # fails to bind, the readiness probe finds the OLD backend still answering
-    # /health with the OLD token, and every editor call 401s. The sibling
-    # launcher documents the same hazard (scripts/dev-local.ps1: "taskkill /T
+    # /health -- a stale instance serving a stale form-kits root and stale code.
+    # The sibling launcher documents the same hazard (scripts/dev-local.ps1: "taskkill /T
     # kills the WHOLE process tree ... would orphan those and leave port
     # 8000/5173 bound for the next run").
     trap 'stop_backend' EXIT INT TERM
