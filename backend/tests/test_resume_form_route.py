@@ -261,3 +261,81 @@ def test_unchecked_checkboxes_never_arrive_as_answers():
 
     assert "Off" not in returned.values()
     assert set(returned) <= ids
+
+
+# ---------------------------------------------------------------------------
+# The REAL round trip: fill -> save -> resume
+# ---------------------------------------------------------------------------
+
+
+def _fill_via_route(field_values: dict) -> bytes:
+    """Fill through the REAL /api/fill-pdf, the way a client's answers land.
+
+    Hand-building a PDF with widget.update() does NOT reproduce it: these XFA
+    checkboxes are filled by writing the on-state to /AS WITHOUT update(), and
+    a hand-built fixture silently reverts to Off. A probe that did it by hand
+    "proved" radio answers were lost when the setup had simply never checked
+    the box.
+    """
+    from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf
+
+    resp = asyncio.run(fill_pdf(PDFFillRequest(
+        kit_id="w7",
+        pdf_filename="form.pdf",
+        field_values=field_values,
+        form_schema=_schema(),
+    )))
+    assert resp.status_code == 200
+    return resp.body
+
+
+def test_a_RADIO_answer_survives_fill_save_resume():
+    """Radio and checkbox_group fields map per OPTION, not at the top level.
+
+    On the W-7 that is application_type, reason and sex -- the form's core
+    routing questions. Reading only top-level pdf_field_name restored the
+    client's text and silently lost every box they ticked.
+    """
+    schema = _schema()
+    radio = next(f for f in schema["fields"] if f.get("type") == "radio" and f.get("options"))
+    option = radio["options"][0]
+
+    restored = _call(_fill_via_route({radio["id"]: option["value"]}))["field_values"]
+
+    assert restored.get(radio["id"]) == option["value"]
+
+
+def test_a_checked_box_is_not_read_as_Off():
+    """The state lives in /AS; /V stays "Off" on these forms.
+
+    So `widget.field_value` reports "Off" for a box the client genuinely
+    ticked -- measured through the real fill route.
+    """
+    schema = _schema()
+    radio = next(f for f in schema["fields"] if f.get("type") == "radio" and f.get("options"))
+    option = radio["options"][0]
+
+    restored = _call(_fill_via_route({radio["id"]: option["value"]}))["field_values"]
+
+    assert "Off" not in restored.values()
+    assert restored, "a checked radio restored nothing at all"
+
+
+def test_text_and_radio_answers_survive_TOGETHER():
+    schema = _schema()
+    radio = next(f for f in schema["fields"] if f.get("type") == "radio" and f.get("options"))
+    option = radio["options"][0]
+    text = next(
+        f for f in schema["fields"]
+        if f.get("pdf_field_name") and f.get("type") == "text"
+    )
+
+    restored = _call(_fill_via_route({
+        radio["id"]: option["value"],
+        text["id"]: "Okonkwo",
+    }))["field_values"]
+
+    assert restored.get(radio["id"]) == option["value"]
+    assert restored.get(text["id"]) == "Okonkwo"
+    ids = {f["id"] for f in schema["fields"]}
+    assert set(restored) <= ids

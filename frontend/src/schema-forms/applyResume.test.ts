@@ -7,6 +7,8 @@
 // answers coming back, landing where they stopped, and being asked to agree
 // again rather than inheriting a tick from a session that ended days ago.
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { applyResume } from './applyResume';
 
@@ -16,20 +18,26 @@ function fv(value: string) {
 }
 import type { SchemaFormState } from './state/schemaFormState';
 
-const SCHEMA = {
-  form_metadata: { form_number: 'w7', version: '3' },
-  sections: [
-    { id: 'part1', fields: [{ id: 'last_name' }, { id: 'first_name' }] },
-    { id: 'part2', fields: [{ id: 'address' }] },
-    { id: 'part3', fields: [{ id: 'signature' }] },
-  ],
-};
+// THE REAL SHIPPED W-7, not a fixture. The invented one used
+// `fields: [{ id }]` -- a shape no kit produces -- and was the sole reason the
+// section-landing tests passed while the code returned the fallback for every
+// real client. A fixture you invented cannot falsify an assumption you also
+// invented.
+const SCHEMA = JSON.parse(
+  readFileSync(
+    resolve(process.cwd(), '..', 'form-kits', 'w7', 'schema.json'),
+    'utf-8',
+  ),
+);
+
+/** Section ids in order, from the real schema. */
+const SECTIONS: Array<{ id: string; fields: string[] }> = SCHEMA.sections;
 
 function baseState(over: Partial<SchemaFormState> = {}): SchemaFormState {
   return {
     schema: SCHEMA,
     fieldValues: {},
-    currentSectionId: 'part1',
+    currentSectionId: SECTIONS[0].id,
     completedSections: new Set<string>(),
     validationErrors: {},
     lastUpdated: 1,
@@ -97,26 +105,30 @@ describe('applyResume', () => {
   });
 
   it('lands the client where they STOPPED, not at question one', () => {
-    // A client who saved at part 3 restarting at part 1 would conclude the
-    // resume did not work.
-    const next = applyResume(baseState(), {
-      fieldValues: { last_name: 'Okonkwo', first_name: 'Adaeze' },
-      linkJtis: [],
-    });
-    expect(next.currentSectionId).toBe('part2');
+    // Answer every field of the FIRST section, from the real schema, and the
+    // client should land on the second -- not back at the start.
+    const answered: Record<string, string> = {};
+    for (const fieldId of SECTIONS[0].fields) answered[fieldId] = 'x';
+
+    const next = applyResume(baseState(), { fieldValues: answered, linkJtis: [] });
+
+    expect(next.currentSectionId).toBe(SECTIONS[1].id);
+    expect(next.currentSectionId).not.toBe(SECTIONS[0].id);
   });
 
   it('stays put when every field is answered', () => {
-    const next = applyResume(baseState({ currentSectionId: 'part3' }), {
-      fieldValues: {
-        last_name: 'Okonkwo',
-        first_name: 'Adaeze',
-        address: '1 Road',
-        signature: 'AO',
-      },
+    const answered: Record<string, string> = {};
+    for (const section of SECTIONS) {
+      for (const fieldId of section.fields) answered[fieldId] = 'x';
+    }
+    const last = SECTIONS[SECTIONS.length - 1].id;
+
+    const next = applyResume(baseState({ currentSectionId: last }), {
+      fieldValues: answered,
       linkJtis: [],
     });
-    expect(next.currentSectionId).toBe('part3');
+
+    expect(next.currentSectionId).toBe(last);
   });
 
   it('CARRIES the session id so one form stays one record', () => {

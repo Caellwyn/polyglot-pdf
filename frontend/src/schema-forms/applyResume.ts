@@ -88,15 +88,21 @@ function firstIncompleteSection(
   state: SchemaFormState,
   values: Record<string, unknown>,
 ): string {
-  const sections =
-    (state.schema as unknown as { sections?: Array<{ id?: string; fields?: Array<{ id?: string }> }> })
-      .sections ?? [];
+  // section.fields is string[] of FIELD IDS -- declared that way in
+  // types/schema.ts and stored that way in all three shipped kits. An earlier
+  // version walked them as objects with .id, behind an `as unknown as` cast
+  // that hid the mismatch from tsc, so this returned the fallback for EVERY
+  // kit and a client who saved at question 60 restarted at question 1 -- the
+  // exact outcome this function exists to prevent. Found in cross-surface
+  // review, after I had already reported it fixed.
+  const schema = state.schema as unknown as {
+    sections?: Array<{ id?: string; fields?: string[] }>;
+  };
 
-  for (const section of sections) {
-    const fields = section.fields ?? [];
-    const unanswered = fields.some((field) => {
-      if (!field.id) return false;
-      const entry = values[field.id] as { value?: unknown } | undefined;
+  for (const section of schema.sections ?? []) {
+    const unanswered = (section.fields ?? []).some((fieldId) => {
+      if (typeof fieldId !== 'string') return false;
+      const entry = values[fieldId] as { value?: unknown } | undefined;
       const value = entry?.value;
       return value === undefined || value === null || value === '';
     });

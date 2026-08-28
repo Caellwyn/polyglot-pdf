@@ -907,13 +907,44 @@ async def resume_form(
 	# W-7, ZERO of 53 schema ids equal their pdf_field_name -- so returning
 	# widget names would hand the client 23 keys their form has never heard of
 	# and restore none of their work.
-	schema = await store.load_schema(kit_id)
-	by_widget: Dict[str, str] = {}
+	try:
+		schema = await store.load_schema(kit_id)
+	except FormKitNotFound as exc:
+		# Same mapping /api/fill-pdf uses (bd polyglot-pdf-sbfk): a missing or
+		# unreadable schema is a 404, never an unhandled 500 that leaks a
+		# stack trace to a client trying to recover their work.
+		raise HTTPException(status_code=404, detail="Not found") from exc
+
+	# widget name -> (schema field id, expected on-value or None).
+	#
+	# TWO MAPPING SHAPES, and missing the second silently drops answers. Most
+	# fields carry a top-level pdf_field_name, but RADIO and CHECKBOX_GROUP
+	# fields map per OPTION -- each option has its own widget and pdf_on_value.
+	# On the shipped W-7 that is 6 of 53 fields, including application_type,
+	# reason and sex: the form's core routing questions. Reading only the
+	# top-level mapping restored a client's text and silently lost every box
+	# they ticked.
+	by_widget: Dict[str, tuple[str, Optional[str]]] = {}
 	for field in (schema or {}).get("fields", []):
-		widget_name = field.get("pdf_field_name")
 		field_id = field.get("id")
-		if isinstance(widget_name, str) and widget_name and isinstance(field_id, str):
-			by_widget[widget_name] = field_id
+		if not isinstance(field_id, str) or not field_id:
+			continue
+		widget_name = field.get("pdf_field_name")
+		if isinstance(widget_name, str) and widget_name:
+			by_widget[widget_name] = (field_id, None)
+		for option in field.get("options") or []:
+			if not isinstance(option, dict):
+				continue
+			opt_widget = option.get("pdf_field_name")
+			opt_value = option.get("value")
+			on_value = option.get("pdf_on_value")
+			if isinstance(opt_widget, str) and opt_widget and isinstance(opt_value, str):
+				# The VALUE the schema uses, not the PDF's on-state: the client's
+				# form stores "apply_new_itin", while the widget holds "2".
+				by_widget[opt_widget] = (
+					opt_value,
+					on_value if isinstance(on_value, str) else None,
+				)
 
 	doc = None
 	try:
@@ -923,6 +954,22 @@ async def resume_form(
 			for widget in page.widgets():
 				name = widget.field_name
 				value = widget.field_value
+
+				# A CHECKED BOX HIDES IN /AS, NOT IN field_value. On these XFA
+				# forms the fill path writes the on-state to the appearance key
+				# and deliberately does not call update(), so /V stays "Off"
+				# while /AS holds "/2" -- and PyMuPDF reports field_value as
+				# "Off" for a box the client genuinely ticked. Measured through
+				# the REAL /api/fill-pdf route; reading field_value alone lost
+				# every checkbox and radio answer.
+				if widget.field_type == 2 and name in by_widget:
+					try:
+						raw = doc.xref_get_key(widget.xref, "AS")
+					except Exception:  # noqa: BLE001 -- a missing key is not an answer
+						raw = None
+					if raw and raw[0] == "name" and isinstance(raw[1], str):
+						value = raw[1].lstrip("/")
+
 				if not name or not isinstance(value, str) or not value.strip():
 					continue
 				# "Off" is PyMuPDF's UNCHECKED checkbox, not an answer. A blank
@@ -931,9 +978,27 @@ async def resume_form(
 				# enum accepts -- on a form the client has not touched.
 				if value == "Off":
 					continue
-				field_id = by_widget.get(name)
-				if field_id:
+				mapped = by_widget.get(name)
+				if not mapped:
+					continue
+				field_id, on_value = mapped
+				if on_value is None:
+					# A directly-mapped field: the widget holds the answer.
 					values[field_id] = value
+				else:
+					# An OPTION widget. It is only an answer when the widget
+					# actually carries this option's on-value -- a box showing
+					# some other state is not this option being chosen. The
+					# field id here is the parent field, and the value is the
+					# SCHEMA's option value.
+					parent = next(
+						(f for f in (schema or {}).get("fields", [])
+						 if any((o or {}).get("value") == field_id
+								for o in (f.get("options") or []))),
+						None,
+					)
+					if parent and value == on_value:
+						values[parent["id"]] = field_id
 		stamp = parse_stamp((doc.metadata or {}).get(STAMP_KEY))
 	finally:
 		if doc is not None:
