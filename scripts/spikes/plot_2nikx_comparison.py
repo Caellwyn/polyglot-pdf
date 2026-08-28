@@ -255,7 +255,7 @@ def plot_cumulative_cost_unhappy(runs: dict, out_path: str) -> None:
 
     # The headline annotation: the line stopping short IS the chart's point.
     ax.annotate(
-        "model wedged -- run aborted here\n(33/57 fields confirmed, 58%)",
+        "model wedged -- run aborted here\n(33/57 confirmed = 58%; 24 correct)",
         xy=(qn[-1], cn[-1]), xytext=(qn[-1] - 22, cn[-1] - 1.05),
         fontsize=9.5, fontweight="bold", color="#8B0000",
         arrowprops=dict(arrowstyle="->", color="#8B0000", linewidth=1.4))
