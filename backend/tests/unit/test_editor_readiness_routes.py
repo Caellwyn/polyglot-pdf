@@ -74,7 +74,8 @@ def client(tmp_path, monkeypatch):
     return TestClient(app), tmp_path
 
 
-AUTH = {"X-Editor-Token": "edit-tok"}
+AUTH = {"X-Editor-Token": "edit-tok"}       # editor tier (maria)
+AUTH_HDR = {"X-Editor-Token": "auth-tok"}   # author tier (josh)
 
 
 def test_route_is_token_gated(client):
@@ -153,6 +154,67 @@ def test_unparseable_metadata_is_never_destroyed(client):
     assert resp.status_code == 200
     assert resp.json()["readiness"] is None
     assert (root / "kit-a" / "metadata.json").read_bytes() == before
+
+
+def test_a_kit_held_by_another_editor_refuses_restamp_409(client):
+    """bd polyglot-pdf-fwzln: this route persists via store.put_metadata
+    (_stamp_readiness), so it needs the SAME _require_edit_lock guard every
+    sibling schema/metadata write path already calls -- without it, editor A
+    (maria, AUTH) could restamp readiness on a kit editor B (sam) currently
+    holds for editing, silently overwriting B's in-progress work's displayed
+    progress with A's stale local copy's counts.
+
+    Takes the lock as one actor (sam) and restamps as another (maria) -- the
+    exact scenario the bead's exit criterion names.
+    """
+    c, root = client
+    _make_kit(root, "kit-a", meta={
+        "status": "draft", "label": "Kit A",
+        "editing_lock": {"role": "editor", "uid": "uid-sam", "holder_label": "sam@example.com"},
+    })
+    before = (root / "kit-a" / "metadata.json").read_bytes()
+    resp = c.post(
+        "/api/editor/kits/kit-a/readiness", json=SCHEMA, headers=AUTH
+    )
+    assert resp.status_code == 409, resp.text
+    assert "sam@example.com" in resp.json()["detail"], (
+        "the refusal must name WHO holds it, matching every sibling lock site"
+    )
+    # The stamp must NOT have been written -- same never-destroy contract as
+    # the write-locked and unparseable-metadata cases above.
+    assert (root / "kit-a" / "metadata.json").read_bytes() == before
+
+
+def test_the_lock_holder_may_still_restamp_their_own_kit(client):
+    """Control: the guard must gate on IDENTITY, not merely "any lock
+    present" -- the holder restamping their own in-progress kit is the
+    normal case this route exists to serve."""
+    c, root = client
+    _make_kit(root, "kit-a", meta={
+        "status": "draft", "label": "Kit A",
+        "editing_lock": {"role": "editor", "uid": "uid-maria", "holder_label": "maria@example.com"},
+    })
+    resp = c.post(
+        "/api/editor/kits/kit-a/readiness", json=SCHEMA, headers=AUTH
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["readiness"] is not None
+
+
+def test_an_author_may_restamp_a_kit_an_editor_holds(client):
+    """Control: an AUTHOR outranks an editor's lock (bd 5tuas) -- the same
+    preemption rule every sibling write path honors, not a stricter one
+    invented for this route."""
+    c, root = client
+    _make_kit(root, "kit-a", meta={
+        "status": "draft", "label": "Kit A",
+        "editing_lock": {"role": "editor", "uid": "uid-sam", "holder_label": "sam@example.com"},
+    })
+    resp = c.post(
+        "/api/editor/kits/kit-a/readiness", json=SCHEMA, headers=AUTH_HDR
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["readiness"] is not None
 
 
 import pytest as _pytest
