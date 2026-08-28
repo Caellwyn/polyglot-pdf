@@ -1829,3 +1829,106 @@ def test_the_late_pass_reproduces_3d_minted_positions_exactly(tmp_path):
     assert after == before, (
         "the late pass changed a position 3d had already written: "
         f"{before} -> {after}")
+
+
+# --- _backfill_dropdown_options (bd polyglot-pdf-hmkas) --------------------- #
+
+def _write_choice_dump(tmp_path, name, choices):
+    """A minimal dump whose widget carries a /Opt choice list."""
+    dump = {"fields": [{
+        "name": name,
+        "widgets": [{"choices": [
+            ({"value": c, "display": c} if isinstance(c, str) else c)
+            for c in choices
+        ]}],
+    }]}
+    p = tmp_path / "choice_dump.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    return str(p)
+
+
+def _select_schema(options=None, claim="P1_Line6e_State[0]"):
+    field = {"id": "mail_state", "type": "select", "pdf_field_name": claim}
+    if options is not None:
+        field["options"] = options
+    return {"fields": [field]}
+
+
+def test_dropdown_options_are_backfilled_from_the_dump(tmp_path):
+    """The core bug: the model sees only a 12-item SAMPLE of the choice list, so
+    it cannot reproduce a 62-item set and emits nothing. The dump has it exactly.
+    """
+    dump = _write_choice_dump(tmp_path, "form1[0].P1_Line6e_State[0]",
+                              [" ", "WY", "AL", "AK"])
+    schema = _select_schema()  # no options at all, as extraction leaves it
+    report = ef._backfill_dropdown_options(schema, dump)
+    opts = schema["fields"][0]["options"]
+    assert [o["value"] for o in opts] == ["WY", "AL", "AK"]
+    assert report == {"fields_filled": 1, "options_written": 3, "unmatched": []}
+
+
+def test_the_blank_placeholder_choice_is_dropped(tmp_path):
+    """An empty selection is the absence of a value, not a selectable option --
+    and an empty option value is itself a lint ERROR."""
+    dump = _write_choice_dump(tmp_path, "form1[0].P1_Line6e_State[0]",
+                              [" ", "", "WY"])
+    schema = _select_schema()
+    ef._backfill_dropdown_options(schema, dump)
+    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY"]
+
+
+def test_the_dump_OVERWRITES_a_model_invented_option_set(tmp_path):
+    """A plausible-but-wrong model option set is exactly what this replaces, so
+    'already has options' is not a reason to skip (mirrors bd icyi's inversion
+    for rects). A slug value here would print clipped on the real form."""
+    dump = _write_choice_dump(tmp_path, "form1[0].P1_Line6e_State[0]",
+                              ["WY", "AL"])
+    schema = _select_schema([{"value": "wyoming", "label": "Wyoming"},
+                             {"value": "alabama", "label": "Alabama"}])
+    ef._backfill_dropdown_options(schema, dump)
+    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
+
+
+def test_a_model_label_for_the_SAME_code_is_preserved(tmp_path):
+    """The dump owns the VALUE and the option SET; the model may improve the
+    LABEL. A state dump's display string is just the code again -- 'AA' is read
+    aloud as letters, where 'Armed Forces Americas (AA)' is a name."""
+    dump = _write_choice_dump(tmp_path, "form1[0].P1_Line6e_State[0]",
+                              ["AA", "WY"])
+    schema = _select_schema([{"value": "AA", "label": "Armed Forces Americas (AA)"}])
+    ef._backfill_dropdown_options(schema, dump)
+    opts = schema["fields"][0]["options"]
+    assert opts[0] == {"value": "AA", "label": "Armed Forces Americas (AA)"}
+    assert opts[1] == {"value": "WY", "label": "WY"}  # no prior label -> code
+
+
+def test_only_select_fields_are_touched(tmp_path):
+    """radio/checkbox_group carry widget identity in pdf_on_value and keep their
+    minted slugs -- the export-code rule is select-only."""
+    dump = _write_choice_dump(tmp_path, "form1[0].P1_Line6e_State[0]",
+                              ["WY", "AL"])
+    schema = {"fields": [{
+        "id": "sex", "type": "radio", "pdf_field_name": "P1_Line6e_State[0]",
+        "options": [{"value": "male", "label": "Male", "pdf_on_value": "1"}],
+    }]}
+    report = ef._backfill_dropdown_options(schema, dump)
+    assert schema["fields"][0]["options"][0]["value"] == "male"
+    assert report["fields_filled"] == 0
+
+
+def test_an_unresolvable_select_is_REPORTED_not_silently_skipped(tmp_path):
+    """A select the dump cannot resolve must surface in the report -- silently
+    leaving it empty is how this bug went unnoticed in the first place."""
+    dump = _write_choice_dump(tmp_path, "form1[0].SomethingElse[0]", ["WY"])
+    schema = _select_schema(claim="P1_Line6e_State[0]")
+    report = ef._backfill_dropdown_options(schema, dump)
+    assert report["unmatched"] == ["mail_state"]
+    assert report["fields_filled"] == 0
+
+
+def test_an_unreadable_dump_returns_the_full_report_shape(tmp_path):
+    """Every return path carries all three keys -- a caller indexing the report
+    must not KeyError on the error path alone."""
+    report = ef._backfill_dropdown_options(
+        _select_schema(), str(tmp_path / "does_not_exist.json"))
+    assert report == {"fields_filled": 0, "options_written": 0, "unmatched": []}

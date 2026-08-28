@@ -407,6 +407,131 @@ def _backfill_positions(schema: dict, dump_path: str, *,
     }
 
 
+def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
+    """Deterministically set options[] on each SELECT from the dump's /Opt list
+    (bd polyglot-pdf-hmkas).
+
+    Same rationale as _backfill_positions: the LLM is flaky at this and the dump
+    HAS the exact answer. A dropdown's option set is not a judgment call -- it is
+    a verbatim copy of the widget's choice list -- and the model was being asked
+    to reproduce it from a TRUNCATED sample (both prompt builders cap the
+    rendered list at 12 with no marker, so the i-90 state field showed 12 of 63
+    codes and the model could not even tell it had been cut). Asked to emit a
+    complete 62-item set from a 12-item sample, it emitted nothing.
+
+    A select's option.value must be the PDF's own EXPORT CODE, not a minted
+    slug: a dropdown has no fill branch of its own, so pdf_fill_routes writes
+    str(option.value) verbatim into the combobox and never reads pdf_on_value,
+    and PyMuPDF does not validate against /Opt. A slug is accepted silently and
+    then prints clipped ('wyoming' -> 'wyomin' in the i-90's 36x18pt box). See
+    bd polyglot-pdf-4we6j for the measurement; polyglot-pdf-g2fpr would give
+    selects a real pdf_on_value channel, at which point this backfill should
+    write code -> pdf_on_value and a slug -> value instead.
+
+    Label: a label the model already wrote for that exact code wins, else the
+    dump's display string, else the code itself. The value and the option SET
+    are always the dump's -- only the PDF knows the codes -- but the label is
+    what the voice model SPEAKS, and a state dropdown's display string is just
+    the code again ("AA" read aloud as letters vs "Armed Forces Americas (AA)").
+    The dump cannot know that; a model often can.
+
+    The BLANK placeholder choice is dropped -- an empty selection is the absence
+    of a value, not a selectable option, and the filler skips empty values.
+
+    The VALUE backfill is UNCONDITIONAL for a resolvable select, exactly as the
+    option-level rect backfill is (bd polyglot-pdf-icyi): a plausible-but-wrong
+    model option set is precisely what this exists to replace, so "already has
+    options" is not a reason to skip.
+
+    Returns {"fields_filled": int, "options_written": int, "unmatched": [...]}.
+    Every return path carries all three keys.
+    """
+    empty = {"fields_filled": 0, "options_written": 0, "unmatched": []}
+    try:
+        with open(dump_path, encoding="utf-8") as fh:
+            dump = json.load(fh)
+    except OSError:
+        return empty
+
+    sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
+    from backend.services.schema_lint import _match_dump_names  # noqa: E402
+
+    entries = dump.get("fields") or []
+    dump_names = [f["name"] for f in entries if f.get("name")]
+    by_name = {f["name"]: f for f in entries if f.get("name")}
+
+    fields_filled = 0
+    options_written = 0
+    unmatched: list[str] = []
+
+    for field in schema.get("fields") or []:
+        if not isinstance(field, dict) or field.get("type") != "select":
+            continue
+        claim = field.get("pdf_field_name")
+        if not isinstance(claim, str) or not claim:
+            unmatched.append(str(field.get("id")))
+            continue
+        names = _match_dump_names(claim, dump_names)
+        if not names:
+            unmatched.append(str(field.get("id")))
+            continue
+
+        # FIRST match only -- never a union across duplicate-named entries,
+        # which would offer a value legal on a DIFFERENT widget instance than
+        # the one this field claims (same convention as schema_lint._dump_entry
+        # and schema_repair.pdf_choice_values).
+        entry = by_name.get(names[0]) or {}
+        # A label the model already wrote for this exact code is KEPT. The VALUE
+        # is always the dump's (only the PDF knows the codes), but the label is
+        # what the voice model SPEAKS, and the dump's display string for a state
+        # dropdown is just the code again -- "AA" is read aloud as letters,
+        # where "Armed Forces Americas (AA)" is a state name. The dump cannot
+        # know that; a model often can. So: dump owns the value and the option
+        # SET, the model may improve the label (bd polyglot-pdf-hmkas).
+        prior_labels: dict[str, str] = {}
+        for o in field.get("options") or []:
+            if not isinstance(o, dict):
+                continue
+            ov, ol = o.get("value"), o.get("label")
+            if isinstance(ov, str) and isinstance(ol, str) and ol.strip():
+                prior_labels[ov] = ol
+        options: list[dict] = []
+        seen: set[str] = set()
+        for widget in entry.get("widgets") or []:
+            if not isinstance(widget, dict):
+                continue
+            for choice in widget.get("choices") or []:
+                if not isinstance(choice, dict):
+                    continue
+                value = choice.get("value")
+                if not isinstance(value, str) or not value.strip():
+                    continue  # the blank placeholder is not an option
+                if value in seen:
+                    continue  # a duplicate value is a lint ERROR
+                seen.add(value)
+                display = choice.get("display")
+                label = prior_labels.get(value) or (
+                    display if isinstance(display, str) and display.strip()
+                    else value
+                )
+                options.append({"value": value, "label": label})
+            if options:
+                break  # one widget owns the choice list
+
+        if not options:
+            unmatched.append(str(field.get("id")))
+            continue
+        field["options"] = options
+        fields_filled += 1
+        options_written += len(options)
+
+    return {
+        "fields_filled": fields_filled,
+        "options_written": options_written,
+        "unmatched": unmatched,
+    }
+
+
 def _build_name_to_tu(dump_path: str) -> dict[str, str]:
     """Map each AcroForm widget NAME -> its /TU tooltip text from the dump.
 
@@ -1418,6 +1543,19 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             print(f"  [positions] normalized "
                   f"{first_pass_positions['model_pages_normalized']} "
                   f"model-supplied page number(s) from 0-based to 1-based")
+
+        # 3z. Deterministically populate each SELECT's options[] from the dump's
+        #     /Opt choice list (bd polyglot-pdf-hmkas). The model sees only a
+        #     12-item sample of the list and so cannot reproduce it; the dump has
+        #     it exactly. Runs while the dump still exists (removed in the
+        #     finally below).
+        dropdowns = _backfill_dropdown_options(schema, dump_path)
+        if dropdowns["fields_filled"] or dropdowns["unmatched"]:
+            print(f"  [dropdowns] filled {dropdowns['options_written']} option(s) "
+                  f"across {dropdowns['fields_filled']} select field(s)"
+                  + (f"; {len(dropdowns['unmatched'])} unresolved: "
+                     f"{', '.join(dropdowns['unmatched'][:5])}"
+                     if dropdowns["unmatched"] else ""))
 
         # 3a. Deterministically populate help.instructions from each field's /TU
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
