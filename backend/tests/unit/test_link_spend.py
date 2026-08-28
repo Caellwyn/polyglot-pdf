@@ -303,3 +303,32 @@ def test_session_cost_usd_does_not_read_the_RESET_counter():
         "session_cost_usd reads the per-SESSION counter, which a section "
         "switch resets -- see test_the_cost_counter_SURVIVES_a_section_switch"
     )
+
+
+def test_each_connection_gets_its_OWN_adapter_instance():
+    """The ceiling's per-connection counter assumes a FRESH adapter.
+
+    _connection_total_cost is never reset, so if one LiveAIGemini instance
+    were shared across two WebSocket connections, a second client would
+    inherit the first client's spend and be refused for someone else's usage.
+
+    get_live_ai already returns a fresh instance per call -- dependencies.py
+    documents a PAST bug where FastAPI's dependency caching shared one adapter
+    and crossed the callbacks. That property is now load-bearing for billing
+    too, so pin it: an lru_cache added to get_live_ai here would silently
+    charge clients for each other.
+    """
+    import inspect
+
+    from backend import dependencies
+
+    src = inspect.getsource(dependencies.get_live_ai)
+    assert "lru_cache" not in src and "@cache" not in src, (
+        "get_live_ai is cached -- one adapter would be shared across "
+        "connections and the spend ceiling would charge a client for "
+        "someone else's session"
+    )
+
+    a = dependencies.get_live_ai.__wrapped__ if hasattr(
+        dependencies.get_live_ai, "__wrapped__") else dependencies.get_live_ai
+    assert a is dependencies.get_live_ai, "get_live_ai is wrapped by a cache"
