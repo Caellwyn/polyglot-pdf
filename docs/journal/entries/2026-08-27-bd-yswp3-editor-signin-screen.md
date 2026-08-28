@@ -232,6 +232,21 @@ The other two beads were left filed: one is a pre-existing tier-2 doc that
 `hn0jq` made wrong and belongs with `rhc2v`'s sweep, the other a
 pre-existing `setBusy` nit in untouched code.
 
+**And the guard I wrote to catch that missed its own idiom.** The confirming
+review demonstrated the evasion concretely: the scan collected string LITERALS,
+but the one legitimate prefixed 403 is written
+`NO_EDITOR_ACCESS_PREFIX + "..."` -- so the very idiom an author would copy
+"for consistency" was invisible to it. Prefixing the Publish 403 through the
+constant passed. Now detected by NAME as well as by value, and widened from one
+route module to every module serving the editor surface. The demonstrated
+evasion is red.
+
+Three guards in this bead, three times the first version could be walked past.
+The pattern is consistent enough to name: a source-scanning guard tends to
+match the shape its AUTHOR was thinking about, and the regression arrives in a
+shape they were not. Writing the evasion yourself, before review does, is the
+cheap half of that lesson.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;

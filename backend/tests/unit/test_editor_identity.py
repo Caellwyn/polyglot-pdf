@@ -346,12 +346,20 @@ def test_EVERY_403_the_backend_raises_is_classified(monkeypatch):
     import ast
     import pathlib
 
-    routes = (pathlib.Path(ea.__file__).resolve().parent.parent
-              / "routes" / "editor_kit_routes.py")
-    tree = ast.parse(routes.read_text(encoding="utf-8"))
+    # EVERY route module serving the editor surface, not just the biggest one:
+    # a 403 added to the readiness routes would otherwise land unpinned, which
+    # is the same one-file-at-a-time miss this guard exists to stop.
+    routes_dir = pathlib.Path(ea.__file__).resolve().parent.parent / "routes"
+    modules = [routes_dir / "editor_kit_routes.py",
+               routes_dir / "editor_readiness_routes.py"]
+    for m in modules:
+        assert m.exists(), f"{m.name} moved -- this scan is now blind to it"
 
     prefixed, plain = [], []
-    for node in ast.walk(tree):
+    nodes_all = []
+    for m in modules:
+        nodes_all.extend(ast.walk(ast.parse(m.read_text(encoding="utf-8"))))
+    for node in nodes_all:
         if not isinstance(node, ast.Raise) or node.exc is None:
             continue
         call = node.exc if isinstance(node.exc, ast.Call) else None
@@ -361,18 +369,29 @@ def test_EVERY_403_the_backend_raises_is_classified(monkeypatch):
         status = kw.get("status_code")
         if not (isinstance(status, ast.Constant) and status.value == 403):
             continue
-        text = "".join(
-            n.value for n in ast.walk(kw.get("detail", ast.Constant("")))
-            if isinstance(n, ast.Constant) and isinstance(n.value, str))
-        (prefixed if NO_EDITOR_ACCESS_PREFIX in text else plain).append(
+        detail = kw.get("detail", ast.Constant(""))
+        nodes = list(ast.walk(detail))
+        text = "".join(n.value for n in nodes
+                       if isinstance(n, ast.Constant) and isinstance(n.value, str))
+        # Two ways to carry the marker, and the SECOND is the one that matters:
+        # the only legitimate prefixed 403 (editor_auth.py) is written as
+        # `NO_EDITOR_ACCESS_PREFIX + "..."`, so that is the idiom someone would
+        # copy here "for consistency". A literal-only scan cannot see it --
+        # measured: prefixing the Publish 403 via the constant passed this test
+        # before the Name check below was added.
+        by_literal = NO_EDITOR_ACCESS_PREFIX in text
+        by_constant = any(isinstance(n, ast.Name)
+                          and "NO_EDITOR_ACCESS" in n.id for n in nodes)
+        (prefixed if (by_literal or by_constant) else plain).append(
             (node.lineno, text[:60]))
 
     assert plain, (
-        "no unprefixed 403 found in editor_kit_routes -- either the file moved "
-        "or this scan broke. An empty set would make this test vacuous."
+        "no unprefixed 403 found in the editor route modules -- either they "
+        "moved or this scan broke. An empty set would make this test vacuous."
     )
     assert not prefixed, (
-        "a 403 in editor_kit_routes carries " + NO_EDITOR_ACCESS_PREFIX + ", "
+        "a 403 in the editor route modules carries "
+        + NO_EDITOR_ACCESS_PREFIX + ", "
         "which EVICTS the caller to the sign-in gate's refused screen. Only "
         "editor_auth's 'this account holds no editor role' 403 may do that. "
         "These are refusals of a specific ACTION for a valid editor, so they "
