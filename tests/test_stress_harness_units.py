@@ -1327,3 +1327,44 @@ def test_legacy_arms_unchanged():
     assert len(mfc.SCHEMAS["i90"]["questions"]) == 34
     # i90-full is registered lazily by run(); the hand-written entries stay put
     assert set(mfc.SCHEMAS) >= {"demo", "i90"}
+
+
+# ------------------------------------------------- session resumption (2nikx)
+
+def test_naive_arm_defaults_session_resumption_on():
+    """--arm naive resumes-on by default (bd polyglot-pdf-2nikx): the naive
+    arm is the ONLY arm this maintainer-directed feature targets, so it opts
+    in without needing an explicit flag."""
+    settings = mfc._make_settings("naive", trigger=12_000, window=9_000)
+    assert settings.SESSION_RESUMPTION_ENABLED is True
+
+
+def test_naive_arm_no_session_resume_flag_disables_it():
+    """--no-session-resume (session_resume=False) reproduces the pre-2nikx
+    behavior: the derailment guard aborts outright on a wedge instead of
+    resume-reconnecting."""
+    settings = mfc._make_settings("naive", trigger=12_000, window=9_000,
+                                  session_resume=False)
+    assert settings.SESSION_RESUMPTION_ENABLED is False
+
+
+@pytest.mark.parametrize("arm", ["unbounded", "dti", "section-reset",
+                                 "sliding-window"])
+def test_non_naive_arms_never_enable_session_resumption(arm):
+    """Every OTHER arm must carry SESSION_RESUMPTION_ENABLED False regardless
+    of the session_resume kwarg -- this is a naive-arm-only opt-in, and every
+    other arm already has its own reconnect machinery
+    (switch_to_section/continuous GoAway reconnect) that this feature must not
+    touch. (section-reset-jit is excluded: _make_settings itself raises
+    SystemExit for that removed arm, bd en2j -- unrelated to this feature and
+    already true before this change.)
+    """
+    settings = mfc._make_settings(arm, trigger=12_000, window=9_000,
+                                  session_resume=True)
+    assert settings.SESSION_RESUMPTION_ENABLED is False
+
+
+def test_max_naive_resumes_cap_is_three():
+    """Pin the resume-budget cap (bd polyglot-pdf-2nikx design: 'cap at
+    MAX_NAIVE_RESUMES = 3 -- past the cap, abort exactly as today')."""
+    assert mfc.MAX_NAIVE_RESUMES == 3

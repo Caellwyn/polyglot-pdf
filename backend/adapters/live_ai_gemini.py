@@ -497,6 +497,18 @@ class LiveAIGemini(ILiveAI):
         # eyes). Reset per-session in _run_session_loop.
         self._go_away_seen: bool = False
 
+        # Session-resumption handle (bd polyglot-pdf-2nikx; SESSION_RESUMPTION_ENABLED,
+        # default off -- see config.py). Captured from LiveServerSessionResumptionUpdate
+        # messages on the receive stream when session_resumption was requested at
+        # connect. NOT reset per-session (unlike _go_away_seen above): the whole
+        # point is that it SURVIVES a reconnect so the NEXT connect can present it.
+        # A caller resuming an inert (flag-off) session simply never sees a message
+        # to capture, so this field stays None and connect() never attaches a
+        # session_resumption config -- inert when the flag is off. Exposed via
+        # get_resumption_handle() rather than read directly, so a future caller
+        # doesn't reach into adapter internals.
+        self._resumption_handle: Optional[str] = None
+
         # Session readiness flag and message queue for race condition handling
         self._session_ready: bool = False  # True when Gemini session is ready to receive messages
         self._pending_client_content: List[str] = []  # Queue for send_client_content() calls before session ready
@@ -896,6 +908,15 @@ class LiveAIGemini(ILiveAI):
     def is_session_active(self) -> bool:
         """Check if Gemini session is currently active (has running background task)."""
         return self._bg_task is not None and not self._bg_task.done()
+
+    def get_resumption_handle(self) -> Optional[str]:
+        """Return the latest captured session-resumption handle, if any.
+
+        None when SESSION_RESUMPTION_ENABLED is off (never requested, so the
+        server never sends an update to capture) or when no resumable update
+        has arrived yet this session (bd polyglot-pdf-2nikx).
+        """
+        return self._resumption_handle
 
     def _was_spontaneous_drop(self) -> bool:
         """True only when the session ended by a real, unexpected ERROR drop.
@@ -1783,6 +1804,24 @@ class LiveAIGemini(ILiveAI):
             "tools": tools_config,
         }
 
+        # Session resumption (bd polyglot-pdf-2nikx; SESSION_RESUMPTION_ENABLED,
+        # default OFF -- see config.py for why production stays off this flag).
+        # When on, ask the Live server for SessionResumptionUpdate messages
+        # (types.SessionResumptionConfig, verified field names against the
+        # installed google-genai SDK, 2026-08-27) and, if a handle from a PRIOR
+        # session on this adapter instance is already stored, present it so the
+        # server resumes that session's state instead of starting fresh. Inert
+        # when the flag is off: no key is added to config at all, so a
+        # production connect (flag off) is byte-identical to before this change.
+        if getattr(settings, "SESSION_RESUMPTION_ENABLED", False):
+            config["session_resumption"] = {
+                "handle": self._resumption_handle,
+            }
+            self._log.info(
+                "session_resumption_requested",
+                resuming=bool(self._resumption_handle),
+            )
+
         # Enable automatic voice activity detection for realtime audio input
         # This allows Gemini to detect when user starts/stops speaking
         try:
@@ -2432,6 +2471,40 @@ class LiveAIGemini(ILiveAI):
                                             await self._on_go_away(time_left)
                                         except Exception:
                                             self._log.exception("on_go_away_callback_error")
+
+                                # Session-resumption update (bd polyglot-pdf-2nikx):
+                                # only sent when session_resumption was requested at
+                                # connect (SESSION_RESUMPTION_ENABLED; see
+                                # _build_live_config), so this is a no-op read on the
+                                # default production path. LiveServerSessionResumption
+                                # Update carries new_handle (empty when the point is
+                                # not resumable, e.g. mid function-call/generation) and
+                                # resumable (bool) -- store the handle only when the
+                                # server marked this point resumable, so a later
+                                # connect never presents a handle the server already
+                                # told us would lose data. Best-effort and never
+                                # breaks the loop, same discipline as GoAway above.
+                                # NO PII in the log: presence/length only, never the
+                                # token value (bd hjo).
+                                resumption_update = getattr(
+                                    event, "session_resumption_update", None)
+                                if resumption_update is not None:
+                                    try:
+                                        new_handle = getattr(
+                                            resumption_update, "new_handle", None)
+                                        resumable = bool(
+                                            getattr(resumption_update, "resumable", False))
+                                        if resumable and new_handle:
+                                            self._resumption_handle = new_handle
+                                            self._log.info(
+                                                "session_resumption_handle_captured",
+                                                handle_present=True,
+                                                handle_len=len(new_handle),
+                                                event_count=event_count,
+                                            )
+                                    except Exception:
+                                        self._log.exception(
+                                            "session_resumption_update_handling_error")
 
                                 # Audio/transcript/tool extraction
                                 responses: list[types.FunctionResponse] = []

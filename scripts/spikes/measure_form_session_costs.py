@@ -104,6 +104,14 @@ import scenario_events as _se  # noqa: E402  (stdlib-only sibling module)
 
 MODELS = {"2.5": MODEL_NATIVE_STANDARD, "3.1": MODEL_NATIVE_PREMIUM}
 
+# Cap on how many times the naive arm's derailment guard may resume-reconnect
+# ONE run before giving up and aborting exactly as before this feature existed
+# (bd polyglot-pdf-2nikx). A wedge that keeps recurring after a resume is
+# evidence the model itself is stuck, not the connection -- so this bounds the
+# spend on a run that would otherwise resume forever without ever finishing
+# the plan.
+MAX_NAIVE_RESUMES = 3
+
 # Per-model text-sidecar rate table, USD per token (bd polyglot-pdf-0cyu: the
 # W6 whole-form gemini-2.5-pro pass, bd polyglot-pdf-gbus/#434, added a SECOND
 # text model to the sidecar -- flash-lite for the secretary + lite validator
@@ -2155,7 +2163,8 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 # ------------------------------------------------------------------- driver
 
 def _make_settings(arm: str, trigger: int, window: int, compression: bool = False,
-                   continuous: bool = False, derive_compression: bool = False):
+                   continuous: bool = False, derive_compression: bool = False,
+                   session_resume: bool = True):
     # The production code defaults are continuous-DTI (bd polyglot-pdf-7872:
     # USE_DTI / CONTINUOUS_SESSION / CONTEXT_COMPRESSION_ENABLED all default ON),
     # so every arm PINS its full mode explicitly -- a future default flip must
@@ -2209,6 +2218,19 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
                 if d.get("name") not in ("ask_secretary", "switch_section")
             ],
             "SPELLBACK_TOOL_ENABLED": False,
+            # Session resumption (bd polyglot-pdf-2nikx). Production ships this
+            # OFF (config.py default) -- the naive arm's driver loop opts IN so
+            # an unhappy-path run that hits the derailment guard's model-wedge
+            # condition can reconnect with Gemini's server-side context
+            # preserved and keep going, instead of aborting the whole run. The
+            # naive arm has no client-owns-state handshake to rebuild a fresh
+            # session from (single continuous session, no section machinery),
+            # so this is the only way to survive a wedge without discarding the
+            # scripted plan. --no-session-resume reproduces the pre-2nikx
+            # behavior (old runs, incl. the wedged
+            # costs_i90-v2_2.5_naive_unhappy_20260828T035215Z artifact this
+            # bead responds to).
+            "SESSION_RESUMPTION_ENABLED": bool(session_resume),
         })
     elif arm == "section-reset-jit":
         # The JIT SI mode was REMOVED (bd polyglot-pdf-en2j): USE_JIT_SCHEMA no
@@ -2493,7 +2515,8 @@ async def run(args) -> int:
     rates = get_pricing_for_model(model_name)
     settings = _make_settings(args.arm, args.trigger, args.window, args.compression,
                               continuous=bool(getattr(args, "continuous", False)),
-                              derive_compression=bool(getattr(args, "derive_compression", False)))
+                              derive_compression=bool(getattr(args, "derive_compression", False)),
+                              session_resume=not bool(getattr(args, "no_session_resume", False)))
     # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
     # `_config.get_settings = ...` is NOT enough: modules that did
     # `from backend.config import get_settings` at import time (ai_context,
@@ -2555,6 +2578,10 @@ async def run(args) -> int:
         "started": stamp, "turns": [], "per_question_tools": {},
         "prompt_curve": [], "errors": [], "rates_per_token": rates,
         "vad": "neutralized (explicit activity brackets; labeled deviation)",
+        # Naive-arm resume-reconnects (bd polyglot-pdf-2nikx): always present
+        # (empty when resumption is off, unused, or this isn't --arm naive) so
+        # downstream analysis can read the key unconditionally.
+        "session_resumes": [],
     }
 
     log_sink: list[dict] = []
@@ -2594,6 +2621,14 @@ async def run(args) -> int:
         settings, "SPEECH_LANGUAGE_CODE_ENABLED", None)
     meta["transcription_language_hint_enabled"] = getattr(
         settings, "TRANSCRIPTION_LANGUAGE_HINT_ENABLED", None)
+    # Session-resumption flag state (bd polyglot-pdf-2nikx), same doctrine as
+    # the language-bias flags above: machine-readable from the artifact, not
+    # only inferable from whether meta["session_resumes"] ends up non-empty
+    # (an --arm naive run with resumption ON that never wedges has an empty
+    # session_resumes list either way -- this distinguishes "on, unused" from
+    # "off").
+    meta["resumption_enabled"] = bool(
+        getattr(settings, "SESSION_RESUMPTION_ENABLED", False))
     meta["planted_groups"] = [sorted(g) for g in planted_groups]
     meta["step_kinds"] = [
         (s.get("event") or ("skip" if s.get("skip") else
@@ -3047,6 +3082,100 @@ async def run(args) -> int:
                     meta.setdefault("secretary_delivers_dropped_reconnect", 0)
                     meta["secretary_delivers_dropped_reconnect"] += len(still)
 
+        async def _naive_resume_reconnect(q_at_wedge: int, reason: str) -> bool:
+            """Resume-reconnect the naive arm's session after the derailment guard
+            fires (bd polyglot-pdf-2nikx).
+
+            DISTINCT from the continuous/section-reset reconnect above:
+            switch_to_section rebuilds the handshake from the REMAINING plan
+            fields (the client-owns-state model production reconnects use), which
+            is exactly the "second session" shape the naive arm's single-session
+            premise forbids (see _make_settings' naive branch: "a stray
+            switch_section call would open a second session and violate the
+            arm's single-session premise"). A resume must stay that one logical
+            session -- so this calls service.start_session directly with the
+            SAME whole-form arm_schema/si the run started with (naive has no
+            sections to narrow to), and relies on the adapter presenting the
+            stored SessionResumptionUpdate handle (SESSION_RESUMPTION_ENABLED)
+            so Gemini restores server-side context instead of the harness
+            replaying anything client-side. session_count is deliberately NOT
+            incremented: bd 89mt's naive-arm invariant asserts session_count==1
+            for exactly this reason (naive's own docstring: "no resets"), and a
+            resume is not a reset -- it is the same session continuing via a
+            different transport-level connection, which is what the handle is
+            FOR. Returns False (no resume) if resumption is off, no handle is
+            available yet, or the per-run cap is exhausted -- caller falls back
+            to today's abort.
+            """
+            nonlocal last_total, _prev_q_end
+            if not getattr(settings, "SESSION_RESUMPTION_ENABLED", False):
+                return False
+            handle = adapter.get_resumption_handle()
+            if not handle:
+                print(f"    [resume] no resumption handle available at q{q_at_wedge}; "
+                      "cannot resume, falling back to abort", flush=True)
+                return False
+            resumes_so_far = len(meta.get("session_resumes") or [])
+            if resumes_so_far >= MAX_NAIVE_RESUMES:
+                print(f"    [resume] resume budget exhausted "
+                      f"({resumes_so_far}/{MAX_NAIVE_RESUMES}); falling back to abort",
+                      flush=True)
+                return False
+            _t_resume0 = time.monotonic()
+            await _drain_before_reconnect()
+            # Close the CURRENT (wedged) Gemini session before reconnecting.
+            # set_callbacks (which start_session calls) only starts a NEW
+            # background task when none is running (LiveAIGemini.set_callbacks:
+            # "if self._bg_task is None or self._bg_task.done()") -- on an
+            # already-running task it just overwrites callbacks IN PLACE and
+            # logs bg_task_already_running_callbacks_overwritten, with NO new
+            # connect and so no chance for the resumption handle to ride a
+            # fresh config. finalize() is exactly what
+            # _switch_to_section_locked calls first for the same reason (step
+            # 1, "Close current Gemini session"); mirror it here.
+            await adapter.finalize()
+            await service.start_session(
+                websocket=client, session_id=f"4loz-{stamp}",
+                accept_connection=False, schema=arm_schema, current_values={},
+                system_instruction=si,
+                form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
+                current_section_id=current_section_id,
+                full_schema=(schema if use_text_ai else None),
+                send_transcript=DEBUG)
+            for _ in range(150):
+                if getattr(adapter, "_session_ready", False):
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                print(f"    [resume] session never became ready after resume "
+                      f"attempt at q{q_at_wedge}", flush=True)
+                return False
+            # start_session (unlike switch_to_section) does NOT auto-greet --
+            # mirror the driver's OWN initial-connect sequence (the
+            # send_initiating_message call right after the first start_session
+            # above) so the resumed session actually prompts the user for the
+            # next field instead of sitting silently ready.
+            await service.send_initiating_message(spoken_language, client.next_hint() or "")
+            # last=0, not last_total: _run_session_loop resets the adapter's
+            # cumulative _session_total_tokens to 0 at the top of EVERY
+            # (re)connect (incl. this one), so waiting on the pre-resume
+            # cumulative value would never be satisfied -- same reasoning as
+            # the continuous/section-reset reconnects' own `last=0` re-greeting
+            # waits above.
+            last_total = await _wait_turn(adapter, last=0)
+            # Anchor the next window to POST-resume (bd jnjj.39), same discipline
+            # as the continuous/section-reset reconnects: _prev_q_end was stamped
+            # at the wedged question's end BEFORE this guard ran, and that
+            # timestamp refers to a session that was just torn down and rebuilt.
+            _prev_q_end = time.monotonic()
+            meta.setdefault("session_resumes", []).append({
+                "resume_at_q": q_at_wedge, "reason": reason,
+                "downtime_s": round(time.monotonic() - _t_resume0, 3),
+            })
+            print(f"    [resume] naive session resumed before q{q_at_wedge} "
+                  f"({reason})", flush=True)
+            return True
+
         async def run_recall(ev):
             """Mid-fill ask_secretary query: speak it, assert the tool fired,
             score the sync answer (a detached 'pending' answer is counted, not
@@ -3477,10 +3606,31 @@ async def run(args) -> int:
                 else:
                     _confirm_stagnant_run += 1
             if _tool_silent_run >= 6 or _confirm_stagnant_run >= 8:
-                meta["derailed_at_q"] = i
-                meta["derailed_reason"] = (
+                _derail_reason = (
                     "6 consecutive tool-silent questions" if _tool_silent_run >= 6
                     else "8 consecutive questions with no new confirmed field")
+                # Naive-arm resume path (bd polyglot-pdf-2nikx): the derailment
+                # guard's ORIGINAL behavior (abort, keep artifacts) is preserved
+                # for every arm and stays the naive arm's fallback too -- this
+                # only inserts a resume ATTEMPT ahead of that abort, and only for
+                # --arm naive (the arm this feature was requested for; other
+                # arms reconnect via section-reset/continuous machinery already
+                # and are unchanged). A successful resume clears the guard's
+                # streak counters and CONTINUES the plan at the NEXT scripted
+                # question (the wedged question i already ran and is scored --
+                # like every other step in this driver, a step is asked once,
+                # never retried; the field it targeted simply stays unconfirmed,
+                # exactly as any other tool-silent/derailed question already
+                # would). The resume itself is recorded in
+                # meta["session_resumes"] regardless of how the rest of the run
+                # goes, so a resumed-then-still-derailed run is fully
+                # reconstructable from the artifact.
+                if args.arm == "naive" and await _naive_resume_reconnect(i, _derail_reason):
+                    _tool_silent_run = 0
+                    _confirm_stagnant_run = 0
+                    continue
+                meta["derailed_at_q"] = i
+                meta["derailed_reason"] = _derail_reason
                 print(f"[derailment-guard] aborting run at q{i:02d}: "
                       f"{meta['derailed_reason']} (model wedged/desynced; "
                       f"artifacts kept)", flush=True)
@@ -3912,6 +4062,16 @@ def main() -> int:
                          "section resets (bd polyglot-pdf-ctu8 candidate arm). Only "
                          "valid with --arm dti; combine with --compression so the "
                          "window bounds the continuous session's growth.")
+    ap.add_argument("--no-session-resume", action="store_true",
+                    dest="no_session_resume",
+                    help="--arm naive only (bd polyglot-pdf-2nikx): disable Gemini "
+                         "Live session resumption, reproducing the pre-2nikx "
+                         "behavior where the derailment guard aborts the run "
+                         "outright on a model wedge instead of reconnecting with a "
+                         "resumption handle. Resumption defaults ON for --arm naive "
+                         "(SESSION_RESUMPTION_ENABLED stays OFF in production "
+                         "either way -- this only ever affects the harness's own "
+                         "Settings override). No effect on other arms.")
     ap.add_argument("--expect-trigger", type=int, default=None,
                     help="PRE-REGISTRATION guard (bd polyglot-pdf-89mt): the "
                          "trigger_tokens this run is EXPECTED to derive. The run "
