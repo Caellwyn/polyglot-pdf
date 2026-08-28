@@ -43,7 +43,13 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 - **Cost calc + accumulation** — `backend/adapters/live_ai_gemini.py` reads
   `usage_metadata` off each Gemini response, splits tokens by modality, calls
   `get_pricing_for_model(self._model_name)`, multiplies tokens × rate per modality, and
-  accumulates `self._session_total_cost` / `self._session_total_tokens` (+ the
+  accumulates `self._session_total_cost` / `self._session_total_tokens` -- and
+`self._connection_total_cost`, which MUST stay in lockstep with them (bd
+polyglot-pdf-ik7e). The per-session counters are zeroed on every Gemini
+session start, and a SECTION SWITCH restarts that session on the same
+adapter -- so they hold one section, which is right for the cost LOG and
+fatal for the client-link spend CEILING. The ceiling reads the never-reset
+`_connection_total_cost` via `session_cost_usd()`. (+ the
   per-modality running totals) across the Gemini session.
 
 - **The writer** — `backend/utils/token_file_logger.py`. `TokenFileLogger`

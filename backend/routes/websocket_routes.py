@@ -1387,8 +1387,9 @@ async def fill_form_from_schema(
 		# the honest code, and the reason token is on the wire for a client
 		# that wants to branch on it.
 		#
-		# NOTE, and it is a real gap: the frontend does NOT read it today. No
-		# code in frontend/src reads event.code or event.reason, so a
+		# NOTE, and it is a real gap: nothing in frontend/src BRANCHES on it
+		# today (handleClose logs event.code/event.reason and then keys every
+		# branch off internal flags), so a
 		# budget-exhausted client falls through to the generic bounded-retry
 		# path and lands on a "reconnect failed" modal offering a Reconnect
 		# that cannot work. Bounded, so not a runaway -- but the wrong

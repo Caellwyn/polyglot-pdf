@@ -332,3 +332,40 @@ def test_each_connection_gets_its_OWN_adapter_instance():
     a = dependencies.get_live_ai.__wrapped__ if hasattr(
         dependencies.get_live_ai, "__wrapped__") else dependencies.get_live_ai
     assert a is dependencies.get_live_ai, "get_live_ai is wrapped by a cache"
+
+
+def test_the_two_cost_counters_ACCRUE_IN_LOCKSTEP():
+    """Both counters must be fed at every accrual site.
+
+    THE REGRESSION THIS CATCHES, and it is worse than the bug it follows:
+    delete the _connection_total_cost accrual and session_cost_usd() returns
+    0.0 forever, so _bank_link_spend banks NOTHING and the ceiling never
+    accumulates at all -- while the per-session cost log looks completely
+    normal. Verified unpinned before this test existed: deleting that line
+    left 42 tests green across test_link_spend and test_websocket_ephemeral.
+
+    Derived from the shipped source rather than exercised, because the accrual
+    sits deep inside the live receive loop -- driving it needs a real Gemini
+    stream, and a test that heavy would pin the harness rather than the
+    property. What must hold is a LOCKSTEP invariant: every site that adds to
+    the per-session counter adds the same value to the per-connection one.
+    """
+    import inspect
+    import re
+
+    from backend.adapters import live_ai_gemini
+
+    src = inspect.getsource(live_ai_gemini)
+
+    session_sites = re.findall(r"_session_total_cost\s*\+=\s*(\w+)", src)
+    connection_sites = re.findall(r"_connection_total_cost\s*\+=\s*(\w+)", src)
+
+    assert session_sites, "no accrual site found -- did the counter move?"
+    assert session_sites == connection_sites, (
+        "the two cost counters no longer accrue in lockstep: "
+        f"_session_total_cost += {session_sites} but "
+        f"_connection_total_cost += {connection_sites}. "
+        "If the per-connection accrual is missing, the spend ceiling banks "
+        "NOTHING and never fires; if it is fed a different value, the "
+        "ceiling and the cost log disagree."
+    )
