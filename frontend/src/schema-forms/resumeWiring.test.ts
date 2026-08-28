@@ -74,4 +74,34 @@ describe('dft1 wiring', () => {
     const preview = read('pdf-view/FilledPreviewModal.tsx');
     expect(preview).toContain('NO resume stamp here');
   });
+
+  it('the overlay RENDERS the resume choice', () => {
+    const overlay = read('demo/VoiceOverlay.tsx');
+    expect(overlay).toContain('<ResumeUpload');
+    expect(overlay).toContain('applyResume(');
+  });
+
+  it('the resume choice comes BEFORE the disclaimer', () => {
+    // A client resuming should choose "continue my saved form" and THEN
+    // agree, so the acceptance record belongs to the session they are about
+    // to work in -- not to one that ended days ago.
+    const overlay = read('demo/VoiceOverlay.tsx');
+    expect(overlay.indexOf('<ResumeUpload')).toBeLessThan(
+      overlay.indexOf('<DisclaimerModal'),
+    );
+  });
+
+  it('a resumed session RE-ACCEPTS the disclaimer', () => {
+    // applyResume clears the flag; if that ever stopped, a resumed client
+    // would skip the agreement entirely and the audit trail would carry a
+    // tick from a session that ended who knows when.
+    const apply = read('schema-forms/applyResume.ts');
+    expect(apply).toContain('disclaimerAccepted: false');
+  });
+
+  it('the resume upload is verified SERVER-side, not in the browser', () => {
+    // A client-side check is defeated by a client-side attacker.
+    const component = read('schema-forms/components/ResumeUpload.tsx');
+    expect(component).toContain('/api/resume-form');
+  });
 });

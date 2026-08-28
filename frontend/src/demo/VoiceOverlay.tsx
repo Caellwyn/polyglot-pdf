@@ -29,6 +29,9 @@ import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTim
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 import { SaveNudge } from '../schema-forms/components/SaveNudge'
+import { ResumeUpload } from '../schema-forms/components/ResumeUpload'
+import type { ResumeResult } from '../schema-forms/components/ResumeUpload'
+import { applyResume } from '../schema-forms/applyResume'
 import { useSaveNudge } from '../schema-forms/useSaveNudge'
 import {
 	createNoticeSpeaker,
@@ -211,6 +214,29 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// components: the overlay does not own the fill/download path.
 		window.dispatchEvent(new CustomEvent('polyglot:save-form'))
 	}, [saveNudge])
+
+	// RESUME CHOICE (bd polyglot-pdf-dft1). Offered BEFORE the disclaimer: a
+	// client resuming should pick "continue my saved form" first and THEN agree,
+	// so the acceptance record belongs to the session they are actually about to
+	// work in.
+	//
+	// Client sessions only, and only when they have not already started -- a
+	// client mid-form does not need a start-over prompt in their way.
+	const [resumeDismissed, setResumeDismissed] = useState(false)
+	const showResumeChoice = isClientSession
+		&& !resumeDismissed
+		&& !formState?.disclaimerAccepted
+		&& Object.keys(formState?.fieldValues ?? {}).length === 0
+
+	const handleResumed = useCallback((result: ResumeResult) => {
+		const current = SchemaFormStateManager.load()
+		if (current) {
+			// applyResume clears disclaimerAccepted on purpose, so the modal below
+			// opens next and the client agrees for THIS session.
+			SchemaFormStateManager.save(applyResume(current, result))
+		}
+		setResumeDismissed(true)
+	}, [])
 
 	const overlayText = getOverlayStrings(selectedLanguage)
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
@@ -2635,6 +2661,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					preselectedFormId={schema.form_metadata.form_number || 'default'}
 				/>
 			)}
+
+			{/* RESUME CHOICE (bd polyglot-pdf-dft1). A client does not pick a
+			    FORM -- their link already did -- so this is one question: start
+			    fresh, or continue the file you saved. The upload is verified
+			    SERVER-side against the kit's own form.pdf; this component only
+			    collects the file. */}
+			<ResumeUpload
+				isOpen={showResumeChoice}
+				kitId={formState?.schema?.form_metadata?.form_number ?? ''}
+				pdfFilename="form.pdf"
+				selectedLanguage={selectedLanguage}
+				backendUrl={getBackendHttpUrl()}
+				onResumed={handleResumed}
+				onStartOver={() => setResumeDismissed(true)}
+			/>
 
 			{/* SAVE NUDGE (bd polyglot-pdf-dft1). The saved PDF is the only thing
 			    between a client and losing every answer -- browser form state is
