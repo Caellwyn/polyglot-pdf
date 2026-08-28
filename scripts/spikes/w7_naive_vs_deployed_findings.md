@@ -802,7 +802,8 @@ tokens on every run.
 | 030509Z | Deployed | unhappy | 57 | $4.268139 | $0.004354 | $0.005677 | **$4.272493** |
 | 032527Z | Deployed | unhappy | 57 | $4.041460 | $0.004347 | $0.003481 | **$4.045807** |
 | 034310Z | Naive | happy | 57 | $6.016500 | -- | -- | **$6.016500** |
-| 035215Z | Naive | unhappy | **39/57 (DID NOT COMPLETE)** | $5.912473 | -- | -- | **$5.912473** |
+| 035215Z | Naive | unhappy (no resume) | **39/57 (DID NOT COMPLETE)** | $5.912473 | -- | -- | **$5.912473** |
+| 053300Z | Naive | unhappy (+ session resume) | 57 | $9.836144 | -- | -- | **$9.836144** |
 
 All four deployed all-in figures were verified to equal `voice_usd +
 text_usd` exactly (residual < $0.00001) -- confirming the single
@@ -818,7 +819,24 @@ W-7 study (commit `ed5dde52`) is applied consistently here too.
 | 032527Z | Deployed | unhappy | $4.045807 | 1041.2s | 57/57 | 57/57 | 48/57 | 84.2% | 17 |
 | **Deployed unhappy mean** | | | **$4.159150** | **1113.2s** | | 57/57 | 48/57 | **84.2%** | |
 | 034310Z | Naive | happy | $6.016500 | 511.9s | 57/57 | 57/57 | 47/57 | 82.5% | 2 (platform force-trim) |
-| 035215Z | Naive | **unhappy -- DID NOT COMPLETE** | $5.912473 | 2103.1s (35.1 min) | **39/57** | 33/57 | 24/57 | 42.1% of 57 / 61.5% of 39 attempted | 2 (platform force-trim) |
+| 035215Z | Naive | **unhappy, no resume -- DID NOT COMPLETE** | $5.912473 | 2103.1s (35.1 min) | **39/57** | 33/57 | 24/57 | 42.1% of 57 / 61.5% of 39 attempted | 2 (platform force-trim) |
+| 053300Z | Naive | **unhappy + session resume (HEADLINE cell)** | $9.836144 | 2401.6s (40.0 min) | 57/57 | 51/57 | 40/57 | 70.2% | 3 (platform force-trim) |
+
+**The completed naive-unhappy run (053300Z, maintainer-directed,
+2026-08-28).** After the no-resume attempt wedged, the maintainer directed
+enabling Gemini's session-resumption feature for the naive arm
+(`SESSION_RESUMPTION_ENABLED`, new adapter support in commit `fd1725a3`,
+default OFF in production -- the June decline stands; the harness opts in for
+`--arm naive` only). The re-run WEDGED AT THE SAME QUESTION 39 -- two
+independent runs, near-identical cost curves to the wedge point, same
+failure spot: the collapse is REPRODUCIBLE naive behavior, not a fluke --
+and this time recovered via the platform's resume token (7.75s downtime,
+`meta.session_resumes`), completing all 57 questions in 40.0 minutes at
+$9.836144 all-in with 51/57 confirmed, 40/57 correct (70.2%), 7 driver
+confirm-nudges, 7 unsettled questions, and 3 platform force-trims. Against
+the deployed unhappy mean: **2.37x the dollars, 2.16x the wall clock, and
+$0.193 vs $0.073 per confirmed field (2.64x)** -- with the naive arm needing
+a recovery feature a naive builder would first have to know to build.
 
 "Evictions" carries the same two-mechanism caveat as the W-7 table above:
 deployed rows count the app's own curated context-compression; naive rows
@@ -902,9 +920,9 @@ provenance caveat).
 | Naive happy | $1.839110 | $6.016500 | |
 | **Happy multiplier (naive/deployed)** | **2.58x** | **2.93x** | **moat widens with form length** |
 | Deployed unhappy mean | $1.367385 | $4.159150 | |
-| Naive unhappy | $3.281677 (complete) | $5.912473 (partial, 39/57 done -- did not complete) | |
-| Unhappy multiplier, raw dollars (naive/deployed) | 2.40x | 1.42x -- **not usable**, see caveat below | |
-| **Unhappy multiplier, per-confirmed-field (naive/deployed)** | n.a. (W-7 naive completed; ratio not needed) | **2.455x** | fair unhappy comparator |
+| Naive unhappy (headline: completed run) | $3.281677 (complete) | $9.836144 (complete, WITH session resume -- 053300Z) | i90-v2 no-resume attempt: $5.912473, aborted 39/57 |
+| **Unhappy multiplier, raw dollars (naive/deployed)** | **2.40x** | **2.37x** | both cells now completing runs |
+| **Unhappy multiplier, per-confirmed-field (naive/deployed)** | 2.40x (both 57-of-57-equivalent) | **2.64x** ($0.193 vs $0.073; naive confirmed only 51/57) | quality-adjusted comparator |
 
 **Read this table carefully -- it is n=1 per naive cell.** Every naive
 number here comes from a single run (as does every naive number in the W-7
@@ -1053,8 +1071,9 @@ Anomalies section below for the honest statement of this open question.
 | W-7 study | $10.173 |
 | i90-v2 committed artifacts | $31.301245 |
 | i90-v2 orphan "killed by tooling" run | $2.421086 |
-| **Program total** | **$43.895** |
-| **vs. $100 cap** | **$56.10 remaining** |
+| i90-v2 naive unhappy + session resume (053300Z, maintainer-directed) | $9.836144 |
+| **Program total** | **$53.731** |
+| **vs. $100 cap** | **$46.27 remaining** |
 
 **Anomaly resolutions (orchestrator, from primary evidence, 2026-08-28):**
 1. The 10 W-7-tagged "orphan" token-log sessions (19:20-20:05 UTC 08-27,
@@ -1079,6 +1098,7 @@ Anomalies section below for the honest statement of this open question.
 | 032527Z | Deployed unhappy | unhappy | $4.041460 | $4.041462 | $0.000002 |
 | 034310Z | Naive happy | happy | $6.016500 | $6.016503 | $0.000003 |
 | 035215Z | Naive unhappy (partial) | unhappy | $5.912473 | $5.912475 | $0.000002 |
+| 053300Z | Naive unhappy + resume | unhappy | $9.836144 | $9.836148 | $0.000004 |
 
 All 6 replay within $0.000004 -- consistent with the W-7 study's own replay
 tolerance. `cached_curve` sums to 0 on every run: the Live path bills 100% of

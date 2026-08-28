@@ -12,12 +12,12 @@ scripts/spikes/data/2nikx-full/plots/:
   1. cumulative_cost_happy.png   -- cumulative all-in cost vs question, happy,
                                     deployed-mean vs naive (2 platform
                                     force-trims annotated)
-  2. cumulative_cost_unhappy.png -- same, unhappy; naive line ENDS at q39
-                                    (model wedged, run aborted -- the line
-                                    stopping short is the point)
+  2. cumulative_cost_unhappy.png -- same, unhappy; TWO naive lines: the
+                                    no-resume attempt aborts at q39 (dashed),
+                                    the session-resume run completes all 57
   3. session_cost_bars.png       -- grouped bars, 4 arms x 2 forms (W-7 +
                                     i90-v2 side by side); naive-unhappy i90-v2
-                                    bar is hatched and labeled DID NOT COMPLETE
+                                    bars show the resumed COMPLETED run; the no-resume abort is a separate line
   4. cost_per_confirmed_field.png -- per-confirmed-field cost bars, both forms
 
 This is a SIBLING of plot_wiadk_comparison.py, not an extension of it: the
@@ -102,7 +102,13 @@ def load_all(data_dir: str) -> dict:
         "deployed_unhappy_1": _load(data_dir, "costs_i90-v2_2.5_dti_cont_comp_der_unhappy_20260828T030509Z.meta.json", "deployed unhappy #1"),
         "deployed_unhappy_2": _load(data_dir, "costs_i90-v2_2.5_dti_cont_comp_der_unhappy_20260828T032527Z.meta.json", "deployed unhappy #2"),
         "naive_happy": _load(data_dir, "costs_i90-v2_2.5_naive_happy_20260828T034310Z.meta.json", "naive happy"),
-        "naive_unhappy": _load(data_dir, "costs_i90-v2_2.5_naive_unhappy_20260828T035215Z.meta.json", "naive unhappy"),
+        # Two naive-unhappy runs, deliberately: 035215Z ran WITHOUT session
+        # resumption and wedged at q39 (the derailment-guard abort); 053300Z
+        # ran WITH resumption (maintainer-directed) and completed all 57.
+        # The completed run is the headline; the abort is plotted alongside
+        # as what happens without recovery machinery.
+        "naive_unhappy": _load(data_dir, "costs_i90-v2_2.5_naive_unhappy_20260828T053300Z.meta.json", "naive unhappy (resumed)"),
+        "naive_unhappy_noresume": _load(data_dir, "costs_i90-v2_2.5_naive_unhappy_20260828T035215Z.meta.json", "naive unhappy (no-resume abort)"),
     }
     # Provenance assertions -- refuse to plot a run that isn't the config we
     # think it is (mirrors plot_wiadk_comparison.py's checks).
@@ -222,11 +228,13 @@ def plot_cumulative_cost_happy(runs: dict, out_path: str) -> None:
 def plot_cumulative_cost_unhappy(runs: dict, out_path: str) -> None:
     dep1 = runs["deployed_unhappy_1"]
     dep2 = runs["deployed_unhappy_2"]
-    naive = runs["naive_unhappy"]
+    naive = runs["naive_unhappy"]              # WITH resumption: completes 57
+    naive_ab = runs["naive_unhappy_noresume"]  # abort at q39: the contrast
 
     q1, c1 = _turn_cumulative_cost(dep1)
     q2, c2 = _turn_cumulative_cost(dep2)
-    qn, cn = _turn_cumulative_cost(naive)  # qn ends at 39, NOT 57 -- the point
+    qn, cn = _turn_cumulative_cost(naive)
+    qa, ca = _turn_cumulative_cost(naive_ab)   # ends at 39, NOT 57
 
     assert q1 == q2, "deployed run question indices do not align"
     mean_c = [(a + b) / 2.0 for a, b in zip(c1, c2)]
@@ -237,12 +245,16 @@ def plot_cumulative_cost_unhappy(runs: dict, out_path: str) -> None:
     ax.plot(q1, mean_c, linewidth=2.6, color="#4C72B0",
             label=f"deployed config -- mean of 2 runs, all 57 questions "
                   f"(final ${mean_c[-1]:.2f})")
-    # Naive line ends at q39 -- it does NOT reach q57. Draw it stopping short,
-    # then mark the stop point explicitly; do not extend or interpolate.
+    # The no-resume attempt: thin dashed line that STOPS at q39 -- what a
+    # naive build without recovery machinery delivers. Never extended.
+    ax.plot(qa, ca, linewidth=1.6, color="#C44E52", linestyle="--", alpha=0.65,
+            label=f"naive, no recovery -- ABORTED at q39/57 (spent ${ca[-1]:.2f})")
+    ax.scatter([qa[-1]], [ca[-1]], color="#C44E52", s=70, zorder=5, marker="x",
+               linewidth=2.0)
+    # The resumed run: completes, at a price.
     ax.plot(qn, cn, linewidth=2.6, color="#C44E52", marker="o", markersize=3,
-            label=f"naive config -- 1 run, ABORTED at q39/57 (spent ${cn[-1]:.2f})")
-    ax.scatter([qn[-1]], [cn[-1]], color="#C44E52", s=90, zorder=5,
-               edgecolor="black", linewidth=1.0)
+            label=f"naive + Google session-resume -- all 57 questions "
+                  f"(final ${cn[-1]:.2f})")
 
     trim_qs = _eviction_questions(naive)
     for i, tq in enumerate(sorted(set(trim_qs))):
@@ -253,16 +265,20 @@ def plot_cumulative_cost_unhappy(runs: dict, out_path: str) -> None:
                         xy=(tq, y), xytext=(tq + 0.4, y * 0.5 if y else 0.2),
                         fontsize=8, color="#C44E52")
 
-    # The headline annotation: the line stopping short IS the chart's point.
+    # Mark the wedge/resume point on the completed run.
+    resume_q = 39
+    if resume_q in qn:
+        y = cn[qn.index(resume_q)]
+        ax.annotate(
+            "model wedged here; recovered via\nGoogle's session-resume token",
+            xy=(resume_q, y), xytext=(resume_q - 24, y + 1.3),
+            fontsize=9.5, fontweight="bold", color="#8B0000",
+            arrowprops=dict(arrowstyle="->", color="#8B0000", linewidth=1.4))
     ax.annotate(
-        "model wedged -- run aborted here\n(33/57 confirmed = 58%; 24 correct)",
-        xy=(qn[-1], cn[-1]), xytext=(qn[-1] - 22, cn[-1] - 1.05),
+        f"completed: 51/57 confirmed,\n40/57 correct (70%), ~40 min",
+        xy=(qn[-1], cn[-1]), xytext=(qn[-1] - 17, cn[-1] * 0.72),
         fontsize=9.5, fontweight="bold", color="#8B0000",
-        arrowprops=dict(arrowstyle="->", color="#8B0000", linewidth=1.4))
-    # Shade the region past q39 the naive run never reached.
-    ax.axvspan(qn[-1], 57, color="#C44E52", alpha=0.06)
-    ax.text(57, ax.get_ylim()[1] * 0.03, "never reached\n(18 questions)",
-            ha="right", va="bottom", fontsize=8, color="#8B0000", style="italic")
+        arrowprops=dict(arrowstyle="->", color="#8B0000", linewidth=1.2))
 
     ax.set_title(
         "I-90 (v2) form, 57 questions: running cost as the conversation "
@@ -271,7 +287,7 @@ def plot_cumulative_cost_unhappy(runs: dict, out_path: str) -> None:
     ax.set_xlabel("question number (1-57)")
     ax.set_ylabel("total cost so far, this session (USD)")
     ax.set_xlim(0, 58)
-    ax.set_ylim(0, 7.3)
+    ax.set_ylim(0, 10.8)
     ax.grid(alpha=0.3)
     ax.legend(loc="upper left", fontsize=9)
     fig.tight_layout()
@@ -282,7 +298,7 @@ def plot_cumulative_cost_unhappy(runs: dict, out_path: str) -> None:
 
 def plot_session_cost_bars(runs_2nikx: dict, runs_w7: dict, out_path: str) -> None:
     """Grouped bars, 4 arms x 2 forms -- the 'moat widens' visual. The naive
-    i90-v2 unhappy bar is hatched and labeled DID NOT COMPLETE since that run
+    i90-v2 unhappy bars show the resumed COMPLETED run; the no-resume abort is a separate line since that run
     never reached the end of the form (aborted at q39/57)."""
 
     def means(runs):
@@ -302,7 +318,7 @@ def plot_session_cost_bars(runs_2nikx: dict, runs_w7: dict, out_path: str) -> No
         ("Deployed, happy", "#4C72B0", [w7_dep_h, i90_dep_h], [False, False]),
         ("Deployed, unhappy", "#264478", [w7_dep_u, i90_dep_u], [False, False]),
         ("Naive, happy", "#DD8452", [w7_naive_h, i90_naive_h], [False, False]),
-        ("Naive, unhappy", "#C44E52", [w7_naive_u, i90_naive_u], [False, True]),
+        ("Naive, unhappy", "#C44E52", [w7_naive_u, i90_naive_u], [False, False]),
     ]
 
     n_forms = len(forms)
