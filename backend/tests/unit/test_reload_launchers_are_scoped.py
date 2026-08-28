@@ -42,8 +42,10 @@ _LAUNCHER_GLOBS = ("scripts/*.sh", "scripts/*.ps1", "*.md", "scripts/*.md")
 _CWD_PATTERNS = (
     # POSIX: cd "<root>/backend"  (subshell or standalone)
     re.compile(r"""cd\s+["']?\$\{?(?:REPO_ROOT|ROOT_DIR)\}?/backend["']?"""),
-    # POSIX, relative: cd backend && <launch>
-    re.compile(r"cd\s+backend\s*&&"),
+    # POSIX, relative: `cd backend &&` or `cd backend` on its own line (the
+    # form both PDF-debug docs use). Anchored to end-of-line so it cannot be
+    # satisfied by "cd backend/some/other/dir".
+    re.compile(r"cd\s+backend\s*(?:&&|$)", re.MULTILINE),
     # PowerShell: Set-Location '<root>\backend'
     re.compile(r"Set-Location\s+['\"][^'\"]*\\backend['\"]"),
     # PowerShell: -WorkingDirectory (Join-Path $RepoRoot 'backend')
@@ -54,15 +56,29 @@ _CWD_PATTERNS = (
 # ('-m', 'uvicorn', 'backend.main:app', ... '--reload') rather than one command
 # string, so a single-line regex misses it entirely -- which is exactly what
 # test_the_launcher_set_is_non_empty caught when this file was first written.
+# Both module spellings: `backend.main:app` (scripts, README) and the bare
+# `main:app` used by DEBUG_PDF_FILLING.md / test-pdf-filling.md. Restricting
+# this to the dotted form silently drops real members of the set -- those two
+# docs are correctly scoped today, so the omission was invisible.
 _RELOAD_RE = re.compile(
-    r"uvicorn\s+backend\.main:app[^\n]*--reload"
-    r"|['\"]uvicorn['\"]\s*,\s*['\"]backend\.main:app['\"]",
+    r"uvicorn\s+(?:backend\.)?main:app[^\n]*--reload"
+    r"|['\"]uvicorn['\"]\s*,\s*['\"](?:backend\.)?main:app['\"]",
     re.IGNORECASE,
 )
 
 
-def _files_launching_uvicorn_reload():
-    seen = []
+def _reload_invocations():
+    """Yield (path, lineno, segment) for EVERY uvicorn --reload launch.
+
+    One entry per INVOCATION, not per file. A per-file check lets a second,
+    unscoped launch in an already-scoped file pass on the strength of the
+    first one's `cd` -- which is how a file-wide search stays defeatable no
+    matter how strict the cwd pattern itself is.
+
+    `segment` is the text from the END of the previous invocation up to this
+    one, so each launch must be preceded by its own cwd statement.
+    """
+    found = []
     for pattern in _LAUNCHER_GLOBS:
         for path in sorted(REPO_ROOT.glob(pattern)):
             if not path.is_file():
@@ -71,9 +87,17 @@ def _files_launching_uvicorn_reload():
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:  # pragma: no cover
                 continue
-            if _RELOAD_RE.search(text):
-                seen.append((path, text))
-    return seen
+            prev_end = 0
+            for match in _RELOAD_RE.finditer(text):
+                segment = text[prev_end : match.end()]
+                lineno = text.count("\n", 0, match.start()) + 1
+                found.append((path, lineno, segment))
+                prev_end = match.end()
+    return found
+
+
+def _files_launching_uvicorn_reload():
+    return sorted({path for path, _, _ in _reload_invocations()})
 
 
 def test_the_launcher_set_is_non_empty():
@@ -87,28 +111,44 @@ def test_the_launcher_set_is_non_empty():
     )
 
 
-@pytest.mark.parametrize(
-    "path, text",
-    _files_launching_uvicorn_reload(),
-    ids=lambda v: str(v.relative_to(REPO_ROOT)) if isinstance(v, Path) else "",
+# PowerShell's Start-Process takes the cwd as an ARGUMENT, so dev-local.ps1
+# builds its uvicorn arg-array first and only names the working directory ~80
+# lines later. That one construct is therefore allowed to appear after the
+# launch; every other dialect must set the cwd BEFORE it. Kept as its own
+# pattern rather than a lookahead window so nothing else gets the exemption.
+_TRAILING_CWD_PATTERN = re.compile(
+    r"-WorkingDirectory\s+\(Join-Path\s+\$\w+\s+'backend'\)"
 )
-def test_reload_launcher_runs_from_backend(path, text):
-    # Evidence region = the launch command and the few lines leading into it,
-    # NOT the whole file. A file-wide search reads unrelated prose as proof:
-    # README.md's "cd backend" 300 lines below the launch block satisfied this
-    # check even with the cd stripped OUT of the launch line itself.
-    # Match the CONSTRUCT that sets the cwd, not text near the launch line.
-    # A proximity window cannot work here: the shell scripts `cd` before the
-    # launch, dev-local.ps1 passes -WorkingDirectory ~80 lines after it, and
-    # every window wide enough to catch the latter also swept in the kill and
-    # cleanup blocks (which name backend paths) and passed a mutated file.
-    # Each pattern below is the actual cwd-setting statement, anchored so it
-    # cannot be satisfied by an unrelated mention of the word "backend".
-    assert any(pat.search(text) for pat in _CWD_PATTERNS), (
-        f"{path.relative_to(REPO_ROOT)} starts `uvicorn --reload` but does not "
-        "establish backend/ as the working directory. uvicorn DISCARDS a "
-        "--reload-dir nested inside the process cwd and watches the cwd "
-        "instead, so this will watch the whole repo -- including "
+
+
+@pytest.mark.parametrize(
+    "path, lineno, segment",
+    _reload_invocations(),
+    # id from path+lineno only -- the segment is whole file chunks, and letting
+    # it into the id makes failures unreadable.
+    ids=[
+        f"{p.relative_to(REPO_ROOT).as_posix()}:{n}"
+        for p, n, _ in _reload_invocations()
+    ],
+)
+def test_reload_launcher_runs_from_backend(path, lineno, segment):
+    """Each INVOCATION must be preceded by its own cwd-setting statement.
+
+    Checking per-file instead lets a second, unscoped launch in the same file
+    pass on the first one's `cd`; checking a proximity window instead either
+    misses the cwd (it can sit ~80 lines away) or sweeps in kill/cleanup
+    blocks that merely name backend paths. Segment = since the previous
+    invocation, so evidence cannot be reused across launches.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    scoped = any(pat.search(segment) for pat in _CWD_PATTERNS) or (
+        _TRAILING_CWD_PATTERN.search(text) is not None
+    )
+    assert scoped, (
+        f"{path.relative_to(REPO_ROOT)}:{lineno} starts `uvicorn --reload` but "
+        "does not establish backend/ as the working directory first. uvicorn "
+        "DISCARDS a --reload-dir nested inside the process cwd and watches the "
+        "cwd instead, so this will watch the whole repo -- including "
         ".claude/worktrees/ -- and restart on unrelated agent edits. "
         "Run uvicorn from backend/ (see scripts/run-schema-editor.sh)."
     )
