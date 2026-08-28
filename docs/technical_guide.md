@@ -270,7 +270,8 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
 Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
-/ `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts:641`.
+/ `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts`'s
+`this.send(handshake)` call.
 Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py`'s
 `@router.websocket("/fill")` handler; handshake keys parsed in its
 `handshake_type`/JIT-branch block).
@@ -312,7 +313,8 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
 Client->server: one `if mtype == ...` switch in `websocket_routes.py`'s
 `/ws/fill` receive loop.
-Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:659-854`.
+Server->client: one dispatch switch at `frontend/src/webFormConnection.ts`'s
+`switch (message.type)` block.
 Message senders are object literals; a renamed `type` logs
 `unknown_control_message_type` (or falls to the TS `default`) and a renamed
 sub-key reads as absent. The request/response pairs ride
@@ -330,13 +332,13 @@ sub-key reads as absent. The request/response pairs ride
 `spellback`/`spellback_response` (bd polyglot-pdf-22h1f; flag-gated, the ONE
 round-trip that deliberately holds the pending tool response for the client's
 blocking TTS clip playback, 90s cap). Client reply builders:
-`webFormConnection.ts:3197` (`sendConfirmFieldResponse`) / :3318
-(`sendSkipFieldResponse`), :2502 (`sendSwitchFieldResponse`), :3295
-(`sendSpellbackResponse`).
+`webFormConnection.ts`'s `sendConfirmFieldResponse` /
+`sendSkipFieldResponse` / `sendSwitchFieldResponse` /
+`sendSpellbackResponse`.
 
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
-  (`webFormConnection.ts:664-666`, expecting an `updates: Record<name, value>`
+  (`webFormConnection.ts`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
   (`backend/services/callback_handler.py:242`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
@@ -350,7 +352,8 @@ Known traps (all deliberate, all pinned only by comments):
 - The `session_ready` message's `native_vad` flag (websocket_routes.py's
   `session_ready` payload send) must agree with the backend's
   `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`webFormConnection.ts:864,951` ->
+  activity-signal behavior from it (`webFormConnection.ts`'s `native_vad`
+  destructure and its `onNativeVadMode` call ->
   `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
 
 ### 4. Backend <-> Gemini Live (tools + session config)
@@ -442,9 +445,9 @@ class).
 
 The chain: Gemini `confirm_field` tool -> backend request
 (`request_coordinator.py:279`, `request_confirm_field`) -> client verifies it
-has a usable value and acks (`webFormConnection.ts:1924`,
-`handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse` at
-:3197 -- `reason` is a fixed category token, never a field value) -> backend
+has a usable value and acks (`webFormConnection.ts`'s
+`handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse`
+-- `reason` is a fixed category token, never a field value) -> backend
 logs ONLY on a positive ack (the `recorded` guard at
 `callback_handler.py:961`; the `log_field_confirmation` call it protects at
 :1000-1009). Event shape (NO PII, no `value` key anywhere), built in

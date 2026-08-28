@@ -3,8 +3,12 @@
  *
  * While the deterministic letter-by-letter TTS clip plays, NOTHING from the
  * mic may reach the model, in ANY input mode -- otherwise the clip (or room
- * echo of it) can leak back in as user speech and trigger a turn while the
- * model is parked on the pending name_spellback tool response. Two distinct
+ * echo of it) can leak back in as user speech and trigger a turn. This mic
+ * hold does NOT mean the model is parked, though (bd polyglot-pdf-kvrfq,
+ * wire-verified 2026-08-26): under barge-in pressure the model can keep
+ * emitting further name_spellback calls while earlier ones are unanswered,
+ * queueing behind the in-flight round-trip (see
+ * docs/components/voice-ai.md's name_spellback bullet). Two distinct
  * behaviors, one per streaming discipline:
  * - native VAD: the stream must stay CONTINUOUS, so a held frame is replaced
  *   with a zeroed buffer of the same length (the bd zivv silence pattern);
