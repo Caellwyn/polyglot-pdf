@@ -1,0 +1,142 @@
+---
+date: 2026-08-27
+bead: polyglot-pdf-dft1
+tags: [client-links, resume, pdf, security, tts, i18n, testing]
+---
+
+# The client's saved PDF is the save file
+
+bd `polyglot-pdf-dft1`. A pilot blocker, and the one that mattered most: today
+a client who steps away for an hour loses **every answer**. `schemaFormState`
+discards state after 60 minutes and re-initialises with `fieldValues: {}`. That
+is live behavior, independent of any spend cap.
+
+The maintainer's design: piggyback on the save the client already does.
+*"We already have a 'save' function that saves the form as a pdf ... We can
+track the link ids used, and the form session id in pdf metadata to allow the
+resume."*
+
+## Why it works: the file already holds both halves
+
+Measured with PyMuPDF before building anything:
+
+- custom JSON in PDF metadata round-trips byte-identical
+- filled field VALUES read back out of a saved document
+
+So the client's own file is a complete save file -- their answers in the form
+fields, their identity in the metadata -- with **no server storage**, which is
+what keeps the stateless-architecture rule intact.
+
+## The upload is attacker-controlled, and the maintainer said so first
+
+*"a thorough check that it matches the form they were assigned. I'd want a byte
+match on everything except the field data to help prevent bad actors from using
+this for prompt injection or some other attack."*
+
+**A literal byte match cannot work**, measured before building: filling the same
+kit twice with identical values produces DIFFERENT bytes -- same length,
+different sha256 -- because PDFs embed timestamps and object ids. Implemented
+literally it would refuse every legitimate resume.
+
+The structure digest is what "everything except the field data" means in
+practice: page count and geometry, the complete widget inventory (name, type,
+rounded rect, sorted so file order cannot matter), and each page's STATIC text.
+Refused, each pinned against the real W-7 kit: a different form, injected page
+text, an added widget, a moved widget, an added page, a removed page, anything
+unreadable. A missing reference form FAILS CLOSED.
+
+### The near-miss worth remembering
+
+The first digest **passed all eight attack tests and rejected every legitimate
+resume.** A filled field renders its value into the page's text layer, so
+hashing page text hashed the client's own answers -- the one thing the digest
+must ignore.
+
+**A security check that refuses everything passes every attack test perfectly.**
+Only the happy-path test caught it, which is why it was written alongside them.
+The fix hashes static text with words inside widget rects excluded; injection is
+still caught because text added where the form has no field lands outside every
+rect, and text hidden UNDER a widget is covered from the other side by the
+widget inventory pinning every rect.
+
+## The paid-TTS conflict, and the maintainer's call
+
+Wiring the spoken nudge surfaced a real design problem: both `/api/tts/*` routes
+declare `require_paid_client_work`, which REDEEMS the link. So the spoken "save
+your form now" would have
+
+- answered the budget-exhausted client with silence -- exactly who needs it, and
+- BURNED a live client's link to deliver a warning we chose to give.
+
+Maintainer: our own safety messages must not count against a client's budget.
+`POST /api/tts/notice` is `require_auth` instead, and follows the contract
+`/api/tts/intro` already set: **the caller sends a KEY, never text.** That is
+what stops a free route from becoming an open text-to-speech service for anyone
+holding a link.
+
+## Translations derived, not written twice
+
+The Python notice table is GENERATED from `resumeStrings.ts` -- the text a
+client SEES -- and a parity test re-derives it to prove they still agree. A
+client hearing one thing while the screen says another is worse than either
+alone.
+
+**The parity test found a real bug on its first run:** Chinese had a leading
+space the printed text did not. The generator wrapped long lines by splitting on
+SPACES, fine for spaced languages and silently corrupting Chinese, Japanese or
+Thai where the sentence is one "word". Fixed in the generator, so the next
+language added cannot hit it.
+
+## Ten well-tested modules, zero mounted
+
+Before the wiring commit, this feature had ten modules with passing unit tests
+and **not one of them reachable by a client.** Every test green; nothing
+rendered.
+
+That is the same shape that broke the client path five times in bd `ugm6`, and
+unit tests cannot see it by construction -- they test the piece, not whether
+anything calls it. The `resumeWiring` guard is derived from the shipped source
+and mutation-verified the honest way: deleting the mount reddens 2 wiring tests
+while all 23 unit tests stay GREEN.
+
+It also pins the ORDERING (the resume choice must precede the disclaimer, so a
+resuming client agrees for the session they are about to work in) and the
+enumerated set (download and print stamped, the preview deliberately not).
+
+## Three environment traps, all found by tests failing
+
+Worth recording because each looked like a test problem and two were product
+problems:
+
+1. **No auto-cleanup** for React Testing Library in this project -- an unmounted
+   render stays in the document and `document.querySelector` finds the stale
+   one. Six tests failed that way.
+2. **`File.arrayBuffer()` is undefined** in this jsdom. Not just a test gap: a
+   client recovering their work is exactly the person on an older phone, so the
+   component now falls back to `FileReader`.
+3. **`URL.createObjectURL` is undefined** there too, so creating the blob URL
+   inside `speak()` threw and the silent-failure catch HID it -- a test that
+   looked like it passed while playing nothing. `play()` now takes the Blob.
+
+## tsc caught a runtime bug the tests missed
+
+`fieldValues` holds `FieldValue` OBJECTS (value, confirmed, confirmedAt,
+confirmationMethod, lastModified) and `applyResume` was merging bare strings --
+which would have corrupted every reader of `.value` or `.confirmed` at runtime,
+not merely failed a type check. The tests passed because they asserted on what
+the merge RETURNED rather than on its SHAPE.
+
+Restored answers are marked `manual_edit`, not `ai_voice`: they came from the
+client's own file, not from something the assistant heard this session.
+
+## What is NOT done
+
+- **`polyglot-pdf-1uyof`** (carry `form_session_id` across a replacement link)
+  depends on this and is still open. The stamp carries the jti list already; the
+  aggregation work is separate.
+- **`polyglot-pdf-cke6v`** (a spend-exhausted client sees a generic "reconnect
+  failed" modal) can now reuse the ending notice rather than building a second
+  modal pipeline.
+- The resume flow has not been exercised against a live browser end to end. The
+  route, the verifier, the merge and the mounts are each tested, and the wiring
+  guard proves they are connected, but nobody has clicked through it.
