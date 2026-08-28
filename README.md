@@ -158,7 +158,12 @@ $env:VERTEXAI="false"; $env:GEMINI_API_KEY="your_key_here"
 **Terminal 1 - Backend:**
 ```bash
 source ./.venv/Scripts/activate
-uvicorn backend.main:app --reload --port 8000
+# Run FROM backend/ so --reload watches only backend/. uvicorn drops a
+# --reload-dir that sits inside the process cwd and watches the cwd instead,
+# so starting from the repo root watches the whole tree -- including
+# .claude/worktrees/, where an edit in any sibling checkout restarts you.
+export PYTHONPATH="$PWD"
+cd backend && uvicorn backend.main:app --reload --reload-dir "$PYTHONPATH/backend" --port 8000
 ```
 Backend available at: <http://localhost:8000>
 

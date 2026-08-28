@@ -233,12 +233,23 @@ start_backend() {
   # GEMINI_API_KEY instead. Respect an already-set value so a different project
   # can be used per run.
   #
-  # --reload-dir backend scopes the reload watcher. A bare --reload watches the
-  # WHOLE cwd tree, and the repo root holds .claude/worktrees/ with ~130 sibling
-  # worktrees, each a full checkout -- so an agent editing any .py in ANY of them
-  # restarts this backend. Safe to scope: backend/ imports no other top-level
-  # package (shared/ is one JSON file, no Python).
-  ( cd "$REPO_ROOT" && \
+  # Scope the reload watcher to backend/ by making backend/ the process CWD.
+  # --reload-dir ALONE cannot do this: uvicorn's WatchFiles supervisor drops
+  # any reload dir that is a CHILD of the process cwd and watches the cwd
+  # instead (uvicorn 0.24, unchanged upstream). With cwd at the repo root --
+  # which holds .claude/worktrees/ and its ~130 sibling checkouts -- that
+  # collapsed to watching EVERYTHING, so an agent editing any .py in ANY
+  # worktree restarted this backend mid-request. The startup log "Will watch
+  # for changes in these directories: [...backend]" prints the CONFIG, not the
+  # effective watch set, which is how this looked fixed for two rounds
+  # (bd polyglot-pdf-b5nmq; PR #650 before it).
+  #
+  # With cwd == the reload dir the supervisor keeps exactly that dir. Safe to
+  # move the cwd: PYTHONPATH pins imports to the repo root, and backend runtime
+  # paths anchor on __file__ rather than cwd (pinned by
+  # backend/tests/unit/test_runtime_paths_are_cwd_independent.py). backend/
+  # imports no other top-level package (shared/ is one JSON file, no Python).
+  ( cd "$REPO_ROOT/backend" && \
     VERTEXAI="$vertexai" USE_PREMIUM_MODEL="$PREMIUM" PYTHONPATH="$REPO_ROOT" \
     GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
     VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}" \
@@ -248,7 +259,7 @@ start_backend() {
     LIVE_DEV_TRANSCRIPTS="${LIVE_DEV_TRANSCRIPTS:-false}" \
     LIVE_DEV_AUDIO_DUMP="${LIVE_DEV_AUDIO_DUMP:-false}" \
     "$VENV_PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload \
-      --reload-dir backend ) &
+      --reload-dir "$REPO_ROOT/backend" ) &
   PIDS+=("$!")
 }
 
