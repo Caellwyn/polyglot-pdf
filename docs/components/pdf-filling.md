@@ -2,10 +2,12 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-4we6j: documented the SELECT fill
-path -- it has no branch of its own, so a dropdown's `option.value` is
-written verbatim into the widget and IS the PDF export value, unchecked
-against the widget's `/Opt` list.)*
+*Last updated: 2026-08-28 (bd polyglot-pdf-6zhaf: kit deletion is
+GRADUATED, not a permanent refusal -- the old three-state guard turned an
+unrunnable confirmation check into a 409 with no override, and
+un-attributable legacy records make it permanently unrunnable, so every kit
+became undeletable forever. Risk now decides how firmly the author is asked,
+never whether the door exists.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -293,17 +295,34 @@ lock, enforced through one `_require_edit_lock` helper and pinned by a property
 test that derives the route list from the shipped module.
 
 **The one thing that removes an archive** is `DELETE /api/editor/kits/{kit_id}`
-(bd `polyglot-pdf-6x1j`) -- author-only, and guarded by a THREE-state check
-rather than a warning: records exist -> 409 offering unpublish; no records and
-the check *succeeded* -> deleted; the check could not run -> 409 refusing.
+(bd `polyglot-pdf-6x1j`) -- author-only, and guarded by GRADUATED FRICTION
+rather than a permanent refusal (bd `polyglot-pdf-6zhaf`). Risk decides how
+firmly the caller is asked, never whether the door exists: never-live with no
+records and a check that *succeeded* deletes outright; never-live with records
+OR an unrunnable check returns 409 `DELETE_NEEDS_ACK:`; an EVER-LIVE kit
+(`complete`/`unpublished`, or any `published_at`) returns 409
+`DELETE_NEEDS_DOUBLE_ACK:`. Both clear on `?acknowledged=` -- `understood` and
+`understood-published` respectively, and the weaker token does NOT satisfy the
+stronger gate.
+
+An absolute refusal was the previous design and turned out to be its own bug:
 `confirmation_logger.kit_has_confirmation_records` RAISES
 `ConfirmationCheckUnavailable` rather than returning False when the Firestore
-sink is off or its query fails, because the local JSONL fallback dies with the
-instance -- reading that silence as "no records" would let an author working
-locally destroy the evidence this archive exists to preserve. Taking the
-archive with the kit is deliberate: a kit with no confirmation records has
-nothing naming its superseded revisions, so leaving them strands bytes no
-record can retrieve. `FormKitStore.delete_kit` is the store's ONLY destructive
+sink is off or its query fails, and un-attributable legacy records make that
+permanent -- so EVERY kit became undeletable forever and the store filled with
+junk nobody could clear. The check is unchanged and its outcome still grades the
+warning; what changed is that a warning can be acknowledged. The caution behind
+it still stands: the local JSONL fallback dies with the instance, so reading
+that silence as "no records" would let an author working locally destroy
+evidence -- which is why the unverifiable case still warns rather than passing
+silently.
+
+Taking the archive with the kit is deliberate, and it is precisely what a delete
+costs. The confirmation records themselves live in a SEPARATE store and survive,
+so a delete does not erase anyone's agreement -- it erases the revision that
+agreement names, leaving a record pointing at bytes nobody can produce. That is
+what the ever-live warning has to say, and saying "this deletes their agreement
+records" instead would be false. `FormKitStore.delete_kit` is the store's ONLY destructive
 primitive; both impls confine the delete to the kit's own prefix (the local one
 resolves and re-checks containment, since `_kit_dir` is a bare join; the GCS one
 appends a trailing slash, without which `w7` would also sweep away `w7-2024`). Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
