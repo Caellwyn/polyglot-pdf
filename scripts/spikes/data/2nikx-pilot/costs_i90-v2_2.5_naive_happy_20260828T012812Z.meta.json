@@ -1,0 +1,423 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90-v2",
+  "arm": "naive",
+  "path": "happy",
+  "questions": 6,
+  "compression": false,
+  "trigger": null,
+  "window": null,
+  "trigger_requested": null,
+  "window_requested": null,
+  "derive_compression": false,
+  "continuous": false,
+  "schema_scope": "full-form",
+  "started": "20260828T012812Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "field_id": "a_number",
+      "text_in": 19823,
+      "audio_in": 224,
+      "text_out": 36,
+      "audio_out": 0,
+      "total_tokens": 20083,
+      "cost_usd": 0.010656,
+      "cumulative_cost_usd": 0.023404,
+      "prompt_tokens": 20047,
+      "latency_s": 1.375
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "a_number",
+      "text_in": 19995,
+      "audio_in": 224,
+      "text_out": 0,
+      "audio_out": 84,
+      "total_tokens": 20303,
+      "cost_usd": 0.011678,
+      "cumulative_cost_usd": 0.035081,
+      "prompt_tokens": 20219,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "field_id": "uscis_account",
+      "text_in": 40015,
+      "audio_in": 677,
+      "text_out": 79,
+      "audio_out": 90,
+      "total_tokens": 40861,
+      "cost_usd": 0.023276,
+      "cumulative_cost_usd": 0.058357,
+      "prompt_tokens": 20411,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "uscis_account",
+      "text_in": 60648,
+      "audio_in": 1194,
+      "text_out": 34,
+      "audio_out": 154,
+      "total_tokens": 62030,
+      "cost_usd": 0.035822,
+      "cumulative_cost_usd": 0.094179,
+      "prompt_tokens": 20726,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "field_id": "family_name",
+      "text_in": 102987,
+      "audio_in": 2639,
+      "text_out": 32,
+      "audio_out": 195,
+      "total_tokens": 105853,
+      "cost_usd": 0.061815,
+      "cumulative_cost_usd": 0.155994,
+      "prompt_tokens": 21486,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "family_name",
+      "text_in": 62703,
+      "audio_in": 2300,
+      "text_out": 20,
+      "audio_out": 41,
+      "total_tokens": 65064,
+      "cost_usd": 0.038783,
+      "cumulative_cost_usd": 0.194777,
+      "prompt_tokens": 21767,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "field_id": "given_name",
+      "text_in": 20982,
+      "audio_in": 853,
+      "text_out": 0,
+      "audio_out": 41,
+      "total_tokens": 21876,
+      "cost_usd": 0.013542,
+      "cumulative_cost_usd": 0.208319,
+      "prompt_tokens": 21835,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "given_name",
+      "text_in": 41983,
+      "audio_in": 1892,
+      "text_out": 27,
+      "audio_out": 146,
+      "total_tokens": 44048,
+      "cost_usd": 0.028473,
+      "cumulative_cost_usd": 0.236793,
+      "prompt_tokens": 21974,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "field_id": "middle_name",
+      "text_in": 42149,
+      "audio_in": 2138,
+      "text_out": 20,
+      "audio_out": 0,
+      "total_tokens": 44307,
+      "cost_usd": 0.027528,
+      "cumulative_cost_usd": 0.264321,
+      "prompt_tokens": 22172,
+      "latency_s": 1.39
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "middle_name",
+      "text_in": 21146,
+      "audio_in": 1094,
+      "text_out": 0,
+      "audio_out": 41,
+      "total_tokens": 22281,
+      "cost_usd": 0.014347,
+      "cumulative_cost_usd": 0.278668,
+      "prompt_tokens": 22240,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "field_id": "name_changed",
+      "text_in": 21153,
+      "audio_in": 1144,
+      "text_out": 7,
+      "audio_out": 87,
+      "total_tokens": 22391,
+      "cost_usd": 0.015067,
+      "cumulative_cost_usd": 0.293735,
+      "prompt_tokens": 22297,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "name_changed",
+      "text_in": 85075,
+      "audio_in": 5317,
+      "text_out": 61,
+      "audio_out": 166,
+      "total_tokens": 90619,
+      "cost_usd": 0.060602,
+      "cumulative_cost_usd": 0.354337,
+      "prompt_tokens": 22780,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "confirm_field",
+      "confirm_field"
+    ],
+    "3": [
+      "confirm_field",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "4": [
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields"
+    ],
+    "6": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ]
+  },
+  "prompt_curve": [
+    19808,
+    20047,
+    20219,
+    20281,
+    20411,
+    20503,
+    20613,
+    20726,
+    20832,
+    20934,
+    21114,
+    21260,
+    21486,
+    21588,
+    21648,
+    21767,
+    21835,
+    21901,
+    21974,
+    22115,
+    22172,
+    22240,
+    22297,
+    22436,
+    22537,
+    22639,
+    22780
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": false,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "spoken_language": "English",
+  "speech_language_code_enabled": true,
+  "transcription_language_hint_enabled": true,
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": false,
+  "session_count": 1,
+  "naive_si_booklet_chars": 40908,
+  "system_instruction_chars": 80438,
+  "greeting_tokens": 20045,
+  "greeting_cost_usd": 0.012748,
+  "greeting_breakdown": {
+    "text_in": 19808,
+    "audio_in": 0,
+    "text_out": 0,
+    "audio_out": 237
+  },
+  "event_records": [],
+  "seam_tool_records": [],
+  "text_ledger_calls": [],
+  "divergence_count": 3,
+  "divergence_pairs": [
+    [
+      "uscis_account",
+      "a_number"
+    ],
+    [
+      "given_name",
+      "family_name"
+    ],
+    [
+      "name_changed",
+      "given_name"
+    ]
+  ],
+  "spellback_count": 0,
+  "spellback_total_chars": 0,
+  "spellback_disabled": false,
+  "compression_effective": null,
+  "cached_curve": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "traffic_types": [],
+  "cache_summary": {
+    "reported": false,
+    "events": 27,
+    "events_with_cached_field": 0,
+    "events_with_nonzero_cache": 0,
+    "total_cached_tokens": 0,
+    "total_prompt_tokens": 578163
+  },
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "a_number",
+    "uscis_account",
+    "family_name",
+    "given_name"
+  ],
+  "fill_accuracy": {
+    "matched": 4,
+    "total": 6,
+    "accuracy": 0.6667,
+    "detail": [
+      {
+        "field_id": "a_number",
+        "expected": null,
+        "written": "087654321",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "uscis_account",
+        "expected": null,
+        "written": "",
+        "ok": false,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "family_name",
+        "expected": null,
+        "written": "Torres",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "given_name",
+        "expected": null,
+        "written": "Elena",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "middle_name",
+        "expected": null,
+        "written": "Mercell",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "name_changed",
+        "expected": null,
+        "written": null,
+        "ok": false,
+        "scored": "lenient"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [
+      "uscis_account",
+      "name_changed"
+    ],
+    "format": [],
+    "transcription": [],
+    "wrong-field": [],
+    "mismatch": [],
+    "spurious": []
+  },
+  "wall_clock_s": 58.9,
+  "auto_apply_fids": []
+}

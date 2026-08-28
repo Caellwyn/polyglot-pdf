@@ -138,6 +138,47 @@ reads the headline for bars and subtracts the greeting seed from curves).
 $9.282043). Well under the $60 stop-and-ping threshold and the $100 cap; no
 single run exceeded the $10 per-run re-estimate trigger.
 
+## i90-v2 extension (bd polyglot-pdf-2nikx, 2026-08-28) -- pre-registrations
+
+The same comparison on the NEW long-form I-90 kit (`form-kits/i-90_v2`, 34
+sections / 94 fields; a coherent single persona asks 57 questions -- the other
+37 fields are schema-gated conditionals/read-only, enumerated in
+`I90V2_EXCLUDED` and pinned by tests). Naive SI for this form: **19,710 SI +
+737 tool = 20,447 tokens** (measured `count_tokens`, 2026-08-28; smaller than
+W-7's 28,660 because the I-90 booklet is half the size).
+
+1. **WRITTEN BEFORE THE FULL 57q NAIVE HAPPY RUN** (pilot
+   `costs_i90-v2_2.5_naive_happy_20260828T012812Z`, $0.342/6q): predicted
+   full naive-happy = **$4.86, band $3.73-$5.99** (+/-25% on the projected
+   part). Method: trace extension from the pilot's own per-event numbers
+   (4.67 events/q stable avg, +594 tok context growth/q, +507 tok audio
+   growth/q) with the ~32,768-token platform force-trim modeled as a sawtooth
+   to the ~19.8k SI floor (2 trims projected). Wall-clock projects ~9.3 min
+   vs the ~10-min connection lifetime: completion is NOT assured, and an
+   API-terminated run is a pre-registered reportable RESULT (cost-to-
+   termination + questions completed), not a discard.
+2. Naive-unhappy (4 turns/q, ~18-19 min projected) is EXPECTED to be
+   API-terminated near the 15-min uncompressed session cap at roughly
+   question 40-46 of 57; predicted cost-to-termination ~$7-9. "The naive
+   approach cannot complete the I-90 in one session" is the anticipated
+   headline IF the logs prove a server-initiated close.
+3. Deployed arm expectations (not formal predictions): happy ~$1.85/run,
+   unhappy ~$3.6/run, scaling the W-7 means by question count; compression
+   effectiveness verified per-run via compression_effective + evictions.
+4. Same conventions as the W-7 study throughout: all-in excludes the
+   greeting (own line), Live cached tokens asserted zero, text sidecar priced
+   via price_text_usage, naive quality claims subject to a scorer-fairness
+   check (the naive smoke's 0/2 looked like format-normalization noise --
+   verify fill_failure_modes before quoting naive accuracy).
+
+### i90-v2 budget ledger (same $100 program cap; W-7 spent $10.17)
+
+| # | run | est. $ | actual $ | notes |
+|---|-----|--------|----------|-------|
+| 10 | D smoke i90-v2 happy q3 | ~0.10 | 0.053 | spell-back + secretary exercised |
+| 11 | N smoke i90-v2 happy q2 | ~0.15 | 0.069 | naive SI 20.4k confirmed on the wire |
+| 12 | N pilot i90-v2 happy q6 | ~0.70 | 0.342 | grounds pre-reg #1 |
+
 ## Results
 
 ### 1. Full results -- all 6 runs + means

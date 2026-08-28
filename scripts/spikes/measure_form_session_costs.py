@@ -720,8 +720,18 @@ I90V2_QUESTIONS = [
     # --- Part 1. Information About You ---
     {"field_id": "a_number", "say": "My A-Number is 0 8 7 6 5 4 3 2 1.",
      "wrong": "My A-Number is 0 8 7 6 5 4 3 2 8."},
+    # Persona HAS a USCIS online account (bd polyglot-pdf-2nikx methodology
+    # note): the original decline phrasing ("I do not have one") wedged a full
+    # 57q deployed run -- the live model answered it with update("") instead of
+    # skip_field once (nondeterministic; the smoke handled the same decline
+    # correctly), the DTI drip never advanced, and 52 questions ran tool-silent
+    # ($1.58 of invalid measurement, artifact kept in 2nikx-full). A filled
+    # answer removes the fragile early decline; later N/A declines (unit type,
+    # province on a US address) stay -- if the model wedges on one of those,
+    # the derailment guard below caps the spend and the wedge is REPORTED as a
+    # reliability datum, not discarded.
     {"field_id": "uscis_account",
-     "say": "I do not have a USCIS online account number.",
+     "say": "My USCIS online account number is 0 0 9 4 4 7 3 1 2 5 8 6.",
      "wrong": "My USCIS online account number is 1 2 3 4 5 6 7 8 9 0 1 2."},
     # --- Your Full Name ---
     {"field_id": "family_name", "say": "My last name is Torres.",
@@ -3165,6 +3175,7 @@ async def run(args) -> int:
                 divergence_pairs.append([expected_fid, other])
 
         sec_idx = 0
+        _tool_silent_run = 0  # derailment guard state (bd polyglot-pdf-2nikx)
         for i, q in enumerate(steps, 1):
             current_q["n"] = i
             is_event = "event" in q
@@ -3390,6 +3401,25 @@ async def run(args) -> int:
             print(f"[q{i:02d}] {fid or q.get('event')}: {rows[-1]['total tokens']} tok "
                   f"(${rows[-1]['total cost']:.4f}) tools={meta['per_question_tools'][str(i)]}",
                   flush=True)
+            # Derailment guard (bd polyglot-pdf-2nikx): a wedged live model can
+            # stop calling tools entirely while still consuming audio + billing
+            # every turn (measured: 52 tool-silent questions, $1.58, zero
+            # stalls -- the stall detector correctly never fires because the
+            # model keeps TALKING). Six consecutive tool-silent questions is
+            # far past any legitimate conversational lull in these scripted
+            # runs; abort, stamp the meta, and keep the artifacts -- a derailed
+            # run is a reportable datum whose spend should stop compounding.
+            if not meta["per_question_tools"][str(i)]:
+                _tool_silent_run += 1
+            else:
+                _tool_silent_run = 0
+            if _tool_silent_run >= 6:
+                meta["derailed_at_q"] = i
+                meta["derailed_reason"] = "6 consecutive tool-silent questions"
+                print(f"[derailment-guard] aborting run at q{i:02d}: "
+                      f"{_tool_silent_run} consecutive questions with zero "
+                      f"tool calls (model wedged; artifacts kept)", flush=True)
+                break
 
         # Terminal boundary (mirror form_complete, the terminal drain): a final
         # window-eligibility check (the tail window settles once the LAST

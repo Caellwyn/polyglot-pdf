@@ -1,0 +1,13 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,a_number,value,False,20047,19823,224,36,0,20083,0.010656,0.023404,1.375
+2,1,a_number,confirm,False,20219,19995,224,0,84,20303,0.011678,0.035081,
+3,2,uscis_account,value,False,20411,40015,677,79,90,40861,0.023276,0.058357,
+4,2,uscis_account,confirm,False,20726,60648,1194,34,154,62030,0.035822,0.094179,
+5,3,family_name,value,False,21486,102987,2639,32,195,105853,0.061815,0.155994,
+6,3,family_name,confirm,False,21767,62703,2300,20,41,65064,0.038783,0.194777,
+7,4,given_name,value,False,21835,20982,853,0,41,21876,0.013542,0.208319,
+8,4,given_name,confirm,False,21974,41983,1892,27,146,44048,0.028473,0.236793,
+9,5,middle_name,value,False,22172,42149,2138,20,0,44307,0.027528,0.264321,1.39
+10,5,middle_name,confirm,False,22240,21146,1094,0,41,22281,0.014347,0.278668,
+11,6,name_changed,value,False,22297,21153,1144,7,87,22391,0.015067,0.293735,
+12,6,name_changed,confirm,False,22780,85075,5317,61,166,90619,0.060602,0.354337,
