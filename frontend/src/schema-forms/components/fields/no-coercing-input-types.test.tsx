@@ -95,6 +95,21 @@ describe("no coercing input types on PDF-backed fields", () => {
     );
     expect(container.querySelector("input")!.getAttribute("placeholder")).toBe("MM/DD/YYYY");
   });
+
+  it(
+    "bd polyglot-pdf-vs15o: a date field carrying ONLY a flat `format` key " +
+      "(no help.format_hint) gets no placeholder -- a documented, latent gap " +
+      "vs. the backend, which reads flat `format` FIRST (field_validator.py's " +
+      "_resolve_date_format). No shipped kit is in this state today; this pins " +
+      "the current (gap-accepting) behavior so a future silent divergence " +
+      "shows up as an intentional test change, not a surprise.",
+    () => {
+      const { container } = renderField(
+        fieldOf("date", { format: "mm/dd/yyyy" } as Partial<FormField>)
+      );
+      expect(container.querySelector("input")!.getAttribute("placeholder")).toBeNull();
+    }
+  );
 });
 
 describe("comb cell count is not applied as a text limit", () => {
