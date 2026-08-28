@@ -135,6 +135,48 @@ behavior (the `_LOG_ROOT` anchor, its use at a call site, the two logger
 defaults, the marker probe) and turned the corresponding assertion red;
 restore green.
 
+Full backend suite green at each stage; 2783 passed at the end.
+
+## The third half: the audit trail, and the guard failing its own test
+
+The Opus cross-surface review then found a consumer the cwd move had
+broken: `confirmation_logger.py` defaulted to a bare `"logs/confirmations"`,
+so the local backend wrote the confirmation audit trail to
+`backend/logs/confirmations` while `scripts/read_confirmations.py` -- run
+"from the repo root" per its own docs -- read `logs/confirmations`.
+Confirmed by resolving both from each cwd: they agree on `origin/dev` and
+diverge on this branch. The failure is silent and badly shaped for this
+particular file: the reader reports "no events" for a session it cannot
+see, indistinguishable from a real gap in a trail whose purpose is
+liability protection. Deployed is unaffected (Firestore mirror), which is
+also the only reason this stayed local.
+
+The reviewer called it out of scope and filed it. It was fixed here
+instead: this change caused it, and shipping the cause while deferring the
+fix on an audit path is not a trade worth making.
+
+**Then the interesting part.** Reverting that fix left the new guard
+GREEN -- the guard written two rounds earlier to prevent exactly this. Two
+reasons, both the same mistake: it only matched `"backend/"`-prefixed
+literals (the invariant is "no cwd-relative paths", not "no backend/
+literals"), and it only inspected literals sitting inside a call, while the
+real one lived in a module CONSTANT and reached `os.getenv` as a variable.
+The indirection that hid the bug from a grep hid it from the AST scan too.
+
+Widened to match any cwd-relative literal, to read `os.getenv(KEY, default)`
+second arguments, and to scan path-shaped constants. A later re-review found
+that scan still blind to ANNOTATED assignments -- and every `config.py`
+`Settings` field is annotated, i.e. the likeliest home for the next one --
+so that was closed too. Writing the negative case for it then exposed a
+false positive the re-review had judged unreachable: a bare `LOG` in the
+name pattern matched `LOG_LEVEL`, whose value `"info/debug"` is path-shaped
+enough to pass the value check. `LOG` is gone; the trailing noun
+(DIR/PATH/ROOT/FILE/FOLDER) is what identifies a path constant.
+
+Both mutations now fail naming the exact file and line -- the real
+`confirmation_logger` revert, and the re-review's own annotated repro in
+`config.py`. Both were green before.
+
 ## Lessons
 
 **A log line that reports configuration is not evidence about behavior.**
@@ -156,5 +198,14 @@ no check, because it converts "unverified" into "verified" in the reader's
 head. So the question to ask of any completeness claim is not "did it
 pass?" but **"what exactly can this see, and what would slip past it?"** --
 and then to pin that answer, as `test_detector_catches_each_path_building_shape`
-now does. Every round here was found by a reviewer, never by the check
-itself; a guard that cannot say what it misses will not tell you.
+now does.
+
+**And run the mutation that matters against the guard itself.** The guard
+here went green while the bug it existed to catch was live in the tree; it
+was only caught by reverting the real fix and watching what the guard did.
+Five earlier mutations had all passed -- they tested the sites the guard
+already knew about, which is the comfortable mutation, not the informative
+one. The informative mutation is the one that reintroduces the *actual
+defect a reviewer just found*. Of the five rounds in this bead, four were
+found by a reviewer and one by a test case written to contradict a
+reviewer's judgment. None were found by the checks passing.
