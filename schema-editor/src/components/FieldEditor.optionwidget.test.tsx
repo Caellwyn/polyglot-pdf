@@ -252,8 +252,11 @@ describe('FieldEditor option widget -- select fields have no per-option widget (
     expect(screen.queryByLabelText('Option 1 PDF widget')).toBeNull();
     // and NOT the misleading shared-name-kid 'widget: X' line either
     expect(screen.queryByText(/widget: form1\[0\]\.state\[0\]/)).toBeNull();
-    // the internal-value slug (still meaningful for select) is retained
-    expect(screen.getByText('ca')).toBeInTheDocument();
+    // The value is still shown -- but for a select it is the PDF EXPORT CODE
+    // and is EDITABLE (bd polyglot-pdf-alzbr), not a read-only minted slug:
+    // the filler writes it verbatim into the combobox, so it cannot be derived
+    // from the label and this is the only place to author it.
+    expect(screen.getByDisplayValue('ca')).toBeInTheDocument();
   });
 });
 
