@@ -3316,7 +3316,7 @@ ACK_UNDERSTOOD = "understood"
 ACK_UNDERSTOOD_PUBLISHED = "understood-published"
 
 
-def _kit_was_ever_live(meta: Optional[dict]) -> bool:
+def _kit_was_ever_live(meta: Optional[dict], files: Optional[set] = None) -> bool:
     """Has this kit ever been visible to a client?
 
     NOT a status-string test. `unpublished` means a RETIRED FORMERLY-LIVE
@@ -3328,12 +3328,21 @@ def _kit_was_ever_live(meta: Optional[dict]) -> bool:
     2026-08-28, kit `w7` is status=complete with NO published_at (it predates
     the stamp), so keying on the timestamp would classify a live form as
     never-published. Either signal is sufficient; neither is necessary.
+
+    ABSENT metadata is not UNREADABLE metadata, and conflating them is a real
+    bug rather than a tidy default: a kit with no metadata.json is a NORMAL,
+    shipped state (form-kits/w9-heldout is exactly that -- a PDF and a note),
+    and it has manifestly never been published, since there is no status to say
+    so. Treating it as ever-live hands the scariest possible warning to the
+    junk-cleanup case this bead exists to unblock. A metadata.json that IS
+    present but did not parse is the suspicious one, and that stays strict.
+    `_stamp_readiness` already tells the two apart the same way, off the same
+    filename set (fresh-eyes round 2, bd polyglot-pdf-6zhaf).
     """
     if not isinstance(meta, dict):
-        # Unreadable metadata is not evidence of safety. Treat as ever-live so
-        # the strictest path applies -- the same fail-closed instinct as the
-        # confirmation check, but escalating rather than blocking outright.
-        return True
+        if files is not None and _METADATA_FILE not in files:
+            return False        # absent -> never published
+        return True             # present but unparseable, or cannot tell
     if meta.get("status") in _PUBLISHED_STATUSES:
         return True
     return bool(meta.get("published_at"))
@@ -3364,12 +3373,16 @@ async def delete_editor_kit(
     So the risk decides how much friction, not whether the door exists:
 
       TIER A -- never live, no records, check worked
-        -> deleted. The junk-cleanup case, and it must stay easy.
+        -> deleted. The junk-cleanup case, and it must stay easy. A kit with
+           NO metadata.json lands here: absent is not unreadable.
       TIER B -- never live, but records exist OR the check is UNAVAILABLE
-        -> 409 DELETE_NEEDS_ACK: naming what is unknown. Proceeds on ?acknowledged=true.
+        -> 409 DELETE_NEEDS_ACK:, naming what is unknown. Cleared by
+           ?acknowledged=understood.
       TIER C -- ever live (complete/unpublished/published_at), any check result
-        -> 409 DELETE_NEEDS_DOUBLE_ACK:. Proceeds only on ?acknowledged=true,
-           and the client is required to double-confirm before sending it.
+        -> 409 DELETE_NEEDS_DOUBLE_ACK:. Cleared ONLY by
+           ?acknowledged=understood-published -- the weaker token does not
+           escalate into it, or the second confirmation would live only in
+           the client and any direct API call would skip it.
 
     Tier B is still cautious for a reason worth keeping: the confirmation sink
     is Firestore, enabled by the deploy env; with it off the check falls back to
@@ -3392,9 +3405,9 @@ async def delete_editor_kit(
     # than reporting a guard result about a kit that was never there. The meta
     # is KEPT now (it was discarded before): the tier depends on whether this
     # kit was ever live, and its label is what the refusal must name.
-    meta, _files = await _load_meta_or_404(store, kit_id)
+    meta, files = await _load_meta_or_404(store, kit_id)
 
-    ever_live = _kit_was_ever_live(meta)
+    ever_live = _kit_was_ever_live(meta, files)
 
     # The check still runs, and its OUTCOME still matters -- it just no longer
     # decides whether deletion is possible, only how loudly we ask.

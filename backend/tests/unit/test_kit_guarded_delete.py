@@ -168,6 +168,48 @@ def test_the_WEAKER_ack_does_NOT_clear_an_ever_live_delete(client, monkeypatch):
     assert (root / "in-use" / "schema.json").exists()
 
 
+def test_a_kit_with_NO_metadata_is_tier_A_not_tier_C(client, monkeypatch):
+    """ABSENT metadata is not UNREADABLE metadata.
+
+    A kit with no metadata.json is a NORMAL shipped state (form-kits/w9-heldout
+    is exactly that: a PDF and a note), and it has manifestly never been
+    published -- there is no status to say so. The first cut of _kit_was_ever_live
+    collapsed "no dict" into "assume the worst", which handed the scariest
+    possible warning ("This form has been published") to precisely the
+    junk-cleanup case this bead exists to unblock. Every fixture wrote a
+    metadata.json, so nothing caught it (fresh-eyes round 2).
+    """
+    c, _store, root = client
+    kit = root / "bare"
+    kit.mkdir(parents=True, exist_ok=True)
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "form.pdf").write_bytes(b"%PDF-1.4 ")
+    _no_records(monkeypatch)
+
+    resp = c.delete("/api/editor/kits/bare", headers=AUTH)
+
+    assert resp.status_code == 200, resp.text
+    assert not (root / "bare").exists()
+
+
+def test_metadata_that_is_PRESENT_but_unreadable_stays_strict(client, monkeypatch):
+    """The other half. A metadata.json that exists and did not parse IS
+    suspicious -- we cannot see a status, and something wrote that file. It
+    keeps the strictest tier, so the absent-vs-unreadable distinction cannot be
+    read as "unparseable is fine now"."""
+    c, _store, root = client
+    kit = root / "corrupt"
+    kit.mkdir(parents=True, exist_ok=True)
+    (kit / "schema.json").write_text(json.dumps(_SCHEMA), encoding="utf-8")
+    (kit / "metadata.json").write_text("{not json at all", encoding="utf-8")
+    _no_records(monkeypatch)
+
+    resp = c.delete("/api/editor/kits/corrupt", headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"].startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+
+
 def test_a_RETIRED_kit_is_treated_as_ever_live(client, monkeypatch):
     """`unpublished` means a RETIRED FORMERLY-LIVE revision (bd 6dz0), NOT
     "never published" -- so it belongs in the STRICTEST tier despite the

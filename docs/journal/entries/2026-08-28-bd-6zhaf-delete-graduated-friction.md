@@ -143,11 +143,36 @@ Also: `delete_kit`'s docstring still promised "a kit WITH records must never
 reach this method", which my own change had made false -- and it is the
 contract every store implementation reads.
 
+**Round 2: absent metadata is not unreadable metadata.** `_kit_was_ever_live`
+returned True for any non-dict, on the reasoning that an unparseable file is
+not evidence of safety. Sound for a CORRUPT file; wrong for a MISSING one. A
+kit with no metadata.json is a normal shipped state -- `form-kits/w9-heldout`
+is a PDF and a note -- and it has manifestly never been published, because
+there is no status to say so. So the junk-cleanup case this bead exists to
+unblock got the scariest warning in the system: "This form has been
+published, so clients may have filled it."
+
+The codebase already knew the difference. `_stamp_readiness` distinguishes
+absent from unparseable off the same filename set, for the same reason, a few
+hundred lines up. I wrote a second, worse answer to a question that was
+already answered -- and every fixture wrote a metadata.json, so nothing
+caught it.
+
+Both directions are pinned now, because over-correcting is the equal and
+opposite bug: absent -> tier A, present-but-unparseable -> tier C. Mutating
+either way reddens its own test.
+
+Worth noting the blast radius honestly: all seven kits in the deployed store
+carry metadata, so this would not have bitten the maintainer today. It was
+reachable, not active.
+
 ## Verification
 
-Six mutations, six caught. Four on the original design: dropping `unpublished`
+Eight mutations, eight caught. Four on the original design: dropping `unpublished`
 from ever-live (a retired form deleted silently -- the log line in the failure
 output shows it), ignoring `published_at`, ignoring the acknowledgement entirely
 (the original bug restored), and letting the double-ack tick stop gating. Two on
 the review fixes: restoring the cross-kit warning leak, and letting the weaker
-acknowledgement clear an ever-live delete.
+acknowledgement clear an ever-live delete. Two on round 2's: treating absent
+metadata as ever-live again, and over-correcting so a corrupt file took the
+light path.
