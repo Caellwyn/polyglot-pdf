@@ -2,12 +2,10 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-28 (bd polyglot-pdf-a372q + bd polyglot-pdf-digef:
-the schema-editor access bullet described the retired
-`SCHEMA_EDITOR_TOKEN`/`SCHEMA_AUTHOR_TOKEN` shared-secret gate as current;
-corrected to the per-person Firebase claim in `backend/services/editor_auth.py`,
-matching `backend/config.py`'s own comment and `deploy-editor.sh`'s runbook).
-See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-28 (bd polyglot-pdf-qp632: the VFF_DEV_LOGGING
+dead-config note's `callback_handler.py:466` citation had drifted -- the
+real "LOGGING POLICY" comment is now inside `on_tool_call`; re-anchored by
+name instead of line number). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -251,10 +249,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 > doc; it predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
 > dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it, and
 > the real gate is the `.env.DEV` marker above. The one surviving mention is the
-> "LOGGING POLICY (HIPAA COMPLIANCE)" comment block inside
-> `CallbackHandler.on_tool_call` in `callback_handler.py`, which documents this
-> correctly (it explicitly calls out `VFF_DEV_LOGGING` as dead config and
-> points back here).
+> "LOGGING POLICY" comment inside `callback_handler.py`'s `on_tool_call`,
+> which documents this correctly (it explicitly calls out `VFF_DEV_LOGGING`
+> as dead config and points back here).
 
 ## Deployment (local/manual — no CI)
 
