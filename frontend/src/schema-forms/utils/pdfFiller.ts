@@ -93,7 +93,13 @@ export async function fillPDF(
   // segment is the literal "pdf" -- deriving the filename from the URL would
   // 404 the fill. Callers should always pass this; the URL-split below is
   // the legacy fallback only.
-  pdfFile?: string
+  pdfFile?: string,
+  // The client's form session id (bd polyglot-pdf-dft1). Stamped into the
+  // saved PDF's metadata so a client who closes the tab -- or steps away past
+  // the 60-minute state expiry -- can reopen their own file and resume.
+  // Optional: a staff download does not want a session id inside a document
+  // that leaves the firm, and omitting it simply means no resume hint.
+  formSessionId?: string
 ): Promise<Uint8Array> {
   if (!pdfUrl) {
     throw new Error("PDF URL is required to fill the form");
@@ -116,12 +122,18 @@ export async function fillPDF(
   // breaks on backend-route paths -- see the pdfFile param note above).
   const pdfFilename = pdfFile || pdfUrl.split('/').pop() || 'form.pdf';
 
-  const requestPayload = {
+  const requestPayload: Record<string, unknown> = {
     kit_id: kitId,
     pdf_filename: pdfFilename,
     field_values: fieldValues,
     form_schema: schema,
   };
+  // Only sent when we have one -- an absent key is how the backend tells a
+  // staff download from a client's, and it must not become the string
+  // "undefined".
+  if (formSessionId) {
+    requestPayload.form_session_id = formSessionId;
+  }
 
   console.log('[pdfFiller] Request URL:', `${backendUrl}/api/fill-pdf`);
   console.log('[pdfFiller] Request payload:', {

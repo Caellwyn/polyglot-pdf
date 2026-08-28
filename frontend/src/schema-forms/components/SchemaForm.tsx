@@ -637,6 +637,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (await resolveSessionToken(user)),
         pdfFile,
+        state.formSessionId,   // resume stamp (bd polyglot-pdf-dft1)
       );
 
       // Generate filename from form metadata
@@ -674,6 +675,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (await resolveSessionToken(user)),
         pdfFile,
+        state.formSessionId,   // resume stamp (bd polyglot-pdf-dft1)
       );
 
       // Open print dialog
