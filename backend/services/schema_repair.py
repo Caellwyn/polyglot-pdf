@@ -327,15 +327,30 @@ def _mint_slugs(
                 is_code = v is not None and v in pdf_choices and v not in seen_codes
                 if is_code:
                     seen_codes.add(v)
-                elif is_select and (v is None or v == ""):
-                    is_code = True  # hold aside; do NOT mint a fake code
+                elif is_select and (v is None or v.strip() == ""):
+                    # Hold aside; do NOT mint a fake code. The blank test
+                    # MATCHES schema_lint's own definition of a missing option
+                    # value (`value is None or value.strip() == ""`,
+                    # schema_lint.py option-value-missing) -- a narrower test
+                    # here would let a whitespace-only value be minted over,
+                    # clearing the very lint ERROR this guard exists to keep
+                    # standing.
+                    is_code = True
                 keep.append(is_code)
             # Mint ONLY for the options actually being replaced, and seed the
             # dedupe with the preserved codes -- a slug minted from one label
             # can otherwise equal a code kept on another option and
             # manufacture the duplicate this whole branch exists to repair
             # (a lowercase PDF code like 'wy' is itself slug-legal).
-            reserved = [str(o["value"]) for o, k in zip(dict_opts, keep) if k]
+            # .get(), not [] -- a kept option no longer necessarily HAS a
+            # "value" key. Before the empty-value hold-aside above, only real
+            # PDF codes were kept and those always carry the key; now an option
+            # with no key at all (which schema_lint treats as an ordinary
+            # missing value) is kept too, and subscripting it aborted the whole
+            # repair() call for every field in the schema.
+            reserved = [
+                str(o.get("value") or "") for o, k in zip(dict_opts, keep) if k
+            ]
             labels = [
                 str(o.get("label") or o.get("value") or "option")
                 for o, k in zip(dict_opts, keep) if not k
@@ -346,7 +361,12 @@ def _mint_slugs(
             for o, k in zip(dict_opts, keep):
                 old = o.get("value")
                 if k:
-                    _register(str(old), str(old))
+                    # Only a REAL value is its own alias. A held-aside empty
+                    # (or absent) value must not register: str(None) would
+                    # enter the literal "None" into the alias table, and ""
+                    # is rejected by _register anyway.
+                    if old is not None:
+                        _register(str(old), str(old))
                     continue
                 slug = next(slug_iter)
                 if old is not None and str(old) != slug:

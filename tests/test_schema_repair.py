@@ -485,6 +485,44 @@ def test_repair_leaves_a_selects_EMPTY_export_code_empty():
                for f in lint_schema(repaired, _COMBO_DUMP))
 
 
+@pytest.mark.parametrize("blank", ["", "   ", "	", None])
+def test_every_shape_lint_calls_MISSING_is_held_aside(blank):
+    """The hold-aside must match schema_lint's own definition of a missing
+    option value (`value is None or value.strip() == ""`), not a narrower one.
+
+    A whitespace-only value is lint-ERROR "missing" but was still minted over,
+    clearing the exact gate this bead exists to keep standing (found in review,
+    measured: '   ' -> 'blank' -> has_errors False).
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "AL", "label": "Alabama"},
+            {"value": blank, "label": ""}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    vals = _values(repaired)
+    assert vals[:2] == ["WY", "AL"]
+    assert vals[2] == blank, "a lint-missing value must survive repair unminted"
+    assert has_errors(lint_schema(repaired, _COMBO_DUMP)),         "repair cleared the publish gate it must preserve"
+
+
+def test_a_select_option_with_NO_value_key_does_not_crash_repair():
+    """Regression: holding empty values aside made a keyed-absent option
+    "kept", but the reserved-list builder still subscripted o["value"] --
+    a KeyError that aborted repair() for the ENTIRE schema, not just the
+    offending option. schema_lint treats a missing key as an ordinary missing
+    value, so repair must too.
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "AL", "label": "Alabama"},
+            {"label": "Blank"}]  # no "value" key at all
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    # .get(), not the shared _values() helper: that one subscripts o["value"]
+    # and would raise the very KeyError this test exists to prove is gone.
+    got = [o.get("value") for o in repaired["fields"][0]["options"]]
+    assert got[:2] == ["WY", "AL"]
+    assert got[2] in (None, ""), "the keyless option must not gain a minted code"
+    assert has_errors(lint_schema(repaired, _COMBO_DUMP))
+
+
 def test_an_empty_select_code_does_not_block_repair_of_its_NEIGHBOURS():
     """Holding the empty value aside must not suppress the whole branch: a
     real defect sharing the field is still repaired around it."""
