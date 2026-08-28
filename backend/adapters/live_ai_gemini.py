@@ -28,6 +28,14 @@ from backend.config import get_pricing_for_model, model_family
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
 
+# Local-dev debug dumps below resolve against the PROJECT ROOT derived from
+# __file__, never the process cwd: the local launchers run uvicorn from
+# backend/ (to scope the --reload watch away from sibling worktrees), so a
+# cwd-relative "backend/logs" would land in backend/backend/logs. Use this for
+# any new dump path rather than a bare relative string.
+_LOG_ROOT = Path(__file__).resolve().parents[2] / "backend" / "logs"
+
+
 # ============================================================================
 # LOGGING TAG GUIDE (ASCII tags for easy log scanning -- bd polyglot-pdf-bw8)
 # ============================================================================
@@ -617,7 +625,7 @@ class LiveAIGemini(ILiveAI):
             import datetime as _dt
             import wave as _wave
             day = _dt.date.today().isoformat()
-            out_dir = Path("backend/logs/audio_out") / f"gemini_{day}"
+            out_dir = _LOG_ROOT / "audio_out" / f"gemini_{day}"
             out_dir.mkdir(parents=True, exist_ok=True)
             sess = (self._form_session_id or self._instance_id or "session").replace(":", "-")
             attempt = getattr(self, "_live_attempt", 0)
@@ -1339,7 +1347,8 @@ class LiveAIGemini(ILiveAI):
             # production containers have no .env.DEV, so this never runs in prod. bd hjo
             if DEV_LOGGING_ENABLED:
                 try:
-                    debug_file = Path("backend/logs/gemini_system_instruction.txt")
+                    debug_file = _LOG_ROOT / "gemini_system_instruction.txt"
+                    debug_file.parent.mkdir(parents=True, exist_ok=True)
                     with open(debug_file, "a", encoding="utf-8") as f:
                         f.write("\n\n" + "=" * 80 + "\n")
                         f.write("CLIENT CONTENT MESSAGE SENT TO GEMINI\n")
@@ -2057,7 +2066,7 @@ class LiveAIGemini(ILiveAI):
             # raw write is gated behind the local-dev marker (no .env.DEV in prod). bd hjo
             if DEV_LOGGING_ENABLED:
                 try:
-                    debug_file = Path("backend/logs/gemini_system_instruction.txt")
+                    debug_file = _LOG_ROOT / "gemini_system_instruction.txt"
                     debug_file.parent.mkdir(parents=True, exist_ok=True)
                     with open(debug_file, "w", encoding="utf-8") as f:
                         f.write("=" * 80 + "\n")

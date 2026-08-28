@@ -1,0 +1,227 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "w7",
+  "arm": "naive",
+  "path": "happy",
+  "questions": 2,
+  "compression": false,
+  "trigger": null,
+  "window": null,
+  "trigger_requested": null,
+  "window_requested": null,
+  "derive_compression": false,
+  "continuous": false,
+  "schema_scope": "full-form",
+  "started": "20260827T192111Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "field_id": "application_type",
+      "text_in": 28244,
+      "audio_in": 162,
+      "text_out": 26,
+      "audio_out": 0,
+      "total_tokens": 28432,
+      "cost_usd": 0.01466,
+      "cumulative_cost_usd": 0.031429,
+      "prompt_tokens": 28406,
+      "latency_s": 1.375
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "application_type",
+      "text_in": 85089,
+      "audio_in": 590,
+      "text_out": 40,
+      "audio_out": 89,
+      "total_tokens": 85808,
+      "cost_usd": 0.045462,
+      "cumulative_cost_usd": 0.076892,
+      "prompt_tokens": 28648,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "field_id": "reason",
+      "text_in": 57082,
+      "audio_in": 548,
+      "text_out": 33,
+      "audio_out": 6,
+      "total_tokens": 57669,
+      "cost_usd": 0.030323,
+      "cumulative_cost_usd": 0.107215,
+      "prompt_tokens": 28882,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "reason",
+      "text_in": 85944,
+      "audio_in": 1138,
+      "text_out": 30,
+      "audio_out": 49,
+      "total_tokens": 87161,
+      "cost_usd": 0.047034,
+      "cumulative_cost_usd": 0.154249,
+      "prompt_tokens": 29081,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ]
+  },
+  "prompt_curve": [
+    28234,
+    28406,
+    28486,
+    28545,
+    28648,
+    28748,
+    28882,
+    28963,
+    29038,
+    29081
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": false,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "spoken_language": "English",
+  "speech_language_code_enabled": true,
+  "transcription_language_hint_enabled": true,
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": false,
+  "session_count": 1,
+  "naive_si_booklet_chars": 81242,
+  "system_instruction_chars": 110789,
+  "greeting_tokens": 28455,
+  "greeting_cost_usd": 0.016769,
+  "greeting_breakdown": {
+    "text_in": 28234,
+    "audio_in": 0,
+    "text_out": 0,
+    "audio_out": 221
+  },
+  "event_records": [],
+  "seam_tool_records": [
+    {
+      "ts": 593802.39,
+      "step": 1,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what are the options for the reason you're submitting form w-7?"
+      },
+      "response": {
+        "answer": "INTERNAL ERROR: the secretary lookup failed. Apologize to the user, in the user's language, for a technical problem and say you could not retrieve that information right now. Do NOT simply repeat their question back to them. You may offer to continue, or ask them to provide the information directly ONLY after acknowledging the error.",
+        "available": false
+      }
+    },
+    {
+      "ts": 593812.187,
+      "step": 2,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the next field to fill?"
+      },
+      "response": {
+        "answer": "INTERNAL ERROR: the secretary lookup failed. Apologize to the user, in the user's language, for a technical problem and say you could not retrieve that information right now. Do NOT simply repeat their question back to them. You may offer to continue, or ask them to provide the information directly ONLY after acknowledging the error.",
+        "available": false
+      }
+    }
+  ],
+  "text_ledger_calls": [],
+  "divergence_count": 0,
+  "divergence_pairs": [],
+  "spellback_count": 0,
+  "spellback_total_chars": 0,
+  "spellback_disabled": false,
+  "compression_effective": null,
+  "cached_curve": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "traffic_types": [],
+  "cache_summary": {
+    "reported": false,
+    "events": 10,
+    "events_with_cached_field": 0,
+    "events_with_nonzero_cache": 0,
+    "total_cached_tokens": 0,
+    "total_prompt_tokens": 287031
+  },
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "application_type",
+    "reason"
+  ],
+  "fill_accuracy": {
+    "matched": 2,
+    "total": 2,
+    "accuracy": 1.0,
+    "detail": [
+      {
+        "field_id": "application_type",
+        "expected": null,
+        "written": "apply_new_itin",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "reason",
+        "expected": null,
+        "written": "b_nonresident_alien_return",
+        "ok": true,
+        "scored": "lenient"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [],
+    "format": [],
+    "transcription": [],
+    "wrong-field": [],
+    "mismatch": [],
+    "spurious": []
+  },
+  "wall_clock_s": 27.2,
+  "auto_apply_fids": []
+}

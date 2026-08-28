@@ -1,0 +1,445 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "w7",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 5,
+  "compression": true,
+  "trigger": 9517,
+  "window": 8017,
+  "trigger_requested": 12000,
+  "window_requested": 9000,
+  "derive_compression": true,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260827T191952Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "field_id": "application_type",
+      "text_in": 8326,
+      "audio_in": 310,
+      "text_out": 26,
+      "audio_out": 84,
+      "total_tokens": 8746,
+      "cost_usd": 0.006153,
+      "cumulative_cost_usd": 0.01109,
+      "prompt_tokens": 4358,
+      "latency_s": 1.266
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "application_type",
+      "text_in": 4210,
+      "audio_in": 221,
+      "text_out": 20,
+      "audio_out": 0,
+      "total_tokens": 4451,
+      "cost_usd": 0.002808,
+      "cumulative_cost_usd": 0.013898,
+      "prompt_tokens": 4431,
+      "latency_s": 1.25
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "field_id": "reason",
+      "text_in": 12072,
+      "audio_in": 588,
+      "text_out": 33,
+      "audio_out": 107,
+      "total_tokens": 12800,
+      "cost_usd": 0.00915,
+      "cumulative_cost_usd": 0.023048,
+      "prompt_tokens": 6410,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "reason",
+      "text_in": 12255,
+      "audio_in": 789,
+      "text_out": 18,
+      "audio_out": 46,
+      "total_tokens": 13108,
+      "cost_usd": 0.009083,
+      "cumulative_cost_usd": 0.03213,
+      "prompt_tokens": 6553,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "field_id": "name_1a_first",
+      "text_in": 6435,
+      "audio_in": 422,
+      "text_out": 10,
+      "audio_out": 0,
+      "total_tokens": 6867,
+      "cost_usd": 0.004503,
+      "cumulative_cost_usd": 0.036634,
+      "prompt_tokens": 6857,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "name_1a_first",
+      "text_in": 61527,
+      "audio_in": 4142,
+      "text_out": 75,
+      "audio_out": 37,
+      "total_tokens": 65781,
+      "cost_usd": 0.043783,
+      "cumulative_cost_usd": 0.080418,
+      "prompt_tokens": 7856,
+      "latency_s": 1.218
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "field_id": "name_1a_middle",
+      "text_in": 54327,
+      "audio_in": 3907,
+      "text_out": 42,
+      "audio_out": 64,
+      "total_tokens": 58340,
+      "cost_usd": 0.039737,
+      "cumulative_cost_usd": 0.120154,
+      "prompt_tokens": 8689,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "name_1a_middle",
+      "text_in": 16410,
+      "audio_in": 1340,
+      "text_out": 23,
+      "audio_out": 27,
+      "total_tokens": 17800,
+      "cost_usd": 0.012595,
+      "cumulative_cost_usd": 0.132749,
+      "prompt_tokens": 9012,
+      "latency_s": 1.296
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "field_id": "name_1a_last",
+      "text_in": 25294,
+      "audio_in": 2238,
+      "text_out": 28,
+      "audio_out": 0,
+      "total_tokens": 27560,
+      "cost_usd": 0.019417,
+      "cumulative_cost_usd": 0.152166,
+      "prompt_tokens": 9249,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "name_1a_last",
+      "text_in": 17084,
+      "audio_in": 1570,
+      "text_out": 23,
+      "audio_out": 74,
+      "total_tokens": 18751,
+      "cost_usd": 0.014186,
+      "cumulative_cost_usd": 0.166352,
+      "prompt_tokens": 9356,
+      "latency_s": 1.344
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "3": [
+      "ask_secretary",
+      "update_form_fields",
+      "name_spellback",
+      "name_spellback",
+      "name_spellback",
+      "confirm_field",
+      "name_spellback",
+      "name_spellback"
+    ],
+    "4": [
+      "confirm_field",
+      "update_form_fields",
+      "name_spellback",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "name_spellback",
+      "confirm_field"
+    ]
+  },
+  "prompt_curve": [
+    4114,
+    4278,
+    4358,
+    4431,
+    6250,
+    6410,
+    6491,
+    6553,
+    6857,
+    6945,
+    6997,
+    7087,
+    7162,
+    7265,
+    7359,
+    7452,
+    7546,
+    7856,
+    7902,
+    7995,
+    8088,
+    8412,
+    8525,
+    8623,
+    8689,
+    8738,
+    9012,
+    9100,
+    9183,
+    9249,
+    9298,
+    9356
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": true,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "spoken_language": "English",
+  "speech_language_code_enabled": true,
+  "transcription_language_hint_enabled": true,
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question",
+    "question",
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": true,
+  "session_count": 1,
+  "system_instruction_chars": 16331,
+  "greeting_tokens": 4354,
+  "greeting_cost_usd": 0.004937,
+  "greeting_breakdown": {
+    "text_in": 4114,
+    "audio_in": 0,
+    "text_out": 0,
+    "audio_out": 240
+  },
+  "pro_pass": {
+    "ran": true,
+    "model": "gemini-2.5-pro",
+    "latency_s": 8.61,
+    "conflicts": 0,
+    "conflict_field_ids": []
+  },
+  "validation_records": [],
+  "drain_records": [],
+  "steer_records": [],
+  "event_records": [],
+  "seam_tool_records": [
+    {
+      "ts": 593735.031,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their first name?"
+      },
+      "response": {
+        "answer": "The secretary is still looking that up; the answer will arrive in a moment as a follow-up. Do NOT answer the question yet and do NOT repeat it back to the user. Either say nothing or give a brief natural acknowledgement in the user's language, then continue -- the answer will be delivered to you shortly.",
+        "available": true
+      }
+    },
+    {
+      "ts": 593737.937,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their first name?"
+      },
+      "response": {
+        "answer": "The applicant's first name has not been answered yet.",
+        "available": true,
+        "fields": [
+          {
+            "field_id": "name_1a_first",
+            "spoken_name": "first name"
+          }
+        ]
+      }
+    }
+  ],
+  "text_ledger_calls": [
+    {
+      "caller": "secretary",
+      "t_start": 593735.031,
+      "dur_s": 4.703
+    },
+    {
+      "caller": "secretary",
+      "t_start": 593737.937,
+      "dur_s": 2.047
+    },
+    {
+      "caller": "pro",
+      "t_start": 593758.343,
+      "dur_s": 8.61
+    }
+  ],
+  "divergence_count": 0,
+  "divergence_pairs": [],
+  "spellback_count": 7,
+  "spellback_total_chars": 22,
+  "spellback_disabled": false,
+  "compression_effective": {
+    "trigger_tokens": 9517,
+    "window_tokens": 8017,
+    "derived_from_si_floor": true,
+    "si_floor_tokens": 5766,
+    "clamped_to_api_minimum": false
+  },
+  "cached_curve": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "traffic_types": [],
+  "cache_summary": {
+    "reported": false,
+    "events": 32,
+    "events_with_cached_field": 0,
+    "events_with_nonzero_cache": 0,
+    "total_cached_tokens": 0,
+    "total_prompt_tokens": 237581
+  },
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "application_type",
+    "reason",
+    "name_1a_first",
+    "name_1a_middle",
+    "name_1a_last"
+  ],
+  "fill_accuracy": {
+    "matched": 5,
+    "total": 5,
+    "accuracy": 1.0,
+    "detail": [
+      {
+        "field_id": "application_type",
+        "expected": null,
+        "written": "apply_new_itin",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "reason",
+        "expected": null,
+        "written": "b_nonresident_alien_return",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "name_1a_first",
+        "expected": null,
+        "written": "Anna",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "name_1a_middle",
+        "expected": null,
+        "written": "Lucia",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "name_1a_last",
+        "expected": null,
+        "written": "Reyes",
+        "ok": true,
+        "scored": "lenient"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [],
+    "format": [],
+    "transcription": [],
+    "wrong-field": [],
+    "mismatch": [],
+    "spurious": []
+  },
+  "wall_clock_s": 60.4,
+  "auto_apply_fids": []
+}

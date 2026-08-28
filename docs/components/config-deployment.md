@@ -2,7 +2,10 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-20 (bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review. Also bd polyglot-pdf-vf48u: the deploy-gate sentence
+*Last updated: 2026-08-27 (bd polyglot-pdf-b5nmq: the `.env.DEV` marker and the
+dev log destinations resolve off `__file__`, not the process cwd -- the local
+launchers now start uvicorn from `backend/` so its reload watch cannot see
+sibling worktrees. Also bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review. Also bd polyglot-pdf-vf48u: the deploy-gate sentence
 enumerated `kit_is_complete`'s skip set as draft/unmarked only; widened to
 name submitted and unpublished too, matching the three-status lifecycle bd
 polyglot-pdf-6dz0 shipped). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
@@ -111,7 +114,14 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   the field-value `_dev_log` calls in `backend/services/callback_handler.py`
   (`_dev_log` is just `get_dev_logger()`, whose `enabled` is `DEV_LOGGING_ENABLED`).
   Present only in local dev (gitignored + dockerignored), so prod never logs
-  PII/PHI. This is the HIPAA guard — see
+  PII/PHI. The marker is looked for at exactly one location — `backend/.env.DEV`,
+  resolved from `dev_file_logger.py`'s own `__file__`, **not** the process cwd —
+  so whether dev logging turns on never depends on which directory the backend
+  was launched from (bd `polyglot-pdf-b5nmq`; the local launchers now start
+  uvicorn from `backend/` to scope its reload watch). The same applies to where
+  the logs are written: `DevFileLogger`'s `log_dir` and the `live_ai_gemini`
+  debug dumps resolve against the repo root via `__file__`, so they land in
+  `backend/logs/` regardless of cwd. This is the HIPAA guard — see
   [hipaa-pii-policy.md](../standards/hipaa-pii-policy.md) and bd `polyglot-pdf-hjo`.
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the

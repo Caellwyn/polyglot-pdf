@@ -37,18 +37,16 @@ def _is_development_mode() -> bool:
         True if running in development mode (PHI logging allowed)
         False if running in production mode (PHI logging disabled)
     """
-    # Check multiple possible locations for the marker file
-    marker_paths = [
-        Path("backend/.env.DEV"),           # From project root
-        Path(".env.DEV"),                   # From backend/ directory
-        Path(__file__).parent.parent / ".env.DEV",  # Relative to this file
-    ]
-
-    for marker_path in marker_paths:
-        if marker_path.exists():
-            return True
-
-    return False
+    # Anchor on __file__, never the cwd. The two cwd-relative candidates this
+    # replaced ("backend/.env.DEV" from the repo root, ".env.DEV" from
+    # backend/) only ever agreed with this one when the process happened to be
+    # started from the matching directory -- and the local launchers now run
+    # uvicorn from backend/ to scope the --reload watch (bd polyglot-pdf-b5nmq),
+    # so cwd is no longer a reliable base. backend/.env.DEV is the one true
+    # location; whether the marker is found must not depend on where the
+    # process was launched.
+    marker_path = Path(__file__).parent.parent / ".env.DEV"
+    return marker_path.exists()
 
 
 # Automatic environment detection - no manual flags!
@@ -73,7 +71,13 @@ class DevFileLogger:
         Args:
             log_dir: Directory for log files (relative to project root)
         """
-        self.log_dir = Path(log_dir)
+        # Resolve log_dir against the PROJECT ROOT derived from __file__, never
+        # the process cwd: the local launchers run uvicorn from backend/ (to
+        # scope the --reload watch), so a cwd-relative "backend/logs" would
+        # write to backend/backend/logs. Same __file__-anchored resolution
+        # token_file_logger.py uses. An absolute log_dir is honored as given.
+        project_root = Path(__file__).parent.parent.parent
+        self.log_dir = project_root / log_dir
         self.enabled = DEV_LOGGING_ENABLED
 
         if self.enabled:
