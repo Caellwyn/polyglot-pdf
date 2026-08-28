@@ -504,6 +504,60 @@ def test_every_shape_lint_calls_MISSING_is_held_aside(blank):
     assert has_errors(lint_schema(repaired, _COMBO_DUMP)),         "repair cleared the publish gate it must preserve"
 
 
+_COND_DUMP = {"fields": [
+    {"name": "form1[0].P1_Line6e_State[0]",
+     "widgets": [{"choices": [{"value": "X1"}, {"value": "WY"}]}]},
+    {"name": "form1[0].dep[0]", "widgets": [{}]},
+]}
+
+
+def _select_with_dependent(option_value, cond_value):
+    return {
+        "source": "pdf", "schema_version": "2",
+        "form_metadata": {"title": "T", "form_number": "F",
+                          "edition_date": "01/01/25"},
+        "extraction_info": {"method": "m"},
+        "sections": [{"id": "s1", "label": "S", "order": 1,
+                      "fields": ["mail_state", "dep"]}],
+        "fields": [
+            {"id": "mail_state", "name": "S", "spoken_name": "s",
+             "type": "select", "section_id": "s1",
+             "pdf_field_name": "P1_Line6e_State[0]",
+             "options": [{"label": "L0", "value": option_value},
+                         {"value": "WY", "label": "Wyoming"}]},
+            {"id": "dep", "name": "D", "spoken_name": "d", "type": "text",
+             "section_id": "s1", "pdf_field_name": "dep[0]",
+             "show_if": {"field": "mail_state", "operator": "equals",
+                         "value": cond_value}},
+        ],
+    }
+
+
+def test_a_condition_naming_a_held_aside_option_is_DROPPED_not_blanked():
+    """Resolving a condition to "" would publish it DEAD and invisible.
+
+    A condition can name an option by LABEL. When that option is a select's
+    held-aside blank, the label resolves to "" -- and schema_lint SKIPS its
+    ref-option-value check for "" (the v1 emptiness idiom), so the rewritten
+    condition passes the publish gate while being permanently dead: never true
+    on equals, always true on not_equals. Worse, it was recorded as a
+    SUCCESSFUL 'rewrite-condition-value' repair. Drop it loudly instead, the
+    same fail-open the option_id path already uses (bd polyglot-pdf-ot284).
+    """
+    repaired, repairs = repair(_select_with_dependent("", "L0"), _COND_DUMP)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert "show_if" not in dep or dep.get("show_if") is None
+    assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
+    assert not any(r["action"] == "rewrite-condition-value" for r in repairs),         "a blank resolution must never be reported as a successful rewrite"
+
+
+def test_a_condition_on_a_REAL_option_value_still_resolves():
+    """The drop is scoped to a BLANK resolution -- a real value is untouched."""
+    repaired, _ = repair(_select_with_dependent("", "WY"), _COND_DUMP)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep["show_if"]["value"] == "WY"
+
+
 def test_a_FALSY_but_real_export_code_still_seeds_the_dedupe():
     """A kept value of 0 / False is a REAL code (a dump can declare "0"), so it
     must seed the mint dedupe like any other.

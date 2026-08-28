@@ -548,6 +548,17 @@ def _rewrite_atom(atom: dict, trigger: Optional[dict],
     resolved_values = []
     for v in values:
         rv, ok = _resolve_value(trigger, v, resolution)
+        # A resolution to a BLANK value is not a usable answer (bd
+        # polyglot-pdf-ot284). A select's held-aside option carries no code
+        # yet, so a condition naming it by label resolves to "" -- and
+        # schema_lint deliberately SKIPS its ref-option-value check for ""
+        # (the v1 "field is empty" idiom), so the rewritten condition would
+        # publish CLEAN while being permanently dead: never true on equals,
+        # always true on not_equals. Treat it as unresolvable and drop
+        # loudly, the same fail-open the option_id path already uses, rather
+        # than recording a silent "successful" rewrite.
+        if ok and rv is not None and str(rv).strip() == "" and str(v).strip() != "":
+            ok = False
         if not ok:
             repairs.append({
                 "action": "drop-condition", "path": path,
