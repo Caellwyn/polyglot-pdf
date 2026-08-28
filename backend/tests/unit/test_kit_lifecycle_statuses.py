@@ -1198,12 +1198,6 @@ def test_EVERY_schema_write_is_DOMINATED_by_the_editing_lock():
         # Kit CREATION: no prior editor could hold a lock on a kit that did
         # not exist a moment ago.
         "onboard_editor_kit",
-        # bd polyglot-pdf-c63tu: a REAL pre-existing gap (an editor with no
-        # lock can rename a kit's label out from under another editor's
-        # lock), filed and tracked separately rather than silently
-        # allowlisted here -- this entry documents the decision to defer,
-        # not a claim that the gap is fine.
-        "set_editor_kit_label",
     }
     # Helpers whose OWN callers must guard before invoking them, because a
     # text-scan for the write call itself cannot see through the helper

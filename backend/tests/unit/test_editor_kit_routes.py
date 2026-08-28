@@ -2308,6 +2308,64 @@ def test_label_rename_requires_the_access_token(client):
     assert r.status_code == 401
 
 
+def test_label_rename_refuses_a_kit_held_by_another_editor(client):
+    """bd polyglot-pdf-c63tu: this route writes metadata via store.put_metadata
+    like every sibling write path, so it needs the SAME _require_edit_lock
+    guard those already call -- without it, editor A (maria, edit-tok) could
+    rename a kit's label out from under editor B (sam), currently holding the
+    kit's edit lock, silently overwriting the metadata B is mid-edit on.
+
+    Takes the lock as one actor (sam) and renames as another (maria) --
+    mirroring test_a_kit_held_by_another_editor_refuses_restamp_409 in
+    test_editor_readiness_routes.py.
+    """
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2",
+              extra_meta={"editing_lock": {
+                  "role": "editor", "uid": "uid-sam", "holder_label": "sam@example.com"}})
+    before = (root / "form-2" / "metadata.json").read_bytes()
+    r = c.post(
+        "/api/editor/kits/form-2/label",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"label": "New Name"},
+    )
+    assert r.status_code == 409, r.text
+    assert "sam@example.com" in r.json()["detail"], (
+        "the refusal must name WHO holds it, matching every sibling lock site"
+    )
+    assert (root / "form-2" / "metadata.json").read_bytes() == before
+
+
+def test_label_rename_by_the_lock_holder_still_works(client):
+    """Control: the guard must gate on IDENTITY, not merely "any lock
+    present" -- the holder renaming their own in-progress kit is normal."""
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2",
+              extra_meta={"editing_lock": {
+                  "role": "editor", "uid": "uid-maria", "holder_label": "maria@example.com"}})
+    r = c.post(
+        "/api/editor/kits/form-2/label",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"label": "New Name"},
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_label_rename_by_an_author_preempts_an_editors_lock(client):
+    """Control: an AUTHOR outranks an editor's lock (bd 5tuas) -- the same
+    preemption rule every sibling write path honors."""
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2",
+              extra_meta={"editing_lock": {
+                  "role": "editor", "uid": "uid-sam", "holder_label": "sam@example.com"}})
+    r = c.post(
+        "/api/editor/kits/form-2/label",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"label": "New Name"},
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_status_revert_to_draft_is_unconditional(client):
     c, _store, root = client
     # Broken schema -- reverting to draft must still work (only PROMOTION gates).
