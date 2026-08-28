@@ -324,3 +324,62 @@ the operator read goes through. `scripts/read_kit_revision.py` is the operator r
 backend = unwrap failed), `field_count=0` (frontend not sending), `filled=0`
 (pdf_field_name mismatch â€” dump real widget names with a `fitz` one-liner), and a
 curl recipe against `/api/fill-pdf`.
+
+---
+
+## Resume: the client's saved PDF is the save file
+
+`POST /api/resume-form` (bd `polyglot-pdf-dft1`). A client uploads the PDF they
+saved earlier and gets their answers back. **Nothing is stored on our servers**
+-- the file the client already has IS the save file, which is what keeps the
+stateless-architecture rule intact.
+
+The client holds only the AcroForm PDF: a round-trip reconstruction of the
+blank form plus their answers. The schema, instructions, translations and
+guidance never leave the server.
+
+### The upload is attacker-controlled
+
+A client picked this file off their own disk, so "it parsed" is not "it is the
+form we sent them". Before any value is read out of it, it must be
+STRUCTURALLY identical to the kit's own `form.pdf`
+(`backend/services/pdf_structure.py`). The comparison target comes from the
+LINK's `kit_id`, never from the upload, so a client cannot aim it at another
+firm's form.
+
+The digest covers page count and geometry, the complete widget inventory (name,
+type, rect), each page's CONTENT STREAM, and every NON-WIDGET annotation. It
+deliberately does NOT depend on extracted text: a filled field renders its
+value into the text layer, and a value too long for its box renders outside
+it, so any text-based digest becomes a function of the client's own answer.
+Two earlier versions failed exactly that way -- one refused every legitimate
+resume, the next let injected text through. Content streams are byte-identical
+whatever the client typed, because answers live in widget annotations.
+
+Refused: a different form, injected page text, an injected annotation, an added
+or moved widget, an added or removed page, an unreadable file, and a missing
+reference form (fails closed). One message for all of them -- telling an
+attacker which check caught them tells them what to fix.
+
+### Reading the answers back
+
+Values come back keyed by SCHEMA FIELD ID, never by PDF widget name; the two
+namespaces are disjoint (zero of the W-7's 53 ids equal their
+`pdf_field_name`). Widget lookup tries exact then `endswith`, mirroring
+`find_widget` in the fill path -- all 114 of the i-90's mappings resolve only
+by suffix.
+
+Three shapes carry answers, and missing any one loses a client's work:
+
+| Shape | Where the answer lives |
+|-------|------------------------|
+| direct | the widget's own value |
+| option (radio / checkbox_group) | `options[].pdf_field_name`, selected when the widget is not `Off` |
+| standalone checkbox | `/AS`, normalised back to `true` |
+
+A checked box hides in `/AS` while `/V` stays `Off`, so `field_value` reports
+`Off` for a box the client genuinely ticked. `checkbox_group` answers restore
+as a LIST. A single-choice field showing more than one tick is DROPPED rather
+than guessed -- on a legal form, re-answering beats resuming a choice the
+client never made.
+
