@@ -131,11 +131,11 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | Type | Source | Purpose |
 |------|--------|---------|
 | `session_ready` | websocket_routes.py (session_ready payload send) | Handshake ack (see above). |
-| `form_updated` | callback_handler.py:242 | A field value changed; carries `data` payload. |
-| `transcript` | callback_handler.py:272 | AI/user transcript text. |
-| `turn_complete` | callback_handler.py:279 | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
+| `form_updated` | callback_handler.py's `send_form_update` | A field value changed; carries `data` payload. |
+| `transcript` | callback_handler.py's `on_transcript` | AI/user transcript text. |
+| `turn_complete` | callback_handler.py's `on_transcript` | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
 | `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn (BOTH VAD modes -- manual rides `send_activity_end`, native rides `input_transcription` -> `on_user_activity`, verified firing on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
-| `go_away` | callback_handler.py:403 | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
+| `go_away` | callback_handler.py's `on_go_away` | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
 | `interrupted` | callback_handler.py (`on_interrupted`) | Gemini stopped the current generation because the user barged in (bd polyglot-pdf-s7uf). The client drains BOTH its audio holds (staging queue + scheduled playback via `resetPlaybackClock`) so the dead generation's tail stops playing; without this, barge-in leaves seconds of stale audio playing behind the model's next generation. No payload; the connection stays live. |
 | `gemini_session_dropped` | callback_handler.py (`on_session_dropped`) | Gemini session died SPONTANEOUSLY behind the still-open WS (e.g. a 1011 "Input data processing failed") -- the client is otherwise frozen on "connected" (bd polyglot-pdf-ppfy). Drives the same pre-emptive reconnect as `go_away`, but the client surfaces a `reconnecting` status so the transient recovery modal shows. No payload. |
 | `idle_timeout` | websocket_routes.py (`_handle_fill_session`'s `watchdog_task` -- NOT the same-named closures in `ws_echo`/`ws_audio`) | Backend closing for inactivity; client must NOT auto-reconnect. |
@@ -174,7 +174,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 
 | Type | Send site | Purpose |
 |------|-----------|---------|
-| `handshake` / `handshake_jit` | schemaFormState.ts:955 / :999 | Initial + section-switch handshake (see above). |
+| `handshake` / `handshake_jit` | schemaFormState.ts's `getHandshakePayload` / `getJITHandshakePayload` | Initial + section-switch handshake (see above). |
 | `form_state` | webFormConnection.ts:4097 | Push current form state; backend replies `form_state_ack`. |
 | `form_state_response` | webFormConnection.ts:1479 | Reply to backend `get_form_state`. Each `field_values[id]` entry carries `{value, confirmed, shown}`. `shown` (bd polyglot-pdf-p68s / jnjj.45d) is the field's current applicability, computed client-side via `shouldShowField` (the backend is stateless and cannot derive it); it feeds the secretary's `shown_map` so a value-bearing-but-now-hidden field is distinguishable from a visible one. An older client that omits `shown` leaves the field out of `shown_map` (renderer default = shown). |
 | `next_field_hint` | websocket_routes.py (next_field_hint arm) | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). No live FE sender today (the FE only sends `next_field_hint_response`; caught by the ceyt contract tests) -- the arm is retained for back-compat. |
@@ -281,8 +281,8 @@ verifying:
    (`previous_spoken_names` / `initial_field_hint` reads in websocket_routes.py's
    handshake handling) and now stores `form_title` into
    `schema["form_metadata"]`. The legacy builder always sent `previous_spoken_names`
-   (`schemaFormState.ts:984`); the JIT builder now matches (`schemaFormState.ts:1090`,
-   with `form_title` at `schemaFormState.ts:1068`).
+   (`schemaFormState.ts:984`); the JIT builder now matches (`schemaFormState.ts:1106`,
+   with `form_title` at `schemaFormState.ts:1084`).
 
 3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
    frontend switches on `case "field_update"` (`webFormConnection.ts:664` ->

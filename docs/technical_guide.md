@@ -270,7 +270,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
 Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
-/ `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts`'s
+/ `getJITHandshakePayload` (DTI, :1015), sent by `frontend/src/webFormConnection.ts`'s
 `this.send(handshake)` call.
 Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py`'s
 `@router.websocket("/fill")` handler; handshake keys parsed in its
@@ -288,7 +288,7 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
   identity -- `kit_id` read before the JIT branch, `form_number`/`edition_date`
   inside it as `jit_form_number`/`jit_edition_date`), `resume` (the
   `is_reconnect` check, near the end of handshake parsing).
-- `full_schema` (sent at `schemaFormState.ts:979`/`:1054`): type-checked
+- `full_schema` (sent at `schemaFormState.ts:979`/`:1070`): type-checked
   `isinstance(dict)` only (the `full_schema` type-check right after handshake
   parsing), cached in
   `form_filling_service.py`'s `self._full_schema = full_schema` assignment
@@ -340,7 +340,7 @@ Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
   (`webFormConnection.ts`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:242`) with a different
+  (`backend/services/callback_handler.py`'s `send_form_update`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
@@ -420,8 +420,11 @@ class).
   the editor/publish surface (`_load_kit_dump` in
   `backend/routes/editor_kit_routes.py`, with 7 call sites across the
   lint routes; the mark-complete promotion gate's call is inside
-  `set_editor_kit_status`, feeding the pure-function
-  checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
+  `set_editor_kit_status`, feeding `lint_schema`'s dump-gated widget-claim
+  checks in `backend/services/schema_lint.py` -- a separate `_load_kit_dump`
+  call, inside the unclaimed-widgets endpoint, feeds
+  `backend/services/widget_picker.py`'s `unclaimed_button_widgets` instead).
+  *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
@@ -463,8 +466,8 @@ Firestore `confirmation_events` (`_submit_firestore_write` checks the
 to `_firestore_write`, which does the actual write and sets the optional
 `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
-handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
-`:1088` (kit_id), `:1089` (edition_date), read as `kit_id`/`jit_form_number`/
+handshake -- sent by the JIT builder at `schemaFormState.ts:1091` (form_number),
+`:1104` (kit_id), `:1105` (edition_date), read as `kit_id`/`jit_form_number`/
 `jit_edition_date` in websocket_routes.py's handshake handling -- see
 contract 2. The
 `edition_date` COLUMN carries whichever revision marker won
