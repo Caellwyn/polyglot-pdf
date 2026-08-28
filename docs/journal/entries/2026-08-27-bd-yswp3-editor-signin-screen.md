@@ -91,6 +91,28 @@ widened at every site mechanically, and the routing decision was made ONCE
 inside handleAuthExpired, which every site already called. Fifteen call sites,
 one place that decides.
 
+**And I still missed one -- which is the actual lesson.** Round 2 fixed 15 sites,
+called it "fixed as a SET", and left ValidationPanel: a third file, same shape,
+whose lintSchema call is the HIGHEST-frequency remote call in the editor, so a
+revoked editor would most likely have hit the unactionable banner there first.
+Two rounds, each finding one more member of one set -- the exact pattern scar
+tissue #8 names as this repo's largest source of review rounds, walked into
+while quoting it.
+
+The fix that mattered was therefore not the one-line widen. It was
+`utils/authErrorRouting.test.ts`, which asserts the property over the SOURCE:
+every catch site accepts ForbiddenError, every forward carries the error, every
+onAuthError prop is typed to receive it. It walks the tree rather than listing
+files (a hand-listed set is the same bug again) and keeps a one-name allowlist
+for SignInGate, which legitimately branches on 403 first. Reverting the
+ValidationPanel omission now turns all three guards red.
+
+Worth stating plainly: the second failure mode there is invisible to tsc.
+`onAuthError?.()` against a `(err?: unknown) => void` prop typechecks fine --
+the signatures are structurally compatible both ways -- so the routing silently
+degrades to treating every 403 as a 401. Only a source-level assertion catches
+it.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;
