@@ -15,20 +15,40 @@ $100 program cap.
 
 ## What shipped
 
-- **The long-form comparison** (6 valid runs, replay-validated to $0.000004):
+- **The long-form comparison** (7 valid runs, replay-validated to $0.000004):
   deployed all-in happy $2.040/$2.072 (mean $2.06), unhappy $4.272/$4.046
   (mean $4.16) -- 57/57 confirmed, 48/57 correct (84%) on ALL FOUR runs;
-  naive happy $6.017 (57/57, 82%, 2 platform force-trims); **naive unhappy
-  DID NOT COMPLETE** -- $5.91 over 35 minutes, 33/57 confirmed (42% correct),
-  then the model went tool-silent and the harness's derailment guard aborted
-  at q39. The MODEL collapsed; there was no server-initiated close -- and the
-  documented 15-minute uncompressed session cap never fired (a second
-  docs-vs-reality divergence alongside the 32k-vs-128k one).
+  naive happy $6.017 (57/57, 82%, 2 platform force-trims). Naive unhappy ran
+  TWICE by maintainer direction: without recovery it **DID NOT COMPLETE**
+  ($5.91 over 35 minutes, 33/57 confirmed, model tool-silence, guard abort at
+  q39; no server close -- and the documented 15-minute uncompressed cap never
+  fired, a second docs-vs-reality divergence alongside 32k-vs-128k); WITH
+  Gemini session resumption enabled it completed -- **$9.836, 40.0 minutes,
+  51/57 confirmed, 40/57 correct (70%)**, one resume at THE SAME q39 (the
+  collapse reproduces at the same question across two independent runs).
+  Final unhappy multipliers, apples-to-apples: 2.37x raw dollars, 2.64x per
+  confirmed field.
+- **Session resumption shipped as the program's only production-code change**
+  (maintainer-directed): `SESSION_RESUMPTION_ENABLED` (default OFF -- the
+  June decline stands for production; the harness opts in for the naive arm),
+  adapter captures SessionResumptionUpdate handles and can reconnect with
+  one; the naive driver resumes instead of aborting (max 3), recording
+  `session_resumes` in the run meta. Config-inertness pinned by
+  mutation-verified tests.
 - **The moat widens with form length**: happy multiplier 2.6x (W-7, 22q) ->
   2.9x (i90-v2, 57q); per-confirmed-field on the correction path $0.073 vs
-  $0.179 (2.45x), and the naive figure buys 58% of a form. Program spend
-  $43.90 of the $100 cap (per-run ledger + anomaly resolutions in the
-  findings doc).
+  $0.193 (2.64x), with the naive arm needing a recovery feature a naive
+  builder would first have to know to build. Program spend $53.73 of the
+  $100 cap (per-run ledger + anomaly resolutions in the findings doc).
+- **The tracked-kit reversal** (Opus round-1 findings): committing
+  form-kits/i-90_v2 turned CI red (translation-coverage lint), armed an
+  unintended next-deploy publish beside the existing I-90, and committed a
+  booklet PDF against .gitignore's own rule -- the kit returned to untracked
+  (schema sha256 pinned in the findings doc; kit-reading tests skip when it
+  is absent; the lint sweep now pins tracked kits only). Publish/label/
+  translation decisions parked in beads polyglot-pdf-9jb21/g3cj1; the
+  metadata readiness flags contradicting the maintainer's completed review
+  are an editor bug (bead polyglot-pdf-058kq).
 - **Harness work bought with diagnostic dollars** (invalid runs committed as
   evidence, excluded from headline means): a realistic 57-question persona
   plan for the 94-field schema (37 schema-gated exclusions, pinned by a
