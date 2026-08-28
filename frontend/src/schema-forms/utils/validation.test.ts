@@ -6,7 +6,7 @@
  * Number is accepted with or without its "A" prefix / separators and normalized
  * to the canonical bare-digit form (the PDF comb field stores digits).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { normalizeFieldValue, validateField, shouldShowField } from './validation';
 import type { FormField } from '../types/schema';
 
@@ -360,6 +360,188 @@ describe('validateField (top-level constraint fields, no validation block)', () 
 
   it('rejects a date after the top-level max', () => {
     expect(validateField(dobField, '2010-01-01')).not.toBeNull();
+  });
+});
+
+// bd polyglot-pdf-8i3rs: a date field whose VALUE is authored in the kit's
+// declared layout (MM/DD/YYYY) but whose BOUND is authored ISO used to
+// wrongly reject a value exactly equal to the bound. Root cause: comparing
+// two `new Date(...)` objects built from differently-formatted strings is
+// timezone-dependent -- `new Date("2007-10-13")` (ISO) parses as UTC
+// midnight, `new Date("10/13/2007")` (slash form) parses as LOCAL midnight,
+// so west of UTC the slash-form value lands hours AFTER the ISO bound even
+// though they name the same calendar day.
+describe('validateField (date value/bound format mismatch, bd polyglot-pdf-8i3rs)', () => {
+  const mmddyyyyWithIsoBound: FormField = {
+    id: 'dob_mixed',
+    name: 'Date of Birth',
+    spoken_name: 'date of birth',
+    type: 'date',
+    section_id: 'Part 1',
+    help: { format_hint: 'MM/DD/YYYY' },
+    max_date: '2007-10-13',
+  };
+
+  // The exit criteria's "both east and west of UTC" requirement is met by
+  // covering each bound direction in the ONE timezone where its failure can
+  // actually manifest, not by running one test under both timezones: a MAX
+  // bound can only wrongly reject WEST of UTC (see the max-bound tests
+  // below); a MIN bound only EAST of UTC (see the min-bound tests further
+  // down). Node re-reads process.env.TZ on every `new Date(...)`
+  // construction, so setting it per-test is enough; no module re-import
+  // needed.
+  const ORIGINAL_TZ = process.env.TZ;
+  afterEach(() => {
+    if (ORIGINAL_TZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = ORIGINAL_TZ;
+    }
+  });
+
+  // MAX bound: with `new Date("2007-10-13")` (ISO) parsing as UTC midnight
+  // and `new Date("10/13/2007")` (slash) parsing as LOCAL midnight, the
+  // slash-form value's UTC instant lands AFTER the ISO bound's only in a
+  // timezone WEST of UTC (a positive UTC offset from local midnight pushes
+  // the instant later) -- so only a west-of-UTC run can actually reproduce
+  // this specific historical bug against a MAX bound. (The mirrored min_date
+  // suite below is what exercises the EAST-of-UTC direction -- see its
+  // comment. Pinning "west of UTC" here is intentional, not a gap in
+  // coverage: an "east of UTC, max bound" case would pass even under the
+  // pre-fix code, so asserting it here would be a vacuous test, exactly the
+  // kind fresh-eyes review caught here on the first pass -- the original
+  // parametrization included a "Pacific/Kiritimati (east)" variant of THIS
+  // max-bound test, which never reddened under mutation, and was replaced
+  // with the honest split below.)
+  it('accepts a MM/DD/YYYY value exactly equal to an ISO max bound (America/Los_Angeles, west of UTC)', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(validateField(mmddyyyyWithIsoBound, '10/13/2007')).toBeNull();
+  });
+
+  it('rejects a MM/DD/YYYY value one day after an ISO max bound (America/Los_Angeles, west of UTC)', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(validateField(mmddyyyyWithIsoBound, '10/14/2007')).not.toBeNull();
+  });
+
+  it('accepts a MM/DD/YYYY value one day before an ISO max bound', () => {
+    expect(validateField(mmddyyyyWithIsoBound, '10/12/2007')).toBeNull();
+  });
+
+  // MIN bound: the mirror-image failure. A negative UTC offset from local
+  // midnight (east of UTC) pushes the slash-form value's UTC instant EARLIER
+  // than the ISO bound's, so THIS is the direction that can wrongly reject a
+  // value exactly equal to a MIN bound. Genuinely exercises the east-of-UTC
+  // path fresh-eyes review found untested (mutation-verified below: forcing
+  // parseDateComponents to return null reddens exactly these two tests when
+  // run under Pacific/Kiritimati, and does not under America/Los_Angeles).
+  const mmddyyyyWithIsoMinBound: FormField = {
+    id: 'admission_date_mixed',
+    name: 'Date of Admission',
+    spoken_name: 'date of admission',
+    type: 'date',
+    section_id: 'Part 1',
+    help: { format_hint: 'MM/DD/YYYY' },
+    min_date: '2007-10-13',
+  };
+
+  it('accepts a MM/DD/YYYY value exactly equal to an ISO min bound (Pacific/Kiritimati, east of UTC)', () => {
+    process.env.TZ = 'Pacific/Kiritimati';
+    expect(validateField(mmddyyyyWithIsoMinBound, '10/13/2007')).toBeNull();
+  });
+
+  it('rejects a MM/DD/YYYY value one day before an ISO min bound (Pacific/Kiritimati, east of UTC)', () => {
+    process.env.TZ = 'Pacific/Kiritimati';
+    expect(validateField(mmddyyyyWithIsoMinBound, '10/12/2007')).not.toBeNull();
+  });
+
+  it('accepts a MM/DD/YYYY value one day after an ISO min bound', () => {
+    expect(validateField(mmddyyyyWithIsoMinBound, '10/14/2007')).toBeNull();
+  });
+
+  it('still rejects an out-of-range value when the bound is authored in the same MM/DD/YYYY layout', () => {
+    const sameLayoutBound: FormField = {
+      ...mmddyyyyWithIsoBound,
+      max_date: '10/13/2007',
+    };
+    expect(validateField(sameLayoutBound, '10/13/2007')).toBeNull();
+    expect(validateField(sameLayoutBound, '10/14/2007')).not.toBeNull();
+  });
+
+  it('accepts a slash-form value equal to an ISO bound even with NO declared layout on the field at all (help.format_hint or flat format)', () => {
+    // parseDateComponents tries BOTH layouts unconditionally (see its
+    // docstring) -- it does not key off the field's declared format at all
+    // anymore, so a field with no format signal whatsoever is fixed
+    // identically to one that declares MM/DD/YYYY or ISO. This is a
+    // deliberate consequence of round 2's fix, not a separate fallback path.
+    const noLayout: FormField = {
+      id: 'no_hint',
+      name: 'Some Date',
+      spoken_name: 'some date',
+      type: 'date',
+      section_id: 'Part 1',
+      max_date: '2007-10-13',
+    };
+    expect(validateField(noLayout, '10/13/2007')).toBeNull();
+  });
+
+  it('still falls back to the pre-existing new Date() comparison when the bound matches NEITHER layout parseDateComponents understands', () => {
+    // A genuinely unusual bound (e.g. "Mo/Yr" layout, MM/YYYY) that matches
+    // neither the slash-triple nor the ISO regex -- this is the actual
+    // remaining fallback case, unchanged from before this bead.
+    const unusualBound: FormField = {
+      id: 'unusual_bound',
+      name: 'Some Date',
+      spoken_name: 'some date',
+      type: 'date',
+      section_id: 'Part 1',
+      max_date: '10/2007', // MM/YYYY -- matches neither parseDateComponents pattern
+    };
+    expect(typeof validateField(unusualBound, '10/13/2007')).not.toBe('undefined');
+  });
+
+  // bd polyglot-pdf-8i3rs, Opus cross-surface review round 1: the ONE
+  // bounded date field the product actually ships
+  // (frontend/public/adult_intake_demo_schema.json's `dob`) declares its
+  // layout via the FLAT `format` key ("YYYY-MM-DD"), not help.format_hint.
+  // An earlier draft of this fix gated the MM/DD/YYYY parse attempt on the
+  // field's DECLARED format (checking format_hint, then the flat key) and
+  // missed exactly this field. Fixed by dropping the declared-format gate
+  // entirely -- parseDateComponents (see its docstring) now tries BOTH
+  // layouts unconditionally on every string, so which key (if any) the
+  // field declares no longer matters to this parse.
+  const dobShapedField: FormField = {
+    id: 'dob',
+    name: 'DOB',
+    spoken_name: 'Date of Birth',
+    type: 'date',
+    section_id: 'section-client-info',
+    format: 'YYYY-MM-DD' as any,
+    min: '1900-01-01' as any,
+    max: '2007-10-13' as any,
+  };
+
+  it('accepts an ISO value exactly equal to the max bound on the real dob-shaped field (flat format key, no help.format_hint)', () => {
+    expect(validateField(dobShapedField, '2007-10-13')).toBeNull();
+  });
+
+  it('rejects an ISO value one day after the max bound on the real dob-shaped field', () => {
+    expect(validateField(dobShapedField, '2007-10-14')).not.toBeNull();
+  });
+
+  // THE actual bug reproduction on the shipped field: DateField.tsx (bd
+  // md20o) renders a plain text input with no format coercion, so a
+  // slash-form value can reach `dob` despite its declared "YYYY-MM-DD"
+  // layout. Without reading the flat `format` key, this value/bound pair
+  // reproduces the exact west-of-UTC rejection this bead exists to fix --
+  // pinned here against the REAL field shape, not just a synthetic one.
+  it('accepts a SLASH-FORM value exactly equal to the max bound on the real dob-shaped field (America/Los_Angeles, west of UTC)', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(validateField(dobShapedField, '10/13/2007')).toBeNull();
+  });
+
+  it('rejects a SLASH-FORM value one day after the max bound on the real dob-shaped field (America/Los_Angeles, west of UTC)', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(validateField(dobShapedField, '10/14/2007')).not.toBeNull();
   });
 });
 
