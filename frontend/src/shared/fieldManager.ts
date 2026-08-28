@@ -297,9 +297,46 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			}
 		}
 
-		// Try fuzzy match if exact match failed
+		// Case-insensitive EXACT match next (bd polyglot-pdf-jbek5): 'AL'
+		// against option value 'al' or text 'AL' is a real, unambiguous
+		// signal -- an export code spoken/echoed back in a different case --
+		// and must win even though 'al' also happens to be a SUBSTRING of
+		// 'Alaska'/'Alabama'. This tier is exact equality (case-folded), not
+		// containment, so it cannot itself collide the way the fuzzy
+		// substring tier below can; a value equal to more than one option's
+		// text/value case-insensitively (a genuinely duplicate-labeled kit)
+		// still only takes the first, matching the exact-match tier above's
+		// existing first-hit behavior.
 		if (!matched) {
 			const lowerValue = newValue.toLowerCase()
+			for (let i = 0; i < selectEl.options.length; i++) {
+				const option = selectEl.options[i]
+				if (option.value.toLowerCase() === lowerValue || option.text.toLowerCase() === lowerValue) {
+					selectEl.selectedIndex = i
+					matched = true
+					console.log('[VFF FieldManager] [check] Case-insensitive exact match for select:', fieldId, '->', option.text)
+					break
+				}
+			}
+		}
+
+		// Try fuzzy (substring) match if exact match failed. This was
+		// written when a select's option.value was a long minted slug
+		// ('wyoming'), where accidental substring containment was unlikely.
+		// Since bd polyglot-pdf-4we6j a select's option.value can be the PDF's
+		// own short export code ('WY', 'AL', 'AK', 'AR'), and short codes
+		// collide readily under bidirectional substring matching -- 'al'
+		// is a substring of BOTH 'alaska' and 'alabama' by TEXT containment
+		// (the case-insensitive exact-match tier above already resolves the
+		// common real case -- an export code equal to an option's own value
+		// -- before reaching here). Collect every candidate FIRST and only
+		// apply the match when it is UNIQUE; an ambiguous value selects
+		// nothing and logs the same "no match" warning a genuinely unmatched
+		// value gets, rather than writing a silently wrong answer onto a
+		// legal form.
+		if (!matched) {
+			const lowerValue = newValue.toLowerCase()
+			const candidates: number[] = []
 			for (let i = 0; i < selectEl.options.length; i++) {
 				const option = selectEl.options[i]
 				const lowerText = option.text.toLowerCase()
@@ -307,11 +344,18 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 
 				if (lowerText.includes(lowerValue) || lowerValue.includes(lowerText) ||
 				    lowerOptionValue.includes(lowerValue) || lowerValue.includes(lowerOptionValue)) {
-					selectEl.selectedIndex = i
-					matched = true
-					console.log('[VFF FieldManager] ~= Fuzzy match for select:', fieldId, '->', option.text)
-					break
+					candidates.push(i)
 				}
+			}
+			if (candidates.length === 1) {
+				const i = candidates[0]
+				selectEl.selectedIndex = i
+				matched = true
+				console.log('[VFF FieldManager] ~= Fuzzy match for select:', fieldId, '->', selectEl.options[i].text)
+			} else if (candidates.length > 1) {
+				console.warn(
+					'[VFF FieldManager] [warn] Ambiguous fuzzy match for:', newValue, 'in', fieldId,
+					'-- matches', candidates.map((i) => selectEl.options[i].text), '-- selecting none')
 			}
 		}
 
