@@ -120,10 +120,6 @@ _log = structlog.get_logger().bind(module="editor_kit_routes")
 
 router = APIRouter(prefix="/api/editor", tags=["editor-kits"])
 
-# Role constants (author strictly includes editor).
-ROLE_EDITOR = "editor"
-ROLE_AUTHOR = "author"
-
 # extract_form.py's tri-state exit code for a stored-with-issues draft (bd
 # polyglot-pdf-v96b, P5.3a). Mirrored here (the extractor runs as a subprocess,
 # so the route cannot import the constant); extract_form.EXIT_ISSUES is the
