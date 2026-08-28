@@ -16,6 +16,7 @@ import fitz  # PyMuPDF
 import structlog
 
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.services.resume_stamp import STAMP_KEY, build_stamp
 from backend.services.auth import require_auth
 from backend.services.kit_gates import (
 	load_live_metadata,
@@ -68,6 +69,18 @@ class PDFFillRequest(BaseModel):
 	pdf_filename: str = Field(..., description="PDF filename (e.g., 'i-90.pdf')")
 	field_values: Dict[str, Any] = Field(..., description="Field ID -> value mapping from schema")
 	form_schema: Dict[str, Any] = Field(..., description="Full schema with pdf_field_name mappings")
+	# RESUME STAMP (bd polyglot-pdf-dft1). Optional: a staff download does not
+	# need one, and an older client that does not send it still gets its PDF.
+	#
+	# The client supplies its own form_session_id, which is fine BECAUSE this
+	# value is never trusted for anything: it is a resume HINT written into a
+	# file the client already controls, not a credential. Compare the link
+	# jti below, which is NOT taken from the body -- that one is read from the
+	# verified token, because a client naming someone else's jti would corrupt
+	# the aggregation the firm bills from.
+	form_session_id: Optional[str] = Field(
+		None, description="Client's form session id, stamped into the PDF for resume"
+	)
 
 
 @router.post("/fill-pdf")
@@ -740,6 +753,36 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 
 		with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
 			temp_path = tmp_file.name
+
+		# RESUME STAMP (bd polyglot-pdf-dft1), written just before save so it
+		# lands in the bytes the client keeps. This is what makes the saved PDF
+		# a SAVE FILE: the answers are already in the form fields, and this
+		# adds the identity needed to resume -- with no server storage, so the
+		# stateless-architecture rule holds.
+		#
+		# The link jti comes from the VERIFIED token, never the body: a client
+		# naming someone else's jti would corrupt the per-link aggregation the
+		# firm bills from. form_session_id does come from the body, which is
+		# safe because it is a hint the client already controls, not a
+		# credential (see services/resume_stamp.py).
+		#
+		# Best-effort: a stamping failure must never cost the client the PDF
+		# they just filled. Losing the stamp costs a resume; raising here
+		# costs the document.
+		try:
+			_stamp = build_stamp(
+				form_session_id=request.form_session_id,
+				kit_id=request.kit_id,
+				link_jtis=[user["jti"]] if isinstance(user, dict) and user.get("jti") else None,
+				schema_version=(request.form_schema or {}).get("form_metadata", {}).get("version"),
+			)
+			if _stamp:
+				_meta = doc.metadata or {}
+				_meta[STAMP_KEY] = _stamp
+				doc.set_metadata(_meta)
+				_log.info("resume_stamp_written", kit=request.kit_id)
+		except Exception as exc:  # noqa: BLE001 -- never lose the PDF over a stamp
+			_log.warning("resume_stamp_failed", kit=request.kit_id, error=str(exc))
 
 		try:
 			# Save with minimal processing to preserve XFA checkbox appearances
