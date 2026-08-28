@@ -26,12 +26,13 @@ likewise document themselves in their module docstrings.
 ### `bootstrap_editor_user.py`
 
 The ONLY way to grant a person sign-in access to the hosted schema editor
-(bd polyglot-pdf-hn0jq) -- without it, a real Firebase ID token with no role
-claim gets 403 ("This account does not have schema editor access"; today's
-shipped access-code UI can't even reach that far and 401s instead, since it
-isn't a real Firebase token -- see below). Stamps an `editor`/`author` custom claim on
-the person's Firebase account; the **script docstring** is the single source
-of truth for usage (`--email <email> --role editor`, `--revoke`, `--list`).
+(bd polyglot-pdf-hn0jq). The editor signs people in with Firebase
+(bd polyglot-pdf-yswp3), and a valid account with no role claim is then
+refused with 403 ("This account does not have schema editor access") -- so
+signing in is necessary but not sufficient, and this script is what makes it
+sufficient. Stamps an `editor`/`author` custom claim on the person's Firebase
+account; the **script docstring** is the single source of truth for usage
+(`--email <email> --role editor`, `--revoke`, `--list`).
 Mirrors `bootstrap_firm.py` as a template rather than extending it -- each
 stamps its own claim and neither reads the other's. Required as a one-time
 setup step per person before their first hosted-editor sign-in; see
@@ -39,11 +40,11 @@ setup step per person before their first hosted-editor sign-in; see
 
 This STAMPS a role on an EXISTING Firebase Auth account -- it does not create
 one, and fails with "No Firebase account for ..." if the person has never had
-one. The hosted editor's sign-in screen does not exist yet (bd
-polyglot-pdf-yswp3, still open) -- there is no product flow that creates a
-Firebase Auth account for a brand-new person today, so the operator must
-create the person's account some other way first (Firebase console, or
-Admin SDK/gcloud) before this command can grant them a role.
+one. The sign-in screen deliberately offers no account creation (editor access
+is granted, never self-served -- a self-served account could only ever hit the
+403 above), so the operator creates the person's Firebase Auth account first
+(Firebase console, or Admin SDK/gcloud) and then runs this command. Someone
+who forgets their password can self-serve a reset from the sign-in screen.
 
 ---
 

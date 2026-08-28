@@ -1039,9 +1039,13 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
 async def editor_session(
     role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> EditorSessionResponse:
-    """Access-code probe: the hosted editor calls this once after code entry to
-    learn the caller's role (author-only UI is gated on it) and to validate the
-    code before any kit traffic."""
+    """Sign-in probe: the hosted editor calls this once the person signs in,
+    to learn their role (author-only UI is gated on it) and to confirm they
+    hold editor access AT ALL before any kit traffic.
+
+    A 403 here is the gate's cue to show its refused screen rather than the
+    sign-in form -- see editor_auth.NO_EDITOR_ACCESS_PREFIX for why the two
+    kinds of 403 must stay distinguishable on the wire."""
     return EditorSessionResponse(role=role.role)
 
 

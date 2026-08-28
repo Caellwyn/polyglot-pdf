@@ -20,6 +20,7 @@
  */
 import React from 'react';
 import type { FormSchema } from '../types/schema';
+import { AuthError, ForbiddenError } from '../utils/remoteKitStore';
 import type { ArchivedRevision } from '../utils/remoteKitStore';
 
 export interface ArchivedVersionsProps {
@@ -27,6 +28,12 @@ export interface ArchivedVersionsProps {
   kitLabel: string;
   listRevisions: (kitId: string) => Promise<ArchivedRevision[]>;
   loadSchema: (kitId: string, marker: string) => Promise<FormSchema | null>;
+  /** Auth failure -- the host routes it: 401 back to sign-in, 403 to the
+   * refused screen. MUST be called WITH the error, or a 403 cannot be told
+   * from a 401 downstream (bd polyglot-pdf-yswp3). BOTH fetchers injected
+   * above go through editorFetch, so either can raise them -- an archive
+   * browse is a remote read like any other. */
+  onAuthError?: (err?: unknown) => void;
 }
 
 function formatStamp(iso: string | null): string {
@@ -36,7 +43,7 @@ function formatStamp(iso: string | null): string {
 }
 
 export function ArchivedVersions({
-  kitId, kitLabel, listRevisions, loadSchema,
+  kitId, kitLabel, listRevisions, loadSchema, onAuthError,
 }: ArchivedVersionsProps) {
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -56,6 +63,10 @@ export function ArchivedVersions({
       try {
         setRevisions(await listRevisions(kitId));
       } catch (e) {
+        if (e instanceof AuthError || e instanceof ForbiddenError) {
+          onAuthError?.(e);
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
@@ -69,6 +80,10 @@ export function ArchivedVersions({
       const schema = await loadSchema(kitId, rev.marker);
       setViewing({ marker: rev.marker, published_at: rev.published_at, schema });
     } catch (e) {
+      if (e instanceof AuthError || e instanceof ForbiddenError) {
+        onAuthError?.(e);
+        return;
+      }
       setViewError(e instanceof Error ? e.message : String(e));
     }
   };

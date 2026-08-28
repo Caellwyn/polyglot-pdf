@@ -26,27 +26,45 @@
  * the hint for an absent stamp).
  */
 import type { FsDirectoryHandle } from './fileSystemAccess';
-import { AuthError, apiBaseUrl, getAccessCode } from './remoteKitStore';
+import { AuthError, apiBaseUrl, errorDetail, forbiddenFromDetail } from './remoteKitStore';
+import { editorIdToken } from './editorAuth';
 
 const METADATA_FILE = 'metadata.json';
 
 /** Ask the backend to recompute + persist the kit's readiness stamp for the
  * schema that was just saved to disk. Resolves to the stamp it wrote (snake
  * case, as metadata.json carries it) or null when stamping was skipped
- * server-side. Throws on HTTP failure (AuthError on 401) -- the caller falls
- * back to invalidateLocalStamp so a dead backend never leaves a stale
- * confident number. */
+ * server-side. Throws on HTTP failure (AuthError on 401, ForbiddenError on
+ * 403) -- the caller falls back to invalidateLocalStamp so a dead backend
+ * never leaves a stale confident number. */
 export async function stampKitReadinessRemote(
   kitId: string, schema: unknown,
 ): Promise<Record<string, unknown> | null> {
-  const code = getAccessCode();
+  // Same per-user identity every other editor call carries
+  // (bd polyglot-pdf-yswp3). This route does NOT go through editorFetch --
+  // it is one of two direct fetch sites in the editor -- so the token and the
+  // 401/403 split are repeated here deliberately rather than drifting apart.
+  const token = await editorIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (code) headers['X-Editor-Token'] = code;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(
     `${apiBaseUrl()}/api/editor/kits/${encodeURIComponent(kitId)}/readiness`,
     { method: 'POST', headers, body: JSON.stringify(schema) },
   );
   if (res.status === 401) throw new AuthError();
+  if (res.status === 403) {
+    // Classify the SAME way editorFetch does. There are two kinds of 403 --
+    // "no editor role at all" (evict to the refused screen) and "this action
+    // is author-only" (an ordinary refusal) -- and the server marks the first
+    // with NO_EDITOR_ACCESS_PREFIX. Constructing a bare ForbiddenError here
+    // would classify every 403 as the second kind and drop the server's own
+    // detail, which is exactly the drift the comment above says this site
+    // avoids. Not reachable today (this path is local-mode only, and local
+    // runs under the backend's dev bypass), so this keeps a true invariant
+    // rather than fixing a live bug.
+    throw forbiddenFromDetail(
+      await errorDetail(res, 'This account does not have schema editor access'));
+  }
   if (!res.ok) throw new Error(`Could not refresh the kit's progress (HTTP ${res.status})`);
   const body = (await res.json()) as { readiness?: Record<string, unknown> | null };
   return body.readiness ?? null;

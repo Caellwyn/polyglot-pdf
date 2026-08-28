@@ -253,13 +253,12 @@ echo ""
 # a local session can never inherit the committed Cloud Run URL and start
 # writing to the shared store.
 if [ "$START_BACKEND" = "1" ]; then
-    # VITE_EDITOR_TOKEN is the SAME per-run token the backend was given, so the
-    # local editor authenticates without a login prompt. Baking a token into a
-    # bundle is only acceptable because this bundle never leaves the machine
-    # (vite dev on localhost, a token minted fresh each run); a HOSTED build
-    # must never do this -- see the warning in schema-editor/.env.hosted.
+    # No credential is baked into the local bundle (bd polyglot-pdf-yswp3).
+    # The backend runs with VFF_DISABLE_AUTH, whose dev bypass answers before
+    # any token check, and the sign-in gate is HOSTED-only (the editor gates
+    # on `hosted && !role`). That bypass refuses itself on a deployed
+    # instance, so it cannot leak past localhost.
     VITE_BACKEND_URL="$BACKEND_URL" \
-    VITE_EDITOR_TOKEN="$SCHEMA_AUTHOR_TOKEN" \
     npm run dev
 else
     npm run dev

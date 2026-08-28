@@ -5,19 +5,25 @@
  * The hosted delivery mode's counterpart of formKitDirectory.ts: instead of a
  * local directory picked via the File System Access API, kits live in the
  * shared store behind the backend (GCS in production, a local form-kits/ dir in
- * dev), served by /api/editor/* (bd 92qe.1). A contractor opens ONE URL, enters
- * an access code once, and works the same catalogue -> open -> edit -> save ->
+ * dev), served by /api/editor/* (bd 92qe.1). A contractor opens ONE URL, signs
+ * in as themselves, and works the same catalogue -> open -> edit -> save ->
  * mark-complete loop against the shared store.
  *
- * Auth: every call carries the access code as the X-Editor-Token header. The
- * code comes from localStorage (entered once in the UI) or a baked
- * VITE_EDITOR_TOKEN (the original single-contractor plan's shape -- still
- * honored). A 401 raises AuthError so the UI can clear the stored code and
- * re-prompt; a 503 means the server has no editor surface configured.
+ * Auth: every call carries the signed-in person's Firebase ID token as
+ * `Authorization: Bearer` (bd polyglot-pdf-yswp3). The token comes from
+ * utils/editorAuth.ts and is fetched PER REQUEST, since it expires roughly
+ * hourly and the SDK refreshes it transparently. A 401 raises AuthError (the
+ * token was refused) and a 403 raises ForbiddenError (a real account with no
+ * editor role -- see editor_auth.py); a 503 means the server has no editor
+ * surface configured.
+ *
+ * The shared access code this replaced (X-Editor-Token) is gone: the server
+ * stopped accepting it when per-user identity landed (bd polyglot-pdf-hn0jq).
  *
  * Delivery-mode gate: isHostedMode() reads VITE_DELIVERY_MODE at call time
  * (not module load) so tests can stub the env per case.
  */
+import { editorIdToken } from './editorAuth';
 import type { FormSchema } from '../types/schema';
 import { stripEditorState } from './fieldGrouping';
 import { migrateLegacyRequired } from './schemaMigrate';
@@ -84,23 +90,65 @@ export interface RemoteKitEntry {
   heldBy?: string | null;
 }
 
-/** The access code was missing/wrong (HTTP 401): clear it and re-prompt. */
+/** The sign-in was missing or refused (HTTP 401): sign in again. */
 export class AuthError extends Error {
-  constructor(message = 'Invalid or missing access code') {
+  constructor(message = 'Sign-in required') {
     super(message);
     this.name = 'AuthError';
   }
 }
 
-const ACCESS_CODE_KEY = 'schema-editor.accessCode';
+/**
+ * A VALID account with no editor access (HTTP 403).
+ *
+ * Kept DISTINCT from AuthError because the remedy is completely different and
+ * the two are easy to confuse: 401 means "sign in again" (a retry can fix it),
+ * while 403 means "you are who you say you are, but you are not listed here"
+ * -- no amount of retrying helps; an operator must grant access with
+ * scripts/bootstrap_editor_user.py. Collapsing them would send a voice-app user
+ * round a sign-in loop that can never succeed.
+ */
+export class ForbiddenError extends Error {
+  /**
+   * True only when the server said this account holds NO editor role at all --
+   * the case that must evict to the refused screen.
+   *
+   * A 403 also arrives for "you ARE an editor, but this action is author-only"
+   * (publishing, reopening a live kit, the author-tier routes). Those must
+   * surface as a normal refusal: throwing a working editor out of the editor
+   * for clicking an author button is a far worse bug than the one this class
+   * was added to fix. The server marks the evicting one with a machine-readable
+   * prefix (editor_auth.NO_EDITOR_ACCESS_PREFIX) rather than a message we
+   * string-match, because prose is not a contract.
+   */
+  readonly noEditorAccess: boolean;
 
-// In-memory fallback for the access code (Codex P1 r2, PR #280): when
-// localStorage is unavailable (Safari private browsing, storage disabled),
-// setAccessCode would otherwise swallow the typed code entirely -- the very
-// next probeSession() reads getAccessCode(), gets nothing, and the editor is
-// unopenable even with a valid code. Memory keeps the CURRENT session working;
-// it just won't persist across reloads.
-let memoryAccessCode: string | null = null;
+  constructor(message = 'This account does not have schema editor access',
+              noEditorAccess = false) {
+    super(message);
+    this.name = 'ForbiddenError';
+    this.noEditorAccess = noEditorAccess;
+  }
+}
+
+/** The server's marker for "no editor role at all" -- mirrors
+ * backend/services/editor_auth.py's NO_EDITOR_ACCESS_PREFIX. */
+const NO_EDITOR_ACCESS_PREFIX = 'NO_EDITOR_ACCESS:';
+
+/** Build a ForbiddenError from a 403's detail, classifying it and stripping
+ * the wire marker.
+ *
+ * EXPORTED because the editor has a SECOND direct fetch site (localStamp.ts)
+ * that cannot go through editorFetch. Sharing the classifier is what stops
+ * the two paths disagreeing about which 403s evict -- duplicating the
+ * `startsWith` there is how the split drifts. */
+export function forbiddenFromDetail(detail: string): ForbiddenError {
+  const evicting = detail.startsWith(NO_EDITOR_ACCESS_PREFIX);
+  return new ForbiddenError(
+    evicting ? detail.slice(NO_EDITOR_ACCESS_PREFIX.length).trim() : detail,
+    evicting,
+  );
+}
 
 /** True when this build runs against the remote store (VITE_DELIVERY_MODE=hosted). */
 export function isHostedMode(): boolean {
@@ -153,60 +201,34 @@ export function apiBaseUrl(): string {
   return (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? '';
 }
 
-/** The active access code: the human-entered one (localStorage, with an
- * in-memory fallback for storage-less browsers) wins, else a baked
- * VITE_EDITOR_TOKEN (single-contractor compat), else null (prompt). */
-export function getAccessCode(): string | null {
-  const baked = import.meta.env.VITE_EDITOR_TOKEN as string | undefined;
-  // LOCAL dev inverts the precedence: run-schema-editor.sh mints a FRESH
-  // per-run token and gives the same value to the backend and this bundle, so
-  // the baked one is authoritative. A code left in localStorage by an earlier
-  // run would otherwise shadow it and 401 every request -- which reads exactly
-  // like the silent no-lint failure this change exists to remove
-  // (bd polyglot-pdf-cpiw). Hosted keeps the human-entered code on top: there
-  // the baked value is a build-time fallback, and one build serves both tiers.
-  if (baked && !isHostedMode()) return baked;
-  try {
-    const stored = window.localStorage.getItem(ACCESS_CODE_KEY);
-    if (stored) return stored;
-  } catch {
-    // storage unavailable -> fall through to the in-memory copy
-  }
-  if (memoryAccessCode) return memoryAccessCode;
-  return baked || null;
-}
-
-export function setAccessCode(code: string): void {
-  memoryAccessCode = code; // always -- storage is best-effort persistence only
-  try {
-    window.localStorage.setItem(ACCESS_CODE_KEY, code);
-  } catch {
-    // storage unavailable -> the in-memory copy above carries the session.
-  }
-}
-
-export function clearAccessCode(): void {
-  memoryAccessCode = null;
-  try {
-    window.localStorage.removeItem(ACCESS_CODE_KEY);
-  } catch {
-    // nothing to clear
-  }
-}
-
+/**
+ * Every editor API call, carrying the signed-in person's identity.
+ *
+ * The ID token is fetched HERE, per request, rather than captured once at
+ * sign-in: Firebase ID tokens expire in about an hour and the SDK refreshes
+ * them from the persisted session, so asking each time is what keeps a long
+ * editing session from 401ing halfway through a kit.
+ */
 async function editorFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const code = getAccessCode();
+  const token = await editorIdToken();
   const headers: Record<string, string> = {
     ...(init.headers as Record<string, string> | undefined),
   };
-  if (code) headers['X-Editor-Token'] = code;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${apiBaseUrl()}${path}`, { ...init, headers });
   if (res.status === 401) throw new AuthError();
+  // 403 is a REAL account without editor access -- a different remedy from 401,
+  // so it gets its own error type rather than being folded into AuthError. The
+  // server's detail is carried through because it names the actual reason.
+  if (res.status === 403) {
+    throw forbiddenFromDetail(await errorDetail(
+      res, 'This account does not have schema editor access'));
+  }
   return res;
 }
 
 /** Extract the backend's error detail for a human-readable failure message. */
-async function errorDetail(res: Response, fallback: string): Promise<string> {
+export async function errorDetail(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { detail?: unknown };
     if (typeof body.detail === 'string' && body.detail) return body.detail;
@@ -216,11 +238,12 @@ async function errorDetail(res: Response, fallback: string): Promise<string> {
   return `${fallback} (HTTP ${res.status})`;
 }
 
-/** Validate the access code and learn the caller's role. AuthError on a bad
- * code; a thrown Error with the server detail on 503 (surface is off). */
+/** Confirm the signed-in person has editor access, and learn their role.
+ * AuthError on a refused token, ForbiddenError on a real account with no editor
+ * role; a thrown Error with the server detail on 503 (surface is off). */
 export async function probeSession(): Promise<{ role: EditorRole }> {
   const res = await editorFetch('/api/editor/session');
-  if (!res.ok) throw new Error(await errorDetail(res, 'Could not validate the access code'));
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not check your access'));
   return (await res.json()) as { role: EditorRole };
 }
 
@@ -638,7 +661,7 @@ export async function setRemoteLabel(kitId: string, label: string): Promise<void
 
 // --- author tier (bd polyglot-pdf-92qe.3) ----------------------------------
 // Onboarding + hosted extraction: multipart POSTs (no manual Content-Type --
-// the browser sets the boundary). Both need the AUTHOR access code; the server
+// the browser sets the boundary). Both need the AUTHOR role; the server
 // answers 403 for the editor tier.
 
 /** Upload a blank form PDF -> a new draft kit in the shared store. */

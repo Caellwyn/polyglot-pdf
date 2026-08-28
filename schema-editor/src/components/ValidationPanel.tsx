@@ -5,6 +5,7 @@ import { reviewCounts } from '../utils/reviewStatus';
 import { bucketFindingsByField } from '../utils/lintFindings';
 import {
   AuthError,
+  ForbiddenError,
   hasBackend,
   isHostedMode,
   lintSchema,
@@ -60,7 +61,10 @@ interface ValidationPanelProps {
   reviewFilterActive?: boolean;
   // A rotated/expired access code surfaced while linting -- let the host drop
   // back to the access gate, same as every other editorFetch caller.
-  onAuthError?: () => void;
+  /** Auth failure -- App routes it: 401 back to sign-in, 403 to the refused
+   * screen. MUST be called WITH the error; calling it bare loses that
+   * distinction silently (tsc accepts either arity). */
+  onAuthError?: (err?: unknown) => void;
   // One-click Repair-all (bd polyglot-pdf-zgln, P5.3b): when provided (author
   // tier on a stored kit), a "Repair all (N)" button runs the server-side repair
   // and the host reloads the repaired schema. Omitted -> no button.
@@ -240,9 +244,13 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       })
       .catch((err) => {
         if (seq !== seqRef.current) return;
-        if (err instanceof AuthError) {
-          onAuthError?.();
-          // HOSTED re-prompts with the access-code gate, so returning here is
+        if (err instanceof AuthError || err instanceof ForbiddenError) {
+          // Forward the ERROR, not a bare call: App tells 401 (sign in again)
+          // from 403 (role revoked -> the refused screen) by its type, and
+          // lint is the highest-frequency remote call in the editor, so a
+          // mid-session revocation usually surfaces HERE first.
+          onAuthError?.(err);
+          // HOSTED re-prompts with the sign-in gate, so returning here is
           // enough. LOCAL has no gate screen (App renders it on `hosted &&
           // !role`), so a 401 would otherwise render NOTHING: no findings, no
           // banner, green completion -- the exact silent-clean state bd cpiw
@@ -250,9 +258,16 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
           // FRESH per-run token while an already-open tab still holds the
           // previous one. Fall through to the banner instead.
           if (hosted) return;
-          setLintError(
-            'the editor was not accepted by its backend (the access token '
-            + 'may be from an earlier run -- reload this page)');
+          // LOCAL wording splits by CAUSE, because the remedies are opposite:
+          // a 401 is usually a token from an earlier run (reload fixes it),
+          // while a 403 means this account lacks the role -- reloading never
+          // fixes that, and telling someone to reload sends them in circles.
+          setLintError(err instanceof ForbiddenError
+            ? 'this account is not allowed to run the checks on this kit '
+              + '(its editor role does not cover it) -- reloading will not '
+              + 'change that; ask an operator to grant access'
+            : 'the editor was not accepted by its backend (the access token '
+              + 'may be from an earlier run -- reload this page)');
           return;
         }
         // A lint failure is non-blocking: the editor stays usable, the strip

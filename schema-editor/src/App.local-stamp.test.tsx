@@ -152,6 +152,28 @@ describe('local-save readiness stamping (bd na1zy)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  // stampKitReadinessRemote is the editor's OTHER direct fetch site -- it does
+  // NOT go through editorFetch -- so its auth failures were swallowed into a
+  // console.warn for four review rounds while every other call site routed
+  // them. A 403 here means the role was revoked mid-session, which needs the
+  // same routing as anywhere else: local mode surfaces it, hosted drops to the
+  // gate. Anything less is a silent failure in the path whose entire job is to
+  // avoid silent staleness.
+  it('an auth failure from the restamp is ROUTED, not swallowed', async () => {
+    hasBackendMock.mockReturnValue(true);
+    const { ForbiddenError } = await import('./utils/remoteKitStore');
+    vi.mocked(localStamp.stampKitReadinessRemote)
+      .mockRejectedValueOnce(new ForbiddenError('access revoked'));
+    await openKitA();
+    fireEvent.click(screen.getByText('pick-root'));
+    await waitFor(() => expect(verifySameFolderMock).toHaveBeenCalled());
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    // LOCAL mode has no gate screen, so handleAuthExpired surfaces a banner --
+    // proof the error reached the router instead of a console line.
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+
   it('Save-As touches neither the stamp nor the metadata (criterion 2)', async () => {
     await openKitA();
     fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true });

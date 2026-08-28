@@ -20,21 +20,32 @@
 #      shared secret any more (a SCHEMA_EDITOR_TOKEN / SCHEMA_AUTHOR_TOKEN
 #      env var, if still set on the backend, is dead config nothing reads --
 #      per-person Firebase custom claims are the only gate now). REQUIRED
-#      before anyone's first sign-in: a real Firebase ID token with no role
-#      claim gets 403 ("This account does not have schema editor access"),
-#      but today's shipped access-code UI (see below) can't even reach that --
-#      it 401s instead, since it isn't a real Firebase token:
+#      before anyone's first sign-in: the editor signs them in with Firebase
+#      (bd polyglot-pdf-yswp3), and a valid account with no role claim is then
+#      refused with 403 ("This account does not have schema editor access"):
 #        python scripts/bootstrap_editor_user.py --email you@example.com --role editor
 #      This STAMPS a role on an EXISTING Firebase Auth account -- it does not
 #      create one, and fails with "No Firebase account for ..." if the person
-#      has never had one. The hosted editor's sign-in screen does not exist yet
-#      (bd polyglot-pdf-yswp3, still open; AccessCodeGate.tsx's access-code
-#      field is not a Firebase sign-in and cannot create an account), so today
-#      the operator must create the person's Firebase Auth account some other
-#      way first (Firebase console, or Admin SDK/gcloud) before this command
-#      can grant them a role.
+#      has never had one. The sign-in screen deliberately offers no account
+#      creation (editor access is granted, never self-served), so the operator
+#      creates the person's Firebase Auth account first (Firebase console, or
+#      Admin SDK/gcloud) and then runs the command above. A person who forgot
+#      their password can self-serve a reset from the sign-in screen.
 #      See scripts/README.md / the script's own docstring for --revoke, --list,
 #      and the author role.
+#      The BUILD also needs the VITE_FIREBASE_* values (committed in
+#      schema-editor/.env.hosted -- public client ids, not secrets); a build
+#      without them renders an explicit "no Firebase configuration" screen.
+#   3b. AUTHORIZED DOMAIN for the editor site. The editor is a SEPARATE
+#      Hosting site from the voice app, and Firebase Auth refuses sign-in
+#      from any domain not on the project's list -- with the whole config
+#      present and valid, so no build check can catch it. Firebase usually
+#      auto-authorizes sites created under the same project; VERIFY rather
+#      than assume, because the failure only appears at a human's first
+#      sign-in attempt:
+#        Firebase console -> Authentication -> Settings -> Authorized domains
+#      Confirm "$EDITOR_SITE.web.app" is listed (and any custom domain).
+#      The sign-in screen names this case explicitly if it fires.
 #      CORS_EXTRA_ORIGINS + EXTRACTOR_MODEL ride the normal backend deploy env
 #      (deploy-demo.sh exports them via BACKEND_EXTRA_ENV).
 #   4. Bucket WRITE access for the editor surface (reads work today; saves 403

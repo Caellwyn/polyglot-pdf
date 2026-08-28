@@ -230,17 +230,18 @@ def main(argv=None) -> int:
     print({
         "stamped": f"Granted {args.role} access to {args.email} (uid {detail}).",
         # NOT "they must sign in once" -- there is no product path that lets a
-        # new person do that. The hosted editor's gate is a free-text access
-        # code (AccessCodeGate.tsx), not a Firebase sign-in, so a brand-new
-        # person cannot create an account by trying to use the editor. Telling
+        # new person do that. The hosted editor now has a real Firebase SIGN-IN
+        # (SignInGate.tsx, bd polyglot-pdf-yswp3), but deliberately no SIGN-UP:
+        # editor access is granted, never self-served, so a brand-new person
+        # still cannot create an account by trying to use the editor. Telling
         # an operator to wait for something that cannot happen is worse than
-        # telling them nothing. bd polyglot-pdf-yswp3 ships the real sign-in
-        # screen; when it does, THIS message is what should change.
+        # telling them nothing.
         "unknown_email": (
             f"No Firebase account for {args.email}. Create it first -- the "
             "Firebase console (Authentication -> Users -> Add user), the "
-            "Admin SDK, or gcloud -- then run this again. The editor has no "
-            "sign-up flow yet, so the account cannot create itself."),
+            "Admin SDK, or gcloud -- then run this again. The editor has a "
+            "sign-in screen but no sign-up, so the account cannot create "
+            "itself."),
     }.get(status, f"ERROR: {detail}"))
     return 0 if status == "stamped" else 1
 

@@ -27,6 +27,7 @@ pytestmark = pytest.mark.real_editor_auth
 import backend.services.editor_auth as ea
 from backend.services.editor_auth import (
     EDITOR_ROLE_CLAIM,
+    NO_EDITOR_ACCESS_PREFIX,
     EditorActor,
     require_author_actor,
     require_editor_actor,
@@ -261,6 +262,43 @@ def test_an_editor_is_refused_the_author_gate():
     assert exc.value.status_code == 403
 
 
+def test_the_TWO_KINDS_of_403_are_distinguishable_by_the_client(monkeypatch):
+    """Same status code, opposite client remedies -- so the wire must say which.
+
+    "You hold no editor role at all" must send the person to the sign-in gate's
+    refused screen: nothing they do in the editor can help, an operator has to
+    grant access. "You are a valid editor, but this action is author-only" must
+    surface as an ordinary refusal and LEAVE THEM WORKING -- evicting an editor
+    for pressing Publish is a worse bug than the one the refused screen fixed
+    (bd polyglot-pdf-yswp3, cross-surface review).
+
+    The marker is a PREFIX, not the message text, because the client has to
+    branch on it: every previous attempt in this repo to key on English prose
+    has been defeated by a rewording, and here a wrong branch throws a working
+    editor out of the app.
+    """
+    # 1. No claim at all -> marked, because it must evict.
+    _fake_firebase(monkeypatch, {"uid": "uid-nobody", "email": "v@example.com"})
+    with pytest.raises(HTTPException) as exc:
+        verify_editor_token("voice-app-token")
+    assert exc.value.status_code == 403
+    assert str(exc.value.detail).startswith(NO_EDITOR_ACCESS_PREFIX), (
+        "the no-editor-access 403 lost its machine-readable marker, so the "
+        "editor cannot tell it from an author-only refusal and will either "
+        "strand a voice-app user on a sign-in form that can never work, or "
+        "evict a valid editor who pressed an author-only button."
+    )
+
+    # 2. A REAL editor refused an author action -> NOT marked.
+    with pytest.raises(HTTPException) as exc:
+        _run(require_author_actor(EditorActor(uid="u", role="editor")))
+    assert exc.value.status_code == 403
+    assert not str(exc.value.detail).startswith(NO_EDITOR_ACCESS_PREFIX), (
+        "an author-only refusal is marked as no-editor-access, so a valid "
+        "editor pressing an author button is thrown out of the editor."
+    )
+
+
 def test_an_author_passes_the_editor_gate(monkeypatch):
     """Author strictly includes editor -- the rule the shared tokens had."""
     _fake_firebase(monkeypatch, {"uid": "uid-josh", "email": "josh@example.com",
@@ -287,6 +325,79 @@ def test_an_unknown_role_value_is_refused(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         verify_editor_token("t")
     assert exc.value.status_code == 403
+
+
+def test_EVERY_403_the_backend_raises_is_classified(monkeypatch):
+    """The prefix is a SET property, so assert it over the set -- not samples.
+
+    Two tests above pin the two 403s that live in editor_auth.py. The ones an
+    editor actually meets in normal use are elsewhere: the per-transition gates
+    in editor_kit_routes (Publish, and reopening a live form). Nothing links
+    those to the constant, so a future 403 added there -- or a well-meant
+    "let's make this consistent" prefixing of one -- would silently start
+    evicting editors, with the suite green. That is CLAUDE.md scar #8's shape
+    exactly, which is why this enumerates rather than samples.
+
+    Reads the SOURCE because these raises are inside request handlers with
+    substantial setup; the property is about which literals carry the marker,
+    and that is visible statically. Derived from the shipped file, never a
+    hand-listed set.
+    """
+    import ast
+    import pathlib
+
+    # EVERY route module serving the editor surface, not just the biggest one:
+    # a 403 added to the readiness routes would otherwise land unpinned, which
+    # is the same one-file-at-a-time miss this guard exists to stop.
+    routes_dir = pathlib.Path(ea.__file__).resolve().parent.parent / "routes"
+    modules = [routes_dir / "editor_kit_routes.py",
+               routes_dir / "editor_readiness_routes.py"]
+    for m in modules:
+        assert m.exists(), f"{m.name} moved -- this scan is now blind to it"
+
+    prefixed, plain = [], []
+    nodes_all = []
+    for m in modules:
+        nodes_all.extend(ast.walk(ast.parse(m.read_text(encoding="utf-8"))))
+    for node in nodes_all:
+        if not isinstance(node, ast.Raise) or node.exc is None:
+            continue
+        call = node.exc if isinstance(node.exc, ast.Call) else None
+        if call is None or getattr(call.func, "id", None) != "HTTPException":
+            continue
+        kw = {k.arg: k.value for k in call.keywords}
+        status = kw.get("status_code")
+        if not (isinstance(status, ast.Constant) and status.value == 403):
+            continue
+        detail = kw.get("detail", ast.Constant(""))
+        nodes = list(ast.walk(detail))
+        text = "".join(n.value for n in nodes
+                       if isinstance(n, ast.Constant) and isinstance(n.value, str))
+        # Two ways to carry the marker, and the SECOND is the one that matters:
+        # the only legitimate prefixed 403 (editor_auth.py) is written as
+        # `NO_EDITOR_ACCESS_PREFIX + "..."`, so that is the idiom someone would
+        # copy here "for consistency". A literal-only scan cannot see it --
+        # measured: prefixing the Publish 403 via the constant passed this test
+        # before the Name check below was added.
+        by_literal = NO_EDITOR_ACCESS_PREFIX in text
+        by_constant = any(isinstance(n, ast.Name)
+                          and "NO_EDITOR_ACCESS" in n.id for n in nodes)
+        (prefixed if (by_literal or by_constant) else plain).append(
+            (node.lineno, text[:60]))
+
+    assert plain, (
+        "no unprefixed 403 found in the editor route modules -- either they "
+        "moved or this scan broke. An empty set would make this test vacuous."
+    )
+    assert not prefixed, (
+        "a 403 in the editor route modules carries "
+        + NO_EDITOR_ACCESS_PREFIX + ", "
+        "which EVICTS the caller to the sign-in gate's refused screen. Only "
+        "editor_auth's 'this account holds no editor role' 403 may do that. "
+        "These are refusals of a specific ACTION for a valid editor, so they "
+        "must stay unprefixed or an editor pressing Publish is thrown out of "
+        "the editor: " + repr(prefixed)
+    )
 
 
 def test_the_dev_bypass_is_refused_on_a_deployed_instance(monkeypatch):
