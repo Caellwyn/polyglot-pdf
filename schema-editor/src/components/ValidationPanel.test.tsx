@@ -734,6 +734,82 @@ describe('Repair-all (bd zgln, carried from the pane)', () => {
     await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
   });
 
+  // Round 7, Opus cross-surface review: a field can carry BOTH
+  // controls_fields (unconvertible) AND conditional_fields at once, which
+  // lint reports as TWO findings sharing one field_id but distinguished
+  // only by `path` (".controls_fields" vs ".conditional_fields").
+  // conditional_fields is ALWAYS unconditionally dropped by repair() (a
+  // plain legacy id list, nothing to convert into) -- excluding both
+  // findings just because the field_id has SOME unconvertible
+  // controls_fields would wrongly hide the conditional_fields repair too.
+  it('still counts the conditional_fields sibling finding even when the SAME field also has an unconvertible controls_fields', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).controls_fields', field_id: 'trig',
+          message: "this field still uses the old controls_fields way of showing/requiring other fields",
+        },
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).conditional_fields', field_id: 'trig',
+          message: "this field still uses the old conditional_fields way of showing/requiring other fields",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={controlsFieldsSchema({ operator: 'is_checked', locks: ['dep'] })} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    // 2 findings reported, 1 unrepairable (controls_fields/locks) -> "Repair all (1)", not (2) and not hidden.
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // operator-trigger, round 7 (Opus cross-surface review): TWO distinct
+  // sub-shapes under one rule id, like condition-malformed/value-arity. A
+  // trigger field whose TYPE can never trigger any condition (e.g.
+  // signature/table) has no rewrite repair() can apply and stays
+  // standing; an operator merely invalid for an otherwise-legal trigger
+  // type (e.g. is_checked on a text field) IS aliased by repair().
+  it('hides the button when the ONLY error is the operator-trigger "field cannot trigger a condition" sub-shape', async () => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'operator-trigger',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message: "a 'signature' field cannot trigger a condition -- pick a different trigger field, or remove this rule",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it('still counts the operator-trigger "operator not valid on this trigger type" sub-shape (repair() DOES fix it)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'operator-trigger',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message: "'is_checked' cannot be used on a 'text' field -- this comparison only works when the trigger field is one of: checkbox",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
   // Deliberately NOT excluded, unlike option-value-missing: a select's
   // option-value-slug repairability is DUMP-CONDITIONAL (pdf_choice_values
   // treats a missing dump as "no evidence", so a dumpless repair mints it

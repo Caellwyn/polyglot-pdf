@@ -125,13 +125,22 @@ common failure was never the REASONING (each round's logic, once the
 inputs were right, was sound) -- it was always an unverified assumption
 about whether the INPUT actually represented the real thing being tested.
 
-**Six rounds, one bug enumeration -- and that is fine, not a failure of
+**Seven rounds, one bug enumeration -- and that is fine, not a failure of
 process.** This session's own doctrine says enumerate the set before
 fixing any of it; it does not say a set this large and this entangled
 with backend internals gets enumerated correctly in one pass. Every round
 found a real, distinct gap (not a restatement of the same finding in a
 new location, which is the actual warning sign CLAUDE.md names) -- the
-cost was six adversarial review rounds, not a shipped bug.
+cost was seven adversarial review rounds, not a shipped bug. The final
+two gaps (round 7, Opus cross-surface review) were a different shape than
+rounds 1-6's isolation mistakes: a genuinely-missed cross-file
+interaction (two findings on one field distinguished only by an unused
+`path` field) and an entirely unenumerated rule
+(`operator-trigger`) -- confirming that even after five rounds of
+fixture-validity vigilance, the review layer that traces the diff OUT
+into consumers and re-derives the rule list from scratch still had
+something the inner review's per-rule-in-isolation testing could not
+surface on its own.
 
 A fifth Opus round found a rule missing from the enumeration ENTIRELY:
 `legacy-trigger-side-logic` (a schema still carrying the removed
@@ -158,24 +167,51 @@ ALL SIX actions look like they cleared. Only re-testing with the correct
 shape (and a schema built from `schema_lint.py`'s own emission-site
 comments, not guessed) revealed the true 4-clear/2-stand split.
 
-Two pre-existing, out-of-scope findings surfaced during the empirical
+A seventh round (Opus cross-surface review, spotting real cross-file
+inconsistencies rather than another sub-shape-isolation mistake) found two
+more genuine gaps: (1) a field carrying BOTH `controls_fields` (with an
+unconvertible action) AND `conditional_fields` gets TWO
+`legacy-trigger-side-logic` findings sharing one `field_id`, distinguished
+only by `path` -- round 6's field-cross-reference excluded both, but
+`conditional_fields` is ALWAYS unconditionally dropped by repair() (a
+plain legacy id list, nothing to convert into), so the second finding was
+wrongly hidden. Fixed by scoping the exclusion to findings whose `path`
+ends in `.controls_fields` specifically, not merely "this field has one
+somewhere." (2) `operator-trigger` -- another rule this enumeration had
+missed entirely -- carries two sub-shapes exactly like
+`condition-malformed`/`value-arity`: a trigger field whose TYPE can never
+trigger any condition (unrepairable) vs. an operator merely invalid for an
+otherwise-legal trigger type (repair() DOES alias it). Split by message
+substring the same way.
+
+Three pre-existing, out-of-scope findings surfaced during the empirical
 sweeps were filed rather than folded in: `polyglot-pdf-7fezk`
 (`schema_lint.py`'s module docstring omits `to-review-pending` from its
-rule catalog) and `polyglot-pdf-2sli8` (a mixed atom+bucket condition
+rule catalog), `polyglot-pdf-2sli8` (a mixed atom+bucket condition
 shape silently loses data in `_rewrite_condition`, found while re-running
-the sweep, reproduces identically on `origin/dev`).
+the sweep, reproduces identically on `origin/dev`), and
+`polyglot-pdf-v3qvi` (this diff's whole classification has no compile-time
+or test-time link to the backend rule ids/messages it mirrors -- a future
+rename or reword on either side silently reverts this bead's fix with both
+suites green; left as a genuine follow-up rather than over-engineering a
+shared-contract test into this already-large PR). A fourth finding (a
+stale comment citing a nonexistent `controls_fields.py`) was fixed inline
+in round 7 since the same comment block was already being rewritten.
 
 ## Files touched
 
 - `schema-editor/src/components/ValidationPanel.tsx` -- errorCount now
   excludes select-scoped `option-value-missing`, four unconditionally-
   unrepairable rules, two `condition-malformed` sub-shapes, two
-  `value-arity` sub-shapes (all matched by message text), and a
-  field-cross-referenced `legacy-trigger-side-logic` carve-out for a
-  trigger field whose `controls_fields` carries an unconvertible action;
-  tooltip corrected to name the actual scope.
-- `schema-editor/src/components/ValidationPanel.test.tsx` -- 18 new tests
-  across six rounds: select-scoped option-value-missing (3), four
+  `value-arity` sub-shapes, one `operator-trigger` sub-shape (all matched
+  by message text), and a path-and-field-cross-referenced
+  `legacy-trigger-side-logic` carve-out scoped to the exact
+  `.controls_fields` finding on a trigger field whose `controls_fields`
+  carries an unconvertible action (not its `.conditional_fields` sibling,
+  which repair() always fixes); tooltip corrected to name the actual
+  scope.
+- `schema-editor/src/components/ValidationPanel.test.tsx` -- 22 new tests
+  across seven rounds: select-scoped option-value-missing (3), four
   rule-level exclusions (4), two condition-malformed sub-shapes plus one
   confirming a repairable sub-shape still counts (3), two value-arity
   sub-shapes plus one confirming the third still counts (3), two

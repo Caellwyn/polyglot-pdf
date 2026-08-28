@@ -390,30 +390,50 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       'needs a list of one or more values',
       'needs a single comparison value',
     ],
+    // operator-trigger's "cannot trigger a condition" sub-shape (a trigger
+    // TYPE repair() has no rewrite for, e.g. signature/table) is
+    // unrepairable; its sibling "cannot be used on a ... field" sub-shape
+    // (a wrong OPERATOR for an otherwise-legal trigger type) IS aliased by
+    // repair()'s _rewrite_atom and must not be matched here.
+    'operator-trigger': [
+      'cannot trigger a condition',
+    ],
   };
   const unrepairableFieldTypes = React.useMemo(() => {
     const types = new Map<string, string>();
     for (const f of schema.fields) types.set(f.id, f.type);
     return types;
   }, [schema.fields]);
-  // legacy-trigger-side-logic (bd polyglot-pdf-9g698, round 6, Opus
-  // cross-surface review): controls_fields.py's ACTION_KEYS are shows,
-  // hides, unlocks, locks, makes_required, makes_optional -- repair()
-  // mirrors 4 of them (shows/makes_required directly; hides/unlocks via
-  // schema_repair.py's REPAIR_CONVERTIBLE_ACTIONS) onto a target's
-  // show_if/require_if/conditional_behavior, clearing the finding. `locks`
-  // and `makes_optional` have NO v2 target-side encoding at all
-  // (schema_repair.py's own comment: "RETAINED on the field... needs
-  // human review") -- repair() explicitly keeps controls_fields on the
-  // field and the lint ERROR stands. The finding's message is IDENTICAL
-  // regardless of which action triggered it, so message-matching (the
-  // technique used for condition-malformed/value-arity) cannot work here
-  // -- the only signal is the field's OWN controls_fields/
-  // conditional_fields array, cross-referenced via field_id the same way
-  // option-value-missing's select carve-out works. conditional_fields (a
-  // plain legacy id list, no action keys at all) is unconditionally
-  // dropped by repair() -- never unrepairable on its own.
-  const fieldsWithUnconvertibleLegacyTrigger = React.useMemo(() => {
+  // legacy-trigger-side-logic (bd polyglot-pdf-9g698, rounds 6-7, Opus
+  // cross-surface review): a field can carry BOTH controls_fields AND
+  // conditional_fields at once, which lint reports as TWO separate
+  // findings sharing one field_id but distinguished by `path`
+  // (".controls_fields" vs ".conditional_fields", schema_lint.py:1003).
+  // conditional_fields is a plain legacy id list with no action keys at
+  // all -- repair() ALWAYS drops it unconditionally (schema_repair.py's
+  // own comment: "there is nothing target-side to convert it INTO; it is
+  // simply removed"). So a mixed field's .conditional_fields finding is
+  // always repairable even when its sibling .controls_fields finding is
+  // not; excluding both by field_id alone (round 6's version) would
+  // wrongly hide the conditional_fields repair too -- this round scopes
+  // the check to the exact PATH suffix the unconvertible controls_fields
+  // finding carries, not merely "this field has controls_fields at all".
+  //
+  // Within controls_fields itself: repairs.controls_fields.ACTION_KEYS are
+  // shows, hides, unlocks, locks, makes_required, makes_optional --
+  // repair() mirrors 4 of them (shows/makes_required directly; hides/
+  // unlocks via schema_repair.py's REPAIR_CONVERTIBLE_ACTIONS, which reads
+  // that constant from backend/services/controls_fields_mirror.py) onto a
+  // target's show_if/require_if/conditional_behavior, clearing the
+  // finding. `locks` and `makes_optional` have NO v2 target-side encoding
+  // at all (schema_repair.py's own comment: "RETAINED on the field...
+  // needs human review") -- repair() explicitly keeps controls_fields on
+  // the field and the lint ERROR stands. The finding's message is
+  // IDENTICAL regardless of which action triggered it, so message-
+  // matching (the technique used for condition-malformed/value-arity)
+  // cannot work here -- the only signal is the field's OWN
+  // controls_fields array, cross-referenced via field_id.
+  const fieldsWithUnconvertibleControlsFields = React.useMemo(() => {
     const ids = new Set<string>();
     for (const f of schema.fields as unknown as Array<Record<string, unknown>>) {
       const controls = f.controls_fields;
@@ -425,6 +445,14 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
     }
     return ids;
   }, [schema.fields]);
+  // operator-trigger (round 7, Opus cross-surface review): schema_lint.py
+  // emits this rule for TWO distinct sub-shapes with distinct messages --
+  // a trigger field whose TYPE can never trigger any condition ("a 'TYPE'
+  // field cannot trigger a condition"), which repair() has no rewrite for
+  // and leaves standing; and an operator merely invalid for an otherwise
+  // legal trigger type ("'OP' cannot be used on a 'TYPE' field"), which
+  // repair()'s _rewrite_atom DOES alias/fix. Matched by message substring
+  // like condition-malformed/value-arity.
   const isUnrepairableError = React.useCallback(
     (f: LintFinding) => {
       if (f.severity !== 'ERROR') return false;
@@ -435,7 +463,8 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       }
       if (f.rule === 'legacy-trigger-side-logic') {
         return f.field_id !== null &&
-          fieldsWithUnconvertibleLegacyTrigger.has(f.field_id);
+          f.path.endsWith('.controls_fields') &&
+          fieldsWithUnconvertibleControlsFields.has(f.field_id);
       }
       const snippets = UNREPAIRABLE_MESSAGE_SNIPPETS_BY_RULE[f.rule];
       if (snippets) {
@@ -443,7 +472,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       }
       return false;
     },
-    [unrepairableFieldTypes, fieldsWithUnconvertibleLegacyTrigger],
+    [unrepairableFieldTypes, fieldsWithUnconvertibleControlsFields],
   );
   const repairableErrorCount = React.useMemo(() => {
     if (!report) return 0;
