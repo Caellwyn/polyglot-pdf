@@ -1140,6 +1140,11 @@ class _DtiDripLiveAI:
         self._session_ready = False
 
 
+@pytest.mark.skipif(
+    not (_REPO / "form-kits" / "i-90_v2" / "schema.json").exists(),
+    reason="form-kits/i-90_v2 not present (untracked kit; pull with "
+           "scripts/pull-form-kits.sh) -- same guard as "
+           "test_measure_harness_i90v2_plan.py")
 def test_dry_run_i90_v2_continuous_dti_drip_advances_past_section_boundary(
         monkeypatch, tmp_path):
     """The offline reproduction for bd polyglot-pdf-2nikx: with a
