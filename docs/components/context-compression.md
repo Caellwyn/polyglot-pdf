@@ -15,7 +15,9 @@ not merely copied forward. Three sites across this repo still asserted the
 pre-cutover count; this doc was one of them. As with the prior stamp, these
 figures are a point-in-time reading -- RE-EXECUTE `derive_compression_window`
 rather than trusting any written-down number, since it moves with the SI
-text and the tool list.)
+text and the tool list. Also fixed (bd polyglot-pdf-eev3n): the
+`injection_budget_tokens` consumption citations, which had drifted onto
+unrelated code, re-anchored to symbol names.)
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
@@ -204,17 +206,19 @@ Two inputs are easy to miss and both move the result by thousands of tokens:
   membership, and the counts can diverge again the moment either changes.
 - **`injection_budget_tokens` is a real third addend**, passed from
   `guidance_contract.inline_injection_budget_tokens(full_schema)`
-  (bd polyglot-pdf-wsao.8, consumed at `backend/adapters/live_ai_gemini.py:1787`).
+  (bd polyglot-pdf-wsao.8, stored as `self._injection_budget_tokens` and
+  consumed via the `getattr(self, "_injection_budget_tokens", 0)` read in
+  `derive_compression_window`'s call site in `backend/adapters/live_ai_gemini.py`).
   It reserves
   room for the largest per-field inline guidance injection the form can produce.
   It is `0` for a form with no `help.details`, so it is invisible on some kits and
   decisive on others -- on the W-7 it is **1652 tokens**. Without it, a
   details-bearing initiating message can exceed the assembled window and Vertex
   closes `1007` AT SESSION ASSEMBLE (the wsao.2 measured failure). It is computed
-  at `backend/services/guidance_contract.py:246` and passed in from TWO sites in
-  `backend/services/form_filling_service.py` -- `:478` (start) and `:1102`
-  (restart); the restart site is the one that regressed wsao.2 when it was
-  missed.
+  at `backend/services/guidance_contract.py:246` and passed in from TWO
+  `guidance_contract.inline_injection_budget_tokens` calls in
+  `backend/services/form_filling_service.py` (start and restart); the
+  restart site is the one that regressed wsao.2 when it was missed.
 
 **The Live API enforces `trigger_tokens` within `[5000, 128000]`** (wire-verified
 2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
