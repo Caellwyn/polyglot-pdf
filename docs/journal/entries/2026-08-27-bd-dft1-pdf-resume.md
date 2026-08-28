@@ -220,3 +220,44 @@ also invented -- and a probe you wrote by hand can manufacture the very bug it
 claims to find. The tests that now pin this drive the REAL fill route, so the
 setup cannot be wrong in a way the assertion cannot see.
 
+## Round three: the same mistake at a third altitude
+
+I fixed the W-7 and broke the other two kits in a new way.
+
+`pdf_on_value` exists on **21 of 21** W-7 option widgets and on **zero** of the
+i-90's 75 and the f1040's 24. I keyed the option mapping on it, so radio and
+checkbox answers restored perfectly on the kit I tested and were lost entirely
+on the other two -- while emitting keys their schemas do not contain. The i-90
+is `status: complete`, so a real client could reach it.
+
+Not an invented fixture this time. A **real kit that happened to be the only
+one where my assumption held.**
+
+The fix reads the on-state from the WIDGET, exactly as the fill path derives it
+(`get_button_on_state`), which is robust across kits because it reads what the
+PDF actually says. Each option widget now also carries its parent field id
+explicitly: the old code found the parent by searching for the first field
+containing that option VALUE, and values are not unique -- 13 are shared across
+fields on the i-90, so answers landed on the wrong field.
+
+### The set, one more time
+
+Fixing the unhandled-store-error finding, I patched the schema load and wrote
+the test. **It failed** -- the reference-form load had the identical gap. I had
+fixed the instance in front of me and not the set, which is scar #8 catching me
+in miniature, inside a single function.
+
+### Three rounds, one shape
+
+| Round | The thing that was only true where I looked |
+|---|---|
+| 1 | a fixture I invented |
+| 2 | a probe I wrote by hand, which fabricated the bug it "found" |
+| 3 | a real kit that was the only one carrying the key I depended on |
+
+Each time the tests were green and the feature was broken for a real client.
+The durable lesson is not about PDFs: **evidence I constructed cannot falsify an
+assumption I also constructed.** What broke the pattern each time was going to
+the shipped artifacts -- the real kits, the real route -- and enumerating the
+whole set rather than the instance.
+
