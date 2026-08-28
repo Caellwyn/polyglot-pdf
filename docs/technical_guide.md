@@ -189,18 +189,19 @@ The canonical shape is Pydantic `FormSchema` (`backend/models/form_models.py:883
 rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 - **Validation happens ONLY at the publish gate.** Draft saves
-  (`save_editor_kit_schema`, `backend/routes/editor_kit_routes.py:1617-1700`)
-  check just that `fields` is a list and write the raw dict via the store
+  (`save_editor_kit_schema` in `editor_kit_routes.py`) check just that
+  `fields` is a list and write the raw dict via the store
   (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
   `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
-  :1172 GCS). The one chokepoint is "mark complete":
-  `FormSchema.model_validate` at `editor_kit_routes.py:2809` plus the
-  zero-ERROR schema-lint gate
-  (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
-  `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
-  dict unvalidated (`get_form_kit_schema`,
-  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema`,
-  `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
+  :1172 GCS). The one chokepoint is "mark complete"
+  (`set_editor_kit_status` in `editor_kit_routes.py`):
+  `FormSchema.model_validate` plus the zero-ERROR schema-lint gate
+  (`lint_schema`, `backend/services/schema_lint.py:833`, checked via its own
+  `lint_schema` call further down the same function). Every read path
+  streams the raw stored dict unvalidated (`get_form_kit_schema`,
+  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema` in
+  `editor_kit_routes.py`, which loads and returns the schema with no
+  validation at all). *Breaks if bypassed:* a hand-edited or
   draft kit reaching the voice path carries whatever shape it has -- e.g. a
   field without `pdf_field_name` is silently never written to the output PDF.
 - **The frontend type is a hand-maintained mirror.**
@@ -339,10 +340,10 @@ blocking TTS clip playback, 90s cap). Client reply builders:
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
   (`webFormConnection.ts`, expecting an `updates: Record<name, value>`
-  shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:242`) with a different
-  `data.form_state`/`data.applied_fields` shape. Never reintroduce a
-  `field_update` producer against the old shape.
+  shape) with **no live backend producer** -- field updates ride the
+  `form_updated` send in `backend/services/callback_handler.py` with a
+  different `data.form_state`/`data.applied_fields` shape. Never
+  reintroduce a `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
   session language, it does not change it (websocket_routes.py's
   `change_spoken_language` arm).
@@ -444,13 +445,13 @@ class).
 ### 6. Confirmation audit trail
 
 The chain: Gemini `confirm_field` tool -> backend request
-(`request_coordinator.py:279`, `request_confirm_field`) -> client verifies it
+(`request_coordinator.py`'s `request_confirm_field`) -> client verifies it
 has a usable value and acks (`webFormConnection.ts`'s
 `handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse`
 -- `reason` is a fixed category token, never a field value) -> backend
-logs ONLY on a positive ack (the `recorded` guard at
-`callback_handler.py:961`; the `log_field_confirmation` call it protects at
-:1000-1009). Event shape (NO PII, no `value` key anywhere), built in
+logs ONLY on a positive ack (the "Recorded" guard inside
+`callback_handler.py`'s `_handle_confirm_field_tool`, which protects the
+`log_field_confirmation` call immediately below it). Event shape (NO PII, no `value` key anywhere), built in
 `confirmation_logger.log_field_confirmation`'s `confirmation_event` dict:
 `{timestamp, event, form_id, kit_id, edition_date, firm_id, form_session_id,
 field_id, field_name, confirmation_method}` (`firm_id` joined under bd
