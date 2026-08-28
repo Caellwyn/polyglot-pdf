@@ -1,44 +1,49 @@
 /**
- * Pins the COMPLETE SET of auth-failure catch sites (bd polyglot-pdf-yswp3).
+ * Pins the COMPLETE SET of auth-failure handling sites (bd polyglot-pdf-yswp3).
  *
- * WHY A SOURCE-SCANNING TEST rather than more behavioural ones:
+ * WHY A SOURCE-SCANNING TEST rather than only behavioural ones:
  *
  * A 401 and a 403 need OPPOSITE remedies -- "sign in again" vs "an operator
- * must grant you access, retrying cannot help". Every place that catches one
- * must therefore catch the other and forward the ERROR so App can tell them
- * apart. That is not one behaviour; it is an invariant over a SET of ~16 catch
- * sites spread across four files.
+ * must grant you access, retrying cannot help". Every place that can receive
+ * one must handle both and forward the ERROR so App can tell them apart. That
+ * is not one behaviour; it is an invariant over a SET of sites across six
+ * files, and the set is what kept getting missed.
  *
- * This bead proved the set is exactly what gets missed. The first pass wired
- * the refused screen at the GATE only. The second widened App (6 sites) and
- * RemoteCatalogue (9) and CALLED IT "fixed as a SET" -- and still missed
- * ValidationPanel, whose lintSchema call is the highest-frequency remote call
- * in the editor. Two review rounds, each finding one more member of the same
- * set: exactly the pattern CLAUDE.md scar tissue #8 names as this repo's single
- * largest source of review rounds.
+ * This bead is the case study. Pass 1 wired the refused screen at the GATE
+ * only. Pass 2 widened App (6 sites) and RemoteCatalogue (9) and called it
+ * "fixed as a SET" -- and missed ValidationPanel. Pass 3 fixed that and added
+ * a guard -- whose patterns could only see files that ALREADY mentioned
+ * AuthError, so it was blind to ArchivedVersions and FormCatalogue, which
+ * handled auth NOWHERE AT ALL and therefore matched nothing. Three rounds,
+ * each finding one more member of one set: exactly the pattern CLAUDE.md scar
+ * tissue #8 names as this repo's largest source of review rounds.
  *
- * Behavioural tests cannot close that: they pin the sites that EXIST, and a
- * future component added with a bare `instanceof AuthError` would ship green.
- * So this asserts the property over the source itself -- the next omission
- * fails CI instead of costing a review round.
+ * That last miss is the important lesson, and it shapes this file: a guard
+ * that greps for the WRONG version of a thing can only ever find files that
+ * are already thinking about it. So the primary test below starts from the
+ * NETWORK CALLS -- every function in remoteKitStore that goes through
+ * `editorFetch` and can therefore throw -- and requires each of their callers
+ * to handle auth. A brand-new component that calls the store and ignores auth
+ * entirely now fails, which is the case that actually shipped twice.
  *
- * TWO FAILURE MODES, both caught here and both silent otherwise:
- *   1. A narrow predicate -- `instanceof AuthError` with no ForbiddenError.
- *   2. A bare forward -- `onAuthError?.()` with no argument. tsc CANNOT catch
- *      this: `() => void` and `(err?: unknown) => void` are structurally
- *      compatible in both directions, so the routing silently degrades to
- *      "always treat it as a 401".
+ * The two secondary tests catch the narrower degradations of a site that IS
+ * handling auth:
+ *   - a narrow predicate (`instanceof AuthError` with no ForbiddenError);
+ *   - a bare forward (`onAuthError?.()`), which tsc CANNOT catch, since
+ *     `() => void` and `(err?: unknown) => void` are structurally compatible
+ *     both ways -- so the routing silently degrades to "every 403 is a 401".
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 const SRC = join(__dirname, '..');
+const STORE = join(SRC, 'utils', 'remoteKitStore.ts');
 
 /** Every non-test source file under schema-editor/src.
  *
- * Walked rather than hand-listed: a hand-listed set is exactly what this test
- * exists to prevent (a new file would simply never be checked). */
+ * WALKED, never hand-listed: a hand-listed set is the very bug this file
+ * exists to prevent -- a new file would simply never be checked. */
 function sourceFiles(dir: string = SRC): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
@@ -55,30 +60,65 @@ function sourceFiles(dir: string = SRC): string[] {
   return out;
 }
 
-/** Catch sites that legitimately name AuthError alone.
- *
- * SignInGate branches on ForbiddenError FIRST (its dedicated refused screen)
- * and reaches the AuthError arm only for a genuine 401, so a bare
- * `instanceof AuthError` is correct there -- widening it would send a refused
- * account round the sign-in form, the very bug this set exists to prevent.
- *
- * An ALLOWLIST, so adding a new exemption is a deliberate, reviewable edit
- * rather than something a broad pattern silently absorbs. */
-const ALLOWED_NARROW = new Set(['SignInGate.tsx']);
+const base = (f: string) => f.split(/[\\/]/).pop() as string;
+
+/** The store's network functions -- everything that goes through editorFetch
+ * and can therefore raise AuthError/ForbiddenError. Read from the store
+ * ITSELF so a newly added route is covered the day it lands. */
+function networkFunctions(): string[] {
+  const src = readFileSync(STORE, 'utf8');
+  return [...src.matchAll(/^export async function (\w+)/gm)].map((m) => m[1]);
+}
 
 describe('auth-failure routing (the SET, not an instance)', () => {
+  // THE primary guard. Starts from the network calls, so it sees a file that
+  // handles auth NOWHERE -- the case that shipped twice and that a
+  // grep-for-AuthError guard is structurally blind to.
+  it('every caller of a store network function handles auth failure', () => {
+    const net = networkFunctions();
+    // A vacuous scan would pass silently; both inputs must be real.
+    expect(net.length).toBeGreaterThan(10);
+    const files = sourceFiles();
+    expect(files.length).toBeGreaterThan(10);
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      if (file === STORE) continue;
+      const src = readFileSync(file, 'utf8');
+      const called = net.filter((fn) => new RegExp(`\\b${fn}\\s*\\(`).test(src));
+      if (called.length === 0) continue;
+      // Either it routes auth itself, or it hands the decision to a host.
+      if (src.includes('AuthError') || src.includes('onAuthError')) continue;
+      offenders.push(
+        `${relative(SRC, file)} calls ${called.join(', ')} but never mentions `
+        + 'AuthError/ForbiddenError/onAuthError');
+    }
+
+    expect(offenders,
+      'These call the editor API but do nothing about a 401/403, so a signed-out '
+      + 'or role-revoked editor gets a raw error string instead of being routed '
+      + 'to sign-in or the refused screen. Either handle both error types, or '
+      + 'take an `onAuthError?: (err?: unknown) => void` prop and forward:\n'
+      + offenders.join('\n')).toEqual([]);
+  });
+
+  // SignInGate branches on ForbiddenError FIRST (its dedicated refused screen)
+  // and reaches the AuthError arm only for a genuine 401, so a bare
+  // `instanceof AuthError` is correct there -- widening it would send a refused
+  // account round the sign-in form, the very bug this set exists to prevent.
+  // An ALLOWLIST, so a new exemption is a deliberate, reviewable edit.
+  const ALLOWED_NARROW = new Set(['SignInGate.tsx']);
+
   it('every catch site accepts ForbiddenError, not only AuthError', () => {
     const offenders: string[] = [];
 
     for (const file of sourceFiles()) {
+      if (ALLOWED_NARROW.has(base(file))) continue;
       const src = readFileSync(file, 'utf8');
-      const base = file.split(/[\\/]/).pop() as string;
-      if (ALLOWED_NARROW.has(base)) continue;
-
       src.split('\n').forEach((line, i) => {
         if (!line.includes('instanceof AuthError')) return;
         if (line.includes('ForbiddenError')) return;
-        offenders.push(`${base}:${i + 1}: ${line.trim()}`);
+        offenders.push(`${base(file)}:${i + 1}: ${line.trim()}`);
       });
     }
 
@@ -88,49 +128,32 @@ describe('auth-failure routing (the SET, not an instance)', () => {
       + 'instead of the refused screen. Widen to '
       + '`err instanceof AuthError || err instanceof ForbiddenError`:\n'
       + offenders.join('\n')).toEqual([]);
-    // The set is non-empty in reality -- an empty scan would mean the walker
-    // is broken and this test is vacuous.
-    expect(sourceFiles().length).toBeGreaterThan(10);
   });
 
-  it('every onAuthError forward carries the error', () => {
+  it('every onAuthError forward carries the error, and every prop receives it', () => {
     const offenders: string[] = [];
 
     for (const file of sourceFiles()) {
       const src = readFileSync(file, 'utf8');
-      const base = file.split(/[\\/]/).pop() as string;
       src.split('\n').forEach((line, i) => {
-        // A call with EMPTY parens: the error never reaches App, so a 403 is
-        // indistinguishable from a 401 downstream.
-        if (!/onAuthError\??\.?\(\s*\)/.test(line)) return;
-        offenders.push(`${base}:${i + 1}: ${line.trim()}`);
-      });
-    }
-
-    expect(offenders,
-      'These call onAuthError with NO argument, so App cannot tell a 403 from '
-      + 'a 401 and routes both to the sign-in form. tsc does not catch this '
-      + '(the two signatures are structurally compatible). Pass the error:\n'
-      + offenders.join('\n')).toEqual([]);
-  });
-
-  it('every onAuthError prop is typed to RECEIVE the error', () => {
-    const offenders: string[] = [];
-
-    for (const file of sourceFiles()) {
-      const src = readFileSync(file, 'utf8');
-      const base = file.split(/[\\/]/).pop() as string;
-      src.split('\n').forEach((line, i) => {
+        // A call with EMPTY parens: the error never reaches the host, so a 403
+        // is indistinguishable from a 401 downstream.
+        if (/onAuthError\??\.?\(\s*\)/.test(line)) {
+          offenders.push(`${base(file)}:${i + 1}: bare call -- ${line.trim()}`);
+        }
+        // A prop declared to take nothing invites exactly that bare call.
         const decl = /onAuthError\??\s*:\s*\(([^)]*)\)\s*=>/.exec(line);
-        if (!decl) return;
-        if (decl[1].trim() !== '') return; // takes a parameter: fine
-        offenders.push(`${base}:${i + 1}: ${line.trim()}`);
+        if (decl && decl[1].trim() === '') {
+          offenders.push(`${base(file)}:${i + 1}: bare type -- ${line.trim()}`);
+        }
       });
     }
 
     expect(offenders,
-      'These declare onAuthError as taking no parameter, which invites a bare '
-      + 'call at every site that uses them. Type it `(err?: unknown) => void`:\n'
+      'The error must travel: App tells a 403 (refused screen) from a 401 (sign '
+      + 'in again) BY ITS TYPE, and tsc cannot catch this -- `() => void` and '
+      + '`(err?: unknown) => void` are structurally compatible both ways, so the '
+      + 'routing silently degrades to treating every 403 as a 401:\n'
       + offenders.join('\n')).toEqual([]);
   });
 });

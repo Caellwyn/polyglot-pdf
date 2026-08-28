@@ -113,6 +113,32 @@ the signatures are structurally compatible both ways -- so the routing silently
 degrades to treating every 403 as a 401. Only a source-level assertion catches
 it.
 
+**Round 3: the guard could only see files that already agreed with it.**
+The source-scanner above matched lines containing `instanceof AuthError`.
+That set is, by construction, the files ALREADY handling auth. Two files
+handling it NOWHERE -- `ArchivedVersions` (both archive fetches) and
+`FormCatalogue` (mark-complete through the real backend, local mode
+included) -- matched nothing and sailed through green, while shipping the
+exact bug the guard was written to stop.
+
+So the guard was rewritten to start from the OTHER end: enumerate the
+network functions in `remoteKitStore` (read from the store itself, so a new
+route is covered the day it lands), find every file that CALLS one, and
+require each to handle auth. Reverting FormCatalogue to its round-2 state --
+no auth handling at all -- now names the file and the function it calls.
+
+The generalisable lesson, and the reason this is worth the words: **a guard
+that greps for the wrong version of a thing can only find code that is
+already thinking about that thing.** Scanning for the BUG shape finds
+near-misses; scanning for the OBLIGATION -- who calls something that can
+fail this way -- finds silence. Silence is what shipped, twice.
+
+Also fixed in round 3: in LOCAL mode a 403 was being shown the 401's remedy
+("the access token may be from an earlier run -- reload this page").
+Reloading cannot fix a missing role, so the two messages now split by cause.
+Local is not a bypass-only mode -- `run-schema-editor.sh` starts the real
+backend, and its author-only routes can refuse a real token on role.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;

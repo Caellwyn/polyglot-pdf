@@ -1387,6 +1387,7 @@ export const App: React.FC = () => {
             onOpenKit={handleOpenKit}
             confirmFolderChange={confirmFolderChange}
             clearOpenKit={clearOpenKit}
+            onAuthError={handleAuthExpired}
             onRootChange={handleRootChange}
             // Same refusal home as the hosted catalogue (sprint-18 C1).
             onStatusRefusal={setPublishRefusal}

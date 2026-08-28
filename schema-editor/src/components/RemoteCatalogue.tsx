@@ -1032,6 +1032,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   kitLabel={kit.label ?? kit.id}
                   listRevisions={listArchivedRevisions}
                   loadSchema={loadArchivedSchema}
+                  onAuthError={onAuthError}
                 />
               </>
             );
@@ -1442,6 +1443,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   kitLabel={kit.label ?? kit.id}
                   listRevisions={listArchivedRevisions}
                   loadSchema={loadArchivedSchema}
+                  onAuthError={onAuthError}
                 />
               </li>
             );

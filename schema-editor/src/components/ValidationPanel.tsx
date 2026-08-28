@@ -258,9 +258,16 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
           // FRESH per-run token while an already-open tab still holds the
           // previous one. Fall through to the banner instead.
           if (hosted) return;
-          setLintError(
-            'the editor was not accepted by its backend (the access token '
-            + 'may be from an earlier run -- reload this page)');
+          // LOCAL wording splits by CAUSE, because the remedies are opposite:
+          // a 401 is usually a token from an earlier run (reload fixes it),
+          // while a 403 means this account lacks the role -- reloading never
+          // fixes that, and telling someone to reload sends them in circles.
+          setLintError(err instanceof ForbiddenError
+            ? 'this account is not allowed to run the checks on this kit '
+              + '(its editor role does not cover it) -- reloading will not '
+              + 'change that; ask an operator to grant access'
+            : 'the editor was not accepted by its backend (the access token '
+              + 'may be from an earlier run -- reload this page)');
           return;
         }
         // A lint failure is non-blocking: the editor stays usable, the strip
