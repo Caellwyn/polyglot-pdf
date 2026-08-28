@@ -248,8 +248,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 > doc; it predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
 > dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it, and
 > the real gate is the `.env.DEV` marker above. The one surviving mention is the
-> comment at `callback_handler.py:466`, which documents this correctly (it
-> explicitly calls out `VFF_DEV_LOGGING` as dead config and points back here).
+> "LOGGING POLICY (HIPAA COMPLIANCE)" comment block inside
+> `CallbackHandler.on_tool_call` in `callback_handler.py`, which documents this
+> correctly (it explicitly calls out `VFF_DEV_LOGGING` as dead config and
+> points back here).
 
 ## Deployment (local/manual — no CI)
 
