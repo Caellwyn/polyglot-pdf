@@ -261,3 +261,51 @@ assumption I also constructed.** What broke the pattern each time was going to
 the shipped artifacts -- the real kits, the real route -- and enumerating the
 whole set rather than the instance.
 
+## Round four: the fourth instance, and a bead I filed on a false premise
+
+The resume route looked widgets up by EXACT key. The fill path falls back to
+`endswith`, and its docstring says why: *XFA PDFs use full paths while our
+schema might only have the bare leaf.*
+
+The i-90's 114 direct mappings are **0 exact, 114 suffix-only**. So a client on
+the only `status: complete` kit -- the one a real client actually receives --
+resumed **12 of 110** answers, losing every text field: name, A-Number,
+address, date of birth.
+
+| Kit | Before | After |
+|---|---|---|
+| W-7 | 46/46 | 46/46 |
+| i-90 | **12/110** | **107/107** |
+| f1040 | 68/68 | 68/68 |
+
+### I filed a P1 bead that was wrong
+
+`polyglot-pdf-t4qo7` claimed the i-90's schema named 114 widgets ABSENT from
+its own PDF, and that filling never printed them. Every part of that was false.
+All 114 are present; the fill path writes them correctly. I had checked EXACT
+matches only -- the identical mistake to the bug I was chasing -- and concluded
+a gold-standard kit was broken. Closed as INVALID rather than fixed.
+
+That is worse than the code bug: it would have sent the maintainer to
+re-derive a kit that was fine.
+
+### "Improved" is not "fixed"
+
+Adding the fallback took the i-90 from 98 lost to 7. I could have shipped that.
+The remaining 7 were the `/AS` read still being gated on an exact match, so it
+was skipped before the fallback ran. Resolving the mapping FIRST, then reading
+the appearance state, took it to zero.
+
+### The test that would have caught it on day one
+
+Fill EVERY field, save, resume, assert nothing lost and nothing changed, across
+ALL THREE kits. Every earlier test filled ONE field on the one kit whose naming
+happened to match exactly -- which is how this survived four review rounds.
+
+The pattern completes: **round 1** an invented fixture, **round 2** a probe I
+wrote that fabricated its own finding, **round 3** the one kit carrying the key
+I depended on, **round 4** the one kit whose widget naming matched exactly. Four
+different disguises for the same error -- generalising from the single case in
+front of me -- and each time a green suite with the feature broken for a real
+client.
+
