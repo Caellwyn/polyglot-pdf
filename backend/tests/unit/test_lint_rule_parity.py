@@ -135,6 +135,72 @@ def test_the_remedy_map_tracks_the_label_map():
     )
 
 
+def _docstring_wildcard_prefixes() -> set[str]:
+    """Docstring 'Rules' entries written as a 'PREFIX-*' wildcard, standing
+    in for a whole flag-taxonomy frozenset rather than one rule id (e.g.
+    'translation-*' for TRANSLATION_FLAG_RULES, 'instructions-*' for
+    GUIDANCE_FLAG_RULES) -- derived from the docstring itself, not
+    hand-listed, so a THIRD taxonomy added later is covered the same way
+    without editing this test."""
+    src = _LINT_PY.read_text(encoding="utf-8")
+    block = re.search(r"Rules \(stable ids.*?\n\n", src, re.DOTALL)
+    assert block, "docstring 'Rules' catalog not found in schema_lint.py"
+    return set(re.findall(r"^- ([a-z][a-z0-9]*)-\*\s+(?:ERROR|WARNING)",
+                          block.group(0), re.MULTILINE))
+
+
+def _docstring_rule_ids() -> set[str]:
+    """The rule ids listed in schema_lint.py's own module docstring 'Rules'
+    catalog (bd polyglot-pdf-7fezk), excluding wildcard entries (see
+    _docstring_wildcard_prefixes) -- those are not real rule ids."""
+    src = _LINT_PY.read_text(encoding="utf-8")
+    block = re.search(r"Rules \(stable ids.*?\n\n", src, re.DOTALL)
+    assert block, "docstring 'Rules' catalog not found in schema_lint.py"
+    ids = set(re.findall(r"^- ([a-z][a-z0-9-]*)\s+(?:ERROR|WARNING)",
+                          block.group(0), re.MULTILINE))
+    return {i for i in ids if not any(i == p for p in _docstring_wildcard_prefixes())}
+
+
+def test_the_module_docstring_lists_every_rule_the_backend_emits():
+    """bd polyglot-pdf-7fezk: the docstring catalog and the actual emission
+    sites drifted (to-review-pending and audit-identity-no-edition were both
+    missing, and the whole GUIDANCE_FLAG_RULES taxonomy had no wildcard entry
+    at all) because nothing pinned them to match. Mechanically enforced from
+    here on, per CLAUDE.md's enumerate-the-set rule -- a docstring update is
+    not audited by re-reading it, only by re-deriving the set it claims to
+    list.
+
+    A rule covered by a docstring 'PREFIX-*' wildcard (translation-*,
+    instructions-*) is considered documented if its id actually starts with
+    that prefix -- so a taxonomy member the wildcard doesn't really cover
+    (e.g. a future rule renamed off the 'translation-'/'instructions-'
+    prefix) still fails this test instead of silently passing.
+    """
+    backend = _backend_rule_ids()
+    docstring = _docstring_rule_ids()
+    wildcards = _docstring_wildcard_prefixes()
+    assert backend, "no rule ids parsed from schema_lint.py -- test is vacuous"
+    assert docstring, "no rule ids parsed from the docstring -- test is vacuous"
+    assert wildcards, "no wildcard prefixes parsed -- test is vacuous"
+
+    def _covered(rule_id: str) -> bool:
+        if rule_id in docstring:
+            return True
+        return any(rule_id.startswith(f"{p}-") for p in wildcards)
+
+    missing = sorted(r for r in backend if not _covered(r))
+    assert missing == [], (
+        "these lint rules are emitted but missing from the module docstring's "
+        f"'Rules' catalog (and not covered by any 'PREFIX-*' wildcard entry): "
+        f"{missing}. Add an entry in the same style as its siblings."
+    )
+    stale = sorted(docstring - backend)
+    assert stale == [], (
+        "the module docstring's 'Rules' catalog lists rule ids the backend "
+        f"no longer emits: {stale}."
+    )
+
+
 def test_the_guidance_staleness_rule_id_matches_on_both_sides():
     """The specific id the ack gate keys on (bd anim / bd cpiw).
 
