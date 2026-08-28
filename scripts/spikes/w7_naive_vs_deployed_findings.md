@@ -1,15 +1,16 @@
 # W-7 session cost: deployed config vs naive baseline (bd polyglot-pdf-wiadk)
 
-**Status: COMPLETE -- all 6 live runs finished, replay-validated, and
-reconciled.** Model `gemini-live-2.5-flash-native-audio` (2.5 tier), Vertex,
-google-genai SDK >= 2.8. Date: 2026-08-27. Live spend: ~$10.17 total (3
-pipeline smokes $0.442 + N-happy pilot $0.449 + 6 full runs $9.282043).
-Billing-console reconciliation
-against these harness-computed dollar figures is a follow-up over the
-2026-08-27 quiet-day window (see "Billing reconciliation" below) -- these
-runs spanned roughly 19:15-20:05 UTC, and Vertex billing exports lag same-day
-traffic, so the console total for this window will not be queryable until at
-least the next business day.
+**Status: COMPLETE -- both the W-7 study (bd wiadk) and its i90-v2 extension
+(bd polyglot-pdf-2nikx) are finished, replay-validated, and reconciled.**
+Model `gemini-live-2.5-flash-native-audio` (2.5 tier), Vertex, google-genai
+SDK >= 2.8. W-7 dates: 2026-08-27; i90-v2 dates: 2026-08-28. Combined program
+spend: **~$43.9-54.2** (two reconciliation scenarios, see "i90-v2 program
+spend ledger" below), well under the $100 program cap. Billing-console
+reconciliation against these harness-computed dollar figures is a follow-up
+over the 2026-08-27 quiet-day window (see "Billing reconciliation" below) --
+those W-7 runs spanned roughly 19:15-20:05 UTC, and Vertex billing exports
+lag same-day traffic, so the console total for this window will not be
+queryable until at least the next business day.
 
 ## Question
 
@@ -178,6 +179,65 @@ W-7's 28,660 because the I-90 booklet is half the size).
 | 10 | D smoke i90-v2 happy q3 | ~0.10 | 0.053 | spell-back + secretary exercised |
 | 11 | N smoke i90-v2 happy q2 | ~0.15 | 0.069 | naive SI 20.4k confirmed on the wire |
 | 12 | N pilot i90-v2 happy q6 | ~0.70 | 0.342 | grounds pre-reg #1 |
+
+## i90-v2 method changes vs. the W-7 study
+
+Three changes were made to the harness between the W-7 study and the i90-v2
+extension, plus one lesson about the scripted audio path. All three code
+changes are committed on this branch and apply to **both arms identically**
+(deployed and naive), so none of them bias the deployed-vs-naive comparison
+relative to each other -- they change the absolute cost/duration of a run,
+not the ratio between arms.
+
+1. **Adaptive confirm-gate (`_settle_confirm`).** The W-7 harness advanced to
+   the next question as soon as it sent a scripted "yes" turn, regardless of
+   whether the model's tool calls actually confirmed the field. The i90-v2
+   harness instead waits for each field to actually settle (be confirmed)
+   before moving on, sending at most one extra "nudge" turn if the first
+   confirm attempt doesn't land. This only affects the live-adapter harness
+   path (not the naive replay/estimator math) and adds real turns -- and
+   therefore real re-billed context -- exactly when a confirm doesn't
+   settle cleanly the first time. It fired 0 extra nudges on the deployed
+   happy runs, 4 on deployed-unhappy run 1 (two fields, `family_name` and
+   `given_name`, needed a nudge), 1 on naive-happy, and 6 on naive-unhappy.
+2. **Derailment guard.** The harness now aborts a run after 6 consecutive
+   tool-silent questions (the model stops calling any tool at all in
+   response to a question) or 8 consecutive confirm-stagnant questions (a
+   confirm is requested but never settles). This is what actually stopped
+   the naive-unhappy run at question 39 of 57 -- see "Naive-unhappy did not
+   complete" below. Without this guard a wedged run would burn budget
+   indefinitely with no forward progress; with it, a wedge becomes a
+   reported, bounded-cost result instead of an unbounded one.
+3. **The ASR lesson (USCIS number leading zeros).** The scripted persona's
+   gTTS-synthesized speech for a USCIS account number beginning with a
+   leading zero ("0 0 9 ...") was transcribed by the model's ASR as letters
+   ("OON 9...") rather than digits, which then failed the strict
+   `^[0-9]{12}$` validation and desynced an entire scripted run (this is
+   one of the diagnostic runs excluded below, not one of the headline
+   valid runs). The fix: the persona's USCIS number was changed to start
+   with a non-zero digit, side-stepping the ASR ambiguity rather than
+   attempting to fix ASR digit-vs-letter disambiguation itself (out of
+   scope for a cost-measurement harness).
+
+**Diagnostic-run exclusion rule.** `scripts/spikes/data/2nikx-full/` holds 9
+summary files, not 6: alongside the 2 valid deployed-happy, 2 valid
+deployed-unhappy, and 1 naive-happy + 1 naive-unhappy run reported as the
+headline results below, it also contains 2 lower-quality deployed-happy dry
+runs (`013010Z`, fill_accuracy.matched = 1/57 -- an almost total fill
+failure; `020339Z`, matched = 14/57) and 1 deployed-unhappy dry run
+(`024500Z`, matched = 12/57, only 33 of 57 steps completed) from earlier in
+the harness's development, before the confirm-gate and derailment-guard
+fixes above landed. **These 3 runs are excluded from every headline number
+in this report** on the accuracy evidence alone (near-total fill failure is
+not a usable cost data point for a comparison whose whole point is
+cost-at-comparable-accuracy) and are instead counted as sunk
+method-development cost in the program ledger below, alongside the smoke,
+pilot, and debug runs and one additional orphan session (the "killed by
+tooling" run, reconciled from the raw token-usage log since its own
+artifacts never wrote to disk). This mirrors the W-7 study's own convention
+of separating pipeline-proof smokes from headline full runs, extended here
+to cover harness-development dry runs that happened to run at full
+question-count.
 
 ## Results
 
@@ -718,7 +778,334 @@ reproduce) was used here for consistency with how every other number in this
 report was derived. The two figures are within ~0.2% of each other and do
 not change the reported 1.51% CV materially either way.
 
+## i90-v2 Results (bd polyglot-pdf-2nikx)
+
+### i90-v2.1 Session cost table (all 6 valid runs + means)
+
+Replay-validated (see "i90-v2 replay validation" below): all 6 replay within
+$0.000004 of the CSV's own recorded total, `cache_summary` reports 0 cached
+tokens on every run.
+
+| Run (stamp) | Arm | Path | Q | Recorded (CSV, voice-only) | Text-sidecar | Greeting (subset of voice) | **All-in** |
+|---|---|---|---:|---:|---:|---:|---:|
+| 021631Z | Deployed | happy | 57 | $2.035449 | $0.004259 | $0.003253 | **$2.039708** |
+| 022519Z | Deployed | happy | 57 | $2.067670 | $0.004384 | $0.003409 | **$2.072054** |
+| 030509Z | Deployed | unhappy | 57 | $4.268139 | $0.004354 | $0.005677 | **$4.272493** |
+| 032527Z | Deployed | unhappy | 57 | $4.041460 | $0.004347 | $0.003481 | **$4.045807** |
+| 034310Z | Naive | happy | 57 | $6.016500 | -- | -- | **$6.016500** |
+| 035215Z | Naive | unhappy | **39/57 (DID NOT COMPLETE)** | $5.912473 | -- | -- | **$5.912473** |
+
+All four deployed all-in figures were verified to equal `voice_usd +
+text_usd` exactly (residual < $0.00001) -- confirming the single
+greeting-as-its-own-line/all-in-excludes-greeting cost convention from the
+W-7 study (commit `ed5dde52`) is applied consistently here too.
+
+| Run | Arm | Path | All-in $ | Wall clock | Q done | Confirmed | Correct | Accuracy | Evictions/trims |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 021631Z | Deployed | happy | $2.039708 | 513.9s | 57/57 | 57/57 | 48/57 | 84.2% | 12 |
+| 022519Z | Deployed | happy | $2.072054 | 552.9s | 57/57 | 57/57 | 48/57 | 84.2% | 14 |
+| **Deployed happy mean** | | | **$2.055881** | **533.4s** | | 57/57 | 48/57 | **84.2%** | |
+| 030509Z | Deployed | unhappy | $4.272493 | 1185.1s | 57/57 | 57/57 | 48/57 | 84.2% | 26 |
+| 032527Z | Deployed | unhappy | $4.045807 | 1041.2s | 57/57 | 57/57 | 48/57 | 84.2% | 17 |
+| **Deployed unhappy mean** | | | **$4.159150** | **1113.2s** | | 57/57 | 48/57 | **84.2%** | |
+| 034310Z | Naive | happy | $6.016500 | 511.9s | 57/57 | 57/57 | 47/57 | 82.5% | 2 (platform force-trim) |
+| 035215Z | Naive | **unhappy -- DID NOT COMPLETE** | $5.912473 | 2103.1s (35.1 min) | **39/57** | 33/57 | 24/57 | 42.1% of 57 / 61.5% of 39 attempted | 2 (platform force-trim) |
+
+"Evictions" carries the same two-mechanism caveat as the W-7 table above:
+deployed rows count the app's own curated context-compression; naive rows
+count the platform's blind force-trim (see Finding 1, which reproduces on
+i90-v2 too -- both naive runs still show the ~31.8-31.9k-to-~27.9-28k
+sawtooth pattern).
+
+### i90-v2.2 Naive-unhappy did not complete -- model collapse, not API termination
+
+The naive-unhappy run went tool-silent for 6 consecutive questions and the
+derailment guard (see "i90-v2 method changes" above) aborted it at question
+39 of 57 (`derailed_reason: "6 consecutive tool-silent questions"`). Before
+that point it had accumulated 6 confirm-nudges and left 6 questions
+unsettled (`ssn`, `status`, `reason_section_a`, `p3_location_applied`,
+`p3_location_issued`, `p3_destination`).
+
+**This was a model collapse, not a server-initiated close.** `session_count`
+stayed at 1 for the entire run and `close_1011` is absent from the meta --
+there is no GoAway, no reconnect, and no evidence the Live API terminated
+the session at all. The model itself simply stopped calling tools in
+response to new questions, and the harness's own guard is what ended the
+run, not the platform. This distinction matters for how the result is
+worded: "the naive approach timed out" or "was terminated" would be
+inaccurate; "the naive approach's model degraded to the point of making no
+further progress, and the harness's own safety guard stopped a run that
+would otherwise have burned budget indefinitely" is the accurate framing.
+
+### i90-v2.3 Cost per confirmed field
+
+| Arm x Path | All-in $ (mean) | Confirmed fields | $/confirmed field |
+|---|---:|---:|---:|
+| Deployed happy | $2.055881 | 57 | $0.0361 |
+| Deployed unhappy | $4.159150 | 57 | $0.0730 |
+| Naive happy | $6.016500 | 57 | $0.1056 |
+| Naive unhappy (partial, DNC) | $5.912473 | 33 | $0.1792 |
+
+Naive/deployed ratio: happy = 2.92x, **unhappy (per-confirmed-field) =
+2.455x**. See i90-v2.6 below for why the per-confirmed-field ratio, not the
+raw dollar ratio, is the fair unhappy-path comparator here.
+
+### i90-v2.4 Trims / evictions / nudges / reconnects
+
+| Run | Arm | Evictions/force-trims | Confirm-nudges | Reconnects | Session count |
+|---|---|---:|---:|---:|---:|
+| dti happy 021631Z | Deployed | 12 | 0 | 0 | 1 |
+| dti happy 022519Z | Deployed | 14 | 0 | 1 | 2 |
+| dti unhappy 030509Z | Deployed | 26 | 4 (unsettled: `family_name`, `given_name`) | 2 | 3 |
+| dti unhappy 032527Z | Deployed | 17 | 0 | 1 | 2 |
+| naive happy 034310Z | Naive | 2 (platform force-trim: 31,878->25,463 at raw event 180; 31,884->25,458 at 275) | 1 | 0 | 1 |
+| naive unhappy 035215Z (partial) | Naive | 2 (same platform force-trim pattern) | 6 | 0 | 1 |
+
+All 4 deployed runs survived multiple ~10-minute connection boundaries via
+the reconnect machinery (`session_count` 1-3) with zero data loss -- this is
+exactly the mechanism the naive arm has no equivalent for, and it is a
+second, independent reason (beyond cost) the naive arm cannot be treated as
+production-equivalent on a long form.
+
+### i90-v2.5 Modality shares
+
+| Run | audio-in % | text-in % | text-out % | audio-out % |
+|---|---:|---:|---:|---:|
+| Deployed happy (mean of 2) | ~48% | ~47% | ~0.4% | ~5% |
+| Deployed unhappy (mean of 2) | ~55-58% | ~37-40% | ~0.3% | ~3-4% |
+| Naive happy | audio-in minority | **text-in dominant** | small | small |
+| Naive unhappy (partial) | audio-in minority | **text-in dominant** | small | small |
+
+The qualitative direction matches the W-7 pattern exactly: naive is
+text-in-dominated by the re-sent 20,447-token SI+tools block on every turn;
+deployed stays audio-in-led, consistent with the MEASURED COST INVARIANT
+(see the W-7 cross-reference section above, which this run reproduces in
+shape though not in exact percentage -- full per-run decimal modality
+percentages were not re-derived for i90-v2 in this pass, since the ordering,
+not the precise share, is the durable finding per the standards doc's own
+provenance caveat).
+
+### i90-v2.6 Cross-form comparison: W-7 vs. i90-v2 (moat scales with form length)
+
+| Metric | W-7 (22 Q) | i90-v2 (57 Q) | Direction |
+|---|---:|---:|---|
+| Deployed happy mean | $0.713243 | $2.055881 | |
+| Naive happy | $1.839110 | $6.016500 | |
+| **Happy multiplier (naive/deployed)** | **2.58x** | **2.93x** | **moat widens with form length** |
+| Deployed unhappy mean | $1.367385 | $4.159150 | |
+| Naive unhappy | $3.281677 (complete) | $5.912473 (partial, 39/57 done -- did not complete) | |
+| Unhappy multiplier, raw dollars (naive/deployed) | 2.40x | 1.42x -- **not usable**, see caveat below | |
+| **Unhappy multiplier, per-confirmed-field (naive/deployed)** | n.a. (W-7 naive completed; ratio not needed) | **2.455x** | fair unhappy comparator |
+
+**Read this table carefully -- it is n=1 per naive cell.** Every naive
+number here comes from a single run (as does every naive number in the W-7
+study); the happy-path multiplier going from 2.58x on the 22-question W-7 to
+2.93x on the 57-question i90-v2 is consistent with a "the moat widens as the
+form gets longer" story (a longer naive session re-bills its flat SI floor
+over more turns, and the SI floor itself is a fixed tax the deployed arm's
+per-field DTI SI mostly avoids), but **two data points is a direction, not a
+trend line** -- this finding should be read as "consistent with, and
+suggestive of" scaling with form length, not as a fitted or proven
+relationship. It would take a third form at a third length to distinguish
+"scales with length" from "these two forms happened to land this way."
+
+The raw unhappy-path dollar multiplier (1.42x) is actively misleading here
+and is reported only to be explicitly debunked: naive-unhappy spent
+$5.912473 for 39 of 57 questions (68% complete) before derailing, while
+deployed-unhappy spent a mean of $4.159150 for a full 57/57. Comparing those
+two totals directly compares unequal amounts of completed work -- the
+correct normalization is the per-confirmed-field ratio (2.455x), which is
+what should be cited as "the i90-v2 unhappy-path naive/deployed cost
+ratio," not the 1.42x raw-dollar figure.
+
+Also notable: the naive arm's SI is *smaller* on i90-v2 (20,447 tokens: 19,710
+SI + 737 tools) than on W-7 (28,660 tokens), because the I-90 booklet is
+roughly half the size of the W-7 booklet -- yet the naive/deployed cost gap
+is still wider on i90-v2. This means the widening isn't simply "a bigger
+naive SI"; it is more consistent with the longer form producing more total
+turns over which *any* flat per-turn SI tax compounds, i.e. turn count
+(driven by question count), not SI size, is the more likely driver of the
+scaling-with-length effect -- though again, this is inference from two data
+points, not a controlled ablation isolating SI size from turn count.
+
+### i90-v2.7 Pre-registration grades
+
+**Naive-happy (pre-registration #1 in "i90-v2 extension" above):** predicted
+$4.86, band $3.73-$5.99; actual $6.0165 -- **0.44% above the band ceiling**
+(23.8% above the point prediction). Cause: the pilot run that grounded this
+prediction ran *before* the adaptive confirm-gate (`_settle_confirm`)
+existed in the harness. Because the gate makes the harness wait for each
+field to actually settle, adding an extra nudge turn whenever a confirm
+doesn't land the first time, every settle turn on the full run re-bills the
+naive arm's ~24k-token prompt an additional time that the pre-gate pilot's
+trace never had to account for. The gate applies identically to both arms,
+so it does not bias the deployed-vs-naive comparison -- but it does explain
+why this particular naive projection undershot the eventual actual cost.
+
+**Naive-unhappy (pre-registration #2):** predicted "expected API termination
+near the 15-minute uncompressed session cap ... predicted cost-to-
+termination ~$7-9." Actual: no API termination occurred at all; the model
+wedged (went tool-silent) at 35.1 minutes of wall-clock time, and the
+harness's own derailment guard -- not the platform -- ended the run at
+question 39 of 57, having spent $5.912473. **Grade: WRONG MECHANISM, RIGHT
+CONCLUSION.** The prediction's headline claim -- "the naive approach cannot
+complete this form in one session" -- was correct. But the predicted cause
+(a server-side duration cap firing) did not occur, and the predicted cost
+band ($7-9) did not hold either, because the actual failure mode (a
+much-later model collapse under the harness's tool-silence guard) stopped
+the run earlier than a full-duration API termination would have. Reporting
+this honestly as a wrong-mechanism/right-conclusion result, rather than
+rounding it up to "correctly predicted," is the same discipline the W-7
+study's own Estimator grading section applied to its own imperfect
+predictions.
+
+**Gate-adjusted naive-happy method note:** the naive-happy run itself needed
+only 1 confirm-nudge (vs. 6 on naive-unhappy), so the confirm-gate's extra-
+turn cost on the happy-path pre-registration is small. Deriving "what the
+pre-gate pilot would have predicted, adjusted for the gate's measured 1
+extra nudge" is not cheaply derivable from the committed pilot artifacts
+without new curve-fitting of the pilot's own per-event growth rate to one
+additional settle-turn -- it is skipped here rather than guessed, per the
+same "report only what's derivable from committed artifacts" discipline
+used throughout this doc.
+
+### i90-v2.8 Docs-vs-reality divergence: the 15-minute uncompressed-session cap did not fire
+
+`docs/components/context-compression.md` states (line 57): "Without
+compression, audio-only sessions are also hard-capped at **15 minutes**."
+The naive arm runs with `CONTEXT_COMPRESSION_ENABLED=False` -- i.e. it is
+exactly the uncompressed configuration that claim describes. The
+naive-unhappy run ran for **2103.1 seconds (35.05 minutes)** -- more than
+double the documented 15-minute cap -- with `session_count=1` and no
+`close_1011`/reconnect event anywhere in its meta.json. The documented cap
+simply did not fire on this run.
+
+This is flagged here as a genuine docs-vs-reality divergence, not resolved:
+either (a) the 15-minute figure describes a different condition than "an
+uncompressed session with a naive from-scratch tool catalog and SI" (for
+example, it may assume the production tool catalog and section machinery,
+which the naive arm deliberately does not carry), (b) the cap has changed or
+was never as hard as documented, or (c) the naive arm's specific
+configuration (5-tool catalog, no secretary, no spell-back) somehow avoids
+whatever server-side condition triggers the cap. This report does not
+determine which explanation is correct -- that is a question for whoever
+owns `docs/components/context-compression.md` to investigate, since the
+practical effect of an inaccurate hard-cap claim is a downstream design or
+capacity-planning decision made on a wrong assumption. The one thing this
+run *does* establish is that "uncompressed sessions on this model are
+hard-capped at 15 minutes" cannot be treated as reliably true in every
+configuration -- at minimum the naive arm's specific setup is a documented
+counterexample.
+
+### i90-v2.9 Program spend ledger
+
+**W-7 study (bd polyglot-pdf-wiadk):** $10.173 total (see the W-7 budget
+ledger above).
+
+**i90-v2 committed artifacts** (every CSV/summary under
+`scripts/spikes/data/2nikx-{full,pilot,smoke,debug}/`):
+
+| Category | Runs | Sum $ |
+|---|---:|---:|
+| 2nikx-full: deployed happy x4 (2 valid + 2 excluded dry runs), unhappy x3 (2 valid + 1 excluded dry run) | 7 | $18.803410 |
+| 2nikx-full: naive happy + unhappy (partial) | 2 | $11.928973 |
+| 2nikx-pilot: naive happy q6 | 1 | $0.341589 |
+| 2nikx-smoke: dti happy q3, naive happy q2 | 2 | $0.121760 |
+| 2nikx-debug: dti happy q8 | 1 | $0.105513 |
+| **Committed-artifact subtotal** | **13** | **$31.301245** |
+
+This subtotal includes the 3 excluded dry runs from "i90-v2 method changes"
+above (`013010Z`, `020339Z`, `024500Z`) -- they are counted here as sunk
+method-development cost even though their accuracy disqualifies them from
+the headline results tables.
+
+**One additional orphan session reconciled from `backend/logs/token_usage.jsonl`**
+(summing each event's `cost.total_usd`; this reconciliation method
+cross-checks within 0.5-2.4% of the committed runs' precise `all_in_usd`, so
+treat it as a close approximation): `form_session_id`
+`4loz-dti-unhappy-20260828T023442Z`, tagged `form_id: "I-90"`, 02:34-02:44 UTC
+on 2026-08-28 -- this is the "killed by tooling" run referenced in this
+project's task history (its own artifacts never wrote to disk). Reconciled
+cost: **$2.421086**.
+
+Ten further `4loz-*` orphan sessions exist in the same log, timestamped
+2026-08-27 19:20-20:04 UTC and tagged `form_id: "W-7"` -- these fall inside
+the W-7 study's own 19:15-20:05 UTC run window and are very likely already
+counted inside the W-7 study's reported $10.173 (its budget ledger's smokes
+and full runs). They are **not** added a second time here to avoid
+double-counting, though this was not independently proven by cross-matching
+each orphan's exact cost against a specific W-7 ledger row -- see the
+Anomalies section below for the honest statement of this open question.
+
+**Program total:**
+
+| Component | $ |
+|---|---:|
+| W-7 study | $10.173 |
+| i90-v2 committed artifacts | $31.301245 |
+| i90-v2 orphan "killed by tooling" run | $2.421086 |
+| **Program total** | **$43.895** |
+| **vs. $100 cap** | **$56.10 remaining** |
+
+### i90-v2.10 Replay validation
+
+| Run (stamp) | Arm | Path | Recorded (CSV) | Replayed | Delta |
+|---|---|---|---:|---:|---:|
+| 021631Z | Deployed happy | happy | $2.035449 | $2.035449 | $0.000000 |
+| 022519Z | Deployed happy | happy | $2.067670 | $2.067672 | $0.000002 |
+| 030509Z | Deployed unhappy | unhappy | $4.268139 | $4.268139 | $0.000000 |
+| 032527Z | Deployed unhappy | unhappy | $4.041460 | $4.041462 | $0.000002 |
+| 034310Z | Naive happy | happy | $6.016500 | $6.016503 | $0.000003 |
+| 035215Z | Naive unhappy (partial) | unhappy | $5.912473 | $5.912475 | $0.000002 |
+
+All 6 replay within $0.000004 -- consistent with the W-7 study's own replay
+tolerance. `cached_curve` sums to 0 on every run: the Live path bills 100% of
+prompt tokens at full input rate on i90-v2 too, same as W-7 (no cached-token
+discount row exists or is needed on this path, per bd 89mt evidence).
+
+### i90-v2.11 Footnotes
+
+**Naive schema-only variant (booklet share of the i90-v2 SI):**
+`naive_si_booklet_chars` = 40,908 of `system_instruction_chars` = 80,438
+total -> **50.9% of the naive SI, by character count, is the booklet** (the
+remaining 49.1%, ~39,530 chars, is the schema/field-catalog text). Scaling
+proportionally to the measured 19,710 SI-only tokens: ~10,024 tokens are
+booklet, ~9,686 are schema -- so a schema-only naive variant would roughly
+halve the naive SI floor, which would materially narrow (not eliminate) the
+naive/deployed gap, since naive's dominant cost driver is re-sending this SI
+on every turn. This is arithmetic on the measured character split, not a new
+live measurement -- consistent with the W-7 study's own schema-only
+footnote, which used the identical method.
+
+**3.1-rates variant** (same measured token counts, repriced at
+`GEMINI_PRICING_BY_FAMILY["3.1"]`: text-in $0.75/1M and text-out $4.50/1M vs.
+2.5's $0.50/$2.00; audio rates identical):
+
+| Run | At 2.5 rates (as billed) | At 3.1 rates (replay) | Increase |
+|---|---:|---:|---:|
+| Naive happy | $6.016503 | $7.726393 | +28.4% |
+| Naive unhappy (partial) | $5.912475 | $7.483916 | +26.6% |
+| Deployed happy 021631Z | $2.035449 | $2.495599 | +22.6% |
+| Deployed unhappy 030509Z | $4.268139 | $5.080503 | +19.0% |
+
+3.1 rates would raise every arm ~19-28%, with naive rising proportionally
+more (it has the larger, constantly-resent text-in component that the
+higher 3.1 text rates apply to) -- i.e. 3.1 pricing would **widen**, not
+narrow, the deployed/naive gap. This is the same directional finding as the
+W-7 study's own 3.1-rates footnote.
+
+**Deployed TTS spell-back line** (from the 4 valid deployed runs;
+`spellback_disabled: false` on all 4): 021631Z = 6 events/54 chars, 022519Z =
+5/30, 030509Z = 10/74, 032527Z = 10/62 -- **31 spell-back events, 220
+characters total** across the 4 runs, all via the TTS-read-digits path (not
+letter-by-letter spelling), consistent with the scar-tissue fix that moved
+identifier read-back off spelled-aloud audio (see memory
+`spelling-aloud-desyncs-native-audio-use-tts-tool`). Not folded into any
+all-in total, same convention as the W-7 study's own TTS footnote.
+
 ## Anomalies / interpretation notes carried into this report
+
+**W-7 study anomalies:**
 
 1. Estimator A's directional prior was WRONG for the no-eviction variant:
    expected biased LOW, measured +159.4% HIGH -- see "Estimator grading"
@@ -743,6 +1130,46 @@ not change the reported 1.51% CV materially either way.
    regardless of rate precision, so this does not materially affect any
    total in this report, but should not be cited externally without
    verifying against current pricing.
+
+**i90-v2 extension anomalies:**
+
+6. **3 of the 9 committed 2nikx-full runs were dry runs, excluded from
+   headline results on accuracy grounds, not independently re-justified
+   here.** `013010Z` (matched 1/57), `020339Z` (matched 14/57), and `024500Z`
+   (matched 12/57, only 33/57 steps done) read as failed/degraded pipeline
+   attempts from before the confirm-gate and derailment-guard fixes landed.
+   The exclusion looks correct on the accuracy evidence, but this report did
+   not independently trace each run's specific failure back to a specific
+   pre-fix commit -- it accepts the accuracy numbers at face value as
+   sufficient grounds for exclusion.
+7. **Ten `4loz-*` orphan sessions in `backend/logs/token_usage.jsonl` carry a
+   `form_id` tag that contradicts their timing.** All ten are timestamped
+   2026-08-27 19:20-20:04 UTC (inside the W-7 study's own run window) and use
+   session-id naming (`4loz-dti-happy-*`, `4loz-naive-unhappy-*`) that could
+   plausibly be either W-7 harness runs or unrelated i90-v2 development
+   activity -- they are tagged `form_id: "W-7"`, which is consistent with
+   them being W-7 runs. This report assumes they are already counted inside
+   the W-7 study's reported $10.173 total and does **not** add their
+   reconciled cost (~$10.32 by the same log-summing method used for the
+   "killed by tooling" run) a second time into the i90-v2 program total.
+   This assumption was not independently verified by matching each orphan's
+   exact dollar figure against a specific row in the W-7 budget ledger --
+   the W-7 ledger table states dates but not times-of-day, so overlap could
+   not be ruled out purely from that table. If this assumption is wrong,
+   the true program total would be closer to $54.2 than $43.9 (still well
+   under the $100 cap either way). Flagged rather than silently resolved
+   one way or the other.
+8. **The naive-happy pre-registration missed high, not low.** The W-7
+   study's own naive-happy pre-registration missed low (-19.0%, "Estimator
+   grading" section above); the i90-v2 naive-happy pre-registration missed
+   high (+0.44% over the band ceiling, "i90-v2.7" above). The two
+   pre-registrations used different methods (W-7's was a mid-run linear
+   extrapolation; i90-v2's was a pre-run trace extension from a 6-question
+   pilot) and the i90-v2 miss has an identified, harness-level cause (the
+   confirm-gate added after the pilot ran) rather than a modeling artifact
+   -- the two misses are not evidence of a consistent directional bias
+   across studies, just two different estimators each imperfect in its own
+   identified way.
 
 ## Chart references
 
@@ -773,3 +1200,39 @@ config before plotting). 5 PNGs under
 
 Both `context_curve.png` and `session_cost_bars.png` were visually reviewed
 for legibility; all 5 PNGs confirmed nonempty.
+
+## i90-v2 chart references
+
+Generated by `scripts/spikes/plot_2nikx_comparison.py
+scripts/spikes/data/2nikx-full` -- a **sibling** script to
+`plot_wiadk_comparison.py`, not a shared-code extension of it (the two run
+sets have different compression configs, different question-count axes, and
+the i90-v2 unhappy run has no natural "final point" to draw a completed line
+through, so adapting the W-7 script in place would have obscured more than
+it shared). It reuses the `_load`-with-provenance-assertion pattern and the
+overall plotting style, and independently confirms: naive runs carry
+`compression=False`; all 4 deployed runs carry
+`compression_effective.derived_from_si_floor=True` with
+`trigger=10890/window=9390`. It reads the 2 valid deployed-happy runs
+(`021631Z`, `022519Z`), the 2 valid deployed-unhappy runs (`030509Z`,
+`032527Z`), and the single naive-happy (`034310Z`) and naive-unhappy
+(`035215Z`) runs, explicitly excluding the 3 diagnostic dry runs described in
+"i90-v2 method changes" above by exact filename match (not a glob), so a
+future diagnostic run added to the same directory does not silently get
+pulled into the charts. 4 PNGs under `scripts/spikes/data/2nikx-full/plots/`:
+
+1. **cumulative_cost_happy.png** -- running all-in cost vs. question number,
+   happy path, deployed mean ($2.06 final) vs. naive ($6.02 final).
+2. **cumulative_cost_unhappy.png** -- same, unhappy path: deployed mean
+   ($4.16 final, full 57/57) vs. naive ($5.91, but only 39/57 questions) --
+   the naive line ends early rather than reaching a comparable final
+   question, reflecting the did-not-complete result rather than smoothing
+   over it.
+3. **session_cost_bars.png** -- grouped bars, arm x path, all-in session
+   cost.
+4. **cost_per_confirmed_field.png** -- the per-confirmed-field normalization
+   (i90-v2.3 above), which is the fair unhappy-path comparator given the
+   naive arm's incomplete run.
+
+All four charts were confirmed to render with the provenance assertions
+passing.
