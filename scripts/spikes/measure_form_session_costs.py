@@ -28,6 +28,13 @@ Outputs, per run:
 
 Arms (--arm):
   unbounded      one session, no compression, no resets (raw growth curve)
+  naive          same single-session shape as unbounded, but the SI is the
+                 full-schema SI with the form's OFFICIAL BOOKLET TEXT appended
+                 verbatim (form_metadata.booklet_text) -- the "give the model
+                 everything" baseline nobody would deploy, measured so every
+                 other arm's savings has an honest ceiling to be measured
+                 against (bd polyglot-pdf-89mt). Harness-only SI mutation;
+                 zero backend/ changes.
   section-reset  the CURRENT production flow: per-section sub-schema, session
                  restart at each section boundary via switch_to_section (the
                  restart + re-greeting tokens are attributed to the FIRST
@@ -164,6 +171,7 @@ def price_text_usage(prompt_tokens: int, cached_tokens: int,
 # its matching question plan.
 DEMO_SCHEMA_PATH = _REPO_ROOT / "frontend" / "public" / "adult_intake_demo_schema.json"
 I90_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "i-90" / "schema.json"
+W7_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "w7" / "schema.json"
 AUDIO_CACHE = Path(__file__).resolve().parent / "fixtures" / "audio_cache"
 _AUDIO_RATE = 16000
 _CHUNK_MS = 40
@@ -553,10 +561,101 @@ def score_fill_accuracy(client, plan, expected) -> dict:
 
 # --schema registry: source path + matching question plan. Default is "demo" for
 # back-compat with the pre-jnjj.24 callers; "i90" is the production-faithful set.
+# --------------------------------------------------------------------- W-7
+# IRS Form W-7 (ITIN application), bd polyglot-pdf-89mt. The deployed demo kit
+# and the shortest real form we ship -- 53 fields, of which 44 survive the
+# certification denylist (the "Acceptance Agent's Use ONLY" block is never
+# fillable, bd polyglot-pdf-oagt) and 19 are conditional.
+#
+# THE PERSONA IS DELIBERATE: a nonresident alien filing a U.S. federal return
+# (reason "b"), which is the most common real W-7 case AND the one that avoids
+# the conditional branches -- no treaty article (a/f), no U.S.-person
+# relationship (d/e), no prior ITIN (6f), no college block (6g). A persona that
+# tripped those branches would measure a longer form, not a typical session, and
+# the per-question number is the point.
+#
+# The "wrong" values are plausible MIS-HEARINGS, not arbitrary different values:
+# Reyes/Reyna, Guatemala/Guatemala City, 03/14/1990 vs 03/04/1990. An
+# implausible wrong answer measures a correction the model would never actually
+# need to make.
+W7_QUESTIONS = [
+    # --- Application type + reason ---
+    {"field_id": "application_type",
+     "say": "I am applying for a new ITIN.",
+     "wrong": "I am renewing an existing ITIN."},
+    {"field_id": "reason",
+     "say": "I am a nonresident alien filing a U.S. federal tax return.",
+     "wrong": "I am a U.S. resident alien filing a return."},
+    # --- Name ---
+    {"field_id": "name_1a_first", "say": "My first name is Ana.",
+     "wrong": "My first name is Anna."},
+    {"field_id": "name_1a_middle", "say": "My middle name is Lucia.",
+     "wrong": "My middle name is Lucy."},
+    {"field_id": "name_1a_last", "say": "My last name is Reyes.",
+     "wrong": "My last name is Reyna."},
+    # --- Mailing address ---
+    {"field_id": "mailing_street",
+     "say": "My street address is 418 Willow Street, apartment 2B.",
+     "wrong": "My street address is 480 Willow Street, apartment 2D."},
+    {"field_id": "mailing_city_state_country",
+     "say": "Springfield, Oregon, United States, 97477.",
+     "wrong": "Springfield, Oregon, United States, 97747."},
+    # --- Foreign address ---
+    {"field_id": "foreign_street",
+     "say": "My foreign address is 12 Avenida Central.",
+     "wrong": "My foreign address is 20 Avenida Central."},
+    {"field_id": "foreign_city_state_country",
+     "say": "Quetzaltenango, Guatemala.",
+     "wrong": "Guatemala City, Guatemala."},
+    # --- Birth ---
+    {"field_id": "date_of_birth", "say": "I was born on March 14th, 1990.",
+     "wrong": "I was born on March 4th, 1990."},
+    {"field_id": "country_of_birth", "say": "I was born in Guatemala.",
+     "wrong": "I was born in Guatemala City."},
+    {"field_id": "city_state_of_birth", "say": "I was born in Quetzaltenango.",
+     "wrong": "I was born in Quetzaltenango, Mexico."},
+    {"field_id": "sex", "say": "Female.", "wrong": "Male."},
+    # --- Citizenship / foreign tax id / visa ---
+    {"field_id": "countries_of_citizenship", "say": "I am a citizen of Guatemala.",
+     "wrong": "I am a citizen of Honduras."},
+    {"field_id": "foreign_tax_id_number",
+     "say": "My foreign tax I.D. number is 2 4 9 8 1 7 3 6.",
+     "wrong": "My foreign tax I.D. number is 2 4 9 8 1 7 3 8."},
+    {"field_id": "us_visa_type_number_expiration",
+     "say": "I do not have a U.S. visa.",
+     "wrong": "I have a B2 visa."},
+    # --- Identification document ---
+    {"field_id": "id_document_type", "say": "I am submitting my passport.",
+     "wrong": "I am submitting my driver's license."},
+    {"field_id": "id_document_issued_by",
+     "say": "It was issued by Guatemala.",
+     "wrong": "It was issued by Guatemala City."},
+    {"field_id": "id_document_number",
+     "say": "The passport number is 1 0 4 7 2 2 8 5.",
+     "wrong": "The passport number is 1 0 4 7 2 2 8 6."},
+    {"field_id": "id_document_expiration_date",
+     "say": "It expires on August 30th, 2029.",
+     "wrong": "It expires on August 13th, 2029."},
+    {"field_id": "date_of_entry_us",
+     "say": "I entered the United States on 06/11/2023.",
+     "wrong": "I entered the United States on 06/01/2023."},
+    # --- Prior ITIN (answered NO, which closes the 6f branch) ---
+    {"field_id": "previously_received_itin_or_irsn",
+     "say": "No, I have never received an ITIN or an IRSN.",
+     "wrong": "Yes, I received one before."},
+]
+
+# No accuracy grading for this run -- 89mt asks a COST question, and an
+# expected-value map would invite reading fill-accuracy off a run whose
+# persona was chosen for cost realism rather than accuracy coverage.
+W7_EXPECTED: dict = {}
+
 SCHEMAS = {
     "demo": {"path": DEMO_SCHEMA_PATH, "questions": DEMO_QUESTIONS, "expected": {}},
     "i90": {"path": I90_SCHEMA_PATH, "questions": I90_QUESTIONS,
             "expected": I90_EXPECTED},
+    "w7": {"path": W7_SCHEMA_PATH, "questions": W7_QUESTIONS,
+           "expected": W7_EXPECTED},
 }
 
 CSV_COLUMNS = [
@@ -566,6 +665,15 @@ CSV_COLUMNS = [
     "text in tokens", "text in token cost",
     "text out tokens", "text out token cost",
     "total tokens", "total cost",
+]
+
+# Column contract for the per-turn <base_name>.turns.csv sidecar (bd
+# polyglot-pdf-89mt/wiadk). Module-level, like CSV_COLUMNS above, so tests pin
+# the shipped shape instead of duplicating the list.
+TURNS_CSV_COLUMNS = [
+    "turn", "q", "field_id", "label", "stalled", "prompt_tokens",
+    "text_in", "audio_in", "text_out", "audio_out",
+    "total_tokens", "cost_usd", "cumulative_cost_usd", "latency_s",
 ]
 
 
@@ -614,6 +722,40 @@ def _pcm_chunks(pcm: bytes) -> list[bytes]:
 
 def load_schema(schema_key: str = "demo") -> dict:
     return json.loads(SCHEMAS[schema_key]["path"].read_text(encoding="utf-8"))
+
+
+# NAIVE arm marker (bd polyglot-pdf-89mt): the naive baseline is "what would a
+# system instruction look like if nobody had ever done any SI-diet work" --
+# the full-schema legacy SI (production's own build_form_context_message,
+# full form, one session, exactly the unbounded arm's shape) PLUS the form's
+# own official booklet text pasted in as reference material, the way a naive
+# first implementation might reach for "just give the model everything." This
+# is harness-only: ZERO backend/ production code is touched, and the booklet
+# is appended AFTER build_form_context_message returns -- production's SI
+# builder never sees or knows about the booklet.
+NAIVE_SI_MARKER = "OFFICIAL FORM INSTRUCTIONS (reference):"
+
+
+def naive_si_booklet_suffix(schema: dict) -> str:
+    """The literal text appended to the production SI for --arm naive.
+
+    Pulled from schema['form_metadata']['booklet_text'] (the form kit's own
+    copy of the IRS/USCIS instruction booklet, when present -- the w7 kit
+    carries ~81k chars, bd polyglot-pdf-89mt). Returns '' (no-op suffix) if
+    the schema carries no booklet_text, so a naive run against a schema
+    without one degrades to the plain full-SI baseline rather than crashing.
+    """
+    booklet = (schema.get("form_metadata") or {}).get("booklet_text") or ""
+    if not booklet:
+        return ""
+    return f"\n\n{NAIVE_SI_MARKER}\n{booklet}"
+
+
+def apply_naive_si(si: str, schema: dict) -> str:
+    """Append the naive arm's booklet suffix to an already-built SI string.
+    Shared by the harness driver and count_naive_si_tokens.py so both measure
+    the EXACT same text -- never reimplement this concatenation elsewhere."""
+    return si + naive_si_booklet_suffix(schema)
 
 
 def sections_in_plan(schema: dict, plan: list[dict]) -> list[dict]:
@@ -723,6 +865,14 @@ class FakeClientWebSocket:
         self.switch_events: list[dict] = []
         self.skip_events: list[dict] = []
         self.sent_messages: list[str] = []
+        # name_spellback tool round-trips (bd polyglot-pdf-22h1f wiring, harness
+        # fix bd polyglot-pdf-89mt): each entry {ts, request_id, status,
+        # value_chars}. value_chars is the length of the CURRENT field's value
+        # at ack time -- a proxy for TTS characters actually synthesized by the
+        # real client's /api/tts/spellback call, which this fake client never
+        # makes (see _handle_spellback docstring). No field VALUE is recorded,
+        # matching the real wire contract (never crosses this message).
+        self.spellback_events: list[dict] = []
         # W2 (bd polyglot-pdf-kxkw, mirrored bd polyglot-pdf-0cyu): settledness-
         # window indices already sent as validate_windows (mirrors the client's
         # persisted state.validatedWindowIndices). A window index, once sent,
@@ -857,6 +1007,8 @@ class FakeClientWebSocket:
             self._handle_skip_field(msg)
         elif mtype == "switch_field":
             self._handle_switch_field(msg)
+        elif mtype == "spellback":
+            self._handle_spellback(msg)
         elif mtype == "validation_result":
             # W3 (bd polyglot-pdf-pr3i, mirrored 0cyu): REPORT-ONLY since W3 --
             # mirror handleValidationResult (webFormConnection.ts:2222-2257).
@@ -1092,6 +1244,54 @@ class FakeClientWebSocket:
         rec["outcome"] = "pinned"
         self.switch_events.append(rec)
         self._reply(lambda: self.service.handle_switch_field_response(rid, ack))
+
+    def _current_field_id(self) -> str | None:
+        """Mirror computeNextField's field resolution (pin honored, else first
+        unconfirmed in active_field_ids) -- same rule next_hint()/
+        next_field_schema() already use. Spell-back and next-field-hint
+        resolve the SAME "current field" in production; this is that shared
+        rule factored out so _handle_spellback doesn't duplicate it."""
+        pin = self._pin_active()
+        if pin:
+            return pin
+        for fid in self.active_field_ids:
+            entry = self.state.get(fid)
+            if not entry or not entry.get("confirmed"):
+                return fid
+        return None
+
+    def _handle_spellback(self, msg: dict):
+        """Mirror handleSpellbackRequest (webFormConnection.ts): ack the
+        name_spellback tool round-trip. The real client resolves the current
+        field itself, fetches a Cloud TTS clip of its value spelled out,
+        plays it BLOCKING, and reports only the outcome + timings -- no field
+        value crosses this message in either direction (see
+        RequestCoordinator.request_spellback's docstring). This fake client
+        never calls that route (no HTTP layer, no TTS client, ZERO spend): it
+        only needs to return a status the backend's tool-response mapping
+        branches on. 'delivered' is the correctness-relevant common case --
+        the model waits silently for the (simulated) clip to finish and then
+        proceeds -- so that's what this always acks, mirroring a healthy
+        client on every call.
+
+        Without this handler the message falls through every branch in
+        send_json and is silently dropped: request_spellback's future is
+        never resolved and RequestCoordinator blocks for the full 90s
+        SPELLBACK_ROUNDTRIP_TIMEOUT before returning CONFIRM_REQUEST_TIMEOUT,
+        which the callback handler then reports to the model as a hard error
+        (apologize, re-ask for spelling) -- a needless stall or a derailed
+        scripted answer sequence, per question, per run.
+        """
+        rid = msg.get("request_id")
+        fid = self._current_field_id()
+        value = self.state.get(fid, {}).get("value") if fid else None
+        value_chars = len(str(value)) if value not in (None, "") else 0
+        rec = {"ts": time.monotonic(), "request_id": rid,
+               "field_id": fid, "status": "delivered",
+               "value_chars": value_chars}
+        self.spellback_events.append(rec)
+        payload = {"status": "delivered", "playback_ms": 0, "fetch_ms": 0}
+        self._reply(lambda: self.service.handle_spellback_response(rid, payload))
 
     def validation_fields(self, up_to_fid: str | None = None,
                          field_ids: list[str] | None = None) -> list[dict]:
@@ -1400,6 +1600,14 @@ class _LogTap:
 # text_ai_gemini._log_usage / ask()/validate(); form_filling_service's
 # ask_secretary_* + validator_* events; callback_handler's DTI coercion event.
 _INFO_EVENTS = frozenset({
+    # bd polyglot-pdf-89mt: capture the compression config the ADAPTER actually
+    # built, so a run's own artifact proves which trigger/window reached the
+    # API. Without this the only record was the operator's REQUESTED values,
+    # and a run that pinned the 12000/9000 argparse defaults looked identical
+    # in metadata to one that derived production's pair.
+    "context_window_compression_enabled",
+    "compression_trigger_clamped_to_api_bounds",
+    "compression_window_clamped_below_trigger",
     "text_ai_usage", "text_ai_ask_complete", "text_ai_validate_complete",
     "ask_secretary_complete", "ask_secretary_pending_async_deliver",
     "ask_secretary_async_delivered", "ask_secretary_async_dropped_session_inactive",
@@ -1588,6 +1796,20 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
             "all_in_usd": round(voice_usd + text_usd, 6),
             "voice_usd": voice_usd,
             "text_usd": text_usd,
+            # bd polyglot-pdf-89mt: split the text sidecar by CALLER. "text_usd"
+            # lumps the secretary, the per-window lite validator and the W6 pro
+            # pass into one number, but they are three separate product
+            # decisions with three different cost profiles -- and bd
+            # polyglot-pdf-jma2 is about to delete one of them. Costing a form
+            # needs them apart.
+            "text_usd_by_caller": {
+                caller: round(sum(r["usd"] for r in text_rows
+                                  if (r.get("caller") or "") == caller), 6)
+                for caller in sorted({(r.get("caller") or "") for r in text_rows})
+            },
+            # The fixed-overhead term of A + B*n: the greeting turn, priced
+            # before any question is asked.
+            "greeting_usd": meta.get("greeting_cost_usd"),
             "voice_tokens": voice_tokens,
             "wall_clock_s": meta.get("wall_clock_s"),
             "steps": len(rows),
@@ -1684,7 +1906,7 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 # ------------------------------------------------------------------- driver
 
 def _make_settings(arm: str, trigger: int, window: int, compression: bool = False,
-                   continuous: bool = False):
+                   continuous: bool = False, derive_compression: bool = False):
     # The production code defaults are continuous-DTI (bd polyglot-pdf-7872:
     # USE_DTI / CONTINUOUS_SESSION / CONTEXT_COMPRESSION_ENABLED all default ON),
     # so every arm PINS its full mode explicitly -- a future default flip must
@@ -1713,6 +1935,31 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
             # adapter honors the fixed values instead of silently auto-sizing while
             # the run metadata still records the requested fixed numbers.
             "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR": False,
+        })
+    elif arm == "naive":
+        # The naive baseline (bd polyglot-pdf-wiadk): same settings shape as
+        # unbounded (no DTI, no compression, no resets -- the `overrides`
+        # dict above already pins exactly that), pinned again here explicitly
+        # so a future default flip cannot silently relabel this arm's
+        # measured configuration (same doctrine as every other branch in this
+        # function). The SI mutation (booklet appended) happens at the driver
+        # call site, not here -- Settings carries no "extra SI text" knob.
+        #
+        # Tool catalog: a naive builder declares only the tools its own flow
+        # needs (fill, confirm, status, field navigation, skip). It has no
+        # secretary (ask_secretary is THIS app's architecture -- the first
+        # naive smoke measured the model actually calling it and burning a
+        # whole ~29k-token context re-send on the fail-open), no spell-back
+        # TTS pipeline, and no section machinery (a stray switch_section
+        # call would open a second session and violate the arm's
+        # single-session premise).
+        _naive_base = _config.Settings()
+        overrides.update({
+            "TOOL_DECLARATIONS": [
+                d for d in _naive_base.TOOL_DECLARATIONS
+                if d.get("name") not in ("ask_secretary", "switch_section")
+            ],
+            "SPELLBACK_TOOL_ENABLED": False,
         })
     elif arm == "section-reset-jit":
         # The JIT SI mode was REMOVED (bd polyglot-pdf-en2j): USE_JIT_SCHEMA no
@@ -1748,13 +1995,26 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
     # window 2500 (floor + the current field's guidance headroom), trigger 3500.
     if compression and arm != "sliding-window":
         overrides["CONTEXT_COMPRESSION_ENABLED"] = True
-        overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
-        overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
-        # Honor the EXACT --trigger/--window for this calibration sweep: turn OFF
-        # the production per-form derivation (default-on under DTI, bd jnjj.35),
-        # which would otherwise auto-size the window and ignore the CLI values --
-        # silently, while the run metadata still records the requested fixed pair.
-        overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = False
+        if derive_compression:
+            # DEPLOY-FIDELITY MODE (bd polyglot-pdf-89mt). Production derives the
+            # window per-form from THIS form's SI+tools floor plus its inline
+            # injection budget (CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR defaults
+            # TRUE and FormFillingService passes the budget), so a run that pins
+            # --trigger/--window measures a configuration NOBODY DEPLOYS. Leave
+            # derivation on and let the adapter size it.
+            #
+            # This matters more than it looks: the harness's --trigger/--window
+            # DEFAULTS are 12000/9000, so simply passing --compression without
+            # thinking measured eviction at roughly twice production's threshold.
+            overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = True
+        else:
+            overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
+            overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
+            # Honor the EXACT --trigger/--window for this calibration sweep: turn OFF
+            # the production per-form derivation (default-on under DTI, bd jnjj.35),
+            # which would otherwise auto-size the window and ignore the CLI values --
+            # silently, while the run metadata still records the requested fixed pair.
+            overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = False
 
     s = _config.Settings(**overrides)
     # Labeled deviation from deploy config: DISABLE automatic VAD so the explicit
@@ -1775,6 +2035,23 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
     s.VAD_PREFIX_PADDING_MS = None
     s.VAD_SILENCE_DURATION_MS = None
     return s
+
+
+def _price_delta(d: dict, rates: dict) -> dict:
+    """Price one CounterTracker delta. Shared by the per-QUESTION CSV row and
+    the per-TURN meta record so the two can never drift apart (bd 89mt)."""
+    ti = d["_session_text_input_tokens"]
+    ai = d["_session_audio_input_tokens"]
+    to = d["_session_text_output_tokens"]
+    ao = d["_session_audio_output_tokens"]
+    return {
+        "text_in_cost": ti * rates["text_input"],
+        "audio_in_cost": ai * rates["audio_input"],
+        "text_out_cost": to * rates["text_output"],
+        "audio_out_cost": ao * rates["audio_output"],
+        "total_cost": (ti * rates["text_input"] + ai * rates["audio_input"]
+                       + to * rates["text_output"] + ao * rates["audio_output"]),
+    }
 
 
 class CounterTracker:
@@ -1966,7 +2243,8 @@ async def run(args) -> int:
         model_name = MODEL_NATIVE_STANDARD_VERTEX
     rates = get_pricing_for_model(model_name)
     settings = _make_settings(args.arm, args.trigger, args.window, args.compression,
-                              continuous=bool(getattr(args, "continuous", False)))
+                              continuous=bool(getattr(args, "continuous", False)),
+                              derive_compression=bool(getattr(args, "derive_compression", False)))
     # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
     # `_config.get_settings = ...` is NOT enough: modules that did
     # `from backend.config import get_settings` at import time (ai_context,
@@ -1988,7 +2266,12 @@ async def run(args) -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    _comp_tag = "_comp" if args.compression and args.arm != "sliding-window" else ""
+    # bd polyglot-pdf-89mt: "_der" marks a DERIVED-window run. Without it a
+    # deploy-fidelity run and a pinned-calibration run produce filenames that
+    # differ in nothing, and an analysis that globs the directory can silently
+    # read the wrong one -- which is exactly what happened on the first pass.
+    _comp_tag = ("_comp" if args.compression and args.arm != "sliding-window" else "") + \
+                ("_der" if getattr(args, "derive_compression", False) else "")
     _cont_tag = "_cont" if getattr(args, "continuous", False) else ""
     base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_cont_tag}{_comp_tag}_{args.path}_{stamp}"
     meta: dict = {
@@ -1996,8 +2279,26 @@ async def run(args) -> int:
         "schema": args.schema,
         "arm": args.arm, "path": args.path, "questions": len(plan),
         "compression": bool(args.compression),
+        # REQUESTED values. These are what the OPERATOR asked for and are NOT
+        # necessarily what the session used -- under --derive-compression the
+        # adapter sizes the window itself and these are meaningless. Read
+        # compression_effective (populated post-connect from the adapter's own
+        # config) for what was actually sent to the API. bd polyglot-pdf-89mt:
+        # an earlier run reported "compression on" while carrying the harness's
+        # 12000/9000 argparse defaults, roughly twice production's derived pair.
+        # KEEP the original key names: build_summary's run block,
+        # analyze_continuous_window.py and cost_matrix_lib.py all read
+        # meta["trigger"]/["window"] and a rename silently turns them into
+        # None -- collapsing every run into one bogus analysis cell and
+        # raising TypeError in cost_matrix_lib. These are OVERWRITTEN
+        # post-connect with the EFFECTIVE derived pair (see compression_effective
+        # below), so downstream consumers keep reading the config that actually
+        # ran, not the one requested.
         "trigger": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
         "window": args.window if (args.arm == "sliding-window" or args.compression) else None,
+        "trigger_requested": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
+        "window_requested": args.window if (args.arm == "sliding-window" or args.compression) else None,
+        "derive_compression": bool(getattr(args, "derive_compression", False)),
         "continuous": bool(getattr(args, "continuous", False)),
         "schema_scope": ("continuous-full-plan" if getattr(args, "continuous", False)
                          else "per-section" if args.arm in ("section-reset", "section-reset-jit", "dti")
@@ -2063,9 +2364,21 @@ async def run(args) -> int:
             form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
             form_id=f"INTAKE-{args.schema.upper()}")
         adapter._log = _LogTap(adapter._log, log_sink, _INFO_EVENTS)
+        # bd polyglot-pdf-89mt: capture the CACHED-token fields too. The Live
+        # cost path (live_ai_gemini._cost_for_turn) prices every prompt token at
+        # the full input rate and never reads cached_content_token_count -- so
+        # if the Live API does report a cache hit, every number this harness
+        # produces is an OVER-estimate by an unknown amount. Recording the raw
+        # field here is what makes that answerable instead of assumed: a run
+        # whose cached counts are all None/0 says Live does not report caching;
+        # non-zero counts say our pricing table is missing a discount row.
+        # traffic_type distinguishes provisioned vs on-demand on Vertex.
         adapter._on_raw_usage = lambda u: usage_dumps.append({
             "prompt": getattr(u, "prompt_token_count", None),
-            "total": getattr(u, "total_token_count", None)})
+            "total": getattr(u, "total_token_count", None),
+            "cached": getattr(u, "cached_content_token_count", None),
+            "traffic_type": str(getattr(u, "traffic_type", None) or ""),
+        })
 
         # Text sidecar (bd polyglot-pdf-eh1h): wire the REAL TextAIGemini so
         # the secretary tool + validator run in-session, exactly as production
@@ -2206,7 +2519,24 @@ async def run(args) -> int:
             client.state[aa["field_id"]] = {
                 "value": aa["value"], "confirmed": True}
 
+        # session_count (bd polyglot-pdf-89mt): starts at 1 for the initial
+        # start_session below; each service.switch_to_section call later in the
+        # driver loop increments it (both call sites are gated on `continuous`
+        # or `is_section_reset`, neither of which the naive arm sets, so a
+        # naive run's count should stay exactly 1 -- asserted post-run below).
+        meta["session_count"] = 1
+
         si = service.build_form_context_message(arm_schema, {}, **si_kwargs)
+        if args.arm == "naive":
+            # bd polyglot-pdf-89mt: append the form's own official booklet text
+            # to the production SI, AFTER build_form_context_message returns --
+            # production's SI builder is never touched or made aware of this.
+            # arm_schema carries only the current section's fields (here: the
+            # whole form, since naive takes the same full-form else-branch as
+            # unbounded), but the booklet lives on the WHOLE schema's
+            # form_metadata, so read it off `schema`, not `arm_schema`.
+            si = apply_naive_si(si, schema)
+            meta["naive_si_booklet_chars"] = len(naive_si_booklet_suffix(schema))
         meta["system_instruction_chars"] = len(si)
         # Session SPOKEN language (bd polyglot-pdf-6mzi): mirror websocket_routes'
         # handshake seeding -- set BEFORE start_session so the per-connect ASR
@@ -2317,13 +2647,32 @@ async def run(args) -> int:
             return 2
 
         tracker = CounterTracker(adapter)
+        # bd polyglot-pdf-89mt: a SECOND, independent tracker at turn
+        # granularity. It must be separate -- delta_and_advance() consumes the
+        # delta, so a single tracker read at both the turn and question
+        # boundaries would leave the question rows reading zero.
+        turn_tracker = CounterTracker(adapter)
+        _cum_cost = {"v": 0.0}
         last_total = 0
 
         # Production greeting: initiating message, then the greeting turn.
         await service.send_initiating_message(spoken_language, client.next_hint() or "")
         last_total = await _wait_turn(adapter, last=last_total)
         meta["greeting_tokens"] = tracker.snapshot()["_session_total_tokens"]
+        # The GREETING is fixed overhead -- the 'A' in A + B*n. Price it on its
+        # own before either tracker's base is reset, so it is never silently
+        # folded into question 1 (bd 89mt).
+        _greet_snap = tracker.snapshot()
+        meta["greeting_cost_usd"] = round(_price_delta(_greet_snap, rates)["total_cost"], 6)
+        meta["greeting_breakdown"] = {
+            "text_in": _greet_snap["_session_text_input_tokens"],
+            "audio_in": _greet_snap["_session_audio_input_tokens"],
+            "text_out": _greet_snap["_session_text_output_tokens"],
+            "audio_out": _greet_snap["_session_audio_output_tokens"],
+        }
+        _cum_cost["v"] = meta["greeting_cost_usd"]
         tracker.base = tracker.snapshot()
+        turn_tracker.base = turn_tracker.snapshot()
         # bd jnjj.39 (Codex PR #246): each question's window STARTS where the previous
         # one ended, not when we begin speaking this answer -- the AI's PROMPT for
         # this field is emitted at the tail of the prior turn (q1's prompt is in the
@@ -2351,8 +2700,30 @@ async def run(args) -> int:
             new_total = await _wait_turn(adapter, last=last_total)
             stalled = new_total == last_total
             last_total = new_total
+            # bd polyglot-pdf-89mt: record this turn's OWN modality split + cost,
+            # labelled with the field it was focused on. The per-question CSV
+            # cannot answer "what did turn 3 of question 12 cost" and carries no
+            # field id at all, so the cost-vs-turn curve -- the thing that shows
+            # whether compression/eviction actually levels per-turn cost off
+            # rather than growing without bound -- was not derivable from any
+            # artifact this harness wrote. Cumulative_cost_usd makes every
+            # truncation available from ONE run: the cost of the first k fields
+            # is just the running sum at that field's last turn.
+            _td = turn_tracker.delta_and_advance()
+            _tc = _price_delta(_td, rates)
+            _cum_cost["v"] += _tc["total_cost"]
             meta["turns"].append({
                 "q": current_q["n"], "label": label, "stalled": stalled,
+                "field_id": current_q.get("field_id"),
+                "text_in": _td["_session_text_input_tokens"],
+                "audio_in": _td["_session_audio_input_tokens"],
+                "text_out": _td["_session_text_output_tokens"],
+                "audio_out": _td["_session_audio_output_tokens"],
+                "total_tokens": _td["_session_total_tokens"],
+                "cost_usd": round(_tc["total_cost"], 6),
+                "cumulative_cost_usd": round(_cum_cost["v"], 6),
+                "prompt_tokens": (usage_dumps[-1].get("prompt")
+                                  if usage_dumps else None),
                 "latency_s": (round(client.first_audio_at - t_end, 3)
                               if client.first_audio_at and client.first_audio_at > t_end
                               else None)})
@@ -2527,11 +2898,49 @@ async def run(args) -> int:
                                 "steer-override")
                     rec["outcome"] = "overridden_unplanted"
 
+        # Divergence tracking (bd polyglot-pdf-89mt): the harness injects
+        # answers in PLAN ORDER regardless of what the model does with them --
+        # this counts, without changing, the cases where the model confirmed a
+        # DIFFERENT field than the one the plan's current step targeted (e.g.
+        # it filled a field it inferred from context before being asked, or
+        # picked up a value the harness's answer incidentally also supplied).
+        # divergence_pairs holds (expected_field_id, actual_field_id) for
+        # every such mismatch; divergence_count is just its length, kept
+        # separately so meta consumers that only want the scalar don't need to
+        # len() the list themselves.
+        divergence_pairs: list[list[str]] = []
+
+        def _record_divergence(expected_fid: str | None,
+                               confirmed_before: set[str]) -> None:
+            if not expected_fid:
+                return
+            confirmed_after = {f for f, e in client.state.items()
+                               if e.get("confirmed")}
+            newly_confirmed = confirmed_after - confirmed_before
+            if expected_fid in newly_confirmed:
+                # The common case: exactly the expected field (plus possibly
+                # nothing else) got confirmed. Not a divergence.
+                newly_confirmed.discard(expected_fid)
+                for other in sorted(newly_confirmed):
+                    divergence_pairs.append([expected_fid, other])
+                return
+            # The expected field did NOT get newly confirmed this step (it may
+            # already have been confirmed by an earlier step, or the model
+            # skipped it entirely) -- if some OTHER field was confirmed
+            # instead, that is the field the model actually targeted.
+            for other in sorted(newly_confirmed):
+                divergence_pairs.append([expected_fid, other])
+
         sec_idx = 0
         for i, q in enumerate(steps, 1):
             current_q["n"] = i
             is_event = "event" in q
             fid = q.get("field_id") if not is_event else None
+            # bd polyglot-pdf-89mt: carry the field id (or the event name) into
+            # current_q so each per-turn record is LABELLED with what it was
+            # focused on. Without this the turns.csv field_id column is blank
+            # and the cost curve cannot be read against the form.
+            current_q["field_id"] = fid or q.get("event") or ""
             f_sec = ((client.schema_fields[fid].get("section_id") or "section-1")
                      if fid else None)
 
@@ -2585,6 +2994,7 @@ async def run(args) -> int:
                          "section_label": "Full Form (continuous)",
                          "previous_spoken_names": []},
                         initial_field_hint=client.next_hint())
+                    meta["session_count"] += 1
                     for _ in range(150):
                         if getattr(adapter, "_session_ready", False):
                             break
@@ -2629,6 +3039,7 @@ async def run(args) -> int:
                      "total_sections": len(secs), "section_label": sec["label"],
                      "previous_spoken_names": spoken_prev},
                     initial_field_hint=client.next_hint())
+                meta["session_count"] += 1
                 for _ in range(150):
                     if getattr(adapter, "_session_ready", False):
                         break
@@ -2677,13 +3088,26 @@ async def run(args) -> int:
                 await speak(q["planted_say"], "plant-value")
                 await speak(confirm_utt, "confirm")
             elif (q.get("path") or args.path) == "happy":
+                # Divergence tracking (bd polyglot-pdf-89mt): snapshot which
+                # fields are already confirmed BEFORE this plan question's
+                # answer, so any field OTHER than the expected `fid` that
+                # becomes newly confirmed during this question's turns is
+                # attributable to this step, not an earlier one. Does not
+                # change injection: the harness still speaks the plan's
+                # scripted answer for `fid` regardless of what the model does.
+                _confirmed_before = {f for f, e in client.state.items()
+                                     if e.get("confirmed")}
                 await speak(q["say"], "value")
                 await speak(confirm_utt, "confirm")
+                _record_divergence(fid, _confirmed_before)
             else:
+                _confirmed_before = {f for f, e in client.state.items()
+                                     if e.get("confirmed")}
                 await speak(q["wrong"], "wrong-value")
                 await speak(reject_utt, "reject")
                 await speak(q["say"], "corrected-value")
                 await speak(confirm_utt, "confirm")
+                _record_divergence(fid, _confirmed_before)
             # End the window at the LAST user activity_end (set by speak), NOT now:
             # Gemini's confirm response after it carries the NEXT field's prompt, which
             # must fall into the next window's model_said (Codex PR #246 round 2).
@@ -2794,6 +3218,18 @@ async def run(args) -> int:
         meta["event_records"] = event_records
         meta["seam_tool_records"] = seam_tool_records
         meta["text_ledger_calls"] = text_ledger_calls
+        meta["divergence_count"] = len(divergence_pairs)
+        meta["divergence_pairs"] = divergence_pairs
+        # Spell-back accounting (bd polyglot-pdf-89mt / 22h1f): how many times
+        # the model invoked name_spellback this run, plus total spelled
+        # characters (a proxy for the real client's Cloud TTS character
+        # spend -- see FakeClientWebSocket._handle_spellback). Zero
+        # invocations is a legitimate outcome (nothing forces the model to
+        # ever spell back), not an error.
+        meta["spellback_count"] = len(client.spellback_events)
+        meta["spellback_total_chars"] = sum(
+            e.get("value_chars", 0) for e in client.spellback_events)
+        meta["spellback_disabled"] = False
 
         try:
             await adapter.finalize()
@@ -2805,8 +3241,102 @@ async def run(args) -> int:
         _ffs_mod._log = _module_logs["ffs"]
         _callback_mod._log = _module_logs["cb"]
 
+    # bd polyglot-pdf-89mt: the EFFECTIVE compression config, read from the
+    # adapter's own log event rather than from what the operator requested.
+    # This is the artifact that makes a cost number auditable: it names the
+    # trigger/window that actually reached the API, whether they were derived
+    # or pinned, and whether the API's 5000-token floor clamped them.
+    _comp_evt = next((e for e in log_sink
+                      if e.get("event") == "context_window_compression_enabled"), None)
+    _clamp_evt = next((e for e in log_sink
+                       if e.get("event") == "compression_trigger_clamped_to_api_bounds"), None)
+    # NOTE the kwargs land under "fields" (the tap stringifies them there), not
+    # at the top level -- reading them off the event dict directly yields all
+    # None, which would look like "compression was off" rather than "I read the
+    # wrong key".
+    # _LogTap STRINGIFIES every kwarg ({k: str(v)}), so these arrive as "7526"
+    # and "True". Coerce them: a later `if eff["derived_from_si_floor"]:` on the
+    # raw string is ALWAYS true -- bool("False") is True -- which would make a
+    # pinned run's metadata claim it was derived. That is the same
+    # metadata-that-looks-right-but-asserts-nothing failure that caused the
+    # first retraction.
+    def _as_int(v):
+        try:
+            return int(str(v))
+        except (TypeError, ValueError):
+            return None
+
+    _cf = (_comp_evt or {}).get("fields") or {}
+    meta["compression_effective"] = ({
+        "trigger_tokens": _as_int(_cf.get("trigger_tokens")),
+        "window_tokens": _as_int(_cf.get("window_tokens")),
+        "derived_from_si_floor": str(_cf.get("derived_from_si_floor")) == "True",
+        "si_floor_tokens": _as_int(_cf.get("si_floor_tokens")),
+        "clamped_to_api_minimum": bool(_clamp_evt),
+    } if _comp_evt else None)
+    # Overwrite the REQUESTED pair with what actually ran, so every downstream
+    # consumer (build_summary's run block, analyze_continuous_window,
+    # cost_matrix_lib) reports the effective config rather than the CLI values
+    # the adapter ignored.
+    if meta.get("compression_effective"):
+        _eff = meta["compression_effective"]
+        if _eff.get("trigger_tokens") is not None:
+            meta["trigger"] = _eff["trigger_tokens"]
+        if _eff.get("window_tokens") is not None:
+            meta["window"] = _eff["window_tokens"]
+
+    # Pre-registration guard: fail LOUDLY if the session did not run the config
+    # this measurement was designed around.
+    _expect = getattr(args, "expect_trigger", None)
+    if _expect is not None:
+        _actual = (meta.get("compression_effective") or {}).get("trigger_tokens")
+        if _actual != _expect:
+            raise SystemExit(
+                f"ABORT (bd polyglot-pdf-89mt pre-registration): expected "
+                f"trigger_tokens={_expect}, adapter used {_actual!r}. "
+                f"compression_effective={meta.get('compression_effective')!r}. "
+                "The measurement config is not what was intended -- refusing to "
+                "write artifacts that would be analysed as if it were."
+            )
+
+    # naive arm invariant (bd polyglot-pdf-89mt): ONE continuous session, no
+    # section resets -- if this ever fires it means a new switch_to_section
+    # call site was added upstream of this check without updating the naive
+    # gating, and the naive numbers would silently be measuring a multi-
+    # session run mislabeled as single-session (the same failure class as the
+    # el92 section-reset-jit mislabeling this bead's docstring warns about).
+    if args.arm == "naive" and meta.get("session_count") != 1:
+        raise SystemExit(
+            f"ABORT (bd polyglot-pdf-89mt naive-arm invariant): --arm naive "
+            f"must run ONE continuous session; session_count="
+            f"{meta.get('session_count')!r}. Refusing to write artifacts that "
+            "would be analysed as a single-session naive run when they are not."
+        )
+
     prompts = [d["prompt"] or 0 for d in usage_dumps]
     meta["prompt_curve"] = prompts
+    # bd polyglot-pdf-89mt: persist the CACHED-token evidence. Without this the
+    # observer above collects cached counts and then drops them on the floor --
+    # the run would burn real money and answer nothing about caching.
+    #
+    # cache_summary is the headline: if `reported` is False, the Live API never
+    # populated cached_content_token_count and our full-rate pricing is correct.
+    # If it is True with non-zero totals, the Live cost path is MISSING a
+    # discount and every figure this harness has ever produced is an
+    # over-estimate (live_ai_gemini._cost_for_turn prices all prompt tokens at
+    # the full input rate; GEMINI_PRICING_BY_FAMILY has no cached row).
+    cached_vals = [d.get("cached") for d in usage_dumps]
+    cached_nums = [c for c in cached_vals if isinstance(c, (int, float))]
+    meta["cached_curve"] = cached_vals
+    meta["traffic_types"] = sorted({d.get("traffic_type", "") for d in usage_dumps} - {""})
+    meta["cache_summary"] = {
+        "reported": any(c is not None for c in cached_vals),
+        "events": len(usage_dumps),
+        "events_with_cached_field": sum(1 for c in cached_vals if c is not None),
+        "events_with_nonzero_cache": sum(1 for c in cached_nums if c > 0),
+        "total_cached_tokens": sum(cached_nums),
+        "total_prompt_tokens": sum(prompts),
+    }
     meta["eviction_drops"] = [[i + 2, prompts[i], prompts[i + 1]]
                               for i in range(len(prompts) - 1)
                               if prompts[i + 1] < prompts[i] - 50]
@@ -2834,6 +3364,23 @@ async def run(args) -> int:
         w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
         w.writeheader()
         w.writerows(rows)
+    # bd polyglot-pdf-89mt: a PER-TURN csv beside the per-question one. This is
+    # the cost-vs-turn graph: one row per model turn, labelled with the field it
+    # was focused on, carrying that turn's own tokens/cost plus the running
+    # total. Two things fall out of it that the per-question CSV cannot give:
+    #   1. EVERY truncation from ONE run -- the cost of a form that stopped at
+    #      field k is cumulative_cost_usd at k's last turn, so a "shorter form"
+    #      needs no separate run.
+    #   2. Whether per-turn cost LEVELS OFF once context compression/eviction
+    #      starts evicting, or grows without bound. prompt_tokens per turn is
+    #      the curve to plot; eviction shows as a sawtooth, not a ramp.
+    turns_path = out_dir / f"{base_name}.turns.csv"
+    with turns_path.open("w", newline="", encoding="utf-8") as fh:
+        tw = csv.DictWriter(fh, fieldnames=TURNS_CSV_COLUMNS,
+                            extrasaction="ignore")
+        tw.writeheader()
+        for _i, _t in enumerate(meta.get("turns") or [], start=1):
+            tw.writerow({"turn": _i, **_t})
     meta["auto_apply_fids"] = [aa["field_id"]
                                for aa in (SCHEMAS[args.schema].get("auto_apply") or [])]
     (out_dir / f"{base_name}.meta.json").write_text(
@@ -2843,6 +3390,7 @@ async def run(args) -> int:
     (out_dir / f"{base_name}.summary.json").write_text(
         json.dumps(summary, indent=2, default=str), encoding="utf-8")
     print(f"\nwrote {csv_path}")
+    print(f"wrote {turns_path}")
     print(f"wrote {out_dir / (base_name + '.meta.json')}")
     print(f"wrote {out_dir / (base_name + '.summary.json')}")
     print(f"all-in: ${summary['headline']['all_in_usd']} "
@@ -2931,16 +3479,20 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
-    ap.add_argument("--schema", choices=["demo", "i90", "i90-full"], default="demo",
+    ap.add_argument("--schema", choices=["demo", "i90", "i90-full", "w7"],
+                    default="demo",
                     help="form schema + question plan: 'demo' (the legacy "
                          "adult-intake demo, default for back-compat), 'i90' "
                          "(the REAL form-kits/i-90 first 4 sections, 34 "
-                         "questions; bd polyglot-pdf-jnjj.24), or 'i90-full' "
+                         "questions; bd polyglot-pdf-jnjj.24), 'i90-full' "
                          "(the WHOLE I-90 stress-test plan generated from the "
                          "g1b answer key -- ~113 questions; requires --arm dti "
-                         "--continuous; bd polyglot-pdf-n86b)")
+                         "--continuous; bd polyglot-pdf-n86b), or 'w7' (the "
+                         "REAL form-kits/w7 kit, 22 questions on the common "
+                         "nonresident-filer path; bd polyglot-pdf-89mt)")
     ap.add_argument("--arm",
-                    choices=["unbounded", "section-reset", "section-reset-jit", "dti", "sliding-window"],
+                    choices=["unbounded", "naive", "section-reset",
+                             "section-reset-jit", "dti", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
     ap.add_argument("--questions", type=int, default=None,
@@ -3029,6 +3581,24 @@ def main() -> int:
                          "section resets (bd polyglot-pdf-ctu8 candidate arm). Only "
                          "valid with --arm dti; combine with --compression so the "
                          "window bounds the continuous session's growth.")
+    ap.add_argument("--expect-trigger", type=int, default=None,
+                    help="PRE-REGISTRATION guard (bd polyglot-pdf-89mt): the "
+                         "trigger_tokens this run is EXPECTED to derive. The run "
+                         "aborts before writing artifacts if the adapter's actual "
+                         "config differs. Two retracted measurements in this bead "
+                         "came from a run silently using a different compression "
+                         "config than the analysis assumed; this makes that a hard "
+                         "failure instead of a later discovery.")
+    ap.add_argument("--derive-compression", action="store_true",
+                    dest="derive_compression",
+                    help="DEPLOY FIDELITY (bd polyglot-pdf-89mt): with "
+                         "--compression, leave the production per-form window "
+                         "DERIVATION on (SI+tools floor + the kit's inline "
+                         "injection budget) instead of pinning --trigger/--window. "
+                         "Use this for any run whose number is meant to describe "
+                         "what a deployed session costs -- the --trigger/--window "
+                         "defaults (12000/9000) are a calibration-sweep artifact "
+                         "and are roughly twice what production derives.")
     ap.add_argument("--compression", action="store_true",
                     help="layer calibrated context-window eviction onto a non-"
                          "sliding-window arm (the jnjj.25-folded eviction test): "

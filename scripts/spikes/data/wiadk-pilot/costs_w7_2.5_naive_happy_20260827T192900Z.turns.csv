@@ -1,0 +1,13 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,application_type,value,False,28184,28018,166,26,0,28210,0.014559,0.031071,1.5
+2,1,application_type,confirm,False,28433,84411,616,29,82,85138,0.045096,0.076166,
+3,2,reason,value,False,28591,56486,566,33,4,57089,0.030055,0.106221,
+4,2,reason,confirm,False,28776,85060,1111,32,43,86246,0.046443,0.152665,
+5,3,name_1a_first,value,False,28860,56857,812,6,48,57723,0.031453,0.184117,0.922
+6,3,name_1a_first,confirm,False,29001,56960,962,23,65,58010,0.032192,0.216309,1.485
+7,4,name_1a_middle,value,False,29133,57120,1078,36,0,58234,0.031866,0.248175,1.985
+8,4,name_1a_middle,confirm,False,29221,57261,1126,24,35,58446,0.032476,0.280651,
+9,5,name_1a_last,value,False,29446,86231,1897,36,43,88207,0.049395,0.330046,
+10,5,name_1a_last,confirm,False,29610,86575,2041,24,14,88654,0.049626,0.379673,1.422
+11,6,mailing_street,value,False,29857,57963,1662,43,0,59668,0.034054,0.413726,1.891
+12,6,mailing_street,confirm,False,30043,87277,2601,42,45,89965,0.052065,0.465792,

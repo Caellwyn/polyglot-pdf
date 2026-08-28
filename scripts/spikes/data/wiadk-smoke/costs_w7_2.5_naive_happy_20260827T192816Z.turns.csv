@@ -1,0 +1,5 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,application_type,value,False,28155,28019,136,26,0,28181,0.014469,0.030825,1.766
+2,1,application_type,confirm,False,28394,84414,506,32,57,85009,0.044473,0.075298,
+3,2,reason,value,False,28563,56513,483,33,0,57029,0.029771,0.10507,1.437
+4,2,reason,confirm,False,28756,85095,1018,30,44,86187,0.046189,0.151259,
