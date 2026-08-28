@@ -180,7 +180,17 @@ function defaultAtom(schema: FormSchema, selfId: string): ConditionalDisplay {
   const atom: ConditionalDisplay = { field: trigger?.id ?? '', operator };
   if (!NO_VALUE_OPERATORS.has(operator)) {
     if (isChoiceTrigger(trigger)) {
-      atom.value = LIST_VALUED_OPERATORS.has(operator) ? [] : safeOptions(trigger!)[0].value;
+      // Seed from the first option with a NON-EMPTY value. A select option
+      // now starts with an empty PDF export code for the author to fill in
+      // (bd polyglot-pdf-alzbr), and seeding "" here would be invisible:
+      // schema_lint deliberately skips "" as the v1 "field is empty" idiom,
+      // so `equals ""` publishes clean while comparing live against the voice
+      // SelectField's own empty placeholder -- the dependent would flip
+      // visible whenever the user simply has not answered yet.
+      const seed = safeOptions(trigger!).find(o => o.value !== '' && o.value != null);
+      atom.value = LIST_VALUED_OPERATORS.has(operator)
+        ? []
+        : (seed?.value ?? safeOptions(trigger!)[0].value);
     } else {
       atom.value = LIST_VALUED_OPERATORS.has(operator) ? [] : '';
     }
@@ -202,7 +212,14 @@ function coerceAtom(atom: ConditionalDisplay, trigger: FormField | undefined): C
     return next;
   }
   if (options) {
-    next.value = options.some(o => o.value === atom.value) ? atom.value : options[0].value;
+    // Same empty-value reasoning as defaultAtom above: fall back to the first
+    // option that actually carries a value, never to an unfilled export code.
+    // Reads through safeOptions (not the local alias) so the options-consumer
+    // guard test can see the read is protected.
+    const seed = safeOptions(trigger!).find(o => o.value !== '' && o.value != null);
+    next.value = options.some(o => o.value === atom.value)
+      ? atom.value
+      : (seed?.value ?? options[0].value);
   } else {
     next.value = Array.isArray(atom.value) ? '' : atom.value ?? '';
   }

@@ -370,3 +370,54 @@ describe('PreviewPane: require_if drives the required badge live', () => {
     expect(badgeFor().length).toBe(0);
   });
 });
+
+describe('ConditionBuilder: an unfilled select export code is never seeded (bd polyglot-pdf-alzbr)', () => {
+  // A select option now starts with an EMPTY PDF export code for the author to
+  // fill in. Seeding a condition from it would be invisible: schema_lint
+  // deliberately skips "" as the v1 "field is empty" idiom, so `equals ""`
+  // publishes clean -- while comparing live, by strict ===, against the voice
+  // SelectField's own empty placeholder. The dependent would flip visible
+  // whenever the user simply has not answered the dropdown yet.
+  function schemaWithHalfAuthoredSelect(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['state', 'target'] }],
+      fields: [
+        field({
+          id: 'state', type: 'select', spoken_name: 'state',
+          options: [
+            { value: '', label: '' },          // just added, code not yet typed
+            { value: 'WY', label: 'Wyoming' },
+          ],
+        }),
+        field({ id: 'target', spoken_name: 'target' }),
+      ],
+    } as unknown as FormSchema;
+  }
+
+  function LocalHarness() {
+    const [condition, setCondition] = useState<FieldCondition | undefined>(undefined);
+    lastCondition = condition;
+    return (
+      <ConditionBuilder
+        title="Shown when"
+        condition={condition}
+        selfId="target"
+        schema={schemaWithHalfAuthoredSelect()}
+        onChange={(next) => { lastCondition = next; setCondition(next); }}
+      />
+    );
+  }
+
+  it('seeds the first option that HAS a value, not the empty one', () => {
+    render(<LocalHarness />);
+    fireEvent.click(screen.getByRole('button', { name: /Add condition/i }));
+    const atom: any = lastCondition;
+    const seeded = atom?.all_of?.[0] ?? atom;
+    expect(seeded.field).toBe('state');
+    expect(seeded.value).toBe('WY');
+    expect(seeded.value).not.toBe('');
+  });
+});
