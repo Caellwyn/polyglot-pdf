@@ -14,6 +14,10 @@ import {
   retargetOptionValueReferences,
 } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
+import {
+  addCopyLink, copySources, copyTargets, linkableSources, linkableTargets,
+  removeCopyLink,
+} from '../utils/copyLinks';
 import { moveFieldToSection } from '../utils/sectionOps';
 import {
   checkFieldComplete, hasCondition, safeOptions, safeOptionsPreservingArity,
@@ -265,6 +269,76 @@ const FormMetadataEditor: React.FC<{
 // Findings rendered AT the property they concern (sprint-18 C1, decision 1):
 // the warnings pane is gone, so a finding about the Instructions box, an
 // option row, or a condition renders directly under that control -- label,
+// One side of an auto-populate relationship (bd polyglot-pdf-g33y2): the
+// fields this one copies INTO, or the fields it is copied FROM. Both sides
+// render identically and commit through the same stored copy_to -- only the
+// argument order differs at the call site, so the two views cannot drift.
+const CopyLinkList: React.FC<{
+  title: string;
+  emptyText: string;
+  addLabel: string;
+  linked: string[];
+  // Named `choices`, not `options`: this is a list of FIELDS to pick from, and
+  // the options-consumer guard (bd polyglot-pdf-8bjdx) matches on the name
+  // `options` to catch unguarded reads of a field's own options[].
+  choices: FormField[];
+  schema: FormSchema;
+  canEdit: boolean;
+  onAdd: (otherId: string) => void;
+  onRemove: (otherId: string) => void;
+}> = ({ title, emptyText, addLabel, linked, choices, schema, canEdit,
+        onAdd, onRemove }) => {
+  const nameFor = (id: string) => {
+    const f = (schema.fields || []).find(x => x?.id === id);
+    // spoken_name is the voice-facing label an author recognises; fall back to
+    // the id so a dangling link is still visible rather than blank.
+    return f ? (f.spoken_name || f.name || f.id) : id;
+  };
+  return (
+    <div>
+      <h5 className="text-xs font-medium text-gray-700">{title}</h5>
+      {linked.length === 0 ? (
+        <p className="text-xs text-gray-500 mt-1">{emptyText}</p>
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {linked.map(id => (
+            <li key={id} className="flex items-center justify-between gap-2">
+              <span className="text-sm text-gray-800">
+                {nameFor(id)}{' '}
+                <span className="font-mono text-xs text-gray-500">({id})</span>
+              </span>
+              {canEdit && (
+                <button
+                  className="btn-sm btn-secondary"
+                  aria-label={`Unlink ${title}: ${id}`}
+                  onClick={() => onRemove(id)}
+                >
+                  Unlink
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit && choices.length > 0 && (
+        <select
+          className="input input-sm mt-2 w-full"
+          aria-label={addLabel}
+          value=""
+          onChange={(e) => { if (e.target.value) onAdd(e.target.value); }}
+        >
+          <option value="">{addLabel}</option>
+          {choices.map(f => (
+            <option key={f.id} value={f.id}>
+              {f.spoken_name || f.name || f.id} ({f.id})
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+};
+
 // plain message, and the imperative remedy line (RULE_REMEDIES, authored by
 // the C12 copy pass for exactly this surface).
 const EmbeddedFindings: React.FC<{
@@ -1533,6 +1607,62 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               they concern (sprint-18 C1): unknown operator, unresolved
               reference, malformed shape... */}
           <EmbeddedFindings findings={anchored.conditions} anchor="conditions" />
+        </div>
+
+        {/* Auto-populate links (bd polyglot-pdf-g33y2). The relationship is
+            stored ONCE, as copy_to on the source, and shown from BOTH ends:
+            standing on A "copies to B", standing on B "copied from A" -- the
+            maintainer asked to see and edit it from either side. The reverse
+            view is derived (copySources scans fields[]), so the two directions
+            cannot disagree.
+
+            Both edits commit through onUpdateFields: adding a link touches the
+            SOURCE (copy_to) and the TARGET (read_only) together, and doing that
+            in two separate onUpdateField calls would race -- the second
+            overwrites the first via the undo history's functional setState,
+            the same trap the option-rename retarget documents. When
+            onUpdateFields is absent the controls render read-only rather than
+            committing a half-edit. */}
+        <div className="space-y-3 border-t border-gray-200 pt-4">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">
+              Auto-populate
+            </h4>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Copied fields fill in by themselves when their source is answered,
+              and are locked so nobody types over them.
+            </p>
+          </div>
+
+          <CopyLinkList
+            title="Copies into"
+            emptyText="Nothing is copied from this field."
+            linked={copyTargets(field)}
+            choices={linkableTargets(schema, field.id)}
+            schema={schema}
+            canEdit={!!onUpdateFields}
+            addLabel="Copy this field into..."
+            onAdd={(otherId) =>
+              onUpdateFields?.(addCopyLink(schema, field.id, otherId))}
+            onRemove={(otherId) =>
+              onUpdateFields?.(removeCopyLink(schema, field.id, otherId))}
+          />
+
+          <CopyLinkList
+            title="Copied from"
+            emptyText="This field is not copied from anywhere."
+            linked={copySources(schema, field.id)}
+            choices={linkableSources(schema, field.id)}
+            schema={schema}
+            canEdit={!!onUpdateFields}
+            addLabel="Fill this field from..."
+            // Stored on the SOURCE either way -- the arguments invert, the
+            // storage does not.
+            onAdd={(otherId) =>
+              onUpdateFields?.(addCopyLink(schema, otherId, field.id))}
+            onRemove={(otherId) =>
+              onUpdateFields?.(removeCopyLink(schema, otherId, field.id))}
+          />
         </div>
 
         {/* Un-group: split a consolidated options[] field back into one field
