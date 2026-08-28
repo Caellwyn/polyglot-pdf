@@ -2003,3 +2003,64 @@ def test_a_select_with_no_pdf_field_name_is_reported_unmatched(tmp_path):
     schema = {"fields": [{"id": "mail_state", "type": "select"}]}
     report = ef._backfill_dropdown_options(schema, dump)
     assert report["unmatched"] == ["mail_state"]
+
+
+def test_the_real_i90_pdf_yields_its_exact_dropdown_option_counts(tmp_path):
+    """REAL-PDF REGRESSION for bd polyglot-pdf-hmkas's exit criterion 1.
+
+    Everything above uses synthetic dumps. This drives the REAL tracked
+    form-kits/i-90/form.pdf through the REAL acroform_dump, then through the
+    backfill, and pins the counts the exit criterion names: two mailing/physical
+    state dropdowns and two more on the interpreter/preparer pages at 62 codes
+    each, plus height feet (7) and inches (12).
+
+    Follows test_every_shipped_kit_has_in_range_pages_and_real_rects' skip
+    convention (fitz optional, form-kits/ optional) so a checkout without them
+    skips rather than fails. form-kits/i-90/ is TRACKED -- unlike i-90_v2/,
+    which .gitignore excludes -- so this runs in CI.
+
+    Why it matters: a regression in _match_dump_names' resolution or in the
+    choice-parsing loop for THIS PDF's naming convention would otherwise be
+    caught by no test at all -- only by someone re-running the check by hand.
+    """
+    pytest.importorskip("fitz")
+    pdf = _REPO / "form-kits" / "i-90" / "form.pdf"
+    if not pdf.is_file():
+        pytest.skip("form-kits/i-90/form.pdf not present in this checkout")
+
+    sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
+    import acroform_dump  # noqa: E402
+
+    dump_path = str(tmp_path / "i90_dump.json")
+    acroform_dump.main(["--json", dump_path, str(pdf)])
+
+    expected = {
+        "mail_state": ("P1_Line6e_State[0]", 62),
+        "phys_state": ("P1_Line7d_State[0]", 62),
+        "height_feet": ("P3_Line8_HeightFeet[0]", 7),
+        "height_inches": ("P3_Line8_HeightInches[0]", 12),
+        "interp_state": ("P6_Line3d_State[0]", 62),
+        "prep_state": ("P7_Line3d_State[0]", 62),
+    }
+    schema = {"fields": [
+        {"id": fid, "type": "select", "pdf_field_name": claim}
+        for fid, (claim, _n) in expected.items()
+    ]}
+
+    report = ef._backfill_dropdown_options(schema, dump_path)
+    assert report["unmatched"] == [], report
+    assert report["fields_filled"] == len(expected)
+
+    for field in schema["fields"]:
+        _claim, want = expected[field["id"]]
+        got = field["options"]
+        assert len(got) == want, "%s: %d options, expected %d" % (
+            field["id"], len(got), want)
+        # Export codes, not slugs -- the whole point of the bead.
+        assert all(o["value"] == o["value"].strip() and o["value"] for o in got)
+        assert not any(o["value"].islower() and o["value"].isalpha()
+                       for o in got if field["id"].endswith("state")), \
+            "%s carries a lowercase slug, not a PDF export code" % field["id"]
+
+    states = [f for f in schema["fields"] if f["id"].endswith("state")]
+    assert [o["value"] for o in states[0]["options"]][:3] == ["AA", "AE", "AK"]
