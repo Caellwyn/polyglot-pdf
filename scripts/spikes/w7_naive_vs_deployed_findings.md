@@ -858,8 +858,8 @@ raw dollar ratio, is the fair unhappy-path comparator here.
 | dti happy 022519Z | Deployed | 14 | 0 | 1 | 2 |
 | dti unhappy 030509Z | Deployed | 26 | 4 (unsettled: `family_name`, `given_name`) | 2 | 3 |
 | dti unhappy 032527Z | Deployed | 17 | 0 | 1 | 2 |
-| naive happy 034310Z | Naive | 2 (platform force-trim: 31,878->25,463 at raw event 180; 31,884->25,458 at 275) | 1 | 0 | 1 |
-| naive unhappy 035215Z (partial) | Naive | 2 (same platform force-trim pattern) | 6 | 0 | 1 |
+| naive happy 034310Z | Naive | 2 (platform force-trim: 31,843->25,497 at raw event 180; 31,872->25,413 at 275) | 1 | 0 | 1 |
+| naive unhappy 035215Z (partial) | Naive | 2 (platform force-trim: 31,878->25,463 at raw event 157; 31,884->25,458 at 243) | 6 | 0 | 1 |
 
 All 4 deployed runs survived multiple ~10-minute connection boundaries via
 the reconnect machinery (`session_count` 1-3) with zero data loss -- this is
@@ -1046,6 +1046,19 @@ Anomalies section below for the honest statement of this open question.
 | i90-v2 orphan "killed by tooling" run | $2.421086 |
 | **Program total** | **$43.895** |
 | **vs. $100 cap** | **$56.10 remaining** |
+
+**Anomaly resolutions (orchestrator, from primary evidence, 2026-08-28):**
+1. The 10 W-7-tagged "orphan" token-log sessions (19:20-20:05 UTC 08-27,
+   ~$10.32) ARE the W-7 study's own smokes/pilot/full runs -- their
+   form_session_id stamps (4loz-dti-happy-20260827T193603Z etc.) match the
+   W-7 ledger's committed artifacts one-for-one, and their subtotal matches
+   the W-7 study's $10.17 to within greeting/boundary accounting. They are
+   already counted; the CONSERVATIVE program total above is the correct one,
+   and the $54.22 "inclusive" scenario double-counts them.
+2. The diagnostic-run figures ($1.58 / $2.46 / $2.34) reconcile EXACTLY
+   against their committed artifacts' all_in_usd ($1.575967 / $2.457632 /
+   $2.339749, runs 013010Z / 020339Z / 024500Z under 2nikx-full) -- the
+   analysis pass had searched the raw token log instead of the artifacts.
 
 ### i90-v2.10 Replay validation
 
