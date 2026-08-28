@@ -545,6 +545,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to rename the form');
+    } finally {
+      // In finally, not the end of the catch block (bd polyglot-pdf-uibly,
+      // same shape as handleSetStatus below): the AuthError return above
+      // skipped it, and busy gates every control in this catalogue -- a
+      // caller that keeps RemoteCatalogue mounted through an auth error
+      // would get every button stuck disabled with no way to recover short
+      // of a reload.
       setBusy(false);
     }
   }, [renameText, refresh, onAuthError]);
@@ -570,6 +577,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to add form');
+    } finally {
+      // In finally, not the end of the catch block (bd polyglot-pdf-uibly,
+      // same shape as handleSetStatus below): the AuthError return above
+      // skipped it, and busy gates every control in this catalogue -- a
+      // caller that keeps RemoteCatalogue mounted through an auth error
+      // would get every button stuck disabled with no way to recover short
+      // of a reload.
       setBusy(false);
     }
   }, [refresh, onAuthError]);
