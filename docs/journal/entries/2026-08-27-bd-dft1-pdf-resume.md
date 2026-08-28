@@ -184,3 +184,39 @@ therefore defending nothing while implying protection. Both removed, with the
 guard's real subject (`_is_safe_session_id`) still exercised where it is
 actually used.
 
+## Round two: a fix I reported that never landed, and a probe that lied
+
+The re-review returned NO-GAPS, and was still worth reading closely.
+
+**I claimed a fix that did not exist.** The section-shape bug was fixed in the
+ROUTE and I reported it fixed everywhere. `applyResume.firstIncompleteSection`
+still walked `section.fields` as objects, behind an `as unknown as` cast that
+hid the mismatch from tsc -- so it returned the fallback for every shipped kit,
+and a client who saved at question 60 restarted at question 1.
+
+**The seventh invented fixture was exactly where the review was pointed.**
+`applyResume.test.ts` used `fields: [{ id }]`, and that fixture was the sole
+reason the section-landing tests were green. It now loads the real W-7 schema.
+
+### A probe can fabricate the bug it claims to find
+
+Fixing radio restoration, my first probe "proved" radio answers were lost. The
+proof was wrong. It called `widget.update()`, which silently reverts these XFA
+checkboxes -- so I was measuring a failed SETUP and reporting a failed FEATURE.
+
+Driving the real `/api/fill-pdf` route instead revealed the actual mechanism,
+which neither the reviewer nor I had seen: **a checked box lives in `/AS` while
+`/V` stays `"Off"`.** PyMuPDF therefore reports `field_value` as `"Off"` for a
+box the client genuinely ticked. On the W-7 that silently emptied
+`application_type`, `reason` and `sex` -- the form's core routing questions --
+while the client's text came back and everything looked fine.
+
+Two fixes: read the state from `/AS`, and map OPTION-level `pdf_field_name`
+entries, because radio and checkbox_group map per option rather than at the top
+level (6 of the W-7's 53 fields).
+
+**The lesson, widened:** a fixture you invented cannot falsify an assumption you
+also invented -- and a probe you wrote by hand can manufacture the very bug it
+claims to find. The tests that now pin this drive the REAL fill route, so the
+setup cannot be wrong in a way the assertion cannot see.
+
