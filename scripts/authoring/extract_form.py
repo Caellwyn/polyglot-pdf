@@ -456,9 +456,15 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
     sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
     from backend.services.schema_lint import _match_dump_names  # noqa: E402
 
-    entries = dump.get("fields") or []
-    dump_names = [f["name"] for f in entries if f.get("name")]
-    by_name = {f["name"]: f for f in entries if f.get("name")}
+    # isinstance-filtered like the siblings in this file
+    # (_complete_grouped_families, _backfill_unclaimed_widgets): a dump whose
+    # "fields" is not a list, or carries a non-dict entry, must degrade to "no
+    # options backfilled" rather than crash the whole extraction run.
+    raw_entries = dump.get("fields")
+    entries = ([e for e in raw_entries if isinstance(e, dict)]
+               if isinstance(raw_entries, list) else [])
+    dump_names = [e["name"] for e in entries if isinstance(e.get("name"), str)]
+    by_name = {e["name"]: e for e in entries if isinstance(e.get("name"), str)}
 
     fields_filled = 0
     options_written = 0

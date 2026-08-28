@@ -1932,3 +1932,74 @@ def test_an_unreadable_dump_returns_the_full_report_shape(tmp_path):
     report = ef._backfill_dropdown_options(
         _select_schema(), str(tmp_path / "does_not_exist.json"))
     assert report == {"fields_filled": 0, "options_written": 0, "unmatched": []}
+
+
+@pytest.mark.parametrize("fields_value", [
+    "not a list",                       # fields is not a list at all
+    [None, {"name": "form1[0].P1_Line6e_State[0]",
+            "widgets": [{"choices": [{"value": "WY"}]}]}],  # non-dict entry
+    [{"name": 123}],                    # non-string name
+    None,
+])
+def test_a_malformed_dump_degrades_instead_of_crashing(tmp_path, fields_value):
+    """A malformed dump must not take down the whole extraction run -- the two
+    sibling backfills in this file already isinstance-filter for exactly this.
+    """
+    p = tmp_path / "bad_dump.json"
+    p.write_text(json.dumps({"fields": fields_value}), encoding="utf-8")
+    schema = _select_schema()
+    report = ef._backfill_dropdown_options(schema, str(p))
+    assert set(report) == {"fields_filled", "options_written", "unmatched"}
+
+
+def test_a_duplicate_value_in_one_Opt_list_is_written_once(tmp_path):
+    """option-value-duplicate is a lint ERROR, so a malformed /Opt carrying the
+    same code twice must not produce two options."""
+    dump = _write_choice_dump(tmp_path, "form1[0].P1_Line6e_State[0]",
+                              ["WY", "AL", "WY"])
+    schema = _select_schema()
+    ef._backfill_dropdown_options(schema, dump)
+    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
+
+
+def test_the_FIRST_widget_with_choices_owns_the_list(tmp_path):
+    """One widget owns the choice list -- a second widget's choices must not be
+    appended (which would merge two unrelated lists into one field)."""
+    dump = {"fields": [{
+        "name": "form1[0].P1_Line6e_State[0]",
+        "widgets": [
+            {"choices": []},                                  # empty: skipped
+            {"choices": [{"value": "WY"}, {"value": "AL"}]},   # this one wins
+            {"choices": [{"value": "ZZ"}]},                    # must NOT append
+        ],
+    }]}
+    p = tmp_path / "multi_widget.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = _select_schema()
+    ef._backfill_dropdown_options(schema, str(p))
+    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
+
+
+def test_the_FIRST_matching_dump_entry_wins(tmp_path):
+    """A claim resolving to several duplicate-named entries takes the FIRST --
+    never a union, which would offer a value legal on a DIFFERENT widget
+    instance than the one this field claims (same rule as
+    schema_repair.pdf_choice_values and schema_lint._dump_entry)."""
+    dump = {"fields": [
+        {"name": "form1[0].a.P1_Line6e_State[0]",
+         "widgets": [{"choices": [{"value": "FIRST"}]}]},
+        {"name": "form1[0].b.P1_Line6e_State[0]",
+         "widgets": [{"choices": [{"value": "SECOND"}]}]},
+    ]}
+    p = tmp_path / "dupe_names.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = _select_schema()
+    ef._backfill_dropdown_options(schema, str(p))
+    assert [o["value"] for o in schema["fields"][0]["options"]] == ["FIRST"]
+
+
+def test_a_select_with_no_pdf_field_name_is_reported_unmatched(tmp_path):
+    dump = _write_choice_dump(tmp_path, "form1[0].X[0]", ["WY"])
+    schema = {"fields": [{"id": "mail_state", "type": "select"}]}
+    report = ef._backfill_dropdown_options(schema, dump)
+    assert report["unmatched"] == ["mail_state"]
