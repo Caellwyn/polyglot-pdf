@@ -3,7 +3,8 @@
  *
  * Two halves:
  *  - stampKitReadinessRemote: the POST to the backend's stamp-refresh route
- *    (token header, AuthError on 401, stamp payload back).
+ *    (bearer ID token, AuthError on 401 / ForbiddenError on 403, stamp
+ *    payload back).
  *  - invalidateLocalStamp: the no-backend fallback that retracts a stale
  *    stamp claim (verified: false) while preserving every other metadata key
  *    and NEVER destroying an unparseable file -- the client mirror of the
@@ -11,7 +12,14 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { invalidateLocalStamp, stampKitReadinessRemote } from './localStamp';
-import { AuthError, setAccessCode, clearAccessCode } from './remoteKitStore';
+import { AuthError, ForbiddenError } from './remoteKitStore';
+import { editorIdToken } from './editorAuth';
+
+// This route is a DIRECT fetch (not editorFetch), so it carries the signed-in
+// person's ID token itself (bd polyglot-pdf-yswp3). Mock the auth module: the
+// test is about what this module SENDS, not about Firebase.
+vi.mock('./editorAuth', () => ({ editorIdToken: vi.fn() }));
+const idTokenMock = vi.mocked(editorIdToken);
 import type { FsDirectoryHandle } from './fileSystemAccess';
 
 // --- fakes ------------------------------------------------------------------
@@ -41,7 +49,7 @@ function fakeDir(initial: string | null): {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  clearAccessCode();
+  idTokenMock.mockReset();
 });
 
 // --- invalidateLocalStamp ---------------------------------------------------
@@ -92,7 +100,7 @@ describe('invalidateLocalStamp', () => {
 
 describe('stampKitReadinessRemote', () => {
   it('POSTs the schema with the editor token and returns the stamp', async () => {
-    setAccessCode('tok-123');
+    idTokenMock.mockResolvedValue('tok-123');
     const stamp = { percent: 50, verified: true };
     const fetchMock = vi.fn(async () => ({
       ok: true, status: 200,
@@ -105,14 +113,24 @@ describe('stampKitReadinessRemote', () => {
       [string, RequestInit];
     expect(url).toContain('/api/editor/kits/kit%20a/readiness');
     expect(init.method).toBe('POST');
+    // Per-user identity, and NOT the retired shared-code header.
+    expect((init.headers as Record<string, string>)['Authorization'])
+      .toBe('Bearer tok-123');
     expect((init.headers as Record<string, string>)['X-Editor-Token'])
-      .toBe('tok-123');
+      .toBeUndefined();
     expect(init.body).toBe(JSON.stringify({ fields: [] }));
   });
 
-  it('throws AuthError on 401 and Error on other failures', async () => {
+  it('throws AuthError on 401, ForbiddenError on 403, Error on others', async () => {
+    idTokenMock.mockResolvedValue('tok');
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 })));
     await expect(stampKitReadinessRemote('k', {})).rejects.toBeInstanceOf(AuthError);
+    // A real account with no editor role: distinct from 401 here too, so a
+    // caller cannot mistake "not allowed" for "sign in again".
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 403 })));
+    const err = await stampKitReadinessRemote('k', {}).catch((e) => e);
+    expect(err).toBeInstanceOf(ForbiddenError);
+    expect(err).not.toBeInstanceOf(AuthError);
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502 })));
     await expect(stampKitReadinessRemote('k', {})).rejects.toThrow('HTTP 502');
   });

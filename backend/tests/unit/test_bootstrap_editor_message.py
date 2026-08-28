@@ -2,11 +2,11 @@
 
 I wrote the original message during bd hn0jq: "They must sign in once before a
 role can be granted." There is no product path that lets a brand-new person do
-that -- the hosted editor's gate is a free-text access code
-(AccessCodeGate.tsx), not a Firebase sign-in, so the account cannot create
-itself by someone trying to use the editor. The message told an operator to
-wait for something that cannot happen, which is worse than telling them
-nothing.
+that. The hosted editor now has a real Firebase sign-in (SignInGate.tsx, bd
+polyglot-pdf-yswp3), but deliberately NO SIGN-UP -- editor access is granted,
+never self-served -- so the account still cannot create itself by someone
+trying to use the editor. The message told an operator to wait for something
+that cannot happen, which is worse than telling them nothing.
 
 The sibling voice tool's identical phrasing is CORRECT and deliberately left
 alone: the voice app has real sign-up (AuthContext.tsx:
@@ -89,8 +89,8 @@ def _grant_path_message() -> str:
 def test_the_message_names_a_path_the_operator_can_actually_TAKE():
     """An ALLOWLIST, not a banned word.
 
-    Banning "sign in" is one synonym from defeat, and it would also flag a
-    future message that correctly says "...once bd yswp3 ships sign-in".
+    Banning "sign in" is one synonym from defeat, and it would also flag the
+    now-shipped sign-in screen being mentioned correctly.
     Assert instead that the message names at least one way to create the
     account that EXISTS today.
     """
@@ -114,8 +114,8 @@ def test_the_message_does_not_promise_a_sign_in_flow_that_does_not_exist():
 
     assert "must sign in" not in msg, (
         "the message still tells the operator the person can sign in to "
-        "create their account; the hosted editor has no sign-in flow until "
-        "bd polyglot-pdf-yswp3 ships one: {!r}".format(msg))
+        "create their account; the hosted editor has a sign-in screen but no "
+        "SIGN-UP, so signing in cannot create the account: {!r}".format(msg))
 
 
 def test_the_editor_and_VOICE_messages_are_allowed_to_differ():

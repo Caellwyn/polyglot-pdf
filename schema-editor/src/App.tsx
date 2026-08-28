@@ -2,7 +2,8 @@ import React from 'react';
 import { FormSelector } from './components/FormSelector';
 import { FormCatalogue } from './components/FormCatalogue';
 import { RemoteCatalogue } from './components/RemoteCatalogue';
-import { AccessCodeGate } from './components/AccessCodeGate';
+import { SignInGate } from './components/SignInGate';
+import { currentEditorEmail, signOutEditor } from './utils/editorAuth';
 import { HostedGuide, hasSeenGuide } from './components/HostedGuide';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
@@ -89,9 +90,10 @@ export function liveStats(
 
 export const App: React.FC = () => {
   // Hosted delivery mode (bd polyglot-pdf-92qe.2): kits come from the backend's
-  // token-gated /api/editor routes (the shared store) instead of a local
-  // folder. `role` is null until the access code validates (the gate screen);
-  // author-only affordances (onboard/extract, bd 92qe.3) key off it later.
+  // per-user /api/editor routes (the shared store) instead of a local folder.
+  // `role` is null until the person signs in AND the server confirms they hold
+  // an editor role (the gate screen, bd polyglot-pdf-yswp3); author-only
+  // affordances (onboard/extract, bd 92qe.3) key off it later.
   const hosted = React.useMemo(isHostedMode, []);
   // Can we call the server for authoritative lint / repair / regeneration?
   // Hosted always can; local dev can whenever the backend is running
@@ -116,6 +118,9 @@ export const App: React.FC = () => {
   // handleRootChange for why this guard is load-bearing rather than tidy.
   const folderSeqRef = React.useRef(0);
   const [role, setRole] = React.useState<EditorRole | null>(null);
+  // The signed-in person's email, for the header. Read once the gate hands us
+  // a role -- by then sign-in has completed, so currentUser is populated.
+  const [signedInEmail, setSignedInEmail] = React.useState<string | null>(null);
   // Remote saves have real latency (a GCS write) -- surface a Saving... state.
   const [saving, setSaving] = React.useState(false);
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
@@ -375,22 +380,36 @@ export const App: React.FC = () => {
     }
   }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi, clearLintMirror]);
 
-  // A remote call answered 401 mid-session (rotated/revoked code): drop back to
-  // the access gate. The gate re-probes the stored code, finds it dead, clears
-  // it, and shows the entry form -- so the contractor lands on "enter your code"
-  // rather than a dead editor.
+  // A remote call answered 401 mid-session (a sign-in that expired or was
+  // revoked): drop back to the sign-in gate. The gate re-probes the live
+  // Firebase session; if it is genuinely dead the person signs in again.
   //
-  // DELIBERATE: this does NOT tear down the open kit or dirty edits. A code
-  // rotation mid-polish must not destroy a contractor's unsaved work -- after
-  // re-entering a valid code they resume exactly where they were and can save.
+  // DELIBERATE: this does NOT tear down the open kit or dirty edits. Losing a
+  // session mid-polish must not destroy a contractor's unsaved work -- after
+  // signing in again they resume exactly where they were and can save.
   // Nothing stale is trusted: every subsequent request re-authenticates with
-  // the NEW code server-side; the in-memory schema/PDF are display state only.
+  // a FRESH ID token server-side; the in-memory schema/PDF are display state
+  // only.
   // (Fresh-eyes flagged the asymmetry vs the kit-switch teardowns; keeping the
   // work is the chosen behavior, locked by a test in App.hosted.test.tsx.)
+  // Sign out on purpose. Unlike handleAuthExpired (an involuntary 401), this
+  // is the person CHOOSING to leave, so the confirm prompt for unsaved work
+  // matters: signing out drops them to the gate and their edits live only in
+  // this tab's memory.
+  const handleSignOut = React.useCallback(async () => {
+    if (hasUnsavedChanges
+        && !window.confirm('You have unsaved changes. Sign out and lose them?')) {
+      return;
+    }
+    await signOutEditor().catch(() => { /* already signed out */ });
+    setSignedInEmail(null);
+    setRole(null); // back to the gate
+  }, [hasUnsavedChanges]);
+
   const handleAuthExpired = React.useCallback(() => {
     setRole(null);
     // setRole(null) only DOES anything hosted, where it drops back to the
-    // access-code gate (`hosted && !role`). LOCAL mode has no gate, so every
+    // sign-in gate (`hosted && !role`). LOCAL mode has no gate, so every
     // caller that catches AuthError and returns would leave the failure
     // completely invisible -- the button stops spinning and nothing happens.
     // That is reachable for real: relaunching the editor mints a FRESH per-run
@@ -1201,10 +1220,15 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  // Hosted mode's front gate: no catalogue traffic until the access code
-  // validates (bd 92qe.2). onReady carries the role (editor vs author).
+  // Hosted mode's front gate: no catalogue traffic until the person SIGNS IN
+  // and the server confirms they hold an editor role (bd polyglot-pdf-yswp3,
+  // replacing the shared access code). onReady carries the role.
   if (hosted && !role) {
-    return <AccessCodeGate onReady={setRole} />;
+    return (
+      <SignInGate
+        onReady={(r) => { setSignedInEmail(currentEditorEmail()); setRole(r); }}
+      />
+    );
   }
 
   return (
@@ -1231,7 +1255,24 @@ export const App: React.FC = () => {
               </span>
             ) : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Who am I, and how do I leave? Hosted only -- local mode has no
+                sign-in at all (bd polyglot-pdf-yswp3). Without this a person
+                signed into the wrong account has no way out of it. */}
+            {hosted && role && (
+              <>
+                <span className="text-sm text-gray-500" data-testid="signed-in-as">
+                  {signedInEmail ?? 'Signed in'}
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => void handleSignOut()}
+                  title="Sign out of the editor"
+                >
+                  Sign out
+                </button>
+              </>
+            )}
             <button
               className="btn btn-secondary"
               onClick={() => setGuideOpen(true)}
