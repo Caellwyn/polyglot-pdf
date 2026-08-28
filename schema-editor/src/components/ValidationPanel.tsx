@@ -438,9 +438,22 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
     for (const f of schema.fields as unknown as Array<Record<string, unknown>>) {
       const controls = f.controls_fields;
       if (!Array.isArray(controls)) continue;
+      // PYTHON truthiness, not JS truthiness and not mere key presence (bd
+      // polyglot-pdf-jri5i, round 8, Opus cross-surface review):
+      // schema_repair.py's rump-retention keys on `control.get(k)` --
+      // Python-falsy, so an explicitly-present-but-EMPTY locks: []  /
+      // makes_optional: [] drops the whole entry there (repaired). JS
+      // arrays are ALWAYS truthy regardless of length (`!![]` is `true`),
+      // so a naive `c.locks` check would silently keep matching Python's
+      // "falsy empty list" case as truthy -- must check the value is a
+      // non-empty array (or any other Python-truthy non-array value)
+      // explicitly, not just presence or JS truthiness.
+      const isPythonTruthy = (v: unknown): boolean =>
+        Array.isArray(v) ? v.length > 0 : Boolean(v);
       const hasUnconvertible = controls.some(
         (c) => c && typeof c === 'object' &&
-          (('locks' in c) || ('makes_optional' in c)));
+          (isPythonTruthy((c as Record<string, unknown>).locks) ||
+           isPythonTruthy((c as Record<string, unknown>).makes_optional)));
       if (hasUnconvertible && typeof f.id === 'string') ids.add(f.id);
     }
     return ids;

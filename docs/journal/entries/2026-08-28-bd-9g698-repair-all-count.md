@@ -125,22 +125,36 @@ common failure was never the REASONING (each round's logic, once the
 inputs were right, was sound) -- it was always an unverified assumption
 about whether the INPUT actually represented the real thing being tested.
 
-**Seven rounds, one bug enumeration -- and that is fine, not a failure of
+**Eight rounds, one bug enumeration -- and that is fine, not a failure of
 process.** This session's own doctrine says enumerate the set before
 fixing any of it; it does not say a set this large and this entangled
 with backend internals gets enumerated correctly in one pass. Every round
 found a real, distinct gap (not a restatement of the same finding in a
 new location, which is the actual warning sign CLAUDE.md names) -- the
-cost was seven adversarial review rounds, not a shipped bug. The final
-two gaps (round 7, Opus cross-surface review) were a different shape than
-rounds 1-6's isolation mistakes: a genuinely-missed cross-file
-interaction (two findings on one field distinguished only by an unused
-`path` field) and an entirely unenumerated rule
-(`operator-trigger`) -- confirming that even after five rounds of
-fixture-validity vigilance, the review layer that traces the diff OUT
-into consumers and re-derives the rule list from scratch still had
-something the inner review's per-rule-in-isolation testing could not
-surface on its own.
+cost was eight adversarial review rounds, not a shipped bug. Rounds 7-8
+(Opus cross-surface review) were a different shape than rounds 1-6's
+isolation mistakes: genuinely-missed cross-file interactions (two
+findings on one field distinguished only by an unused `path` field, an
+entirely unenumerated rule, and a Python/JS truthiness mismatch) --
+confirming that even after several rounds of fixture-validity vigilance,
+the review layer that traces the diff OUT into consumers and re-derives
+the rule list from scratch still had things the inner review's
+per-rule-in-isolation testing could not surface on its own.
+
+**Porting a Python truthiness check to JavaScript is its own distinct
+trap, separate from every fixture-validity mistake earlier in this same
+bead.** `control.get(k)` is falsy for `None` AND for an empty list in
+Python; the natural-looking JS translation (`c.locks || c.makes_optional`)
+is NOT falsy for an empty array -- `[]` is truthy in JavaScript. This
+looks like the same "isolation" family of mistake as rounds 3/4/6, but it
+is actually a different failure mode: those were about constructing a
+fixture that did not represent the real input space; this one was about
+correctly translating a boolean rule ACROSS languages with different
+truthiness semantics for the exact value this rule cares about. Both are
+real risks whenever frontend code re-derives backend logic, but they are
+worth naming separately rather than filing under one lesson, because the
+fix for one (test with real backend inputs) does not by itself catch the
+other (know where the two languages disagree).
 
 A fifth Opus round found a rule missing from the enumeration ENTIRELY:
 `legacy-trigger-side-logic` (a schema still carrying the removed
@@ -184,6 +198,22 @@ trigger any condition (unrepairable) vs. an operator merely invalid for an
 otherwise-legal trigger type (repair() DOES alias it). Split by message
 substring the same way.
 
+An eighth round (a second Opus cross-surface pass, re-verifying the round-7
+fixes rather than a fresh sweep) found one more real gap in round 6's
+original code: the unconvertible-action check tested key PRESENCE
+(`'locks' in c`) where the backend's rump-retention tests key TRUTHINESS
+(`control.get(k)`), so a `locks: []` (explicitly present, but empty) was
+called unrepairable when repair() actually clears it (an empty list is
+Python-falsy, so `control.get(k)` is `None`, the action is dropped from
+the rump, and the whole `controls_fields` entry is popped). Fixed by
+checking Python-style truthiness explicitly -- and that fix itself needed
+a second attempt: a first pass used `c.locks || c.makes_optional`, which
+is WRONG in JavaScript specifically, because `[]` is truthy in JS
+(`!![] === true`) even though it is falsy in the Python code being
+mirrored. The corrected version checks array length explicitly rather
+than relying on either language's native truthiness, since the two
+disagree on precisely the input this fix cares about.
+
 Three pre-existing, out-of-scope findings surfaced during the empirical
 sweeps were filed rather than folded in: `polyglot-pdf-7fezk`
 (`schema_lint.py`'s module docstring omits `to-review-pending` from its
@@ -210,8 +240,8 @@ in round 7 since the same comment block was already being rewritten.
   carries an unconvertible action (not its `.conditional_fields` sibling,
   which repair() always fixes); tooltip corrected to name the actual
   scope.
-- `schema-editor/src/components/ValidationPanel.test.tsx` -- 22 new tests
-  across seven rounds: select-scoped option-value-missing (3), four
+- `schema-editor/src/components/ValidationPanel.test.tsx` -- 23 new tests
+  across eight rounds: select-scoped option-value-missing (3), four
   rule-level exclusions (4), two condition-malformed sub-shapes plus one
   confirming a repairable sub-shape still counts (3), two value-arity
   sub-shapes plus one confirming the third still counts (3), two

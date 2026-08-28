@@ -767,6 +767,31 @@ describe('Repair-all (bd zgln, carried from the pane)', () => {
     await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
   });
 
+  // bd polyglot-pdf-jri5i, round 8 (Opus cross-surface review): the
+  // unconvertible-action check must test TRUTHINESS, not mere key
+  // PRESENCE -- schema_repair.py's rump-retention keys on `control.get(k)`,
+  // so an explicitly-present-but-EMPTY locks/makes_optional array is falsy
+  // there and repair() clears the whole entry (the field's controls_fields
+  // gets popped entirely, same as any other fully-convertible field).
+  it('still counts legacy-trigger-side-logic when locks/makes_optional is present but EMPTY (repair() clears it)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).controls_fields', field_id: 'trig',
+          message: "this field still uses the old controls_fields way of showing/requiring other fields",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={controlsFieldsSchema({ operator: 'is_checked', locks: [] })} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
   // operator-trigger, round 7 (Opus cross-surface review): TWO distinct
   // sub-shapes under one rule id, like condition-malformed/value-arity. A
   // trigger field whose TYPE can never trigger any condition (e.g.
