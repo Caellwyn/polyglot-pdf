@@ -6,7 +6,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FormSchema } from '../types/schema';
 import {
   AuthError,
+  DeleteNeedsAcknowledgement,
   ForbiddenError,
+  deleteRemoteKit,
   apiBaseUrl,
   extractRemoteKit,
   hasBackend,
@@ -202,6 +204,52 @@ describe('request shape', () => {
     expect(err.noEditorAccess).toBe(false);
     // The server's own wording reaches the human unchanged.
     expect(err.message).toContain('author action');
+  });
+
+  // A REFUSAL THAT CANNOT BE GOT PAST IS NOT A SAFEGUARD (bd polyglot-pdf-6zhaf).
+  // The server grades a risky delete instead of blocking it, and the client has
+  // to be able to tell the grades apart to offer the right confirmation.
+  it('a DELETE_NEEDS_ACK 409 becomes an acknowledgeable warning, prefix stripped', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(
+      { detail: 'DELETE_NEEDS_ACK: "Form 2" was never published, but whether '
+        + 'anyone has filled it cannot be checked right now (sink disabled).' },
+      409));
+    const err = await deleteRemoteKit('form-2').catch((e) => e);
+    expect(err).toBeInstanceOf(DeleteNeedsAcknowledgement);
+    expect(err.escalation).toBe('ack');
+    expect(err.message).toContain('cannot be checked');
+    // The wire marker is plumbing and must never reach a human.
+    expect(err.message).not.toContain('DELETE_NEEDS_ACK');
+  });
+
+  it('a DELETE_NEEDS_DOUBLE_ACK 409 is graded higher', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(
+      { detail: 'DELETE_NEEDS_DOUBLE_ACK: "W-7" has been published.' }, 409));
+    const err = await deleteRemoteKit('w7').catch((e) => e);
+    expect(err).toBeInstanceOf(DeleteNeedsAcknowledgement);
+    expect(err.escalation).toBe('double-ack');
+    expect(err.message).not.toContain('DELETE_NEEDS_DOUBLE_ACK');
+  });
+
+  it('acknowledged=true is sent on the wire, and only when asked for', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ objectsRemoved: 3 }));
+
+    await deleteRemoteKit('form-2');
+    expect(fetchMock.mock.calls[0][0]).not.toContain('acknowledged');
+
+    await deleteRemoteKit('form-2', { acknowledged: true });
+    expect(fetchMock.mock.calls[1][0]).toContain('acknowledged=true');
+  });
+
+  // A 409 that is NOT one of the graded refusals is still a plain failure --
+  // folding everything into the acknowledgeable path would offer a "delete
+  // anyway" button for errors that acknowledging cannot fix.
+  it('an ungraded 409 stays an ordinary Error', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'Kit is locked' }, 409));
+    const err = await deleteRemoteKit('form-2').catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(DeleteNeedsAcknowledgement);
+    expect(err.message).toBe('Kit is locked');
   });
 
   it('a non-401 error surfaces the server detail', async () => {

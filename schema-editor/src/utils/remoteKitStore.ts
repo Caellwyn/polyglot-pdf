@@ -639,11 +639,59 @@ export async function releaseKitLock(kitId: string): Promise<KitLockResult> {
  * should surface that detail verbatim rather than retrying, because a refusal
  * here is the guard working, not a transient failure.
  */
-export async function deleteRemoteKit(kitId: string): Promise<number> {
-  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) throw new Error(await errorDetail(res, 'Could not delete the form'));
+/** How firmly the server wants this deletion confirmed (bd polyglot-pdf-6zhaf).
+ *
+ *   'ack'        -- never published, but records exist or could not be checked
+ *   'double-ack' -- ever live: the form may have been filled and agreed to
+ *
+ * A refusal is never final. The old design refused outright when the
+ * confirmation check was positive OR unavailable, and because un-attributable
+ * legacy records make it permanently unavailable, every kit became undeletable
+ * forever. A safeguard makes a destructive act deliberate, not impossible. */
+export type DeleteEscalation = 'ack' | 'double-ack';
+
+/** A delete the server wants confirmed rather than refused outright. Carries
+ * the server's own wording -- it names what is at risk for THIS kit, which a
+ * generic client-side warning cannot. */
+export class DeleteNeedsAcknowledgement extends Error {
+  readonly escalation: DeleteEscalation;
+
+  constructor(message: string, escalation: DeleteEscalation) {
+    super(message);
+    this.name = 'DeleteNeedsAcknowledgement';
+    this.escalation = escalation;
+  }
+}
+
+/** Server markers -- mirror editor_kit_routes.DELETE_NEEDS_*_PREFIX. Matched on
+ * a PREFIX rather than message text: the copy will be reworded, and here the
+ * wording decides whether the human is offered a way through at all. */
+const DELETE_NEEDS_ACK_PREFIX = 'DELETE_NEEDS_ACK:';
+const DELETE_NEEDS_DOUBLE_ACK_PREFIX = 'DELETE_NEEDS_DOUBLE_ACK:';
+
+/** Delete a kit. Pass acknowledged once the human has confirmed a warning the
+ * server raised; without it a risky delete comes back as
+ * DeleteNeedsAcknowledgement rather than succeeding. */
+export async function deleteRemoteKit(
+  kitId: string, opts: { acknowledged?: boolean } = {},
+): Promise<number> {
+  const query = opts.acknowledged ? '?acknowledged=true' : '';
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}${query}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) {
+    const detail = await errorDetail(res, 'Could not delete the form');
+    if (detail.startsWith(DELETE_NEEDS_DOUBLE_ACK_PREFIX)) {
+      throw new DeleteNeedsAcknowledgement(
+        detail.slice(DELETE_NEEDS_DOUBLE_ACK_PREFIX.length).trim(), 'double-ack');
+    }
+    if (detail.startsWith(DELETE_NEEDS_ACK_PREFIX)) {
+      throw new DeleteNeedsAcknowledgement(
+        detail.slice(DELETE_NEEDS_ACK_PREFIX.length).trim(), 'ack');
+    }
+    throw new Error(detail);
+  }
   const body = (await res.json()) as { objectsRemoved?: number };
   return body.objectsRemoved ?? 0;
 }

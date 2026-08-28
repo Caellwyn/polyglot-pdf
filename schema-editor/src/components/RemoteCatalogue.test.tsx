@@ -1635,7 +1635,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: false }));
     await waitFor(() =>
       expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
   });
@@ -1726,7 +1726,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: false }));
     expect(clearOpenKit).toHaveBeenCalledTimes(1);
   });
 
@@ -1752,7 +1752,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: false }));
     expect(clearOpenKit).not.toHaveBeenCalled();
   });
 });
