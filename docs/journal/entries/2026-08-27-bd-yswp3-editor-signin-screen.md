@@ -74,6 +74,23 @@ the bearer header in each of the two fetch sites (3 and 1 red). The edited
 operator-message guard was re-verified too, since editing a test invalidates
 its earlier proof.
 
+**The 403 screen was right at the door and wrong everywhere else.** Review
+caught that I had built the refused screen for the GATE and then left every
+mid-session catch site folding 403 into the generic error banner -- so an
+editor whose role was revoked mid-kit would hit an unactionable message on
+every save, repair and regenerate, never reaching the screen built for exactly
+that case. Reachable for real: revocation is deliberately delayed up to an
+hour (editor_auth.py runs without check_revoked), so a stale-but-valid token
+403s while the UI still thinks the person is an editor.
+
+The instructive part is the SHAPE of the fix. Six catch sites in App.tsx, nine
+more in RemoteCatalogue -- and the first instinct, patching the one the
+reviewer named, would have been the repo's single most expensive mistake
+(scar tissue #8: fix the SET, not the instance). Instead the predicate was
+widened at every site mechanically, and the routing decision was made ONCE
+inside handleAuthExpired, which every site already called. Fifteen call sites,
+one place that decides.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;

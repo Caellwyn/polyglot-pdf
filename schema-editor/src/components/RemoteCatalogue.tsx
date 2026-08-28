@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-  AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  AuthError,
+  ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
   listArchivedRevisions, loadArchivedSchema,
   onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
@@ -23,7 +24,7 @@ interface RemoteCatalogueProps {
   /** The caller's access tier (author-only controls arrive with bd 92qe.3). */
   role: EditorRole;
   /** A call answered 401 (rotated/revoked code): the app drops to the gate. */
-  onAuthError?: () => void;
+  onAuthError?: (err?: unknown) => void;
   /**
    * Live in-editor review stats for the open kit (same contract as
    * FormCatalogue's liveProgress), so the open card tracks unsaved edits.
@@ -239,7 +240,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // than rethrow: with several kits, more than one fetch can reject, and
       // a rethrow through Promise.all would leave the siblings' rejections
       // unhandled.
-      let authFailed = false;
+      // Holds the auth ERROR, not a boolean: a 403 must reach onAuthError as a
+      // ForbiddenError so the caller can tell "signed out" from "not allowed".
+      let authFailed: unknown = null;
       const computed = await Promise.all(withSchema.map(async (e) => {
         try {
           const schema = await loadRemoteSchema(e.id);
@@ -263,21 +266,23 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             version: versionInfoFromSchema(schema),
           }] as const;
         } catch (err) {
-          if (err instanceof AuthError) authFailed = true;
+          if (err instanceof AuthError || err instanceof ForbiddenError) {
+            authFailed = err;
+          }
           return [e.id, { reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null }] as const;
         }
       }));
       if (seq !== refreshSeq.current) return;
       if (authFailed) {
-        onAuthError?.();
+        onAuthError?.(authFailed);
         return;
       }
       setProgress(Object.fromEntries(computed));
       if (deliberate) setEditedProgress({});
     } catch (err) {
       if (seq !== refreshSeq.current) return;
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to load the kit list');
@@ -312,7 +317,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       if (kit.id === selectedKitId) clearOpenKit?.();
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) { onAuthError?.(); return; }
+      if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
       // The guard refusing (409) is the NORMAL outcome for a form anyone has
       // filled, and for one whose records cannot be checked. Keep the dialog
       // open and show the server's own words -- it names the safe alternative.
@@ -356,7 +361,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           : `Released "${kit.label}".`);
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) { onAuthError?.(); return; }
+      if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
       setError(err instanceof Error ? err.message : 'Could not change the lock');
     } finally {
       setLockingId(null);
@@ -473,8 +478,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       }
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       const detail = err instanceof Error ? err.message : 'Failed to update status';
@@ -535,8 +540,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       setNotice(`Renamed "${kit.label}" to "${label}".`);
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to rename the form');
@@ -560,8 +565,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       await refresh();
       setNotice(`Added "${created.id}" -- run the extraction to produce its schema, then open it here.`);
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to add form');
@@ -606,8 +611,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         return next;
       });
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Extraction failed');
@@ -667,8 +672,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         if (kit.id === selectedKitId) onOpenKit(kit);
       }
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Option translation failed');

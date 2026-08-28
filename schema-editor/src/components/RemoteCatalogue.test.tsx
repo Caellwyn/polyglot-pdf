@@ -27,7 +27,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 
 import { RemoteCatalogue } from './RemoteCatalogue';
 import {
-  AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  AuthError, ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit,
   releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
@@ -362,6 +362,24 @@ describe('RemoteCatalogue', () => {
     );
     await waitFor(() => expect(onAuthError).toHaveBeenCalled());
     expect(screen.queryByText(/Invalid or missing/)).not.toBeInTheDocument();
+  });
+
+  // A 403 (a real account whose editor role was revoked) must route the SAME
+  // way as a 401 -- otherwise every catalogue action dead-ends on an error
+  // banner the person cannot act on, instead of reaching the refused screen.
+  // The ERROR ITSELF is forwarded, since App tells the two apart by type.
+  it('routes a 403 to onAuthError, carrying the error so App can tell it apart', async () => {
+    const refusal = new ForbiddenError('This account does not have schema editor access');
+    vi.mocked(listRemoteKits).mockRejectedValue(refusal);
+    const onAuthError = vi.fn();
+    render(
+      <RemoteCatalogue
+        defaultExpanded
+        onOpenKit={() => {}} selectedKitId={null} role="editor"
+        onAuthError={onAuthError}
+      />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalledWith(refusal));
   });
 
   it('routes a 401 DURING THE PROGRESS SCAN to onAuthError, not a schema error', async () => {

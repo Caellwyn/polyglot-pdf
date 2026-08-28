@@ -172,6 +172,18 @@ describe('SignInGate', () => {
     expect(screen.queryByText(/sign up/i)).not.toBeInTheDocument();
   });
 
+  // Handed a mid-session 403 by App, the gate must show the refused screen
+  // WITHOUT probing again -- the probe would only 403 a second time, so the
+  // person would watch a spinner just to reach the same answer.
+  it('renders the refused screen from refusedReason without re-probing', async () => {
+    currentUser = SIGNED_IN;
+    render(<SignInGate onReady={vi.fn()} refusedReason="Access was revoked" />);
+
+    await screen.findByTestId('signin-refused');
+    expect(screen.getByText('Access was revoked')).toBeInTheDocument();
+    expect(probeSession).not.toHaveBeenCalled();
+  });
+
   it('says so when the build has no Firebase configuration', async () => {
     vi.mocked(isAuthConfigured).mockReturnValue(false);
     render(<SignInGate onReady={vi.fn()} />);

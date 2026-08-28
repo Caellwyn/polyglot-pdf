@@ -437,6 +437,63 @@ describe('App hosted mode (bd 92qe.2)', () => {
     }
   });
 
+  // A 403 mid-session is NOT a 401: an operator revoked this person's editor
+  // role while their ID token was still valid (revocation is delayed up to an
+  // hour by design -- editor_auth.py runs without check_revoked). Sending them
+  // to the sign-in FORM would be a dead end: signing in again cannot restore a
+  // role they no longer hold. They must land on the refused screen instead.
+  it('a mid-session 403 on save shows the refused screen, not the sign-in form', async () => {
+    await passGate();
+    await openKit('draft-kit');
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field'));
+
+    vi.mocked(saveRemoteSchema).mockRejectedValue(
+      new ForbiddenError('This account does not have schema editor access'));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    await screen.findByTestId('signin-refused');
+    expect(screen.getByText(/does not have schema editor access/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+  });
+
+  it('Sign out returns to the gate and clears the session', async () => {
+    await passGate();
+    // Real sign-out ends the Firebase session, so the SDK emits a null user.
+    vi.mocked(signOutEditor).mockImplementation(async () => { emitUser(null); });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => expect(signOutEditor).toHaveBeenCalled());
+    await screen.findByLabelText('Password');
+  });
+
+  // The confirm guard protects unsaved work: declining must be a NO-OP, or the
+  // button silently discards edits the person just said to keep.
+  it('Sign out with unsaved edits asks first, and declining keeps the work', async () => {
+    await passGate();
+    await openKit('draft-kit');
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field')); // dirty
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+      expect(signOutEditor).not.toHaveBeenCalled();
+      // Still in the editor, still dirty.
+      expect(screen.getByTestId('edit-field')).toBeInTheDocument();
+      expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('shows who is signed in', async () => {
+    await passGate();
+    expect(screen.getByTestId('signed-in-as')).toHaveTextContent('editor@example.com');
+  });
+
   it('a mid-session 401 on save drops back to the sign-in gate', async () => {
     await passGate();
     await openKit('draft-kit');

@@ -29,6 +29,7 @@ import {
   type CatalogueEntry, type FolderCheck, type KitVersionInfo } from './utils/formKitDirectory';
 import {
   AuthError,
+  ForbiddenError,
   hasBackend,
   isHostedMode,
   loadRemotePdfBlobUrl,
@@ -121,6 +122,12 @@ export const App: React.FC = () => {
   // The signed-in person's email, for the header. Read once the gate hands us
   // a role -- by then sign-in has completed, so currentUser is populated.
   const [signedInEmail, setSignedInEmail] = React.useState<string | null>(null);
+  // Set when a mid-session call 403s: the person is still signed in, but no
+  // longer holds an editor role. Handed to the gate so it shows the refused
+  // screen (with its sign-out escape hatch) instead of a sign-in form that
+  // cannot help. Cleared whenever the gate lets someone back through.
+  const [refusedMidSession, setRefusedMidSession] =
+    React.useState<string | null>(null);
   // Remote saves have real latency (a GCS write) -- surface a Saving... state.
   const [saving, setSaving] = React.useState(false);
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
@@ -403,10 +410,17 @@ export const App: React.FC = () => {
     }
     await signOutEditor().catch(() => { /* already signed out */ });
     setSignedInEmail(null);
+    setRefusedMidSession(null);
     setRole(null); // back to the gate
   }, [hasUnsavedChanges]);
 
-  const handleAuthExpired = React.useCallback(() => {
+  const handleAuthExpired = React.useCallback((err?: unknown) => {
+    // A 403 mid-session (an operator revoked this person's editor role while
+    // their ID token was still valid -- revocation is delayed up to an hour by
+    // design, see editor_auth.py) needs the gate's REFUSED screen, not its
+    // sign-in form: signing in again cannot restore access. Routing it here
+    // rather than at each catch site means all six share one predicate.
+    setRefusedMidSession(err instanceof ForbiddenError ? err.message : null);
     setRole(null);
     // setRole(null) only DOES anything hosted, where it drops back to the
     // sign-in gate (`hosted && !role`). LOCAL mode has no gate, so every
@@ -486,8 +500,8 @@ export const App: React.FC = () => {
       setSavingToKit(true); // saves target the kit's own remote schema
     } catch (err) {
       if (seq !== openSeqRef.current) return; // a stale open's failure is moot
-      if (err instanceof AuthError) {
-        handleAuthExpired();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        handleAuthExpired(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to open form');
@@ -756,8 +770,8 @@ export const App: React.FC = () => {
         }
         setSaveError(null);
       } catch (err) {
-        if (err instanceof AuthError) {
-          handleAuthExpired();
+        if (err instanceof AuthError || err instanceof ForbiddenError) {
+          handleAuthExpired(err);
           return;
         }
         setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
@@ -974,8 +988,8 @@ export const App: React.FC = () => {
       setSaveError(null);
     } catch (err) {
       if (seq !== openSeqRef.current) return; // a stale repair's failure is moot
-      if (err instanceof AuthError) {
-        handleAuthExpired();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        handleAuthExpired(err);
         return;
       }
       // Surface the repair failure (e.g. a 422 naming hallucinated widgets) in
@@ -1035,8 +1049,8 @@ export const App: React.FC = () => {
       setSaveError(null);
     } catch (err) {
       if (seq !== openSeqRef.current) return;
-      if (err instanceof AuthError) {
-        handleAuthExpired();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        handleAuthExpired(err);
         return;
       }
       setSaveError(err instanceof Error ? err.message : 'Failed to regenerate divisions');
@@ -1077,8 +1091,8 @@ export const App: React.FC = () => {
       return (report.regenerated || []).includes(fieldId);
     } catch (err) {
       if (seq !== openSeqRef.current) return false;
-      if (err instanceof AuthError) {
-        handleAuthExpired();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        handleAuthExpired(err);
         // LOCAL has no access-code gate to fall back to (App renders it on
         // `hosted && !role`), so swallowing this would leave the button
         // looking successful. Rethrow and let it render the message.
@@ -1098,8 +1112,8 @@ export const App: React.FC = () => {
     try {
       return await loadUnclaimedWidgets(selectedKitId);
     } catch (err) {
-      if (err instanceof AuthError) {
-        handleAuthExpired();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        handleAuthExpired(err);
         return [];
       }
       throw err; // the picker surfaces the message inline
@@ -1226,7 +1240,12 @@ export const App: React.FC = () => {
   if (hosted && !role) {
     return (
       <SignInGate
-        onReady={(r) => { setSignedInEmail(currentEditorEmail()); setRole(r); }}
+        refusedReason={refusedMidSession}
+        onReady={(r) => {
+          setRefusedMidSession(null);
+          setSignedInEmail(currentEditorEmail());
+          setRole(r);
+        }}
       />
     );
   }

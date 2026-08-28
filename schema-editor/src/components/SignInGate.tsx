@@ -9,6 +9,11 @@ interface SignInGateProps {
   /** Called once a signed-in person is confirmed to HAVE editor access;
    * carries the role the server reports (editor vs author). */
   onReady: (role: EditorRole) => void;
+  /** Set when a call FAILED with 403 mid-session (an operator revoked this
+   * person's editor role while their ID token was still valid). Shows the
+   * refused screen immediately rather than re-probing, since the probe would
+   * only 403 again. */
+  refusedReason?: string | null;
 }
 
 type Mode = 'signin' | 'reset';
@@ -38,7 +43,7 @@ type Mode = 'signin' | 'reset';
  * Duplicates the voice app's sign-in SHAPE without importing it -- see
  * utils/editorAuth.ts for why that duplication is deliberate.
  */
-export const SignInGate: React.FC<SignInGateProps> = ({ onReady }) => {
+export const SignInGate: React.FC<SignInGateProps> = ({ onReady, refusedReason }) => {
   const [mode, setMode] = React.useState<Mode>('signin');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -48,11 +53,11 @@ export const SignInGate: React.FC<SignInGateProps> = ({ onReady }) => {
   // A signed-in account that the SERVER refused (no editor role). Held
   // separately from `error` because it needs its own escape hatch rather than
   // a retry -- retyping a correct password cannot fix it.
-  const [refused, setRefused] = React.useState<string | null>(null);
+  const [refused, setRefused] = React.useState<string | null>(refusedReason ?? null);
   // True while we still have a Firebase session to restore + probe. Starts true
   // so a returning editor sees "Checking your access..." rather than a flash of
   // the sign-in form they are about to be sent through.
-  const [restoring, setRestoring] = React.useState(true);
+  const [restoring, setRestoring] = React.useState(!refusedReason);
 
   const configured = React.useMemo(isAuthConfigured, []);
 
@@ -88,6 +93,12 @@ export const SignInGate: React.FC<SignInGateProps> = ({ onReady }) => {
       setRestoring(false);
       return;
     }
+    // Already known-refused (403 mid-session): re-probing would just 403 again,
+    // and the person would watch a spinner to reach the same screen.
+    if (refusedReason) {
+      setRestoring(false);
+      return;
+    }
     let cancelled = false;
     const unsub = watchEditorUser((user) => {
       if (cancelled) return;
@@ -98,7 +109,7 @@ export const SignInGate: React.FC<SignInGateProps> = ({ onReady }) => {
       void probe().finally(() => { if (!cancelled) setRestoring(false); });
     });
     return () => { cancelled = true; unsub(); };
-  }, [configured, probe]);
+  }, [configured, probe, refusedReason]);
 
   const handleGoogle = React.useCallback(async () => {
     setError(null);
