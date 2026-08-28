@@ -866,6 +866,14 @@ _EXPECTED_GATED_ROUTES = {
     # work spends nothing and must not burn the link -- the same
     # retrieval-vs-spend split the TTL correction established.
     ("POST", "/api/resume-form"),
+    # OUR OWN safety notices, spoken free (bd polyglot-pdf-dft1). Note it is
+    # here and NOT in the paid set below, which is the entire point: the paid
+    # dependency REDEEMS the link, so using it would answer the
+    # budget-exhausted client with silence -- exactly the client who needs to
+    # hear "save your form now" -- and would burn a live link to deliver a
+    # warning we chose to give. It speaks only KEYED, server-side text, so a
+    # free route cannot become an open text-to-speech service.
+    ("POST", "/api/tts/notice"),
 }
 
 

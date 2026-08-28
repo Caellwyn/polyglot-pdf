@@ -125,6 +125,11 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 dependency reading `Authorization: Bearer <idToken>` and delegating to
 `verify_token` (so the same dev bypass applies). It gates `POST
 /api/fill-pdf` (the body carries user-entered field values), `POST
+/api/tts/notice` (bd `polyglot-pdf-dft1` -- the app's OWN safety notices,
+spoken free: the paid dependency would redeem the link, answering a
+budget-exhausted client with silence and burning a live client's link to
+deliver a warning we chose to give. It speaks only KEYED server-side text, so
+being free does not make it an open text-to-speech service), `POST
 /api/resume-form` (bd `polyglot-pdf-dft1` -- a client uploads the PDF they
 saved earlier; it reads the kit's own form.pdf as the REFERENCE to verify
 that upload against, so it carries the same gates as the fill route.
