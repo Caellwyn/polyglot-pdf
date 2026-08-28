@@ -26,7 +26,7 @@
  * the hint for an absent stamp).
  */
 import type { FsDirectoryHandle } from './fileSystemAccess';
-import { AuthError, ForbiddenError, apiBaseUrl } from './remoteKitStore';
+import { AuthError, apiBaseUrl, errorDetail, forbiddenFromDetail } from './remoteKitStore';
 import { editorIdToken } from './editorAuth';
 
 const METADATA_FILE = 'metadata.json';
@@ -52,7 +52,19 @@ export async function stampKitReadinessRemote(
     { method: 'POST', headers, body: JSON.stringify(schema) },
   );
   if (res.status === 401) throw new AuthError();
-  if (res.status === 403) throw new ForbiddenError();
+  if (res.status === 403) {
+    // Classify the SAME way editorFetch does. There are two kinds of 403 --
+    // "no editor role at all" (evict to the refused screen) and "this action
+    // is author-only" (an ordinary refusal) -- and the server marks the first
+    // with NO_EDITOR_ACCESS_PREFIX. Constructing a bare ForbiddenError here
+    // would classify every 403 as the second kind and drop the server's own
+    // detail, which is exactly the drift the comment above says this site
+    // avoids. Not reachable today (this path is local-mode only, and local
+    // runs under the backend's dev bypass), so this keeps a true invariant
+    // rather than fixing a live bug.
+    throw forbiddenFromDetail(
+      await errorDetail(res, 'This account does not have schema editor access'));
+  }
   if (!res.ok) throw new Error(`Could not refresh the kit's progress (HTTP ${res.status})`);
   const body = (await res.json()) as { readiness?: Record<string, unknown> | null };
   return body.readiness ?? null;

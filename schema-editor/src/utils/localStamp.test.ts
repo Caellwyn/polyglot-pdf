@@ -121,6 +121,31 @@ describe('stampKitReadinessRemote', () => {
     expect(init.body).toBe(JSON.stringify({ fields: [] }));
   });
 
+  // This route is the editor's SECOND request path (not editorFetch), so it
+  // must classify a 403 the SAME way -- there are two kinds, and only the
+  // marked one evicts. A bare ForbiddenError here would silently call every
+  // 403 non-evicting AND drop the server's own message.
+  it('classifies the two kinds of 403 exactly as editorFetch does', async () => {
+    idTokenMock.mockResolvedValue('tok');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false, status: 403,
+      json: async () => ({ detail: 'NO_EDITOR_ACCESS: no editor access' }),
+    })));
+    const evicting = await stampKitReadinessRemote('k', {}).catch((e) => e);
+    expect(evicting).toBeInstanceOf(ForbiddenError);
+    expect(evicting.noEditorAccess).toBe(true);
+    expect(evicting.message).toBe('no editor access'); // marker stripped
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false, status: 403,
+      json: async () => ({ detail: 'This action requires the author role' }),
+    })));
+    const refusal = await stampKitReadinessRemote('k', {}).catch((e) => e);
+    expect(refusal).toBeInstanceOf(ForbiddenError);
+    expect(refusal.noEditorAccess).toBe(false);
+    expect(refusal.message).toBe('This action requires the author role');
+  });
+
   it('throws AuthError on 401, ForbiddenError on 403, Error on others', async () => {
     idTokenMock.mockResolvedValue('tok');
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 })));

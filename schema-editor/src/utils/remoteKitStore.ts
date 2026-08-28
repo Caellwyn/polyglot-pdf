@@ -135,6 +135,21 @@ export class ForbiddenError extends Error {
  * backend/services/editor_auth.py's NO_EDITOR_ACCESS_PREFIX. */
 const NO_EDITOR_ACCESS_PREFIX = 'NO_EDITOR_ACCESS:';
 
+/** Build a ForbiddenError from a 403's detail, classifying it and stripping
+ * the wire marker.
+ *
+ * EXPORTED because the editor has a SECOND direct fetch site (localStamp.ts)
+ * that cannot go through editorFetch. Sharing the classifier is what stops
+ * the two paths disagreeing about which 403s evict -- duplicating the
+ * `startsWith` there is how the split drifts. */
+export function forbiddenFromDetail(detail: string): ForbiddenError {
+  const evicting = detail.startsWith(NO_EDITOR_ACCESS_PREFIX);
+  return new ForbiddenError(
+    evicting ? detail.slice(NO_EDITOR_ACCESS_PREFIX.length).trim() : detail,
+    evicting,
+  );
+}
+
 /** True when this build runs against the remote store (VITE_DELIVERY_MODE=hosted). */
 export function isHostedMode(): boolean {
   return import.meta.env.VITE_DELIVERY_MODE === 'hosted';
@@ -206,19 +221,14 @@ async function editorFetch(path: string, init: RequestInit = {}): Promise<Respon
   // so it gets its own error type rather than being folded into AuthError. The
   // server's detail is carried through because it names the actual reason.
   if (res.status === 403) {
-    const detail = await errorDetail(
-      res, 'This account does not have schema editor access');
-    const evicting = detail.startsWith(NO_EDITOR_ACCESS_PREFIX);
-    throw new ForbiddenError(
-      evicting ? detail.slice(NO_EDITOR_ACCESS_PREFIX.length).trim() : detail,
-      evicting,
-    );
+    throw forbiddenFromDetail(await errorDetail(
+      res, 'This account does not have schema editor access'));
   }
   return res;
 }
 
 /** Extract the backend's error detail for a human-readable failure message. */
-async function errorDetail(res: Response, fallback: string): Promise<string> {
+export async function errorDetail(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { detail?: unknown };
     if (typeof body.detail === 'string' && body.detail) return body.detail;

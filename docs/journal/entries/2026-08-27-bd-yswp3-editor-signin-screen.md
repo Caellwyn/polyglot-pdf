@@ -207,6 +207,31 @@ cloud access), which is the right call. Handled without pretending to know:
 `deploy-editor.sh` gained a verify-this step, and the sign-in screen now names
 `auth/unauthorized-domain` explicitly instead of surfacing a raw SDK string.
 
+The outer review's second pass cleared at NO-GAPS and filed four
+non-blocking beads. Two were fixed here rather than deferred, because both
+were about a claim in this diff's own code being untrue:
+
+**A comment that lied about the code beside it.** `localStamp.ts` said the
+401/403 split was "repeated here deliberately rather than drifting apart"
+-- while constructing a bare `ForbiddenError`, which classifies every 403 as
+non-evicting and discards the server's message. Not reachable today (that
+path is local-mode only, and local runs under the dev bypass), so the fix
+buys no behaviour: it makes an invariant TRUE that the next reader will
+otherwise trust. The classifier is now exported from the store and shared by
+both request paths, so they cannot disagree by construction.
+
+**The prefix contract was pinned by sample, not by set.** Two tests covered
+the two 403s in `editor_auth.py`; the ones an editor actually meets --
+Publish, reopening a live form -- live in `editor_kit_routes.py` and were
+unpinned. Adding the marker to either would have started evicting editors
+with the suite green. Now enumerated from the shipped route file by AST:
+every 403 it raises must stay unprefixed, and the test refuses to pass if it
+finds none (a vacuous scan is the failure mode of this kind of guard).
+
+The other two beads were left filed: one is a pre-existing tier-2 doc that
+`hn0jq` made wrong and belongs with `rhc2v`'s sweep, the other a
+pre-existing `setBusy` nit in untouched code.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;

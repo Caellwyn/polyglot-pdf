@@ -327,6 +327,60 @@ def test_an_unknown_role_value_is_refused(monkeypatch):
     assert exc.value.status_code == 403
 
 
+def test_EVERY_403_the_backend_raises_is_classified(monkeypatch):
+    """The prefix is a SET property, so assert it over the set -- not samples.
+
+    Two tests above pin the two 403s that live in editor_auth.py. The ones an
+    editor actually meets in normal use are elsewhere: the per-transition gates
+    in editor_kit_routes (Publish, and reopening a live form). Nothing links
+    those to the constant, so a future 403 added there -- or a well-meant
+    "let's make this consistent" prefixing of one -- would silently start
+    evicting editors, with the suite green. That is CLAUDE.md scar #8's shape
+    exactly, which is why this enumerates rather than samples.
+
+    Reads the SOURCE because these raises are inside request handlers with
+    substantial setup; the property is about which literals carry the marker,
+    and that is visible statically. Derived from the shipped file, never a
+    hand-listed set.
+    """
+    import ast
+    import pathlib
+
+    routes = (pathlib.Path(ea.__file__).resolve().parent.parent
+              / "routes" / "editor_kit_routes.py")
+    tree = ast.parse(routes.read_text(encoding="utf-8"))
+
+    prefixed, plain = [], []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Raise) or node.exc is None:
+            continue
+        call = node.exc if isinstance(node.exc, ast.Call) else None
+        if call is None or getattr(call.func, "id", None) != "HTTPException":
+            continue
+        kw = {k.arg: k.value for k in call.keywords}
+        status = kw.get("status_code")
+        if not (isinstance(status, ast.Constant) and status.value == 403):
+            continue
+        text = "".join(
+            n.value for n in ast.walk(kw.get("detail", ast.Constant("")))
+            if isinstance(n, ast.Constant) and isinstance(n.value, str))
+        (prefixed if NO_EDITOR_ACCESS_PREFIX in text else plain).append(
+            (node.lineno, text[:60]))
+
+    assert plain, (
+        "no unprefixed 403 found in editor_kit_routes -- either the file moved "
+        "or this scan broke. An empty set would make this test vacuous."
+    )
+    assert not prefixed, (
+        "a 403 in editor_kit_routes carries " + NO_EDITOR_ACCESS_PREFIX + ", "
+        "which EVICTS the caller to the sign-in gate's refused screen. Only "
+        "editor_auth's 'this account holds no editor role' 403 may do that. "
+        "These are refusals of a specific ACTION for a valid editor, so they "
+        "must stay unprefixed or an editor pressing Publish is thrown out of "
+        "the editor: " + repr(prefixed)
+    )
+
+
 def test_the_dev_bypass_is_refused_on_a_deployed_instance(monkeypatch):
     """K_SERVICE is Cloud Run's marker. Fail-closed by construction: the bypass
     is refused when deployed however the env is set."""
