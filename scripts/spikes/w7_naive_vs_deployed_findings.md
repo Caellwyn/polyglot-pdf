@@ -844,7 +844,11 @@ count the platform's blind force-trim (see Finding 1, which reproduces on
 i90-v2 too -- both naive runs still show the ~31.8-31.9k-to-~27.9-28k
 sawtooth pattern).
 
-### i90-v2.2 Naive-unhappy did not complete -- model collapse, not API termination
+### i90-v2.2 Naive-unhappy attempt 1 (no resume) did not complete -- model collapse, not API termination
+
+*(SUPERSEDED as the headline cell by the completed session-resume run
+053300Z, documented in the results table above -- this section describes the
+FIRST attempt, retained as the what-happens-without-recovery evidence.)*
 
 The naive-unhappy run went tool-silent for 6 consecutive questions and the
 derailment guard (see "i90-v2 method changes" above) aborted it at question
@@ -871,11 +875,14 @@ would otherwise have burned budget indefinitely" is the accurate framing.
 | Deployed happy | $2.055881 | 57 | $0.0361 |
 | Deployed unhappy | $4.159150 | 57 | $0.0730 |
 | Naive happy | $6.016500 | 57 | $0.1056 |
-| Naive unhappy (partial, DNC) | $5.912473 | 33 | $0.1792 |
+| Naive unhappy, attempt 1 (partial, DNC -- superseded) | $5.912473 | 33 | $0.1792 |
+| **Naive unhappy, completed run 053300Z (HEADLINE)** | $9.836144 | 51 | **$0.1929** |
 
-Naive/deployed ratio: happy = 2.92x, **unhappy (per-confirmed-field) =
-2.455x**. See i90-v2.6 below for why the per-confirmed-field ratio, not the
-raw dollar ratio, is the fair unhappy-path comparator here.
+Naive/deployed ratio: happy = 2.92x, **unhappy per-confirmed-field = 2.64x
+(the CITABLE figure, from the completed 053300Z run: $0.1929 vs $0.0730)**.
+The 2.455x from the superseded partial attempt is retained in this table's
+history only -- do not cite it. See i90-v2.6 below for why per-confirmed-
+field, not raw dollars, is the fair unhappy-path comparator.
 
 ### i90-v2.4 Trims / evictions / nudges / reconnects
 
@@ -937,13 +944,14 @@ relationship. It would take a third form at a third length to distinguish
 "scales with length" from "these two forms happened to land this way."
 
 The raw unhappy-path dollar multiplier (1.42x) is actively misleading here
-and is reported only to be explicitly debunked: naive-unhappy spent
+and is reported only to be explicitly debunked: the no-resume attempt spent
 $5.912473 for 39 of 57 questions (68% complete) before derailing, while
 deployed-unhappy spent a mean of $4.159150 for a full 57/57. Comparing those
-two totals directly compares unequal amounts of completed work -- the
-correct normalization is the per-confirmed-field ratio (2.455x), which is
-what should be cited as "the i90-v2 unhappy-path naive/deployed cost
-ratio," not the 1.42x raw-dollar figure.
+two totals directly compares unequal amounts of completed work. **With the
+completed session-resume run (053300Z) this whole caveat is moot for the
+headline: cite 2.37x raw dollars ($9.836144 vs $4.159150, both completing)
+or 2.64x per confirmed field ($0.1929 vs $0.0730) -- never the 1.42x or
+2.455x figures from the superseded partial attempt.**
 
 Also notable: the naive arm's SI is *smaller* on i90-v2 (20,447 tokens: 19,710
 SI + 737 tools) than on W-7 (28,660 tokens), because the I-90 booklet is
