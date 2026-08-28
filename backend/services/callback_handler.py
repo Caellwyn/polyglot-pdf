@@ -1298,12 +1298,18 @@ class CallbackHandler:
         Deterministic spell-back: the CLIENT resolves the current field, reads
         the stored value, fetches a Cloud TTS clip that spells it out in the
         SESSION language and asks the verification question (bd 44ywm), and
-        plays it BLOCKING (mic muted, model parked on this pending response) --
-        the model's speech path never carries the spelling, which is the fix
-        for the sticky-first-spelling audio defect (bd 0rpu). The tool takes NO
-        arguments on purpose (any model-supplied argument is ignored): the
-        current field is the only spellable target, so there is no id for the
-        model to hallucinate and no value path from model memory (bd h7wx).
+        plays it BLOCKING (mic muted) -- the model's speech path never
+        carries the spelling, which is the fix for the sticky-first-spelling
+        audio defect (bd 0rpu). Holding this tool response open for the
+        playback does NOT mean the model is parked meanwhile, though (bd
+        polyglot-pdf-kvrfq, wire-verified 2026-08-26): under barge-in
+        pressure the model can keep emitting further name_spellback calls
+        while earlier ones are unanswered, queueing behind this in-flight
+        round-trip (see docs/components/voice-ai.md's name_spellback
+        bullet). The tool takes NO arguments on purpose (any model-supplied
+        argument is ignored): the current field is the only spellable
+        target, so there is no id for the model to hallucinate and no
+        value path from model memory (bd h7wx).
 
         Three response variants, each an explicit behavioral instruction so the
         model's post-tool generation stays letter-free:

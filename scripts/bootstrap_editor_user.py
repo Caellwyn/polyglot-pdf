@@ -229,8 +229,18 @@ def main(argv=None) -> int:
     status, detail = stamp_editor_role(args.email, args.role)
     print({
         "stamped": f"Granted {args.role} access to {args.email} (uid {detail}).",
-        "unknown_email": (f"No Firebase account for {args.email}. They must sign "
-                          "in once before a role can be granted."),
+        # NOT "they must sign in once" -- there is no product path that lets a
+        # new person do that. The hosted editor's gate is a free-text access
+        # code (AccessCodeGate.tsx), not a Firebase sign-in, so a brand-new
+        # person cannot create an account by trying to use the editor. Telling
+        # an operator to wait for something that cannot happen is worse than
+        # telling them nothing. bd polyglot-pdf-yswp3 ships the real sign-in
+        # screen; when it does, THIS message is what should change.
+        "unknown_email": (
+            f"No Firebase account for {args.email}. Create it first -- the "
+            "Firebase console (Authentication -> Users -> Add user), the "
+            "Admin SDK, or gcloud -- then run this again. The editor has no "
+            "sign-up flow yet, so the account cannot create itself."),
     }.get(status, f"ERROR: {detail}"))
     return 0 if status == "stamped" else 1
 
