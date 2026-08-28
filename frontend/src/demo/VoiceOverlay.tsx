@@ -16,7 +16,7 @@ declare global {
 	}
 }
 
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
@@ -28,6 +28,14 @@ import { getOverlayStrings, formatFieldsCompleted } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
+import { SaveNudge } from '../schema-forms/components/SaveNudge'
+import { useSaveNudge } from '../schema-forms/useSaveNudge'
+import {
+	createNoticeSpeaker,
+	NOTICE_SAVE_EARLY,
+	NOTICE_VOICE_ENDING,
+} from '../schema-forms/utils/noticeSpeech'
+import { hasClientLinkToken } from '../shared/sessionCredential'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState } from '../shared/solState'
 import { useGeminiSpeaking, useClipPlaying } from '../shared/useGeminiSpeaking'
@@ -167,6 +175,43 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => () => { introPlayerRef.current?.dispose() }, [])
 
 	// Panel UI copy in the session language (bd polyglot-pdf-ibxz); English fallback.
+	// SAVE NUDGE WIRING (bd polyglot-pdf-dft1).
+	//
+	// CLIENT SESSIONS ONLY. Staff work on their own machines with their own
+	// workflow; the nudge exists because a CLIENT's only copy is the file they
+	// save, and browser form state is discarded after 60 minutes.
+	const isClientSession = hasClientLinkToken()
+	const formState = SchemaFormStateManager.load()
+	const saveNudge = useSaveNudge({
+		formSessionId: formState?.formSessionId,
+		completedSectionCount: completedSections.size,
+		// The nudge fires when voice is ENDING for any reason -- the spend
+		// ceiling, an idle timeout, or the form finishing. All three are the last
+		// moment before a client might close the tab.
+		voiceEnding: status.toLowerCase() === 'idle_timeout'
+			|| status.toLowerCase() === 'reconnect_failed',
+		enabled: isClientSession,
+	})
+
+	// The notice speech route is FREE (require_auth, not the paid dependency),
+	// so a budget-exhausted client still HEARS how to keep their work.
+	const speakNotice = useMemo(() => {
+		const speaker = createNoticeSpeaker({ backendUrl: getBackendHttpUrl() })
+		return (text: string, language?: string) => speaker(
+			text,
+			language,
+			saveNudge.variant === 'ending' ? NOTICE_VOICE_ENDING : NOTICE_SAVE_EARLY,
+		)
+	}, [saveNudge.variant])
+
+	const handleNudgeSave = useCallback(() => {
+		saveNudge.markSaved()
+		// Hand off to the form's own download, which is what stamps the resume
+		// identity into the PDF. Dispatching rather than reaching across
+		// components: the overlay does not own the fill/download path.
+		window.dispatchEvent(new CustomEvent('polyglot:save-form'))
+	}, [saveNudge])
+
 	const overlayText = getOverlayStrings(selectedLanguage)
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
@@ -2590,6 +2635,20 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					preselectedFormId={schema.form_metadata.form_number || 'default'}
 				/>
 			)}
+
+			{/* SAVE NUDGE (bd polyglot-pdf-dft1). The saved PDF is the only thing
+			    between a client and losing every answer -- browser form state is
+			    discarded after 60 minutes -- so the prompt has to find them rather
+			    than wait to be found. CLIENT SESSIONS ONLY: staff have their own
+			    workflow and their own machines. */}
+			<SaveNudge
+				isOpen={saveNudge.variant !== null}
+				variant={saveNudge.variant ?? 'early'}
+				selectedLanguage={selectedLanguage}
+				speak={speakNotice}
+				onSave={handleNudgeSave}
+				onDismiss={saveNudge.dismiss}
+			/>
 
 			{/* Disclaimer Modal - shown after language selection */}
 			<DisclaimerModal
