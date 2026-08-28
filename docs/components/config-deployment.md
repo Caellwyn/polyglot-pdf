@@ -2,13 +2,10 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-b5nmq: the `.env.DEV` marker and the
-dev log destinations resolve off `__file__`, not the process cwd -- the local
-launchers now start uvicorn from `backend/` so its reload watch cannot see
-sibling worktrees. Also bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review. Also bd polyglot-pdf-vf48u: the deploy-gate sentence
-enumerated `kit_is_complete`'s skip set as draft/unmarked only; widened to
-name submitted and unpublished too, matching the three-status lifecycle bd
-polyglot-pdf-6dz0 shipped). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-28 (bd polyglot-pdf-qp632: the VFF_DEV_LOGGING
+dead-config note's `callback_handler.py:466` citation had drifted -- the
+real "LOGGING POLICY" comment is now inside `on_tool_call`; re-anchored by
+name instead of line number). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -248,8 +245,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 > doc; it predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
 > dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it, and
 > the real gate is the `.env.DEV` marker above. The one surviving mention is the
-> comment at `callback_handler.py:466`, which documents this correctly (it
-> explicitly calls out `VFF_DEV_LOGGING` as dead config and points back here).
+> "LOGGING POLICY" comment inside `callback_handler.py`'s `on_tool_call`,
+> which documents this correctly (it explicitly calls out `VFF_DEV_LOGGING`
+> as dead config and points back here).
 
 ## Deployment (local/manual — no CI)
 
