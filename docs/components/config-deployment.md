@@ -2,13 +2,12 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-b5nmq: the `.env.DEV` marker and the
-dev log destinations resolve off `__file__`, not the process cwd -- the local
-launchers now start uvicorn from `backend/` so its reload watch cannot see
-sibling worktrees. Also bd polyglot-pdf-nsb4y: the intro-clip flag pair gates the AUDIO only -- the disclaimer TEXT is unconditional -- and the SI register note now says the applicant UNDERTAKES review. Also bd polyglot-pdf-vf48u: the deploy-gate sentence
-enumerated `kit_is_complete`'s skip set as draft/unmarked only; widened to
-name submitted and unpublished too, matching the three-status lifecycle bd
-polyglot-pdf-6dz0 shipped). See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-28 (bd polyglot-pdf-a372q + bd polyglot-pdf-digef:
+the schema-editor access bullet described the retired
+`SCHEMA_EDITOR_TOKEN`/`SCHEMA_AUTHOR_TOKEN` shared-secret gate as current;
+corrected to the per-person Firebase claim in `backend/services/editor_auth.py`,
+matching `backend/config.py`'s own comment and `deploy-editor.sh`'s runbook).
+See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -209,13 +208,17 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   from all four, not from the reads alone. None of it is cached,
   deliberately: caching a revocation check reopens the replay window the
   redemption gate closes.
-- **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
-  for the token-gated `/api/editor/*` surface the hosted schema editor uses
-  (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:
-  *editor* = polish provided kits (list/read drafts, save schemas, flip status);
-  *author* = editor + PDF onboarding/hosted extraction (bd 92qe.3). Neither set →
-  the surface is disabled (503 fail-closed). On Cloud Run inject via Secret
-  Manager (`--set-secrets`), never plaintext env.
+- **Schema editor access** — `/api/editor/*` (`backend/routes/editor_kit_routes.py`)
+  is gated per-PERSON, not by a shared secret: `backend/services/editor_auth.py`
+  verifies a Firebase ID token and reads the `schema_editor_role` custom claim
+  (bd `polyglot-pdf-hn0jq`). Two tiers, same as before: *editor* = polish
+  provided kits (list/read drafts, save schemas, flip status); *author* =
+  editor + PDF onboarding/hosted extraction. Granting or revoking access is
+  `scripts/bootstrap_editor_user.py` against the account's Firebase project —
+  there is no server-side secret to attach on Cloud Run for this surface.
+  (`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN` were the earlier shared-secret
+  gate this replaced; the settings fields still exist in `backend/config.py`
+  but nothing reads them.)
 - **`CORS_EXTRA_ORIGINS`** — comma-separated extra CORS origins appended to the
   hardcoded localhost list in `backend/main.py` (e.g. the hosted schema-editor
   site, which calls Cloud Run directly rather than through the Hosting `/api`
@@ -323,14 +326,15 @@ pinned to `--only hosting:app`, the `frontend/package.json` `deploy` /
 otherwise THROW -- prod maps no `editor` target -- and the demo one would
 silently ship a stale editor build), and the editor ships only via
 **`deploy-editor.sh`** (`npm run build:hosted` + `--only hosting:editor`; its
-header is the one-time runbook: site create, `target:apply`, the two
-access-code secrets attached once to Cloud Run with `--set-secrets`, and the
+header is the one-time runbook: site create, `target:apply`, granting each
+person editor access via `scripts/bootstrap_editor_user.py` -- there is no
+shared secret to attach any more (bd `polyglot-pdf-hn0jq`) -- and the
 bucket `roles/storage.objectAdmin` grant the editor's writes need).
 `deploy-editor.sh` also **resolves the live Cloud Run URL at deploy time** and
 exports `VITE_API_BASE_URL` (overriding the `.env.hosted` fallback), same as the
 voice app -- a committed hash there once drifted on a service recreate and made
-every access-code entry hit a 404'd backend, looking like a wrong password (bd
-`emm7`).
+every request 404 against the backend, looking like a broken deploy rather
+than a stale URL (bd `emm7`).
 `deploy-demo.sh` carries `EXTRACTOR_MODEL` + `CORS_EXTRA_ORIGINS`
 (SEMICOLON-separated origins -- commas are `--set-env-vars`' pair separator)
 via `BACKEND_EXTRA_ENV`; the backend deploy runs `--memory=1Gi` (extraction
