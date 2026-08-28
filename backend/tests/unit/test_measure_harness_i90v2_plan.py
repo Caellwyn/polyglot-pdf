@@ -60,9 +60,24 @@ _SPIKES_DIR = str(_REPO_ROOT / "scripts" / "spikes")
 if _SPIKES_DIR not in sys.path:
     sys.path.insert(0, _SPIKES_DIR)
 
+import pytest  # noqa: E402
+
 import measure_form_session_costs as harness  # noqa: E402
 
 I90V2_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "i-90_v2" / "schema.json"
+
+# The i-90_v2 kit is deliberately NOT tracked in git (bd polyglot-pdf-2nikx,
+# Opus review: tracking it turned CI red on the translation lint and armed an
+# unintended deploy path -- see .gitignore's form-kits/i-90_v2 block). Local
+# measurement machines pull it from the bucket via scripts/pull-form-kits.sh;
+# a fresh CI clone does not have it, so this whole module skips there --
+# same pattern as test_pdf_fill_dropdown_export_codes.py's absent-file skip.
+pytestmark = pytest.mark.skipif(
+    not I90V2_SCHEMA_PATH.exists(),
+    reason="form-kits/i-90_v2 not present (untracked kit; pull with "
+           "scripts/pull-form-kits.sh) -- i90-v2 plan pins only run where "
+           "the kit exists",
+)
 
 _RADIO_LIKE_TYPES = ("radio", "select", "checkbox_group")
 

@@ -144,7 +144,16 @@ single run exceeded the $10 per-run re-estimate trigger.
 The same comparison on the NEW long-form I-90 kit (`form-kits/i-90_v2`, 34
 sections / 94 fields; a coherent single persona asks 57 questions -- the other
 37 fields are schema-gated conditionals/read-only, enumerated in
-`I90V2_EXCLUDED` and pinned by tests). Naive SI for this form: **19,710 SI +
+`I90V2_EXCLUDED` and pinned by tests).
+
+**Kit provenance (the kit is deliberately NOT tracked in git -- Opus review,
+beads polyglot-pdf-9jb21/g3cj1):** pull it from the demo bucket with
+`scripts/pull-form-kits.sh`. Every run in this study used
+`form-kits/i-90_v2/schema.json` with sha256
+`2d9cd437a604519e74770ef3e905c295eab62508c28ec1d9e8c8efee1f7bd271`
+(maintainer-reviewed content; the metadata readiness flags lag the review --
+an editor persistence bug, bead polyglot-pdf-058kq). Tests that read the kit
+skip cleanly when it is absent (fresh CI clones). Naive SI for this form: **19,710 SI +
 737 tool = 20,447 tokens** (measured `count_tokens`, 2026-08-28; smaller than
 W-7's 28,660 because the I-90 booklet is half the size).
 
