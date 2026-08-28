@@ -39,7 +39,7 @@ function mounted(overrides: Partial<Parameters<typeof ResumeUpload>[0]> = {}) {
   return { onResumed, onStartOver };
 }
 
-function mockFetch(response: Partial<Response> & { json?: () => unknown }) {
+function mockFetch(response: Partial<Response> & { json?: () => Promise<unknown> }) {
   const fetchMock = vi.fn(async () => response as unknown as Response);
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -61,7 +61,7 @@ describe('ResumeUpload', () => {
     const fetchMock = mockFetch({
       ok: true,
       status: 200,
-      json: () => ({ field_values: { last_name: 'Okonkwo' }, link_jtis: [] }),
+      json: async () => ({ field_values: { last_name: 'Okonkwo' }, link_jtis: [] }),
     });
     const { onResumed } = mounted();
 
@@ -81,7 +81,7 @@ describe('ResumeUpload', () => {
     mockFetch({
       ok: true,
       status: 200,
-      json: () => ({
+      json: async () => ({
         field_values: { last_name: 'Okonkwo' },
         form_session_id: 'fss_1_abc',
         link_jtis: ['jti-a'],
@@ -102,7 +102,7 @@ describe('ResumeUpload', () => {
   });
 
   it('shows the mismatch message when the server refuses', async () => {
-    mockFetch({ ok: false, status: 400, json: () => ({}) });
+    mockFetch({ ok: false, status: 400, json: async () => ({}) });
     const { onResumed } = mounted();
 
     fireEvent.change(document.querySelector('input[type=file]') as HTMLInputElement, {
@@ -120,7 +120,7 @@ describe('ResumeUpload', () => {
     mockFetch({
       ok: false,
       status: 400,
-      json: () => ({ field_values: { last_name: 'INJECTED' } }),
+      json: async () => ({ field_values: { last_name: 'INJECTED' } }),
     });
     const { onResumed } = mounted();
 
@@ -148,7 +148,7 @@ describe('ResumeUpload', () => {
     // Browsers do not fire change for an identical value, so the input must be
     // cleared -- otherwise a client who picks the wrong file, then the right
     // one, then the right one again sees nothing happen.
-    const fetchMock = mockFetch({ ok: false, status: 400, json: () => ({}) });
+    const fetchMock = mockFetch({ ok: false, status: 400, json: async () => ({}) });
     mounted();
 
     const input = document.querySelector('input[type=file]') as HTMLInputElement;
@@ -186,7 +186,7 @@ describe('ResumeUpload', () => {
   });
 
   it('attaches the bearer token, because the route is auth-gated', async () => {
-    const fetchMock = mockFetch({ ok: true, status: 200, json: () => ({ field_values: {} }) });
+    const fetchMock = mockFetch({ ok: true, status: 200, json: async () => ({ field_values: {} }) });
     mounted({ getToken: async () => 'tok-123' });
 
     fireEvent.change(document.querySelector('input[type=file]') as HTMLInputElement, {
