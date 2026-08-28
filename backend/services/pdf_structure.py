@@ -16,9 +16,9 @@ actually means:
 
   - page count, and each page's geometry
   - the complete widget inventory: field name, type, and position
-  - a hash of each page's STATIC text -- the form's own printed labels, with
-    every word inside a widget's area excluded, because a filled field renders
-    its value into the page and that value is exactly what must NOT count
+  - a hash of each page's CONTENT STREAM -- the drawing instructions for every
+    printed line, label and box. Exact, not heuristic: the client's answers
+    live in widget annotations, so this is byte-identical whatever they typed
 
 Measured properties: stable across runs, and IDENTICAL for the same form
 carrying completely different answers.
@@ -55,6 +55,7 @@ _log = structlog.get_logger(__name__)
 _RECT_PRECISION = 2
 
 
+
 class StructureMismatch(Exception):
     """An upload is not structurally the form it claims to resume."""
 
@@ -71,22 +72,34 @@ def _widget_line(widget: Any) -> str:
     )
 
 
-def _static_text_digest(page: Any) -> str:
-    """Hash the page's printed text, excluding anything inside a widget.
+def _content_digest(doc: Any, page: Any) -> str:
+    """Hash the page's CONTENT STREAM -- the document itself.
 
-    Word-level rather than block-level: a block can span both a label and the
-    field beside it, which would drag the client's answer back into the hash.
+    This is the drawing instructions: every printed line, label, box and rule.
+    It is what "byte match on everything except the field data" actually means
+    (maintainer, 2026-08-27), and it is exact rather than heuristic.
+
+    WHY THIS AND NOT PAGE TEXT. A client's answers live in WIDGET ANNOTATIONS,
+    not in the page content, so this stream is byte-identical no matter what
+    they typed -- verified on all three kits, including a value long enough to
+    overflow its box. The earlier version hashed extracted TEXT and tried to
+    exclude words near a widget, which cannot work: a value too long for its
+    field renders OUTSIDE the box, so the hash became a function of the
+    client's own answer and their saved file was refused. Widening the
+    exclusion then let injected text through. There is no correct margin --
+    the two goals are in direct tension -- and this sidesteps the tradeoff
+    entirely.
+
+    The schema, instructions, translations and guidance never leave the server
+    (they live in the form kit), so a client's PDF is a round-trip
+    reconstruction of the blank form plus their answers. Comparing content
+    streams asks exactly the right question: is this OUR document?
     """
-    import fitz
-
-    widget_rects = [w.rect for w in page.widgets()]
-    words: list[str] = []
-    for x0, y0, x1, y1, word, *_rest in page.get_text("words"):
-        rect = fitz.Rect(x0, y0, x1, y1)
-        if any(rect.intersects(box) for box in widget_rects):
-            continue
-        words.append(word)
-    return hashlib.sha256(" ".join(words).encode("utf-8")).hexdigest()
+    parts: list[str] = []
+    for xref in page.get_contents():
+        stream = doc.xref_stream(xref) or b""
+        parts.append(hashlib.sha256(stream).hexdigest())
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
 def structure_digest(doc: Any) -> str:
@@ -121,7 +134,7 @@ def structure_digest(doc: Any) -> str:
         # this hash. Text hidden UNDER a widget would be covered by that
         # field's own rendering, and the widget inventory above pins the
         # rects themselves.
-        parts.append(_static_text_digest(page))
+        parts.append(_content_digest(doc, page))
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
