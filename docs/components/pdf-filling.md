@@ -290,9 +290,14 @@ before 5tuas carries no uid; it is unattributable, so same-role contention
 falls back to the old ALLOW for it rather than stranding an editor on a kit
 nobody can be shown to hold. A preempted editor finds
 out on their NEXT SAVE, which 409s: there is no channel from server to editor,
-so the save is the notification. Every route that rewrites a schema honours the
-lock, enforced through one `_require_edit_lock` helper and pinned by a property
-test that derives the route list from the shipped module.
+so the save is the notification. Every route that rewrites a kit's schema OR
+metadata honours the lock (bd polyglot-pdf-fwzln widened this to the local-save
+readiness route too, which writes metadata via the SAME shared
+`_stamp_readiness` helper the hosted save path uses), enforced through one
+`_require_edit_lock` helper and pinned by a property test that derives the
+write-site list from BOTH route modules (`editor_kit_routes.py` and
+`editor_readiness_routes.py`), not just the one the schema-write path lives
+in.
 
 **The one thing that removes an archive** is `DELETE /api/editor/kits/{kit_id}`
 (bd `polyglot-pdf-6x1j`) -- author-only, and guarded by GRADUATED FRICTION

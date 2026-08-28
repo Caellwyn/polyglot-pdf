@@ -1143,40 +1143,100 @@ def test_EVERY_schema_write_is_DOMINATED_by_the_editing_lock():
     passed this test while an editor could rewrite a schema out from under an
     author holding the lock (Opus fresh-eyes reproduced it end to end).
 
-    Now every put_schema must be PRECEDED by a guard in the same function.
+    Now every put_schema/put_metadata write must be PRECEDED by a guard in
+    the same function.
+
+    SCANS BOTH MODULES, not just editor_kit_routes.py, and BOTH write shapes
+    (put_schema AND put_metadata) -- not just the biggest module or the
+    original write shape (bd polyglot-pdf-fwzln, bd polyglot-pdf-hn0rk): a
+    single-module, single-shape scan is exactly the "one file/shape at a
+    time" miss this repo's scar tissue calls out (CLAUDE.md #7) -- it is
+    precisely how this test's own module scope missed the readiness route's
+    put_metadata write for as long as it did, needing a separate bead rather
+    than this test to catch it.
+
+    A CALL TO _stamp_readiness ALSO counts as a write site in the CALLER: it
+    is a shared helper whose own put_metadata call is unguarded BY DESIGN
+    (both its callers guard before invoking it) -- a text-scan for
+    "await store.put_schema("/"await store.put_metadata(" cannot see THROUGH
+    a helper call, so a caller that stopped guarding before calling it would
+    otherwise pass this test vacuously (verified by mutation: removing
+    stamp_kit_readiness's guard call reddened nothing here until this
+    caller-site check was added).
     """
     import inspect
-    src = inspect.getsource(ekr).splitlines()
-    starts = [i for i, l in enumerate(src)
-              if l.startswith("async def ") or l.startswith("def ")]
+    import pathlib
 
-    # Helpers that write a schema are included too, not only @router. functions
-    # -- the route-only filter meant a new helper-level writer would be
-    # invisible to this test. Anything genuinely exempt is allowlisted WITH a
-    # reason, so the exemption is a decision on the record rather than a gap.
+    routes_dir = pathlib.Path(ekr.__file__).resolve().parent
+    modules = {
+        "editor_kit_routes": ekr,
+        "editor_readiness_routes": __import__(
+            "backend.routes.editor_readiness_routes", fromlist=["x"]),
+    }
+    for name in modules:
+        assert (routes_dir / f"{name}.py").exists(), (
+            f"{name}.py moved -- this scan is now blind to it"
+        )
+
+    # Helpers that write are included too, not only @router. functions -- a
+    # route-only filter meant a new helper-level writer would be invisible.
+    # Anything genuinely exempt is allowlisted WITH a reason, so the
+    # exemption is a decision on the record rather than a gap.
     ALLOWED = {
         # Runs INSIDE the publish path, after that route's own guard, on the
         # schema object that route already holds.
         "_sweep_drifted_translations",
+        # A shared HELPER, not a route/entry point: it has no lock context of
+        # its own, so IT is not scanned for a guard -- instead, every CALL to
+        # it (see _HELPER_CALL_SITES below) is treated as a write site in the
+        # CALLING function, which must guard before calling it.
+        "_stamp_readiness",
+        # The lock protocol itself -- guarding these would be a deadlock (you
+        # cannot require the lock you are trying to take or release).
+        "take_editor_kit_lock",
+        "release_editor_kit_lock",
+        # Kit CREATION: no prior editor could hold a lock on a kit that did
+        # not exist a moment ago.
+        "onboard_editor_kit",
+        # bd polyglot-pdf-c63tu: a REAL pre-existing gap (an editor with no
+        # lock can rename a kit's label out from under another editor's
+        # lock), filed and tracked separately rather than silently
+        # allowlisted here -- this entry documents the decision to defer,
+        # not a claim that the gap is fine.
+        "set_editor_kit_label",
     }
+    # Helpers whose OWN callers must guard before invoking them, because a
+    # text-scan for the write call itself cannot see through the helper
+    # (bd polyglot-pdf-hn0rk): a call to any of these counts as a write site
+    # in the calling function, exactly like a direct put_schema/put_metadata.
+    _HELPER_CALL_SITES = ("_stamp_readiness(",)
 
     offenders = []
-    for idx, i in enumerate(starts):
-        end_i = starts[idx + 1] if idx + 1 < len(starts) else len(src)
-        body = src[i:end_i]
-        name = src[i].split("(")[0].replace("async def ", "").replace("def ", "").strip()
-        writes = [j for j, l in enumerate(body) if "await store.put_schema(" in l]
-        if not writes or name in ALLOWED:
-            continue
-        guards = [j for j, l in enumerate(body) if "_require_edit_lock(" in l]
-        first_guard = min(guards) if guards else None
-        for w in writes:
-            if first_guard is None or first_guard > w:
-                offenders.append(f"{name} (write at +{w}, guard at "
-                                 f"{'none' if first_guard is None else f'+{first_guard}'})")
+    for mod_name, mod in modules.items():
+        src = inspect.getsource(mod).splitlines()
+        starts = [i for i, l in enumerate(src)
+                  if l.startswith("async def ") or l.startswith("def ")]
+        for idx, i in enumerate(starts):
+            end_i = starts[idx + 1] if idx + 1 < len(starts) else len(src)
+            body = src[i:end_i]
+            name = src[i].split("(")[0].replace("async def ", "").replace("def ", "").strip()
+            if name in ALLOWED:
+                continue
+            writes = [j for j, l in enumerate(body)
+                      if "await store.put_schema(" in l or "await store.put_metadata(" in l
+                      or any(call in l for call in _HELPER_CALL_SITES)]
+            if not writes:
+                continue
+            guards = [j for j, l in enumerate(body) if "_require_edit_lock(" in l]
+            first_guard = min(guards) if guards else None
+            for w in writes:
+                if first_guard is None or first_guard > w:
+                    offenders.append(
+                        f"{mod_name}.{name} (write at +{w}, guard at "
+                        f"{'none' if first_guard is None else f'+{first_guard}'})")
 
     assert offenders == [], (
-        "these schema writes are not dominated by an editing-lock check: "
+        "these schema/metadata writes are not dominated by an editing-lock check: "
         + "; ".join(offenders)
     )
 
@@ -1185,10 +1245,17 @@ def test_the_lock_property_test_covers_the_routes_it_claims_to():
     """A guard against the enumeration silently matching nothing -- a detection
     that finds zero writers would pass the test above vacuously."""
     import inspect
+    from backend.routes import editor_readiness_routes as err_routes
     src = inspect.getsource(ekr)
-    assert src.count("await store.put_schema(") >= 7, (
-        "expected at least 7 schema writes in this module; the detection above "
-        "may have stopped matching"
+    readiness_src = inspect.getsource(err_routes)
+    total_writes = (
+        src.count("await store.put_schema(") + src.count("await store.put_metadata(")
+        + readiness_src.count("await store.put_schema(")
+        + readiness_src.count("await store.put_metadata(")
+    )
+    assert total_writes >= 8, (
+        "expected at least 8 schema/metadata writes across both modules; the "
+        "detection above may have stopped matching"
     )
 
 
