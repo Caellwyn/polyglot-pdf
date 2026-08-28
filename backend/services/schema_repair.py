@@ -278,6 +278,12 @@ def _mint_slugs(
                 v not in pdf_choices and not vocab.is_valid_option_slug(v)
                 for v in values
             )
+            # NOTE: a select's empty value still sets `missing` and so still
+            # TRIGGERS this branch -- that is deliberate. Suppressing the
+            # trigger would also suppress the repair of any real defect
+            # sharing the field (a duplicate, a junk value). The empty value
+            # is instead held aside inside the loop below, so its neighbours
+            # are still repaired while it stays empty (bd polyglot-pdf-ot284).
             missing = any(o.get("value") in (None, "") for o in dict_opts)
             dupes = len(set(values)) != len(values)
             needs_mint = invalid or missing or dupes
@@ -298,6 +304,21 @@ def _mint_slugs(
             # schema stuck (repair reports nothing to fix while lint still
             # blocks on option-value-duplicate). First occurrence keeps the
             # code; the rest fall through to minting.
+            #
+            # A SELECT's EMPTY value is likewise held aside (bd
+            # polyglot-pdf-ot284). Minting invents a slug, and a dropdown's
+            # value goes verbatim into the combobox -- so the minted 'option'
+            # is absent from the widget's /Opt list and the form PRINTS
+            # "option". Worse, 'option' IS a valid slug, so lint then reports
+            # nothing: repairing would convert a loud, blocking
+            # option-value-missing ERROR into a silent mis-print. Only the PDF
+            # knows the real code, so the author must supply it -- leaving the
+            # value empty keeps that ERROR standing until they do. The schema
+            # editor creates a select option this way on purpose (bd
+            # polyglot-pdf-alzbr). radio/checkbox_group are unaffected: they
+            # carry widget identity in pdf_field_name/pdf_on_value, so a
+            # minted slug is the correct repair for them.
+            is_select = f.get("type") == "select"
             seen_codes: set = set()
             keep = []
             for o in dict_opts:
@@ -306,13 +327,37 @@ def _mint_slugs(
                 is_code = v is not None and v in pdf_choices and v not in seen_codes
                 if is_code:
                     seen_codes.add(v)
+                elif is_select and (v is None or v.strip() == ""):
+                    # Hold aside; do NOT mint a fake code. The blank test
+                    # MATCHES schema_lint's own definition of a missing option
+                    # value (`value is None or value.strip() == ""`,
+                    # schema_lint.py option-value-missing) -- a narrower test
+                    # here would let a whitespace-only value be minted over,
+                    # clearing the very lint ERROR this guard exists to keep
+                    # standing.
+                    is_code = True
                 keep.append(is_code)
             # Mint ONLY for the options actually being replaced, and seed the
             # dedupe with the preserved codes -- a slug minted from one label
             # can otherwise equal a code kept on another option and
             # manufacture the duplicate this whole branch exists to repair
             # (a lowercase PDF code like 'wy' is itself slug-legal).
-            reserved = [str(o["value"]) for o, k in zip(dict_opts, keep) if k]
+            # .get(), not [] -- a kept option no longer necessarily HAS a
+            # "value" key. Before the empty-value hold-aside above, only real
+            # PDF codes were kept and those always carry the key; now an option
+            # with no key at all (which schema_lint treats as an ordinary
+            # missing value) is kept too, and subscripting it aborted the whole
+            # repair() call for every field in the schema.
+            # `is not None`, NOT truthiness: a kept value of 0 / False / 0.0 is
+            # a REAL export code (the dump can declare "0"), and `x or ""`
+            # would drop it from the dedupe seed -- letting mint_unique_slugs
+            # hand a sibling the same slug and manufacture the very duplicate
+            # this branch exists to prevent. Every other value test in this
+            # function uses `is not None` for the same reason.
+            reserved = [
+                str(o.get("value")) if o.get("value") is not None else ""
+                for o, k in zip(dict_opts, keep) if k
+            ]
             labels = [
                 str(o.get("label") or o.get("value") or "option")
                 for o, k in zip(dict_opts, keep) if not k
@@ -323,7 +368,12 @@ def _mint_slugs(
             for o, k in zip(dict_opts, keep):
                 old = o.get("value")
                 if k:
-                    _register(str(old), str(old))
+                    # Only a REAL value is its own alias. A held-aside empty
+                    # (or absent) value must not register: str(None) would
+                    # enter the literal "None" into the alias table, and ""
+                    # is rejected by _register anyway.
+                    if old is not None:
+                        _register(str(old), str(old))
                     continue
                 slug = next(slug_iter)
                 if old is not None and str(old) != slug:
@@ -498,6 +548,17 @@ def _rewrite_atom(atom: dict, trigger: Optional[dict],
     resolved_values = []
     for v in values:
         rv, ok = _resolve_value(trigger, v, resolution)
+        # A resolution to a BLANK value is not a usable answer (bd
+        # polyglot-pdf-ot284). A select's held-aside option carries no code
+        # yet, so a condition naming it by label resolves to "" -- and
+        # schema_lint deliberately SKIPS its ref-option-value check for ""
+        # (the v1 "field is empty" idiom), so the rewritten condition would
+        # publish CLEAN while being permanently dead: never true on equals,
+        # always true on not_equals. Treat it as unresolvable and drop
+        # loudly, the same fail-open the option_id path already uses, rather
+        # than recording a silent "successful" rewrite.
+        if ok and rv is not None and str(rv).strip() == "" and str(v).strip() != "":
+            ok = False
         if not ok:
             repairs.append({
                 "action": "drop-condition", "path": path,

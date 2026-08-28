@@ -112,16 +112,23 @@ Opens at http://localhost:3001
 ### Hosted mode (the contractor workspace)
 
 A hosted build (`npm run build:hosted`, `VITE_DELIVERY_MODE=hosted` from
-`.env.hosted`) swaps the local-folder front door for the backend's token-gated
+`.env.hosted`) swaps the local-folder front door for the backend's per-user
 `/api/editor/*` routes over the shared form-kits store (bd polyglot-pdf-92qe.2):
 
-1. Open the hosted URL and enter your **access code** (asked once per browser).
-   The code determines your tier: *editor* (review/polish the provided forms)
-   or *author* (additionally: **Add a form (PDF)** uploads a blank AcroForm PDF
-   into the shared workspace, and **Run extraction** on a schemaless card runs
-   the PDF -> schema pipeline on the server -- takes a few minutes, with an
-   elapsed counter; optionally attach the form's official instructions PDF
-   first to enrich the per-field help text).
+1. Open the hosted URL and **sign in as yourself** -- email + password, or the
+   Google button (your session is remembered per browser, so this is asked
+   once). Your ACCOUNT determines your tier: *editor* (review/polish the
+   provided forms) or *author* (additionally: **Add a form (PDF)** uploads a
+   blank AcroForm PDF into the shared workspace, and **Run extraction** on a
+   schemaless card runs the PDF -> schema pipeline on the server -- takes a few
+   minutes, with an elapsed counter; optionally attach the form's official
+   instructions PDF first to enrich the per-field help text).
+
+   If you see *"this account has not been granted access to the schema
+   editor"*, your sign-in worked and the account simply is not on the editor's
+   list yet -- retyping your password will not help. Ask whoever administers
+   the editor to grant it, then reload. Use **Sign out** in the header to
+   switch accounts.
 2. The catalogue lists every kit in the shared workspace -- drafts included
    (drafts ARE the work list). Open a card, edit exactly as in local mode.
 3. **Cmd/Ctrl+S** saves back to the shared store (watch for the `Saving...` ->

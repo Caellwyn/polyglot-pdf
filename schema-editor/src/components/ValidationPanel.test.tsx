@@ -37,7 +37,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 
 // Imported AFTER the mock so the component picks up the mocked lintSchema.
 const { ValidationPanel, refusalFieldIds } = await import('./ValidationPanel');
-const { AuthError } = await import('../utils/remoteKitStore');
+const { AuthError, ForbiddenError } = await import('../utils/remoteKitStore');
 
 const SCHEMA: FormSchema = {
   form_metadata: { title: 'T', version: '1', form_number: 'X' },
@@ -396,6 +396,24 @@ describe('degraded-mode notices + auth (carried from the pane)', () => {
     expect(await screen.findByText(/Checks did not run/)).toBeInTheDocument();
     expect(screen.getByText(/from an earlier run/)).toBeInTheDocument();
     expect(onAuthError).toHaveBeenCalled(); // host still told, as before
+  });
+
+  // lintSchema is the highest-frequency remote call in the editor (every kit
+  // open, and debounced after essentially every edit), so a mid-session role
+  // revocation usually surfaces HERE first. The error must be FORWARDED, not
+  // just reported: App tells 403 (refused screen) from 401 (sign in again) by
+  // its type, and a bare onAuthError() would silently route every 403 to the
+  // sign-in form -- a dead end, since retrying cannot restore a revoked role.
+  it('forwards a 403 as a ForbiddenError so App can route it', async () => {
+    hostedMode = true;
+    const refusal = new ForbiddenError('This account does not have schema editor access');
+    lintSchema.mockRejectedValue(refusal);
+    const onAuthError = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onAuthError={onAuthError} />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalledWith(refusal));
   });
 
   it('a 401 in HOSTED mode still defers to the access-code gate', async () => {

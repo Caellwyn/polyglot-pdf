@@ -42,6 +42,19 @@ _log = structlog.get_logger().bind(module="editor_auth")
 # separation epic can move it wholesale.
 EDITOR_ROLE_CLAIM = "schema_editor_role"
 
+# Marks the ONE 403 that means "this account holds no editor role at all", as
+# opposed to the several that mean "you are a valid editor, but this particular
+# action is author-only" (require_author_actor, and the per-transition publish
+# gates in editor_kit_routes). Only the former should evict someone to the
+# sign-in gate's refused screen; the latter must surface as a normal refusal, or
+# an editor clicking an author-only button gets thrown out of the editor
+# (bd polyglot-pdf-yswp3, cross-surface review).
+#
+# A machine-readable PREFIX rather than a message the client string-matches:
+# prose is not a contract, and every previous attempt in this repo to key on
+# message text has been defeated by a rewording.
+NO_EDITOR_ACCESS_PREFIX = "NO_EDITOR_ACCESS:"
+
 ROLE_EDITOR = "editor"
 ROLE_AUTHOR = "author"
 _VALID_ROLES = (ROLE_EDITOR, ROLE_AUTHOR)
@@ -143,7 +156,8 @@ def verify_editor_token(token: str) -> EditorActor:
         # a voice-app account from reaching the editor.
         raise HTTPException(
             status_code=403,
-            detail="This account does not have schema editor access",
+            detail=(NO_EDITOR_ACCESS_PREFIX
+                    + " This account does not have schema editor access"),
         )
 
     uid = claims.get("uid") or claims.get("sub")

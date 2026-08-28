@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 import { FormCatalogue } from './FormCatalogue';
+import { ForbiddenError } from '../utils/remoteKitStore';
 
 
 // --- in-memory mock directory ---------------------------------------------- //
@@ -1309,6 +1310,35 @@ describe('FormCatalogue -- run extraction', () => {
       await waitFor(() =>
         expect(screen.getByText(/Name this version of/)).toBeInTheDocument());
       expect(screen.queryByText(/AUTHOR_VERSION_REQUIRED/)).not.toBeInTheDocument();
+    });
+
+    // A 403 is NOT a refused publish: mark-complete on a real backend can be
+    // refused for lack of the ROLE, and that needs the host's auth routing
+    // (sign-in vs the refused screen), not this card's notice line. Local mode
+    // is not exempt -- run-schema-editor.sh starts the real backend. Found in
+    // review round 3: this file handled auth nowhere at all.
+    it('routes a 403 from mark-complete to onAuthError, not the notice line', async () => {
+      const root = mockRoot([
+        mockKit('acme', { 'schema.json': SCHEMA,
+                          'metadata.json': JSON.stringify({ label: 'Acme Intake', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 403,
+        json: async () => ({ detail: 'This account does not have schema editor access' }),
+      } as unknown as Response));
+      const onAuthError = vi.fn();
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk
+        onAuthError={onAuthError} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await waitFor(() => expect(screen.getByText('Acme Intake')).toBeTruthy());
+      fireEvent.click(screen.getByText('Mark complete'));
+
+      await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+      // The ERROR travels, so the host can tell 403 from 401.
+      expect(onAuthError.mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
     });
 
     it('retries through the server with the normalized version attached', async () => {
