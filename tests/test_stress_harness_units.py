@@ -976,6 +976,245 @@ def test_dry_run_i90_full_drain_round_trip():
     asyncio.run(_inner())
 
 
+# ------------------------------------------------- i90-v2 continuous-DTI drip
+#
+# bd polyglot-pdf-2nikx: a live 57-question --schema i90-v2 --arm dti
+# --continuous run filled+confirmed q1, then emitted ZERO tool calls for q3
+# onward (52 straight questions of pure conversation, no stalls/errors). The
+# HYPOTHESIS was that i90-v2's schema.json shape -- sections[].fields as a
+# list of field-id STRINGS referencing the top-level fields[] list of dicts,
+# rather than inlining full field dicts -- silently starves the harness's
+# next_field_hint / manifest / DTI-drip machinery once the plan crosses the
+# first section boundary.
+#
+# INVESTIGATION FINDING: every form kit (w7, i-90, i-90_v2, f1040) already
+# uses the string-id shape for sections[].fields -- there is no dict-inlining
+# kit left to regress against, and the harness's own section-order test
+# (test_measure_harness_i90v2_plan.py::TestSectionOrder) already reads
+# sections[].fields as ID strings. So the hypothesis is REFUTED at the schema
+# level. This test proves it is refuted at the BEHAVIORAL level too: driven
+# by a well-behaved fake model that (a) looks up the client's own real
+# "current unconfirmed field" (exactly what the DTI drip's next_field_hint /
+# next_field_schema round-trip is supposed to keep in sync) and (b) supplies
+# a VALUE THAT ACTUALLY PASSES that field's OWN validation constraints, the
+# continuous-DTI drip advances past the section-1/section-2 boundary (field 3,
+# "family_name", a DIFFERENT schema section than field 1/2) and keeps
+# confirming every field through question 15 -- with NO live Gemini call.
+#
+# This differs from _DryRunLiveAI (used by test_dry_run_i90_full_emits_summary
+# / test_dry_run_i90_full_drain_round_trip) in exactly one respect: those
+# fakes send a HARDCODED value ("1") with an EMPTY field_id, relying solely on
+# the DTI current-field coercion gate -- which works, but the hardcoded "1"
+# fails real per-field validation (e.g. a_number's ^[0-9]{7,9}$ pattern), so
+# confirm_field never actually records True and the current-field pointer
+# never advances (their own docstrings note this is a pre-existing dry-run
+# limitation, not a bug). This test's fake instead supplies a value that
+# genuinely validates, so confirm_field succeeds for real and the drip's
+# request_next_field_hint -> merge_field_schema -> _current_field_id advance
+# is exercised end-to-end -- proving the starvation the live run hit is a
+# live-model behavior variance (confirmed independently: the artifact from
+# the same bead's 3-question smoke run shows the model calling skip_field
+# instead of confirm_field for the very same optional "uscis_account" field
+# and continuing normally, vs. the failing run's model calling neither),
+# not a harness data-shape defect.
+def _dti_drip_valid_value_for(field: dict) -> str:
+    """A value that should pass THIS field's own validation constraints --
+    mirrors what a well-behaved voice model / real user answer would supply,
+    so confirm_field genuinely succeeds instead of silently failing validation
+    the way _DryRunLiveAI's hardcoded "1" does for most text fields."""
+    import re as _re
+
+    ftype = field.get("type")
+    validation = field.get("validation") or {}
+    if ftype in ("radio", "select", "checkbox_group"):
+        options = field.get("options") or []
+        return options[0]["value"] if options else ""
+    if not validation.get("required", False):
+        # An optional field with no pattern constraint: the empty "does not
+        # apply" answer is a legitimate, common real-world path (and is
+        # exactly what tripped the live bug's q2 "uscis_account" -- pinning
+        # this path is the point, not an incidental simplification).
+        if not validation.get("pattern"):
+            return ""
+    pattern = validation.get("pattern")
+    if pattern:
+        m = _re.match(r"^\^\[0-9\]\{(\d+)(?:,(\d+))?\}\$$", pattern)
+        if m:
+            n = int(m.group(2) or m.group(1))
+            return "1" * n
+    min_len = validation.get("min_length")
+    if min_len:
+        return "1" * min_len
+    if ftype == "date":
+        return "01/01/1990"
+    if ftype == "email":
+        return "a@example.com"
+    return "test value"
+
+
+class _DtiDripLiveAI:
+    """Like _DryRunLiveAI, but looks up the FakeClientWebSocket's own current
+    unconfirmed field (via active_field_ids + confirmed state -- exactly what
+    the DTI protocol's next_field_hint/next_field_schema round-trip is meant
+    to keep the backend's _current_field_id pointer in sync with) and sends
+    that field's real id plus a validation-passing value. This is the
+    minimal change needed to exercise the REAL confirm-succeeds ->
+    request_next_field_hint -> merge_field_schema -> pointer-advances path,
+    instead of always failing validation and never advancing (bd
+    polyglot-pdf-2nikx investigation)."""
+
+    def __init__(self, *a, **kw):
+        self._session_ready = False
+        self._on_tool_call = None
+        self._toggle = "update"
+        self.client = None  # set by the test after FakeClientWebSocket exists
+        for f in ("_session_text_input_tokens", "_session_audio_input_tokens",
+                  "_session_text_output_tokens", "_session_audio_output_tokens",
+                  "_session_total_tokens"):
+            setattr(self, f, 0)
+        self._log = __import__("structlog").get_logger()
+
+    def set_session_context(self, **kw):
+        pass
+
+    def set_callbacks(self, **kw):
+        if kw.get("on_tool_call"):
+            self._on_tool_call = kw["on_tool_call"]
+        self._session_ready = True
+
+    def is_session_active(self):
+        return self._session_ready
+
+    def begin_graceful_shutdown(self):
+        ev = asyncio.Event()
+        ev.set()
+        return ev
+
+    def _bump(self, text_in=50, audio_in=10, text_out=5, audio_out=20):
+        self._session_text_input_tokens += text_in
+        self._session_audio_input_tokens += audio_in
+        self._session_text_output_tokens += text_out
+        self._session_audio_output_tokens += audio_out
+        self._session_total_tokens += text_in + audio_in + text_out + audio_out
+
+    async def send_client_content(self, message):
+        self._bump()
+        return True
+
+    async def send_text_message(self, message):
+        self._bump()
+        return True
+
+    async def stream_audio(self, chunk):
+        return None
+
+    async def send_activity_start(self):
+        return None
+
+    def _current_field(self):
+        client = self.client
+        if client is None:
+            return None
+        for fid in client.active_field_ids:
+            entry = client.state.get(fid)
+            if not entry or not entry.get("confirmed"):
+                return client.schema_fields.get(fid)
+        return None
+
+    async def send_activity_end(self):
+        if self._on_tool_call is not None:
+            field = self._current_field()
+            fid = field["id"] if field else ""
+            if self._toggle == "update":
+                value = _dti_drip_valid_value_for(field) if field else "1"
+                await self._on_tool_call(
+                    "update_form_fields", {"field_id": fid, "value": value})
+                self._toggle = "confirm"
+            else:
+                await self._on_tool_call(
+                    "confirm_field", {"field_id": fid, "status": "verbal"})
+                self._toggle = "update"
+        self._bump()
+
+    async def finalize(self):
+        self._session_ready = False
+
+
+def test_dry_run_i90_v2_continuous_dti_drip_advances_past_section_boundary(
+        monkeypatch, tmp_path):
+    """The offline reproduction for bd polyglot-pdf-2nikx: with a
+    validation-passing fake model, --schema i90-v2 --arm dti --continuous
+    fills+confirms every one of the first 15 plan questions -- crossing from
+    section 1 (a_number, uscis_account) into later sections (family_name
+    onward) -- with NO live Gemini call and NO starvation. This refutes the
+    string-vs-dict sections[].fields hypothesis behaviorally, not just by
+    schema-shape inspection.
+
+    MUTATION-VERIFIED (per CLAUDE.md 'test the tests'): reverting
+    _dti_drip_valid_value_for to always return the OLD _DryRunLiveAI-style
+    hardcoded "1" (which fails a_number's ^[0-9]{7,9}$ pattern) turns this RED
+    -- confirmed_fields stops at 0 and the drip never leaves field 1, proving
+    this test actually discriminates a starved drip from a healthy one.
+    """
+    import argparse
+
+    monkeypatch.setenv("GEMINI_API_KEY", "dry-run-dummy")
+    monkeypatch.setattr(mfc, "LiveAIGemini", _DtiDripLiveAI)
+    monkeypatch.setattr(mfc, "synth_cached",
+                        lambda text, lang="en": b"\x00" * 320)
+
+    fake_ai_holder = {}
+    _orig_live_ai_gemini = _DtiDripLiveAI
+
+    def _capturing_live_ai(*a, **kw):
+        inst = _orig_live_ai_gemini(*a, **kw)
+        fake_ai_holder["ai"] = inst
+        return inst
+
+    monkeypatch.setattr(mfc, "LiveAIGemini", _capturing_live_ai)
+
+    _orig_client_init = mfc.FakeClientWebSocket.__init__
+
+    def _capturing_client_init(self, *a, **kw):
+        _orig_client_init(self, *a, **kw)
+        if "ai" in fake_ai_holder:
+            fake_ai_holder["ai"].client = self
+
+    monkeypatch.setattr(mfc.FakeClientWebSocket, "__init__", _capturing_client_init)
+
+    args = argparse.Namespace(
+        model="2.5", schema="i90-v2", arm="dti", path="happy",
+        questions=15, trigger=5000, window=3500, vertex=False,
+        continuous=True, compression=True,
+        out_dir=str(tmp_path), synth_only=False, debug=False,
+        events="none", mix_unhappy=0, reactivity=None, lang="en",
+        text_ai=False, no_text_ai=False)
+    rc = asyncio.run(mfc.run(args))
+    assert rc == 0
+
+    import json as _json
+    m = _json.loads(next(tmp_path.glob("*.meta.json")).read_text(encoding="utf-8"))
+
+    # The plan's first 2 questions (a_number, uscis_account) are section 1;
+    # family_name (question 3) is a DIFFERENT schema section -- confirming it
+    # is the section-boundary crossing the live bug never made.
+    confirmed = set(m["client_confirmed_fields"])
+    assert "family_name" in confirmed, (
+        "the DTI drip never advanced past the first schema section -- this "
+        "is exactly the live starvation bd polyglot-pdf-2nikx reported")
+    # All 15 asked questions confirmed, not just the first section's 2.
+    asked_ids = {q["field_id"] for q in mfc.I90V2_QUESTIONS[:15]}
+    assert asked_ids <= confirmed, (
+        f"drip starved partway through: missing {asked_ids - confirmed}")
+
+    # Every question actually saw BOTH tool calls (no silent no-op turns).
+    per_q = m["per_question_tools"]
+    for i in range(1, 16):
+        tools = per_q[str(i)]
+        assert "update_form_fields" in tools and "confirm_field" in tools, (
+            f"question {i} got no tool calls: {tools}")
+
+
 def test_dry_run_legacy_i90_arm_still_runs(monkeypatch, tmp_path):
     """The pre-existing 34-q --schema i90 arm keeps working untouched (its
     sidecar stays UNWIRED by default -- text_usd must be zero)."""
