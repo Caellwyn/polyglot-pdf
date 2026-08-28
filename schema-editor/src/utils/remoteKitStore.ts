@@ -109,11 +109,31 @@ export class AuthError extends Error {
  * round a sign-in loop that can never succeed.
  */
 export class ForbiddenError extends Error {
-  constructor(message = 'This account does not have schema editor access') {
+  /**
+   * True only when the server said this account holds NO editor role at all --
+   * the case that must evict to the refused screen.
+   *
+   * A 403 also arrives for "you ARE an editor, but this action is author-only"
+   * (publishing, reopening a live kit, the author-tier routes). Those must
+   * surface as a normal refusal: throwing a working editor out of the editor
+   * for clicking an author button is a far worse bug than the one this class
+   * was added to fix. The server marks the evicting one with a machine-readable
+   * prefix (editor_auth.NO_EDITOR_ACCESS_PREFIX) rather than a message we
+   * string-match, because prose is not a contract.
+   */
+  readonly noEditorAccess: boolean;
+
+  constructor(message = 'This account does not have schema editor access',
+              noEditorAccess = false) {
     super(message);
     this.name = 'ForbiddenError';
+    this.noEditorAccess = noEditorAccess;
   }
 }
+
+/** The server's marker for "no editor role at all" -- mirrors
+ * backend/services/editor_auth.py's NO_EDITOR_ACCESS_PREFIX. */
+const NO_EDITOR_ACCESS_PREFIX = 'NO_EDITOR_ACCESS:';
 
 /** True when this build runs against the remote store (VITE_DELIVERY_MODE=hosted). */
 export function isHostedMode(): boolean {
@@ -186,8 +206,12 @@ async function editorFetch(path: string, init: RequestInit = {}): Promise<Respon
   // so it gets its own error type rather than being folded into AuthError. The
   // server's detail is carried through because it names the actual reason.
   if (res.status === 403) {
+    const detail = await errorDetail(
+      res, 'This account does not have schema editor access');
+    const evicting = detail.startsWith(NO_EDITOR_ACCESS_PREFIX);
     throw new ForbiddenError(
-      await errorDetail(res, 'This account does not have schema editor access'),
+      evicting ? detail.slice(NO_EDITOR_ACCESS_PREFIX.length).trim() : detail,
+      evicting,
     );
   }
   return res;

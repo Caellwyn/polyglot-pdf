@@ -420,6 +420,13 @@ export const App: React.FC = () => {
     // design, see editor_auth.py) needs the gate's REFUSED screen, not its
     // sign-in form: signing in again cannot restore access. Routing it here
     // rather than at each catch site means all six share one predicate.
+    // ONLY a "no editor role at all" 403 evicts. An author-only refusal (an
+    // editor pressing Publish) is a normal refusal: throwing them out of the
+    // editor for it would be worse than the bug this routing exists to fix.
+    if (err instanceof ForbiddenError && !err.noEditorAccess) {
+      setSaveError(err.message);
+      return;
+    }
     setRefusedMidSession(err instanceof ForbiddenError ? err.message : null);
     setRole(null);
     // setRole(null) only DOES anything hosted, where it drops back to the

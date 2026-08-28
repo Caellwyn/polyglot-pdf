@@ -1,14 +1,15 @@
-"""The local editor's credential must agree across all FOUR links (bd borq).
+"""The local editor must actually AUTHENTICATE, by whatever carries it (bd borq).
 
-`scripts/run-schema-editor.sh` mints a per-run token and hands the SAME value
-to two different consumers. That value then travels a four-link chain, and
-every link is a separate FILE in a separate language:
+There is no shared credential to agree on any more. Per-user sign-in
+(bd polyglot-pdf-yswp3) removed the last link of the old four-link chain: the
+browser sends a per-person Firebase ID token, and LOCAL dev does not sign in at
+all -- the launcher runs the backend with VFF_DISABLE_AUTH and the sign-in gate
+is hosted-only. So what has to hold locally is now:
 
-    run-schema-editor.sh   mints  SCHEMA_AUTHOR_TOKEN
-      -> exports the same value as VITE_EDITOR_TOKEN
-        -> remoteKitStore.ts reads import.meta.env.VITE_EDITOR_TOKEN
-          -> sends it as the X-Editor-Token header
-            -> require_editor_role reads that header
+    run-schema-editor.sh  exports VFF_DISABLE_AUTH=true
+      -> passes it EXPLICITLY to the uvicorn invocation
+        -> editor_auth._dev_bypass_allowed() honours it off a deployed instance
+          -> and REFUSES it on one (K_SERVICE), so this cannot leak to prod
 
 WHY THIS NEEDS A TEST AND NOT JUST CARE. Breaking any link degrades local mode
 SILENTLY and in the most misleading possible direction: the editor still
@@ -17,19 +18,24 @@ author as "no problems found" rather than "auth failed". There is no error
 toast, no red state, nothing. A findings-free panel is indistinguishable from
 a clean schema.
 
-The original bug (bd borq) was this chain broken at BOTH ends at once: the
+The original bug (bd borq) was the old chain broken at BOTH ends at once: the
 launcher set no token, so the backend 503'd, and the frontend sent none, so it
 would have 401'd anyway. bd polyglot-pdf-cpiw (PR #522) fixed both. Nothing
 pinned the agreement, so a rename on either side could reintroduce it.
 
-WHAT CARRIES AUTHORITY NOW (bd polyglot-pdf-hn0jq): the shared secrets are
-gone, so the launcher's minted token is no longer a credential the backend can
-verify -- ANY non-empty value behaves the same. The local editor authenticates
-via VFF_DISABLE_AUTH, which the launcher exports and which editor_auth refuses
-outright on a deployed instance. The SYMPTOM these tests exist to prevent is
-unchanged (a silently unauthenticated editor whose empty lint panel reads as a
-clean schema); the mechanism that prevents it is now the bypass, so that is
-what they pin.
+THE SYMPTOM IS WHAT THIS FILE OWNS, NOT THE MECHANISM. The mechanism has now
+moved twice -- shared secret (borq) -> per-user token + bypass locally
+(hn0jq) -> no client credential at all in local mode (yswp3) -- while the thing
+that must never happen is identical each time: a local editor that fails auth
+SILENTLY and shows an empty findings panel that reads as a clean schema. So
+these tests pin whatever currently carries local auth, and are expected to be
+rewritten (not deleted) the next time it moves.
+
+WHAT CARRIES IT TODAY: VFF_DISABLE_AUTH. The launcher exports it and passes it
+explicitly to uvicorn; editor_auth refuses it outright on a deployed instance,
+which is what makes relying on it safe. The old VITE_EDITOR_TOKEN /
+X-Editor-Token links are GONE from the client -- asserting on them now would
+pin a chain that no longer exists.
 
 These tests read the ACTUAL shipped files rather than a reimplementation.
 
@@ -37,19 +43,21 @@ ASCII only.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts" / "run-schema-editor.sh"
 STORE = ROOT / "schema-editor" / "src" / "utils" / "remoteKitStore.ts"
 
-# The four link names. Each appears in at least two files that must agree.
-BACKEND_ENV_VAR = "SCHEMA_AUTHOR_TOKEN"
-FRONTEND_ENV_VAR = "VITE_EDITOR_TOKEN"
-HEADER = "X-Editor-Token"
+# What the local chain rests on today. The client sends no shared credential
+# at all, so there is no frontend env var or wire header left to agree on.
+BYPASS_ENV_VAR = "VFF_DISABLE_AUTH"
+# The header the CLIENT must no longer send. Asserted ABSENT (below): its
+# return would mean the retired shared-code path came back.
+RETIRED_HEADER = "X-Editor-Token"
+RETIRED_FRONTEND_ENV_VAR = "VITE_EDITOR_TOKEN"
 
 
 def _read(p: Path) -> str:
@@ -132,104 +140,78 @@ def test_launcher_enables_the_dev_bypass_so_the_local_editor_authenticates():
     )
 
 
-def test_launcher_hands_the_SAME_value_to_both_sides():
-    """The two-sided half. A token the backend accepts but the frontend never
-    sends 401s just as dead as no token at all."""
-    sh = _read(LAUNCHER)
-    # Backend consumer: the env var is exported into the uvicorn subshell.
-    assert re.search(rf'{BACKEND_ENV_VAR}="\${BACKEND_ENV_VAR}"', sh), (
-        f"{LAUNCHER.name} no longer exports {BACKEND_ENV_VAR} to the backend."
-    )
-    # Frontend consumer: the SAME shell variable, not a second mint.
-    assert re.search(rf'{FRONTEND_ENV_VAR}="\${BACKEND_ENV_VAR}"', sh), (
-        f"{LAUNCHER.name} must set {FRONTEND_ENV_VAR} from ${BACKEND_ENV_VAR} "
-        f"-- the SAME value. Two independently minted tokens would 401: the "
-        f"editor loads, lint returns nothing, and a findings-free panel looks "
-        f"like a clean schema rather than an auth failure."
-    )
+def test_the_client_sends_NO_shared_credential_any_more():
+    """The retired links must stay retired.
 
+    Per-user sign-in (bd polyglot-pdf-yswp3) removed the build-baked token and
+    the X-Editor-Token header from the client. Re-adding either would put a
+    shared secret back into a bundle anyone can read -- the exact posture the
+    editor-identity epic exists to end -- and would do it silently, since the
+    server still accepts that header until bd polyglot-pdf-rhc2v removes it.
 
-def test_the_frontend_reads_the_env_var_the_launcher_sets():
-    """Link 3. A rename here is invisible to the shell script."""
-    ts = _code_only(_read(STORE))
-    # WORD-BOUNDED. A bare substring check is defeated by a SUFFIXED rename:
-    # VITE_EDITOR_TOKEN is a prefix of VITE_EDITOR_TOKEN_V2, so `in` matches
-    # the renamed symbol and the guard passes on a broken chain (measured --
-    # this test was green against exactly that mutation before the boundary).
-    pattern = re.compile(
-        r"import\.meta\.env\." + re.escape(FRONTEND_ENV_VAR) + r"\b"
-    )
-    assert pattern.search(ts), (
-        f"{STORE.name} no longer reads {FRONTEND_ENV_VAR}, which "
-        f"{LAUNCHER.name} sets. Local mode would fall back to the prompt path "
-        f"and every editor call would 401."
-    )
-
-
-def test_the_frontend_sends_the_header_the_backend_reads():
-    """Link 4, asked of the FRAMEWORK rather than of the source text.
-
-    Two files, two languages, one wire header. The TypeScript side is a string
-    literal, so it must be read from source. The Python side is NOT -- FastAPI
-    computes the real answer and will tell us, so ask it.
-
-    THREE WRONG VERSIONS PRECEDED THIS, every one measured:
-      1. `"x-editor-token" in py.lower()` over the raw file. The DOCSTRINGS
-         satisfied it, so renaming the parameter changed the real header while
-         the test stayed green. Asserted against prose; caught nothing.
-      2. A word-bounded search for the parameter NAME. That rejected
-         `Header(alias="X-Editor-Token")` on a renamed parameter -- a valid
-         refactor whose wire header is unchanged (verified 200). A guard that
-         reddens on correct code teaches the next author to bypass it.
-      3. Name OR literal alias. Still rejected `Header(alias=_HDR)` where the
-         alias comes from a constant -- also valid, also verified 200.
-
-    Each failed for the same reason: it pattern-matched SOURCE TEXT for
-    something the framework already knows. Walking the dependant graph is
-    immune to all three, because it reports the header the app actually binds
-    however it was spelled -- and a comment naming the old header cannot fool
-    it, because comments are not in the graph.
+    Asserted over CODE, not prose: both names legitimately appear in comments
+    explaining what was retired, and matching those would make this vacuous.
     """
     ts = _code_only(_read(STORE))
-    assert f"'{HEADER}'" in ts or f'"{HEADER}"' in ts, (
-        f"{STORE.name} no longer sends the {HEADER} header."
+    assert RETIRED_FRONTEND_ENV_VAR not in ts, (
+        f"{STORE.name} reads {RETIRED_FRONTEND_ENV_VAR} again. That bakes a "
+        f"shared credential into the bundle in PLAINTEXT (standard Vite VITE_* "
+        f"behaviour) -- anyone who can open the site can read it. Identity "
+        f"comes from the signed-in person's Firebase ID token."
     )
-
-    # Scoped to require_editor_role's OWN dependant, not to the whole app
-    # (fresh-eyes round 4). "Does ANY route bind X-Editor-Token?" is a weaker
-    # question than this docstring claims: an unrelated future route declaring
-    # the same header would satisfy it while THIS dependency was broken.
-    # Unexploitable today -- require_editor_role is the only Header() in the
-    # backend -- but the set would silently absorb a second one.
-    from fastapi.dependencies.utils import get_dependant
-    from backend.routes.editor_kit_routes import require_editor_role
-
-    dependant = get_dependant(path="/", call=require_editor_role)
-    declared = set()
-    stack = [dependant]
-    while stack:
-        d = stack.pop()
-        for param in getattr(d, "header_params", []):
-            declared.add(str(param.alias).lower())
-        stack.extend(getattr(d, "dependencies", []))
-
-    assert HEADER.lower() in declared, (
-        f"require_editor_role no longer declares a {HEADER} header parameter "
-        f"(it declares: {sorted(declared) or 'none'}). FastAPI binds the wire "
-        f"header from the parameter name or an explicit Header(alias=...); "
-        f"neither now yields {HEADER}, so the backend expects a different "
-        f"header than {STORE.name} sends. Every editor call 401s, and local "
-        f"mode degrades to a findings-free panel that reads as a clean schema "
-        f"rather than an auth failure."
+    assert RETIRED_HEADER not in ts, (
+        f"{STORE.name} sends the {RETIRED_HEADER} header again. The server "
+        f"still accepts it (until bd polyglot-pdf-rhc2v), so this would NOT "
+        f"fail loudly -- it would quietly restore the shared-secret path."
     )
 
 
-@pytest.mark.parametrize("name", [BACKEND_ENV_VAR, FRONTEND_ENV_VAR])
-def test_both_env_var_names_appear_in_the_launcher(name):
-    """Set-style guard: renaming EITHER variable must fail here, not silently
-    in a running editor. Parametrized so the failure names which one moved."""
-    assert name in _read(LAUNCHER), (
-        f"{name} is gone from {LAUNCHER.name}. If it was renamed, update the "
-        f"consumer too: {BACKEND_ENV_VAR} is read by backend config, "
-        f"{FRONTEND_ENV_VAR} by {STORE.name}."
+def test_the_launcher_bakes_no_credential_into_the_local_bundle():
+    """The launcher half of the same property.
+
+    It used to hand the minted token to the browser as VITE_EDITOR_TOKEN. The
+    local editor now needs no client credential -- the backend's bypass answers
+    before any token check -- so re-adding one would be dead config that reads
+    like a live credential to the next author.
+    """
+    sh = _read(LAUNCHER)
+    assert RETIRED_FRONTEND_ENV_VAR not in sh, (
+        f"{LAUNCHER.name} sets {RETIRED_FRONTEND_ENV_VAR} again. Nothing reads "
+        f"it: the local editor authenticates via {BYPASS_ENV_VAR} on the "
+        f"backend, and the sign-in gate is hosted-only."
     )
+
+
+def test_the_bypass_is_refused_on_a_deployed_instance():
+    """What makes leaning on the bypass SAFE, asked of the real function.
+
+    The local chain now rests entirely on VFF_DISABLE_AUTH, so the guarantee
+    that it cannot apply in production is load-bearing rather than incidental.
+    K_SERVICE is Cloud Run's marker: present means deployed, and the bypass must
+    refuse itself however the env is set.
+    """
+    import importlib
+
+    from backend.services import editor_auth
+
+    importlib.reload(editor_auth)
+    saved = {k: os.environ.get(k) for k in (BYPASS_ENV_VAR, "K_SERVICE")}
+    try:
+        os.environ[BYPASS_ENV_VAR] = "true"
+        os.environ.pop("K_SERVICE", None)
+        assert editor_auth._dev_bypass_allowed() is True, (
+            "the local bypass no longer engages off a deployed instance -- "
+            "every /api/editor call would 401 and the editor would silently "
+            "return nothing, which is bd borq's symptom exactly."
+        )
+        os.environ["K_SERVICE"] = "polyglot-backend"
+        assert editor_auth._dev_bypass_allowed() is False, (
+            "the local bypass is NOT refused on a deployed instance. The whole "
+            "local chain rests on this being unreachable in production."
+        )
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v

@@ -270,7 +270,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
   // operator has to grant access. This is the voice-app-user case.
   it('a signed-in account WITHOUT editor access is told so, not re-prompted', async () => {
     vi.mocked(probeSession).mockRejectedValue(
-      new ForbiddenError('This account does not have schema editor access'));
+      new ForbiddenError('This account does not have schema editor access', true));
     render(<App />);
     await screen.findByTestId('signin-refused');
     expect(screen.getByText(/does not have schema editor access/)).toBeInTheDocument();
@@ -449,7 +449,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
     fireEvent.click(screen.getByTestId('edit-field'));
 
     vi.mocked(saveRemoteSchema).mockRejectedValue(
-      new ForbiddenError('This account does not have schema editor access'));
+      new ForbiddenError('This account does not have schema editor access', true));
     fireEvent.keyDown(window, { key: 's', metaKey: true });
 
     await screen.findByTestId('signin-refused');
@@ -492,6 +492,29 @@ describe('App hosted mode (bd 92qe.2)', () => {
   it('shows who is signed in', async () => {
     await passGate();
     expect(screen.getByTestId('signed-in-as')).toHaveTextContent('editor@example.com');
+  });
+
+  // The other half of the 403 split: an AUTHOR-ONLY refusal must NOT evict.
+  // An editor pressing an author action is a normal, expected refusal -- being
+  // thrown out of the editor for it is worse than the bug the refused screen
+  // was added to fix (cross-surface review).
+  it('an author-only 403 shows the refusal and KEEPS the editor open', async () => {
+    await passGate();
+    await openKit('draft-kit');
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field'));
+
+    vi.mocked(saveRemoteSchema).mockRejectedValue(new ForbiddenError(
+      'Publishing is an author action. Submit this form for review instead.',
+      false));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    await waitFor(() =>
+      expect(screen.getByText(/author action/)).toBeInTheDocument());
+    // Still in the editor: no refused screen, no sign-in form.
+    expect(screen.queryByTestId('signin-refused')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    expect(screen.getByTestId('edit-field')).toBeInTheDocument();
   });
 
   it('a mid-session 401 on save drops back to the sign-in gate', async () => {

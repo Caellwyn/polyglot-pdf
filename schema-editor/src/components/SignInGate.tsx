@@ -319,6 +319,16 @@ function friendlyError(err: unknown): string {
   if (code === 'auth/popup-blocked') {
     return 'Your browser blocked the Google sign-in window. Allow popups and try again.';
   }
+  // The editor is a SEPARATE Hosting site from the voice app, so its domain
+  // must be listed under Firebase Auth > Settings > Authorized domains.
+  // Without this case an operator sees a raw SDK string naming neither the
+  // cause nor the fix -- and the build-time config check cannot catch it,
+  // since the config is present and valid.
+  if (code === 'auth/unauthorized-domain') {
+    return 'Sign-in is not enabled for this web address yet. Whoever '
+      + 'administers the editor needs to add this site to the Firebase '
+      + 'project\'s authorized domains.';
+  }
   return (err as { message?: string } | null)?.message
     ?? 'Something went wrong. Please try again.';
 }

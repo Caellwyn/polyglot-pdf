@@ -36,6 +36,16 @@
 #      The BUILD also needs the VITE_FIREBASE_* values (committed in
 #      schema-editor/.env.hosted -- public client ids, not secrets); a build
 #      without them renders an explicit "no Firebase configuration" screen.
+#   3b. AUTHORIZED DOMAIN for the editor site. The editor is a SEPARATE
+#      Hosting site from the voice app, and Firebase Auth refuses sign-in
+#      from any domain not on the project's list -- with the whole config
+#      present and valid, so no build check can catch it. Firebase usually
+#      auto-authorizes sites created under the same project; VERIFY rather
+#      than assume, because the failure only appears at a human's first
+#      sign-in attempt:
+#        Firebase console -> Authentication -> Settings -> Authorized domains
+#      Confirm "$EDITOR_SITE.web.app" is listed (and any custom domain).
+#      The sign-in screen names this case explicitly if it fires.
 #      CORS_EXTRA_ORIGINS + EXTRACTOR_MODEL ride the normal backend deploy env
 #      (deploy-demo.sh exports them via BACKEND_EXTRA_ENV).
 #   4. Bucket WRITE access for the editor surface (reads work today; saves 403

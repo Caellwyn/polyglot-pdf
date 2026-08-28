@@ -92,7 +92,7 @@ describe('SignInGate', () => {
   // would loop them forever through a step that already succeeded.
   it('a 403 explains that access must be granted, and does NOT re-prompt', async () => {
     vi.mocked(probeSession).mockRejectedValue(
-      new ForbiddenError('This account does not have schema editor access'));
+      new ForbiddenError('This account does not have schema editor access', true));
     const onReady = vi.fn();
     currentUser = SIGNED_IN;
     render(<SignInGate onReady={onReady} />);
@@ -107,7 +107,7 @@ describe('SignInGate', () => {
   });
 
   it('the refused screen offers a way back to a different account', async () => {
-    vi.mocked(probeSession).mockRejectedValue(new ForbiddenError('nope'));
+    vi.mocked(probeSession).mockRejectedValue(new ForbiddenError('nope', true));
     currentUser = SIGNED_IN;
     render(<SignInGate onReady={vi.fn()} />);
 
@@ -161,6 +161,19 @@ describe('SignInGate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByText('Incorrect email or password.')).toBeInTheDocument();
+  });
+
+  // The editor is a SEPARATE Hosting site, so its domain must be on the
+  // Firebase project's authorized list. Nothing at build time can catch this
+  // (the config is present and valid) -- it only fires at a human's first
+  // sign-in, so the message has to name the fix.
+  it('names the fix when the site is not an authorized Firebase domain', async () => {
+    vi.mocked(signInWithGoogle).mockRejectedValue({ code: 'auth/unauthorized-domain' });
+    render(<SignInGate onReady={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
+
+    expect(await screen.findByText(/authorized domains/)).toBeInTheDocument();
   });
 
   // Editor access is GRANTED (scripts/bootstrap_editor_user.py), never

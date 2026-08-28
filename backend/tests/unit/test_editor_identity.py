@@ -27,6 +27,7 @@ pytestmark = pytest.mark.real_editor_auth
 import backend.services.editor_auth as ea
 from backend.services.editor_auth import (
     EDITOR_ROLE_CLAIM,
+    NO_EDITOR_ACCESS_PREFIX,
     EditorActor,
     require_author_actor,
     require_editor_actor,
@@ -259,6 +260,43 @@ def test_an_editor_is_refused_the_author_gate():
     with pytest.raises(HTTPException) as exc:
         _run(require_author_actor(EditorActor(uid="u", role="editor")))
     assert exc.value.status_code == 403
+
+
+def test_the_TWO_KINDS_of_403_are_distinguishable_by_the_client(monkeypatch):
+    """Same status code, opposite client remedies -- so the wire must say which.
+
+    "You hold no editor role at all" must send the person to the sign-in gate's
+    refused screen: nothing they do in the editor can help, an operator has to
+    grant access. "You are a valid editor, but this action is author-only" must
+    surface as an ordinary refusal and LEAVE THEM WORKING -- evicting an editor
+    for pressing Publish is a worse bug than the one the refused screen fixed
+    (bd polyglot-pdf-yswp3, cross-surface review).
+
+    The marker is a PREFIX, not the message text, because the client has to
+    branch on it: every previous attempt in this repo to key on English prose
+    has been defeated by a rewording, and here a wrong branch throws a working
+    editor out of the app.
+    """
+    # 1. No claim at all -> marked, because it must evict.
+    _fake_firebase(monkeypatch, {"uid": "uid-nobody", "email": "v@example.com"})
+    with pytest.raises(HTTPException) as exc:
+        verify_editor_token("voice-app-token")
+    assert exc.value.status_code == 403
+    assert str(exc.value.detail).startswith(NO_EDITOR_ACCESS_PREFIX), (
+        "the no-editor-access 403 lost its machine-readable marker, so the "
+        "editor cannot tell it from an author-only refusal and will either "
+        "strand a voice-app user on a sign-in form that can never work, or "
+        "evict a valid editor who pressed an author-only button."
+    )
+
+    # 2. A REAL editor refused an author action -> NOT marked.
+    with pytest.raises(HTTPException) as exc:
+        _run(require_author_actor(EditorActor(uid="u", role="editor")))
+    assert exc.value.status_code == 403
+    assert not str(exc.value.detail).startswith(NO_EDITOR_ACCESS_PREFIX), (
+        "an author-only refusal is marked as no-editor-access, so a valid "
+        "editor pressing an author button is thrown out of the editor."
+    )
 
 
 def test_an_author_passes_the_editor_gate(monkeypatch):

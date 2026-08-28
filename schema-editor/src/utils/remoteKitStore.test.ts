@@ -176,6 +176,34 @@ describe('request shape', () => {
     await expect(listRemoteKits()).rejects.toBeInstanceOf(ForbiddenError);
   });
 
+  // TWO KINDS OF 403, and conflating them evicts a working editor. "No editor
+  // role at all" must drop to the refused screen; "this action is author-only"
+  // (publishing, reopening a live kit) is a NORMAL refusal for a valid editor.
+  // The server marks the first with a machine-readable prefix rather than a
+  // message we string-match -- prose is not a contract.
+  it('a 403 marked NO_EDITOR_ACCESS sets noEditorAccess and strips the prefix', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(
+      { detail: 'NO_EDITOR_ACCESS: This account does not have schema editor access' },
+      403));
+    const err = await probeSession().catch((e) => e);
+    expect(err).toBeInstanceOf(ForbiddenError);
+    expect(err.noEditorAccess).toBe(true);
+    // The wire marker is an implementation detail, never shown to a human.
+    expect(err.message).toBe('This account does not have schema editor access');
+    expect(err.message).not.toContain('NO_EDITOR_ACCESS');
+  });
+
+  it('an author-only 403 is NOT flagged, so a valid editor is never evicted', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(
+      { detail: 'Publishing is an author action. Submit this form for review instead.' },
+      403));
+    const err = await probeSession().catch((e) => e);
+    expect(err).toBeInstanceOf(ForbiddenError);
+    expect(err.noEditorAccess).toBe(false);
+    // The server's own wording reaches the human unchanged.
+    expect(err.message).toContain('author action');
+  });
+
   it('a non-401 error surfaces the server detail', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'editor surface is not configured' }, 503));
     await expect(probeSession()).rejects.toThrow('editor surface is not configured');

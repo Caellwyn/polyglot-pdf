@@ -161,6 +161,52 @@ OBLIGATION side (who calls something that can fail this way), and accepting
 that the residue needs behavioural tests per site. The cost was four review
 rounds on a bead whose feature work was done in the first commit.
 
+## What the OUTER review caught that five inner rounds did not
+
+The inner loop cleared at NO-GAPS. The cross-surface pass then found three
+things, two of them real defects -- a clean demonstration of why the two
+layers have different jobs.
+
+**1. A CI failure in a file the diff never touched.** `tests/` (the ROOT
+suite, which CI runs alongside `backend/tests`) held
+`test_local_editor_credential_chain.py`, pinning the four-link chain this
+bead deleted: the launcher's `VITE_EDITOR_TOKEN`, the store's read of it, and
+the `X-Editor-Token` header. Four hard failures. I had run only
+`backend/tests` and called the backend green -- the scope was wrong, not the
+result.
+
+The file was not deleted. Its docstring already said the right thing: the
+MECHANISM has moved twice while the SYMPTOM it guards is identical each time
+-- a local editor that fails auth silently and shows an empty findings panel
+that reads as a clean schema. So the tests were rewritten to pin what carries
+local auth today (the `VFF_DISABLE_AUTH` bypass, plus its refusal on a
+deployed instance) and to assert the retired links stay retired: re-adding a
+build-baked credential now fails, which matters because the server still
+accepts that header until `rhc2v`, so its return would be silent.
+
+**2. Every 403 evicted -- including the ones that should not.** This one I
+introduced. `editorFetch` turns ANY 403 into `ForbiddenError`, and
+`handleAuthExpired` sent all of them to the refused screen. But three
+different 403s exist: "no editor role at all" (evict), "this action is
+author-only" (`require_author_actor`), and the per-transition publish gates.
+An editor pressing Publish would have been thrown OUT of the editor and told
+they have no access -- worse than the bug the refused screen was added to fix,
+and a regression against `origin/dev`, where that 403 displayed correctly.
+
+Fixed at the wire, not in the client's guesswork: the server marks the
+evicting 403 with a machine-readable prefix and the client branches on that.
+Keying on the English message was the obvious shortcut and the wrong one --
+every previous attempt in this repo to match prose has been defeated by a
+rewording, and here a wrong branch throws a working editor out of the app.
+
+**3. An unverifiable deploy prerequisite, reported honestly.** The editor is a
+separate Hosting site, so its domain must be on Firebase Auth's authorized
+list -- and no build check can catch a miss, because the config is present and
+valid. The reviewer flagged it as UNVERIFIED rather than proven broken (no
+cloud access), which is the right call. Handled without pretending to know:
+`deploy-editor.sh` gained a verify-this step, and the sign-in screen now names
+`auth/unauthorized-domain` explicitly instead of surfacing a raw SDK string.
+
 ## Follow-ups
 
 The shared tokens themselves still exist server-side and in the launcher env;
