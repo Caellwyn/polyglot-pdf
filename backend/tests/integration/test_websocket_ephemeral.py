@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+
+from backend.services.link_spend import (
+    LinkBudgetExhausted as _LinkBudgetExhausted,
+)
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -317,6 +321,168 @@ async def test_a_client_link_session_carries_the_links_firm_and_form(
     assert kwargs.get("kit_id") == "i-90"
     assert kwargs.get("link_jti") == _jti
     assert kwargs.get("link_employee_id") == "u-emp-7"
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_link_at_its_SPEND_CEILING_is_refused_a_new_voice_session(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """THE CEILING ACTUALLY STOPS A SESSION (bd polyglot-pdf-ik7e).
+
+    Refused BEFORE any Gemini session exists -- the point is to refuse the
+    session, not to discover afterwards that it should have been refused.
+
+    And refused with 1013 + `budget_exhausted`, deliberately NOT the 1008
+    "Authentication failed" the other refusals use: a client who used their
+    allowance has a perfectly good link, and telling them authentication
+    failed sends them to the firm with the wrong problem.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    import time as _t
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+    # This link has already spent its whole ceiling.
+    monkeypatch.setattr(
+        "backend.routes.websocket_routes.check_budget",
+        lambda jti, *a, **k: (_ for _ in ()).throw(
+            _LinkBudgetExhausted("spent 10.0000 of its 10.00 ceiling")
+        ),
+    )
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_fill_session.assert_not_awaited()          # no paid session started
+    mock_websocket.close.assert_awaited()
+    kwargs = mock_websocket.close.await_args.kwargs
+    assert kwargs.get("code") == 1013, "a spent link is not an auth failure"
+    assert kwargs.get("reason") == "budget_exhausted"
+
+
+@pytest.mark.asyncio
+async def test_a_finished_session_BANKS_its_spend_against_the_link(monkeypatch):
+    """The gate is useless unless spend is actually RECORDED.
+
+    Without banking, every link sits at $0 forever and the ceiling never fires
+    -- while both refusal tests stay green, because they stub check_budget and
+    never reach a teardown. That is the one-layer-removed trap this project has
+    paid for repeatedly.
+
+    Tests the extracted helper rather than driving the whole receive loop; the
+    test below pins that the teardown actually CALLS it, which is the other
+    half of the same guarantee.
+    """
+    from backend.routes import websocket_routes as wr
+
+    banked = []
+    monkeypatch.setattr(wr, "record_spend",
+                        lambda j, cost, *a, **k: banked.append((j, cost)))
+
+    class _AI:
+        def session_cost_usd(self):
+            return 1.75
+
+    class _Svc:
+        live_ai = _AI()
+
+    got = await wr._bank_link_spend("jti-under-test", _Svc(), wr._log)
+
+    assert banked, "the session's cost never reached the spend store"
+    assert banked[0] == ("jti-under-test", pytest.approx(1.75))
+    assert got == pytest.approx(1.75)
+
+
+@pytest.mark.asyncio
+async def test_a_STAFF_session_banks_nothing(monkeypatch):
+    """No jti, no link, nothing to bank. Staff are not the abuse surface."""
+    from backend.routes import websocket_routes as wr
+
+    banked = []
+    monkeypatch.setattr(wr, "record_spend",
+                        lambda j, cost, *a, **k: banked.append((j, cost)))
+
+    class _AI:
+        def session_cost_usd(self):
+            return 9.99
+
+    class _Svc:
+        live_ai = _AI()
+
+    assert await wr._bank_link_spend(None, _Svc(), wr._log) == 0.0
+    assert banked == []
+
+
+@pytest.mark.asyncio
+async def test_a_broken_adapter_does_not_break_the_TEARDOWN(monkeypatch):
+    """Accounting must never take down a session teardown."""
+    from backend.routes import websocket_routes as wr
+
+    class _AI:
+        def session_cost_usd(self):
+            raise RuntimeError("adapter exploded")
+
+    class _Svc:
+        live_ai = _AI()
+
+    assert await wr._bank_link_spend("jti-a", _Svc(), wr._log) == 0.0
+
+
+def test_the_TEARDOWN_actually_calls_the_banking_helper():
+    """Pins the WIRING, not just the helper.
+
+    A perfectly-tested helper nobody calls banks nothing. Derived from the
+    shipped source so deleting the call reddens here.
+    """
+    from pathlib import Path as _P
+
+    src = _P(__file__).resolve().parents[2] / "routes" / "websocket_routes.py"
+    body = src.read_text(encoding="utf-8")
+    assert "await _bank_link_spend(link_jti, service, log)" in body, (
+        "the teardown no longer banks link spend -- every ceiling would sit "
+        "at $0 forever and never fire"
+    )
+    # ...and it must run BEFORE end_session finalises the adapter.
+    assert body.index("await _bank_link_spend(") < body.index("await service.end_session()")
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_a_link_WITH_headroom_still_connects_normally(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch
+):
+    """The other half: the gate must not refuse a client who has room.
+
+    Without this, a gate that refused EVERYTHING would pass the test above.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    from backend.services.link_tokens import mint_link_token
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7")
+    import time as _t
+    monkeypatch.setattr(
+        "backend.services.link_redemptions.open_link",
+        lambda jti, firm_id, kit_id, now=None: {
+            "jti": jti, "firm_id": firm_id, "kit_id": kit_id,
+            "opened_at": int(_t.time()), "completed_at": None,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.routes.websocket_routes.check_budget", lambda jti, *a, **k: 7.5
+    )
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    mock_fill_session.assert_awaited()
 
 
 @pytest.mark.asyncio
