@@ -417,7 +417,13 @@ path tolerates a missing id.
 
 Each response's `usage_metadata` is split by modality, priced via
 `get_pricing_for_model(self._model_name)`, accumulated into
-`self._session_total_cost` / `_session_total_tokens`, and (when session context is
+`self._session_total_cost` / `_session_total_tokens` -- AND
+`_connection_total_cost`, which must be fed in LOCKSTEP: it is the one the
+client-link spend ceiling reads (`session_cost_usd()`, bd polyglot-pdf-ik7e),
+and unlike the others it is never reset, because a SECTION SWITCH restarts
+the Gemini session on this same adapter and zeroes the per-session counters.
+Dropping it silently makes the ceiling bank $0 forever; pinned by
+`test_the_two_cost_counters_ACCRUE_IN_LOCKSTEP`. Session context is also
 set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
 [../standards/logging-and-cost.md](../standards/logging-and-cost.md).
 
