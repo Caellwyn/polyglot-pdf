@@ -465,6 +465,194 @@ def test_duplicate_pdf_sanctioned_codes_are_still_resolved():
     assert not has_errors(lint_schema(repaired, _COMBO_DUMP))
 
 
+def test_repair_leaves_a_selects_EMPTY_export_code_empty():
+    """Repair must not invent a code only the PDF can supply (bd ot284).
+
+    A dropdown's value goes verbatim into the combobox, so a minted 'option'
+    is absent from the widget's /Opt list and the form PRINTS "option" --
+    and because 'option' IS a valid slug, lint then reports nothing at all.
+    Repairing would convert a loud, blocking option-value-missing ERROR into
+    a silent mis-print. The schema editor creates a select option this way on
+    purpose (bd alzbr), so the guard has to survive a Repair click.
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "AL", "label": "Alabama"},
+            {"value": "", "label": ""}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    assert _values(repaired) == ["WY", "AL", ""]
+    # ...and the blocking ERROR is still standing afterwards.
+    assert any(f.rule == "option-value-missing" and f.severity == "ERROR"
+               for f in lint_schema(repaired, _COMBO_DUMP))
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "	", None])
+def test_every_shape_lint_calls_MISSING_is_held_aside(blank):
+    """The hold-aside must match schema_lint's own definition of a missing
+    option value (`value is None or value.strip() == ""`), not a narrower one.
+
+    A whitespace-only value is lint-ERROR "missing" but was still minted over,
+    clearing the exact gate this bead exists to keep standing (found in review,
+    measured: '   ' -> 'blank' -> has_errors False).
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "AL", "label": "Alabama"},
+            {"value": blank, "label": ""}]
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    vals = _values(repaired)
+    assert vals[:2] == ["WY", "AL"]
+    assert vals[2] == blank, "a lint-missing value must survive repair unminted"
+    assert has_errors(lint_schema(repaired, _COMBO_DUMP)),         "repair cleared the publish gate it must preserve"
+
+
+_COND_DUMP = {"fields": [
+    {"name": "form1[0].P1_Line6e_State[0]",
+     "widgets": [{"choices": [{"value": "X1"}, {"value": "WY"}]}]},
+    {"name": "form1[0].dep[0]", "widgets": [{}]},
+]}
+
+
+def _select_with_dependent(option_value, cond_value):
+    return {
+        "source": "pdf", "schema_version": "2",
+        "form_metadata": {"title": "T", "form_number": "F",
+                          "edition_date": "01/01/25"},
+        "extraction_info": {"method": "m"},
+        "sections": [{"id": "s1", "label": "S", "order": 1,
+                      "fields": ["mail_state", "dep"]}],
+        "fields": [
+            {"id": "mail_state", "name": "S", "spoken_name": "s",
+             "type": "select", "section_id": "s1",
+             "pdf_field_name": "P1_Line6e_State[0]",
+             "options": [{"label": "L0", "value": option_value},
+                         {"value": "WY", "label": "Wyoming"}]},
+            {"id": "dep", "name": "D", "spoken_name": "d", "type": "text",
+             "section_id": "s1", "pdf_field_name": "dep[0]",
+             "show_if": {"field": "mail_state", "operator": "equals",
+                         "value": cond_value}},
+        ],
+    }
+
+
+def test_a_condition_naming_a_held_aside_option_is_DROPPED_not_blanked():
+    """Resolving a condition to "" would publish it DEAD and invisible.
+
+    A condition can name an option by LABEL. When that option is a select's
+    held-aside blank, the label resolves to "" -- and schema_lint SKIPS its
+    ref-option-value check for "" (the v1 emptiness idiom), so the rewritten
+    condition passes the publish gate while being permanently dead: never true
+    on equals, always true on not_equals. Worse, it was recorded as a
+    SUCCESSFUL 'rewrite-condition-value' repair. Drop it loudly instead, the
+    same fail-open the option_id path already uses (bd polyglot-pdf-ot284).
+    """
+    repaired, repairs = repair(_select_with_dependent("", "L0"), _COND_DUMP)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert "show_if" not in dep or dep.get("show_if") is None
+    assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
+    assert not any(r["action"] == "rewrite-condition-value" for r in repairs),         "a blank resolution must never be reported as a successful rewrite"
+
+
+def test_an_ALREADY_blank_condition_value_is_not_newly_dropped():
+    """The blank-resolution guard is scoped to values that STARTED non-blank.
+
+    A condition whose own value was already blank must keep whatever behaviour
+    it had before this fix -- the guard exists to stop a real reference being
+    silently rewritten to nothing, not to newly police blank-vs-blank. Without
+    the `str(v).strip() != ""` clause this case flips from preserved to
+    dropped, so the clause is load-bearing (found in cross-surface review as an
+    unpinned scoping clause: deleting it left all 91 tests green).
+    """
+    # Whitespace on BOTH sides is the only input that distinguishes the clause:
+    # an exactly-"" condition value already fails _register's empty-key guard
+    # and never reaches here.
+    dump = {"fields": [
+        {"name": "form1[0].P1_Line6e_State[0]",
+         "widgets": [{"choices": [{"value": "X1"}]}]},
+        {"name": "form1[0].dep[0]", "widgets": [{}]},
+    ]}
+    schema = _select_with_dependent("   ", "   ")
+    repaired, repairs = repair(schema, dump)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep.get("show_if", {}).get("value") == "   "
+    assert not any(r["action"] == "drop-condition" for r in repairs)
+
+
+def test_a_condition_on_a_REAL_option_value_still_resolves():
+    """The drop is scoped to a BLANK resolution -- a real value is untouched."""
+    repaired, _ = repair(_select_with_dependent("", "WY"), _COND_DUMP)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep["show_if"]["value"] == "WY"
+
+
+def test_a_FALSY_but_real_export_code_still_seeds_the_dedupe():
+    """A kept value of 0 / False is a REAL code (a dump can declare "0"), so it
+    must seed the mint dedupe like any other.
+
+    Guarding the reserved list with `x or ""` instead of `x is not None` drops
+    it, and mint_unique_slugs then hands a sibling the same slug -- manufacturing
+    the exact option-value-duplicate this branch exists to prevent. Found in
+    review; measured: options came back [0, '0'] with a duplicate ERROR on the
+    schema repair had just "fixed".
+    """
+    dump = {"fields": [{
+        "name": "form1[0].P1_Line6e_State[0]",
+        "widgets": [{"choices": [{"value": "0"}, {"value": "WY"}]}],
+    }]}
+    # The second option's LABEL mints to '0', colliding with the first's code.
+    opts = [{"value": 0, "label": "Zero-code"},
+            {"value": "!!!", "label": "0"}]
+    repaired, _ = repair(_schema(_combo(opts)), dump)
+    vals = [o.get("value") for o in repaired["fields"][0]["options"]]
+    assert vals[0] == 0, "the real falsy code must be preserved"
+    assert len({str(v) for v in vals}) == len(vals),         "repair manufactured a duplicate: %r" % (vals,)
+    assert not has_errors(lint_schema(repaired, dump))
+
+
+def test_a_select_option_with_NO_value_key_does_not_crash_repair():
+    """Regression: holding empty values aside made a keyed-absent option
+    "kept", but the reserved-list builder still subscripted o["value"] --
+    a KeyError that aborted repair() for the ENTIRE schema, not just the
+    offending option. schema_lint treats a missing key as an ordinary missing
+    value, so repair must too.
+    """
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "AL", "label": "Alabama"},
+            {"label": "Blank"}]  # no "value" key at all
+    repaired, _ = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    # .get(), not the shared _values() helper: that one subscripts o["value"]
+    # and would raise the very KeyError this test exists to prove is gone.
+    got = [o.get("value") for o in repaired["fields"][0]["options"]]
+    assert got[:2] == ["WY", "AL"]
+    assert got[2] in (None, ""), "the keyless option must not gain a minted code"
+    assert has_errors(lint_schema(repaired, _COMBO_DUMP))
+
+
+def test_an_empty_select_code_does_not_block_repair_of_its_NEIGHBOURS():
+    """Holding the empty value aside must not suppress the whole branch: a
+    real defect sharing the field is still repaired around it."""
+    opts = [{"value": "WY", "label": "Wyoming"},
+            {"value": "WY", "label": "Wyoming again"},
+            {"value": "", "label": ""}]
+    repaired, repairs = repair(_schema(_combo(opts)), _COMBO_DUMP)
+    vals = _values(repaired)
+    assert vals[0] == "WY"          # first occurrence keeps the code
+    assert vals[1] not in ("WY", "")  # the duplicate WAS repaired
+    assert vals[2] == ""            # the empty one was left alone
+    assert any(r["action"] == "mint-option-slugs" for r in repairs)
+
+
+def test_radio_and_checkbox_group_still_mint_over_an_empty_value():
+    """Scoped to select ONLY: radio/checkbox_group carry widget identity in
+    pdf_on_value, so minting a slug is the correct repair for them."""
+    for ftype in ("radio", "checkbox_group"):
+        fields = [{"id": "f", "type": ftype, "options": [
+            {"value": "", "label": "Male", "pdf_on_value": "1"},
+            {"value": "female", "label": "Female", "pdf_on_value": "2"},
+        ]}]
+        repaired, _ = repair(_schema(fields), None)
+        vals = [o["value"] for o in repaired["fields"][0]["options"]]
+        assert vals[0] == "male", "%s should still mint: %r" % (ftype, vals)
+
+
 def test_dumpless_repair_still_mints_over_non_slug_dropdown_values():
     """No dump means no evidence: repair keeps its old, stricter behaviour
     rather than preserving values it cannot verify.

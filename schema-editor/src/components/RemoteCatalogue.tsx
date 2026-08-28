@@ -1,7 +1,8 @@
 import React from 'react';
 import {
-  AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  deleteRemoteKit,
+  AuthError,
+  ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  deleteRemoteKit, DeleteNeedsAcknowledgement, type DeleteEscalation,
   listArchivedRevisions, loadArchivedSchema,
   onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
   translateRemoteKitOptions, fetchRetireCandidates,
@@ -23,7 +24,7 @@ interface RemoteCatalogueProps {
   /** The caller's access tier (author-only controls arrive with bd 92qe.3). */
   role: EditorRole;
   /** A call answered 401 (rotated/revoked code): the app drops to the gate. */
-  onAuthError?: () => void;
+  onAuthError?: (err?: unknown) => void;
   /**
    * Live in-editor review stats for the open kit (same contract as
    * FormCatalogue's liveProgress), so the open card tracks unsaved edits.
@@ -131,6 +132,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // be deleted has to be read next to the form it names.
   const [deletePrompt, setDeletePrompt] = React.useState<RemoteKitEntry | null>(null);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  // The server asked for confirmation rather than refusing outright (bd
+  // polyglot-pdf-6zhaf). Holds its OWN wording -- it names what is at risk for
+  // this specific kit, which a generic client warning cannot.
+  const [deleteWarning, setDeleteWarning] =
+    React.useState<{ text: string; escalation: DeleteEscalation } | null>(null);
+  // A warning belongs to ONE kit. Leaking it into the next dialog is not a
+  // display glitch: a tier-B warning arms "Delete anyway" immediately, so kit
+  // B's dialog would open one click from deleting a kit whose id was never
+  // typed -- bypassing the type-to-confirm guard entirely, on the exact action
+  // where deleting the wrong row is the mistake that actually happens.
+  // Cleared HERE, keyed on the kit, so every path that opens the dialog is
+  // covered rather than each remembering to (fresh-eyes, bd 6zhaf).
+  React.useEffect(() => { setDeleteWarning(null); setDeleteError(null); },
+                  [deletePrompt?.id]);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   // The kit whose lock is being taken/released right now (bd
   // polyglot-pdf-hqztg), so its buttons can disable without freezing the
@@ -239,7 +254,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // than rethrow: with several kits, more than one fetch can reject, and
       // a rethrow through Promise.all would leave the siblings' rejections
       // unhandled.
-      let authFailed = false;
+      // Holds the auth ERROR, not a boolean: a 403 must reach onAuthError as a
+      // ForbiddenError so the caller can tell "signed out" from "not allowed".
+      let authFailed: unknown = null;
       const computed = await Promise.all(withSchema.map(async (e) => {
         try {
           const schema = await loadRemoteSchema(e.id);
@@ -263,21 +280,23 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             version: versionInfoFromSchema(schema),
           }] as const;
         } catch (err) {
-          if (err instanceof AuthError) authFailed = true;
+          if (err instanceof AuthError || err instanceof ForbiddenError) {
+            authFailed = err;
+          }
           return [e.id, { reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null }] as const;
         }
       }));
       if (seq !== refreshSeq.current) return;
       if (authFailed) {
-        onAuthError?.();
+        onAuthError?.(authFailed);
         return;
       }
       setProgress(Object.fromEntries(computed));
       if (deliberate) setEditedProgress({});
     } catch (err) {
       if (seq !== refreshSeq.current) return;
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to load the kit list');
@@ -292,7 +311,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // server's guard decides (records exist / verified clean / could not check),
   // and a 409 is the guard WORKING, so it renders inside the dialog rather
   // than dismissing it.
-  const handleDelete = React.useCallback(async (kit: RemoteKitEntry) => {
+  const handleDelete = React.useCallback(async (
+    kit: RemoteKitEntry, acknowledged: DeleteEscalation | null = null,
+  ) => {
     setDeleteError(null);
     // Clear any stale success banner, as every sibling handler does. Without
     // it, deleting kit A and then being REFUSED on kit B showed a green
@@ -302,8 +323,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setNotice(null);
     setDeletingId(kit.id);
     try {
-      await deleteRemoteKit(kit.id);
+      await deleteRemoteKit(kit.id, { acknowledged });
       setDeletePrompt(null);
+      setDeleteWarning(null);
       setNotice(`"${kit.label}" was deleted permanently.`);
       // Close the editor pane if the deleted kit was the OPEN one (bd
       // polyglot-pdf-hbfky) -- without this, the card vanishes from the
@@ -312,10 +334,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       if (kit.id === selectedKitId) clearOpenKit?.();
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) { onAuthError?.(); return; }
-      // The guard refusing (409) is the NORMAL outcome for a form anyone has
-      // filled, and for one whose records cannot be checked. Keep the dialog
-      // open and show the server's own words -- it names the safe alternative.
+      if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
+      // NOT a refusal -- a request to confirm. The server decided how risky
+      // this delete is; the dialog escalates instead of dead-ending, because a
+      // form nobody can ever delete is its own bug (bd polyglot-pdf-6zhaf).
+      if (err instanceof DeleteNeedsAcknowledgement) {
+        setDeleteWarning({ text: err.message, escalation: err.escalation });
+        return;
+      }
+      // A genuine failure (502, a broken store). Keep the dialog open and show
+      // the server's own words.
       setDeleteError(err instanceof Error ? err.message : 'Could not delete the form');
     } finally {
       setDeletingId(null);
@@ -356,7 +384,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           : `Released "${kit.label}".`);
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) { onAuthError?.(); return; }
+      if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
       setError(err instanceof Error ? err.message : 'Could not change the lock');
     } finally {
       setLockingId(null);
@@ -473,8 +501,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       }
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       const detail = err instanceof Error ? err.message : 'Failed to update status';
@@ -535,11 +563,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       setNotice(`Renamed "${kit.label}" to "${label}".`);
       await refresh();
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to rename the form');
+    } finally {
+      // In finally, not the end of the catch block (bd polyglot-pdf-uibly,
+      // same shape as handleSetStatus below): the AuthError return above
+      // skipped it, and busy gates every control in this catalogue -- a
+      // caller that keeps RemoteCatalogue mounted through an auth error
+      // would get every button stuck disabled with no way to recover short
+      // of a reload.
       setBusy(false);
     }
   }, [renameText, refresh, onAuthError]);
@@ -560,11 +595,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       await refresh();
       setNotice(`Added "${created.id}" -- run the extraction to produce its schema, then open it here.`);
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to add form');
+    } finally {
+      // In finally, not the end of the catch block (bd polyglot-pdf-uibly,
+      // same shape as handleSetStatus below): the AuthError return above
+      // skipped it, and busy gates every control in this catalogue -- a
+      // caller that keeps RemoteCatalogue mounted through an auth error
+      // would get every button stuck disabled with no way to recover short
+      // of a reload.
       setBusy(false);
     }
   }, [refresh, onAuthError]);
@@ -606,8 +648,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         return next;
       });
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Extraction failed');
@@ -667,8 +709,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         if (kit.id === selectedKitId) onOpenKit(kit);
       }
     } catch (err) {
-      if (err instanceof AuthError) {
-        onAuthError?.();
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
         return;
       }
       setError(err instanceof Error ? err.message : 'Option translation failed');
@@ -1027,6 +1069,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   kitLabel={kit.label ?? kit.id}
                   listRevisions={listArchivedRevisions}
                   loadSchema={loadArchivedSchema}
+                  onAuthError={onAuthError}
                 />
               </>
             );
@@ -1437,6 +1480,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   kitLabel={kit.label ?? kit.id}
                   listRevisions={listArchivedRevisions}
                   loadSchema={loadArchivedSchema}
+                  onAuthError={onAuthError}
                 />
               </li>
             );
@@ -1463,7 +1507,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           kitLabel={deletePrompt.label}
           busy={deletingId === deletePrompt.id}
           error={deleteError}
-          onCancel={() => { setDeletePrompt(null); setDeleteError(null); }}
+          warning={deleteWarning}
+          onAcknowledge={() => {
+            // Confirm the level the SERVER asked for, never a fixed one.
+            if (deleteWarning) void handleDelete(deletePrompt, deleteWarning.escalation);
+          }}
+          onCancel={() => { setDeletePrompt(null); setDeleteError(null); setDeleteWarning(null); }}
           onConfirm={() => { void handleDelete(deletePrompt); }}
         />
       )}

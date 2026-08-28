@@ -108,7 +108,9 @@ Should see entries like:
 1. **Old build cached**: Hard refresh (Ctrl+Shift+R)
 2. **Server not restarted**: Stop and restart `npm run dev:schema`
 3. **Wrong URL**: Should be port 5176, not 5174 or 5173
-4. **Backend not running**: Start backend with `uvicorn main:app --reload`
+4. **Backend not running**: Start backend with `cd backend && uvicorn main:app --reload`
+   (from `backend/` -- uvicorn discards a `--reload-dir` nested in its own cwd,
+   so starting from the repo root watches every worktree)
 
 ## If Nothing Works
 

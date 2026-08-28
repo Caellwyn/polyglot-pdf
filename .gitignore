@@ -149,4 +149,12 @@ pitch/ignored_pitch/
 # not a deliverable. Committing one puts a phantom form in every developer
 # local catalogue (LocalFormKitStore synthesizes the manifest by scanning
 # directories and treats absent metadata as public).
+# i-90_v2 stays UNTRACKED deliberately (bd polyglot-pdf-2nikx, Opus review):
+# tracking it turned CI red (translation-coverage lint), would let the next
+# deploy publish it beside the existing I-90 (label collision, 6/17 languages
+# under-translated, readiness gating ignored -- beads polyglot-pdf-9jb21 /
+# g3cj1), and committed a booklet PDF against the rule below. The cost
+# harness pulls it from the bucket: scripts/pull-form-kits.sh. Measurement
+# provenance: schema.json sha256 recorded in
+# scripts/spikes/w7_naive_vs_deployed_findings.md.
 form-kits/i-90_v2/

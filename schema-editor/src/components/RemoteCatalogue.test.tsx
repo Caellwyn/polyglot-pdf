@@ -27,8 +27,8 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 
 import { RemoteCatalogue } from './RemoteCatalogue';
 import {
-  AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  deleteRemoteKit,
+  AuthError, ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  deleteRemoteKit, DeleteNeedsAcknowledgement,
   releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   fetchRetireCandidates,
@@ -364,6 +364,24 @@ describe('RemoteCatalogue', () => {
     expect(screen.queryByText(/Invalid or missing/)).not.toBeInTheDocument();
   });
 
+  // A 403 (a real account whose editor role was revoked) must route the SAME
+  // way as a 401 -- otherwise every catalogue action dead-ends on an error
+  // banner the person cannot act on, instead of reaching the refused screen.
+  // The ERROR ITSELF is forwarded, since App tells the two apart by type.
+  it('routes a 403 to onAuthError, carrying the error so App can tell it apart', async () => {
+    const refusal = new ForbiddenError('This account does not have schema editor access');
+    vi.mocked(listRemoteKits).mockRejectedValue(refusal);
+    const onAuthError = vi.fn();
+    render(
+      <RemoteCatalogue
+        defaultExpanded
+        onOpenKit={() => {}} selectedKitId={null} role="editor"
+        onAuthError={onAuthError}
+      />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalledWith(refusal));
+  });
+
   it('routes a 401 DURING THE PROGRESS SCAN to onAuthError, not a schema error', async () => {
     // The list call succeeds, but the code is revoked before the per-kit
     // schema fetches -- the auth state must reach onAuthError, never masquerade
@@ -509,6 +527,24 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
     await waitFor(() =>
       expect(screen.getByText(/Added "new-kit"/)).toBeInTheDocument());
     expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1); // refreshed
+  });
+
+  it('resets busy on an auth error during upload, so Refresh is not left stuck disabled (bd polyglot-pdf-uibly)', async () => {
+    vi.mocked(onboardRemoteKit).mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null}
+      role="author" onAuthError={onAuthError} />);
+    await waitFor(() => expect(screen.getByText('Add a form (PDF)')).toBeInTheDocument());
+
+    const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'Form W-7.pdf',
+      { type: 'application/pdf' });
+    fireEvent.change(screen.getByTestId('upload-pdf-input'), { target: { files: [file] } });
+
+    await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+    // The BUG this pins: handleUploadPdf set busy(true), then on an AuthError
+    // called onAuthError and returned WITHOUT resetting it -- every control
+    // in the catalogue (starting with Refresh) stayed disabled until reload.
+    await waitFor(() => expect(screen.getByText('Refresh')).not.toBeDisabled());
   });
 
   it('author uploading a non-PDF is refused client-side', async () => {
@@ -1383,6 +1419,30 @@ describe('rename from the selector strip (bd 15ic)', () => {
     expect(screen.queryByLabelText('New form name')).not.toBeInTheDocument();
     expect(setRemoteLabel).not.toHaveBeenCalled();
   });
+
+  it('resets busy on an auth error, so Refresh is not left stuck disabled (bd polyglot-pdf-uibly)', async () => {
+    vi.mocked(setRemoteLabel).mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor"
+      onAuthError={onAuthError} />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Select a form'), {
+      target: { value: 'draft-kit' },
+    });
+
+    fireEvent.click(screen.getByText('Rename'));
+    fireEvent.change(screen.getByLabelText('New form name'), {
+      target: { value: 'IRS W-9' },
+    });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+    // The BUG this pins: handleRename set busy(true), then on an AuthError
+    // called onAuthError and returned WITHOUT resetting it -- every control
+    // in the catalogue (starting with Refresh) stayed disabled until reload.
+    await waitFor(() => expect(screen.getByText('Refresh')).not.toBeDisabled());
+  });
 });
 
 describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
@@ -1617,9 +1677,39 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: null }));
     await waitFor(() =>
       expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  // A WARNING BELONGS TO ONE KIT. Leaking it into the next dialog is not a
+  // display glitch: a tier-B warning arms "Delete anyway" immediately, so the
+  // next kit's dialog would open ONE CLICK from deleting a form whose id was
+  // never typed -- defeating the type-to-confirm guard on the exact action
+  // where deleting the wrong row is the mistake that actually happens.
+  // Found by fresh-eyes review; there was no coverage of cross-kit reset.
+  it('does NOT carry a warning from one kit into the next dialog', async () => {
+    vi.mocked(deleteRemoteKit).mockRejectedValueOnce(
+      new DeleteNeedsAcknowledgement('Records cannot be checked.', 'ack'));
+    await openCards('author');
+
+    // Kit A: type its id, delete, get warned.
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+    await screen.findByTestId('delete-anyway');
+
+    // Cancel, then open the dialog again.
+    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+
+    // Back to the ordinary guarded path: no armed override, and the button is
+    // disabled until the id is typed again.
+    expect(screen.queryByTestId('delete-anyway')).not.toBeInTheDocument();
+    expect(screen.getByText('Delete permanently')).toBeInTheDocument();
+    expect((screen.getByText('Delete permanently') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('renders Delete LAST, after the extraction row on a schemaless kit', async () => {
@@ -1708,7 +1798,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: null }));
     expect(clearOpenKit).toHaveBeenCalledTimes(1);
   });
 
@@ -1734,7 +1824,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit'));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: null }));
     expect(clearOpenKit).not.toHaveBeenCalled();
   });
 });

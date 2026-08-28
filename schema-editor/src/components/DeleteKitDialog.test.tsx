@@ -17,6 +17,68 @@ const props = {
   onCancel: vi.fn(),
 };
 
+describe('DeleteKitDialog escalation (bd polyglot-pdf-6zhaf)', () => {
+  // The whole point of the bead: a refusal the human cannot get past is not a
+  // safeguard, it is a form that can never be cleaned up. The server grades the
+  // risk; the dialog offers the matching confirmation.
+  const warned = (escalation: 'ack' | 'double-ack') => ({
+    ...props,
+    warning: { text: 'Records for this form cannot be checked right now.', escalation },
+  });
+
+  it('a single-ack warning offers Delete anyway, enabled immediately', () => {
+    const onAcknowledge = vi.fn();
+    render(<DeleteKitDialog {...warned('ack')} onAcknowledge={onAcknowledge} />);
+
+    expect(screen.getByTestId('delete-warning-ack')).toBeInTheDocument();
+    // No second tick for a never-published form: the risk does not warrant it.
+    expect(screen.queryByTestId('delete-understood')).not.toBeInTheDocument();
+
+    const anyway = screen.getByTestId('delete-anyway');
+    expect(anyway).not.toBeDisabled();
+    fireEvent.click(anyway);
+    expect(onAcknowledge).toHaveBeenCalled();
+  });
+
+  it('a DOUBLE-ack warning stays disabled until the box is ticked', () => {
+    const onAcknowledge = vi.fn();
+    render(<DeleteKitDialog {...warned('double-ack')} onAcknowledge={onAcknowledge} />);
+
+    const anyway = screen.getByTestId('delete-anyway');
+    expect(anyway).toBeDisabled();
+    fireEvent.click(anyway);
+    expect(onAcknowledge).not.toHaveBeenCalled();   // clicking through is not enough
+
+    fireEvent.click(screen.getByTestId('delete-understood'));
+    expect(anyway).not.toBeDisabled();
+    fireEvent.click(anyway);
+    expect(onAcknowledge).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the SERVER wording, which names what is at risk for this kit', () => {
+    render(<DeleteKitDialog {...warned('double-ack')} />);
+    expect(screen.getByText(/cannot be checked right now/)).toBeInTheDocument();
+  });
+
+  // A fresh warning must not inherit a tick from a previous attempt, or the
+  // second confirmation silently stops being a decision.
+  it('re-arms the tick when a NEW warning arrives', () => {
+    const { rerender } = render(<DeleteKitDialog {...warned('double-ack')} />);
+    fireEvent.click(screen.getByTestId('delete-understood'));
+    expect(screen.getByTestId('delete-anyway')).not.toBeDisabled();
+
+    rerender(<DeleteKitDialog {...props}
+      warning={{ text: 'A different warning entirely.', escalation: 'double-ack' }} />);
+    expect(screen.getByTestId('delete-anyway')).toBeDisabled();
+  });
+
+  it('with no warning, the ordinary type-to-confirm path is untouched', () => {
+    render(<DeleteKitDialog {...props} />);
+    expect(screen.queryByTestId('delete-anyway')).not.toBeInTheDocument();
+    expect(screen.getByText('Delete permanently')).toBeInTheDocument();
+  });
+});
+
 describe('DeleteKitDialog', () => {
   it('keeps Delete disabled until the kit id is typed exactly', () => {
     const onConfirm = vi.fn();
@@ -59,7 +121,10 @@ describe('DeleteKitDialog', () => {
     // removes the live form would be wrong.
     expect(screen.getByText(/every archived version/)).toBeTruthy();
     expect(screen.getByText(/cannot be undone/)).toBeTruthy();
-    expect(screen.getByText(/unpublish it instead/i)).toBeTruthy();
+    // Matched on the WORD, not the phrasing: the copy was reworded when
+    // deletion became graduated (bd 6zhaf), and what this pins is that the safe
+    // alternative is still offered -- not one particular sentence.
+    expect(screen.getByText(/unpublish/i)).toBeTruthy();
   });
 
   it('renders a server refusal IN PLACE, keeping the dialog open', () => {

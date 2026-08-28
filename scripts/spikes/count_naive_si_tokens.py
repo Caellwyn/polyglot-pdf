@@ -1,14 +1,15 @@
-"""Token count for the NAIVE arm's system instruction (bd polyglot-pdf-89mt).
+"""Token count for the NAIVE arm's system instruction (bd polyglot-pdf-89mt;
+generalized to take --schema for bd polyglot-pdf-2nikx).
 
 Builds the EXACT naive-arm system instruction -- the production full-schema SI
 (FormFillingService.build_form_context_message, the same code path
-measure_form_session_costs.py's --arm naive uses) with the w7 form's official
-booklet text appended (apply_naive_si), imported directly from the harness
-module so this script can never drift from what the harness actually sends --
-plus the tool-declarations payload the session would carry (SPELLBACK_TOOL_
-ENABLED defaults on, so name_spellback is included), and calls Vertex
-count_tokens (a metadata call, NOT a generate call -- zero live-model spend)
-against the 2.5 flash tokenizer.
+measure_form_session_costs.py's --arm naive uses) with the chosen form's
+official booklet text appended (apply_naive_si), imported directly from the
+harness module so this script can never drift from what the harness actually
+sends -- plus the tool-declarations payload the session would carry
+(SPELLBACK_TOOL_ENABLED defaults on, so name_spellback is included), and calls
+Vertex count_tokens (a metadata call, NOT a generate call -- zero live-model
+spend) against the 2.5 flash tokenizer.
 
 count_tokens rejects Live-API model ids (the Live surface and the
 Generative/count_tokens surface are different APIs); this script tries the
@@ -18,6 +19,11 @@ never has to guess which tokenizer priced the numbers below.
 
 Usage (from repo root, with Vertex ADC configured):
     backend/.venv/Scripts/python.exe scripts/spikes/count_naive_si_tokens.py
+    backend/.venv/Scripts/python.exe scripts/spikes/count_naive_si_tokens.py --schema i90-v2
+
+--schema defaults to "w7" -- the default behavior (schema choice, output
+text, and every function call) is byte-identical to the pre-generalization
+script.
 
 Do NOT run this as part of routine test collection -- it makes a real (free)
 Vertex API call. The verifier runs it manually.
@@ -43,7 +49,6 @@ from backend.services.form_filling_service import FormFillingService  # noqa: E4
 # Reuse the harness's OWN functions -- never reimplement the naive-SI shape
 # here, or this script and the harness could silently price different text.
 from measure_form_session_costs import (  # noqa: E402
-    W7_SCHEMA_PATH,
     apply_naive_si,
     load_schema,
     naive_si_booklet_suffix,
@@ -58,12 +63,13 @@ from measure_form_session_costs import (  # noqa: E402
 _FALLBACK_TOKENIZER_MODEL = "gemini-2.5-flash"
 
 
-def build_naive_si_and_tools() -> tuple[str, list[dict]]:
+def build_naive_si_and_tools(schema_key: str = "w7") -> tuple[str, list[dict]]:
     """Build the exact naive-arm SI + tool-declarations payload, via the SAME
     code path measure_form_session_costs.py --arm naive uses: production's
     build_form_context_message (full form, one session -- the naive arm takes
-    the unbounded arm's schema shape) with the w7 booklet appended."""
-    schema = load_schema("w7")
+    the unbounded arm's schema shape) with the chosen form's booklet
+    appended."""
+    schema = load_schema(schema_key)
     settings = _make_settings("naive", trigger=12_000, window=9_000,
                               compression=False, continuous=False,
                               derive_compression=False)
@@ -115,9 +121,18 @@ def _count_tokens(client, model: str, si: str, tools: list[dict]):
 
 
 def main() -> int:
-    si, tools = build_naive_si_and_tools()
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--schema", choices=["w7", "i90-v2"], default="w7",
+                         help="Which form-kit schema to build the naive-arm "
+                              "SI + tools for (default: w7).")
+    args = parser.parse_args()
+
+    si, tools = build_naive_si_and_tools(args.schema)
+    print(f"schema: {args.schema}")
     print(f"naive-arm SI: {len(si)} chars "
-          f"(booklet suffix: {len(naive_si_booklet_suffix(load_schema('w7')))} chars)")
+          f"(booklet suffix: {len(naive_si_booklet_suffix(load_schema(args.schema)))} chars)")
     print(f"tool declarations: {len(tools)} tools "
           f"({', '.join(t.get('name', '?') for t in tools)})")
 

@@ -1,10 +1,15 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-vdcm4: every drifted
-`websocket_routes.py:<line>` / `confirmation_logger.py:<line>` citation in
-contracts 2, 3, and 6 re-anchored to a symbol/arm name instead of a line
-number -- all had drifted 60-140 lines past their real targets. The editor
-rows describe per-user Firebase claims, not shared tokens, per bd
+*Last updated: 2026-08-27 (bd polyglot-pdf-nyc5j/qn8wv/x6dq1: every drifted
+`config.py`/`form_filling_service.py`/`live_ai_gemini.py`/`ai_context.py`/
+`spellback_tts.py`/`callback_handler.py` citation in contracts 1, 2, 4, and 11
+re-anchored to a symbol name instead of a line number -- including the
+`form_metadata` bullet, the tool coupling table, and the `LIVE_VOICE_NAME`
+two-consumer section. This whole doc keeps drifting the same way, so line
+numbers here are no longer trustworthy without re-verifying against source
+-- bd polyglot-pdf-vdcm4 already re-anchored the same class of citation in
+contracts 2, 3, and 6 once, and this pass had to do contract 2 again. The
+editor rows describe per-user Firebase claims, not shared tokens, per bd
 polyglot-pdf-hn0jq; the lock rows are person-scoped, per bd
 polyglot-pdf-5tuas.)*
 
@@ -91,16 +96,16 @@ insertion point.
 | POST | `/api/disclaimer-acceptance` | Record disclaimer acceptance DURABLY (bd polyglot-pdf-0dsv4: the `confirmation_events` Firestore collection + the per-session file, keyed on `form_session_id`, not a log line -- fail-open, so a sink outage cannot block an Agree click). UNAUTHENTICATED by design (Agree fires before any session exists), so `firm_id` is always `None` here and the `form_session_id` is validated as a single safe path segment before it becomes a filename. One acceptance per `form_session_id` -- a duplicate POST is dropped silently, not errored -- except PLACEHOLDER ids (`unknown`/`undefined`/`null`/`none`/empty), which are deliberately NOT deduped (bd polyglot-pdf-g3kui: `confirmation_logger._claim_first_acceptance`); every request field is bounded at the Pydantic model so an oversized body 422s before reaching the sink. Anonymized; client IP deliberately NOT logged, bd z2is. Records `script_version` -- the hash of the exact script the user saw and heard, echoed from the intro route's `X-Intro-Script-Version` so the record names WHICH text was agreed to; `None` on the legacy model-read path -- a known audit gap, since that path still serves deterministic scripted text (bd s1iex.7, bd polyglot-pdf-pyebx). `standards/confirmation-and-audit.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
-| DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). The guard has THREE outcomes, not two: confirmation records name the kit -> 409 offering unpublish; no records and the check SUCCEEDED -> deleted; the check could not run -> 409 refusing. That last case is why this is safe -- the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`), and its local JSONL fallback dies with the instance, so silence there is not evidence of absence. Editors are refused server-side, not merely hidden from in the UI. |
+| DELETE | `/api/editor/kits/{kit_id}` | **AUTHOR ONLY** -- permanently remove a kit and everything under it, ARCHIVES INCLUDED (bd polyglot-pdf-6x1j). GRADUATED FRICTION, never a permanent block (bd polyglot-pdf-6zhaf): risk decides how firmly the caller is asked, not whether the door exists. Never live + no records + the check SUCCEEDED -> deleted. Never live but records exist OR the check could not run -> 409 prefixed `DELETE_NEEDS_ACK:`. EVER LIVE (`complete`/`unpublished`, or any `published_at` -- either signal alone is sufficient, since `w7` is complete with no stamp while `unpublished` means RETIRED-formerly-live; a kit with NO metadata.json is never-live, but one whose metadata is PRESENT and unparseable is treated as live) -> 409 prefixed `DELETE_NEEDS_DOUBLE_ACK:`. Each refusal names the acknowledgement that clears it, and the two are DISTINCT values -- `?acknowledged=understood` for the single, `understood-published` for the double. The weaker does NOT satisfy an ever-live delete: one shared boolean would put "double confirmation" in the client's checkbox only, where any direct API call skips it. The editor sends the level the server asked for, and the double additionally requires an explicit tick before it will send. The old design refused outright when the check was positive or unavailable -- and un-attributable legacy records make it permanently unavailable, so EVERY kit became undeletable forever. The check itself is unchanged and its outcome still grades the warning; the record sink is Firestore (`CONFIRMATION_FIRESTORE_ENABLED`, default false, set by `deploy-all.sh`) whose local JSONL fallback dies with the instance, so silence there is still not evidence of absence. NOTE what a delete destroys: only this kit's prefix -- confirmation records live in a separate collection and SURVIVE, so what is lost is the revision those records name, not the agreement itself. Every delete logs actor + acknowledged + ever_live + had_records. Editors are refused server-side, not merely hidden from in the UI. |
 | GET | `/api/editor/kits/{kit_id}/archive`, `.../archive/{marker}/schema` | The editor's archive reads (bd qfyxr): superseded revisions newest-first + one revision's schema, READ-ONLY (returning to an old revision goes through draft/publish, never the archive). Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/derive-divisions` | Regenerate the kit's parts/sections deterministically (bd 6cfu.3) -- re-runs `derive_sections.derive_and_apply` on the STORED schema + PDF (widget-name conventions -> printed headings -> page fallback) and re-files every field's `section_id`. **DESTRUCTIVE to manual division edits by design**; the editor fronts it with a confirm dialog, field content untouched. Author-only; 409 on complete or on a kit with no PDF; a corrupt/0-page PDF is a 422 data defect, not a 500. |
 | GET | `/api/editor/kits/{kit_id}/draft-snapshots` | Prior saved states of this kit's draft, newest-first (bd polyglot-pdf-y2l0p). EDITOR-accessible by deliberate maintainer decision (2026-08-18): routing recovery through an author means the person who lost the work cannot get it back themselves. 404 (not an empty list) for a kit that does not exist -- "no earlier versions" and "no such form" are different answers. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore` | Put a snapshot's schema back as the live draft. Snapshots what it REPLACES first, so restoring the wrong version is one more restore away rather than a second loss -- that is what makes it safe without an author. Refused on a write-locked kit (complete/unpublished), same as a save. Non-numeric snapshot ids 400 before reaching the store. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). 409 on any write-locked kit -- complete OR unpublished -- with a revert-first message (`force=true` would overwrite the published schema in place, bd polyglot-pdf-w3zw). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
-| POST | `/api/editor/kits/{kit_id}/label` | Rename a kit's DISPLAY label (bd polyglot-pdf-15ic), preserving every other metadata key (the read-merge-write shape of the status flip). Pure display -- the catalogue and form picker render it, nothing keys on it; kit identity is the immutable `kit_id`/storage path and is deliberately NOT renameable here. Exists because onboarding derives labels from PDF filenames, so nameless uploads collide into "Form", "Form 2", ... Token-gated. |
+| POST | `/api/editor/kits/{kit_id}/label` | Rename a kit's DISPLAY label (bd polyglot-pdf-15ic), preserving every other metadata key (the read-merge-write shape of the status flip). Pure display -- the catalogue and form picker render it, nothing keys on it; kit identity is the immutable `kit_id`/storage path and is deliberately NOT renameable here. Exists because onboarding derives labels from PDF filenames, so nameless uploads collide into "Form", "Form 2", ... 409 when a different editor holds the kit's edit lock (bd polyglot-pdf-c63tu), naming the holder, same as every sibling metadata write route. Token-gated. |
 | DELETE | `/api/editor/kits/{kit_id}/lock` | Release a kit. An author may release anyone's lock; an editor may release only a lock THEY hold (bd polyglot-pdf-5tuas) -- they can neither evict an author nor free another editor's kit. Author preemption is the stale-lock escape when someone closes their laptop. Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/lock` | Take a kit for editing (bd polyglot-pdf-hqztg). An AUTHOR can always take a lock back from an editor; the reverse 409s. That preemption IS the stale-lock release -- there is no timer, because a clock that steals from someone actively working is worse than a human deciding to take it. USER-scoped (bd polyglot-pdf-5tuas): the lock stores the holder's uid, so a second editor is refused 409 and the refusal NAMES the holder. Re-taking your OWN lock is not a steal. A pre-5tuas lock has no uid, so same-role contention falls back to ALLOW for it rather than stranding anyone. `heldBy` stays a ROLE on the wire; `heldByLabel` carries the person. Returns `{ok, kitId, heldBy, preempted}`. Token-gated. |
-| POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. Token-gated. `backend/routes/editor_readiness_routes.py`. |
+| POST | `/api/editor/kits/{kit_id}/readiness` | Recompute + persist the kit's readiness stamp for the POSTED schema (the local-save stamp refresher, sprint-18 C4b bd na1zy; same `_stamp_readiness` as the hosted save). 409 on write-locked kits (submitted, complete or unpublished) -- a published revision's stamp only changes through the publish flow. ALSO 409 when a different editor holds the kit's edit lock (bd polyglot-pdf-fwzln) -- this route writes metadata like every sibling write path, so it needs the same `_require_edit_lock` guard; the refusal names the holder. Token-gated. `backend/routes/editor_readiness_routes.py`. |
 | POST | `/api/editor/kits/{kit_id}/regenerate-guidance` | Re-author field guidance from the kit's instruction booklet (bd polyglot-pdf-cpiw) -- the costly half of the staleness gate, opposite "acknowledge". Optional `fieldIds` scopes the rewrite (the natural call from the staleness banner); omitted means every askable field. Guidance a HUMAN edited is never clobbered (per-channel hashes vs. provenance). A successful rewrite re-stamps `identity_sha1`, which is what CLEARS the staleness flag. Author-only (spends model tokens + rewrites the schema); 409 on complete. |
 | POST | `/api/editor/kits/{kit_id}/repair` | One-click Repair-all for a stored draft (bd polyglot-pdf-zgln): runs the SAME deterministic `backend/services/schema_repair.repair()` the CLI extraction pass runs, against the schema + its persisted `acroform.json` dump, so the result equals CLI repair on the same input. Reports what changed plus POST-repair lint counts. **Author-only** (it mutates the stored schema). A draft referencing nonexistent PDF widgets is a 422 naming them, not a 500 -- repair cannot invent mappings. 409 on a complete kit. |
 | GET | `/api/editor/kits/{kit_id}/retire-candidates` | Live kits that plausibly serve the SAME FORM as this one, so the publish modal can ask which older version to retire (bd polyglot-pdf-bdedm). A SUGGESTION -- it retires nothing; the author ticks one and it rides the publish as `replaces_kit_id`. AUTHOR-ONLY, matching the publish it feeds. Matches on `form_number` first (a declared mismatch DECIDES -- it never falls through to the label, or an identical label would override two different numbers and offer I-130A when publishing I-130), then EXACT normalised label equality. Deliberately conservative: real form families differ by a one-character suffix and several variants are supplements filed ALONGSIDE their base, so a missed suggestion costs one manual retire while a wrong one asks an author to retire a live form. Each candidate carries kit id, label, form number and whichever revision marker it actually has (`edition_date` > `author_version` > `published_at`), plus WHY it matched, so a human can tell two same-numbered kits apart. Reads one schema per live kit -- confined to this route so the cost lands only when an author is publishing, never on a catalogue render. Token-gated. |
@@ -110,7 +115,7 @@ insertion point.
 | POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on any write-locked kit -- complete OR unpublished -- bd 2h9j). Returns the verify/rectify gate's `flags` and persists them at `_bakeoff.authoring.option_translation`, where schema-lint re-emits them as WARNINGs for the editor ValidationPanel (bd 9djc). Author token only. |
 | GET | `/api/editor/kits/{kit_id}/unclaimed-widgets` | The kit's PDF button widgets that no field/option claims (bd nivy), powering the "Add from PDF widgets" picker when the extractor missed a checkbox/radio. Read from the persisted `acroform.json` dump; a pre-dump kit returns an empty list. Author-only (it feeds an author-only PDF-mapped option edit). |
 | POST | `/api/editor/lint`, `/api/editor/kits/{kit_id}/lint` | Lint the POSTED (possibly-unsaved) schema over the single Python ruleset (`backend/services/schema_lint.py`). The kit-scoped form additionally loads the kit's persisted `acroform.json` dump -- the SAME inputs as the `/status` promotion gate -- so the editor strip sees the dump-gated widget-claim rules live (sprint-18 C1, bd o7y9); the dumpless form remains for schemas with no kit identity. Token-gated. |
-| GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Per-user Firebase identity (bd polyglot-pdf-hn0jq): the ID token rides either `Authorization: Bearer` or `X-Editor-Token`. 401 for a token that does not verify, 403 for a valid account without the `schema_editor_role` claim. There is no unconfigured-surface 503 -- there is no shared secret left to omit. Grant access with `scripts/bootstrap_editor_user.py`. `components/pdf-filling.md` |
+| GET | `/api/editor/session` | Hosted-editor sign-in probe -> `{role}`; the gate calls it once the person signs in, to learn whether they hold editor access at all (bd polyglot-pdf-yswp3). Per-user Firebase identity (bd polyglot-pdf-hn0jq): the ID token rides either `Authorization: Bearer` or `X-Editor-Token`. 401 for a token that does not verify, 403 for a valid account without the `schema_editor_role` claim -- and that 403 is prefixed `NO_EDITOR_ACCESS:` (`editor_auth.NO_EDITOR_ACCESS_PREFIX`) to distinguish it from the OTHER 403s an editor legitimately meets (`require_author_actor`, and the per-transition publish gates on `/status`). Only the prefixed one means "you hold no editor role at all"; the client evicts to its refused screen on that and shows the rest as ordinary refusals, so an editor pressing an author-only button is not thrown out of the editor (bd polyglot-pdf-yswp3). There is no unconfigured-surface 503 -- there is no shared secret left to omit. Grant access with `scripts/bootstrap_editor_user.py`. `components/pdf-filling.md` |
 | POST | `/api/editor/store-handshake` | Confirm the editor and the backend are looking at the SAME local folder: the editor writes a nonce file into the folder the human picked, this reads it from the backend's own root and reports whether it matches. Read-only on the backend side -- it never creates or deletes the marker, so an unwritable store simply reports no match rather than failing. The `reason` values it actually returns are `not-a-local-store` (GCS; hosted mode never calls it), `mismatch` (no marker observed -- the editor, having just attempted the write, picks the user-facing message) and `stale` (a marker from an earlier session in a different folder). Token-gated. |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is) + **firm-scoped** (bd vy6id: the body's caller-supplied `kit_id` runs the same visibility gate as the kit reads -- a private kit 404s for non-members). `components/pdf-filling.md` |
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy): PRIVATE kits appear only for callers whose `firm_id` claim resolves to an allowlist containing them, with paths rewritten to the authenticated backend routes. `components/pdf-filling.md` |
@@ -186,18 +191,19 @@ The canonical shape is Pydantic `FormSchema` (`backend/models/form_models.py:883
 rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 - **Validation happens ONLY at the publish gate.** Draft saves
-  (`save_editor_kit_schema`, `backend/routes/editor_kit_routes.py:1617-1700`)
-  check just that `fields` is a list and write the raw dict via the store
+  (`save_editor_kit_schema` in `editor_kit_routes.py`) check just that
+  `fields` is a list and write the raw dict via the store
   (`FormKitStore.put_schema`, `backend/services/form_kits.py:324` abstract /
   `LocalFormKitStore.put_schema` :605 local / `GCSFormKitStore.put_schema`
-  :1172 GCS). The one chokepoint is "mark complete":
-  `FormSchema.model_validate` at `editor_kit_routes.py:2809` plus the
-  zero-ERROR schema-lint gate
-  (`lint_schema`, `backend/services/schema_lint.py:833`, checked at
-  `editor_kit_routes.py:2841-2852`). Every read path streams the raw stored
-  dict unvalidated (`get_form_kit_schema`,
-  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema`,
-  `editor_kit_routes.py:1567-1568`). *Breaks if bypassed:* a hand-edited or
+  :1172 GCS). The one chokepoint is "mark complete"
+  (`set_editor_kit_status` in `editor_kit_routes.py`):
+  `FormSchema.model_validate` plus the zero-ERROR schema-lint gate
+  (`lint_schema`, `backend/services/schema_lint.py:833`, checked via its own
+  `lint_schema` call further down the same function). Every read path
+  streams the raw stored dict unvalidated (`get_form_kit_schema`,
+  `backend/routes/form_kit_routes.py:233-257`; `get_editor_kit_schema` in
+  `editor_kit_routes.py`, which loads and returns the schema with no
+  validation at all). *Breaks if bypassed:* a hand-edited or
   draft kit reaching the voice path carries whatever shape it has -- e.g. a
   field without `pdf_field_name` is silently never written to the output PDF.
 - **The frontend type is a hand-maintained mirror.**
@@ -255,7 +261,8 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
   - `form_metadata` (`form_number`, `edition_date`, `details`, `booklet_text`):
     consumed by the secretary reference block (`secretary_context.py:220-243`)
     and the audit-trail edition marker
-    (`backend/services/form_filling_service.py:362-368`). The key is
+    (`resolve_edition_marker`, defined in `backend/utils/confirmation_logger.py`,
+    called from `form_filling_service.py`). The key is
     `form_metadata`, NOT `metadata` -- the wrong name no-ops the whole reference
     block with zero signal (in-source note at `secretary_context.py:227-230`).
   - Legacy `controls_fields`/`conditional_fields`: REMOVED from the model and
@@ -266,7 +273,8 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
 Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
-/ `getJITHandshakePayload` (DTI, :999), sent by `frontend/src/webFormConnection.ts:641`.
+/ `getJITHandshakePayload` (DTI, :1015), sent by `frontend/src/webFormConnection.ts`'s
+`this.send(handshake)` call.
 Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py`'s
 `@router.websocket("/fill")` handler; handshake keys parsed in its
 `handshake_type`/JIT-branch block).
@@ -283,16 +291,18 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
   identity -- `kit_id` read before the JIT branch, `form_number`/`edition_date`
   inside it as `jit_form_number`/`jit_edition_date`), `resume` (the
   `is_reconnect` check, near the end of handshake parsing).
-- `full_schema` (sent at `schemaFormState.ts:979`/`:1054`): type-checked
+- `full_schema` (sent at `schemaFormState.ts:979`/`:1070`): type-checked
   `isinstance(dict)` only (the `full_schema` type-check right after handshake
   parsing), cached in
-  `form_filling_service.py:296` (preserved across internal restarts), then read
+  `form_filling_service.py`'s `self._full_schema = full_schema` assignment
+  (preserved across internal restarts), then read
   by `handle_ask_secretary` (`form_filling_service.py`'s
   `self._full_schema or self._schema` read) and rendered into the secretary catalog by
   `render_static_catalog(schema)` in `text_ai_gemini.py:302`, the edition fingerprint
-  (`resolve_edition_marker` call at `form_filling_service.py:396`), the injection
-  budget (`form_filling_service.py:513-514`), and runtime translation overrides
-  (`_maybe_start_option_translation` call at `form_filling_service.py:464` ->
+  (`resolve_edition_marker` call in `form_filling_service.py`), the injection
+  budget (`guidance_contract.inline_injection_budget_tokens` calls in
+  `form_filling_service.py`, two call sites), and runtime translation overrides
+  (`_maybe_start_option_translation` call in `form_filling_service.py` ->
   `option_translation.py`). *Breaks if malformed:* each consumer degrades
   independently and silently (secretary falls back to per-section schema, audit
   edition falls back to a fingerprint, translations revert to English).
@@ -306,7 +316,8 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
 
 Client->server: one `if mtype == ...` switch in `websocket_routes.py`'s
 `/ws/fill` receive loop.
-Server->client: one dispatch switch at `frontend/src/webFormConnection.ts:659-854`.
+Server->client: one dispatch switch at `frontend/src/webFormConnection.ts`'s
+`switch (message.type)` block.
 Message senders are object literals; a renamed `type` logs
 `unknown_control_message_type` (or falls to the TS `default`) and a renamed
 sub-key reads as absent. The request/response pairs ride
@@ -324,15 +335,15 @@ sub-key reads as absent. The request/response pairs ride
 `spellback`/`spellback_response` (bd polyglot-pdf-22h1f; flag-gated, the ONE
 round-trip that deliberately holds the pending tool response for the client's
 blocking TTS clip playback, 90s cap). Client reply builders:
-`webFormConnection.ts:3197` (`sendConfirmFieldResponse`) / :3318
-(`sendSkipFieldResponse`), :2502 (`sendSwitchFieldResponse`), :3295
-(`sendSpellbackResponse`).
+`webFormConnection.ts`'s `sendConfirmFieldResponse` /
+`sendSkipFieldResponse` / `sendSwitchFieldResponse` /
+`sendSpellbackResponse`.
 
 Known traps (all deliberate, all pinned only by comments):
 - The frontend still carries a dead `case "field_update"`
-  (`webFormConnection.ts:664-666`, expecting an `updates: Record<name, value>`
+  (`webFormConnection.ts`, expecting an `updates: Record<name, value>`
   shape) with **no live backend producer** -- field updates ride `form_updated`
-  (`backend/services/callback_handler.py:242`) with a different
+  (`backend/services/callback_handler.py`'s `send_form_update`) with a different
   `data.form_state`/`data.applied_fields` shape. Never reintroduce a
   `field_update` producer against the old shape.
 - `change_spoken_language` is a wire-compat misnomer -- it re-asserts the pinned
@@ -344,44 +355,48 @@ Known traps (all deliberate, all pinned only by comments):
 - The `session_ready` message's `native_vad` flag (websocket_routes.py's
   `session_ready` payload send) must agree with the backend's
   `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`webFormConnection.ts:864,951` ->
+  activity-signal behavior from it (`webFormConnection.ts`'s `native_vad`
+  destructure and its `onNativeVadMode` call ->
   `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
 
 ### 4. Backend <-> Gemini Live (tools + session config)
 
 Tool names + arg schemas have ONE source of truth:
-`Settings.TOOL_DECLARATIONS` (`backend/config.py:588-816`), deep-copied into the
-live config by `form_filling_service.py:222-228` (which drops `switch_section`
+`Settings.TOOL_DECLARATIONS` (the list literal in `backend/config.py`),
+deep-copied into the live config by `form_filling_service.py`'s
+`_build_tool_declarations` (which drops `switch_section`
 in continuous mode, and appends `SPELLBACK_TOOL_DECLARATION` under
 `SPELLBACK_TOOL_ENABLED` -- default ON since bd polyglot-pdf-apkdl, so a
 production session ships 7 declarations; setting the flag false rolls back to 6,
 bd polyglot-pdf-22h1f) and declared to
-Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py:1722`;
-tools assembled at :1752). Gemini's tool
-calls come back through the adapter (`self._on_tool_call(...)` call sites at
-`live_ai_gemini.py:2736` and `:2917`)
-into `CallbackHandler.on_tool_call` (`backend/services/callback_handler.py:448`),
-which dispatches to the `form_filling_service` handlers that emit the Leg-A
-client messages above. The coupling table (tool -> handler -> client message):
+Gemini in `_build_live_config` (`backend/adapters/live_ai_gemini.py`;
+tools assembled into `tools_config` in the same method). Gemini's tool
+calls come back through the adapter (`self._on_tool_call(...)` call sites in
+`live_ai_gemini.py`, two sites)
+into `CallbackHandler.on_tool_call`, which dispatches to the
+`form_filling_service` handlers that emit the Leg-A
+client messages above. The coupling table (tool -> handler -> client message);
+each row's branch is `on_tool_call`'s `if normalized == "<tool>"` (or, for
+`get_form_status`, `if normalized in {"get_form_status", "get_form_state"}`):
 
 | Gemini tool (args) | Handler (`callback_handler.py`, dispatch branch) | Client message |
 |---|---|---|
-| `update_form_fields` (`field_id`, `value`) | :507 | `form_updated` |
-| `get_form_status` (`field_ids`) | :510 | `get_form_state` round-trip |
-| `confirm_field` (`field_id`, `confirmation_method`) | :522 | `confirm_field` round-trip |
-| `skip_field` (`field_id`) | :525 | `skip_field` round-trip |
-| `switch_to_field` (`field`) | :531 | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
-| `ask_secretary` (`query`) | :534 | none -- answered server-side from the cached `full_schema` |
-| `switch_section` (deprecated; dropped in continuous mode) | :516 | internal session restart + `section_switched` |
+| `update_form_fields` (`field_id`, `value`) | `normalized == "update_form_fields"` | `form_updated` |
+| `get_form_status` (`field_ids`) | `normalized in {"get_form_status", "get_form_state"}` | `get_form_state` round-trip |
+| `confirm_field` (`field_id`, `confirmation_method`) | `normalized == "confirm_field"` | `confirm_field` round-trip |
+| `skip_field` (`field_id`) | `normalized == "skip_field"` | `skip_field` round-trip |
+| `switch_to_field` (`field`) | `normalized == "switch_to_field"` | `switch_field` round-trip -- **the tool name and the wire type differ on purpose** |
+| `ask_secretary` (`query`) | `normalized == "ask_secretary"` | none -- answered server-side from the cached `full_schema` |
+| `switch_section` (deprecated; dropped in continuous mode) | `normalized == "switch_section"` | internal session restart + `section_switched` |
 | `name_spellback` (no args; `SPELLBACK_TOOL_ENABLED` default ON, declared via `SPELLBACK_TOOL_DECLARATION` -- kept out of `TOOL_DECLARATIONS` so the flag stays a real rollback) | `_handle_name_spellback_tool` | `spellback` round-trip + client HTTP `POST /api/tts/spellback` (bd polyglot-pdf-22h1f) |
 
 Field values never cross to Gemini as structured data -- they are rendered into
 guidance prose by `ai_context.render_field_guidance`
-(`backend/services/ai_context.py:79`); the contract there is between the SI
+(`backend/services/ai_context.py`); the contract there is between the SI
 templates and the prose, not key names. System instruction:
 `form_filling_service.build_form_context_message`
-(`form_filling_service.py:1214`) ->
-`ai_context.build_form_context` (:444).
+(`form_filling_service.py`) ->
+`ai_context.build_form_context`.
 
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
 
@@ -408,8 +423,11 @@ class).
   the editor/publish surface (`_load_kit_dump` in
   `backend/routes/editor_kit_routes.py`, with 7 call sites across the
   lint routes; the mark-complete promotion gate's call is inside
-  `set_editor_kit_status`, feeding the pure-function
-  checks in `backend/services/widget_picker.py`). *Breaks:* a stale or
+  `set_editor_kit_status`, feeding `lint_schema`'s dump-gated widget-claim
+  checks in `backend/services/schema_lint.py` -- a separate `_load_kit_dump`
+  call, inside the unclaimed-widgets endpoint, feeds
+  `backend/services/widget_picker.py`'s `unclaimed_button_widgets` instead).
+  *Breaks:* a stale or
   mutated client schema fills a wrong/blank field into a PDF that completes
   "successfully" -- the exact reassembles-without-error failure mode.
 - Field-id -> `pdf_field_name` mapping with a two-pass `[]`-alias resolution,
@@ -432,13 +450,13 @@ class).
 ### 6. Confirmation audit trail
 
 The chain: Gemini `confirm_field` tool -> backend request
-(`request_coordinator.py:279`, `request_confirm_field`) -> client verifies it
-has a usable value and acks (`webFormConnection.ts:1924`,
-`handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse` at
-:3197 -- `reason` is a fixed category token, never a field value) -> backend
-logs ONLY on a positive ack (the `recorded` guard at
-`callback_handler.py:961`; the `log_field_confirmation` call it protects at
-:1000-1009). Event shape (NO PII, no `value` key anywhere), built in
+(`request_coordinator.py`'s `request_confirm_field`) -> client verifies it
+has a usable value and acks (`webFormConnection.ts`'s
+`handleConfirmFieldRequest`; reply built by `sendConfirmFieldResponse`
+-- `reason` is a fixed category token, never a field value) -> backend
+logs ONLY on a positive ack (the "Recorded" guard inside
+`callback_handler.py`'s `_handle_confirm_field_tool`, which protects the
+`log_field_confirmation` call immediately below it). Event shape (NO PII, no `value` key anywhere), built in
 `confirmation_logger.log_field_confirmation`'s `confirmation_event` dict:
 `{timestamp, event, form_id, kit_id, edition_date, firm_id, form_session_id,
 field_id, field_name, confirmation_method}` (`firm_id` joined under bd
@@ -451,8 +469,8 @@ Firestore `confirmation_events` (`_submit_firestore_write` checks the
 to `_firestore_write`, which does the actual write and sets the optional
 `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
-handshake -- sent by the JIT builder at `schemaFormState.ts:1075` (form_number),
-`:1088` (kit_id), `:1089` (edition_date), read as `kit_id`/`jit_form_number`/
+handshake -- sent by the JIT builder at `schemaFormState.ts:1091` (form_number),
+`:1104` (kit_id), `:1105` (edition_date), read as `kit_id`/`jit_form_number`/
 `jit_edition_date` in websocket_routes.py's handshake handling -- see
 contract 2. The
 `edition_date` COLUMN carries whichever revision marker won
@@ -746,12 +764,13 @@ that is not the one on screen. Pinned by
 consumers in different surfaces, so changing the env var moves both at
 once:
 
-- `backend/adapters/live_ai_gemini.py:1866` -- the Gemini Live session's
+- `backend/adapters/live_ai_gemini.py`'s `voice_name = (getattr(settings,
+  "LIVE_VOICE_NAME", "") or "").strip()` read -- feeds the Gemini Live session's
   `speech_config.voice_config.prebuilt_voice_config.voice_name`. An
   unaccepted name is a hard `1007 Invalid voice name` at connect that
   breaks EVERY session.
-- `backend/services/spellback_tts.py:269`
-  (`resolve_spellback_voice`) -- the PERSONA half of the spell-back clip's
+- `backend/services/spellback_tts.py`'s
+  `resolve_spellback_voice` -- the PERSONA half of the spell-back clip's
   Cloud TTS voice (`{locale}-Chirp3-HD-{persona}`), which in turn selects
   the clip's loudness gain via `spellback_gain_db` /
   `_MEASURED_GAIN_DB` (`spellback_tts.py:91-98`).

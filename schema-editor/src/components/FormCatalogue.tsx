@@ -16,6 +16,7 @@ import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStam
 // (bd polyglot-pdf-rh5v) so the publish gates and the translation drift sweep
 // run in local mode too -- one implementation, not two that disagree.
 import {
+  AuthError, ForbiddenError,
   listArchivedRevisions, loadArchivedSchema, setRemoteStatus,
 } from '../utils/remoteKitStore';
 import { ArchivedVersions } from './ArchivedVersions';
@@ -39,6 +40,16 @@ interface FormCatalogueProps {
    * same-named kit in the new folder can't inherit the prior form's live progress.
    */
   clearOpenKit?: () => void;
+  /**
+   * Auth failure on one of the SERVER-backed actions -- the host routes it:
+   * 401 back to sign-in, 403 to the refused screen (bd polyglot-pdf-yswp3).
+   *
+   * LOCAL mode is not exempt: run-schema-editor.sh starts the REAL backend,
+   * so mark-complete and the archive browse below are as live here as they
+   * are hosted, and can be refused the same way. MUST be called WITH the
+   * error, or a 403 cannot be told from a 401.
+   */
+  onAuthError?: (err?: unknown) => void;
   /**
    * The folder now in use (bd polyglot-pdf-s2bf). The host runs the same-folder
    * handshake against it: the backend resolves kit ids against its OWN root, so
@@ -103,7 +114,7 @@ const STATUS_STYLE: Record<string, string> = {
  * the browser lacks the File System Access directory API.
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
-  onOpenKit, confirmFolderChange, clearOpenKit, selectedKitId, liveProgress,
+  onOpenKit, confirmFolderChange, clearOpenKit, onAuthError, selectedKitId, liveProgress,
   onRootChange, serverActionsOk = false, onStatusRefusal,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
@@ -360,6 +371,13 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       // a generic failure, and leave the kit as-is -- the server did not promote
       // it, so the card must not either.
       setNotice(null);
+      // An auth failure is not a refused publish: it needs the host's routing
+      // (sign-in vs the refused screen), not this card's notice line. Checked
+      // FIRST so it cannot be mistaken for a gate refusal.
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
+        return;
+      }
       const detail = err instanceof Error ? err.message : 'Failed to update status';
       // Same publish gate, so the same re-prompt (bd polyglot-pdf-xzw5). Local
       // mode runs the REAL backend (scripts/run-schema-editor.sh starts it),
@@ -379,7 +397,8 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     } finally {
       setBusy(false);
     }
-  }, [root, refresh, serverActionsOk, onStatusRefusal, selectedKitId]);
+  }, [root, refresh, serverActionsOk, onStatusRefusal, selectedKitId,
+      onAuthError]);
 
   // Single-kit deploy (bd polyglot-pdf-ipzh). `deployTarget` is null until the
   // dev-only host endpoint answers, so the button never renders in a static or
@@ -1015,6 +1034,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   kitLabel={kit.label ?? kit.id}
                   listRevisions={listArchivedRevisions}
                   loadSchema={loadArchivedSchema}
+                  onAuthError={onAuthError}
                 />
               )}
             </li>

@@ -60,13 +60,18 @@ npm run dev
 
 The editor has a second delivery mode for contractors (bd polyglot-pdf-92qe.2):
 built with `npm run build:hosted` (`VITE_DELIVERY_MODE=hosted`, config in
-`.env.hosted`), it lists/edits kits from the backend's token-gated
+`.env.hosted`), it lists/edits kits from the backend's per-user
 `/api/editor/*` routes (the shared GCS store) instead of a local folder.
 
-- Open the hosted URL, enter the **access code** you were given (remembered per
-  browser). The code maps to a tier: **editor** (polish provided forms) or
-  **author** (also: upload a blank form PDF to add it to the workspace, and run
-  the server-side extraction on it -- both from the catalogue).
+- Open the hosted URL and **sign in as yourself** (email + password, or Google;
+  the session is remembered per browser). Signing in is not enough on its own:
+  an operator must first grant your account access with
+  `scripts/bootstrap_editor_user.py`, otherwise you are told the account has no
+  editor access. That grant also sets your tier: **editor** (polish provided
+  forms) or **author** (also: upload a blank form PDF to add it to the
+  workspace, and run the server-side extraction on it -- both from the
+  catalogue). There is no self-service account creation; a forgotten password
+  can be reset from the sign-in screen.
 - The catalogue shows every kit in the shared workspace, drafts included.
 - Cmd/Ctrl+S saves back to the shared store; **Mark complete** flips the kit's
   status (the server validates the schema first -- a broken schema is refused

@@ -71,6 +71,18 @@ Rules (stable ids; one finding per violation site):
                                 validation.required (read by every kit + the
                                 frontend) so a top-level true is silently ignored
                                 and the field is treated as optional
+- to-review-pending      ERROR   a field or section's id/section_id starts with
+                                TO_REVIEW_PREFIX ('sec_to_review') -- the
+                                deterministic division pass's holding area for
+                                a human to re-file (bd 6cfu.2/.3); blocks
+                                Mark-complete until moved into a real section
+- instructions-*         WARNING the guidance judge's flag taxonomy
+                                (guidance_contract.GUIDANCE_FLAG_RULES) --
+                                instructions-rectified / -ungrounded-dropped /
+                                -enrich-unavailable, re-emitted verbatim from
+                                the persisted bake report's
+                                authoring.instructions_enrich.flags, same as
+                                translation-* below
 - translation-*          WARNING the translation verify/rectify gate's flag
                                 taxonomy (TRANSLATION_FLAG_RULES below), re-
                                 emitted verbatim from the persisted bake report
@@ -106,6 +118,10 @@ Rules (stable ids; one finding per violation site):
                                 fit
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
+- audit-identity-no-edition WARNING a kit declares no form_metadata.edition_date
+                                AND no author_version, so confirmation/audit
+                                records fall back to an unreadable content
+                                fingerprint instead of naming the revision
 - guidance-identity-stale WARNING a field's name / spoken_name / option
                                 label/spoken-label/value bindings / TYPE
                                 changed since its guidance was authored (the

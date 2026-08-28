@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { ArchivedVersions } from './ArchivedVersions';
+import { AuthError, ForbiddenError } from '../utils/remoteKitStore';
 import type { FormSchema } from '../types/schema';
 
 const REVS = [
@@ -35,6 +36,33 @@ function mount(overrides: Partial<Parameters<typeof ArchivedVersions>[0]> = {}) 
   );
   return { listRevisions, loadSchema };
 }
+
+describe('ArchivedVersions auth routing (bd polyglot-pdf-yswp3)', () => {
+  // Both injected fetchers go through editorFetch, so browsing the archive can
+  // 401/403 like any other remote read. Without this the component rendered the
+  // raw error string and the person never reached sign-in or the refused
+  // screen -- found in review round 3, after two earlier passes each claimed
+  // the set was complete.
+  it('routes a 403 from the LIST fetch to onAuthError, carrying the error', async () => {
+    const refusal = new ForbiddenError('This account does not have schema editor access');
+    const onAuthError = vi.fn();
+    mount({ listRevisions: vi.fn(async () => { throw refusal; }), onAuthError });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived versions' }));
+    await waitFor(() => expect(onAuthError).toHaveBeenCalledWith(refusal));
+  });
+
+  it('routes a 401 from the VIEW fetch to onAuthError too', async () => {
+    const refusal = new AuthError();
+    const onAuthError = vi.fn();
+    mount({ loadSchema: vi.fn(async () => { throw refusal; }), onAuthError });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived versions' }));
+    // The revision marker IS the button label.
+    fireEvent.click(await screen.findByRole('button', { name: '2025-06' }));
+    await waitFor(() => expect(onAuthError).toHaveBeenCalledWith(refusal));
+  });
+});
 
 describe('ArchivedVersions disclosure', () => {
   it('is collapsed by default and fetches NOTHING until expanded', () => {

@@ -255,8 +255,11 @@ FIELD SHAPE (the unit the scorer grades hardest):
   "max_length": int, "read_only": bool, "multiline": bool,
   "options": [ {{"value": str(SLUG), "label": str,
                 "pdf_field_name": str(optional), "pdf_on_value": str(optional)}} ],
-                             // radio/select/checkbox_group choices -- see
+                             // radio/checkbox_group choices -- see
                              // CHOICE-FIELD RULES; option.value is a SEMANTIC SLUG.
+                             // A SELECT is different: omit options entirely --
+                             // its values are the PDF's own export codes and
+                             // are filled in from the PDF after extraction.
 
   // RELATIONSHIP / LOGIC keys (recover from printed conditional text like
   // "Yes (Proceed to Item 5)" and form structure):
@@ -315,14 +318,26 @@ CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
   with NO field-level pdf_field_name -- per-box identity lives on
   options[].pdf_field_name. A single standalone yes/no box is type "checkbox".
   A pick-exactly-one set is type "radio"; a dropdown is "select".
-- option.value MUST be a SEMANTIC SLUG minted from the option label: lowercase
-  ASCII [a-z0-9_-], no commas or spaces, UNIQUE within the field. Do NOT use a
-  widget-leaf identifier or a raw on-state as the value -- the widget identity
-  lives in option.pdf_field_name (and pdf_on_value for shared-name radio kids).
-- Any show_if / require_if that references a choice field's option MUST use
-  that option's SLUG as the value, with a membership operator (includes /
-  not_includes) for a checkbox_group trigger, or equals / in for a radio/select
-  trigger.
+- For a RADIO or CHECKBOX_GROUP, option.value MUST be a SEMANTIC SLUG minted
+  from the option label: lowercase ASCII [a-z0-9_-], no commas or spaces,
+  UNIQUE within the field. Do NOT use a widget-leaf identifier or a raw
+  on-state as the value -- the widget identity lives in option.pdf_field_name
+  (and pdf_on_value for shared-name radio kids).
+- For a SELECT (dropdown) this rule does NOT apply: its option.value is the
+  PDF's own EXPORT CODE (e.g. "WY"), because a dropdown writes its value
+  straight into the PDF box with no separate widget mapping. Do not invent or
+  slugify these. You do not need to emit a dropdown's options at all -- the
+  full choice list is copied from the PDF itself after extraction, and the
+  choices shown to you in the field list are only a SAMPLE. Emit the field with
+  its type, name and help text; leave options[] out.
+- Any show_if / require_if that references a RADIO or CHECKBOX_GROUP option MUST
+  use that option's SLUG as the value, with a membership operator (includes /
+  not_includes) for a checkbox_group trigger, or equals / in for a radio one.
+  A condition on a SELECT trigger uses that dropdown's PDF EXPORT CODE (e.g.
+  "WY") with equals / in -- there is no slug to reference, since a select's
+  options are filled in from the PDF after extraction. If you cannot see the
+  exact code in the sampled choice list, omit the condition rather than guess
+  it: a condition naming a value the dropdown does not have is dropped.
 
 CANONICAL v2 EXAMPLE (imitate its conventions: slug option values, per-box
 pdf_field_name, and an `includes` membership show_if referencing an option
@@ -386,8 +401,19 @@ def acroform_field_list(dump: dict, max_fields: Optional[int] = None) -> str:
         if w0.get("tu"):
             bits.append(f"tu={w0['tu']!r}")
         if w0.get("choices"):
-            vals = ",".join(c["value"] for c in w0["choices"][:12])
-            bits.append(f"choices=[{vals}]")
+            # The list is SAMPLED, so say so (bd polyglot-pdf-hmkas). A bare
+            # 12-of-63 render reads as the complete set, and asking a model to
+            # emit the other 51 from it invites hallucination -- the i-90 state
+            # dropdown showed 12 codes with no marker and came out with no
+            # options at all. The full set is backfilled deterministically from
+            # the dump (extract_form._backfill_dropdown_options), so this line
+            # is only a hint that the field IS a dropdown and roughly what its
+            # values look like.
+            choices = w0["choices"]
+            vals = ",".join(c["value"] for c in choices[:12])
+            more = len(choices) - 12
+            suffix = f", ... and {more} more" if more > 0 else ""
+            bits.append(f"choices=[{vals}{suffix}]")
         if any("on_value" in w for w in f["widgets"]):
             ons = [w["on_value"] for w in f["widgets"] if w.get("on_value")]
             bits.append("on=" + ",".join(ons[:8]))

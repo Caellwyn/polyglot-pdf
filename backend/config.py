@@ -403,6 +403,37 @@ class Settings(BaseModel):
 		os.getenv("LIVE_DEV_AUDIO_DUMP", "false").lower() == "true"
 	)
 
+	# --- Gemini Live session resumption (bd polyglot-pdf-2nikx) ---
+	# The Live API can hand back a resumption HANDLE (via SessionResumptionUpdate
+	# messages on the receive stream) that a later connect can present to resume
+	# the SAME server-side session state instead of rebuilding context from
+	# scratch (docs/genai_docs/live-api-best-practices.md: "Retain the latest
+	# resumption token ... and pass it as the handle when reconnecting").
+	#
+	# DEFAULT FALSE -- production behavior must stay byte-identical with this
+	# off. The repo already WEIGHED and DECLINED resumption for production in
+	# June (journal 2026-06-15-bd-l3a.3, bead l3a.3 closed wont-do): the
+	# maintainer judged the benefit (invisibly surviving the Live API's ~10-min
+	# connection reset mid-session) too marginal against the real cost
+	# (handle-plumbing across the stateless backend boundary, frontend
+	# storage/handshake carry, live-only testing) -- reconnect already rebuilds
+	# context fine from the client-owns-state handshake. That tradeoff is
+	# unchanged for production; this flag does NOT reopen l3a.3.
+	#
+	# This flag exists ONLY for the cost-measurement harness (scripts/spikes/
+	# measure_form_session_costs.py, maintainer directive bd polyglot-pdf-2nikx):
+	# the naive arm's unhappy-path run has no client-owns-state handshake to
+	# rebuild from on a reconnect (it is a single deliberately-naive session with
+	# no section machinery), so when the model wedges mid-run the ONLY way to
+	# keep going without discarding the whole scripted plan is a literal
+	# server-side resume. No new external API surface: this rides the SAME Live
+	# API websocket connect config the adapter already sends
+	# (google.genai.types.SessionResumptionConfig) -- no new IAM permission, no
+	# new endpoint.
+	SESSION_RESUMPTION_ENABLED: bool = (
+		os.getenv("SESSION_RESUMPTION_ENABLED", "false").lower() == "true"
+	)
+
 	# --- Deterministic spell-back tool (bd polyglot-pdf-22h1f / 0rpu) ---
 	# Routes name spelling OUT of the Live model's speech path: the model calls
 	# the name_spellback tool, the CLIENT plays a Cloud Text-to-Speech clip of
@@ -913,12 +944,12 @@ class Settings(BaseModel):
 		"letters they gave -> call name_spellback -> stay silent."
 	)
 
-	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
-	# tiers checked by the /api/editor/* routes: EDITOR (polish provided kits:
-	# list/read drafts, save schemas, flip status) and AUTHOR (editor + onboard
-	# PDFs + run hosted extraction). Unset -> the editor surface is disabled
-	# (routes fail closed with 503). On Cloud Run these arrive via Secret
-	# Manager (--set-secrets), never plaintext env.
+	# RETIRED (bd polyglot-pdf-hn0jq): these were the original shared-secret
+	# gate for /api/editor/* (EDITOR / AUTHOR tiers). The routes now
+	# authenticate per-person via backend/services/editor_auth.py (a Firebase
+	# ID token + the schema_editor_role custom claim, granted by
+	# scripts/bootstrap_editor_user.py) -- nothing reads these two settings
+	# any more. Left declared for bd polyglot-pdf-rhc2v to remove outright.
 	SCHEMA_EDITOR_TOKEN: str | None = os.getenv("SCHEMA_EDITOR_TOKEN")
 	SCHEMA_AUTHOR_TOKEN: str | None = os.getenv("SCHEMA_AUTHOR_TOKEN")
 	# Extra CORS origins (comma-separated), e.g. the hosted schema-editor site.

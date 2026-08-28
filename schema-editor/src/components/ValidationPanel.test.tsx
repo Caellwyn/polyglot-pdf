@@ -37,7 +37,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 
 // Imported AFTER the mock so the component picks up the mocked lintSchema.
 const { ValidationPanel, refusalFieldIds } = await import('./ValidationPanel');
-const { AuthError } = await import('../utils/remoteKitStore');
+const { AuthError, ForbiddenError } = await import('../utils/remoteKitStore');
 
 const SCHEMA: FormSchema = {
   form_metadata: { title: 'T', version: '1', form_number: 'X' },
@@ -398,6 +398,24 @@ describe('degraded-mode notices + auth (carried from the pane)', () => {
     expect(onAuthError).toHaveBeenCalled(); // host still told, as before
   });
 
+  // lintSchema is the highest-frequency remote call in the editor (every kit
+  // open, and debounced after essentially every edit), so a mid-session role
+  // revocation usually surfaces HERE first. The error must be FORWARDED, not
+  // just reported: App tells 403 (refused screen) from 401 (sign in again) by
+  // its type, and a bare onAuthError() would silently route every 403 to the
+  // sign-in form -- a dead end, since retrying cannot restore a revoked role.
+  it('forwards a 403 as a ForbiddenError so App can route it', async () => {
+    hostedMode = true;
+    const refusal = new ForbiddenError('This account does not have schema editor access');
+    lintSchema.mockRejectedValue(refusal);
+    const onAuthError = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onAuthError={onAuthError} />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalledWith(refusal));
+  });
+
   it('a 401 in HOSTED mode still defers to the access-code gate', async () => {
     hostedMode = true;
     lintSchema.mockRejectedValue(new AuthError());
@@ -454,6 +472,391 @@ describe('Repair-all (bd zgln, carried from the pane)', () => {
     render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
     await waitFor(() => expect(lintSchema).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  // bd polyglot-pdf-9g698: a select's option-value-missing is DELIBERATELY
+  // unrepairable (backend/services/schema_repair.py's hold-aside, bd ot284
+  // -- only the author can supply the PDF export code). The button must not
+  // count it, or offer itself for a kit whose only defect is one.
+  it('hides the button when the ONLY error is a select option-value-missing (unrepairable)', async () => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'option-value-missing',
+          path: 'fields[0] (id=picker)', field_id: 'picker',
+          message: "Answer choice has no value",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it('subtracts ONLY the select option-value-missing errors from the count, keeping others', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'option-value-missing',
+          path: 'fields[0] (id=picker)', field_id: 'picker',
+          message: "Answer choice has no value",
+        },
+        {
+          severity: 'ERROR', rule: 'option-value-duplicate',
+          path: 'fields[0] (id=picker)~1', field_id: 'picker',
+          message: "option value 'dup' appears 2 times",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    // 2 errors reported, 1 unrepairable -> "Repair all (1)", not (2).
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  it('still counts option-value-missing on a RADIO field (still minted, unlike select)', async () => {
+    const radioSchema: FormSchema = {
+      ...SCHEMA,
+      fields: [
+        { id: 'r', name: 'R', type: 'radio', spoken_name: 'r' },
+        ...SCHEMA.fields.slice(1),
+      ],
+    } as unknown as FormSchema;
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'option-value-missing',
+          path: 'fields[0] (id=r)', field_id: 'r',
+          message: "Answer choice has no value",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={radioSchema} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // bd polyglot-pdf-9g698, Opus cross-surface review: the fix's initial cut
+  // only excluded option-value-missing on select. Empirically running EVERY
+  // ERROR-severity rule schema_lint.py can emit through schema_repair.py's
+  // repair() (dumpless -- the common frontend lint path) found more rules
+  // repair() never touches at all: hidden-with-show-if, ref-unresolved-field,
+  // to-review-pending, dump-widget-multiclaim (dump-present). Each pinned
+  // here the same way. (value-arity is scoped to a specific sub-shape below,
+  // not excluded wholesale -- see the message-matched tests further down.)
+  it.each([
+    ['hidden-with-show-if', 'Field is both hidden and conditionally shown'],
+    ['ref-unresolved-field', 'Condition references a field that does not exist'],
+    ['to-review-pending', 'Field is still in the to-review holding section'],
+    ['dump-widget-multiclaim', 'widget "Widget1" claimed by more than one field'],
+  ])('hides the button when the ONLY error is %s (confirmed unrepairable by direct execution)', async (rule, message) => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        { severity: 'ERROR', rule, path: 'fields[0] (id=dep)', field_id: 'dep', message },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  // condition-malformed carries six sub-shapes reachable through the
+  // editor's normal flow (a 7th, non-dict top-level payload, is excluded
+  // for a different reason -- see ValidationPanel.tsx's comment), with no
+  // signal but message TEXT to tell them apart -- direct execution found
+  // only two of the six survive repair() unchanged. The other four (a
+  // non-list bucket, a non-dict bucket member, an empty bucket, a missing
+  // operator) ARE minted/dropped, so excluding the whole rule id would
+  // hide four working repairs -- the matching is scoped to the exact prose
+  // these two sub-shapes emit.
+  it.each([
+    ['not a set of rules', 'this condition is a str, not a set of rules -- rebuild it under the field\'s Conditional Logic section'],
+    ['does not say which field triggers it', 'this rule does not say which field triggers it -- open it under Conditional Logic and pick a field'],
+  ])('hides the button when the ONLY error is a condition-malformed "%s" sub-shape', async (_label, message) => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        { severity: 'ERROR', rule: 'condition-malformed', path: 'fields[0] (id=dep).show_if', field_id: 'dep', message },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it('still counts a condition-malformed sub-shape repair() DOES clear (an empty condition group)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'condition-malformed',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message: "this group of rules is empty -- add at least one rule, or remove the group",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // value-arity, rounds 4-5 (Opus cross-surface review): the SAME
+  // multi-shape problem as condition-malformed, but it took two attempts
+  // to isolate correctly. Round 4 tested all three sub-shapes but drew a
+  // wrong "wholesale exclusion" conclusion from results that were not
+  // fully isolated from each other; round 5 re-tested each sub-shape
+  // completely alone (one schema, one finding) against the REAL operators
+  // (backend/models/conditional_vocabulary.py's OPERATORS, not a made-up
+  // name) and found only TWO of the three survive repair() unchanged: a
+  // list-arity operator (in/not_in) missing its list, and a scalar-arity
+  // operator given a list or nothing. The third -- a stray value left on a
+  // no-value operator (is_empty/is_not_empty/is_checked) -- IS silently
+  // cleared by repair()'s _rewrite_atom (unconditionally drops the stray
+  // value for any no-value operator), so it must be excluded from
+  // UNREPAIRABLE, not included.
+  it.each([
+    ['list-arity operator missing its list', "'in' needs a list of one or more values to compare against -- add at least one"],
+    ['scalar-arity operator given a list', "'equals' needs a single comparison value, not a list or nothing -- set exactly one"],
+  ])('hides the button when the ONLY error is the value-arity "%s" sub-shape', async (_label, message) => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'value-arity',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message,
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it('still counts the value-arity "stray value on a no-value operator" sub-shape (repair() DOES fix it)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'value-arity',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message: "'is_empty' does not take a comparison value, but one is set -- remove it",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // legacy-trigger-side-logic, round 6 (Opus cross-surface review): a
+  // controls_fields entry carries an ACTION KEY (shows/hides/unlocks/
+  // locks/makes_required/makes_optional) -- repair() mirrors 4 of the 6
+  // onto a target's show_if/require_if/conditional_behavior, clearing the
+  // finding; `locks`/`makes_optional` have NO v2 target-side encoding at
+  // all and are explicitly RETAINED (schema_repair.py's own comment: needs
+  // human review). The finding's message is IDENTICAL regardless of which
+  // action triggered it, so this is scoped by inspecting the TRIGGER
+  // field's own controls_fields array for locks/makes_optional, the same
+  // cross-reference approach as option-value-missing's select carve-out.
+  const controlsFieldsSchema = (control: Record<string, unknown>): FormSchema => ({
+    ...SCHEMA,
+    fields: [
+      { id: 'trig', name: 'Trig', type: 'checkbox', spoken_name: 'trig', controls_fields: [control] },
+      ...SCHEMA.fields.slice(1),
+    ],
+  } as unknown as FormSchema);
+
+  it.each([
+    ['locks', { operator: 'is_checked', locks: ['dep'] }],
+    ['makes_optional', { operator: 'is_checked', makes_optional: ['dep'] }],
+  ])('hides the button when the ONLY error is legacy-trigger-side-logic with an unconvertible "%s" action', async (_label, control) => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).controls_fields', field_id: 'trig',
+          message: "this field still uses the old controls_fields way of showing/requiring other fields",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={controlsFieldsSchema(control)} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it.each([
+    ['shows', { operator: 'is_checked', shows: ['dep'] }],
+    ['makes_required', { operator: 'is_checked', makes_required: ['dep'] }],
+  ])('still counts legacy-trigger-side-logic when the trigger field only carries a convertible "%s" action', async (_label, control) => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).controls_fields', field_id: 'trig',
+          message: "this field still uses the old controls_fields way of showing/requiring other fields",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={controlsFieldsSchema(control)} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // Round 7, Opus cross-surface review: a field can carry BOTH
+  // controls_fields (unconvertible) AND conditional_fields at once, which
+  // lint reports as TWO findings sharing one field_id but distinguished
+  // only by `path` (".controls_fields" vs ".conditional_fields").
+  // conditional_fields is ALWAYS unconditionally dropped by repair() (a
+  // plain legacy id list, nothing to convert into) -- excluding both
+  // findings just because the field_id has SOME unconvertible
+  // controls_fields would wrongly hide the conditional_fields repair too.
+  it('still counts the conditional_fields sibling finding even when the SAME field also has an unconvertible controls_fields', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).controls_fields', field_id: 'trig',
+          message: "this field still uses the old controls_fields way of showing/requiring other fields",
+        },
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).conditional_fields', field_id: 'trig',
+          message: "this field still uses the old conditional_fields way of showing/requiring other fields",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={controlsFieldsSchema({ operator: 'is_checked', locks: ['dep'] })} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    // 2 findings reported, 1 unrepairable (controls_fields/locks) -> "Repair all (1)", not (2) and not hidden.
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // bd polyglot-pdf-jri5i, round 8 (Opus cross-surface review): the
+  // unconvertible-action check must test TRUTHINESS, not mere key
+  // PRESENCE -- schema_repair.py's rump-retention keys on `control.get(k)`,
+  // so an explicitly-present-but-EMPTY locks/makes_optional array is falsy
+  // there and repair() clears the whole entry (the field's controls_fields
+  // gets popped entirely, same as any other fully-convertible field).
+  it('still counts legacy-trigger-side-logic when locks/makes_optional is present but EMPTY (repair() clears it)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'legacy-trigger-side-logic',
+          path: 'fields[0] (id=trig).controls_fields', field_id: 'trig',
+          message: "this field still uses the old controls_fields way of showing/requiring other fields",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={controlsFieldsSchema({ operator: 'is_checked', locks: [] })} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // operator-trigger, round 7 (Opus cross-surface review): TWO distinct
+  // sub-shapes under one rule id, like condition-malformed/value-arity. A
+  // trigger field whose TYPE can never trigger any condition (e.g.
+  // signature/table) has no rewrite repair() can apply and stays
+  // standing; an operator merely invalid for an otherwise-legal trigger
+  // type (e.g. is_checked on a text field) IS aliased by repair().
+  it('hides the button when the ONLY error is the operator-trigger "field cannot trigger a condition" sub-shape', async () => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'operator-trigger',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message: "a 'signature' field cannot trigger a condition -- pick a different trigger field, or remove this rule",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it('still counts the operator-trigger "operator not valid on this trigger type" sub-shape (repair() DOES fix it)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'operator-trigger',
+          path: 'fields[0] (id=dep).show_if', field_id: 'dep',
+          message: "'is_checked' cannot be used on a 'text' field -- this comparison only works when the trigger field is one of: checkbox",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  // Deliberately NOT excluded, unlike option-value-missing: a select's
+  // option-value-slug repairability is DUMP-CONDITIONAL (pdf_choice_values
+  // treats a missing dump as "no evidence", so a dumpless repair mints it
+  // the same as radio/checkbox_group -- confirmed empirically). Excluding
+  // it here would under-count a repair that genuinely works.
+  it('still counts option-value-slug on a SELECT field (dump-conditional, not type-conditional like option-value-missing)', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'ERROR', rule: 'option-value-slug',
+          path: 'fields[0] (id=picker)', field_id: 'picker',
+          message: "value not in the required format",
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
   });
 });
 

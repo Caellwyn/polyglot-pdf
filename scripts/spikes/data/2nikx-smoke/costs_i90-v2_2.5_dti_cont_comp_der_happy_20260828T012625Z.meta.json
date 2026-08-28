@@ -1,0 +1,297 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90-v2",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 3,
+  "compression": true,
+  "trigger": 10890,
+  "window": 9390,
+  "trigger_requested": 12000,
+  "window_requested": 9000,
+  "derive_compression": true,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260828T012625Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "field_id": "a_number",
+      "text_in": 4001,
+      "audio_in": 209,
+      "text_out": 36,
+      "audio_out": 0,
+      "total_tokens": 4246,
+      "cost_usd": 0.0027,
+      "cumulative_cost_usd": 0.006516,
+      "prompt_tokens": 4210,
+      "latency_s": 1.297
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "a_number",
+      "text_in": 8187,
+      "audio_in": 480,
+      "text_out": 20,
+      "audio_out": 95,
+      "total_tokens": 8782,
+      "cost_usd": 0.006714,
+      "cumulative_cost_usd": 0.01323,
+      "prompt_tokens": 4368,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "field_id": "uscis_account",
+      "text_in": 8873,
+      "audio_in": 648,
+      "text_out": 27,
+      "audio_out": 35,
+      "total_tokens": 9583,
+      "cost_usd": 0.006854,
+      "cumulative_cost_usd": 0.020084,
+      "prompt_tokens": 4819,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "uscis_account",
+      "text_in": 14145,
+      "audio_in": 1237,
+      "text_out": 21,
+      "audio_out": 49,
+      "total_tokens": 15452,
+      "cost_usd": 0.011414,
+      "cumulative_cost_usd": 0.031498,
+      "prompt_tokens": 5260,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "field_id": "family_name",
+      "text_in": 19804,
+      "audio_in": 1906,
+      "text_out": 23,
+      "audio_out": 20,
+      "total_tokens": 21753,
+      "cost_usd": 0.015906,
+      "cumulative_cost_usd": 0.047404,
+      "prompt_tokens": 5528,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "family_name",
+      "text_in": 10141,
+      "audio_in": 1058,
+      "text_out": 33,
+      "audio_out": 0,
+      "total_tokens": 11232,
+      "cost_usd": 0.008311,
+      "cumulative_cost_usd": 0.055715,
+      "prompt_tokens": 5624,
+      "latency_s": 1.734
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "update_form_fields",
+      "skip_field",
+      "name_spellback"
+    ],
+    "3": [
+      "update_form_fields",
+      "name_spellback",
+      "confirm_field",
+      "update_form_fields"
+    ]
+  },
+  "prompt_curve": [
+    3986,
+    4210,
+    4299,
+    4368,
+    4702,
+    4819,
+    5031,
+    5091,
+    5260,
+    5326,
+    5394,
+    5462,
+    5528,
+    5575,
+    5624,
+    5721
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": true,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "spoken_language": "English",
+  "speech_language_code_enabled": true,
+  "transcription_language_hint_enabled": true,
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": true,
+  "session_count": 1,
+  "system_instruction_chars": 16331,
+  "greeting_tokens": 4138,
+  "greeting_cost_usd": 0.003817,
+  "greeting_breakdown": {
+    "text_in": 3986,
+    "audio_in": 0,
+    "text_out": 0,
+    "audio_out": 152
+  },
+  "pro_pass": {
+    "ran": true,
+    "model": "gemini-2.5-pro",
+    "latency_s": 7.75,
+    "conflicts": 0,
+    "conflict_field_ids": []
+  },
+  "validation_records": [],
+  "drain_records": [],
+  "steer_records": [],
+  "event_records": [],
+  "seam_tool_records": [
+    {
+      "ts": 12010.015,
+      "step": 2,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "uscis_account"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "uscis_account",
+        "next_field_hint": "Next field to fill is #3: 'Family Name (Last Name)'",
+        "message": "Field 'uscis_account' skipped.",
+        "next_field_guidance": "ID: family_name | Spoken: last name | Type: text | Required: true | Instructions: spell your full legal last name. Your new card will be issued in the name you provide here, so use your current legal name. | Format: Name | Official reference text: Item Numbers 3.a. - 3.c.  Your Full Name.  Provide your full legal name in the spaces provided. | Fill language: English | Speak English aloud -- respond UNMISTAKABLY in English"
+      }
+    }
+  ],
+  "text_ledger_calls": [
+    {
+      "caller": "pro",
+      "t_start": 12018.609,
+      "dur_s": 7.75
+    }
+  ],
+  "divergence_count": 0,
+  "divergence_pairs": [],
+  "spellback_count": 2,
+  "spellback_total_chars": 6,
+  "spellback_disabled": false,
+  "compression_effective": {
+    "trigger_tokens": 10890,
+    "window_tokens": 9390,
+    "derived_from_si_floor": true,
+    "si_floor_tokens": 5766,
+    "clamped_to_api_minimum": false
+  },
+  "cached_curve": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "traffic_types": [],
+  "cache_summary": {
+    "reported": false,
+    "events": 16,
+    "events_with_cached_field": 0,
+    "events_with_nonzero_cache": 0,
+    "total_cached_tokens": 0,
+    "total_prompt_tokens": 80396
+  },
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "a_number",
+    "uscis_account",
+    "family_name"
+  ],
+  "fill_accuracy": {
+    "matched": 2,
+    "total": 3,
+    "accuracy": 0.6667,
+    "detail": [
+      {
+        "field_id": "a_number",
+        "expected": null,
+        "written": "87654321",
+        "ok": true,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "uscis_account",
+        "expected": null,
+        "written": "",
+        "ok": false,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "family_name",
+        "expected": null,
+        "written": "Taurus",
+        "ok": true,
+        "scored": "lenient"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [
+      "uscis_account"
+    ],
+    "format": [],
+    "transcription": [],
+    "wrong-field": [],
+    "mismatch": [],
+    "spurious": []
+  },
+  "wall_clock_s": 42.9,
+  "auto_apply_fids": []
+}

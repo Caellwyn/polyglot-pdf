@@ -44,6 +44,7 @@ from backend.routes.editor_kit_routes import (
     _is_write_locked,
     _lock_reason,
     _load_meta_or_404,
+    _require_edit_lock,
     _stamp_readiness,
     require_editor_role,
 )
@@ -87,6 +88,15 @@ async def stamp_kit_readiness(
         # same detail every sibling lock site raises -- a retired revision
         # must not be told to use a publish flow that does not apply.
         raise HTTPException(status_code=409, detail=_lock_reason(meta))
+    # The EDIT lock (per-editor checkout) is a separate gate from the
+    # write-lock above -- every sibling route that writes a kit's schema/
+    # metadata calls this (bd polyglot-pdf-fwzln; _require_edit_lock's own
+    # docstring: "every route containing put_schema must call this"). This
+    # route's _stamp_readiness call below writes metadata via
+    # store.put_metadata, so without this check, editor A restamping after a
+    # local save could silently overwrite the readiness stamp of a kit
+    # editor B currently holds the lock on.
+    _require_edit_lock(meta, role)
     stamp = await _stamp_readiness(store, kit_id, schema, meta, files)
     _log.info("editor_readiness_restamped", kit_id=kit_id, role=role.role, actor=role.label(),
               readiness_percent=(stamp or {}).get("percent"),

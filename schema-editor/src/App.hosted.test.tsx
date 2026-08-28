@@ -140,16 +140,57 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
   };
 });
 
+// Sign-in is Firebase (bd polyglot-pdf-yswp3). Mock the editor's auth module so
+// these tests drive the GATE's behaviour without a live SDK: `watchEditorUser`
+// is the callback the gate waits on to learn whether anyone is signed in.
+vi.mock('./utils/editorAuth', () => ({
+  isAuthConfigured: vi.fn(() => true),
+  watchEditorUser: vi.fn(),
+  signInWithGoogle: vi.fn(),
+  signInWithPassword: vi.fn(),
+  sendReset: vi.fn(),
+  signOutEditor: vi.fn(async () => {}),
+  currentEditorEmail: vi.fn(() => 'editor@example.com'),
+  editorIdToken: vi.fn(async () => 'id-token'),
+}));
+
 import { App } from './App';
 import {
-  AuthError, clearAccessCode, isHostedMode, listRemoteKits,
+  AuthError, ForbiddenError, isHostedMode, listRemoteKits,
   loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit,
   saveRemoteSchema, setRemoteStatus,
 } from './utils/remoteKitStore';
+import {
+  isAuthConfigured, signInWithPassword, signOutEditor, watchEditorUser,
+} from './utils/editorAuth';
+
+// Live auth-state listeners, exactly as the Firebase SDK behaves: a subscriber
+// registered at mount keeps receiving updates. Re-mocking the function instead
+// would leave an ALREADY-MOUNTED gate subscribed to the previous stub, so a
+// later sign-in never reached it.
+let authListeners: Array<(u: unknown) => void> = [];
+let currentUser: unknown = null;
+
+/** Set the signed-in user (`null` = signed out) and notify every listener. */
+function emitUser(user: unknown) {
+  currentUser = user;
+  authListeners.forEach((cb) => cb(user));
+}
 
 beforeEach(() => {
   window.localStorage.clear();
-  clearAccessCode(); // also drops the module-level in-memory fallback copy
+  vi.mocked(isAuthConfigured).mockReturnValue(true);
+  vi.mocked(signOutEditor).mockResolvedValue(undefined);
+  authListeners = [];
+  // Register each subscriber and replay the current user to it, as the SDK does.
+  vi.mocked(watchEditorUser).mockImplementation((cb: (u: never) => void) => {
+    const fn = cb as (u: unknown) => void;
+    authListeners.push(fn);
+    fn(currentUser);
+    return () => { authListeners = authListeners.filter((l) => l !== fn); };
+  });
+  // Signed in by default: most tests are about what happens AFTER the gate.
+  emitUser({ uid: 'u1', email: 'editor@example.com' });
   vi.mocked(isHostedMode).mockReturnValue(true);
   vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
   vi.mocked(listRemoteKits).mockResolvedValue([KIT]);
@@ -177,15 +218,15 @@ afterEach(() => {
   // the same mock state no matter what ran before it.
   vi.resetAllMocks();
   window.localStorage.clear();
-  clearAccessCode();
 });
 
-/** Enter the access code through the gate and land on the catalogue. */
+/** Land on the catalogue as an already-signed-in editor.
+ *
+ * The default beforeEach emits a signed-in user, so the gate restores that
+ * session and probes it -- the returning-editor path, which is what every
+ * post-gate test wants as its starting point. */
 async function passGate() {
   render(<App />);
-  const input = await screen.findByLabelText('Access code');
-  fireEvent.change(input, { target: { value: 'sekret' } });
-  fireEvent.click(screen.getByText('Open the workspace'));
   await waitFor(() => expect(screen.getByTestId('remote-catalogue')).toBeInTheDocument());
 }
 
@@ -197,8 +238,20 @@ async function openKit(kitId: string) {
 }
 
 describe('App hosted mode (bd 92qe.2)', () => {
-  it('prompts for an access code, validates it, and shows the remote catalogue', async () => {
-    await passGate();
+  it('signs a person in, checks their access, and shows the remote catalogue', async () => {
+    // Nobody signed in yet -> the sign-in form; signing in emits the user.
+    emitUser(null);
+    render(<App />);
+    const email = await screen.findByLabelText('Email');
+    fireEvent.change(email, { target: { value: 'editor@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+    vi.mocked(signInWithPassword).mockImplementation(async () => {
+      emitUser({ uid: 'u1', email: 'editor@example.com' });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('remote-catalogue')).toBeInTheDocument());
+    expect(signInWithPassword).toHaveBeenCalledWith('editor@example.com', 'pw');
     expect(probeSession).toHaveBeenCalled();
     // The kit list came from the API, and the local-folder UI never rendered.
     await waitFor(() =>
@@ -206,35 +259,53 @@ describe('App hosted mode (bd 92qe.2)', () => {
     expect(screen.queryByText('Open form-kits folder')).not.toBeInTheDocument();
   });
 
-  it('a stored code is probed silently on load (no prompt for returning users)', async () => {
-    window.localStorage.setItem('schema-editor.accessCode', 'remembered');
+  it('an existing session goes straight to the catalogue (no prompt)', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByTestId('remote-catalogue')).toBeInTheDocument());
-    expect(screen.queryByLabelText('Access code')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
   });
 
-  it('re-prompts when the code is refused (401), with the stored code cleared', async () => {
-    window.localStorage.setItem('schema-editor.accessCode', 'stale');
+  // A 403 is a REAL account with no editor role. Retyping a password can never
+  // fix it, so the gate must NOT show the sign-in form again -- it must say an
+  // operator has to grant access. This is the voice-app-user case.
+  it('a signed-in account WITHOUT editor access is told so, not re-prompted', async () => {
+    vi.mocked(probeSession).mockRejectedValue(
+      new ForbiddenError('This account does not have schema editor access', true));
+    render(<App />);
+    await screen.findByTestId('signin-refused');
+    expect(screen.getByText(/does not have schema editor access/)).toBeInTheDocument();
+    // Crucially NOT the sign-in form, and not the catalogue.
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('remote-catalogue')).not.toBeInTheDocument();
+  });
+
+  it('a refused token (401) signs the person out and re-prompts', async () => {
     vi.mocked(probeSession).mockRejectedValue(new AuthError());
     render(<App />);
-    // The silent probe fails -> the gate form renders and the code is gone.
-    const input = await screen.findByLabelText('Access code');
-    expect(input).toBeInTheDocument();
-    expect(window.localStorage.getItem('schema-editor.accessCode')).toBeNull();
+    await screen.findByLabelText('Password');
+    expect(signOutEditor).toHaveBeenCalled();
   });
 
-  it('a NON-auth probe failure (e.g. 503) keeps the stored code and shows why', async () => {
-    // Only a REFUSED code may be wiped: a transient server-side issue (surface
-    // unconfigured, network blip) must not log every returning contractor out
-    // (fresh-eyes gap 2). The error is shown even though the probe was silent.
-    window.localStorage.setItem('schema-editor.accessCode', 'still-good');
+  // A transient server problem must NOT sign a working editor out -- their
+  // credentials are fine, and logging everyone out over a 503 is worse than
+  // the failure itself.
+  it('a NON-auth probe failure (e.g. 503) shows why and does NOT sign out', async () => {
     vi.mocked(probeSession).mockRejectedValue(
       new Error('The editor surface is not configured on this server'),
     );
     render(<App />);
-    await screen.findByLabelText('Access code');
-    expect(window.localStorage.getItem('schema-editor.accessCode')).toBe('still-good');
-    expect(screen.getByText(/not configured/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText(/not configured/)).toBeInTheDocument());
+    expect(signOutEditor).not.toHaveBeenCalled();
+  });
+
+  // A hosted build with no Firebase config cannot sign anyone in. Say that,
+  // rather than rendering a form whose every submit fails opaquely.
+  it('a build with no Firebase config says so instead of showing a form', async () => {
+    vi.mocked(isAuthConfigured).mockReturnValue(false);
+    render(<App />);
+    await screen.findByTestId('signin-unconfigured');
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
   });
 
   it('opens a kit from the remote catalogue: schema + PDF via the routes', async () => {
@@ -296,11 +367,12 @@ describe('App hosted mode (bd 92qe.2)', () => {
     await passGate();
     await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
-    // A dead code mid-repair drops back to the access gate (probeSession still
-    // resolves author here, so the gate would re-open; assert the re-prompt).
+    // A dead session mid-repair drops back to the sign-in gate (probeSession
+    // still resolves author here, so the gate would re-open; assert the
+    // re-prompt).
     vi.mocked(probeSession).mockRejectedValue(new AuthError());
     fireEvent.click(screen.getByTestId('repair-all'));
-    await screen.findByLabelText('Access code');
+    await screen.findByLabelText('Password');
   });
 
   it('a repair in flight does NOT clobber a kit opened mid-repair (bd r5vp)', async () => {
@@ -365,15 +437,95 @@ describe('App hosted mode (bd 92qe.2)', () => {
     }
   });
 
-  it('a mid-session 401 on save drops back to the access gate', async () => {
+  // A 403 mid-session is NOT a 401: an operator revoked this person's editor
+  // role while their ID token was still valid (revocation is delayed up to an
+  // hour by design -- editor_auth.py runs without check_revoked). Sending them
+  // to the sign-in FORM would be a dead end: signing in again cannot restore a
+  // role they no longer hold. They must land on the refused screen instead.
+  it('a mid-session 403 on save shows the refused screen, not the sign-in form', async () => {
+    await passGate();
+    await openKit('draft-kit');
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field'));
+
+    vi.mocked(saveRemoteSchema).mockRejectedValue(
+      new ForbiddenError('This account does not have schema editor access', true));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    await screen.findByTestId('signin-refused');
+    expect(screen.getByText(/does not have schema editor access/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+  });
+
+  it('Sign out returns to the gate and clears the session', async () => {
+    await passGate();
+    // Real sign-out ends the Firebase session, so the SDK emits a null user.
+    vi.mocked(signOutEditor).mockImplementation(async () => { emitUser(null); });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => expect(signOutEditor).toHaveBeenCalled());
+    await screen.findByLabelText('Password');
+  });
+
+  // The confirm guard protects unsaved work: declining must be a NO-OP, or the
+  // button silently discards edits the person just said to keep.
+  it('Sign out with unsaved edits asks first, and declining keeps the work', async () => {
+    await passGate();
+    await openKit('draft-kit');
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field')); // dirty
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+      expect(signOutEditor).not.toHaveBeenCalled();
+      // Still in the editor, still dirty.
+      expect(screen.getByTestId('edit-field')).toBeInTheDocument();
+      expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('shows who is signed in', async () => {
+    await passGate();
+    expect(screen.getByTestId('signed-in-as')).toHaveTextContent('editor@example.com');
+  });
+
+  // The other half of the 403 split: an AUTHOR-ONLY refusal must NOT evict.
+  // An editor pressing an author action is a normal, expected refusal -- being
+  // thrown out of the editor for it is worse than the bug the refused screen
+  // was added to fix (cross-surface review).
+  it('an author-only 403 shows the refusal and KEEPS the editor open', async () => {
+    await passGate();
+    await openKit('draft-kit');
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field'));
+
+    vi.mocked(saveRemoteSchema).mockRejectedValue(new ForbiddenError(
+      'Publishing is an author action. Submit this form for review instead.',
+      false));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    await waitFor(() =>
+      expect(screen.getByText(/author action/)).toBeInTheDocument());
+    // Still in the editor: no refused screen, no sign-in form.
+    expect(screen.queryByTestId('signin-refused')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    expect(screen.getByTestId('edit-field')).toBeInTheDocument();
+  });
+
+  it('a mid-session 401 on save drops back to the sign-in gate', async () => {
     await passGate();
     await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('edit-field'));
     vi.mocked(saveRemoteSchema).mockRejectedValue(new AuthError());
-    vi.mocked(probeSession).mockRejectedValue(new AuthError()); // stored code is dead too
+    vi.mocked(probeSession).mockRejectedValue(new AuthError()); // the session is dead too
     fireEvent.keyDown(window, { key: 's', metaKey: true });
-    await waitFor(() => expect(screen.getByLabelText('Access code')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('Password')).toBeInTheDocument());
   });
 
   it('a failed kit-B open keeps kit A pointing at a LIVE blob URL (fresh-eyes r2)', async () => {
@@ -395,15 +547,20 @@ describe('App hosted mode (bd 92qe.2)', () => {
       vi.mocked(loadRemotePdfBlobUrl).mockRejectedValueOnce(new AuthError());
       vi.mocked(probeSession).mockRejectedValueOnce(new AuthError());
       await openKit('second-kit');
-      const input = await screen.findByLabelText('Access code');
+      const email = await screen.findByLabelText('Email');
 
       // Kit A's URL was never revoked mid-open...
       expect(revoke).not.toHaveBeenCalledWith('blob:kit-a');
 
-      // ...and after re-auth the preserved kit A still renders its LIVE URL.
+      // ...and after signing in again the preserved kit A still renders its
+      // LIVE URL.
       vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
-      fireEvent.change(input, { target: { value: 'new-code' } });
-      fireEvent.click(screen.getByText('Open the workspace'));
+      vi.mocked(signInWithPassword).mockImplementation(async () => {
+        emitUser({ uid: 'u1', email: 'editor@example.com' });
+      });
+      fireEvent.change(email, { target: { value: 'editor@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
       await waitFor(() =>
         expect(screen.getByTestId('pdf')).toHaveTextContent('blob:kit-a'));
     } finally {
@@ -411,26 +568,30 @@ describe('App hosted mode (bd 92qe.2)', () => {
     }
   });
 
-  it('unsaved edits SURVIVE a 401 gate round trip and save under the new code', async () => {
-    // Deliberate behavior (fresh-eyes gap 4, resolved as keep-the-work): a code
-    // rotation mid-polish must not destroy a contractor's unsaved edits. After
-    // re-entering a valid code the editor resumes where it was, and the save
-    // goes through re-authenticated with the NEW code.
+  it('unsaved edits SURVIVE a 401 gate round trip and save after re-signing in', async () => {
+    // Deliberate behavior (fresh-eyes gap 4, resolved as keep-the-work): losing
+    // a session mid-polish must not destroy a contractor's unsaved edits. After
+    // signing in again the editor resumes where it was, and the save goes
+    // through re-authenticated with the FRESH token.
     await passGate();
     await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('edit-field')); // dirty the schema
 
     vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new AuthError());
-    vi.mocked(probeSession).mockRejectedValueOnce(new AuthError()); // stored code dead
+    vi.mocked(probeSession).mockRejectedValueOnce(new AuthError()); // session dead
     fireEvent.keyDown(window, { key: 's', metaKey: true });
-    const input = await screen.findByLabelText('Access code');
+    const email = await screen.findByLabelText('Email');
 
-    // Re-enter a (new) valid code -- probeSession succeeds again.
+    // Sign in again -- probeSession succeeds this time.
     vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
     vi.mocked(saveRemoteSchema).mockResolvedValue(undefined);
-    fireEvent.change(input, { target: { value: 'rotated-code' } });
-    fireEvent.click(screen.getByText('Open the workspace'));
+    vi.mocked(signInWithPassword).mockImplementation(async () => {
+      emitUser({ uid: 'u1', email: 'editor@example.com' });
+    });
+    fireEvent.change(email, { target: { value: 'editor@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     // The open kit + dirty edit are still there (no teardown)...
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
@@ -448,7 +609,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
     // No gate, no remote catalogue -- the local front door renders instead
     // (in jsdom the directory API is absent, so FormCatalogue shows its
     // unsupported-browser message: that IS the local path).
-    expect(screen.queryByTestId('access-code-gate')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('signin-gate')).not.toBeInTheDocument();
     expect(screen.queryByTestId('remote-catalogue')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByText(/File System Access directory API/)).toBeInTheDocument());

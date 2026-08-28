@@ -229,8 +229,19 @@ def main(argv=None) -> int:
     status, detail = stamp_editor_role(args.email, args.role)
     print({
         "stamped": f"Granted {args.role} access to {args.email} (uid {detail}).",
-        "unknown_email": (f"No Firebase account for {args.email}. They must sign "
-                          "in once before a role can be granted."),
+        # NOT "they must sign in once" -- there is no product path that lets a
+        # new person do that. The hosted editor now has a real Firebase SIGN-IN
+        # (SignInGate.tsx, bd polyglot-pdf-yswp3), but deliberately no SIGN-UP:
+        # editor access is granted, never self-served, so a brand-new person
+        # still cannot create an account by trying to use the editor. Telling
+        # an operator to wait for something that cannot happen is worse than
+        # telling them nothing.
+        "unknown_email": (
+            f"No Firebase account for {args.email}. Create it first -- the "
+            "Firebase console (Authentication -> Users -> Add user), the "
+            "Admin SDK, or gcloud -- then run this again. The editor has a "
+            "sign-in screen but no sign-up, so the account cannot create "
+            "itself."),
     }.get(status, f"ERROR: {detail}"))
     return 0 if status == "stamped" else 1
 

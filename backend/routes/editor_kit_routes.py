@@ -120,10 +120,6 @@ _log = structlog.get_logger().bind(module="editor_kit_routes")
 
 router = APIRouter(prefix="/api/editor", tags=["editor-kits"])
 
-# Role constants (author strictly includes editor).
-ROLE_EDITOR = "editor"
-ROLE_AUTHOR = "author"
-
 # extract_form.py's tri-state exit code for a stored-with-issues draft (bd
 # polyglot-pdf-v96b, P5.3a). Mirrored here (the extractor runs as a subprocess,
 # so the route cannot import the constant); extract_form.EXIT_ISSUES is the
@@ -1043,9 +1039,13 @@ async def _stamp_readiness(store, kit_id: str, schema: dict,
 async def editor_session(
     role: Annotated[EditorActor, Depends(require_editor_role)],
 ) -> EditorSessionResponse:
-    """Access-code probe: the hosted editor calls this once after code entry to
-    learn the caller's role (author-only UI is gated on it) and to validate the
-    code before any kit traffic."""
+    """Sign-in probe: the hosted editor calls this once the person signs in,
+    to learn their role (author-only UI is gated on it) and to confirm they
+    hold editor access AT ALL before any kit traffic.
+
+    A 403 here is the gate's cue to show its refused screen rather than the
+    sign-in form -- see editor_auth.NO_EDITOR_ACCESS_PREFIX for why the two
+    kinds of 403 must stay distinguishable on the wire."""
     return EditorSessionResponse(role=role.role)
 
 
@@ -3296,10 +3296,63 @@ async def set_editor_kit_status(
     )
 
 
+# Machine-readable refusal markers for the delete guard (bd polyglot-pdf-6zhaf).
+# The client must know WHICH refusal it got so it can escalate rather than dead-
+# end: a refusal the human cannot get past is not a safeguard, it is a form that
+# can never be cleaned up. Prefixes rather than prose, matching the pattern this
+# surface already uses (AUTHOR_VERSION_REQUIRED:, NO_EDITOR_ACCESS:) -- English
+# gets reworded, and here the wording decides whether an override is offered.
+DELETE_NEEDS_ACK_PREFIX = "DELETE_NEEDS_ACK:"
+DELETE_NEEDS_DOUBLE_ACK_PREFIX = "DELETE_NEEDS_DOUBLE_ACK:"
+
+# The two acknowledgement LEVELS, distinct on the wire. A single boolean cannot
+# express two levels: with one, `?acknowledged=true` satisfied an ever-live
+# delete exactly as it satisfied a never-live one, so the "double" in
+# double-confirmation lived only in the client's checkbox and any direct API
+# call skipped it (fresh-eyes, bd polyglot-pdf-6zhaf). These are values the
+# CALLER must name, so the server records which level was actually given
+# rather than inferring it.
+ACK_UNDERSTOOD = "understood"
+ACK_UNDERSTOOD_PUBLISHED = "understood-published"
+
+
+def _kit_was_ever_live(meta: Optional[dict], files: Optional[set] = None) -> bool:
+    """Has this kit ever been visible to a client?
+
+    NOT a status-string test. `unpublished` means a RETIRED FORMERLY-LIVE
+    revision (bd polyglot-pdf-6dz0), so it is as live-having as `complete`;
+    reading the word alone would put a retired form in the LIGHT tier, which is
+    the opposite of right.
+
+    And `published_at` alone is not enough either: measured on the demo store
+    2026-08-28, kit `w7` is status=complete with NO published_at (it predates
+    the stamp), so keying on the timestamp would classify a live form as
+    never-published. Either signal is sufficient; neither is necessary.
+
+    ABSENT metadata is not UNREADABLE metadata, and conflating them is a real
+    bug rather than a tidy default: a kit with no metadata.json is a NORMAL,
+    shipped state (form-kits/w9-heldout is exactly that -- a PDF and a note),
+    and it has manifestly never been published, since there is no status to say
+    so. Treating it as ever-live hands the scariest possible warning to the
+    junk-cleanup case this bead exists to unblock. A metadata.json that IS
+    present but did not parse is the suspicious one, and that stays strict.
+    `_stamp_readiness` already tells the two apart the same way, off the same
+    filename set (fresh-eyes round 2, bd polyglot-pdf-6zhaf).
+    """
+    if not isinstance(meta, dict):
+        if files is not None and _METADATA_FILE not in files:
+            return False        # absent -> never published
+        return True             # present but unparseable, or cannot tell
+    if meta.get("status") in _PUBLISHED_STATUSES:
+        return True
+    return bool(meta.get("published_at"))
+
+
 @router.delete("/kits/{kit_id}", response_model=KitDeleteResponse)
 async def delete_editor_kit(
     kit_id: str,
     role: Annotated[EditorActor, Depends(require_author_role)],
+    acknowledged: Optional[str] = None,
 ) -> KitDeleteResponse:
     """Permanently remove a kit and everything under it, archives included.
 
@@ -3308,57 +3361,108 @@ async def delete_editor_kit(
     destructive actions -- their work should always be recoverable"). Editors
     are subcontractors; deletion is the accountable party's call.
 
-    THE GUARD IS THE FEATURE. A kit named by any confirmation record must not be
-    deletable at all: those records pin what a client agreed to, and the whole
-    revision-archive mechanism (bd polyglot-pdf-w3zw / xzw5) exists so those
-    bytes stay retrievable. Rather than warning and proceeding, this refuses --
-    the unsafe path is made impossible, and unpublish is offered instead, which
-    hides the kit from clients while keeping every byte.
+    GRADUATED FRICTION, never a permanent block (maintainer decision
+    2026-08-28, bd polyglot-pdf-6zhaf): "I want all the safeguards, but no form
+    should ever be completely invulnerable." The previous design refused
+    outright when the confirmation check was positive OR unavailable, with no
+    way past -- and because un-attributable legacy records make the check
+    permanently unavailable, EVERY kit became undeletable forever. A form-kit
+    store then fills with junk nobody can clear. A safeguard must make a
+    destructive act DELIBERATE, not IMPOSSIBLE.
 
-    THREE outcomes, and the third is the one that matters:
-      - records exist        -> 409, suggesting unpublish
-      - no records, verified -> deleted
-      - COULD NOT CHECK      -> 409, refusing
+    So the risk decides how much friction, not whether the door exists:
 
-    The third is not paranoia. The confirmation sink is Firestore, enabled by
-    the deploy env; with it off the check falls back to a local JSONL file that
-    dies with the instance. An editor running locally against the real bucket
-    would see an empty file, conclude "no records", and destroy evidence that
-    exists. "I could not verify this is safe" must read as NO, never as yes
-    (maintainer decision, same date).
+      TIER A -- never live, no records, check worked
+        -> deleted. The junk-cleanup case, and it must stay easy. A kit with
+           NO metadata.json lands here: absent is not unreadable.
+      TIER B -- never live, but records exist OR the check is UNAVAILABLE
+        -> 409 DELETE_NEEDS_ACK:, naming what is unknown. Cleared by
+           ?acknowledged=understood.
+      TIER C -- ever live (complete/unpublished/published_at), any check result
+        -> 409 DELETE_NEEDS_DOUBLE_ACK:. Cleared ONLY by
+           ?acknowledged=understood-published -- the weaker token does not
+           escalate into it, or the second confirmation would live only in
+           the client and any direct API call would skip it.
+
+    Tier B is still cautious for a reason worth keeping: the confirmation sink
+    is Firestore, enabled by the deploy env; with it off the check falls back to
+    a local JSONL that dies with the instance, so an operator running locally
+    against the real bucket sees an empty file and would otherwise conclude "no
+    records". Unverified is not the same as safe -- it just is not a dead end.
+
+    WHAT IS ACTUALLY DESTROYED, stated precisely because the warning copy
+    depends on it: delete_kit removes only this kit's own prefix -- schema, PDF,
+    metadata, revision archives. The confirmation records live in a SEPARATE
+    Firestore collection and survive. So a delete does not erase anyone's
+    agreement; it erases THE REVISION THAT AGREEMENT NAMES, leaving a record
+    that points at a document nobody can produce any more. Telling an author
+    "this deletes their agreement records" would be false, and false warnings
+    teach people to click through true ones.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     # 404 before anything else, so deleting a typo'd id says so plainly rather
-    # than reporting a guard result about a kit that was never there.
-    await _load_meta_or_404(store, kit_id)
+    # than reporting a guard result about a kit that was never there. The meta
+    # is KEPT now (it was discarded before): the tier depends on whether this
+    # kit was ever live, and its label is what the refusal must name.
+    meta, files = await _load_meta_or_404(store, kit_id)
 
+    ever_live = _kit_was_ever_live(meta, files)
+
+    # The check still runs, and its OUTCOME still matters -- it just no longer
+    # decides whether deletion is possible, only how loudly we ask.
+    unverifiable: Optional[str] = None
     try:
         has_records = kit_has_confirmation_records(kit_id)
     except ConfirmationCheckUnavailable as exc:
-        _log.warning(
-            "editor_kit_delete_unverifiable", kit_id=kit_id, role=role.role, actor=role.label(), error=str(exc)
-        )
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f'Cannot verify whether "{kit_id}" has confirmation records, so it '
-                f"will not be deleted. Deletion is permanent and takes the revision "
-                f"archive with it, so an unverified delete could destroy the record "
-                f"of what a client agreed to. Unpublish it instead -- that hides it "
-                f"from clients and keeps every file."
-            ),
-        ) from exc
+        has_records = False
+        unverifiable = str(exc)
 
-    if has_records:
-        _log.info("editor_kit_delete_refused", kit_id=kit_id, role=role.role, actor=role.label())
+    # The human sees the LABEL; the id is internal (and the editor currently
+    # shows ids where labels belong -- bd polyglot-pdf-kztlr), so a refusal that
+    # names only the id is unreadable against the catalogue on screen.
+    label = (meta or {}).get("label") or kit_id
+
+    # An ever-live kit needs the STRONGER token specifically -- the weaker one
+    # does not escalate into it, or the tier is decorative.
+    if ever_live and acknowledged != ACK_UNDERSTOOD_PUBLISHED:
+        _log.info("editor_kit_delete_needs_double_ack", kit_id=kit_id,
+                  role=role.role, actor=role.label(), has_records=has_records,
+                  unverifiable=unverifiable)
         raise HTTPException(
             status_code=409,
             detail=(
-                f'"{kit_id}" has confirmation records: clients have agreed to this '
-                f"form, and those records name the exact revision they saw. Deleting "
-                f"it would destroy the evidence behind them. Unpublish it instead -- "
-                f"that hides it from clients and keeps every file."
+                DELETE_NEEDS_DOUBLE_ACK_PREFIX
+                + f' "{label}" has been published, so clients may have filled it '
+                f"and agreed to what they saw. Their agreement records will "
+                f"survive this deletion -- but the exact form revision those "
+                f"records name will be gone, so you would no longer be able to "
+                f"show what they agreed to. This cannot be undone. Unpublishing "
+                f"instead hides it from clients and keeps every file."
+            ),
+        )
+
+    if (has_records or unverifiable) and acknowledged not in (
+            ACK_UNDERSTOOD, ACK_UNDERSTOOD_PUBLISHED):
+        # Never live, but we either found records or could not look. Say which,
+        # because the remedy differs and the old message conflated them.
+        reason = (
+            "it has confirmation records, so someone has already filled it"
+            if has_records else
+            "the confirmation record store cannot be consulted right now, so "
+            "whether ANY form has been filled is unknown -- this is not "
+            "specific to this one"
+        )
+        _log.info("editor_kit_delete_needs_ack", kit_id=kit_id, role=role.role,
+                  actor=role.label(), has_records=has_records,
+                  unverifiable=unverifiable)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                DELETE_NEEDS_ACK_PREFIX
+                + f' "{label}" was never published, but {reason}. Deleting it '
+                f"removes the form, its PDF and every archived version, "
+                f"permanently."
             ),
         )
 
@@ -3371,7 +3475,13 @@ async def delete_editor_kit(
             status_code=502, detail=f"Unable to delete the kit: {exc}"
         ) from exc
 
-    _log.info("editor_kit_deleted", kit_id=kit_id, role=role.role, actor=role.label(), objects_removed=removed)
+    # ATTRIBUTION IS THE PRICE OF THE OVERRIDE. A delete that got past a warning
+    # must name who waved it through and what they were warned about, or the
+    # graduated path is just a slower way to lose the record silently.
+    _log.info("editor_kit_deleted", kit_id=kit_id, role=role.role,
+              actor=role.label(), objects_removed=removed,
+              acknowledged=acknowledged, ever_live=ever_live,
+              had_records=has_records, unverifiable=unverifiable)
     return KitDeleteResponse(ok=True, kitId=kit_id, objectsRemoved=removed)
 
 
@@ -3522,6 +3632,10 @@ async def set_editor_kit_label(
     label = _safe_label(body.label)
     store = get_form_kit_store()
     meta, _files = await _load_meta_or_404(store, kit_id)
+    # bd polyglot-pdf-c63tu: every sibling schema/metadata write route calls
+    # this -- an editor with no lock could otherwise rename a kit's label out
+    # from under a different editor's in-progress edit.
+    _require_edit_lock(meta, role)
     next_meta = {**(meta or {}), "label": label}
     try:
         await store.put_metadata(kit_id, next_meta)

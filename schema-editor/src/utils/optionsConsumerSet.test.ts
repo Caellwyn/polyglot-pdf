@@ -112,8 +112,11 @@ const SAFE_EXEMPTIONS: Array<{
   },
   {
     file: 'ConditionBuilder.tsx',
-    fragment: 'next.value = options.some(o => o.value === atom.value)',
-    why: 'coerceAtom -- same safeOptions(trigger!) local as the entry above.',
+    fragment: '&& options.some(o => o.value === atom.value);',
+    why: "coerceAtom's keep-guard -- same safeOptions(trigger!) local as the "
+      + 'entry above. (bd polyglot-pdf-alzbr moved this read out of the '
+      + 'next.value assignment into a `keep` const, so an EMPTY incoming value '
+      + 'is re-seeded rather than preserved; the receiver is unchanged.)',
   },
 ];
 

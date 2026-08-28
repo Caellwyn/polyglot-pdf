@@ -2,20 +2,22 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-4we6j: documented the SELECT fill
-path -- it has no branch of its own, so a dropdown's `option.value` is
-written verbatim into the widget and IS the PDF export value, unchecked
-against the widget's `/Opt` list.)*
+*Last updated: 2026-08-28 (bd polyglot-pdf-6zhaf: kit deletion is
+GRADUATED, not a permanent refusal -- the old three-state guard turned an
+unrunnable confirmation check into a 409 with no override, and
+un-attributable legacy records make it permanently unrunnable, so every kit
+became undeletable forever. Risk now decides how firmly the author is asked,
+never whether the door exists.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
-blank PDF with PyMuPDF and returns the bytes â€” nothing is stored. The form state
+blank PDF with PyMuPDF and returns the bytes -- nothing is stored. The form state
 that feeds this is in [schema-forms.md](schema-forms.md); the no-persistence rule
 is [../standards/stateless-architecture.md](../standards/stateless-architecture.md).
 
 ## Request flow
 
-1. `SchemaForm` (Download/Print buttons) **unwraps** each `FieldValue` â†’
+1. `SchemaForm` (Download/Print buttons) **unwraps** each `FieldValue` ->
    `unwrapFieldValue` (a raw wrapper breaks fill) and calls `fillPDF(kitId, pdfUrl,
    values, schema, getToken, pdfFile)` in `frontend/src/schema-forms/utils/pdfFiller.ts`.
 2. `fillPDF` POSTs to **`/api/fill-pdf`** with `{kit_id, pdf_filename, field_values,
@@ -28,8 +30,8 @@ is [../standards/stateless-architecture.md](../standards/stateless-architecture.
    the URL split survives only as the fallback for a missing `pdfFile`.
    Callers inside the authed app thread
    `user.getIdToken()`; local dev against a `VFF_DISABLE_AUTH` backend may omit it.
-   (Backend HTTP base: env override â†’ `VITE_BACKEND_HTTP_URL` â†’
-   current origin via Firebase rewrite â†’ `localhost:8000` dev fallback.
+   (Backend HTTP base: env override -> `VITE_BACKEND_HTTP_URL` ->
+   current origin via Firebase rewrite -> `localhost:8000` dev fallback.
    Manifest `/api/` asset paths resolve via `resolveKitAssetUrl` -- same base.)
 3. The backend (`backend/routes/pdf_fill_routes.py`) first sanitises both
    body fields the store will path-join (`_safe_kit_id`, same guard every
@@ -43,13 +45,13 @@ is [../standards/stateless-architecture.md](../standards/stateless-architecture.
    for non-members), then loads the blank PDF from the form-kit store, fills
    it, and returns `application/pdf` bytes.
 4. The client wraps the bytes in a Blob: `downloadPDF` (anchor download) or
-   `printPDF` (opens a new window â†’ `print()`; falls back to download if the popup
-   is blocked â€” the tablet print path).
+   `printPDF` (opens a new window -> `print()`; falls back to download if the popup
+   is blocked -- the tablet print path).
 
 ## Backend fill (PyMuPDF / `fitz`)
 
 `POST /api/fill-pdf` opens the PDF from `stream=` (never a temp path for input),
-builds a `field_id â†’ pdf_field_name` map + a `field_id â†’ field` lookup from
+builds a `field_id -> pdf_field_name` map + a `field_id -> field` lookup from
 `form_schema.fields`, then fills per field by type. Both maps are built in **two
 passes** so a real exact schema id always wins over any sibling's `[]`-alias: pass
 1 writes every real exact id unconditionally; pass 2 registers `[]`-alias variants
@@ -59,9 +61,9 @@ gap, but never shadows a distinct real field that happens to lack its own
 `pdf_field_name` (bd `polyglot-pdf-eb4z`; the frontend mirror is
 `readFieldEntryWithAlias`).
 
-- **text / number / etc.** â€” `fresh_widget.field_value = str(value)` then
+- **text / number / etc.** -- `fresh_widget.field_value = str(value)` then
   `widget.update()`.
-- **radio** â€” find the selected `option` by `value`, fill each option's
+- **radio** -- find the selected `option` by `value`, fill each option's
   `pdf_field_name` widget on/off. An option with NO `pdf_field_name` of its
   own may instead carry `pdf_on_value` (schema v2, bd `h76m.17`): the shared
   field-level `pdf_field_name` is one true-AcroForm radio field whose kid
@@ -69,11 +71,11 @@ gap, but never shadows a distinct real field that happens to lack its own
   directly (xref surgery) onto the kid whose appearance table carries that
   state (`find_widget_by_state`) -- only the SELECTED option writes; a radio
   field holds one value, so there is no per-kid Off pass.
-- **select (dropdown / combobox)** â€” has NO branch of its own: it
+- **select (dropdown / combobox)** -- has NO branch of its own: it
   falls to the scalar path above, so `option.value` is written **verbatim**
   into the widget and `pdf_on_value` is never consulted -- for a dropdown,
   `option.value` IS the PDF export value. See the gotcha below.
-- **checkbox / checkbox_group** â€” a `bool` fills one widget; a `list` is a
+- **checkbox / checkbox_group** -- a `bool` fills one widget; a `list` is a
   checkbox *group* (fill each selected option's widget). The v2
   `checkbox_group` TYPE (bd `h76m.17`) shares this branch -- it is the same
   options-bearing multi-select, explicit in the type instead of inferred from
@@ -151,26 +153,26 @@ gap, but never shadows a distinct real field that happens to lack its own
   wrong sibling (bd `h76m.17`).
 
 - **Must pass the page that contains the widget.** `fill_widget` re-fetches a
-  **fresh** widget from `page.widgets()` by `field_name` before writing â€” PyMuPDF
+  **fresh** widget from `page.widgets()` by `field_name` before writing -- PyMuPDF
   widget refs are weak and go stale ("weakly-referenced object no longer exists")
   if you hold one across operations. This is the central correctness rule of the
   filler.
 - **XFA path matching.** `find_widget` tries an **exact** `field_name` match first,
-  then an **`endswith`** match â€” XFA PDFs expose full paths like
+  then an **`endswith`** match -- XFA PDFs expose full paths like
   `form1[0].#subform[0].P1_Line1_AlienNumber[0]` while the schema's
   `pdf_field_name` is often just the leaf (`P1_Line1_AlienNumber[0]`). It scans all
   pages and returns `(widget, page)`.
 - **XFA checkboxes: set, don't `update()`.** For checkbox/radio widgets the filler
   sets `field_value` **and** the `/AS` appearance key directly
   (`doc.xref_set_key(xref, "AS", f"/{on_state}")`) and deliberately does **not**
-  call `update()` â€” it lets the viewer regenerate the appearance. The "on" state is
+  call `update()` -- it lets the viewer regenerate the appearance. The "on" state is
   derived from `widget.button_states()` (`get_button_on_state`, default `"Yes"`);
   "off" is `"Off"`.
-- **`need_appearances` is intentionally NOT set** â€” commented out, because for these
+- **`need_appearances` is intentionally NOT set** -- commented out, because for these
   XFA forms the viewer generates appearances and forcing it blanked the checkboxes.
 - **Dynamic flag manipulation for conditional fields.** `apply_field_flag_changes`
   honors a field's `pdf_field_flag_change` (`{bit, current_value, required_value}`)
-  to flip a read-only bit and unlock a locked widget before filling â€” the PDF-side
+  to flip a read-only bit and unlock a locked widget before filling -- the PDF-side
   counterpart of the frontend `flip_readonly_bit` unlock (see
   [schema-forms.md](schema-forms.md)). The descriptor is read from
   `conditional_logic` first, then `conditional_behavior` as a fallback: the gold
@@ -181,19 +183,19 @@ gap, but never shadows a distinct real field that happens to lack its own
 
 Output is saved to a `NamedTemporaryFile` with `garbage=3, deflate=True`, read back,
 and that temp file is always removed in `finally`. Counts (`filled`/`skipped`/
-`errors`) are logged; **values are never logged** (PII/PHI â€” bd `polyglot-pdf-hjo`).
+`errors`) are logged; **values are never logged** (PII/PHI -- bd `polyglot-pdf-hjo`).
 
 ## Form-kit store (where the blank PDF comes from)
 
-`backend/services/form_kits.py` â€” `get_form_kit_store()` (lru-cached) returns one of
+`backend/services/form_kits.py` -- `get_form_kit_store()` (lru-cached) returns one of
 two backends by `FORM_KITS_MODE`:
 
-- **`local`** (default) â€” `LocalFormKitStore` reads `<FORM_KITS_LOCAL_ROOT>/<kit_id>/`
+- **`local`** (default) -- `LocalFormKitStore` reads `<FORM_KITS_LOCAL_ROOT>/<kit_id>/`
   (`schema.json`, `form.pdf` or first `*.pdf`); generates the manifest by scanning.
-- **`gcs`** â€” `GCSFormKitStore` reads `gs://<FORM_KITS_GCS_BUCKET>/<prefix>/<kit_id>/...`
+- **`gcs`** -- `GCSFormKitStore` reads `gs://<FORM_KITS_GCS_BUCKET>/<prefix>/<kit_id>/...`
   via an authenticated `storage.Client` (requires `FORM_KITS_GCS_BUCKET`).
 
-`load_pdf_bytes` raises `FormKitNotFound` (â†’ 404) / `FormKitStoreError` (â†’ 502).
+`load_pdf_bytes` raises `FormKitNotFound` (-> 404) / `FormKitStoreError` (-> 502).
 
 The same store also carries an **additive editor write/list surface**
 (`put_schema`, `put_metadata`, `load_metadata`, `list_kit_files`,
@@ -288,22 +290,44 @@ before 5tuas carries no uid; it is unattributable, so same-role contention
 falls back to the old ALLOW for it rather than stranding an editor on a kit
 nobody can be shown to hold. A preempted editor finds
 out on their NEXT SAVE, which 409s: there is no channel from server to editor,
-so the save is the notification. Every route that rewrites a schema honours the
-lock, enforced through one `_require_edit_lock` helper and pinned by a property
-test that derives the route list from the shipped module.
+so the save is the notification. Every route that rewrites a kit's schema OR
+metadata honours the lock (bd polyglot-pdf-fwzln widened this to the local-save
+readiness route too, which writes metadata via the SAME shared
+`_stamp_readiness` helper the hosted save path uses), enforced through one
+`_require_edit_lock` helper and pinned by a property test that derives the
+write-site list from BOTH route modules (`editor_kit_routes.py` and
+`editor_readiness_routes.py`), not just the one the schema-write path lives
+in.
 
 **The one thing that removes an archive** is `DELETE /api/editor/kits/{kit_id}`
-(bd `polyglot-pdf-6x1j`) -- author-only, and guarded by a THREE-state check
-rather than a warning: records exist -> 409 offering unpublish; no records and
-the check *succeeded* -> deleted; the check could not run -> 409 refusing.
+(bd `polyglot-pdf-6x1j`) -- author-only, and guarded by GRADUATED FRICTION
+rather than a permanent refusal (bd `polyglot-pdf-6zhaf`). Risk decides how
+firmly the caller is asked, never whether the door exists: never-live with no
+records and a check that *succeeded* deletes outright; never-live with records
+OR an unrunnable check returns 409 `DELETE_NEEDS_ACK:`; an EVER-LIVE kit
+(`complete`/`unpublished`, or any `published_at`) returns 409
+`DELETE_NEEDS_DOUBLE_ACK:`. Both clear on `?acknowledged=` -- `understood` and
+`understood-published` respectively, and the weaker token does NOT satisfy the
+stronger gate.
+
+An absolute refusal was the previous design and turned out to be its own bug:
 `confirmation_logger.kit_has_confirmation_records` RAISES
 `ConfirmationCheckUnavailable` rather than returning False when the Firestore
-sink is off or its query fails, because the local JSONL fallback dies with the
-instance -- reading that silence as "no records" would let an author working
-locally destroy the evidence this archive exists to preserve. Taking the
-archive with the kit is deliberate: a kit with no confirmation records has
-nothing naming its superseded revisions, so leaving them strands bytes no
-record can retrieve. `FormKitStore.delete_kit` is the store's ONLY destructive
+sink is off or its query fails, and un-attributable legacy records make that
+permanent -- so EVERY kit became undeletable forever and the store filled with
+junk nobody could clear. The check is unchanged and its outcome still grades the
+warning; what changed is that a warning can be acknowledged. The caution behind
+it still stands: the local JSONL fallback dies with the instance, so reading
+that silence as "no records" would let an author working locally destroy
+evidence -- which is why the unverifiable case still warns rather than passing
+silently.
+
+Taking the archive with the kit is deliberate, and it is precisely what a delete
+costs. The confirmation records themselves live in a SEPARATE store and survive,
+so a delete does not erase anyone's agreement -- it erases the revision that
+agreement names, leaving a record pointing at bytes nobody can produce. That is
+what the ever-live warning has to say, and saying "this deletes their agreement
+records" instead would be false. `FormKitStore.delete_kit` is the store's ONLY destructive
 primitive; both impls confine the delete to the kit's own prefix (the local one
 resolves and re-checks containment, since `_kit_dir` is a bare join; the GCS one
 appends a trailing slash, without which `w7` would also sweep away `w7-2024`). Archives are invisible to the RUNTIME catalogues for free: `list_kit_files`
@@ -320,9 +344,9 @@ the operator read goes through. `scripts/read_kit_revision.py` is the operator r
 ## Debugging
 
 `DEBUG_PDF_FILLING.md` (repo root) is the field-by-field debug runbook for the
-"blank PDF" failure modes â€” wrapped-value symptoms (`{value:...}` reaching the
+"blank PDF" failure modes -- wrapped-value symptoms (`{value:...}` reaching the
 backend = unwrap failed), `field_count=0` (frontend not sending), `filled=0`
-(pdf_field_name mismatch â€” dump real widget names with a `fitz` one-liner), and a
+(pdf_field_name mismatch -- dump real widget names with a `fitz` one-liner), and a
 curl recipe against `/api/fill-pdf`.
 
 ---

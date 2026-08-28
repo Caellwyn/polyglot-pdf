@@ -370,3 +370,97 @@ describe('PreviewPane: require_if drives the required badge live', () => {
     expect(badgeFor().length).toBe(0);
   });
 });
+
+describe('ConditionBuilder: an unfilled select export code is never seeded (bd polyglot-pdf-alzbr)', () => {
+  // A select option now starts with an EMPTY PDF export code for the author to
+  // fill in. Seeding a condition from it would be invisible: schema_lint
+  // deliberately skips "" as the v1 "field is empty" idiom, so `equals ""`
+  // publishes clean -- while comparing live, by strict ===, against the voice
+  // SelectField's own empty placeholder. The dependent would flip visible
+  // whenever the user simply has not answered the dropdown yet.
+  function schemaWithHalfAuthoredSelect(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['txt', 'state', 'target'] }],
+      fields: [
+        // A text trigger FIRST, so "Add condition" lands here and the
+        // coerceAtom test has something to switch AWAY from. A text trigger's
+        // seeded value is '' -- which is exactly the value that must not be
+        // carried onto the half-authored select.
+        field({ id: 'txt', spoken_name: 'txt' }),
+        field({
+          id: 'state', type: 'select', spoken_name: 'state',
+          options: [
+            { value: '', label: '' },          // just added, code not yet typed
+            { value: 'WY', label: 'Wyoming' },
+          ],
+        }),
+        field({ id: 'target', spoken_name: 'target' }),
+      ],
+    } as unknown as FormSchema;
+  }
+
+  function LocalHarness() {
+    const [condition, setCondition] = useState<FieldCondition | undefined>(undefined);
+    lastCondition = condition;
+    return (
+      <ConditionBuilder
+        title="Shown when"
+        condition={condition}
+        selfId="target"
+        schema={schemaWithHalfAuthoredSelect()}
+        onChange={(next) => { lastCondition = next; setCondition(next); }}
+      />
+    );
+  }
+
+  it('coerceAtom: SWITCHING the trigger to a half-authored select also skips the empty code', () => {
+    // defaultAtom runs on "Add condition"; coerceAtom runs on a trigger or
+    // operator CHANGE. They are separate code paths and need separate pins --
+    // reverting coerceAtom alone left the whole suite green (per-layer trap,
+    // CLAUDE.md scar: redundant guards need per-layer tests).
+    render(<LocalHarness />);
+    fireEvent.click(screen.getByRole('button', { name: /Add condition/i }));
+    // Row starts on the first triggerable field; switch it to the select.
+    const triggerSel = screen.getByLabelText(/trigger field/i) as HTMLSelectElement;
+    fireEvent.change(triggerSel, { target: { value: 'state' } });
+
+    const atom: any = lastCondition;
+    const row = atom?.all_of?.[0] ?? atom;
+    expect(row.field).toBe('state');
+    expect(row.value).toBe('WY');
+    expect(row.value).not.toBe('');
+  });
+
+  it('defaultAtom: seeds the first option that HAS a value, not the empty one', () => {
+    // Only the select is triggerable here, so "Add condition" seeds from it
+    // directly -- this pins defaultAtom, the coerceAtom case is above.
+    function OnlySelectHarness() {
+      const base = schemaWithHalfAuthoredSelect();
+      const schema = {
+        ...base,
+        fields: base.fields.filter(f => f.id !== 'txt'),
+      } as unknown as FormSchema;
+      const [condition, setCondition] = useState<FieldCondition | undefined>(undefined);
+      lastCondition = condition;
+      return (
+        <ConditionBuilder
+          title="Shown when"
+          condition={condition}
+          selfId="target"
+          schema={schema}
+          onChange={(next) => { lastCondition = next; setCondition(next); }}
+        />
+      );
+    }
+    render(<OnlySelectHarness />);
+    fireEvent.click(screen.getByRole('button', { name: /Add condition/i }));
+    const atom: any = lastCondition;
+    const seeded = atom?.all_of?.[0] ?? atom;
+    expect(seeded.field).toBe('state');
+    expect(seeded.value).toBe('WY');
+    expect(seeded.value).not.toBe('');
+  });
+});
