@@ -309,3 +309,51 @@ different disguises for the same error -- generalising from the single case in
 front of me -- and each time a green suite with the feature broken for a real
 client.
 
+## Round five: the guarantee was real, and scoped to what I had enumerated
+
+I told the reviewer the whole-form round trip was the branch's strongest claim
+and asked it to falsify that specifically. It did.
+
+`_answer_everything` was an if/elif over text, radio and checkbox_group with
+**no else**, so `number` (57 fields on the f1040), `checkbox` (49), `date`,
+`textarea` and `select` were never filled. "Fill every field, nothing lost"
+actually covered **68 of the f1040's 176**.
+
+Nothing about it was wrong. It was *scoped to what I had happened to
+enumerate*, and it read like a total guarantee.
+
+**Widening it caught a live bug in the same run.** A ticked standalone checkbox
+resumed as the raw PDF on-state -- `"Y"` on the i-90, `"1"` on the f1040 --
+rather than the client's `true`. The next fill rejects that as
+`checkbox_unsupported_value`, so the tick disappears from the printed legal
+form while the preview and the form UI disagree about it.
+
+| Kit | Before | Now |
+|---|---|---|
+| W-7 | 46 of 53 | 53 of 53 |
+| i-90 | 107 of 132 | 128 of 132 (4 signatures) |
+| f1040 | 68 of 176 | **176 of 176** |
+
+357 fields, zero lost, zero altered.
+
+Two guards so the ceiling cannot come back: an unknown field type now RAISES
+rather than being skipped, and the size floor is derived from the schema rather
+than a hand-picked `> 20` -- which would have let the f1040 fall to 21 fields
+and still pass.
+
+### Five rounds, one error
+
+| Round | The thing that was true only where I looked |
+|---|---|
+| 1 | a fixture I invented |
+| 2 | a probe I wrote, which fabricated its own finding |
+| 3 | the one kit carrying the schema key I relied on |
+| 4 | the one kit whose widget naming matched exactly |
+| 5 | the field types my own test helper happened to name |
+
+Every round: a green suite, and the feature broken for a real client. The
+error was never in the reasoning -- each fix was correct for the case in front
+of me. It was in the *scope* of the evidence, and in each case the fix was the
+same: go to the shipped artifacts, and enumerate the whole set rather than the
+instance.
+
