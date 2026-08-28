@@ -3305,6 +3305,16 @@ async def set_editor_kit_status(
 DELETE_NEEDS_ACK_PREFIX = "DELETE_NEEDS_ACK:"
 DELETE_NEEDS_DOUBLE_ACK_PREFIX = "DELETE_NEEDS_DOUBLE_ACK:"
 
+# The two acknowledgement LEVELS, distinct on the wire. A single boolean cannot
+# express two levels: with one, `?acknowledged=true` satisfied an ever-live
+# delete exactly as it satisfied a never-live one, so the "double" in
+# double-confirmation lived only in the client's checkbox and any direct API
+# call skipped it (fresh-eyes, bd polyglot-pdf-6zhaf). These are values the
+# CALLER must name, so the server records which level was actually given
+# rather than inferring it.
+ACK_UNDERSTOOD = "understood"
+ACK_UNDERSTOOD_PUBLISHED = "understood-published"
+
 
 def _kit_was_ever_live(meta: Optional[dict]) -> bool:
     """Has this kit ever been visible to a client?
@@ -3324,7 +3334,7 @@ def _kit_was_ever_live(meta: Optional[dict]) -> bool:
         # the strictest path applies -- the same fail-closed instinct as the
         # confirmation check, but escalating rather than blocking outright.
         return True
-    if meta.get("status") in ("complete", "unpublished"):
+    if meta.get("status") in _PUBLISHED_STATUSES:
         return True
     return bool(meta.get("published_at"))
 
@@ -3333,7 +3343,7 @@ def _kit_was_ever_live(meta: Optional[dict]) -> bool:
 async def delete_editor_kit(
     kit_id: str,
     role: Annotated[EditorActor, Depends(require_author_role)],
-    acknowledged: bool = False,
+    acknowledged: Optional[str] = None,
 ) -> KitDeleteResponse:
     """Permanently remove a kit and everything under it, archives included.
 
@@ -3400,7 +3410,9 @@ async def delete_editor_kit(
     # names only the id is unreadable against the catalogue on screen.
     label = (meta or {}).get("label") or kit_id
 
-    if ever_live and not acknowledged:
+    # An ever-live kit needs the STRONGER token specifically -- the weaker one
+    # does not escalate into it, or the tier is decorative.
+    if ever_live and acknowledged != ACK_UNDERSTOOD_PUBLISHED:
         _log.info("editor_kit_delete_needs_double_ack", kit_id=kit_id,
                   role=role.role, actor=role.label(), has_records=has_records,
                   unverifiable=unverifiable)
@@ -3417,14 +3429,16 @@ async def delete_editor_kit(
             ),
         )
 
-    if (has_records or unverifiable) and not acknowledged:
+    if (has_records or unverifiable) and acknowledged not in (
+            ACK_UNDERSTOOD, ACK_UNDERSTOOD_PUBLISHED):
         # Never live, but we either found records or could not look. Say which,
         # because the remedy differs and the old message conflated them.
         reason = (
-            f"it has confirmation records, so someone has already filled it"
+            "it has confirmation records, so someone has already filled it"
             if has_records else
-            f"whether anyone has filled it cannot be checked right now "
-            f"({unverifiable})"
+            "the confirmation record store cannot be consulted right now, so "
+            "whether ANY form has been filled is unknown -- this is not "
+            "specific to this one"
         )
         _log.info("editor_kit_delete_needs_ack", kit_id=kit_id, role=role.role,
                   actor=role.label(), has_records=has_records,

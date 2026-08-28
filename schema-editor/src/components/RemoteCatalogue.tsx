@@ -137,6 +137,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // this specific kit, which a generic client warning cannot.
   const [deleteWarning, setDeleteWarning] =
     React.useState<{ text: string; escalation: DeleteEscalation } | null>(null);
+  // A warning belongs to ONE kit. Leaking it into the next dialog is not a
+  // display glitch: a tier-B warning arms "Delete anyway" immediately, so kit
+  // B's dialog would open one click from deleting a kit whose id was never
+  // typed -- bypassing the type-to-confirm guard entirely, on the exact action
+  // where deleting the wrong row is the mistake that actually happens.
+  // Cleared HERE, keyed on the kit, so every path that opens the dialog is
+  // covered rather than each remembering to (fresh-eyes, bd 6zhaf).
+  React.useEffect(() => { setDeleteWarning(null); setDeleteError(null); },
+                  [deletePrompt?.id]);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   // The kit whose lock is being taken/released right now (bd
   // polyglot-pdf-hqztg), so its buttons can disable without freezing the
@@ -303,7 +312,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // and a 409 is the guard WORKING, so it renders inside the dialog rather
   // than dismissing it.
   const handleDelete = React.useCallback(async (
-    kit: RemoteKitEntry, acknowledged = false,
+    kit: RemoteKitEntry, acknowledged: DeleteEscalation | null = null,
   ) => {
     setDeleteError(null);
     // Clear any stale success banner, as every sibling handler does. Without
@@ -1485,8 +1494,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           busy={deletingId === deletePrompt.id}
           error={deleteError}
           warning={deleteWarning}
-          onAcknowledge={() => { void handleDelete(deletePrompt, true); }}
-          onCancel={() => { setDeletePrompt(null); setDeleteError(null); }}
+          onAcknowledge={() => {
+            // Confirm the level the SERVER asked for, never a fixed one.
+            if (deleteWarning) void handleDelete(deletePrompt, deleteWarning.escalation);
+          }}
+          onCancel={() => { setDeletePrompt(null); setDeleteError(null); setDeleteWarning(null); }}
           onConfirm={() => { void handleDelete(deletePrompt); }}
         />
       )}

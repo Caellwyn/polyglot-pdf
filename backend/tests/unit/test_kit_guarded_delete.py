@@ -2,16 +2,28 @@
 
 Deletion is the ONLY destructive operation in the editor API, and it takes the
 revision archive with it -- the bytes bd polyglot-pdf-w3zw/xzw5 exist to keep
-retrievable. So the guard, not the delete, is the feature:
+retrievable. So the guard, not the delete, is the feature -- but it GRADES rather than
+blocks (bd polyglot-pdf-6zhaf). An absolute refusal turned out to be its own
+bug: un-attributable legacy records made the check permanently unavailable, so
+every kit became undeletable forever and the store filled with junk nobody
+could clear. Risk decides how firmly the caller is asked, never whether the
+door exists:
 
-  records exist        -> 409, offering unpublish
-  no records, VERIFIED -> deleted
-  could not check      -> 409, refusing
+  never live, no records, VERIFIED  -> deleted
+  never live, records OR unverified -> 409 DELETE_NEEDS_ACK
+  EVER LIVE (any check result)      -> 409 DELETE_NEEDS_DOUBLE_ACK
 
-The third case is the one that needs pinning hardest. The confirmation sink is
-Firestore, enabled only by the deploy env; with it off the check falls back to
-a local JSONL file that dies with the instance. Treating that silence as "no
-records" would let an author working locally destroy evidence that exists.
+Each refusal names the acknowledgement that clears it, and the two levels are
+DISTINCT values on the wire -- the weaker one must not satisfy an ever-live
+delete, or "double confirmation" lives only in the client and any direct API
+call skips it.
+
+Unverified still is not safe, which is why tier B exists at all. The
+confirmation sink is Firestore, enabled only by the deploy env; with it off the
+check falls back to a local JSONL file that dies with the instance. Treating
+that silence as "no records" would let an author working locally destroy
+evidence that exists -- so it warns, and says the cause is GLOBAL rather than
+about the kit in front of them.
 """
 import asyncio
 import json
@@ -126,10 +138,34 @@ def test_an_EVER_LIVE_kit_IS_deletable_once_acknowledged(client, monkeypatch):
     _make_kit(root, "in-use", status="complete")
     _has_records(monkeypatch)
 
-    resp = c.delete("/api/editor/kits/in-use?acknowledged=true", headers=AUTH)
+    resp = c.delete(
+        f"/api/editor/kits/in-use?acknowledged={ekr.ACK_UNDERSTOOD_PUBLISHED}",
+        headers=AUTH)
 
     assert resp.status_code == 200, resp.text
     assert not (root / "in-use").exists()
+
+
+def test_the_WEAKER_ack_does_NOT_clear_an_ever_live_delete(client, monkeypatch):
+    """The two levels must be DISTINCT on the wire, or the "double" in double
+    confirmation lives only in the client's checkbox and any direct API call
+    skips it (fresh-eyes, bd polyglot-pdf-6zhaf). One boolean cannot express
+    two levels -- that is exactly how the first cut of this got it wrong."""
+    c, _store, root = client
+    _make_kit(root, "in-use", status="complete")
+    _has_records(monkeypatch)
+
+    resp = c.delete(f"/api/editor/kits/in-use?acknowledged={ekr.ACK_UNDERSTOOD}",
+                    headers=AUTH)
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"].startswith(ekr.DELETE_NEEDS_DOUBLE_ACK_PREFIX)
+    assert (root / "in-use" / "schema.json").exists()
+
+    # And a junk value is not a skeleton key either.
+    junk = c.delete("/api/editor/kits/in-use?acknowledged=true", headers=AUTH)
+    assert junk.status_code == 409, junk.text
+    assert (root / "in-use" / "schema.json").exists()
 
 
 def test_a_RETIRED_kit_is_treated_as_ever_live(client, monkeypatch):
@@ -180,7 +216,9 @@ def test_a_NEVER_LIVE_kit_WITH_records_needs_a_single_ack(client, monkeypatch):
     assert detail.startswith(ekr.DELETE_NEEDS_ACK_PREFIX)
     assert "confirmation records" in detail
 
-    ok = c.delete("/api/editor/kits/draft-but-filled?acknowledged=true", headers=AUTH)
+    ok = c.delete(
+        f"/api/editor/kits/draft-but-filled?acknowledged={ekr.ACK_UNDERSTOOD}",
+        headers=AUTH)
     assert ok.status_code == 200, ok.text
     assert not (root / "draft-but-filled").exists()
 
@@ -205,11 +243,18 @@ def test_an_UNVERIFIABLE_never_live_kit_warns_then_deletes(client, monkeypatch):
     # It names the REASON it could not check, rather than implying something
     # about this kit specifically -- the old message read as a per-kit verdict
     # when the cause was global, which is why the maintainer tried other forms.
-    assert "cannot be checked" in detail
-    assert "sink disabled" in detail
+    # The cause is GLOBAL. The old message read as a verdict on this kit, which
+    # is why the maintainer worked through every form in the catalogue looking
+    # for one that would delete -- so the wording must say so, and must NOT
+    # echo the raw exception ("...so THIS KIT cannot be cleared"), which would
+    # relocate the same bug into a parenthetical.
+    assert "not specific to this one" in detail
+    assert "cannot be cleared for deletion" not in detail
     assert (root / "unknown-history" / "schema.json").exists()
 
-    ok = c.delete("/api/editor/kits/unknown-history?acknowledged=true", headers=AUTH)
+    ok = c.delete(
+        f"/api/editor/kits/unknown-history?acknowledged={ekr.ACK_UNDERSTOOD}",
+        headers=AUTH)
     assert ok.status_code == 200, ok.text
     assert not (root / "unknown-history").exists()
 

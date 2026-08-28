@@ -121,7 +121,10 @@ describe('DeleteKitDialog', () => {
     // removes the live form would be wrong.
     expect(screen.getByText(/every archived version/)).toBeTruthy();
     expect(screen.getByText(/cannot be undone/)).toBeTruthy();
-    expect(screen.getByText(/unpublish it instead/i)).toBeTruthy();
+    // Matched on the WORD, not the phrasing: the copy was reworded when
+    // deletion became graduated (bd 6zhaf), and what this pins is that the safe
+    // alternative is still offered -- not one particular sentence.
+    expect(screen.getByText(/unpublish/i)).toBeTruthy();
   });
 
   it('renders a server refusal IN PLACE, keeping the dialog open', () => {

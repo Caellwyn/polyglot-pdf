@@ -28,7 +28,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  deleteRemoteKit,
+  deleteRemoteKit, DeleteNeedsAcknowledgement,
   releaseKitLock, takeKitLock,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   fetchRetireCandidates,
@@ -1635,9 +1635,39 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: false }));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: null }));
     await waitFor(() =>
       expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  // A WARNING BELONGS TO ONE KIT. Leaking it into the next dialog is not a
+  // display glitch: a tier-B warning arms "Delete anyway" immediately, so the
+  // next kit's dialog would open ONE CLICK from deleting a form whose id was
+  // never typed -- defeating the type-to-confirm guard on the exact action
+  // where deleting the wrong row is the mistake that actually happens.
+  // Found by fresh-eyes review; there was no coverage of cross-kit reset.
+  it('does NOT carry a warning from one kit into the next dialog', async () => {
+    vi.mocked(deleteRemoteKit).mockRejectedValueOnce(
+      new DeleteNeedsAcknowledgement('Records cannot be checked.', 'ack'));
+    await openCards('author');
+
+    // Kit A: type its id, delete, get warned.
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+    await screen.findByTestId('delete-anyway');
+
+    // Cancel, then open the dialog again.
+    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() => expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+
+    // Back to the ordinary guarded path: no armed override, and the button is
+    // disabled until the id is typed again.
+    expect(screen.queryByTestId('delete-anyway')).not.toBeInTheDocument();
+    expect(screen.getByText('Delete permanently')).toBeInTheDocument();
+    expect((screen.getByText('Delete permanently') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('renders Delete LAST, after the extraction row on a schemaless kit', async () => {
@@ -1726,7 +1756,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: false }));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: null }));
     expect(clearOpenKit).toHaveBeenCalledTimes(1);
   });
 
@@ -1752,7 +1782,7 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'done-kit' } });
     fireEvent.click(screen.getByText('Delete permanently'));
 
-    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: false }));
+    await waitFor(() => expect(deleteRemoteKit).toHaveBeenCalledWith('done-kit', { acknowledged: null }));
     expect(clearOpenKit).not.toHaveBeenCalled();
   });
 });

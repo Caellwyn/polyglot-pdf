@@ -105,9 +105,49 @@ one. `_kit_was_ever_live(None)` returns True: an unparseable file is not
 evidence of safety. Same fail-closed instinct as the original guard, but
 escalating instead of blocking.
 
+## What review caught
+
+**A one-click delete of the wrong form -- worse than the bug being fixed.**
+The warning state was cleared on a successful delete but not on Cancel, and
+not when the dialog reopened for a different kit. A tier-B warning arms
+"Delete anyway" immediately, so: get warned on kit A, cancel, open kit B,
+and B's dialog opens one click from deleting a form whose id was never
+typed. That defeats the type-to-confirm guard on precisely the action where
+deleting the wrong row is the mistake that actually happens.
+
+Fixed by clearing on a `deletePrompt?.id` effect rather than at each call
+site -- every path that opens the dialog is covered instead of each one
+remembering to. No test covered cross-kit reset; there is one now.
+
+**"Double confirmation" the server never checked.** Both tiers gated on one
+boolean, so `?acknowledged=true` cleared an ever-live delete exactly as it
+cleared a never-live one. The second confirmation existed only in the
+client's checkbox: any direct API call skipped it, and the server could not
+record which level was actually given. One boolean cannot express two
+levels. Now two distinct named tokens, and the weaker one does not escalate
+into the stronger.
+
+That one is worth remembering as a shape: I wrote a docstring claiming "the
+client is required to double-confirm before sending it" -- which is not a
+server contract at all, it is a hope about the client. If the enforcement
+lives in the UI, the API does not have the property.
+
+**The message relocated the bug instead of fixing it.** Tier B embedded the
+raw exception text, which reads "...so THIS KIT cannot be cleared for
+deletion" -- the exact per-kit phrasing that sent the maintainer through
+every form in the catalogue, now nested in a parenthetical. The cause is
+global, so the message says so, and the raw text goes to the LOG where an
+operator debugging the sink actually needs it.
+
+Also: `delete_kit`'s docstring still promised "a kit WITH records must never
+reach this method", which my own change had made false -- and it is the
+contract every store implementation reads.
+
 ## Verification
 
-Four mutations, four caught: dropping `unpublished` from ever-live (a retired
-form deleted silently -- the log line in the failure output shows it), ignoring
-`published_at`, ignoring the acknowledgement entirely (the original bug
-restored), and letting the double-ack tick stop gating.
+Six mutations, six caught. Four on the original design: dropping `unpublished`
+from ever-live (a retired form deleted silently -- the log line in the failure
+output shows it), ignoring `published_at`, ignoring the acknowledgement entirely
+(the original bug restored), and letting the double-ack tick stop gating. Two on
+the review fixes: restoring the cross-kit warning leak, and letting the weaker
+acknowledgement clear an ever-live delete.

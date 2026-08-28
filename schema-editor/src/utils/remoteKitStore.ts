@@ -669,13 +669,26 @@ export class DeleteNeedsAcknowledgement extends Error {
 const DELETE_NEEDS_ACK_PREFIX = 'DELETE_NEEDS_ACK:';
 const DELETE_NEEDS_DOUBLE_ACK_PREFIX = 'DELETE_NEEDS_DOUBLE_ACK:';
 
+/** The acknowledgement each escalation clears -- mirrors editor_kit_routes'
+ * ACK_UNDERSTOOD / ACK_UNDERSTOOD_PUBLISHED. DISTINCT values, not one boolean:
+ * the weaker one must not satisfy an ever-live delete, or the second
+ * confirmation is decoration the server never checks. */
+const ACK_TOKEN: Record<DeleteEscalation, string> = {
+  'ack': 'understood',
+  'double-ack': 'understood-published',
+};
+
 /** Delete a kit. Pass acknowledged once the human has confirmed a warning the
  * server raised; without it a risky delete comes back as
  * DeleteNeedsAcknowledgement rather than succeeding. */
 export async function deleteRemoteKit(
-  kitId: string, opts: { acknowledged?: boolean } = {},
+  kitId: string, opts: { acknowledged?: DeleteEscalation | null } = {},
 ): Promise<number> {
-  const query = opts.acknowledged ? '?acknowledged=true' : '';
+  // The token names WHICH warning was confirmed, so acknowledging the lighter
+  // one cannot clear the heavier gate.
+  const query = opts.acknowledged
+    ? `?acknowledged=${encodeURIComponent(ACK_TOKEN[opts.acknowledged])}`
+    : '';
   const res = await editorFetch(
     `/api/editor/kits/${encodeURIComponent(kitId)}${query}`,
     { method: 'DELETE' },

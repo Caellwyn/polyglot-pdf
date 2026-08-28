@@ -237,8 +237,13 @@ describe('request shape', () => {
     await deleteRemoteKit('form-2');
     expect(fetchMock.mock.calls[0][0]).not.toContain('acknowledged');
 
-    await deleteRemoteKit('form-2', { acknowledged: true });
-    expect(fetchMock.mock.calls[1][0]).toContain('acknowledged=true');
+    await deleteRemoteKit('form-2', { acknowledged: 'ack' });
+    expect(fetchMock.mock.calls[1][0]).toContain('acknowledged=understood');
+
+    // The HEAVIER warning sends a DIFFERENT token. One boolean cannot express
+    // two levels, and the server rejects the weaker one for an ever-live kit.
+    await deleteRemoteKit('w7', { acknowledged: 'double-ack' });
+    expect(fetchMock.mock.calls[2][0]).toContain('acknowledged=understood-published');
   });
 
   // A 409 that is NOT one of the graded refusals is still a plain failure --

@@ -74,9 +74,10 @@ export function DeleteKitDialog({
 
         <p className="mt-2 text-sm text-slate-600">
           This removes the form, its PDF, and every archived version of it. It
-          cannot be undone. If anyone has already filled this form, deletion
-          will be refused -- unpublish it instead, which hides it from clients
-          and keeps every file.
+          cannot be undone. If anyone has already filled this form -- or if that
+          cannot be checked -- you will be asked to confirm again before it goes
+          ahead. Unpublishing instead hides it from clients and keeps every
+          file.
         </p>
 
         <label className="mt-4 block text-xs font-medium text-slate-700" htmlFor="delete-kit-input">
