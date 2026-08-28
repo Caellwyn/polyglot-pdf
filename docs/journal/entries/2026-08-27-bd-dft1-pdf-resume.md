@@ -140,3 +140,47 @@ client's own file, not from something the assistant heard this session.
 - The resume flow has not been exercised against a live browser end to end. The
   route, the verifier, the merge and the mounts are each tested, and the wiring
   guard proves they are connected, but nobody has clicked through it.
+
+## The review found the feature did not work
+
+Six blocking findings, every structural claim verified independently before
+fixing. The headline: **a real W-7 resume returned ZERO usable answers.**
+
+- the route returned values keyed by PDF WIDGET NAME; `fieldValues` is keyed by
+  SCHEMA FIELD ID, and **zero of the W-7's 53 ids equal their pdf_field_name**
+- `section.fields` is `string[]` of ids, not objects -- the index built on all
+  three shipped kits was EMPTY
+- an untouched W-7 already carries 21 `'Off'` checkbox widgets, which would
+  have been written as confirmed answers on a form nobody filled in
+- the mount used `form_metadata.form_number` (`"W-7"`); the kit is `"w7"`, so
+  every resume 404'd
+- neither new route was given an auth token, so both 401 in any deployed
+  environment -- working only under the local `VFF_DISABLE_AUTH` bypass
+- the nudge's Save button dispatched an event NOTHING listened for, silencing
+  both nudges permanently while downloading nothing
+
+### Why the tests missed all of it
+
+Every fixture I wrote invented a shape no shipped kit produces. The route test
+filled a widget BY NAME and asserted that SAME STRING came back -- so it passed
+*precisely because* it conflated the two namespaces the bug conflates. Three of
+those tests FAILED once the route was fixed: they were pinning the bug.
+
+**And the mount guard I was pleased with caught none of it.** It proved
+components were RENDERED, not that they were rendered CORRECTLY WIRED. A
+wiring guard that checks presence is one layer removed from a wiring guard that
+checks the values being passed.
+
+The generalisable rule: **a fixture you invented cannot falsify an assumption
+you also invented.** Every fix here is now pinned by a test derived from the
+REAL shipped kits.
+
+### Dead code removed rather than left to mislead
+
+`resumeFromPdf.ts` -- the browser-side PDF reader -- had no production
+importer. The design moved mid-build: the SERVER verifies uploads, so a
+client-side reader became redundant. Its Python/TypeScript parity guard was
+therefore defending nothing while implying protection. Both removed, with the
+guard's real subject (`_is_safe_session_id`) still exercised where it is
+actually used.
+
