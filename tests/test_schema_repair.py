@@ -551,6 +551,31 @@ def test_a_condition_naming_a_held_aside_option_is_DROPPED_not_blanked():
     assert not any(r["action"] == "rewrite-condition-value" for r in repairs),         "a blank resolution must never be reported as a successful rewrite"
 
 
+def test_an_ALREADY_blank_condition_value_is_not_newly_dropped():
+    """The blank-resolution guard is scoped to values that STARTED non-blank.
+
+    A condition whose own value was already blank must keep whatever behaviour
+    it had before this fix -- the guard exists to stop a real reference being
+    silently rewritten to nothing, not to newly police blank-vs-blank. Without
+    the `str(v).strip() != ""` clause this case flips from preserved to
+    dropped, so the clause is load-bearing (found in cross-surface review as an
+    unpinned scoping clause: deleting it left all 91 tests green).
+    """
+    # Whitespace on BOTH sides is the only input that distinguishes the clause:
+    # an exactly-"" condition value already fails _register's empty-key guard
+    # and never reaches here.
+    dump = {"fields": [
+        {"name": "form1[0].P1_Line6e_State[0]",
+         "widgets": [{"choices": [{"value": "X1"}]}]},
+        {"name": "form1[0].dep[0]", "widgets": [{}]},
+    ]}
+    schema = _select_with_dependent("   ", "   ")
+    repaired, repairs = repair(schema, dump)
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep.get("show_if", {}).get("value") == "   "
+    assert not any(r["action"] == "drop-condition" for r in repairs)
+
+
 def test_a_condition_on_a_REAL_option_value_still_resolves():
     """The drop is scoped to a BLANK resolution -- a real value is untouched."""
     repaired, _ = repair(_select_with_dependent("", "WY"), _COND_DUMP)
