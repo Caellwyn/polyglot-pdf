@@ -1,0 +1,7 @@
+turn,q,field_id,label,stalled,prompt_tokens,text_in,audio_in,text_out,audio_out,total_tokens,cost_usd,cumulative_cost_usd,latency_s
+1,1,a_number,value,False,4210,4001,209,36,0,4246,0.0027,0.006516,1.297
+2,1,a_number,confirm,False,4368,8187,480,20,95,8782,0.006714,0.01323,
+3,2,uscis_account,value,False,4819,8873,648,27,35,9583,0.006854,0.020084,
+4,2,uscis_account,confirm,False,5260,14145,1237,21,49,15452,0.011414,0.031498,
+5,3,family_name,value,False,5528,19804,1906,23,20,21753,0.015906,0.047404,
+6,3,family_name,confirm,False,5624,10141,1058,33,0,11232,0.008311,0.055715,1.734

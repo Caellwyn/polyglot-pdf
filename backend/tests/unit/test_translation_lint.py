@@ -357,13 +357,30 @@ def test_lint_kit_schema_empty_and_none_schema():
 def test_lint_kits_sweeps_real_repo_kits():
     """Exit criterion 3: the sweep over the committed kits completes without
     error. Findings are allowed (the shipped bake predates the lint); the
-    pin is completion + coverage, not zero findings."""
+    pin is completion + coverage, not zero findings.
+
+    COMMITTED kits only (bd polyglot-pdf-2nikx): lint_kits scans the on-disk
+    tree, which on a dev machine can also hold UNTRACKED kits (bucket pulls
+    via scripts/pull-form-kits.sh, editor scratch kits). Those are explicitly
+    non-deliverables (.gitignore's scratch-kits block), so asserting their
+    lint state here made the suite red on any machine that had pulled the
+    bucket while staying green in CI -- the assertions now filter to kits
+    git actually tracks, matching this docstring's own 'committed' claim."""
     kits_root = DEFAULT_GLOSSARY_PATH.parents[1]
+    import subprocess
+    tracked = subprocess.run(
+        ["git", "ls-files", "form-kits"], capture_output=True, text=True,
+        cwd=str(kits_root.parent), check=True).stdout
+    tracked_kits = {line.split("/")[1] for line in tracked.splitlines()
+                    if line.count("/") >= 2}
     glossary = load_glossary()
     results = lint_kits(kits_root, glossary)
     assert {"f1040", "i-90", "w7"} <= set(results)
+    assert {"f1040", "i-90", "w7"} <= tracked_kits
     assert "_translation" not in results
-    for findings in results.values():
+    for kit_id, findings in results.items():
+        if kit_id not in tracked_kits:
+            continue  # untracked local kit: not a deliverable, not pinned
         for finding in findings:
             assert finding.severity == SEVERITY_WARNING
             assert finding.rule == RULE_MECHANICAL

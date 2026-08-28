@@ -1,0 +1,210 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90-v2",
+  "arm": "naive",
+  "path": "happy",
+  "questions": 2,
+  "compression": false,
+  "trigger": null,
+  "window": null,
+  "trigger_requested": null,
+  "window_requested": null,
+  "derive_compression": false,
+  "continuous": false,
+  "schema_scope": "full-form",
+  "started": "20260828T012724Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "field_id": "a_number",
+      "text_in": 19823,
+      "audio_in": 258,
+      "text_out": 36,
+      "audio_out": 0,
+      "total_tokens": 20117,
+      "cost_usd": 0.010757,
+      "cumulative_cost_usd": 0.02425,
+      "prompt_tokens": 20081,
+      "latency_s": 1.453
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "a_number",
+      "text_in": 19995,
+      "audio_in": 258,
+      "text_out": 0,
+      "audio_out": 77,
+      "total_tokens": 20330,
+      "cost_usd": 0.011695,
+      "cumulative_cost_usd": 0.035945,
+      "prompt_tokens": 20253,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "field_id": "uscis_account",
+      "text_in": 60089,
+      "audio_in": 1187,
+      "text_out": 39,
+      "audio_out": 91,
+      "total_tokens": 61406,
+      "cost_usd": 0.034776,
+      "cumulative_cost_usd": 0.07072,
+      "prompt_tokens": 20511,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "field_id": "uscis_account",
+      "text_in": 20104,
+      "audio_in": 437,
+      "text_out": 0,
+      "audio_out": 6,
+      "total_tokens": 20547,
+      "cost_usd": 0.011435,
+      "cumulative_cost_usd": 0.082155,
+      "prompt_tokens": 20541,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields"
+    ],
+    "2": [
+      "skip_field",
+      "get_form_status"
+    ]
+  },
+  "prompt_curve": [
+    19808,
+    20081,
+    20253,
+    20315,
+    20450,
+    20511,
+    20541
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": false,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "spoken_language": "English",
+  "speech_language_code_enabled": true,
+  "transcription_language_hint_enabled": true,
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": false,
+  "session_count": 1,
+  "naive_si_booklet_chars": 40908,
+  "system_instruction_chars": 80438,
+  "greeting_tokens": 20107,
+  "greeting_cost_usd": 0.013492,
+  "greeting_breakdown": {
+    "text_in": 19808,
+    "audio_in": 0,
+    "text_out": 0,
+    "audio_out": 299
+  },
+  "event_records": [],
+  "seam_tool_records": [
+    {
+      "ts": 12066.843,
+      "step": 2,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "uscis_account"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "uscis_account",
+        "next_field_hint": "Next field to fill is #1: 'Alien Registration Number (A-Number)'",
+        "message": "Field 'uscis_account' skipped."
+      }
+    }
+  ],
+  "text_ledger_calls": [],
+  "divergence_count": 0,
+  "divergence_pairs": [],
+  "spellback_count": 0,
+  "spellback_total_chars": 0,
+  "spellback_disabled": false,
+  "compression_effective": null,
+  "cached_curve": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "traffic_types": [],
+  "cache_summary": {
+    "reported": false,
+    "events": 7,
+    "events_with_cached_field": 0,
+    "events_with_nonzero_cache": 0,
+    "total_cached_tokens": 0,
+    "total_prompt_tokens": 141959
+  },
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "uscis_account"
+  ],
+  "fill_accuracy": {
+    "matched": 0,
+    "total": 2,
+    "accuracy": 0.0,
+    "detail": [
+      {
+        "field_id": "a_number",
+        "expected": null,
+        "written": null,
+        "ok": false,
+        "scored": "lenient"
+      },
+      {
+        "field_id": "uscis_account",
+        "expected": null,
+        "written": "",
+        "ok": false,
+        "scored": "lenient"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [
+      "a_number",
+      "uscis_account"
+    ],
+    "format": [],
+    "transcription": [],
+    "wrong-field": [],
+    "mismatch": [],
+    "spurious": []
+  },
+  "wall_clock_s": 29.2,
+  "auto_apply_fids": []
+}
