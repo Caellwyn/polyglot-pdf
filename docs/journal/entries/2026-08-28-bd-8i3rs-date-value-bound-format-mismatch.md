@@ -21,14 +21,14 @@ text input honoring the kit's own layout (bd md20o) instead of forcing ISO.
 ## What shipped
 
 Added `parseDateComponents`/`dateComponentsKey`/`formatDateComponents`:
-parse a date string against the field's declared layout (MM/DD/YYYY) or
-ISO, and compare the two `{year, month, day}` results with pure integer
-arithmetic -- no `Date` object, no timezone conversion, anywhere in the
-comparison path. `validateDateValue`'s min/max checks now try this path
-first; if either the value or the bound doesn't parse against either
-layout, it falls back to the pre-existing `new Date()` comparison
-unchanged (an unusual layout this narrower fix doesn't cover is no worse
-off than before).
+parse a date string as either MM/DD/YYYY or ISO -- tried UNCONDITIONALLY,
+not gated on the field's declared format (see below) -- and compare the
+two `{year, month, day}` results with pure integer arithmetic; no `Date`
+object, no timezone conversion, anywhere in the comparison path.
+`validateDateValue`'s min/max checks now try this path first; if either
+the value or the bound doesn't parse against either layout, it falls back
+to the pre-existing `new Date()` comparison unchanged (an unusual layout
+this narrower fix doesn't cover is no worse off than before).
 
 Deliberately narrower than the backend's `_resolve_date_format` (which
 also handles prose hints and a longer layout list): this covers only the
@@ -54,6 +54,33 @@ a comment explaining why an east-of-UTC max-bound assertion would itself
 be vacuous). Mutation-verifying confirmed both directions now redden
 independently.
 
+**Gating the fix on the field's OWN declared format missed the one real
+field it needed to cover.** The first cross-surface-reviewed draft only
+tried the MM/DD/YYYY parse when the field's declared layout (checked via
+`help.format_hint`, then widened to also check the flat `format` key)
+was literally "MM/DD/YYYY" -- reasoning that a field declaring ISO would
+only ever hold ISO values. That's false: `DateField` renders a plain text
+input with no format coercion (bd md20o), so a slash-form value can reach
+a field whose SCHEMA says ISO. The one bounded date field the product
+actually ships (`adult_intake_demo_schema.json`'s `dob`) declares
+`format: "YYYY-MM-DD"` -- so a slash-form `dob` value still reproduced the
+exact bug through two review rounds, caught only when the Opus
+cross-surface reviewer traced the fix out to that real schema file and
+executed it against the real field shape rather than a synthetic one.
+Fixed by dropping the declared-format gate entirely: `parseDateComponents`
+now tries BOTH layouts unconditionally on any string, since the two
+patterns are structurally unambiguous (slashes vs. dashes). Re-verified
+by pinning the real `dob` field shape directly and mutation-testing it.
+
+Three narrow, non-blocking observations from the round-2 cross-surface
+pass were filed as separate beads rather than folded in here (out of this
+bead's scope): impossible calendar dates like Feb 30 parse without
+rejection on both the old and new code paths (`polyglot-pdf-vdyhb`); a
+DD/MM/YYYY-declared field would be misread as MM/DD/YYYY, since this fix
+only recognizes the one slash layout (`polyglot-pdf-mul28`); and the
+comment referencing removed code, fixed directly in this same PR since it
+touched lines already in flight rather than left as `polyglot-pdf-5n59m`.
+
 ## Files touched
 
 - `frontend/src/schema-forms/utils/validation.ts` -- new
@@ -63,5 +90,7 @@ independently.
   pinning the exact bug on BOTH bound directions: a max-bound case under a
   timezone west of UTC (the only direction that can wrongly reject a value
   equal to a MAX bound) and a min-bound case under a timezone east of UTC
-  (the only direction for a MIN bound) -- plus same-layout and
-  no-format-hint control cases. Mutation-verified per direction.
+  (the only direction for a MIN bound), plus a direct pin against the real
+  `adult_intake_demo_schema.json` `dob` field shape (flat `format` key, no
+  `help.format_hint`) with a slash-form value -- plus same-layout and
+  no-declared-layout control cases. Mutation-verified per case.

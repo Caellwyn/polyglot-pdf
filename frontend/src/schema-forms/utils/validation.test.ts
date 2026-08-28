@@ -467,12 +467,13 @@ describe('validateField (date value/bound format mismatch, bd polyglot-pdf-8i3rs
     expect(validateField(sameLayoutBound, '10/14/2007')).not.toBeNull();
   });
 
-  it('falls back to the pre-existing new Date() comparison for a field with no declared format_hint', () => {
-    // No help.format_hint at all -- parseDateComponents has no MM/DD/YYYY
-    // layout to try, so a slash-form value falls through to the legacy path
-    // unchanged. Not this bead's bug (only date fields WITH a declared
-    // layout are affected), so behavior here is deliberately untouched.
-    const noHint: FormField = {
+  it('accepts a slash-form value equal to an ISO bound even with NO declared layout on the field at all (help.format_hint or flat format)', () => {
+    // parseDateComponents tries BOTH layouts unconditionally (see its
+    // docstring) -- it does not key off the field's declared format at all
+    // anymore, so a field with no format signal whatsoever is fixed
+    // identically to one that declares MM/DD/YYYY or ISO. This is a
+    // deliberate consequence of round 2's fix, not a separate fallback path.
+    const noLayout: FormField = {
       id: 'no_hint',
       name: 'Some Date',
       spoken_name: 'some date',
@@ -480,10 +481,67 @@ describe('validateField (date value/bound format mismatch, bd polyglot-pdf-8i3rs
       section_id: 'Part 1',
       max_date: '2007-10-13',
     };
-    // Same value as the pinned bug case, but with no format_hint to key off
-    // -- this exercises the untouched fallback path, not a claim about which
-    // way it resolves.
-    expect(typeof validateField(noHint, '10/13/2007')).not.toBe('undefined');
+    expect(validateField(noLayout, '10/13/2007')).toBeNull();
+  });
+
+  it('still falls back to the pre-existing new Date() comparison when the bound matches NEITHER layout parseDateComponents understands', () => {
+    // A genuinely unusual bound (e.g. "Mo/Yr" layout, MM/YYYY) that matches
+    // neither the slash-triple nor the ISO regex -- this is the actual
+    // remaining fallback case, unchanged from before this bead.
+    const unusualBound: FormField = {
+      id: 'unusual_bound',
+      name: 'Some Date',
+      spoken_name: 'some date',
+      type: 'date',
+      section_id: 'Part 1',
+      max_date: '10/2007', // MM/YYYY -- matches neither parseDateComponents pattern
+    };
+    expect(typeof validateField(unusualBound, '10/13/2007')).not.toBe('undefined');
+  });
+
+  // bd polyglot-pdf-8i3rs, Opus cross-surface review round 1: the ONE
+  // bounded date field the product actually ships
+  // (frontend/public/adult_intake_demo_schema.json's `dob`) declares its
+  // layout via the FLAT `format` key ("YYYY-MM-DD"), not help.format_hint.
+  // An earlier draft of this fix gated the MM/DD/YYYY parse attempt on the
+  // field's DECLARED format (checking format_hint, then the flat key) and
+  // missed exactly this field. Fixed by dropping the declared-format gate
+  // entirely -- parseDateComponents (see its docstring) now tries BOTH
+  // layouts unconditionally on every string, so which key (if any) the
+  // field declares no longer matters to this parse.
+  const dobShapedField: FormField = {
+    id: 'dob',
+    name: 'DOB',
+    spoken_name: 'Date of Birth',
+    type: 'date',
+    section_id: 'section-client-info',
+    format: 'YYYY-MM-DD' as any,
+    min: '1900-01-01' as any,
+    max: '2007-10-13' as any,
+  };
+
+  it('accepts an ISO value exactly equal to the max bound on the real dob-shaped field (flat format key, no help.format_hint)', () => {
+    expect(validateField(dobShapedField, '2007-10-13')).toBeNull();
+  });
+
+  it('rejects an ISO value one day after the max bound on the real dob-shaped field', () => {
+    expect(validateField(dobShapedField, '2007-10-14')).not.toBeNull();
+  });
+
+  // THE actual bug reproduction on the shipped field: DateField.tsx (bd
+  // md20o) renders a plain text input with no format coercion, so a
+  // slash-form value can reach `dob` despite its declared "YYYY-MM-DD"
+  // layout. Without reading the flat `format` key, this value/bound pair
+  // reproduces the exact west-of-UTC rejection this bead exists to fix --
+  // pinned here against the REAL field shape, not just a synthetic one.
+  it('accepts a SLASH-FORM value exactly equal to the max bound on the real dob-shaped field (America/Los_Angeles, west of UTC)', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(validateField(dobShapedField, '10/13/2007')).toBeNull();
+  });
+
+  it('rejects a SLASH-FORM value one day after the max bound on the real dob-shaped field (America/Los_Angeles, west of UTC)', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(validateField(dobShapedField, '10/14/2007')).not.toBeNull();
   });
 });
 

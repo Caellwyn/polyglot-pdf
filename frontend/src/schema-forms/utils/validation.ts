@@ -357,43 +357,46 @@ function validateNumberValue(field: FormField, value: any, rules: ValidationRule
 }
 
 /**
- * Parse a date string against the field's declared layout, falling back to
- * ISO (YYYY-MM-DD) -- mirrors the backend's _parse_bound
- * (backend/utils/field_validator.py), which tries the field's own layout AND
- * ISO before giving up on a min/max bound. Returns plain {year, month, day}
- * components (month 1-indexed) rather than a Date, so callers compare dates
- * numerically instead of through `new Date()` (see bd polyglot-pdf-8i3rs:
- * `new Date("2007-10-13")` parses as UTC midnight while
- * `new Date("10/13/2007")` parses as LOCAL midnight, so comparing two Date
- * objects built from a mixed value/bound format pair is timezone-dependent
- * and can wrongly reject a value exactly equal to its bound). Returns null
- * if neither layout matches.
+ * Parse a date string as either MM/DD/YYYY or ISO (YYYY-MM-DD) -- mirrors
+ * the backend's _parse_bound (backend/utils/field_validator.py), which
+ * tries the field's own layout AND ISO before giving up on a min/max bound.
+ * Returns plain {year, month, day} components (month 1-indexed) rather than
+ * a Date, so callers compare dates numerically instead of through
+ * `new Date()` (see bd polyglot-pdf-8i3rs: `new Date("2007-10-13")` parses
+ * as UTC midnight while `new Date("10/13/2007")` parses as LOCAL midnight,
+ * so comparing two Date objects built from a mixed value/bound format pair
+ * is timezone-dependent and can wrongly reject a value exactly equal to its
+ * bound). Returns null if the string matches neither shape.
  *
- * Only the two layouts this repo's shipped kits + this bug's exit criterion
- * actually need (MM/DD/YYYY, the declared-layout case; YYYY-MM-DD, the ISO
- * fallback every bound may be authored in) are covered -- this is
- * deliberately narrower than the backend's full _DATE_LAYOUTS/prose-matching
- * chain (_resolve_date_format), which is a much larger port out of scope for
- * this bead. A value/bound pair in some other layout falls through to the
+ * Tries BOTH layouts unconditionally -- NOT gated on the field's declared
+ * format -- because DateField renders a plain text input with no format
+ * coercion (bd md20o): a slash-form value can reach a field whose declared
+ * layout is ISO, and vice versa, regardless of what the schema says the
+ * layout SHOULD be. The two patterns are structurally distinguishable
+ * (slashes vs. dashes) so trying both is unambiguous. An earlier draft of
+ * this fix gated the MM/DD/YYYY attempt on `declaredFormat === "MM/DD/YYYY"`
+ * and missed exactly this case: `adult_intake_demo_schema.json`'s `dob`
+ * field declares "YYYY-MM-DD" with no help.format_hint, so a slash-form
+ * value against it never matched either branch and fell through to the
+ * still-buggy `new Date()` fallback (Opus cross-surface review, round 2).
+ *
+ * Only these two layouts (this repo's shipped kits + this bug's exit
+ * criterion actually need) are covered -- deliberately narrower than the
+ * backend's full _DATE_LAYOUTS/prose-matching chain (_resolve_date_format),
+ * which is a much larger port out of scope for this bead. A value/bound in
+ * some other layout (DD/MM/YYYY, MM/YYYY, etc.) falls through to the
  * pre-existing `new Date()` behavior via the caller's fallback.
  */
 function parseDateComponents(
-  raw: string,
-  declaredFormat: string | undefined
+  raw: string
 ): { year: number; month: number; day: number } | null {
   const trimmed = raw.trim();
 
-  const isMmDdYyyy =
-    declaredFormat !== undefined &&
-    /^mm\/dd\/yyyy$/i.test(declaredFormat.trim());
-  if (isMmDdYyyy) {
-    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
-    if (m) {
-      return { year: Number(m[3]), month: Number(m[1]), day: Number(m[2]) };
-    }
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slash) {
+    return { year: Number(slash[3]), month: Number(slash[1]), day: Number(slash[2]) };
   }
 
-  // ISO (YYYY-MM-DD) -- the default layout, and every bound's fallback.
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
   if (iso) {
     return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) };
@@ -458,11 +461,11 @@ function validateDateValue(field: FormField, value: string, rules: ValidationRul
     }
   }
 
-  // Declared layout (e.g. "MM/DD/YYYY"), for parsing the VALUE and BOUNDS
-  // against the same layout instead of handing mixed-format strings to
-  // `new Date()` (bd polyglot-pdf-8i3rs -- see parseDateComponents).
-  const declaredFormat = field.help?.format_hint;
-  const valueComponents = parseDateComponents(value, declaredFormat);
+  // Parse the VALUE and BOUNDS against MM/DD/YYYY or ISO instead of handing
+  // mixed-format strings to `new Date()` (bd polyglot-pdf-8i3rs -- see
+  // parseDateComponents's docstring for why this is unconditional on the
+  // field's declared format).
+  const valueComponents = parseDateComponents(value);
 
   // Min date. Prefer the canonical field.min_date; fall back to a top-level
   // min folded into the rules (Codex PR #145 round 2): some date fields carry
@@ -473,7 +476,7 @@ function validateDateValue(field: FormField, value: string, rules: ValidationRul
   const minDateSource = field.min_date ?? asDateBound(rules.min);
   if (minDateSource) {
     const minComponents = valueComponents
-      ? parseDateComponents(minDateSource, declaredFormat)
+      ? parseDateComponents(minDateSource)
       : null;
     if (valueComponents && minComponents) {
       if (dateComponentsKey(valueComponents) < dateComponentsKey(minComponents)) {
@@ -495,7 +498,7 @@ function validateDateValue(field: FormField, value: string, rules: ValidationRul
   const maxDateSource = field.max_date ?? asDateBound(rules.max);
   if (maxDateSource) {
     const maxComponents = valueComponents
-      ? parseDateComponents(maxDateSource, declaredFormat)
+      ? parseDateComponents(maxDateSource)
       : null;
     if (valueComponents && maxComponents) {
       if (dateComponentsKey(valueComponents) > dateComponentsKey(maxComponents)) {
