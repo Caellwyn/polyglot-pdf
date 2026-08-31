@@ -66,6 +66,14 @@ def _isolate_k_service(monkeypatch):
 # dependency once here is the same trick a single test file was using, hoisted
 # to where every file gets it.
 #
+# bd polyglot-pdf-rhc2v then DELETED that header from the production dependency,
+# which broke the shim's other half: patching verify_editor_token is useless if
+# nothing reads the header that would call it, and ~225 tests 401'd. So the
+# shim now also TRANSLATES the header the suite sends into the
+# `Authorization: Bearer` a real client sends (see _editor_bearer_shim). That is
+# strictly better than it sounds: the tests now travel the SAME code path
+# production does, instead of a retired one kept alive for their benefit.
+#
 # The two tokens the suite already sends become two DISTINCT PEOPLE, which is
 # strictly closer to reality than the shared secret they modelled before.
 #
@@ -112,6 +120,70 @@ def _editor_actor_auth(monkeypatch, request):
     monkeypatch.setattr(ea, "verify_editor_token", _fake_verify)
 
     monkeypatch.setattr(ea, "_dev_bypass_allowed", lambda: False)
+
+
+def bearerize_headers(headers):
+    """Rewrite an X-Editor-Token header into `Authorization: Bearer <token>`.
+
+    Module-level rather than a closure inside the fixture SO A TEST CAN IMPORT
+    IT. A test that re-implements this logic guards a copy, and a copy drifts --
+    which is exactly how the shape bug below would come back unnoticed.
+
+    SHAPE-AGNOSTIC: httpx accepts a mapping OR a list of (name, value) pairs,
+    and the fixture is autouse across the WHOLE backend suite -- so a future
+    non-editor test using the list form would otherwise crash with an
+    AttributeError raised from conftest, nowhere near its own subject
+    (cross-surface review, bd polyglot-pdf-rhc2v).
+
+    An existing Authorization always wins: this fills a gap, never overrides a
+    credential a test deliberately set.
+    """
+    pairs = (list(headers.items()) if hasattr(headers, "items")
+             else list(headers))
+    token = next((v for k, v in pairs
+                  if str(k).lower() == "x-editor-token"), None)
+    has_auth = any(str(k).lower() == "authorization" for k, _ in pairs)
+    if not token or has_auth:
+        return headers
+    # Preserve the caller's shape: a list stays a list, so a test sending
+    # duplicate header names does not silently lose one.
+    if hasattr(headers, "items"):
+        out = dict(headers)
+        out["Authorization"] = f"Bearer {token}"
+        return out
+    return list(headers) + [("Authorization", f"Bearer {token}")]
+
+
+@pytest.fixture(autouse=True)
+def _editor_bearer_shim(monkeypatch, request):
+    """Let the suite keep sending X-Editor-Token after the header was retired.
+
+    bd polyglot-pdf-rhc2v removed `x_editor_token` from `require_editor_actor`,
+    so the header the suite has always sent now reaches nothing and every editor
+    test 401s. Rather than rewrite ~225 call sites, translate at the boundary:
+    if a request carries the suite's header and no Authorization, present it as
+    `Authorization: Bearer <token>` -- exactly what the deployed client sends.
+
+    THIS IS A TEST-TRANSPORT SHIM, NOT A REVIVED AUTH PATH. It lives in
+    conftest, never in backend/, so the server itself still accepts one header
+    only -- `test_the_RETIRED_X_Editor_Token_header_is_refused` asserts the
+    parameter is gone, and it runs under `real_editor_auth` so this shim cannot
+    answer for it.
+    """
+    if request.node.get_closest_marker("real_editor_auth"):
+        return
+
+    import starlette.testclient as _tc
+
+    original = _tc.TestClient.request
+
+    def _request(self, method, url, *args, **kwargs):
+        headers = kwargs.get("headers")
+        if headers:
+            kwargs["headers"] = bearerize_headers(headers)
+        return original(self, method, url, *args, **kwargs)
+
+    monkeypatch.setattr(_tc.TestClient, "request", _request)
 
 
 @pytest.fixture(autouse=True)
