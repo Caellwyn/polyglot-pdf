@@ -2,18 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-9qn64: added the staging
-channel -- two live channels in one project, separated by Cloud Run service +
-Hosting site; the production channel is dead and its script refuses to run.
-Earlier, bd polyglot-pdf-rhc2v: the `/api/editor/*`
-surface takes NO shared secret -- `SCHEMA_EDITOR_TOKEN` /
-`SCHEMA_AUTHOR_TOKEN` are deleted, access is a per-person Firebase claim
-granted with `scripts/bootstrap_editor_user.py`, and there is no
-unconfigured-surface 503 left to fail closed into. Also bd
-polyglot-pdf-qp632: the VFF_DEV_LOGGING dead-config note's
-`callback_handler.py:466` citation had drifted -- the real "LOGGING POLICY"
-comment is now inside `on_tool_call`; re-anchored by name instead of line
-number.) See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-31 (bd polyglot-pdf-9qn64: added the staging channel -- two live channels in one project, separated by Cloud Run service + Hosting site; the production channel is dead and its script refuses to run.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
