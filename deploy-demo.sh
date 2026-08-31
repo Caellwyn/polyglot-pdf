@@ -155,8 +155,9 @@ if [ "$DEPLOY_GCP" = true ]; then
     # the HMAC SIGNING KEY for every link token, so it must be injected via
     # Secret Manager (--set-secrets), NEVER as a plaintext env var -- the same
     # rule this script's own comment states for GEMINI_API_KEY. Without it
-    # minting 503s, and the mint page reports "LINK_BASE_URL is unset" because
-    # the route returns 503 for both. Provisioning it is a maintainer step.
+    # minting 503s. The mint page names BOTH this and LINK_BASE_URL on a 503,
+    # because the route cannot distinguish them. Provisioning it is a
+    # maintainer step.
     #
     # NOTE --set-env-vars REPLACES the whole env block, so a LINK_* var set by
     # hand on the service does NOT survive the next deploy. That is why these

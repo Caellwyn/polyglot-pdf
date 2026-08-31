@@ -141,13 +141,38 @@ describe('MintLinkPage', () => {
     expect(screen.getByRole('alert').textContent).toContain('LINK_MINTING_ENABLED');
   });
 
-  it('names LINK_BASE_URL when link delivery is unconfigured', async () => {
+  it('distinguishes "kit not allowed" from "minting is off" -- both are 404', async () => {
+    // Cross-surface review r2: the catalogue lists every PUBLIC kit to any
+    // signed-in staffer, but mint requires the kit to be in the firm's
+    // explicit allowlist -- so the picker can offer a form that minting
+    // refuses, with the SAME status as "minting is disabled". Telling the
+    // operator to set LINK_MINTING_ENABLED (already on) is the wrong fix.
+    await mounted({
+      ok: false, status: 404,
+      json: async () => ({ detail: 'Kit not available' }),
+    });
+
+    fireEvent.click(screen.getByText('Create link'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('allowed list');
+    // Emphatically NOT the disabled-minting advice.
+    expect(text).not.toContain('LINK_MINTING_ENABLED');
+  });
+
+  it('names BOTH settings that cause a 503', async () => {
+    // The route 503s for a missing LINK_BASE_URL *or* a missing
+    // LINK_TOKEN_SECRET, so naming only one sends the operator to check a
+    // setting that is already right (cross-surface review r2).
     await mounted({ ok: false, status: 503, json: async () => ({}) });
 
     fireEvent.click(screen.getByText('Create link'));
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
-    expect(screen.getByRole('alert').textContent).toContain('LINK_BASE_URL');
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('LINK_BASE_URL');
+    expect(text).toContain('LINK_TOKEN_SECRET');
   });
 
   it('explains a missing firm claim rather than blaming the server', async () => {

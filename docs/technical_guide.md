@@ -744,8 +744,12 @@ pinned, so a unilateral change on either reddens. The gate pins the form id via
 `saveOnboardingState` and leaves LANGUAGE unset -- the form is the firm's
 choice, the language is the client's.
 
-**Minting is off by default** until the spend ceiling ships (bd
-polyglot-pdf-ik7e): a live link is an unauthenticated door to a paid session.
+**Minting is off by default** -- a live link is an unauthenticated door to a
+paid session, so it stays off wherever `LINK_MINTING_ENABLED` is not explicitly
+set. The spend ceiling it waited on (bd polyglot-pdf-ik7e) has shipped and the
+DEMO now enables it (bd polyglot-pdf-gob8l). The ceiling in force is the global
+one; per-form `link_cost_ceiling_usd` is declared by the shipped kits but not
+yet threaded through the handshake (bd polyglot-pdf-4tjt7).
 
 ### 10. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 

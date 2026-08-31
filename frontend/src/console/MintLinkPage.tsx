@@ -108,10 +108,26 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
       });
 
       if (response.status === 404) {
-        // The ik7e interlock, not a broken page.
+        // TWO different problems share this status, and they need opposite
+        // fixes (cross-surface review r2):
+        //   "Not found"      -> minting is switched off
+        //   "Kit not availab" -> minting is ON, but this form is not in the
+        //                        firm's allowlist
+        // The catalogue lists every PUBLIC kit to any signed-in staffer, while
+        // mint requires the kit to be in the firm's explicit allowlist
+        // (get_allowed_kits returns kits "beyond public kits"), so the picker
+        // can legitimately offer a form that minting then refuses. Reporting
+        // that as "switched off" sends the operator to a setting that is
+        // already correct.
+        const detail = await response.json().then(
+          (d) => String(d?.detail ?? ''),
+          () => '',
+        );
         setPhase('error');
         setMessage(
-          'Link minting is switched off. Set LINK_MINTING_ENABLED on the backend to turn it on.',
+          detail === 'Kit not available'
+            ? 'This form is not on your firm\'s allowed list, so links cannot be created for it yet.'
+            : 'Link minting is switched off. Set LINK_MINTING_ENABLED on the backend to turn it on.',
         );
         return;
       }
