@@ -112,6 +112,9 @@ describe('kit naming coverage (bd polyglot-pdf-kztlr)', () => {
  */
 const BARE_KIT_LABEL = /\$\{\s*(?:kit|entry|created|k)\??\.label\b/;
 
+/** The same pattern, global -- the scan must see EVERY match on a line. */
+const ALL_BARE_KIT_LABELS = new RegExp(BARE_KIT_LABEL.source, 'g');
+
 /**
  * Character offsets of every `title={...}` tooltip expression in a file.
  *
@@ -127,9 +130,13 @@ const BARE_KIT_LABEL = /\$\{\s*(?:kit|entry|created|k)\??\.label\b/;
  * is no per-line state left to get wrong, and "is this match inside a span" is
  * then a plain interval test.
  *
- * (This is still not a JSX parser -- a `title={` inside a comment or a string
- * literal would open a phantom span. That is a much narrower hole than the one
- * it replaces, and the negative-case test below pins the shapes that matter.)
+ * (This is still not a JSX parser: a `title={` inside a comment or a string
+ * literal opens a phantom span. Where that phantom BALANCES it exempts a
+ * little text it should not -- narrow, and the battery below pins the shapes
+ * that matter. Where it does NOT balance the span is DISCARDED rather than
+ * run to EOF, because a span that swallowed the rest of the file would
+ * disable the guard everywhere downstream: maximum blast radius, zero
+ * signal.)
  */
 function tooltipSpans(text: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
@@ -145,10 +152,52 @@ function tooltipSpans(text: string): Array<[number, number]> {
         if (depth === 0) break;
       }
     }
-    spans.push([at, i < text.length ? i : text.length]);
-    at = text.indexOf(OPEN, i + 1);
+    // AN UNBALANCED `title={` EXEMPTS NOTHING. Running off the end means the
+    // braces never closed -- a phantom opened by a `title={` inside a comment
+    // or a string literal. Extending such a span to EOF would silently
+    // disable this guard for the whole rest of the file, which is the worst
+    // possible failure for a check: maximum blast radius, zero signal. An
+    // exemption we cannot delimit is not an exemption we can trust, so it is
+    // dropped and the offenders after it are reported.
+    if (i < text.length) spans.push([at, i]);
+    at = text.indexOf(OPEN, (i < text.length ? i : at + OPEN.length) + 1);
   }
   return spans;
+}
+
+/**
+ * The guard itself, over one file's text -- returns the offending line numbers.
+ *
+ * EXTRACTED SO THE BATTERY DRIVES THE REAL SCAN. An earlier battery exercised
+ * `tooltipSpans` directly on synthetic strings, which felt equivalent and was
+ * not: reverting the caller from `matchAll` back to a single-match `.search()`
+ * left every one of those cases GREEN, because the helper was still correct and
+ * only its consumer had regressed. A battery that tests a helper cannot see a
+ * bug in the code around it -- so this takes text, not a path, and the battery
+ * feeds it the same adversarial inputs the real files would contain.
+ */
+function scanForBareLabels(text: string): number[] {
+  const offenders: number[] = [];
+  const spans = tooltipSpans(text);
+  const lineStarts: number[] = [0];
+  text.split('\n').forEach((l) => lineStarts.push(
+    lineStarts[lineStarts.length - 1] + l.length + 1));
+
+  text.split('\n').forEach((line, i) => {
+    // A comparison is not a message: `label === kit.label` guards a no-op
+    // rename, and `?? kit.id` is a fallback, not prose.
+    if (/===|!==|\?\?/.test(line)) return;
+    // EVERY match on the line, not just the first.
+    for (const m of line.matchAll(ALL_BARE_KIT_LABELS)) {
+      const abs = lineStarts[i] + (m.index ?? 0);
+      // A card's own hover tooltip is the ONE place label-only is right: it is
+      // attached to the card, whose subtitle renders the id three lines below,
+      // so both identities are already side by side.
+      if (spans.some(([a, b]) => abs >= a && abs <= b)) continue;
+      offenders.push(i + 1);
+    }
+  });
+  return offenders;
 }
 
 describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
@@ -160,24 +209,10 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
       // kitName.ts IS the formatter -- it necessarily reads the raw label.
       if (f.endsWith('kitName.ts')) continue;
       const text = fs.readFileSync(f, 'utf8');
-      const spans = tooltipSpans(text);
-      const lineStarts: number[] = [0];
-      text.split('\n').forEach((l) => lineStarts.push(
-        lineStarts[lineStarts.length - 1] + l.length + 1));
-
-      text.split('\n').forEach((line, i) => {
-        // A comparison is not a message: `label === kit.label` guards a no-op
-        // rename, and `?? kit.id` is a fallback, not prose.
-        if (/===|!==|\?\?/.test(line)) return;
-        const col = line.search(BARE_KIT_LABEL);
-        if (col < 0) return;
-        const abs = lineStarts[i] + col;
-        // A card's own hover tooltip is the ONE place label-only is right: it
-        // is attached to the card, whose subtitle renders the id three lines
-        // below, so both identities are already side by side.
-        if (spans.some(([a, b]) => abs >= a && abs <= b)) return;
-        offenders.push(`${path.relative(SRC, f)}:${i + 1}  ${line.trim()}`);
-      });
+      const lines = text.split('\n');
+      for (const ln of scanForBareLabels(text)) {
+        offenders.push(`${path.relative(SRC, f)}:${ln}  ${lines[ln - 1].trim()}`);
+      }
     }
     expect(offenders, `These name a kit by label alone, which does not identify `
       + `it -- nothing stops two kits sharing a label. Use kitName(kit):\n  `
@@ -189,28 +224,40 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
   // simplification cannot quietly reopen one (CLAUDE.md scar #8: when the same
   // defect class survives twice, pin every earlier escape at once).
   it('exempts a real tooltip but nothing beside it', () => {
-    const inside = 'title={kit.hasSchema ? `Open ${kit.label}` : `no`}';
-    expect(tooltipSpans(inside).length).toBe(1);
-    const [a, b] = tooltipSpans(inside)[0];
-    expect(inside.slice(a, b + 1).endsWith('}')).toBe(true);
+    // Driven through scanForBareLabels -- the REAL guard -- not through
+    // tooltipSpans alone. An earlier battery tested the helper directly and
+    // stayed green when the caller regressed from matchAll back to a
+    // single-match .search(): the helper was still right, and only the code
+    // around it was wrong. A battery aimed one layer below the bug proves
+    // nothing about the bug.
+
+    // A label INSIDE a tooltip is exempt.
+    expect(scanForBareLabels(
+      'title={kit.hasSchema ? `Open ${kit.label}` : `no`}')).toEqual([]);
 
     // The offender AFTER a same-line tooltip closes -- the evasion that beat
     // attempt three.
-    const after = '<b title={`x`} /> setNotice(`"${kit.label}" gone`);';
-    const afterAt = after.search(BARE_KIT_LABEL);
-    expect(tooltipSpans(after).some(([s, e]) => afterAt >= s && afterAt <= e))
-      .toBe(false);
+    expect(scanForBareLabels(
+      '<b title={`x`} /> setNotice(`"${kit.label}" gone`);')).toEqual([1]);
 
     // ...and BEFORE it opens -- the evasion that beat attempt two.
-    const before = 'setNotice(`"${kit.label}" gone`); const t = <b title={`x`} />;';
-    const beforeAt = before.search(BARE_KIT_LABEL);
-    expect(tooltipSpans(before).some(([s, e]) => beforeAt >= s && beforeAt <= e))
-      .toBe(false);
+    expect(scanForBareLabels(
+      'setNotice(`"${kit.label}" gone`); const t = <b title={`x`} />;'))
+      .toEqual([1]);
+
+    // TWO labels on one line, the first exempted: the second must still be
+    // seen. A single-match scan skipped the whole line.
+    expect(scanForBareLabels(
+      '<b title={`${kit.label}`} /> setNotice(`"${entry.label}" x`);'))
+      .toEqual([1]);
+
+    // An UNBALANCED `title={` (a phantom from a comment or string literal)
+    // must exempt NOTHING rather than run to EOF.
+    expect(scanForBareLabels(['title={ // never closes',
+      'setNotice(`"${kit.label}" x`);'].join(String.fromCharCode(10)))).toEqual([2]);
 
     // A multi-line tooltip still covers a label on its continuation line.
-    const multi = 'title={a\n  ? `Open ${kit.label}`\n  : `no`}\nsetNotice(1);';
-    const multiAt = multi.search(BARE_KIT_LABEL);
-    expect(tooltipSpans(multi).some(([s, e]) => multiAt >= s && multiAt <= e))
-      .toBe(true);
+    expect(scanForBareLabels(['title={a', '  ? `Open ${kit.label}`',
+      '  : `no`}', 'setNotice(1);'].join(String.fromCharCode(10)))).toEqual([]);
   });
 });

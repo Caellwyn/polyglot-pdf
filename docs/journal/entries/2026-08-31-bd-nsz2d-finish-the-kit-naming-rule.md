@@ -146,3 +146,47 @@ One genuine pre-existing gap was filed rather than folded in
 (`polyglot-pdf-5ivqx`): the catalogue dropdown renders `{k.label}` as a JSX TEXT
 node, a shape this guard's regex cannot see, so two same-labelled kits are
 indistinguishable there. Unchanged on dev, and outside this bead.
+
+## Round 2: I fixed the helper and left the caller broken
+
+Two findings, and the first is the one worth remembering.
+
+**The defect moved up one layer instead of dying.** `tooltipSpans` was now
+correct, and the code calling it still used `line.search(...)` -- which returns
+only the FIRST match on a line. So a line whose first label sat inside an
+exempted tooltip was skipped entirely, and a second, genuinely bare label later
+on that same line was never checked. That is the identical shape the whole-file
+rewrite was meant to eliminate: an offender coexisting with a tooltip on one
+line. I had repaired the helper and left its consumer single-match.
+
+**And my battery could not see it.** This is the sharper half. The battery
+tested `tooltipSpans` directly on synthetic strings, so reverting the caller
+from `matchAll` back to `.search()` left every case GREEN -- the helper was
+still right, and only the code around it had regressed. I ran that mutation
+expecting red and got a pass.
+
+So the guard's scan is now extracted as `scanForBareLabels(text)` and the
+battery drives THAT. Re-running the same mutation reddens it. **A battery aimed
+one layer below the bug proves nothing about the bug** -- and "the helper is
+well tested" is exactly the sentence that hides it.
+
+Second finding: an unbalanced `title={` -- a phantom from a comment or string
+literal -- ran its span to EOF, silently exempting every offender downstream.
+Maximum blast radius, zero signal. An unbalanced span is now DISCARDED, and the
+docstring says so rather than describing the hole as narrow.
+
+Both are pinned in the battery, which now holds every historical evasion: after
+a tooltip closes, before one opens, two labels on one line, an unbalanced
+phantom, and a legitimate multi-line tooltip that must stay exempt.
+
+## What three rounds across two beads actually taught
+
+Every round in both beads found a defect in a CHECK, never in the shipped
+messages. The messages have been correct since each bead's first pass.
+
+The recurring error has a single shape: **I keep verifying the piece I just
+wrote instead of the behaviour I care about.** The guard tested variable names
+instead of the naming rule; the exemption tested a line instead of a position;
+the battery tested a helper instead of the scan. Each was locally reasonable
+and each left the real question unasked -- and in every case a green run was
+what made it feel finished.
