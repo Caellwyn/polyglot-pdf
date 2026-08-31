@@ -106,9 +106,14 @@ hosting targets, mapped to sites in `.firebaserc`:
 | `editor` | `polyglot-editor-demo` | (no rewrite -- calls Cloud Run directly) |
 
 All three use public directory `frontend/dist` (`schema-editor/dist` for the
-editor) and SPA fallback to `/index.html`. **The per-target rewrite is what binds
-a frontend to its backend** -- deploying the `app` target ships a build to the
-demo site regardless of which backend it was built against, so the target and
-`BACKEND_SERVICE_NAME` must always be set as a pair. The channel scripts do this.
+editor) and SPA fallback to `/index.html`. **The per-target rewrite binds only the
+HTTP calls.** Firebase Hosting does not proxy WebSocket upgrades, so the voice
+client connects to Cloud Run directly -- for that path the build-time
+`VITE_WS_URL` (resolved from `BACKEND_SERVICE_NAME` at deploy time) is the only
+binding. Deploying the `app` target also ships a build to the demo site
+regardless of which backend it was built against, so the target and
+`BACKEND_SERVICE_NAME` must always be set as a pair. The channel scripts do this,
+and a build for an explicitly-selected channel now ABORTS rather than falling
+back to another channel's backend URL.
 
 See `firebase.json` for full configuration.

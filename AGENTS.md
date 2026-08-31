@@ -30,7 +30,7 @@ the client (`sessionStorage`); PDF rendering is a separate HTTP call (PyMuPDF).
 
 Stack: React + TypeScript (Vite) frontend on **Firebase Hosting**; Python/FastAPI
 backend on **Cloud Run** (co-located with Gemini). Deploy is **local/manual**
-(`deploy-demo.sh` / `deploy-production.sh`).
+(`deploy-staging.sh` -> `deploy-demo.sh`; `deploy-production.sh` is dead and refuses to run).
 
 Entry points:
 - Backend: `backend/main.py`, WebSocket route `backend/routes/websocket_routes.py`,

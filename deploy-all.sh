@@ -149,6 +149,14 @@ FORM_KITS_DIR="$SCRIPT_DIR/form-kits"
 # latent bug becomes load-bearing with a second channel: deploy-staging.sh
 # exports polyglot-backend-staging, and a clobber would have pointed a staging
 # deploy straight at the demo's live service. The demo/prod default is unchanged.
+#
+# Capture whether the caller EXPLICITLY selected a channel, BEFORE defaulting.
+# The frontend stage uses this to decide between failing hard and warning when
+# the Cloud Run URL cannot be resolved: an explicit channel that cannot be
+# resolved must abort (the fallback VITE_WS_URL names another channel's
+# backend -- see the frontend stage), whereas a bare deploy-all.sh run keeps its
+# historical warn-and-continue behavior.
+BACKEND_SERVICE_NAME_EXPLICIT="${BACKEND_SERVICE_NAME:-}"
 BACKEND_SERVICE_NAME="${BACKEND_SERVICE_NAME:-polyglot-backend}"
 REGION="us-central1"
 # Demo bucket by default (bd polyglot-pdf-d7hy, enumerated the set after the
@@ -180,7 +188,12 @@ FRONTEND_BUILD_CMD="${FRONTEND_BUILD_CMD:-npm run build:schema}"
 # deploy-staging.sh sets "app-staging" so a staging frontend can never land on
 # the site investors are shown. Both targets are mapped in .firebaserc and carry
 # their OWN /api/** rewrite in firebase.json, each pointing at its own Cloud Run
-# service -- so the target choice is what wires a build to its backend.
+# service -- so the target choice wires a build's HTTP calls to its backend.
+# NOTE: it does NOT wire the VOICE path. Firebase Hosting does not proxy
+# WebSocket upgrades, so the voice client connects to Cloud Run DIRECTLY
+# (docs/technical_guide.md "Gotchas"); for that path VITE_WS_URL -- injected
+# below from BACKEND_SERVICE_NAME -- is the only binding. Set the target and
+# BACKEND_SERVICE_NAME as a PAIR.
 # The site NAME (for the URL echoed at the end) is derived separately, because
 # only the "app" target is the project-named default site. It is defaulted at
 # the point of USE, not here: POLYGLOT_PROJECT_NAME may still be unset at this
@@ -523,6 +536,30 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         # https://host -> wss://host/ws/fill (the app's WS endpoint).
         export VITE_WS_URL="${BACKEND_URL/https:/wss:}/ws/fill"
         log_info "🔌 Injecting live backend URL into build: VITE_WS_URL=$VITE_WS_URL"
+    elif [ -n "$BACKEND_SERVICE_NAME_EXPLICIT" ]; then
+        # A CHANNEL was explicitly selected and its service could not be
+        # resolved -- fail hard instead of warning (bd polyglot-pdf-9qn64,
+        # outer cross-surface review F1).
+        #
+        # WHY THIS IS FATAL AND THE WARN BELOW IS NOT. WebSockets BYPASS the
+        # Firebase Hosting /api/** rewrite entirely -- Hosting does not proxy WS
+        # upgrades, so the voice client connects to Cloud Run DIRECTLY
+        # (docs/technical_guide.md "Gotchas"; frontend/src/shared/config.ts).
+        # The per-target rewrite therefore binds only HTTP; for the voice path
+        # VITE_WS_URL is the ONLY thing binding a frontend to its backend.
+        #
+        # Both fallbacks name a DEMO backend: .env.demo's committed literal and
+        # config.ts's PRODUCTION_WS_URL. So warning-and-continuing here would
+        # build a STAGING frontend that drives the LIVE DEMO backend -- real
+        # Gemini spend and real confirmation_events against the service the demo
+        # runs on -- while the deploy looks like it succeeded. This fires on the
+        # FIRST staging deploy (the service does not exist yet), on a lone
+        # `deploy-staging.sh --frontend`, and any time the backend stage failed.
+        log_error "Could not resolve the Cloud Run URL for service '$BACKEND_SERVICE_NAME' in project '$POLYGLOT_PROJECT_NAME'."
+        log_error "Refusing to build: the fallback VITE_WS_URL points at a DIFFERENT channel's backend,"
+        log_error "so this build would send voice traffic to the wrong Cloud Run service."
+        log_error "Deploy that service first (e.g. ./deploy-staging.sh --backend), then retry."
+        exit 1
     else
         log_warn "Could not resolve live backend URL; build will fall back to VITE_WS_URL in .env.<mode> (may be stale -- bd polyglot-pdf-emm7)"
     fi

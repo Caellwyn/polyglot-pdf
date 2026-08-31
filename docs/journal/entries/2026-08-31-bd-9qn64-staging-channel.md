@@ -68,9 +68,10 @@ Flow is now worktree -> local -> `dev` -> **staging** -> **demo**.
   at the top would have baked in an empty site name on the gcloud-autodetect
   path.
 - `firebase.json` / `.firebaserc`: a third hosting target whose `/api/**`
-  rewrite points at the staging service. **That per-target rewrite is what binds
-  a frontend to its backend**, which is why the target and `BACKEND_SERVICE_NAME`
-  must always move as a pair.
+  rewrite points at the staging service. That rewrite binds the HTTP calls; the
+  VOICE path is bound separately by `VITE_WS_URL` (see the outer-review section
+  below -- this distinction is the entry's main lesson). The target and
+  `BACKEND_SERVICE_NAME` must move as a pair either way.
 - `deploy-staging.sh`: backend env **byte-identical** to the demo's, verified
   mechanically. A config difference would mean staging stops predicting demo
   behavior, and the bugs this exists to catch are precisely the config-shaped
@@ -97,6 +98,52 @@ failure in the edit); the occurrence count caught it, and it was redone by line
 deletion -- a mutation that does not apply proves nothing.
 
 Full backend suite after: **3100 passed, 31 skipped**, exit 0.
+
+## The outer review's catch: the rewrite is NOT what binds the voice path
+
+The Opus cross-surface pass found the most important thing in this entry, and it
+inverted a claim this work had been stating confidently.
+
+**WebSockets bypass the Firebase Hosting rewrite entirely.** Hosting does not
+proxy WS upgrades, so the voice client connects to Cloud Run *directly*
+(`docs/technical_guide.md` "Gotchas"; `frontend/src/shared/config.ts`). The
+per-target `/api/**` rewrite -- which this change's docs, comments and tests all
+presented as "what binds a frontend to its backend" -- binds only plain HTTP. For
+the voice path, build-time `VITE_WS_URL` is the ONLY binding.
+
+That matters because `deploy-all.sh` resolved the backend URL with
+`... 2>/dev/null || true` and, on failure, warned and continued. Both fallbacks
+name a DEMO backend (`.env.demo`'s committed literal, then `config.ts`'s
+`PRODUCTION_WS_URL`). So a staging frontend build whose service lookup failed
+would ship pointing at the **live demo backend** -- real Gemini spend and real
+`confirmation_events` against the demo's service -- and the deploy would look
+like it succeeded. It fires on the FIRST staging deploy, when
+`polyglot-backend-staging` does not exist yet: the single most likely first run.
+
+A warn-and-continue was defensible when there was one channel and one possible
+backend. With two channels it is a silent cross-channel leak, so the frontend
+stage now **fails hard** when an explicitly-selected channel cannot be resolved,
+while a bare `deploy-all.sh` keeps its historical lenient behavior
+(`BACKEND_SERVICE_NAME_EXPLICIT`, captured before defaulting -- capturing after
+would make every run look explicit and break exit criterion 2).
+
+The same wrong reasoning had produced a wrong CORS justification in
+`deploy-staging.sh` (the staging site needs no entry because WS upgrades are not
+CORS-preflighted -- not because they are same-origin). Fixed, because the next
+person adding a cross-origin fetch would have reasoned from it.
+
+## The doc set, found one at a time
+
+The review also found that four docs had been updated and **six had not** --
+`technical_guide.md` (tier-1), `.claude/skills/run-local/SKILL.md` and
+`.claude/prime-closeout-override.md` (both agent-loaded, so they instruct
+behavior directly), `auth.md`, `AGENTS.md`, and `README.md`. Textbook scar #8:
+the first fixes were correct, they just were not the whole set.
+
+Fixed together, then pinned as a SET rather than as instances:
+`test_dead_prod_doc_set_is_complete` walks every non-journal `*.md` and asserts
+the enumerated list matches reality, so a NEW doc that starts mentioning
+`deploy-production.sh` fails CI instead of costing another review round.
 
 ## What this does NOT fix
 

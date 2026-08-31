@@ -134,10 +134,18 @@ if [ "$DEPLOY_GCP" = true ] || [ "$DEPLOY_FORM_KITS" = true ]; then
     # on staging, and only then promote it to the demo.
     #
     # The one deliberate difference is CORS_EXTRA_ORIGINS, which names the
-    # editor origins. The voice app reaches the backend same-origin through the
-    # Hosting /api/** rewrite, so the staging SITE needs no CORS entry of its
-    # own; the editor origins stay listed because the hosted editor calls Cloud
-    # Run directly and may be pointed at this service for testing.
+    # editor origins. The staging SITE needs no CORS entry of its own, but NOT
+    # for the reason you might assume: the voice path is a WEBSOCKET, and
+    # Firebase Hosting does not proxy WS upgrades, so the client connects to
+    # Cloud Run DIRECTLY, cross-origin (docs/technical_guide.md "Gotchas").
+    # It works because a WS upgrade is not CORS-preflighted -- not because it is
+    # same-origin. Only the app's plain HTTP calls use the Hosting /api/**
+    # rewrite and are genuinely same-origin.
+    #
+    # So: if anyone later adds a cross-origin fetch/XHR from the staging site
+    # straight to Cloud Run (bypassing the rewrite), it WILL need an entry here.
+    # The editor origins are listed precisely because the hosted editor does
+    # exactly that -- it calls Cloud Run directly to dodge the rewrite's 60s cap.
     BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \

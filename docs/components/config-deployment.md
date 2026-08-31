@@ -82,8 +82,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`gcs`** (what deploys use) — reads
   `gs://<FORM_KITS_GCS_BUCKET>/<FORM_KITS_REMOTE_PREFIX>/<kit_id>/...`. The
   `--set-env-vars` that pins `FORM_KITS_MODE=gcs` + the bucket lives in
-  **`deploy-all.sh`**; the `deploy-demo.sh` / `deploy-production.sh` wrappers only
-  set the shell vars (project, bucket name) and delegate to it.
+  **`deploy-all.sh`**; the `deploy-staging.sh` / `deploy-demo.sh` wrappers only
+  set the shell vars (project, bucket name, service, hosting target) and delegate
+  to it.
 
 ## Required & dev-only env vars
 
