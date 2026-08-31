@@ -854,6 +854,21 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   // no-field early return, per the rules of hooks.
   const codeBeforeEditRef = React.useRef<string | null>(null);
 
+  // Auto-populate pickers (bd polyglot-pdf-g33y2). Memoized because each call
+  // walks the copy graph per candidate field, so it is O(fields x chain) --
+  // fine on a real kit (0.4ms on the 200-field i-90), but measured at 266ms on
+  // a synthetic 500-field schema carrying one 500-long copy chain, which
+  // unmemoized would run on EVERY keystroke in this panel. Declared
+  // unconditionally, before the no-field early return, per the rules of hooks.
+  const copyLinkChoices = React.useMemo(() => (
+    field
+      ? {
+          targets: linkableTargets(schema, field.id),
+          sources: linkableSources(schema, field.id),
+        }
+      : { targets: [], sources: [] }
+  ), [schema, field]);
+
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
     // version/edition/OMB/expiration are reachable without picking a field.
@@ -1638,7 +1653,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             title="Copies into"
             emptyText="Nothing is copied from this field."
             linked={copyTargets(field)}
-            choices={linkableTargets(schema, field.id)}
+            choices={copyLinkChoices.targets}
             schema={schema}
             canEdit={!!onUpdateFields}
             addLabel="Copy this field into..."
@@ -1652,7 +1667,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             title="Copied from"
             emptyText="This field is not copied from anywhere."
             linked={copySources(schema, field.id)}
-            choices={linkableSources(schema, field.id)}
+            choices={copyLinkChoices.sources}
             schema={schema}
             canEdit={!!onUpdateFields}
             addLabel="Fill this field from..."
