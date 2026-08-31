@@ -182,3 +182,43 @@ describe('pickers offer only legal choices', () => {
     expect(ids).toContain('other');
   });
 });
+
+describe('type compatibility', () => {
+  const typed = (over: Partial<FormField>[] = []) => schema([
+    field({ id: 'txt' }),
+    field({ id: 'pick', type: 'select', options: [
+      { value: 'a', label: 'A' }, { value: 'b', label: 'B' }] } as any),
+    field({ id: 'pick2', type: 'select', options: [
+      { value: 'a', label: 'A' }] } as any),
+    field({ id: 'radio1', type: 'radio', options: [
+      { value: 'y', label: 'Y' }] } as any),
+    ...(over as FormField[]),
+  ]);
+
+  it('refuses text -> select: the copied value would print BLANK', () => {
+    // The runtime copies raw and stamps confirmed WITHOUT validating, so this
+    // link satisfies the required gate and then prints nothing.
+    expect(whyNotLinkable(typed(), 'txt', 'pick')).toMatch(/answer choices/i);
+  });
+
+  it('refuses text -> radio for the same reason', () => {
+    expect(whyNotLinkable(typed(), 'txt', 'radio1')).toMatch(/answer choices/i);
+  });
+
+  it('ALLOWS select -> select (matching option sets are the author\'s call)', () => {
+    expect(whyNotLinkable(typed(), 'pick', 'pick2')).toBeNull();
+  });
+
+  it('ALLOWS a choice field copying into free text', () => {
+    expect(whyNotLinkable(typed(), 'pick', 'txt')).toBeNull();
+  });
+
+  it('ALLOWS text -> text (the i-90 page-header repeat shape)', () => {
+    const two = schema([field({ id: 'a' }), field({ id: 'b' })]);
+    expect(whyNotLinkable(two, 'a', 'b')).toBeNull();
+  });
+
+  it('keeps an incompatible pair out of the picker', () => {
+    expect(linkableTargets(typed(), 'txt').map(f => f.id)).not.toContain('pick');
+  });
+});

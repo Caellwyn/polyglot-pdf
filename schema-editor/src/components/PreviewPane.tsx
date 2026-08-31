@@ -98,7 +98,16 @@ export default function PreviewPane({ schema }: PreviewPaneProps) {
       const next = arr.includes(optionValue)
         ? arr.filter(v => v !== optionValue)
         : [...arr, optionValue];
-      return { ...prev, [field.id]: next };
+      const out = { ...prev, [field.id]: next };
+      // Fan out here TOO (bd polyglot-pdf-g33y2). The runtime does not treat a
+      // checkbox group specially -- FieldRenderer routes its toggle through the
+      // same handleFieldChange that fans copy_to out -- so leaving it out of
+      // this sibling handler would make the preview lie for exactly one field
+      // type, which is worse than not fanning out at all.
+      for (const targetId of copyTargets(field)) {
+        out[targetId] = next;
+      }
+      return out;
     });
   };
 

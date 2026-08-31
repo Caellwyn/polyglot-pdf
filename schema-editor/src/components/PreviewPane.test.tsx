@@ -206,3 +206,31 @@ describe('PreviewPane: auto-populate fan-out (bd polyglot-pdf-g33y2, crit 2)', (
     expect((screen.getByLabelText(/page 9/) as HTMLInputElement).value).toBe('A123');
   });
 });
+
+describe('PreviewPane: a CHECKBOX GROUP source also fans out (bd polyglot-pdf-g33y2)', () => {
+  it('toggling an option copies the selection to the target', () => {
+    // The runtime does not treat a checkbox group specially -- its toggle goes
+    // through the same handleFieldChange that fans copy_to out -- so a preview
+    // that fanned out for text but not here would lie for exactly one type.
+    // Option LABELS differ per group so getByLabelText stays unambiguous.
+    const s = buildSchema([
+      field({ id: 'langs', type: 'checkbox', label: 'Languages',
+              copy_to: ['p8_langs'],
+              options: [{ value: 'en', label: 'English' },
+                        { value: 'es', label: 'Spanish' }] }),
+      field({ id: 'p8_langs', type: 'checkbox', label: 'Languages (page 8)',
+              read_only: true,
+              options: [{ value: 'en', label: 'English (repeat)' },
+                        { value: 'es', label: 'Spanish (repeat)' }] }),
+    ], ['langs', 'p8_langs']);
+    render(<PreviewPane schema={s} />);
+
+    fireEvent.click(screen.getByLabelText('English'));
+
+    // The target's box for the SAME option value is now checked.
+    expect((screen.getByLabelText('English (repeat)') as HTMLInputElement).checked)
+      .toBe(true);
+    expect((screen.getByLabelText('Spanish (repeat)') as HTMLInputElement).checked)
+      .toBe(false);
+  });
+});

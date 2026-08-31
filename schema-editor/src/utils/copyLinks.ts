@@ -64,6 +64,41 @@ export function whyNotLinkable(
   if (reaches(schema, targetId, fieldId)) {
     return 'That would make a loop: the other field already copies back here.';
   }
+  const mismatch = whyIncompatible(source, target);
+  if (mismatch) return mismatch;
+  return null;
+}
+
+/**
+ * Why a value copied from `source` would not be a legal value for `target`.
+ *
+ * The runtime fan-out copies the RAW value and stamps it confirmed WITHOUT
+ * validating (SchemaForm's handleFieldChange), so a mismatched link produces a
+ * field that looks answered, satisfies the required gate, and then prints BLANK
+ * on the draft a human reviews -- the PDF filler skips an option value it
+ * cannot match. Refusing at authoring time is the only place this is visible.
+ *
+ * Deliberately narrow: it refuses only what is provably wrong -- copying INTO a
+ * choice field from something whose values cannot be its options. Loose pairs
+ * (text -> date, number -> text) are left alone, because a form legitimately
+ * repeats one answer in differently-typed boxes and over-refusing would block
+ * real authoring.
+ */
+const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox_group']);
+
+function whyIncompatible(
+  source: FormField | undefined, target: FormField | undefined,
+): string | null {
+  if (!source || !target) return null;
+  const tType = String(target.type);
+  const sType = String(source.type);
+  if (!CHOICE_TYPES.has(tType)) return null;      // free-text target: anything goes
+  if (sType === tType) return null;               // same kind: option sets are the author's problem
+  if (!CHOICE_TYPES.has(sType)) {
+    return `"${target.spoken_name || target.name || target.id}" only accepts `
+      + 'its own answer choices, so a typed value copied into it would not '
+      + 'match any of them and would print blank.';
+  }
   return null;
 }
 
