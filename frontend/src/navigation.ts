@@ -188,9 +188,6 @@ export function computeNextField(
   // shown field is confirmed, exactly isFormComplete's condition). There is
   // therefore no separate end-of-form "go back for missed fields" phase.
   //
-  // WHERE the origin field sits in the rotation depends on the gesture that set
-  // it -- see searchOriginIncludesSelf below.
-  //
   // A stale/unknown origin degrades to the previous behavior (start at 0).
   //
   // Where the origin field itself sits in the rotation depends on WHICH gesture

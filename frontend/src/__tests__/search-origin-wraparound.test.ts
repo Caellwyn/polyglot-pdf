@@ -271,6 +271,63 @@ describe('next-field search origin + wrap-around (bd a08po)', () => {
     expect(computeNextField(state)?.id).toBe('e')
   })
 
+  it('no field is LOST when the AI confirms out of order (the wrap is the guarantee)', () => {
+    // confirmField/markFieldSkipped advance the origin on EVERY call, including
+    // the AI's own voice fills -- so an out-of-order confirm reorders what is
+    // offered next. That is intended, but it must never let a field fall out of
+    // the sweep. Drive the whole form the way the AI does (confirm whatever is
+    // offered, repeat) starting from an out-of-order confirm, and assert every
+    // field is still visited and the form still completes.
+    let state = baseState()
+    state = SchemaFormStateManager.updateField(state, 'd', 'x')
+    state = SchemaFormStateManager.confirmField(state, 'd', 'ai_voice')
+
+    const visited = ['d']
+    for (let i = 0; i < 20; i++) {
+      const next = computeNextField(state)
+      if (!next) break
+      visited.push(next.id)
+      state = SchemaFormStateManager.updateField(state, next.id, 'x')
+      state = SchemaFormStateManager.confirmField(state, next.id, 'ai_voice')
+    }
+
+    // Order is d,e,a,b,c -- resumed then wrapped, which is the point.
+    for (const id of ['a', 'b', 'c', 'd', 'e']) {
+      expect(visited).toContain(id)
+    }
+    expect(isFormComplete(state)).toBe(true)
+  })
+
+  it('confirming/skipping does NOT strand the scan when includesSelf was true', () => {
+    // A click sets includesSelf=true; the subsequent confirm must clear it back
+    // to false, or the rotation would keep re-offering the field it just
+    // finished as the first candidate.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c', { includesSelf: true })
+    state = SchemaFormStateManager.updateField(state, 'c', 'x')
+    state = SchemaFormStateManager.confirmField(state, 'c', 'manual_edit')
+
+    expect(state.searchOriginIncludesSelf).toBe(false)
+    expect(computeNextField(state)?.id).toBe('d')
+  })
+
+  it('migrates a session that has the origin id but NOT the includesSelf flag', () => {
+    // The intermediate on-disk shape (origin persisted before the flag existed).
+    // The two migration defaults are independent, so this combination needs its
+    // own case -- an enumeration with a hole is the recurring trap here.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c', { includesSelf: true })
+    const stored = JSON.parse(sessionStorageMock['schema_form_state'])
+    delete stored.searchOriginIncludesSelf
+    sessionStorageMock['schema_form_state'] = JSON.stringify(stored)
+
+    const loaded = SchemaFormStateManager.load()
+    expect(loaded?.searchOriginFieldId).toBe('c')
+    expect(loaded?.searchOriginIncludesSelf).toBe(false)
+    // Defaults to the EDIT reading (resume after), never a resurrected click.
+    expect(computeNextField(loaded as SchemaFormState)?.id).toBe('d')
+  })
+
   it('the live pin still outranks the search origin', () => {
     // switch_to_field (a verbal redirect) is the most recent explicit signal in
     // this scenario, so it must win over an older origin.
