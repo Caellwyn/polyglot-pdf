@@ -319,6 +319,10 @@ export class SchemaFormStateManager {
     options?: {
       confirmed?: boolean;
       confirmationMethod?: 'ai_voice' | 'manual_edit';
+      // Internal: set on the recursive writes this method makes to a field's
+      // copy_to targets, so a target carrying its own copy_to does not chain.
+      // Callers should not pass it (bd polyglot-pdf-gpaed).
+      skipCopyTo?: boolean;
     }
   ): SchemaFormState {
     console.log(`[SchemaFormStateManager] updateField: ${fieldId} = ${JSON.stringify(value)}`);
@@ -438,6 +442,41 @@ export class SchemaFormStateManager {
     if (newState.validationErrors[fieldId]) {
       const { [fieldId]: removed, ...rest } = newState.validationErrors;
       newState.validationErrors = rest;
+    }
+
+    // AUTO-POPULATE (copy_to) fans out HERE, at the single write chokepoint, so
+    // EVERY path gets it (bd polyglot-pdf-gpaed). It used to live in exactly one
+    // caller -- SchemaForm's React manual-edit handler -- so the VOICE path
+    // never fanned out at all: a value Gemini filled left its copy targets
+    // blank. Combined with the read-only coupling the editor now applies to a
+    // copy target (bd polyglot-pdf-g33y2), a REQUIRED target was unreachable --
+    // the AI cannot write a read_only field and isSectionValid does not excuse
+    // it, so the section gate could never be satisfied.
+    //
+    // Placed before save() so the targets persist in the same write, and after
+    // the normalization above so a target stores the SAME canonical value its
+    // source does.
+    //
+    // ONE HOP, not transitive: a target's own copy_to is not followed. That
+    // matches what the single-caller version did, so this changes WHICH paths
+    // fan out, not how far. `skipCopyTo` makes the recursion explicit rather
+    // than relying on that -- a chained link would otherwise re-enter here per
+    // target and each re-entry would save() again.
+    if (!options?.skipCopyTo) {
+      const targets = Array.isArray(field?.copy_to) ? field.copy_to : [];
+      let fanned = newState;
+      for (const targetId of targets) {
+        if (typeof targetId !== 'string' || !targetId) continue;
+        if (targetId === fieldId) continue;          // self-link: hand-edited junk
+        fanned = SchemaFormStateManager.updateField(fanned, targetId, value, {
+          ...options,
+          skipCopyTo: true,
+        });
+      }
+      if (fanned !== newState) {
+        this.save(fanned);
+        return fanned;
+      }
     }
 
     this.save(newState);
