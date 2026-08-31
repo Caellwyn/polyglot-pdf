@@ -241,3 +241,30 @@ good as the question it asks, and the question is easy to get subtly wrong in a
 way no green run reveals. Each round's fix was correct and incomplete, which is
 exactly the shape CLAUDE.md scar #8 describes -- experienced here from the
 inside, in the checker rather than the code.
+
+## The cross-surface pass: NO-GAPS, and one thing deleted
+
+The outer review traced every changed contract into its consumers and found the
+wire safe. The two delete prefixes are stripped by length (`slice(PREFIX.length)`)
+and the remainder is rendered as opaque prose, so changing that remainder breaks
+nothing; `AUTHOR_VERSION_REQUIRED:` and `NO_EDITOR_ACCESS:` were not touched;
+`deploy-all.sh`'s grep for `"label"` in metadata.json is unaffected because the
+storage format never changed -- only how a message reads.
+
+It also found that `kitTitle()` -- a helper I exported for the heading case --
+had **no production callers**. I wrote it because a heading "felt like" it
+needed one, then never found a heading that did: `DeleteKitDialog` already
+receives a label prop. Deleted rather than shipped. A speculative export is a
+claim that something needs it, and this one did not.
+
+Two findings were filed rather than folded in, both genuinely outside this
+bead: the label-only SUCCESS banners (`polyglot-pdf-nsz2d`, pre-existing and
+identical on dev), and a U+FEFF divergence between the two flatteners
+(`polyglot-pdf-th60w`) -- real, measured, and reachable only via a BOM pasted
+into a label.
+
+One deliberate non-fix: the delete-race 404 (`polyglot-pdf-ytd3m`) still names a
+bare id, and stays allowlisted. That path fires when the kit vanished BETWEEN
+the guard and the write, so naming it from metadata read before the delete would
+assert a label for something that no longer exists. Silence about a name is
+better than confidence about a gone one.

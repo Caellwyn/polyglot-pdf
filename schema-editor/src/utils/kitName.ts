@@ -55,14 +55,3 @@ export function kitName(kit: NameableKit): string {
   if (!label || labelRestatesId(label, kit.id)) return `"${kit.id}"`;
   return `"${label}" (${kit.id})`;
 }
-
-/**
- * The same identity for a heading or a button -- label only, no id.
- *
- * Prose has room to carry both; a card title or a dialog heading does not,
- * and the id is already beside it there.
- */
-export function kitTitle(kit: NameableKit): string {
-  const label = (kit.label ?? '').trim();
-  return label || kit.id;
-}

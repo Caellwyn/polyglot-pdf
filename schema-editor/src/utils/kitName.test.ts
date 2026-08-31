@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kitName, kitTitle } from './kitName';
+import { kitName } from './kitName';
 
 /**
  * These cases are the SHARED CONTRACT with the backend's `_kit_name`.
@@ -40,16 +40,5 @@ describe('kitName -- naming a kit in prose (bd polyglot-pdf-kztlr)', () => {
   it('is case- and separator-insensitive when judging a restatement', () => {
     expect(kitName({ id: 'my_form', label: 'My Form' })).toBe('"my_form"');
     expect(kitName({ id: 'MY-FORM', label: 'my form' })).toBe('"MY-FORM"');
-  });
-});
-
-describe('kitTitle -- naming a kit in a heading', () => {
-  it('uses the label alone, with no id', () => {
-    expect(kitTitle({ id: 'form-2', label: 'W-7' })).toBe('W-7');
-  });
-
-  it('falls back to the id when there is no label', () => {
-    expect(kitTitle({ id: 'form-2' })).toBe('form-2');
-    expect(kitTitle({ id: 'form-2', label: '  ' })).toBe('form-2');
   });
 });
