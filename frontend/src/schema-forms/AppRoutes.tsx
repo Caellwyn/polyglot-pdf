@@ -20,6 +20,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { SchemaFormDemo } from "./SchemaFormDemo";
 import { ClientLinkEntry } from "./ClientLinkEntry";
+import { MintLinkPage } from "../console/MintLinkPage";
 import { AuthProvider } from "../contexts/AuthContext";
 import { ProtectedRoute } from "../components/layout/ProtectedRoute";
 
@@ -32,6 +33,9 @@ import { ProtectedRoute } from "../components/layout/ProtectedRoute";
  * clientRoute.test.tsx against the backend's own constant.
  */
 export const CLIENT_LINK_PATH = "/f";
+
+/** Where staff mint a client link (bd polyglot-pdf-gob8l, first console slice). */
+export const MINT_PATH = "/console/links";
 
 export function AppRoutes() {
   return (
@@ -46,6 +50,19 @@ export function AppRoutes() {
         element={
           <AuthProvider>
             <ClientLinkEntry />
+          </AuthProvider>
+        }
+      />
+      {/* CONSOLE -- staff only, and auth-gated exactly like the app itself.
+          The backend gates independently on a firm claim, so this route being
+          reachable does not by itself let anyone mint. */}
+      <Route
+        path={MINT_PATH}
+        element={
+          <AuthProvider>
+            <ProtectedRoute>
+              <MintLinkPage />
+            </ProtectedRoute>
           </AuthProvider>
         }
       />

@@ -126,7 +126,21 @@ if [ "$DEPLOY_GCP" = true ]; then
     # temperature EVERY spell-back validation run used -- deploying at Google's
     # default 1.0 would ship a configuration we never tested. This var only
     # became deployable in this same change (it was dev-marker-gated before).
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    #
+    # LINK_MINTING_ENABLED=true turns the CLIENT LINK tier on for the demo
+    # (maintainer, 2026-08-28, so testers can try the deployed app). It is
+    # false by default on purpose -- the bd polyglot-pdf-ik7e interlock: a live
+    # link is an unauthenticated entry point to a paid Gemini session, so it
+    # must not exist without a spend ceiling behind it. That ceiling now ships:
+    # the two published kits carry link_cost_ceiling_usd=3 in their
+    # metadata.json, and link_spend enforces it per link across reconnects.
+    #
+    # LINK_BASE_URL is the FRONTEND origin, not this backend. A minted link is
+    # `<base>/f#t=<token>` and /f is a client-app route (AppRoutes.tsx
+    # CLIENT_LINK_PATH); pointing it at Cloud Run would 404 every tester. The
+    # token rides in the URL FRAGMENT, which browsers never send to a server,
+    # so it stays out of access logs and referrers.
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_BASE_URL=https://polyglot-demo-aa709.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi
