@@ -70,24 +70,6 @@ export function whyNotLinkable(
 }
 
 /**
- * Why a value copied from `source` would not be a legal value for `target`.
- *
- * The runtime fan-out copies the RAW value and stamps it confirmed WITHOUT
- * validating (SchemaForm's handleFieldChange), so a mismatched link produces a
- * field that looks answered, satisfies the required gate, and then prints BLANK
- * on the draft a human reviews -- the PDF filler skips an option value it
- * cannot match. Refusing at authoring time is the only place this is visible.
- *
- * Deliberately narrow: it refuses only what is provably wrong -- copying INTO an
- * option-backed field from something that has no options to draw on. Loose pairs
- * (text -> date, number -> text) are left alone, because a form legitimately
- * repeats one answer in differently-typed boxes and over-refusing would block
- * real authoring. Two option-backed fields are left alone too: whether their
- * option SETS line up is the author's judgment, not something to guess from
- * types.
- */
-
-/**
  * Whether a field's value must be one of its own options.
  *
  * Derived from the DATA (does it carry options?), not from a hardcoded type
@@ -105,15 +87,42 @@ function isOptionBacked(field: FormField): boolean {
   if (t === 'select' || t === 'radio' || t === 'checkbox_group') return true;
   // A standalone boolean checkbox is NOT option-backed; one carrying options is
   // a group in all but name, and the runtime treats it as an enum field.
-  return t === 'checkbox' && copyTargetsSafeOptions(field).length > 0;
+  return t === 'checkbox' && rawOptionCount(field) > 0;
 }
 
-/** options[] of a field, tolerating a malformed value (shared shape guard). */
-function copyTargetsSafeOptions(field: FormField): unknown[] {
+/**
+ * How many entries `options` holds, RAW.
+ *
+ * Deliberately NOT safeOptions() from utils/validation, despite looking like a
+ * duplicate of it. safeOptions DROPS unreadable entries; the runtime predicate
+ * this mirrors counts them (`(field.options?.length ?? 0) > 0`). So for an
+ * options array of nulls or numbers, safeOptions says 0 and the runtime says
+ * "enum field" -- reusing it would reintroduce the editor-vs-runtime
+ * divergence this whole guard exists to close. Verified across 120
+ * type x options-shape cells in cross-surface review.
+ */
+function rawOptionCount(field: FormField): number {
   const raw = (field as { options?: unknown }).options;
-  return Array.isArray(raw) ? raw : [];
+  return Array.isArray(raw) ? raw.length : 0;
 }
 
+/**
+ * Why a value copied from `source` would not be a legal value for `target`.
+ *
+ * The runtime fan-out copies the RAW value and stamps it confirmed WITHOUT
+ * validating (SchemaForm's handleFieldChange), so a mismatched link produces a
+ * field that looks answered, satisfies the required gate, and then prints BLANK
+ * on the draft a human reviews -- the PDF filler skips an option value it
+ * cannot match. Refusing at authoring time is the only place this is visible.
+ *
+ * Deliberately narrow: it refuses only what is provably wrong -- copying INTO an
+ * option-backed field from something that has no options to draw on. Loose pairs
+ * (text -> date, number -> text) are left alone, because a form legitimately
+ * repeats one answer in differently-typed boxes and over-refusing would block
+ * real authoring. Two option-backed fields are left alone too: whether their
+ * option SETS line up is the author's judgment, not something to guess from
+ * types.
+ */
 function whyIncompatible(
   source: FormField | undefined, target: FormField | undefined,
 ): string | null {
