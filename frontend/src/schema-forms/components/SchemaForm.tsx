@@ -612,6 +612,20 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     }
   };
 
+  // SAVE NUDGE BRIDGE (bd polyglot-pdf-dft1). The nudge lives in the voice
+  // overlay, which does not own the fill/download path, so it asks for a save
+  // by event rather than reaching across components.
+  //
+  // Without this listener the nudge's Save button silently does NOTHING while
+  // telling the client they saved -- and it permanently silences both nudges,
+  // so they never learn otherwise. The ending variant has no dismiss button,
+  // making that dead button its only exit. Found in cross-surface review.
+  useEffect(() => {
+    const onSaveRequested = () => { void handleDownloadPDF(); };
+    window.addEventListener('polyglot:save-form', onSaveRequested);
+    return () => window.removeEventListener('polyglot:save-form', onSaveRequested);
+  });
+
   const handleDownloadPDF = async () => {
     if (!pdfUrl) {
       alert("PDF URL not configured. Cannot download filled PDF.");
@@ -637,6 +651,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (await resolveSessionToken(user)),
         pdfFile,
+        state.formSessionId,   // resume stamp (bd polyglot-pdf-dft1)
       );
 
       // Generate filename from form metadata
@@ -674,6 +689,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         kitId, pdfUrl, unwrappedFieldValues, state.schema,
         async () => (await resolveSessionToken(user)),
         pdfFile,
+        state.formSessionId,   // resume stamp (bd polyglot-pdf-dft1)
       );
 
       // Open print dialog

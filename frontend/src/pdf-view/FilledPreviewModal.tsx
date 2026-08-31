@@ -64,6 +64,11 @@ export default function FilledPreviewModal({
       unwrapped[fieldId] = unwrapFieldValue(value);
     }
 
+    // NO resume stamp here, deliberately (bd polyglot-pdf-dft1). This renders
+    // to an on-screen preview that is revoked when the modal closes -- the
+    // client never keeps these bytes, so a stamp would serve nothing. The
+    // download and print paths in SchemaForm produce the file they DO keep,
+    // and those are stamped.
     fillPDF(kitId, pdfUrl, unwrapped, schema,
       async () => (await resolveSessionToken(user)),
       pdfFile)

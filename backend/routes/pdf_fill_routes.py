@@ -16,6 +16,11 @@ import fitz  # PyMuPDF
 import structlog
 
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.services.pdf_structure import (
+	StructureMismatch,
+	assert_matches_reference,
+)
+from backend.services.resume_stamp import STAMP_KEY, build_stamp, parse_stamp
 from backend.services.auth import require_auth
 from backend.services.kit_gates import (
 	load_live_metadata,
@@ -30,6 +35,13 @@ from backend.services.form_kits import (
 )
 
 _log = structlog.get_logger().bind(module="pdf_fill_routes")
+
+
+# Upper bound on a resume upload (bd polyglot-pdf-dft1). The shipped kits are
+# ~150KB (W-7) to a few MB filled; 25MB is far above any real saved form and
+# far below a size that would hurt to decode. Anything larger is not a saved
+# form, and handing it to a PDF parser is a cheap denial vector.
+_MAX_RESUME_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 def _safe_pdf_filename(pdf_filename: str) -> str:
@@ -68,6 +80,18 @@ class PDFFillRequest(BaseModel):
 	pdf_filename: str = Field(..., description="PDF filename (e.g., 'i-90.pdf')")
 	field_values: Dict[str, Any] = Field(..., description="Field ID -> value mapping from schema")
 	form_schema: Dict[str, Any] = Field(..., description="Full schema with pdf_field_name mappings")
+	# RESUME STAMP (bd polyglot-pdf-dft1). Optional: a staff download does not
+	# need one, and an older client that does not send it still gets its PDF.
+	#
+	# The client supplies its own form_session_id, which is fine BECAUSE this
+	# value is never trusted for anything: it is a resume HINT written into a
+	# file the client already controls, not a credential. Compare the link
+	# jti below, which is NOT taken from the body -- that one is read from the
+	# verified token, because a client naming someone else's jti would corrupt
+	# the aggregation the firm bills from.
+	form_session_id: Optional[str] = Field(
+		None, description="Client's form session id, stamped into the PDF for resume"
+	)
 
 
 @router.post("/fill-pdf")
@@ -741,6 +765,36 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 		with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
 			temp_path = tmp_file.name
 
+		# RESUME STAMP (bd polyglot-pdf-dft1), written just before save so it
+		# lands in the bytes the client keeps. This is what makes the saved PDF
+		# a SAVE FILE: the answers are already in the form fields, and this
+		# adds the identity needed to resume -- with no server storage, so the
+		# stateless-architecture rule holds.
+		#
+		# The link jti comes from the VERIFIED token, never the body: a client
+		# naming someone else's jti would corrupt the per-link aggregation the
+		# firm bills from. form_session_id does come from the body, which is
+		# safe because it is a hint the client already controls, not a
+		# credential (see services/resume_stamp.py).
+		#
+		# Best-effort: a stamping failure must never cost the client the PDF
+		# they just filled. Losing the stamp costs a resume; raising here
+		# costs the document.
+		try:
+			_stamp = build_stamp(
+				form_session_id=request.form_session_id,
+				kit_id=request.kit_id,
+				link_jtis=[user["jti"]] if isinstance(user, dict) and user.get("jti") else None,
+				schema_version=(request.form_schema or {}).get("form_metadata", {}).get("version"),
+			)
+			if _stamp:
+				_meta = doc.metadata or {}
+				_meta[STAMP_KEY] = _stamp
+				doc.set_metadata(_meta)
+				_log.info("resume_stamp_written", kit=request.kit_id)
+		except Exception as exc:  # noqa: BLE001 -- never lose the PDF over a stamp
+			_log.warning("resume_stamp_failed", kit=request.kit_id, error=str(exc))
+
 		try:
 			# Save with minimal processing to preserve XFA checkbox appearances
 			doc.save(
@@ -779,3 +833,269 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 			doc.close()
 		if temp_path and os.path.exists(temp_path):
 			os.remove(temp_path)
+
+
+class ResumeUploadRequest(BaseModel):
+	"""A client re-opening the PDF they saved earlier (bd polyglot-pdf-dft1)."""
+
+	kit_id: str = Field(..., description="Kit the client is resuming")
+	pdf_filename: str = Field(..., description="The kit's PDF filename")
+	pdf_base64: str = Field(..., description="The client's saved PDF, base64")
+
+
+@router.post("/resume-form")
+async def resume_form(
+	request: ResumeUploadRequest, user: dict = Depends(require_auth)
+) -> Dict[str, Any]:
+	"""Verify a client's saved PDF and hand back the answers inside it.
+
+	THE UPLOAD IS ATTACKER-CONTROLLED. A client picked this file off their own
+	disk, so "it parsed" is not "it is the form we sent them". Before anything
+	is read out of it, it must be STRUCTURALLY IDENTICAL to the kit's own form
+	-- see services/pdf_structure.py for what that covers and why a literal
+	byte match cannot work.
+
+	THE COMPARISON TARGET CARRIES NO CLIENT INPUT. kit_id runs the same gate
+	chain as /fill-pdf (require_published + require_visible), and for a client
+	link require_visible resolves to the ONE kit that link was minted for --
+	so a client cannot aim this at another firm's form, and the reference
+	bytes come from our own store.
+
+	Returns the field values found; the client merges them into their form.
+	Field values are NEVER logged (PII/PHI).
+	"""
+	import base64
+
+	kit_id = _safe_kit_id(request.kit_id)
+	pdf_filename = _safe_pdf_filename(request.pdf_filename)
+	store = get_form_kit_store()
+
+	try:
+		uploaded = base64.b64decode(request.pdf_base64, validate=True)
+	except Exception as exc:  # noqa: BLE001
+		_log.info("resume_upload_undecodable", kit=kit_id)
+		raise HTTPException(status_code=400, detail="Unreadable file") from exc
+
+	# Bound the upload. These forms are ~150KB-2MB; anything far larger is not
+	# a saved form, and decoding it into a PDF parser is a cheap denial vector.
+	if len(uploaded) > _MAX_RESUME_UPLOAD_BYTES:
+		_log.warning("resume_upload_too_large", kit=kit_id, size=len(uploaded))
+		raise HTTPException(status_code=413, detail="File too large")
+
+	try:
+		meta = await load_live_metadata(store, kit_id)
+		require_published(store, kit_id, meta)
+		await require_visible(kit_id, meta, user)
+		reference = await store.load_pdf_bytes(kit_id, pdf_filename)
+	except FormKitNotFound as exc:
+		raise HTTPException(status_code=404, detail="Not found") from exc
+	except FormKitStoreError as exc:
+		# The REFERENCE form is what an upload is checked against, so an
+		# unreadable one must fail closed with a handled error -- never an
+		# unhandled 500, and never by admitting the upload unchecked.
+		_log.error("resume_reference_load_failed", kit=kit_id, error=str(exc))
+		raise HTTPException(
+			status_code=502, detail="Unable to load the form for this kit"
+		) from exc
+
+	try:
+		assert_matches_reference(uploaded, reference)
+	except StructureMismatch as exc:
+		# ONE refusal for every structural failure -- wrong form, tampered
+		# form, unreadable form. Distinguishing them would tell an attacker
+		# which part of their file to fix.
+		_log.warning("resume_upload_refused", kit=kit_id, reason=str(exc))
+		raise HTTPException(
+			status_code=400,
+			detail="That file does not match the form you were sent.",
+		) from exc
+
+	# The client's answers come back keyed by SCHEMA FIELD ID, never by PDF
+	# widget name. The two namespaces are disjoint -- measured on the shipped
+	# W-7, ZERO of 53 schema ids equal their pdf_field_name -- so returning
+	# widget names would hand the client 23 keys their form has never heard of
+	# and restore none of their work.
+	try:
+		schema = await store.load_schema(kit_id)
+	except FormKitNotFound as exc:
+		# Same mapping /api/fill-pdf uses (bd polyglot-pdf-sbfk): a MISSING kit
+		# is a 404, and an UNREADABLE one is a 502 -- never an unhandled 500
+		# that leaks a stack trace to a client trying to recover their work.
+		# The two are caught separately because they are different facts, and
+		# an earlier version caught only the first while claiming both.
+		raise HTTPException(status_code=404, detail="Not found") from exc
+	except FormKitStoreError as exc:
+		_log.error("resume_schema_load_failed", kit=kit_id, error=str(exc))
+		raise HTTPException(
+			status_code=502, detail="Unable to load the form for this kit"
+		) from exc
+
+	# widget name -> what that widget means.
+	#
+	# THREE SHAPES, and missing any one loses answers:
+	#   direct   -- field.pdf_field_name; the widget holds the value
+	#   option   -- options[].pdf_field_name; the widget is ONE choice of a
+	#               radio or checkbox_group, and being "on" selects it
+	#
+	# The option shape covers 21 widgets on the W-7, 75 on the i-90 and 24 on
+	# the f1040. Reading only the direct shape lost every box a client ticked.
+	#
+	# The OPTION entry carries its PARENT field id explicitly. An earlier
+	# version looked the parent up by searching for a field containing that
+	# option VALUE, which is wrong because values are not unique: 13 values are
+	# shared across fields on the i-90 and 3 on the f1040, so answers landed on
+	# the wrong field entirely.
+	#
+	# multi is True for checkbox_group, whose answer is a LIST client-side.
+	by_widget: Dict[str, dict] = {}
+	for field in (schema or {}).get("fields", []):
+		field_id = field.get("id")
+		if not isinstance(field_id, str) or not field_id:
+			continue
+		widget_name = field.get("pdf_field_name")
+		if isinstance(widget_name, str) and widget_name:
+			by_widget[widget_name] = {
+				"kind": "direct",
+				"field_id": field_id,
+				"checkbox": field.get("type") == "checkbox",
+			}
+		multi = field.get("type") == "checkbox_group"
+		for option in field.get("options") or []:
+			if not isinstance(option, dict):
+				continue
+			opt_widget = option.get("pdf_field_name")
+			opt_value = option.get("value")
+			if isinstance(opt_widget, str) and opt_widget and isinstance(opt_value, str):
+				by_widget[opt_widget] = {
+					"kind": "option",
+					"field_id": field_id,
+					"option_value": opt_value,
+					"multi": multi,
+				}
+
+	doc = None
+	try:
+		doc = fitz.open(stream=uploaded, filetype="pdf")
+		values: Dict[str, Any] = {}
+		# checkbox_group answers accumulate: the client stores a LIST.
+		multi_values: Dict[str, list] = {}
+		# Single-choice fields showing MORE THAN ONE ticked option.
+		conflicted: set = set()
+		for page in doc:
+			for widget in page.widgets():
+				name = widget.field_name
+				value = widget.field_value
+
+				# RESOLVE THE MAPPING FIRST. The /AS read below was gated on an
+				# EXACT key match, but the i-90's widgets match only by suffix
+				# -- so the read was skipped for every one of them and 7 real
+				# radio answers stayed lost even after the fallback was added.
+				# Resolve, then read.
+				mapped = by_widget.get(name)
+				if not mapped:
+					# SUFFIX FALLBACK, mirroring find_widget in the FILL path:
+					# XFA PDFs name widgets with a full path
+					# ("form1[0].#subform[0].P1_Line1_AlienNumber[0]") while a
+					# schema may map the bare leaf. On the i-90 that is ALL 114
+					# direct mappings -- 0 exact, 114 suffix-only -- so an
+					# exact-key lookup lost every text answer on the only
+					# status:complete kit, while the fill path wrote them
+					# correctly. Exact wins first, the same precedence
+					# find_widget uses.
+					mapped = next(
+						(m for widget_name, m in by_widget.items()
+						 if name.endswith(widget_name)),
+						None,
+					)
+				if not mapped:
+					continue
+
+				# A CHECKED BOX HIDES IN /AS, NOT IN field_value. On these XFA
+				# forms the fill path writes the on-state to the appearance key
+				# and deliberately does not call update(), so /V stays "Off"
+				# while /AS holds the on-state -- and PyMuPDF reports
+				# field_value as "Off" for a box the client genuinely ticked.
+				# Measured through the REAL /api/fill-pdf route.
+				if widget.field_type == 2:
+					try:
+						raw = doc.xref_get_key(widget.xref, "AS")
+					except Exception:  # noqa: BLE001 -- a missing key is not an answer
+						raw = None
+					if raw and raw[0] == "name" and isinstance(raw[1], str):
+						# Strip the leading "/" AND surrounding whitespace: the
+						# i-90 has on-states like "/ STE " and "/ APT ", so a
+						# bare lstrip("/") left " STE " and the emptiness check
+						# below discarded it.
+						value = raw[1].lstrip("/").strip()
+
+				if not name or not isinstance(value, str) or not value.strip():
+					continue
+
+				if mapped["kind"] == "direct":
+					if value == "Off":
+						continue      # an unchecked box is not an answer
+					if mapped.get("checkbox"):
+						# A STANDALONE checkbox restores as the client's own
+						# TRUE, not the PDF's on-state ("Y" on the i-90, "1" on
+						# the f1040). Returning the raw state means the next
+						# fill rejects it as checkbox_unsupported_value and the
+						# tick vanishes from the printed legal form, while the
+						# preview and the form UI disagree about it.
+						values[mapped["field_id"]] = True
+					else:
+						values[mapped["field_id"]] = value
+					continue
+
+				# An OPTION widget. It is selected when it shows ANY state
+				# other than Off -- derived from the widget, exactly as the
+				# FILL path does (get_button_on_state), rather than from a
+				# pdf_on_value key that only the W-7 carries: it is absent
+				# from all 75 i-90 and all 24 f1040 option widgets, so
+				# requiring it lost every one of their answers.
+				if value == "Off":
+					continue
+				if mapped.get("multi"):
+					# checkbox_group answers are a LIST client-side; collapsing
+					# to a scalar means a second tick silently replaces the
+					# first and the box renders unticked.
+					bucket = multi_values.setdefault(mapped["field_id"], [])
+					if mapped["option_value"] not in bucket:
+						bucket.append(mapped["option_value"])
+				else:
+					# A single-choice field. A file with SEVERAL options of the
+					# same radio ticked is not a valid form state -- our own
+					# fill path writes exactly one -- so rather than letting
+					# whichever widget came last silently win, drop the field
+					# and let the client answer it again. They lose one answer
+					# they could not have produced legitimately, instead of
+					# resuming with a choice they never made.
+					#
+					# Not a security boundary: every value here is a real
+					# option of the CORRECT field, and a client can only do
+					# this to their own draft. It is about not inventing an
+					# answer on a legal form.
+					previous = values.get(mapped["field_id"])
+					if previous is not None and previous != mapped["option_value"]:
+						conflicted.add(mapped["field_id"])
+					values[mapped["field_id"]] = mapped["option_value"]
+
+		for field_id in conflicted:
+			values.pop(field_id, None)
+		if conflicted:
+			_log.warning("resume_conflicting_options", kit=kit_id,
+						 field_count=len(conflicted))
+		values.update(multi_values)
+		stamp = parse_stamp((doc.metadata or {}).get(STAMP_KEY))
+	finally:
+		if doc is not None:
+			doc.close()
+
+	# Field COUNT only. The values are the client's answers.
+	_log.info("resume_upload_accepted", kit=kit_id, field_count=len(values))
+
+	return {
+		"kit_id": kit_id,
+		"field_values": values,
+		"form_session_id": (stamp or {}).get("fsid"),
+		"link_jtis": (stamp or {}).get("jtis", []),
+	}

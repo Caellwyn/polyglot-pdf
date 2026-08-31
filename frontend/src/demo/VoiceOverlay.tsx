@@ -16,7 +16,7 @@ declare global {
 	}
 }
 
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
@@ -28,6 +28,18 @@ import { getOverlayStrings, formatFieldsCompleted } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
+import { SaveNudge } from '../schema-forms/components/SaveNudge'
+import { ResumeUpload } from '../schema-forms/components/ResumeUpload'
+import type { ResumeResult } from '../schema-forms/components/ResumeUpload'
+import { applyResume } from '../schema-forms/applyResume'
+import { loadOnboardingState } from '../schema-forms/onboardingStorage'
+import { useSaveNudge } from '../schema-forms/useSaveNudge'
+import {
+	createNoticeSpeaker,
+	NOTICE_SAVE_EARLY,
+	NOTICE_VOICE_ENDING,
+} from '../schema-forms/utils/noticeSpeech'
+import { hasClientLinkToken } from '../shared/sessionCredential'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState } from '../shared/solState'
 import { useGeminiSpeaking, useClipPlaying } from '../shared/useGeminiSpeaking'
@@ -167,6 +179,71 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => () => { introPlayerRef.current?.dispose() }, [])
 
 	// Panel UI copy in the session language (bd polyglot-pdf-ibxz); English fallback.
+	// SAVE NUDGE WIRING (bd polyglot-pdf-dft1).
+	//
+	// CLIENT SESSIONS ONLY. Staff work on their own machines with their own
+	// workflow; the nudge exists because a CLIENT's only copy is the file they
+	// save, and browser form state is discarded after 60 minutes.
+	const isClientSession = hasClientLinkToken()
+	const formState = SchemaFormStateManager.load()
+	const saveNudge = useSaveNudge({
+		formSessionId: formState?.formSessionId,
+		completedSectionCount: completedSections.size,
+		// The nudge fires when voice is ENDING for any reason -- the spend
+		// ceiling, an idle timeout, or the form finishing. All three are the last
+		// moment before a client might close the tab.
+		voiceEnding: status.toLowerCase() === 'idle_timeout'
+			|| status.toLowerCase() === 'reconnect_failed',
+		enabled: isClientSession,
+	})
+
+	// The notice speech route is FREE (require_auth, not the paid dependency),
+	// so a budget-exhausted client still HEARS how to keep their work.
+	const speakNotice = useMemo(() => {
+		// getToken for the same reason: /api/tts/notice is auth-gated, so a
+		// tokenless call is silent in every deployed environment.
+		const speaker = createNoticeSpeaker({
+			backendUrl: getBackendHttpUrl(),
+			getToken,
+		})
+		return (text: string, language?: string) => speaker(
+			text,
+			language,
+			saveNudge.variant === 'ending' ? NOTICE_VOICE_ENDING : NOTICE_SAVE_EARLY,
+		)
+	}, [saveNudge.variant, getToken])
+
+	const handleNudgeSave = useCallback(() => {
+		saveNudge.markSaved()
+		// Hand off to the form's own download, which is what stamps the resume
+		// identity into the PDF. Dispatching rather than reaching across
+		// components: the overlay does not own the fill/download path.
+		window.dispatchEvent(new CustomEvent('polyglot:save-form'))
+	}, [saveNudge])
+
+	// RESUME CHOICE (bd polyglot-pdf-dft1). Offered BEFORE the disclaimer: a
+	// client resuming should pick "continue my saved form" first and THEN agree,
+	// so the acceptance record belongs to the session they are actually about to
+	// work in.
+	//
+	// Client sessions only, and only when they have not already started -- a
+	// client mid-form does not need a start-over prompt in their way.
+	const [resumeDismissed, setResumeDismissed] = useState(false)
+	const showResumeChoice = isClientSession
+		&& !resumeDismissed
+		&& !formState?.disclaimerAccepted
+		&& Object.keys(formState?.fieldValues ?? {}).length === 0
+
+	const handleResumed = useCallback((result: ResumeResult) => {
+		const current = SchemaFormStateManager.load()
+		if (current) {
+			// applyResume clears disclaimerAccepted on purpose, so the modal below
+			// opens next and the client agrees for THIS session.
+			SchemaFormStateManager.save(applyResume(current, result))
+		}
+		setResumeDismissed(true)
+	}, [])
+
 	const overlayText = getOverlayStrings(selectedLanguage)
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
@@ -2590,6 +2667,43 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					preselectedFormId={schema.form_metadata.form_number || 'default'}
 				/>
 			)}
+
+			{/* RESUME CHOICE (bd polyglot-pdf-dft1). A client does not pick a
+			    FORM -- their link already did -- so this is one question: start
+			    fresh, or continue the file you saved. The upload is verified
+			    SERVER-side against the kit's own form.pdf; this component only
+			    collects the file. */}
+			<ResumeUpload
+				isOpen={showResumeChoice}
+				// The kit id the LINK pinned at open time. NOT
+				// form_metadata.form_number, which is the printed form NAME
+				// ("W-7") and not the kit directory ("w7") -- every resume
+				// would 404 and read as "that is not your form".
+				kitId={loadOnboardingState().formId ?? ''}
+				pdfFilename="form.pdf"
+				selectedLanguage={selectedLanguage}
+				backendUrl={getBackendHttpUrl()}
+				// /api/resume-form is auth-gated: without a token it 401s in
+				// every deployed environment, working only under the local
+				// VFF_DISABLE_AUTH bypass.
+				getToken={getToken}
+				onResumed={handleResumed}
+				onStartOver={() => setResumeDismissed(true)}
+			/>
+
+			{/* SAVE NUDGE (bd polyglot-pdf-dft1). The saved PDF is the only thing
+			    between a client and losing every answer -- browser form state is
+			    discarded after 60 minutes -- so the prompt has to find them rather
+			    than wait to be found. CLIENT SESSIONS ONLY: staff have their own
+			    workflow and their own machines. */}
+			<SaveNudge
+				isOpen={saveNudge.variant !== null}
+				variant={saveNudge.variant ?? 'early'}
+				selectedLanguage={selectedLanguage}
+				speak={speakNotice}
+				onSave={handleNudgeSave}
+				onDismiss={saveNudge.dismiss}
+			/>
 
 			{/* Disclaimer Modal - shown after language selection */}
 			<DisclaimerModal
