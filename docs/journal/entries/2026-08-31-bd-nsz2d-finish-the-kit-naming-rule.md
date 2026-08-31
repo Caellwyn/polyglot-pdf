@@ -190,3 +190,52 @@ instead of the naming rule; the exemption tested a line instead of a position;
 the battery tested a helper instead of the scan. Each was locally reasonable
 and each left the real question unasked -- and in every case a green run was
 what made it feel finished.
+
+## Round 3: the same exemption shape, a fourth time
+
+Round 3 scored zero gaps against the rubric and still found the pattern again.
+The comparison exclusion skipped the whole LINE whenever it saw `===`, `!==` or
+`??` anywhere on it -- so
+
+```
+if (x === y) setNotice(`"${kit.label}" done`);
+```
+
+scanned clean. Latent rather than live, but it is the fourth instance in this
+bead of an exemption keyed on something ADJACENT to what it means to excuse:
+a CSS class, then a line, then a direction, now a neighbouring operator.
+
+The fix keys on the thing itself. `${kit.label}` reaches a human only from
+inside a TEMPLATE LITERAL; the identical characters in bare code are a
+comparison or a fallback that says nothing to anyone. So the test is whether
+THIS match sits in prose -- an odd number of backticks before it -- not whether
+prose-ish punctuation appears somewhere on the line.
+
+That also resolved the round's second finding for free: a label inside a `//`
+comment or a single-quoted string is no longer flagged, because neither is a
+template literal. Two findings, one root cause, one fix.
+
+Backtick counting is not a parser either, and the docstring says so. But it
+fails in the safe direction and it asks the right question.
+
+## Four rounds across two beads: what the pattern actually is
+
+Nothing shipped wrong. Every finding in every round was in a check.
+
+Two distinct errors kept recurring, and naming them separately matters because
+they need opposite corrections:
+
+**Verifying the piece I just wrote instead of the behaviour I care about.** The
+guard tested variable names, not the naming rule. The battery tested a helper,
+not the scan. Both looked thorough and asked the wrong question.
+
+**Excusing by proximity.** Every carve-out I wrote keyed on something NEAR its
+target rather than the target: a CSS class near a subtitle, a line containing a
+tooltip, a region that kept extending, an operator sharing a line. Each was
+correct for the case in hand and wrong for the next one, because "near" is not
+a property anything preserves.
+
+The correction for both is the same question, asked before writing the check
+rather than after review returns it: *what exactly must be true, and can I test
+that directly?* If the answer involves anything's neighbour, it is the wrong
+test.

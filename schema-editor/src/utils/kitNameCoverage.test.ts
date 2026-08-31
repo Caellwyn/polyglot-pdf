@@ -184,16 +184,28 @@ function scanForBareLabels(text: string): number[] {
     lineStarts[lineStarts.length - 1] + l.length + 1));
 
   text.split('\n').forEach((line, i) => {
-    // A comparison is not a message: `label === kit.label` guards a no-op
-    // rename, and `?? kit.id` is a fallback, not prose.
-    if (/===|!==|\?\?/.test(line)) return;
     // EVERY match on the line, not just the first.
     for (const m of line.matchAll(ALL_BARE_KIT_LABELS)) {
-      const abs = lineStarts[i] + (m.index ?? 0);
+      const col = m.index ?? 0;
+      const abs = lineStarts[i] + col;
       // A card's own hover tooltip is the ONE place label-only is right: it is
       // attached to the card, whose subtitle renders the id three lines below,
       // so both identities are already side by side.
       if (spans.some(([a, b]) => abs >= a && abs <= b)) continue;
+      // `${kit.label}` only reaches a human from inside a TEMPLATE LITERAL. The
+      // same characters in bare code are a comparison or a fallback
+      // (`label === kit.label`, `kit.label ?? kit.id`), which says nothing to
+      // anyone.
+      //
+      // An earlier version skipped the whole LINE when it saw `===`/`??`
+      // anywhere on it -- so `if (x === y) setNotice(\`"${kit.label}" done\`);`
+      // scanned clean. That is the fourth time in this bead an exemption keyed
+      // on something ADJACENT to its target excused something else, which is
+      // the rule this very file keeps restating. Backtick-counting is not a
+      // parser either, but it keys on the thing itself: whether THIS match sits
+      // in prose.
+      const backticksBefore = (line.slice(0, col).match(/`/g) ?? []).length;
+      if (backticksBefore % 2 === 0) continue;
       offenders.push(i + 1);
     }
   });
@@ -255,6 +267,20 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
     // must exempt NOTHING rather than run to EOF.
     expect(scanForBareLabels(['title={ // never closes',
       'setNotice(`"${kit.label}" x`);'].join(String.fromCharCode(10)))).toEqual([2]);
+
+    // A COMPARISON on the same line must not excuse a real message. The
+    // line-wide `===`/`??` skip let this scan clean -- the fourth instance in
+    // this bead of an exemption excusing its neighbour.
+    expect(scanForBareLabels(
+      'if (x === y) setNotice(`"${kit.label}" done`);')).toEqual([1]);
+
+    // ...while a genuine comparison, which reaches nobody, stays exempt.
+    expect(scanForBareLabels('if (label === kit.label) return;')).toEqual([]);
+    expect(scanForBareLabels('const l = kit.label ?? kit.id;')).toEqual([]);
+
+    // Outside a template literal is not prose: a comment or a quoted string
+    // mentioning the shape is not a message to anyone.
+    expect(scanForBareLabels('// see ${kit.label} for details')).toEqual([]);
 
     // A multi-line tooltip still covers a label on its continuation line.
     expect(scanForBareLabels(['title={a', '  ? `Open ${kit.label}`',
