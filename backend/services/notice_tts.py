@@ -58,10 +58,6 @@ MAX_NOTICE_CHARS = 400
 # client SEES. Derived rather than hand-written so the spoken and printed
 # words cannot drift apart; pinned by test_notice_tts_parity.py.
 #
-# GENERATED FROM frontend/src/schema-forms/resumeStrings.ts -- the text a
-# client SEES. Derived rather than hand-written so the spoken and printed
-# words cannot drift apart; pinned by test_notice_tts_parity.py.
-#
 # English is the fallback for any language absent here. NEVER enumerate
 # "the supported languages" from this table: 18 today, growing toward ~90.
 NOTICE_TEXT: dict[str, dict[str, str]] = {
