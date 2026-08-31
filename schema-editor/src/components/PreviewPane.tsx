@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react';
 import type { FormField, FormSchema, FormSection } from '../types/schema';
 import { isFieldRequired, shouldShowField } from '../utils/conditionalVisibility';
+import { copyTargets } from '../utils/copyLinks';
 import { safeOptions } from '../utils/validation';
 
 interface PreviewPaneProps {
@@ -67,7 +68,26 @@ export default function PreviewPane({ schema }: PreviewPaneProps) {
   const sections = useMemo(() => orderedSections(schema), [schema]);
 
   const setValue = (fieldId: string, value: PreviewValue) => {
-    setValues(prev => ({ ...prev, [fieldId]: value }));
+    setValues(prev => {
+      const next = { ...prev, [fieldId]: value };
+      // Fan the value out to every copy target, the same way the voice app
+      // does (SchemaForm's handleFieldChange), so the preview SHOWS an
+      // auto-populated field filling in rather than staying blank while the
+      // real form fills it (bd polyglot-pdf-g33y2). Without this the preview
+      // contradicts the app on exactly the fields this bead exists to author.
+      //
+      // One hop only, matching the runtime: SchemaForm writes each target
+      // directly and does not re-enter its own handler, so a chained link
+      // (a -> b -> c) populates b but not c THERE too. Following the chain
+      // here would make the preview claim behaviour the app does not have --
+      // and the editor refuses to author a cycle, so a deep chain is already
+      // unusual. If the runtime ever fans out transitively, this follows it.
+      const source = (schema.fields || []).find(f => f?.id === fieldId);
+      for (const targetId of copyTargets(source)) {
+        next[targetId] = value;
+      }
+      return next;
+    });
   };
 
   // Toggle one option in a checkbox group's selected-value array (multi-select).
@@ -78,7 +98,16 @@ export default function PreviewPane({ schema }: PreviewPaneProps) {
       const next = arr.includes(optionValue)
         ? arr.filter(v => v !== optionValue)
         : [...arr, optionValue];
-      return { ...prev, [field.id]: next };
+      const out = { ...prev, [field.id]: next };
+      // Fan out here TOO (bd polyglot-pdf-g33y2). The runtime does not treat a
+      // checkbox group specially -- FieldRenderer routes its toggle through the
+      // same handleFieldChange that fans copy_to out -- so leaving it out of
+      // this sibling handler would make the preview lie for exactly one field
+      // type, which is worse than not fanning out at all.
+      for (const targetId of copyTargets(field)) {
+        out[targetId] = next;
+      }
+      return out;
     });
   };
 

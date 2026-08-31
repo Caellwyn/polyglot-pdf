@@ -150,3 +150,87 @@ describe('PreviewPane: section grouping', () => {
     expect(within(section).getByText('Reason')).toBeTruthy();
   });
 });
+
+describe('PreviewPane: auto-populate fan-out (bd polyglot-pdf-g33y2, crit 2)', () => {
+  // The i-90 shape: a Part 1 answer that repeats on page 8.
+  const LINKED = () => buildSchema([
+    field({ id: 'family_name', label: 'Family name', copy_to: ['p8_family_name'] }),
+    field({ id: 'p8_family_name', label: 'Family name (page 8)', read_only: true }),
+  ], ['family_name', 'p8_family_name']);
+
+  it('a copy target FILLS IN when its source is edited', () => {
+    // Without this the preview contradicts the app on exactly the fields this
+    // bead exists to author: the voice runtime fans copy_to out, the preview
+    // left the target blank.
+    render(<PreviewPane schema={LINKED()} />);
+    const src = screen.getByLabelText(/^Family name$/) as HTMLInputElement;
+    fireEvent.change(src, { target: { value: 'GARCIA' } });
+
+    const target = screen.getByLabelText(/Family name \(page 8\)/) as HTMLInputElement;
+    expect(target.value).toBe('GARCIA');
+  });
+
+  it('the copy target renders READ-ONLY', () => {
+    render(<PreviewPane schema={LINKED()} />);
+    const target = screen.getByLabelText(/Family name \(page 8\)/) as HTMLInputElement;
+    expect(target.disabled).toBe(true);
+  });
+
+  it('an UNLINKED field is not touched by the fan-out', () => {
+    render(<PreviewPane schema={LINKED()} />);
+    const src = screen.getByLabelText(/^Family name$/) as HTMLInputElement;
+    fireEvent.change(src, { target: { value: 'GARCIA' } });
+    // `reason` is a radio in the same schema; nothing should have selected.
+    const radios = screen.getAllByRole('radio') as HTMLInputElement[];
+    expect(radios.every(r => !r.checked)).toBe(true);
+  });
+
+  it('editing the SOURCE again overwrites the target', () => {
+    render(<PreviewPane schema={LINKED()} />);
+    const src = screen.getByLabelText(/^Family name$/) as HTMLInputElement;
+    fireEvent.change(src, { target: { value: 'GARCIA' } });
+    fireEvent.change(src, { target: { value: 'LOPEZ' } });
+    const target = screen.getByLabelText(/Family name \(page 8\)/) as HTMLInputElement;
+    expect(target.value).toBe('LOPEZ');
+  });
+
+  it('one source fans out to SEVERAL targets', () => {
+    const many = buildSchema([
+      field({ id: 'a_number', label: 'A number', copy_to: ['p8_a', 'p9_a'] }),
+      field({ id: 'p8_a', label: 'A number (page 8)', read_only: true }),
+      field({ id: 'p9_a', label: 'A number (page 9)', read_only: true }),
+    ], ['a_number', 'p8_a', 'p9_a']);
+    render(<PreviewPane schema={many} />);
+    fireEvent.change(screen.getByLabelText(/^A number$/), { target: { value: 'A123' } });
+    expect((screen.getByLabelText(/page 8/) as HTMLInputElement).value).toBe('A123');
+    expect((screen.getByLabelText(/page 9/) as HTMLInputElement).value).toBe('A123');
+  });
+});
+
+describe('PreviewPane: a CHECKBOX GROUP source also fans out (bd polyglot-pdf-g33y2)', () => {
+  it('toggling an option copies the selection to the target', () => {
+    // The runtime does not treat a checkbox group specially -- its toggle goes
+    // through the same handleFieldChange that fans copy_to out -- so a preview
+    // that fanned out for text but not here would lie for exactly one type.
+    // Option LABELS differ per group so getByLabelText stays unambiguous.
+    const s = buildSchema([
+      field({ id: 'langs', type: 'checkbox', label: 'Languages',
+              copy_to: ['p8_langs'],
+              options: [{ value: 'en', label: 'English' },
+                        { value: 'es', label: 'Spanish' }] }),
+      field({ id: 'p8_langs', type: 'checkbox', label: 'Languages (page 8)',
+              read_only: true,
+              options: [{ value: 'en', label: 'English (repeat)' },
+                        { value: 'es', label: 'Spanish (repeat)' }] }),
+    ], ['langs', 'p8_langs']);
+    render(<PreviewPane schema={s} />);
+
+    fireEvent.click(screen.getByLabelText('English'));
+
+    // The target's box for the SAME option value is now checked.
+    expect((screen.getByLabelText('English (repeat)') as HTMLInputElement).checked)
+      .toBe(true);
+    expect((screen.getByLabelText('Spanish (repeat)') as HTMLInputElement).checked)
+      .toBe(false);
+  });
+});
