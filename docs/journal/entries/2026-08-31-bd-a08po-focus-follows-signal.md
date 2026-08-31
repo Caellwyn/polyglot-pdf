@@ -55,8 +55,8 @@ ambiguous focus is a mis-fill, not a UX wrinkle.
 Their replacement rule is what shipped, and it is better because it keys on a
 signal that is genuinely unambiguous: **typing is intent, clicking is not.**
 Nobody types into a field by accident, but fidget-clicking during playback is
-common. So typing moves the origin unconditionally; a click waits until the model
-is silent. The fidget case resolves to nothing happening, which is correct for
+common. So typing moves the origin unconditionally; a click waits until playback
+is over. The fidget case resolves to nothing happening, which is correct for
 noise.
 
 The predicate ended up being `isAnyAudioPlaying()` -- the clip-inclusive union.
