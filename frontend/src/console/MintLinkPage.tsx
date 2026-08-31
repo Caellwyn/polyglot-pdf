@@ -22,9 +22,13 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
+// Imported HERE, not at the entry point: this page is the only consumer, and
+// a stylesheet wired somewhere else can be mounted without it (bd
+// polyglot-pdf-41ay8 exists because the markup shipped with no CSS at all).
+import './styles/console.css';
 import { useAuth } from '../contexts/AuthContext';
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller';
-import { resolveSessionToken } from '../shared/sessionCredential';
+import { resolveStaffToken } from '../shared/sessionCredential';
 
 interface FormKit {
   id: string;
@@ -60,7 +64,11 @@ export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProp
   const [copied, setCopied] = useState(false);
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    const token = await resolveSessionToken(user);
+    // resolveSTAFFToken, not resolveSessionToken: this is a staff-only action,
+    // and the form-filling resolver prefers a stashed client-link token -- so
+    // a staffer who tried one of their own links in this tab would mint with
+    // the CLIENT credential and be refused (bd polyglot-pdf-so88g).
+    const token = await resolveStaffToken(user);
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, [user]);
 
