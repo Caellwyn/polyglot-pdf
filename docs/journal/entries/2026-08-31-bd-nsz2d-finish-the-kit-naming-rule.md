@@ -104,3 +104,45 @@ the thing itself.
 - The coverage guard's label half is mutation-verified in both directions:
   reverting a converted site flags it, and the tooltip exemption stays narrow
   under the evasion above.
+
+## Review: the exemption was defeated a THIRD time, so the mechanism changed
+
+I wrote above that keying the exemption to the LINE was the mistake and keying
+it to the OFFSET was the fix. Review defeated the offset version too, with the
+mirror of my own evasion -- an offender **after** the tooltip closes on the same
+line:
+
+```
+const t = <b title={`x`} />; setNotice(`"${kit.label}" gone`);
+```
+
+The cause was structural, not a missed case. Walking one line at a time meant
+re-deriving "am I inside a region?" at every line boundary, and my `regionEnd`
+never stopped extending once a region opened. Each fix repaired one boundary and
+opened the next.
+
+So the mechanism changed rather than the patch. Tooltip spans are now computed
+ONCE over the whole file: a span opens at `title={` and closes when its braces
+balance, wherever that lands. There is no per-line state left to get wrong, and
+membership is a plain interval test.
+
+This is the shape CLAUDE.md scar #8 describes, met for the second time in two
+beads: **when the same defect class survives your fix twice, the fix is wrong,
+not incomplete.** Both earlier evasions are now kept as an explicit battery in
+the test file, so a future simplification cannot quietly reopen one.
+
+The remaining hole is stated rather than hidden: this is not a JSX parser, so a
+`title={` inside a comment or string literal would open a phantom span. Narrower
+than what it replaces, and the battery pins the shapes that matter.
+
+Two smaller corrections from the same round: the guard's docstring claimed
+components receiving a `kitLabel` prop "have no id to pair with it", which is
+false for `DeleteKitDialog` (it receives both and stays label-only for its own
+stated reason); and `RetireCandidatesDialog` renders label-and-id as separate
+JSX elements -- kitName's rule spelled out in markup -- which now says so, since
+otherwise it reads as an omission.
+
+One genuine pre-existing gap was filed rather than folded in
+(`polyglot-pdf-5ivqx`): the catalogue dropdown renders `{k.label}` as a JSX TEXT
+node, a shape this guard's regex cannot see, so two same-labelled kits are
+indistinguishable there. Unchanged on dev, and outside this bead.
