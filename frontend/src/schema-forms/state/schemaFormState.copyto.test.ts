@@ -186,3 +186,47 @@ describe('copy_to fans out from the write chokepoint (bd polyglot-pdf-gpaed)', (
     expect(valueOf(after, 'family_name')).toBe('GARCIA')
   })
 })
+
+describe('the section gate: a REQUIRED copy target is reachable again', () => {
+  beforeEach(() => {
+    const store: Record<string, string> = {}
+    const stub = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+    global.sessionStorage = stub
+    if (typeof window !== 'undefined') {
+      Object.defineProperty(window, 'sessionStorage', {
+        value: stub, writable: true, configurable: true,
+      })
+    }
+  })
+
+  /** Source -> REQUIRED, read_only target: the dead-end shape from the title. */
+  function gated(): FormSchema {
+    const s = schema()
+    ;(s.fields[1] as any).validation = { required: true }
+    return s
+  }
+
+  it('the section is INCOMPLETE before the source is answered', () => {
+    // Floor: without this the next assertion could pass vacuously on a section
+    // that was already valid.
+    expect(SchemaFormStateManager.isSectionValid(fresh(gated()), 'sec')).toBe(false)
+  })
+
+  it('an AI fill of the SOURCE completes the section', () => {
+    // This is the bug in the bead's title. The target is required AND
+    // read_only: the AI cannot write it directly, so before the fan-out reached
+    // the voice path the gate could never clear and the session dead-ended.
+    const s = SchemaFormStateManager.updateField(
+      fresh(gated()), 'family_name', 'GARCIA',
+      { confirmed: true, confirmationMethod: 'ai_voice' })
+    expect(valueOf(s, 'p8_family_name')).toBe('GARCIA')
+    expect(SchemaFormStateManager.isSectionValid(s, 'sec')).toBe(true)
+  })
+})

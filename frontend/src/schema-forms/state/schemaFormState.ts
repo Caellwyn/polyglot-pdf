@@ -453,9 +453,10 @@ export class SchemaFormStateManager {
     // the AI cannot write a read_only field and isSectionValid does not excuse
     // it, so the section gate could never be satisfied.
     //
-    // Placed before save() so the targets persist in the same write, and after
-    // the normalization above so a target stores the SAME canonical value its
-    // source does.
+    // Placed before save() so the targets persist in the same write. Each hop
+    // RE-ENTERS this method, so a target is normalized against ITS OWN schema
+    // field -- source and target need not share a format_preset for the target
+    // to store a canonical value.
     //
     // ONE HOP, not transitive: a target's own copy_to is not followed. That
     // matches what the single-caller version did, so this changes WHICH paths
