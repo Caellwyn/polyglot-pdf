@@ -146,7 +146,12 @@ export function resolveSessionToken(
  * and unfixable by them. Fails closed (no unauthorized mint), but the
  * mint-test-mint-again loop is exactly the console's first workflow.
  *
- * Synchronous-union return, for the same reason as resolveSessionToken.
+ * The return type mirrors resolveSessionToken's union for SYMMETRY -- so the
+ * two are interchangeable at a call site -- and NOT for its microtask reason.
+ * That reason is real but specific to the other function: its readToken()
+ * early return hands back a stored string synchronously. This one has no such
+ * branch; getIdToken() is always a Promise, so it can never return
+ * synchronously with a token.
  */
 export function resolveStaffToken(
   user: { getIdToken: () => Promise<string> } | null | undefined,
