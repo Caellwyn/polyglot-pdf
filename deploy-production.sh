@@ -1,9 +1,37 @@
 #!/bin/bash
-# deploy-production.sh - Deploy to Business channel
+# deploy-production.sh - Deploy to Business channel  [DEAD -- REFUSES TO RUN]
 #
 # Usage: ./deploy-production.sh [options]
+#
+# THIS CHANNEL IS DEAD (bd polyglot-pdf-je6iy). It targets polyglot-forms-919f2,
+# which is UNREACHABLE -- it does not appear in `gcloud projects list` for the
+# maintainer's account, deploy-all.sh's own comments call it dead, and
+# scripts/bootstrap_firm.py hard-refuses to touch it. Its .env.production also
+# ships an EMPTY VITE_FIREBASE_API_KEY, so any frontend it built would die at
+# launch with "auth/invalid-api-key".
+#
+# It is kept (rather than deleted) only as the record of the prod channel's
+# shape, and now REFUSES to run: with a staging channel next to it, a runnable
+# script named "production" is a live footgun -- the obvious guess for "deploy
+# the real one" is the one target that cannot work.
+#
+# The live channels are:
+#   ./deploy-staging.sh   -> the test deploy      (polyglot-app-staging.web.app)
+#   ./deploy-demo.sh      -> the investor/pilot demo (polyglot-demo-aa709.web.app)
+# See docs/doctrine/promotion-tiers.md.
+#
+# To genuinely revive a production channel, that is a maintainer decision: it
+# needs a reachable project, a full scripts/setup-gcp-project.sh bootstrap, real
+# VITE_FIREBASE_* values in .env.production, and its own Firebase Auth user set.
 
 set -e
+
+echo "ERROR: deploy-production.sh is DEAD and refuses to run." >&2
+echo "  Its target project (polyglot-forms-919f2) is unreachable -- bd polyglot-pdf-je6iy." >&2
+echo "  Did you mean:" >&2
+echo "    ./deploy-staging.sh   # the test deploy" >&2
+echo "    ./deploy-demo.sh      # the demo shown to investors and pilot firms" >&2
+exit 1
 
 # Colors for output
 GREEN='\033[0;32m'

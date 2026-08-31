@@ -7,13 +7,22 @@
   "targets": {
     "polyglot-demo-aa709": {
       "hosting": {
-        "app": ["polyglot-demo-aa709"],
-        "editor": ["polyglot-editor-demo"]
+        "app": [
+          "polyglot-demo-aa709"
+        ],
+        "editor": [
+          "polyglot-editor-demo"
+        ],
+        "app-staging": [
+          "polyglot-app-staging"
+        ]
       }
     },
     "polyglot-forms-919f2": {
       "hosting": {
-        "app": ["polyglot-forms-919f2"]
+        "app": [
+          "polyglot-forms-919f2"
+        ]
       }
     }
   }

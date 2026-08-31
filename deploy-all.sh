@@ -142,7 +142,14 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 FORM_KITS_DIR="$SCRIPT_DIR/form-kits"
 
-BACKEND_SERVICE_NAME="polyglot-backend"
+# Cloud Run service name, OVERRIDABLE by the channel deploy scripts (bd
+# polyglot-pdf-9qn64). This was a bare assignment, which silently CLOBBERED the
+# value a caller exported -- deploy-production.sh has exported
+# BACKEND_SERVICE_NAME since it was written and never once had an effect. That
+# latent bug becomes load-bearing with a second channel: deploy-staging.sh
+# exports polyglot-backend-staging, and a clobber would have pointed a staging
+# deploy straight at the demo's live service. The demo/prod default is unchanged.
+BACKEND_SERVICE_NAME="${BACKEND_SERVICE_NAME:-polyglot-backend}"
 REGION="us-central1"
 # Demo bucket by default (bd polyglot-pdf-d7hy, enumerated the set after the
 # outer cross-surface review caught this 4th caller), matching every other
@@ -167,6 +174,19 @@ FORM_KITS_PREFIX="${FORM_KITS_PREFIX:-form-kits}"
 # Firebase "auth/invalid-api-key". Default to the prod schema build so a direct
 # deploy-all.sh --frontend is safe.
 FRONTEND_BUILD_CMD="${FRONTEND_BUILD_CMD:-npm run build:schema}"
+
+# Firebase Hosting target for the voice app, overridable by the channel deploy
+# scripts (bd polyglot-pdf-9qn64). "app" is the demo/prod voice-app site;
+# deploy-staging.sh sets "app-staging" so a staging frontend can never land on
+# the site investors are shown. Both targets are mapped in .firebaserc and carry
+# their OWN /api/** rewrite in firebase.json, each pointing at its own Cloud Run
+# service -- so the target choice is what wires a build to its backend.
+# The site NAME (for the URL echoed at the end) is derived separately, because
+# only the "app" target is the project-named default site. It is defaulted at
+# the point of USE, not here: POLYGLOT_PROJECT_NAME may still be unset at this
+# line -- check_project() resolves it from gcloud further down -- so defaulting
+# here would bake in an empty site name on the autodetect path.
+FRONTEND_HOSTING_TARGET="${FRONTEND_HOSTING_TARGET:-app}"
 
 # Print header
 echo ""
@@ -230,6 +250,11 @@ log_info "  Form Kits: $DEPLOY_FORM_KITS"
 echo ""
 
 check_project
+
+# Now that the project is resolved, default the Hosting site name to it (the
+# "app" target IS the project-named default site). deploy-staging.sh overrides
+# both this and FRONTEND_HOSTING_TARGET.
+FRONTEND_SITE_NAME="${FRONTEND_SITE_NAME:-$POLYGLOT_PROJECT_NAME}"
 
 # ============================================================================
 # BACKEND DEPLOYMENT
@@ -512,10 +537,10 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     # targets (app = the voice app, editor = the hosted schema editor), and a
     # bare "--only hosting" would deploy BOTH -- including whatever stale build
     # sits in schema-editor/dist. The editor ships via deploy-editor.sh only.
-    firebase deploy --only hosting:app --project "$POLYGLOT_PROJECT_NAME"
+    firebase deploy --only "hosting:$FRONTEND_HOSTING_TARGET" --project "$POLYGLOT_PROJECT_NAME"
     
     log_success "✅ Frontend deployed successfully!"
-    echo "   URL: https://$POLYGLOT_PROJECT_NAME.web.app"
+    echo "   URL: https://$FRONTEND_SITE_NAME.web.app"
     echo ""
     
     cd "$SCRIPT_DIR"
@@ -538,7 +563,7 @@ fi
 
 if [ "$DEPLOY_FRONTEND" = true ]; then
     log_info "🌐 Frontend URL:"
-    echo "   https://$POLYGLOT_PROJECT_NAME.web.app"
+    echo "   https://$FRONTEND_SITE_NAME.web.app"
     echo ""
 fi
 
