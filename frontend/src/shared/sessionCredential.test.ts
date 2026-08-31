@@ -92,9 +92,12 @@ describe("the credential resolver is the ONLY token source", () => {
     // would have left the client tier working on some surfaces and silently
     // unauthenticated on others.
     //
-    // Derived from the shipped sources so a TENTH site fails CI rather than
-    // shipping broken for clients only. If you are adding a backend call:
-    // use resolveSessionToken(user), not user.getIdToken().
+    // Derived from the shipped sources so a NEW site fails CI rather than
+    // shipping broken for clients only -- the guard asserts the offender list
+    // is EMPTY, not a count, so it keeps working as sites are added (the mint
+    // page at /console/links was the tenth, bd polyglot-pdf-gob8l, and passes
+    // because it routes through here). If you are adding a backend call: use
+    // resolveSessionToken(user), not user.getIdToken().
     const root = join(__dirname, "..");
     const offenders: string[] = [];
 

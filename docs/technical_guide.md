@@ -696,11 +696,15 @@ system that is NOT a Firebase account. Five coupled pieces:
   bounded-retry path and a "reconnect failed" modal (bd polyglot-pdf-cke6v).
 
   Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
-  and are tested in `link_budget.cost_ceiling_usd_for_kit`, but threading one
-  through costs a metadata load on every client connect for a feature no kit
-  uses yet. And the check is at CONNECT, so a single session that blows the
-  ceiling mid-call is caught on the NEXT connect -- overrun is bounded by one
-  session.
+  and are tested in `link_budget.cost_ceiling_usd_for_kit`, but the socket
+  passes no kit metadata, so a kit's own `link_cost_ceiling_usd` is INERT --
+  and two kits now declare one (w7 and i-90 at $3, bd polyglot-pdf-gob8l), so
+  those links are bounded by the GLOBAL default rather than the declared $3.
+  Fails safe: a higher ceiling, never an absent one. Threading it through
+  costs a metadata load on every client connect, so it is its own bead
+  (polyglot-pdf-4tjt7). And the check is at CONNECT, so a single session that
+  blows the ceiling mid-call is caught on the NEXT connect -- overrun is
+  bounded by one session.
 
   A new door that authenticates a client credential must decide which side it
   is on. THREE dependencies exist, not two:

@@ -119,7 +119,7 @@ describe("the client link route", () => {
 
   // --- The mint route (bd polyglot-pdf-gob8l) -------------------------------
   // Same failure mode as the client route above, opposite polarity: /f must be
-  // reachable SIGNED OUT, /console/links must NOT be. The page's own 9 tests
+  // reachable SIGNED OUT, /console/links must NOT be. The page's own tests
   // say nothing about which door it sits behind -- and an unmounted page is
   // the exact way the previous bead shipped ten tested modules a user could
   // not reach.
