@@ -169,10 +169,18 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   partial configuration is the hazard.** A live link is an unauthenticated
   door to a paid Gemini session, so read all four together:
   - **`LINK_MINTING_ENABLED=true`** — THE INTERLOCK. `POST /api/links/mint`
-    404s while this is unset, which is the default. **It must stay unset
-    until the per-jti/per-firm rate limits and the session cost ceiling ship
-    (bd `polyglot-pdf-ik7e`).** Turning it on earlier means an
-    unauthenticated entry point to a ~$3 session with nothing bounding spend.
+    404s while this is unset, which remains the default anywhere it is not
+    explicitly set. What it guarded -- the per-jti/per-firm limits and the
+    session cost ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so
+    enabling it is now legitimate: the DEMO sets it in `deploy-demo.sh`
+    (maintainer, 2026-08-28, so testers can reach the deployed app). Enabling
+    it in any environment where the ceiling is NOT enforced would still mean
+    an unauthenticated entry point to a paid session with nothing bounding
+    spend. The ceiling actually in force is the global
+    `LINK_COST_CEILING_USD`: a kit's own `link_cost_ceiling_usd` is read by
+    `cost_ceiling_usd_for_kit`, but the WS handshake does not yet pass kit
+    metadata to `check_budget`, so per-form caps are declared-but-inert (bd
+    `polyglot-pdf-4tjt7`).
   - **`LINK_TOKEN_SECRET`** — the HMAC signing key (>=32 chars). Fails CLOSED
     and loudly: minting and verification both refuse without it, deliberately
     rather than defaulting (a default key would be forgeable by anyone

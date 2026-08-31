@@ -131,16 +131,43 @@ if [ "$DEPLOY_GCP" = true ]; then
     # (maintainer, 2026-08-28, so testers can try the deployed app). It is
     # false by default on purpose -- the bd polyglot-pdf-ik7e interlock: a live
     # link is an unauthenticated entry point to a paid Gemini session, so it
-    # must not exist without a spend ceiling behind it. That ceiling now ships:
-    # the two published kits carry link_cost_ceiling_usd=3 in their
-    # metadata.json, and link_spend enforces it per link across reconnects.
+    # must not exist without a spend ceiling behind it. A ceiling IS enforced
+    # per link across reconnects (services/link_spend.check_budget), which
+    # satisfies the interlock.
+    #
+    # But it is the GLOBAL $10 default, NOT the $3 the two kits declare. The
+    # kits carry link_cost_ceiling_usd=3 and cost_ceiling_usd_for_kit reads it
+    # correctly; the WS handshake simply never passes kit metadata to
+    # check_budget (websocket_routes.py), so the per-form value is inert. Real
+    # per-link exposure on this demo is therefore $10, not $3. Threading the
+    # metadata through the handshake is bd polyglot-pdf-4tjt7 -- it needs a kit
+    # load on the hottest path, which is why it is its own bead. Fails SAFE (a
+    # higher ceiling, never an absent one), so this is a cost note, not a hole.
+    #
+    # LINK_REDEMPTIONS_FIRESTORE_ENABLED=true is REQUIRED alongside minting,
+    # not optional: open_link raises RedemptionUnavailable when the store is
+    # off, and the redemption gate fails CLOSED, so every minted link would
+    # 404 at /api/links/open. Cloud Run's disk is ephemeral tmpfs, so
+    # Firestore is the only durable one-time-use record -- same reason
+    # CONFIRMATION_FIRESTORE_ENABLED is set in deploy-all.sh.
+    #
+    # STILL REQUIRED AND NOT SET HERE: LINK_TOKEN_SECRET (>=32 chars). It is
+    # the HMAC SIGNING KEY for every link token, so it must be injected via
+    # Secret Manager (--set-secrets), NEVER as a plaintext env var -- the same
+    # rule this script's own comment states for GEMINI_API_KEY. Without it
+    # minting 503s, and the mint page reports "LINK_BASE_URL is unset" because
+    # the route returns 503 for both. Provisioning it is a maintainer step.
+    #
+    # NOTE --set-env-vars REPLACES the whole env block, so a LINK_* var set by
+    # hand on the service does NOT survive the next deploy. That is why these
+    # are declared here rather than clicked in.
     #
     # LINK_BASE_URL is the FRONTEND origin, not this backend. A minted link is
     # `<base>/f#t=<token>` and /f is a client-app route (AppRoutes.tsx
     # CLIENT_LINK_PATH); pointing it at Cloud Run would 404 every tester. The
     # token rides in the URL FRAGMENT, which browsers never send to a server,
     # so it stays out of access logs and referrers.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_BASE_URL=https://polyglot-demo-aa709.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://polyglot-demo-aa709.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

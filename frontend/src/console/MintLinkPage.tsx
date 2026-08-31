@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
+import { useAuth } from '../contexts/AuthContext';
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller';
 import { resolveSessionToken } from '../shared/sessionCredential';
 
@@ -31,7 +32,7 @@ interface FormKit {
 }
 
 export interface MintLinkPageProps {
-  /** The signed-in staff user; supplies the bearer token. */
+  /** Test override only. In the app the user comes from useAuth(). */
   user?: { getIdToken: () => Promise<string> } | null;
   /** Injected in tests. */
   fetchImpl?: typeof fetch;
@@ -39,7 +40,15 @@ export interface MintLinkPageProps {
 
 type Phase = 'idle' | 'minting' | 'done' | 'error';
 
-export function MintLinkPage({ user, fetchImpl }: MintLinkPageProps) {
+export function MintLinkPage({ user: userOverride, fetchImpl }: MintLinkPageProps) {
+  // From the CONTEXT, not a prop. Mounted inside ProtectedRoute, so a user is
+  // present -- and the route element passes no props, so reading a `user` prop
+  // here sent every request with NO Authorization header: an empty form picker
+  // and a 401 on every mint, in production only. Tests inject fetchImpl and so
+  // cannot see it, and VFF_DISABLE_AUTH masks it locally. Same pattern as
+  // SchemaFormDemo (bd polyglot-pdf-z2is).
+  const { user: authUser } = useAuth();
+  const user = userOverride ?? authUser;
   const doFetch = fetchImpl ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   const backend = getBackendHttpUrl();
 
@@ -112,8 +121,12 @@ export function MintLinkPage({ user, fetchImpl }: MintLinkPageProps) {
         return;
       }
       if (response.status === 503) {
+        // The route returns 503 for EITHER missing setting, so naming only one
+        // sends the operator to check the wrong thing (cross-surface review).
         setPhase('error');
-        setMessage('Link delivery is not configured: LINK_BASE_URL is unset on the backend.');
+        setMessage(
+          'Link setup is incomplete on the backend: LINK_BASE_URL or LINK_TOKEN_SECRET is missing.',
+        );
         return;
       }
       if (!response.ok) {

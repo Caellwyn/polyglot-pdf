@@ -11,6 +11,27 @@ import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/re
 
 import { MintLinkPage } from './MintLinkPage';
 
+// The page reads its user from context, not from a prop -- the route element
+// passes no props. Firebase initializes at import time and throws without an
+// API key, so the whole auth chain is stubbed (same pattern as
+// clientRoute.test.tsx).
+vi.mock('../firebase/config', () => ({
+  auth: { __sentinel: 'auth' },
+  db: { __sentinel: 'db' },
+}));
+vi.mock('../contexts/AuthContext', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>(
+    '../contexts/AuthContext',
+  );
+  return {
+    ...actual,
+    useAuth: () => ({
+      user: { uid: 'staff-1', getIdToken: async () => 'staff-token' },
+      loading: false,
+    }),
+  };
+});
+
 const CATALOGUE = {
   ok: true,
   status: 200,
@@ -84,6 +105,28 @@ describe('MintLinkPage', () => {
     const mint = calls.find((c) => c.url.includes('/api/links/mint'));
     expect(mint).toBeTruthy();
     expect(JSON.parse(String(mint!.init!.body)).kit_id).toBe('w7');
+  });
+
+  it('AUTHENTICATES both calls with the signed-in staff token', async () => {
+    // Cross-surface review r1: the page was mounted with no `user` prop and
+    // read one, so resolveSessionToken(undefined) returned undefined and BOTH
+    // requests went out with no Authorization header -- an empty form picker
+    // and a 401 on every mint, in production only. The other tests inject
+    // fetchImpl and assert on rendered output, so all 9 stayed green.
+    // VFF_DISABLE_AUTH masks it locally; Cloud Run does not.
+    const { calls } = await mounted({
+      ok: true, status: 200,
+      json: async () => ({ url: 'https://demo.example/f#t=tok' }),
+    });
+    fireEvent.click(screen.getByText('Create link'));
+    await waitFor(() => expect(screen.getByLabelText('Client link')).toBeTruthy());
+
+    const catalogue = calls.find((c) => c.url.includes('/api/form-kits'));
+    const mint = calls.find((c) => c.url.includes('/api/links/mint'));
+    for (const call of [catalogue, mint]) {
+      const headers = (call!.init!.headers ?? {}) as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer staff-token');
+    }
   });
 
   it('says MINTING IS OFF rather than showing a 404', async () => {
