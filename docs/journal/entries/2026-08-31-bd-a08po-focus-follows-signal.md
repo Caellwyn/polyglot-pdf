@@ -44,7 +44,7 @@ rules we had been considering became unnecessary -- there is nothing to
 interrupt. Silence is recoverable ("what goes here?" is one utterance); unwanted
 speech is not.
 
-## Why a click is ignored while the model is speaking
+## Why a click is ignored while audio is playing
 
 The first proposal was to let the in-flight question keep its own referent while
 a click moved focus elsewhere. The maintainer rejected it: under DTI the model

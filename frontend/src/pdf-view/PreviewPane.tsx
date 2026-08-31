@@ -74,7 +74,8 @@ export default function PreviewPane({
   const closeEditor = useCallback(() => setEditingFieldId(null), []);
   // Opening a field's editor is this view's focus gesture (bd polyglot-pdf-a08po):
   // open it AND move the search origin. onFieldFocus decides for itself whether
-  // to honour the move (it suppresses while the model is speaking).
+  // to honour the move (it suppresses while ANY audio is playing -- a clip too,
+  // not just the model's own PCM; see SchemaForm's handleFieldFocus).
   const openEditor = useCallback((fieldId: string) => {
     setEditingFieldId(fieldId);
     onFieldFocus?.(fieldId);

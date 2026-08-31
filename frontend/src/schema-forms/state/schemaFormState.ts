@@ -75,7 +75,7 @@ export interface SchemaFormState {
 
   // Where the next-field search RESUMES from (bd polyglot-pdf-a08po). Set to
   // the field the user most recently acted on -- a manual edit, or a click/
-  // focus while the model is silent. computeNextField starts its scan at this
+  // focus while no audio is playing. computeNextField starts its scan at this
   // field's position and WRAPS to the top, instead of always restarting at
   // index 0.
   //
@@ -1535,7 +1535,7 @@ export class SchemaFormStateManager {
   /**
    * Move the next-field search origin to `fieldId` (see searchOriginFieldId on
    * the state interface, bd polyglot-pdf-a08po). Called when the user acts on a
-   * field directly -- a manual edit, or a click/focus while the model is silent
+   * field directly -- a manual edit, or a click/focus while no audio is playing
    * -- so the search resumes from where they ARE instead of the top of the form.
    *
    * Deliberately NOT a pin: this only moves where the scan starts. The field
