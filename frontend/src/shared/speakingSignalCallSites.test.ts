@@ -38,6 +38,7 @@ const SRC = resolve(__dirname, '..')
 const SCANNED = [
   'demo/VoiceOverlay.tsx',
   'demo/VoiceOverlayMobile.tsx',
+  'schema-forms/components/SchemaForm.tsx',
   'shared/connection.ts',
   'shared/useGeminiSpeaking.ts',
 ]
@@ -111,6 +112,18 @@ const CLASSIFIED: Array<{
     fragment: 'if (audioManager?.IS_SPEAKING()) return',
     signal: 'isModelSpeaking',
     why: 'post-resume re-prompt guard -- must not re-prompt over the model',
+  },
+  {
+    file: 'SchemaForm.tsx',
+    fragment: "if (typeof audio?.IS_SPEAKING === 'function' && audio.IS_SPEAKING()) {",
+    signal: 'isModelSpeaking',
+    why:
+      'click-to-focus suppression (bd polyglot-pdf-a08po) -- asks "is the model ' +
+      'mid-utterance?", the same question barge-in asks. A click during an ' +
+      'overlap must NOT move the search origin: under DTI the model holds one ' +
+      "field's schema and the backend coercion pointer is singular, so " +
+      'retargeting mid-question mis-fills the spoken answer. isSpeaking() reads ' +
+      'false during a model+clip overlap, which would let exactly that through.',
   },
 
   // --- SUSPEND / RESUME: MUST keep clip-suppression (s1iex.4 deadlock) ------

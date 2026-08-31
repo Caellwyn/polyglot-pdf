@@ -10,6 +10,9 @@ export interface TextAreaFieldProps {
   value: any; // Accept any type (primitive or FieldValue wrapper)
   onChange: (value: string) => void;
   onBlur?: () => void;
+  // Cursor entered this field (bd polyglot-pdf-a08po) -- moves the next-field
+  // search origin; never makes the model speak.
+  onFocus?: () => void;
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
@@ -23,6 +26,7 @@ export function TextAreaField({
   value,
   onChange,
   onBlur,
+  onFocus,
   error,
   disabled = false,
   confirmed = false,
@@ -71,6 +75,7 @@ export function TextAreaField({
         value={displayValue}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
+        onFocus={onFocus}
         placeholder={field.placeholder}
         maxLength={field.max_length || field.validation?.max_length}
         rows={getRows()}

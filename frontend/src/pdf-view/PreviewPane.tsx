@@ -40,6 +40,10 @@ export interface PreviewPaneProps {
   validationErrors?: Record<string, string>;
   onFieldChange?: (fieldId: string, value: any) => void;
   onFieldBlur?: (fieldId: string) => void;
+  // The user opened this field's editor (bd polyglot-pdf-a08po). On the PDF
+  // view the overlay click IS the focus gesture -- it is what puts the cursor
+  // in the field -- so it moves the next-field search origin, silently.
+  onFieldFocus?: (fieldId: string) => void;
 }
 
 const MIN_SCALE = 0.5;
@@ -53,6 +57,7 @@ export default function PreviewPane({
   validationErrors,
   onFieldChange,
   onFieldBlur,
+  onFieldFocus,
 }: PreviewPaneProps) {
   const { document: pdfDoc, numPages, isLoading, error } = usePDFDocument(pdfUrl ?? null);
   const [scale, setScale] = useState(1.0);
@@ -67,6 +72,13 @@ export default function PreviewPane({
   const editable = !!(onFieldChange && onFieldBlur);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const closeEditor = useCallback(() => setEditingFieldId(null), []);
+  // Opening a field's editor is this view's focus gesture (bd polyglot-pdf-a08po):
+  // open it AND move the search origin. onFieldFocus decides for itself whether
+  // to honour the move (it suppresses while the model is speaking).
+  const openEditor = useCallback((fieldId: string) => {
+    setEditingFieldId(fieldId);
+    onFieldFocus?.(fieldId);
+  }, [onFieldFocus]);
   useEffect(() => {
     setEditingFieldId(null);
   }, [currentFieldId, scale]);
@@ -169,7 +181,7 @@ export default function PreviewPane({
             currentFieldId={currentFieldId}
             onFirstPageLoad={handleFirstPageLoad}
             editingFieldId={editable ? editingFieldId : null}
-            onOverlayClick={editable ? setEditingFieldId : undefined}
+            onOverlayClick={editable ? openEditor : undefined}
             onCloseEditor={editable ? closeEditor : undefined}
             validationErrors={validationErrors}
             onFieldChange={onFieldChange}

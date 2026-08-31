@@ -72,6 +72,26 @@ export interface SchemaFormState {
   // follows the jump with no extra plumbing. Cleared when the pinned field is
   // confirmed or skipped (the form then resumes its normal fill order).
   pinnedFieldId?: string | null;
+
+  // Where the next-field search RESUMES from (bd polyglot-pdf-a08po). Set to
+  // the field the user most recently acted on -- a manual edit, or a click/
+  // focus while the model is silent. computeNextField starts its scan at this
+  // field's position and WRAPS to the top, instead of always restarting at
+  // index 0.
+  //
+  // Why: without it, every manual edit re-targeted the model at the FIRST
+  // unconfirmed field while the user was working far below it, so a
+  // mostly-manual user had the model's focus yanked back to the top of the
+  // form after each entry. Wrapping also means fields the user skipped past
+  // are swept up on the way around -- there is no separate end-of-form
+  // "redirect to missed fields" phase, and completion is unchanged (the
+  // search coming up empty is still exactly isFormComplete's condition).
+  //
+  // This is a SEARCH ORIGIN, not a pin: it never forces a field to be next
+  // (an unconfirmed field AT the origin is returned by the normal priority
+  // rules, not by virtue of being the origin), and a stale value is harmless
+  // -- an id that no longer resolves just falls back to index 0.
+  searchOriginFieldId?: string | null;
 }
 
 export class SchemaFormStateManager {
@@ -151,6 +171,7 @@ export class SchemaFormStateManager {
       // intent defeated for the first connect).
       selectedLanguage: loadOnboardingState().language ?? undefined,
       pinnedFieldId: null, // Field-level navigation pin (bd jnjj.36)
+      searchOriginFieldId: null, // Next-field search origin (bd a08po)
     };
 
     this.save(newState);
@@ -224,6 +245,13 @@ export class SchemaFormStateManager {
       // Initialize the navigation pin if missing (old state, bd jnjj.36)
       if (parsed.pinnedFieldId === undefined) {
         parsed.pinnedFieldId = null;
+      }
+
+      // Initialize the search origin if missing (old state, bd a08po). A
+      // persisted session from before this field existed resumes from the top,
+      // which is exactly the previous behavior.
+      if (parsed.searchOriginFieldId === undefined) {
+        parsed.searchOriginFieldId = null;
       }
 
       // Initialize disclaimer fields if missing (migration for existing sessions)
@@ -1470,6 +1498,22 @@ export class SchemaFormStateManager {
    */
   static pinField(state: SchemaFormState, fieldId: string): SchemaFormState {
     const newState = { ...state, pinnedFieldId: fieldId, lastUpdated: Date.now() };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Move the next-field search origin to `fieldId` (see searchOriginFieldId on
+   * the state interface, bd polyglot-pdf-a08po). Called when the user acts on a
+   * field directly -- a manual edit, or a click/focus while the model is silent
+   * -- so the search resumes from where they ARE instead of the top of the form.
+   *
+   * Deliberately NOT a pin: this only moves where the scan starts. The field
+   * itself is returned only if the normal priority rules pick it.
+   */
+  static setSearchOrigin(state: SchemaFormState, fieldId: string): SchemaFormState {
+    if (state.searchOriginFieldId === fieldId) return state;
+    const newState = { ...state, searchOriginFieldId: fieldId, lastUpdated: Date.now() };
     this.save(newState);
     return newState;
   }

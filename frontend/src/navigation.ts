@@ -177,6 +177,30 @@ export function computeNextField(
     sectionFieldIds: Array.from(currentSectionFieldIds).slice(0, 5) // Show first 5 for brevity
   });
 
+  // Resume the scan from where the USER most recently acted, wrapping to the
+  // top (bd polyglot-pdf-a08po). Both priority loops below iterate this
+  // rotation instead of raw schema order.
+  //
+  // Rotating (rather than scanning to the end and stopping) is what makes the
+  // wrap a complete sweep: fields BEFORE the origin -- the ones a user filling
+  // out of order skipped past -- are visited after the tail, so they are still
+  // reached and completion is unchanged (an empty result still means every
+  // shown field is confirmed, exactly isFormComplete's condition). There is
+  // therefore no separate end-of-form "go back for missed fields" phase.
+  //
+  // The origin field itself is visited LAST, not first: the user just acted on
+  // it, so the next thing to offer is what comes AFTER it. If it is genuinely
+  // still unconfirmed (e.g. edited but not verified) the rotation comes back
+  // around to it once nothing later qualifies.
+  //
+  // A stale/unknown origin degrades to the previous behavior (start at 0).
+  const originIndex = state.searchOriginFieldId
+    ? fieldsToCheck.findIndex(f => f.id === state.searchOriginFieldId)
+    : -1;
+  const searchOrder = originIndex >= 0
+    ? [...fieldsToCheck.slice(originIndex + 1), ...fieldsToCheck.slice(0, originIndex + 1)]
+    : fieldsToCheck;
+
   // When skipConfirmed=false, just return first field (no prioritization)
   if (!skipConfirmed) {
     for (const field of fieldsToCheck) {
@@ -191,7 +215,8 @@ export function computeNextField(
 
   // PRIORITY 1: Find first filled but UNCONFIRMED field
   // This ensures Gemini must confirm fields before moving on
-  for (const field of fieldsToCheck) {
+  // (searchOrder = fieldsToCheck rotated to the user's last-acted field, bd a08po)
+  for (const field of searchOrder) {
     // Skip fields the form does not currently show. shouldShowField ALONE --
     // an extra `field.hidden ||` would skip a `hidden: true` field whose
     // show_if is SATISFIED, which renders and is required, leaving it
@@ -235,7 +260,8 @@ export function computeNextField(
   }
 
   // PRIORITY 2: Find first EMPTY field (skipping confirmed fields)
-  for (const field of fieldsToCheck) {
+  // (searchOrder, same rotation as PRIORITY 1 -- bd a08po)
+  for (const field of searchOrder) {
     // shouldShowField ALONE -- see the PRIORITY 1 loop above (bd ubam).
     if (!shouldShowField(field, state.fieldValues, state.schema.fields)) {
       continue;
