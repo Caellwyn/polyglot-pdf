@@ -435,17 +435,30 @@ sessionStorage.clear()
 
 ## 🚢 Deployment
 
-Two independent deployment paths exist — demo and production — targeting separate Firebase/GCP projects. Deploy is **local/manual**; there is no active production environment today.
+Two live channels — **staging** and **demo** — both inside `polyglot-demo-aa709`, separated by Cloud Run service and Firebase Hosting site. Deploy is **local/manual**; there is no production environment.
+
+Always deploy to staging first, verify it there, then promote to demo: some bugs only appear once deployed, and the demo is the URL shown to investors and pilot firms.
 
 ### Top-level deploy scripts (canonical)
 
 ```bash
-# Deploy to demo (polyglot-demo-aa709)
-./deploy-demo.sh
-
-# Deploy to production (polyglot-forms-919f2) — inactive target
-./deploy-production.sh
+# Deploy to staging — the test deploy (polyglot-app-staging.web.app)
+./deploy-staging.sh
 ```
+
+```bash
+# Deploy to demo — shown to investors/pilot firms (polyglot-demo-aa709.web.app)
+./deploy-demo.sh
+```
+
+`./deploy-production.sh` is **dead** and refuses to run: its target project
+(`polyglot-forms-919f2`) is unreachable.
+
+The two channels share the GCP/Firebase project, the form-kits bucket, Firestore
+and the Auth user pool — so staging protects against broken **code** reaching the
+demo, not against bad **data**. Publishing a form kit or changing Firestore rules
+affects the demo whichever channel you ran it from. See
+[`docs/doctrine/promotion-tiers.md`](docs/doctrine/promotion-tiers.md).
 
 These wrap the frontend build (`build:schema:demo` / production Vite build) plus
 `firebase deploy`, and also ship the Firestore security rules
@@ -460,8 +473,9 @@ The underlying npm scripts in `frontend/` build then call `firebase deploy`
 directly, pinned to the voice-app hosting target (`hosting` is an array of named
 targets since the hosted schema editor got its own site -- bd 92qe.4):
 `npm run deploy:demo` ships `--only hosting:app`, and `npm run deploy`
-(production) ships `--only firestore:rules,hosting:app`. Neither touches the
-editor site (that ships only via `deploy-editor.sh`). Prefer the top-level
+(production) ships `--only firestore:rules,hosting:app` at the dead prod project.
+Neither touches the editor site (that ships only via `deploy-editor.sh`), and
+neither targets staging (`deploy-staging.sh` is the only staging path). Prefer the top-level
 scripts: `deploy-demo.sh` runs a separate `firebase deploy --only
 firestore:rules` step so the demo path ships rules too (the app-only
 `npm run deploy:demo` would not).
@@ -504,14 +518,14 @@ For each project:
 
 ### Firestore Security Rules
 
-See `firestore.rules` (wired into `firebase.json`) — users can only read/write their own profile document, and the `authorized_emails` collection is readable by unauthenticated users (required for the pre-signup check) but not writable from the client. **`deploy-demo.sh` and `deploy-production.sh` ship these rules** (`firebase deploy --only firestore:rules`) on any frontend/full deploy; a project left on default-deny breaks both email signup and the profile-doc sync.
+See `firestore.rules` (wired into `firebase.json`) — users can only read/write their own profile document, and the `authorized_emails` collection is readable by unauthenticated users (required for the pre-signup check) but not writable from the client. **`deploy-demo.sh` ships these rules** (`firebase deploy --only firestore:rules`) on any frontend/full deploy — `deploy-staging.sh` deliberately does not, because rules are project-wide and a staging rules deploy would apply to the live demo; a project left on default-deny breaks both email signup and the profile-doc sync.
 
 ### Deployment Checklist
 
 - [ ] `GOOGLE_CLOUD_PROJECT` set in Cloud Run (done by `deploy-new.sh`). Leave `VERTEXAI` at its `true` default — a deployed service refuses to start on the AI Studio path (Vertex-only production, bd `polyglot-pdf-5e6a`)
 - [ ] `FORM_KITS_MODE` and `FORM_KITS_GCS_BUCKET` set in Cloud Run
 - [ ] Firebase Auth sign-in methods enabled (Google + Email/Password)
-- [ ] Firestore security rules deployed (shipped automatically by `deploy-demo.sh` / `deploy-production.sh`; standalone: `firebase deploy --only firestore:rules`) — a project on default-deny breaks email signup + profile sync
+- [ ] Firestore security rules deployed (shipped automatically by `deploy-demo.sh`; standalone: `firebase deploy --only firestore:rules`) — a project on default-deny breaks email signup + profile sync
 - [ ] `authorized_emails` collection populated for email sign-up users
 - [ ] `.env.demo` / `.env.production` contain correct `VITE_WS_URL` and Firebase config
 - [ ] Verify WebSocket connects after deploy (check Cloud Run logs for `ws_connect`)

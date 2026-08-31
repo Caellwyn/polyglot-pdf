@@ -1,16 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-28 (bd polyglot-pdf-rhc2v: the `/api/editor/*`
-surface takes NO shared secret -- `SCHEMA_EDITOR_TOKEN` /
-`SCHEMA_AUTHOR_TOKEN` are deleted, access is a per-person Firebase claim
-granted with `scripts/bootstrap_editor_user.py`, and there is no
-unconfigured-surface 503 left to fail closed into. Also bd
-polyglot-pdf-qp632: the VFF_DEV_LOGGING dead-config note's
-`callback_handler.py:466` citation had drifted -- the real "LOGGING POLICY"
-comment is now inside `on_tool_call`; re-anchored by name instead of line
-number.) See [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-08-31 (bd polyglot-pdf-9qn64: added the staging channel -- two live channels in one project, separated by Cloud Run service + Hosting site; the production channel is dead and its script refuses to run.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -90,8 +82,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`gcs`** (what deploys use) — reads
   `gs://<FORM_KITS_GCS_BUCKET>/<FORM_KITS_REMOTE_PREFIX>/<kit_id>/...`. The
   `--set-env-vars` that pins `FORM_KITS_MODE=gcs` + the bucket lives in
-  **`deploy-all.sh`**; the `deploy-demo.sh` / `deploy-production.sh` wrappers only
-  set the shell vars (project, bucket name) and delegate to it.
+  **`deploy-all.sh`**; the `deploy-staging.sh` / `deploy-demo.sh` wrappers only
+  set the shell vars (project, bucket name, service, hosting target) and delegate
+  to it.
 
 ## Required & dev-only env vars
 
@@ -270,15 +263,26 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 
 ## Deployment (local/manual — no CI)
 
-Two Firebase/GCP projects, both running a Cloud Run service named
-**`polyglot-backend`** in **`us-central1`**. Aliases live in `.firebaserc`:
+**Two LIVE channels, one project.** Both run in `polyglot-demo-aa709` in
+**`us-central1`**, separated by Cloud Run SERVICE and Hosting SITE (bd
+`polyglot-pdf-9qn64`). Aliases and target mappings live in `.firebaserc`:
 
-| Channel | Project ID | Script | Frontend URL |
-|---------|-----------|--------|--------------|
-| **demo** | `polyglot-demo-aa709` | `deploy-demo.sh` | `https://polyglot-demo-aa709.web.app` |
-| **production** | `polyglot-forms-919f2` (`.firebaserc` `default`/`prod`) | `deploy-production.sh` | `https://polyglot-forms-919f2.web.app` |
+| Channel | Cloud Run service | Hosting target -> site | Script | Frontend URL |
+|---------|-------------------|------------------------|--------|--------------|
+| **staging** (test deploy) | `polyglot-backend-staging` | `app-staging` -> `polyglot-app-staging` | `deploy-staging.sh` | `https://polyglot-app-staging.web.app` |
+| **demo** (protected) | `polyglot-backend` | `app` -> `polyglot-demo-aa709` | `deploy-demo.sh` | `https://polyglot-demo-aa709.web.app` |
 
-Both delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
+Staging is the disposable target for finding deploy-only bugs; the demo is what
+investors and pilot firms see. Promote staging -> demo, never straight to demo.
+The two SHARE the project, form-kits bucket, Firestore, and Auth user pool, so
+staging isolates broken CODE, not bad DATA -- see
+[../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
+
+**`production` is DEAD.** `deploy-production.sh` targets `polyglot-forms-919f2`
+(still the `.firebaserc` `default`/`prod` alias), which is unreachable -- bd
+`polyglot-pdf-je6iy`. The script now refuses to run.
+
+All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
 a brand-new Cloud Run service by name -- not part of the regular update flow the
 two channel scripts use.
@@ -305,35 +309,49 @@ two channel scripts use.
   manifest.
 - **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
   `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
-  → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting:app`. The
+  → `.env.demo`; staging reuses the demo build, same project keys). Output
+  `frontend/dist` → `firebase deploy --only hosting:$FRONTEND_HOSTING_TARGET`
+  (`app` by default, `app-staging` for staging). The
   bare `npm run build` is NOT used: it loads `.env.production` under the default
   Vite config, whose Firebase keys differ per channel — a demo built that way dies
   with `auth/invalid-api-key`. **Backend WS URL is resolved at deploy time** (bd
   `emm7`): before the build, `deploy-all.sh` resolves the live Cloud Run URL
-  (`gcloud run services describe polyglot-backend --format 'value(status.url)'`)
-  and exports `VITE_WS_URL` (which OVERRIDES the `.env.<mode>` `VITE_WS_URL` line —
+  (`gcloud run services describe $BACKEND_SERVICE_NAME --format 'value(status.url)'`)
+  and exports `VITE_WS_URL`. **That resolution is what binds a frontend build to
+  its channel's backend** -- `deploy-staging.sh` exports
+  `BACKEND_SERVICE_NAME=polyglot-backend-staging` for the frontend stage too, not
+  just the backend one. `BACKEND_SERVICE_NAME` and `FRONTEND_HOSTING_TARGET` are
+  both `${VAR:-default}` in `deploy-all.sh`, never bare assignments: a bare
+  assignment silently clobbers the caller's export and would deploy staging over
+  the demo with no error (pinned by
+  `backend/tests/unit/test_deploy_channel_isolation.py`). It exports `VITE_WS_URL` (which OVERRIDES the `.env.<mode>` `VITE_WS_URL` line —
   standard Vite precedence). The `VITE_WS_URL` values committed in `.env.demo` /
   `.env.production` are now documented FALLBACK-ONLY, because the Cloud Run auto-URL
   hash is not stable (it drifted on a service recreate and 404'd the deployed
   frontend).
 - **Firestore rules** — `firebase deploy --only firestore:rules` ships
   `firestore.rules` (wired via `firebase.json`). This step lives in the
-  **`deploy-demo.sh` / `deploy-production.sh` wrappers**, not `deploy-all.sh`, runs
+  **`deploy-demo.sh` wrapper**, not `deploy-all.sh`, runs
   only on a frontend/full deploy, and runs **before** the frontend so the new
-  frontend never goes live against stale rules. A project left on default-deny
+  frontend never goes live against stale rules. **`deploy-staging.sh` deliberately
+  does NOT ship rules**: they are project-wide, not per-site, so a staging rules
+  deploy would apply to the live demo. A project left on default-deny
   breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
   profile sync -- see [auth.md](auth.md).
 
 ### Hosted schema editor (second Hosting site)
 
-`firebase.json` `hosting` is an ARRAY of two named targets (bd `92qe.4`):
-`app` (the voice app, `frontend/dist`, keeps its `/api` rewrite) and `editor`
+`firebase.json` `hosting` is an ARRAY of three named targets (bd `92qe.4`,
+extended by `stgenv`): `app` (the voice app, `frontend/dist`, `/api` rewrite ->
+`polyglot-backend`), `app-staging` (same build dir, `/api` rewrite ->
+`polyglot-backend-staging`), and `editor`
 (`schema-editor/dist`, SPA catch-all, **no** `/api` rewrite -- the editor calls
 Cloud Run directly via `VITE_API_BASE_URL`; the Hosting rewrite's 60s cap would
 kill minutes-long extraction). `.firebaserc` maps `editor` ->
-`polyglot-editor-demo` on the demo project. **Because targets are named, a bare
-`firebase deploy --only hosting` deploys BOTH sites** -- `deploy-all.sh` is
-pinned to `--only hosting:app`, the `frontend/package.json` `deploy` /
+`polyglot-editor-demo` on the demo project, and `app-staging` ->
+`polyglot-app-staging`. **Because targets are named, a bare
+`firebase deploy --only hosting` deploys ALL THREE sites** -- `deploy-all.sh` is
+pinned to the parameterized `--only hosting:$FRONTEND_HOSTING_TARGET`, the `frontend/package.json` `deploy` /
 `deploy:demo` shortcuts are pinned too (the unscoped prod one would
 otherwise THROW -- prod maps no `editor` target -- and the demo one would
 silently ship a stale editor build), and the editor ships only via

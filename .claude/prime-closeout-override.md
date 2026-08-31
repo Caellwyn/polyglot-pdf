@@ -31,9 +31,12 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
   docs-only PR pings**, as does a trivial PR that got no adversarial review;
   whether a Haiku clear should ever qualify is an open maintainer question, so do
   NOT widen it autonomously.
-- **Demo deploy** — there is NO `main`/prod tier; the demo remote is the live
-  target. Deploys are manual (`deploy-demo.sh`, not branch-triggered). The agent
-  MAY run the demo deploy, but only after a local test of the change, with
+- **Deploys** — there is NO `main`/prod tier (`deploy-production.sh` targets a
+  dead project and refuses to run). Two manual channels, not branch-triggered:
+  `deploy-staging.sh` (the disposable test deploy) then `deploy-demo.sh` (the
+  demo shown to investors/pilot firms). Verify on staging before promoting to
+  the demo. The agent
+  MAY run either deploy, but only after a local test of the change, with
   explicit per-instance maintainer permission, and a post-deploy test-drive (the
   three-part gate in [`docs/doctrine/promotion-tiers.md`](../docs/doctrine/promotion-tiers.md)).
   Syncing the local root to `dev` is autonomous; merging a PR into `dev` is

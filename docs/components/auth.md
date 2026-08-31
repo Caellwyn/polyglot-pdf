@@ -66,8 +66,8 @@ match /authorized_emails/{doc} {
 ```
 
 > **Deploy note.** The repo `firestore.rules` is the source of truth and is wired
-> into `firebase.json` (`firestore.rules`). `deploy-demo.sh` and
-> `deploy-production.sh` ship it (`firebase deploy --only firestore:rules`) on any
+> into `firebase.json` (`firestore.rules`). `deploy-demo.sh` ships it
+> (`firebase deploy --only firestore:rules`) on any
 > frontend/full deploy, so a normal deploy keeps the live rules in sync with the
 > repo. A project left on default-deny breaks BOTH email signup (the unauth
 > `authorized_emails` read) and the `users/{uid}` profile sync below. Deploy is a

@@ -36,11 +36,18 @@ without the other -- see [Surface contracts](#surface-contracts) below.
 ## Environments
 
 Promotion is worktree -> local test server (`scripts/dev-local.ps1`) -> `dev` ->
-demo remote (`deploy-demo.sh`). Deploys are **local/manual** (`deploy-demo.sh`,
-`deploy-production.sh` -> `deploy-all.sh`), NOT branch-triggered/CI, and there is
-**no active prod** -- the demo remote (`polyglot-demo-aa709`) is the live target.
-The agent may run `deploy-demo.sh` under the three-part gate (local-test-first +
-per-instance permission + post-deploy test-drive); see
+**staging** remote (`deploy-staging.sh`) -> **demo** remote (`deploy-demo.sh`).
+Deploys are **local/manual** (`deploy-staging.sh` / `deploy-demo.sh` ->
+`deploy-all.sh`), NOT branch-triggered/CI, and there is **no prod** --
+`deploy-production.sh` targets a dead, unreachable project and refuses to run.
+Staging and demo are two channels in the ONE project `polyglot-demo-aa709`, split
+by Cloud Run service (`polyglot-backend-staging` / `polyglot-backend`) and Hosting
+site; staging is the disposable target for deploy-only bugs, the demo is what
+investors and pilot firms see. They SHARE Firestore, the form-kits bucket and the
+Auth pool, so staging isolates broken code, not bad data.
+The agent may run either deploy under the three-part gate (local-test-first +
+per-instance permission + post-deploy test-drive), and a demo deploy expects the
+change to have been verified on staging first; see
 [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md).
 
 One live Firebase project: the demo, `polyglot-demo-aa709` (the former
