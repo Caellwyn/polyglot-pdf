@@ -276,9 +276,15 @@ unauthenticated endpoint an oracle for probing which links and firms exist.
 Entitlement is RE-CHECKED at open rather than trusted from the mint-time
 snapshot, since a firm can be suspended in the 48 hours in between.
 
-**Minting is OFF by default** (`LINK_MINTING_ENABLED`) until the spend
-ceiling ships (bd `polyglot-pdf-ik7e`) -- see
-[config-deployment.md](config-deployment.md).
+**Minting is OFF by default** (`LINK_MINTING_ENABLED`); the spend ceiling it
+waited on (bd `polyglot-pdf-ik7e`) has shipped, and the DEMO now enables it --
+see [config-deployment.md](config-deployment.md).
+
+Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind
+`ProtectedRoute`. The page is only the door: `firm_id` and `employee_id` come
+from the VERIFIED token, never from anything the page sends, so a reachable
+page cannot grant itself a firm.
+
 ### The firm WRITE path: authorization is not authentication
 
 `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`) is the firm

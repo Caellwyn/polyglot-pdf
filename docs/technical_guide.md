@@ -124,7 +124,7 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
-| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`**, which stays false until the spend ceiling lands (bd `polyglot-pdf-ik7e`). `components/auth.md` |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed, and the demo now enables it). Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
@@ -696,11 +696,15 @@ system that is NOT a Firebase account. Five coupled pieces:
   bounded-retry path and a "reconnect failed" modal (bd polyglot-pdf-cke6v).
 
   Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
-  and are tested in `link_budget.cost_ceiling_usd_for_kit`, but threading one
-  through costs a metadata load on every client connect for a feature no kit
-  uses yet. And the check is at CONNECT, so a single session that blows the
-  ceiling mid-call is caught on the NEXT connect -- overrun is bounded by one
-  session.
+  and are tested in `link_budget.cost_ceiling_usd_for_kit`, but the socket
+  passes no kit metadata, so a kit's own `link_cost_ceiling_usd` is INERT --
+  and two kits now declare one (w7 and i-90 at $3, bd polyglot-pdf-gob8l), so
+  those links are bounded by the GLOBAL default rather than the declared $3.
+  Fails safe: a higher ceiling, never an absent one. Threading it through
+  costs a metadata load on every client connect, so it is its own bead
+  (polyglot-pdf-4tjt7). And the check is at CONNECT, so a single session that
+  blows the ceiling mid-call is caught on the NEXT connect -- overrun is
+  bounded by one session.
 
   A new door that authenticates a client credential must decide which side it
   is on. THREE dependencies exist, not two:
@@ -729,8 +733,11 @@ The redeemed token lives in `sessionStorage` via
 `shared/sessionCredential.ts` -- TAB-SCOPED, so it survives a reload (the
 entry gate clears it from the URL, so memory-only stranded a client on any
 refresh) and dies with the tab. Never `localStorage`, which would outlive the
-browser session. All NINE backend-calling sites resolve through that one
-module; a tenth inline `user.getIdToken()` fails CI.
+browser session. EVERY backend-calling site resolves through that one
+module; an inline `user.getIdToken()` anywhere else fails CI. Deliberately not
+a COUNT: the guard asserts the allowlist is empty, not a number, so a count
+here goes stale silently every time a site is added (it said NINE until the
+mint page at `/console/links` made it ten, bd polyglot-pdf-gob8l).
 
 Frontend: `/f` renders `ClientLinkEntry` OUTSIDE `ProtectedRoute`
 (`frontend/src/schema-forms/AppRoutes.tsx` -- extracted from `main.tsx` so a
@@ -744,8 +751,12 @@ pinned, so a unilateral change on either reddens. The gate pins the form id via
 `saveOnboardingState` and leaves LANGUAGE unset -- the form is the firm's
 choice, the language is the client's.
 
-**Minting is off by default** until the spend ceiling ships (bd
-polyglot-pdf-ik7e): a live link is an unauthenticated door to a paid session.
+**Minting is off by default** -- a live link is an unauthenticated door to a
+paid session, so it stays off wherever `LINK_MINTING_ENABLED` is not explicitly
+set. The spend ceiling it waited on (bd polyglot-pdf-ik7e) has shipped and the
+DEMO now enables it (bd polyglot-pdf-gob8l). The ceiling in force is the global
+one; per-form `link_cost_ceiling_usd` is declared by the shipped kits but not
+yet threaded through the handshake (bd polyglot-pdf-4tjt7).
 
 ### 10. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 

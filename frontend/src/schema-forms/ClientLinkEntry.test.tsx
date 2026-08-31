@@ -114,8 +114,8 @@ describe("ClientLinkEntry", () => {
     await screen.findByTestId("form-app");
 
     // The assertion that MATTERS is the second one: it proves the credential
-    // is reachable through the resolver the nine backend-calling sites
-    // actually use, not merely that some key was written to storage.
+    // is reachable through the resolver every backend-calling site actually
+    // uses, not merely that some key was written to storage.
     expect(sessionStorage.getItem("vff_client_link_token")).toBe("good.token");
     expect(await resolveSessionToken(null)).toBe("good.token");
   });
