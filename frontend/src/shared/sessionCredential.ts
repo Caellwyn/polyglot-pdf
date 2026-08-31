@@ -94,7 +94,7 @@ export function clearClientLinkToken(): void {
 }
 
 /**
- * Resolve the credential for a backend call.
+ * Resolve the credential for a backend call ON THE FORM-FILLING PATH.
  *
  * The CLIENT LINK WINS when present. A client-link session has no Firebase
  * user, so the two are mutually exclusive in practice -- but the explicit
@@ -102,6 +102,11 @@ export function clearClientLinkToken(): void {
  * signed-in browser, sending their STAFF token would start a session
  * attributed to the staff account rather than to the link, quietly breaking
  * both the telemetry attribution and the link's one-time-use accounting.
+ *
+ * NOT FOR STAFF-ONLY CONSOLE ACTIONS -- use resolveStaffToken for those (bd
+ * polyglot-pdf-so88g). Minting a link is a firm-staff act, and the link-wins
+ * rule sends the wrong credential the moment a staffer has tried one of their
+ * own links in that tab.
  */
 export function resolveSessionToken(
   user: { getIdToken: () => Promise<string> } | null | undefined,
@@ -117,6 +122,35 @@ export function resolveSessionToken(
   // caller therefore work unchanged.
   const token = readToken();
   if (token) return token;
+  return user ? user.getIdToken() : undefined;
+}
+
+/**
+ * Resolve the credential for a STAFF-ONLY action (bd polyglot-pdf-so88g).
+ *
+ * The mirror image of resolveSessionToken: the FIREBASE USER WINS, and a
+ * stashed client-link token is ignored outright rather than preferred.
+ *
+ * WHY A SECOND FUNCTION RATHER THAN A FLAG ON THE FIRST. The link-wins rule
+ * is load-bearing on the form-filling path -- it keeps a session attributed
+ * to the link rather than to a staffer who happened to open it, which the
+ * one-time-use accounting and the telemetry both depend on. Flipping that
+ * globally to fix minting would break the thing it exists to protect. The two
+ * paths genuinely want opposite precedence, so they get one function each,
+ * named for the tier they serve.
+ *
+ * The bug this fixes: a staffer mints a link, opens it in the same tab to try
+ * it, and every later mint from that tab sends the CLIENT token. The backend
+ * resolves it to a caller with no uid and refuses with 403 -- reported to the
+ * operator as "your account is not attached to a firm", which is both wrong
+ * and unfixable by them. Fails closed (no unauthorized mint), but the
+ * mint-test-mint-again loop is exactly the console's first workflow.
+ *
+ * Synchronous-union return, for the same reason as resolveSessionToken.
+ */
+export function resolveStaffToken(
+  user: { getIdToken: () => Promise<string> } | null | undefined,
+): string | undefined | Promise<string | undefined> {
   return user ? user.getIdToken() : undefined;
 }
 

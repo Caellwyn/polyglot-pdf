@@ -10,6 +10,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 import { MintLinkPage } from './MintLinkPage';
+import { clearClientLinkToken, setClientLinkToken } from '../shared/sessionCredential';
 
 // The page reads its user from context, not from a prop -- the route element
 // passes no props. Firebase initializes at import time and throws without an
@@ -64,6 +65,10 @@ afterEach(() => {
   // every subsequent query.
   cleanup();
   vi.restoreAllMocks();
+  // The client-link token is module state AND sessionStorage, so a leak from
+  // the so88g test would silently change what every later test authenticates
+  // with -- passing or failing for a reason unrelated to its own subject.
+  clearClientLinkToken();
 });
 
 describe('MintLinkPage', () => {
@@ -105,6 +110,34 @@ describe('MintLinkPage', () => {
     const mint = calls.find((c) => c.url.includes('/api/links/mint'));
     expect(mint).toBeTruthy();
     expect(JSON.parse(String(mint!.init!.body)).kit_id).toBe('w7');
+  });
+
+  it('uses the STAFF token even when this tab has opened a client link', async () => {
+    // bd polyglot-pdf-so88g. The console shares an origin and a tab with /f,
+    // and the mint-test-mint-again loop is the first thing anyone does with
+    // this page: mint a link, open it to check it, come back and mint another.
+    // Step 2 stashes a client-link token in sessionStorage, and the
+    // FORM-FILLING resolver prefers it by design -- so the second mint went
+    // out with the client's credential and was refused, reported to the
+    // operator as "not attached to a firm".
+    //
+    // Not fixed by flipping that precedence: link-wins is load-bearing on the
+    // fill path (it keeps a session attributed to the link, which the
+    // one-time-use accounting depends on). The console asks a different
+    // question, so it calls a different resolver.
+    setClientLinkToken('client.link.token');
+
+    const { calls } = await mounted({
+      ok: true, status: 200,
+      json: async () => ({ url: 'https://demo.example/f#t=tok' }),
+    });
+    fireEvent.click(screen.getByText('Create link'));
+    await waitFor(() => expect(screen.getByLabelText('Client link')).toBeTruthy());
+
+    const mint = calls.find((c) => c.url.includes('/api/links/mint'));
+    const headers = (mint!.init!.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer staff-token');
+    expect(headers.Authorization).not.toContain('client.link.token');
   });
 
   it('AUTHENTICATES both calls with the signed-in staff token', async () => {
