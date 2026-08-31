@@ -13,6 +13,7 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
+import { kitName } from './kitName';
 import { readStampFromMetadata } from './readinessStamp';
 import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
@@ -213,7 +214,7 @@ export async function setKitStatus(
   // caught here only because a test drove the real revert path.
   if (existing?.status === 'submitted' || existing?.status === 'unpublished') {
     throw new Error(
-      `"${entry.id}" is ${existing?.status} and cannot be changed by a local `
+      `${kitName(entry)} is ${existing?.status} and cannot be changed by a local `
       + 'write -- a submitted kit is awaiting author review, and a superseded '
       + 'one is what earlier confirmations point at. Use the backend, which '
       + 'runs the full gate.',

@@ -1160,6 +1160,33 @@ async def list_editor_kits(
     return EditorKitListResponse(kits=kits)
 
 
+def _kit_name(kit_id: str, meta: Optional[dict]) -> str:
+    """How a refusal names a kit to the human who has to act on it.
+
+    A kit has two identities: the id (a folder name, often auto-generated --
+    `form`, `form-2`) and the label a human gave it ("W-7"). The catalogue
+    shows the label, so a refusal naming only the id cannot be matched to
+    anything on screen: the maintainer hit exactly that, told deletion had
+    refused "form-2" with no "form-2" visible anywhere (bd polyglot-pdf-kztlr).
+
+    Returns '"W-7" (form-2)' when the label was chosen, and '"form-2"' when
+    the label is absent or merely a re-spelling of the id -- the catalogue
+    synthesises one from the id (_friendly_label), so repeating it would show
+    one fact twice. Mirrors kitName() in schema-editor/src/utils/kitName.ts.
+    """
+    label = (meta or {}).get("label")
+    if not isinstance(label, str) or not label.strip():
+        return f'"{kit_id}"'
+    label = label.strip()
+
+    def flat(text: str) -> str:
+        return re.sub(r"[-_\s]+", "", text).lower()
+
+    if flat(label) == flat(kit_id):
+        return f'"{kit_id}"'
+    return f'"{label}" ({kit_id})'
+
+
 async def _load_meta_or_404(store, kit_id: str) -> tuple[Optional[dict], set[str]]:
     """The kit's (metadata, filenames) -- 404 when the kit isn't in the store.
 
@@ -1425,13 +1452,16 @@ async def get_archived_kit_schema(
     kit_id = _safe_kit_id(kit_id)
     marker = _safe_archive_marker(marker)
     store = get_form_kit_store()
-    await _load_meta_or_404(store, kit_id)
+    # KEEP the metadata: the 404 below names the kit, and it must name it the
+    # way the catalogue does (bd polyglot-pdf-kztlr) -- which needs the label
+    # this call has already read.
+    meta, _files = await _load_meta_or_404(store, kit_id)
     try:
         schema = await store.load_archived_revision(kit_id, marker)
     except FormKitNotFound as exc:
         raise HTTPException(
             status_code=404,
-            detail=f"Archived revision not found for kit {kit_id}") from exc
+            detail=f"Archived revision not found for kit {_kit_name(kit_id, meta)}") from exc
     except FormKitStoreError as exc:
         _log.error(
             "kit_archive_read_failed", kit_id=kit_id, marker=marker, error=str(exc))
@@ -1674,7 +1704,7 @@ async def get_editor_kit_schema(
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no schema yet"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema yet"
         ) from exc
     except FormKitStoreError as exc:
         _log.error("editor_schema_load_failed", kit_id=kit_id, error=str(exc))
@@ -1696,7 +1726,7 @@ async def get_editor_kit_pdf(
         data = await store.load_pdf_bytes(kit_id, pdf_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no PDF"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no PDF"
         ) from exc
     except FormKitStoreError as exc:
         _log.error("editor_pdf_load_failed", kit_id=kit_id, error=str(exc))
@@ -1888,7 +1918,7 @@ async def lint_editor_kit_schema(
             status_code=502, detail="Unable to read the kit's PDF form data"
         ) from exc
     if meta is None and dump_data is None:
-        raise HTTPException(status_code=404, detail=f"Kit {kit_id} not found")
+        raise HTTPException(status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} not found")
     findings = lint_schema(schema, dump_data)
     out = [LintFindingOut(**f.as_dict()) for f in findings]
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
@@ -1936,7 +1966,7 @@ async def repair_editor_kit(
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no schema to repair"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema to repair"
         ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
@@ -2018,7 +2048,7 @@ async def translate_editor_kit_options(
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no schema to translate"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema to translate"
         ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
@@ -2126,7 +2156,7 @@ async def derive_editor_kit_divisions(
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no schema"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema"
         ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
@@ -2329,7 +2359,7 @@ async def _regenerate_guidance_locked(
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no schema"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema"
         ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
@@ -2549,7 +2579,7 @@ async def get_unclaimed_widgets(
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(
-            status_code=404, detail=f"Kit {kit_id} has no schema"
+            status_code=404, detail=f"Kit {_kit_name(kit_id, meta)} has no schema"
         ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
@@ -2822,8 +2852,9 @@ async def set_editor_kit_status(
         if _status_of(superseded_meta) != "complete":
             raise HTTPException(
                 status_code=409,
-                detail=f"Cannot replace {superseded_kit}: it is not published "
-                       f"(status {_status_of(superseded_meta)}), so there is "
+                detail=f"Cannot replace {_kit_name(superseded_kit, superseded_meta)}: "
+                       f"it is not published (status "
+                       f"{_status_of(superseded_meta)}), so there is "
                        "nothing to retire.",
             )
 
@@ -3062,7 +3093,7 @@ async def set_editor_kit_status(
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        f'"{kit_id}" is already published without a version. Adding '
+                        f'{_kit_name(kit_id, meta)} is already published without a version. Adding '
                         f"one now would rewrite the schema its existing confirmation "
                         f"records were confirmed against. Revert it to draft and "
                         f"publish again to give this revision a version."
@@ -3280,9 +3311,12 @@ async def set_editor_kit_status(
                        superseded=superseded_kit, error=str(exc))
             raise HTTPException(
                 status_code=502,
-                detail=f"{kit_id} was published, but {superseded_kit} could not "
-                       "be unpublished -- BOTH are live for this form now. "
-                       f"Unpublish {superseded_kit} to finish the swap.",
+                detail=f"{_kit_name(kit_id, meta)} was published, but "
+                       f"{_kit_name(superseded_kit, superseded_meta)} could "
+                       "not be unpublished -- BOTH are live for this form "
+                       "now. Unpublish "
+                       f"{_kit_name(superseded_kit, superseded_meta)} to "
+                       "finish the swap.",
             ) from exc
         _log.info("editor_kit_superseded", kit_id=kit_id,
                   superseded=superseded_kit, role=role.role, actor=role.label())
@@ -3418,10 +3452,12 @@ async def delete_editor_kit(
         has_records = False
         unverifiable = str(exc)
 
-    # The human sees the LABEL; the id is internal (and the editor currently
-    # shows ids where labels belong -- bd polyglot-pdf-kztlr), so a refusal that
-    # names only the id is unreadable against the catalogue on screen.
-    label = (meta or {}).get("label") or kit_id
+    # Name it the way the catalogue does (bd polyglot-pdf-kztlr). This route is
+    # where the bug was REPORTED, and label-only was its first fix -- but
+    # nothing makes labels unique, so two kits can share one and a label-only
+    # refusal is ambiguous in exactly the way an id-only one was. _kit_name
+    # carries both, and drops the id only when the label restates it.
+    label = _kit_name(kit_id, meta)
 
     # An ever-live kit needs the STRONGER token specifically -- the weaker one
     # does not escalate into it, or the tier is decorative.
@@ -3433,7 +3469,7 @@ async def delete_editor_kit(
             status_code=409,
             detail=(
                 DELETE_NEEDS_DOUBLE_ACK_PREFIX
-                + f' "{label}" has been published, so clients may have filled it '
+                + f" {label} has been published, so clients may have filled it "
                 f"and agreed to what they saw. Their agreement records will "
                 f"survive this deletion -- but the exact form revision those "
                 f"records name will be gone, so you would no longer be able to "
@@ -3460,7 +3496,7 @@ async def delete_editor_kit(
             status_code=409,
             detail=(
                 DELETE_NEEDS_ACK_PREFIX
-                + f' "{label}" was never published, but {reason}. Deleting it '
+                + f" {label} was never published, but {reason}. Deleting it "
                 f"removes the form, its PDF and every archived version, "
                 f"permanently."
             ),
@@ -3956,11 +3992,12 @@ async def extract_editor_kit(
         )
     _require_edit_lock(meta, role)
     if pdf_file not in files:
-        raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
+        raise HTTPException(status_code=409,
+                            detail=f"Kit {_kit_name(kit_id, meta)} has no {pdf_file} to extract from")
     if schema_file in files and not force:
         raise HTTPException(
             status_code=409,
-            detail=f'"{schema_file}" already exists for kit "{kit_id}"; re-extracting '
+            detail=f'"{schema_file}" already exists for kit {_kit_name(kit_id, meta)}; re-extracting '
                    "would overwrite it (pass force=true to replace it)",
         )
 

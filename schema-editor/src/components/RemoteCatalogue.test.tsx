@@ -569,7 +569,8 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
       'fresh-kit', { instructionsPdf: undefined, translateOptions: true,
         enrichGuidance: true }));
     await waitFor(() =>
-      expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
+      expect(screen.getByText(/Extracted "Fresh Form" \(fresh-kit\)/))
+        .toBeInTheDocument());
   });
 
   it('unchecking the translate-options checkbox threads false (bd 2h9j)', async () => {
@@ -649,7 +650,8 @@ describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => 
 
       resolveExtract({ ok: true, detail: '[OK] wrote schema.json -- 7 fields' });
       await waitFor(() =>
-        expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
+        expect(screen.getByText(/Extracted "Fresh Form" \(fresh-kit\)/))
+        .toBeInTheDocument());
       expect(screen.queryByText(/Extracting\.\.\./)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
