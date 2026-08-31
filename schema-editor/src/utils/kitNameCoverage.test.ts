@@ -66,9 +66,13 @@ describe('kit naming coverage (bd polyglot-pdf-kztlr)', () => {
       const text = fs.readFileSync(f, 'utf8');
       text.split('\n').forEach((line, i) => {
         if (!QUOTED_KIT_ID.test(line)) return;
-        // The card subtitle deliberately shows the id, unquoted and beside the
-        // label; it is the one place the id is the point.
-        if (line.includes('text-gray-500')) return;
+        // NO carve-out for the card subtitle. It renders {kit.id} UNQUOTED
+        // beside the label -- deliberately, it is the one place the id is the
+        // point -- and the pattern above requires quotes, so it never matched.
+        // An earlier draft excluded any line containing 'text-gray-500', which
+        // keyed the exemption on an unrelated Tailwind class: a future line
+        // pairing that class with a genuinely raw id would have been waved
+        // through silently. An exemption nothing needs is pure attack surface.
         // kitName.ts IS the formatter -- it necessarily writes the raw form.
         if (f.endsWith('kitName.ts')) return;
         offenders.push(`${path.relative(SRC, f)}:${i + 1}  ${line.trim()}`);

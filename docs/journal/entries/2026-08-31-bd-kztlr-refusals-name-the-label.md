@@ -153,3 +153,47 @@ Both fixes are mutation-verified against the reviewer's own findings rather
 than against convenient synthetic cases: reverting the delete route to
 label-only, and `writeLocalStatus` to a raw id, each reddens the guard that was
 blind to it an hour earlier.
+
+## Round 2: the guard was unsound, and one test passed by coincidence
+
+Round 1's fix widened the detector's vocabulary and taught it to follow an
+assignment. Round 2 showed that follow was **unsound**, and found a test that
+had never actually tested anything.
+
+**The detector marked a name safe forever.** It treated any local assigned from
+`_kit_name(...)` *anywhere* in a function as correctly named *everywhere* in
+it. So `label = _kit_name(kit_id, meta)` followed later by `label = kit_id`
+would pass -- and `delete_editor_kit` uses exactly that assign-then-use shape,
+so the hole sat on the route the bug was reported on. Now a name counts as safe
+only if EVERY assignment to it is the safe one. Verified against the reviewer's
+own proof-of-concept.
+
+This is still flow-insensitive: it cannot reason about branches. That is
+recorded in the code rather than left implied, and the bias is deliberate --
+erring toward flagging is the safe direction for a guard, because a false
+positive is a visible argument while a false negative ships.
+
+**Six FormCatalogue tests passed by fixture coincidence.** They assert
+`Extracted "w7"` on a kit whose id is `w7` and whose label is `W7`. Those
+flatten to the same string, so `kitName` correctly emits the bare form -- which
+is byte-identical to what the *unfixed* code emitted. Every one of them would
+have passed a full revert. The sibling RemoteCatalogue tests were updated in
+round 1 and do pin the real behaviour, so the two catalogues' suites had
+silently diverged in what they proved.
+
+Rather than churn the shared fixture, a new test drives the case that
+distinguishes fixed from broken: id `form-2`, label `W-7` -- the maintainer's
+actual situation. Reverting that file's notice reddens exactly one test, the
+new one, which is the measurement that shows the other six were never load-
+bearing.
+
+**And an exemption that protected nothing.** The frontend scan excluded any
+line containing `text-gray-500`, meaning to spare the card subtitle. But the
+subtitle renders `{kit.id}` UNQUOTED and the pattern requires quotes, so it
+never matched -- the carve-out was dead, and keyed on an unrelated Tailwind
+class, so a future line pairing that class with a genuinely raw id would have
+been waved through. Deleted. An exemption nothing needs is pure attack surface.
+
+The through-line across all three rounds: every finding was in a **check**, not
+in the shipped behaviour. The messages were right after round 1. What kept
+being wrong was my confidence that they would stay right.

@@ -73,21 +73,40 @@ def _bare_id_refusals(path: Path):
             # correct, so the detector follows the assignment rather than
             # flagging the variable -- otherwise widening the vocabulary above
             # just trades a blind spot for a false positive.
+            #
+            # A name counts as safe only if EVERY assignment to it in the
+            # function is from _kit_name. "Assigned safely at least once" is
+            # unsound: `label = _kit_name(...)` followed later by
+            # `label = kit_id` would mark the name safe forever and let a
+            # bare-id refusal through -- and delete_editor_kit uses exactly
+            # this assign-then-use shape, so that hole would sit on the route
+            # the bug was reported on. This is still flow-INsensitive (it
+            # cannot reason about branches), but erring toward flagging is the
+            # safe direction for a guard: a false positive is a visible
+            # argument, a false negative ships.
             self.safe = set()
 
         def visit_FunctionDef(self, node):
             prev, prev_safe = self.fn, self.safe
             self.fn = node.name
             self.safe = set()
+            safe_names, unsafe_names = set(), set()
             for n in ast.walk(node):
-                if not isinstance(n, ast.Assign):
+                if not isinstance(n, (ast.Assign, ast.AnnAssign, ast.For)):
                     continue
-                if not (isinstance(n.value, ast.Call)
-                        and getattr(n.value.func, "id", "") == "_kit_name"):
-                    continue
-                for t in n.targets:
-                    self.safe |= {x.id for x in ast.walk(t)
-                                  if isinstance(x, ast.Name)}
+                targets = (n.targets if isinstance(n, ast.Assign)
+                           else [n.target])
+                names = {x.id for t in targets for x in ast.walk(t)
+                         if isinstance(x, ast.Name)}
+                value = getattr(n, "value", None)
+                formatted = (isinstance(value, ast.Call)
+                             and getattr(value.func, "id", "") == "_kit_name")
+                if formatted and isinstance(n, ast.Assign):
+                    safe_names |= names
+                else:
+                    unsafe_names |= names
+            # EVERY assignment must be the safe one.
+            self.safe = safe_names - unsafe_names
             self.generic_visit(node)
             self.fn, self.safe = prev, prev_safe
 
@@ -222,6 +241,13 @@ def test_every_kit_name_argument_is_actually_bound():
     which was true; it cannot ask whether the second argument EXISTS. Routes
     that discard the metadata read are exactly where the next author will reach
     for _kit_name, so this is a likely repeat rather than a one-off.
+
+    LIMIT, stated because a guard that hides one reads as broader assurance
+    than it is: this is flow-INSENSITIVE. A name assigned only on a path that
+    never executes (`if False:`) counts as bound here and would still raise
+    NameError at runtime. Binding a name in dead code is not a shape anyone
+    writes on purpose, so the check errs toward silence there; what it catches
+    is the shape that actually shipped -- no assignment at all.
     """
     unbound = []
     for mod in _editor_route_modules():
