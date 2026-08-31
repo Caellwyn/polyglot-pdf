@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { kitName, kitTitle } from './kitName';
 
+/**
+ * These cases are the SHARED CONTRACT with the backend's `_kit_name`.
+ * The same rows appear as _PARITY_CASES in
+ * backend/tests/unit/test_kit_refusals_name_the_label.py. The two formatters
+ * cannot share code across the language boundary, so they share this table:
+ * change the rule on one side without the other and that side goes red.
+ */
+
 describe('kitName -- naming a kit in prose (bd polyglot-pdf-kztlr)', () => {
   it('names a human-labelled kit by BOTH label and id', () => {
     // The maintainer's actual case: a card reading "W-7" whose id is `form-2`.

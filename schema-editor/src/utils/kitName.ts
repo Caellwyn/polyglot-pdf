@@ -12,6 +12,14 @@
  * when a kit has been renamed, both identities are real and the human may
  * need either (the delete dialog makes them type the id), so both are shown.
  * When the label is merely a restatement of the id, repeating it is noise.
+ *
+ * MIRRORED by `_kit_name` in backend/routes/editor_kit_routes.py -- server
+ * refusals must name a kit the same way the catalogue does, or the message
+ * cannot be matched to the card it is about. The two cannot share code across
+ * the language boundary, so they share a CASE TABLE instead: the rows in
+ * kitName.test.ts are the same rows as _PARITY_CASES in
+ * backend/tests/unit/test_kit_refusals_name_the_label.py. Change one side and
+ * the other side's tests are what tell you.
  */
 
 /** The minimum shape a kit needs to be named -- both catalogue entry types

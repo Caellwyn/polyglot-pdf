@@ -91,8 +91,14 @@ def _bare_id_refusals(path: Path):
             self.fn = node.name
             self.safe = set()
             safe_names, unsafe_names = set(), set()
+            # AugAssign belongs here too: `label += f" ({kit_id})"` MUTATES a
+            # safe name back into an unsafe one, and this file's own style
+            # already builds messages that way elsewhere. Tracking only
+            # rebinding would leave the same hole round 2 closed, reachable
+            # through a different node type.
             for n in ast.walk(node):
-                if not isinstance(n, (ast.Assign, ast.AnnAssign, ast.For)):
+                if not isinstance(n, (ast.Assign, ast.AnnAssign, ast.For,
+                                      ast.AugAssign, ast.NamedExpr)):
                     continue
                 targets = (n.targets if isinstance(n, ast.Assign)
                            else [n.target])
@@ -105,6 +111,19 @@ def _bare_id_refusals(path: Path):
                     safe_names |= names
                 else:
                     unsafe_names |= names
+            # Rebinding through a `with ... as`, `except ... as`, `global` or
+            # `nonlocal` is a bind this walk cannot classify, so treat it as
+            # unsafe rather than assume: a guard should fail loudly on a shape
+            # it does not understand, not stay silent.
+            for n in ast.walk(node):
+                if isinstance(n, ast.withitem) and n.optional_vars is not None:
+                    unsafe_names |= {x.id for x in ast.walk(n.optional_vars)
+                                     if isinstance(x, ast.Name)}
+                elif isinstance(n, ast.ExceptHandler) and n.name:
+                    unsafe_names.add(n.name)
+                elif isinstance(n, (ast.Global, ast.Nonlocal)):
+                    unsafe_names |= set(n.names)
+
             # EVERY assignment must be the safe one.
             self.safe = safe_names - unsafe_names
             self.generic_visit(node)
@@ -258,3 +277,60 @@ def test_every_kit_name_argument_is_actually_bound():
         "(meta, _files = await _load_meta_or_404(...)) rather than discarding "
         "it:\n  " + "\n  ".join(unbound)
     )
+
+
+# The frontend mirror of _kit_name. The two are hand-written in different
+# languages and cannot share code, so the SHARED CONTRACT is pinned instead:
+# one table of cases, asserted against both implementations. Reviewers flagged
+# the drift risk in two separate rounds; this is what makes the mirroring
+# checkable rather than merely asserted in a docstring.
+_KITNAME_TS = (
+    Path(__file__).resolve().parents[3]
+    / "schema-editor" / "src" / "utils" / "kitName.ts"
+)
+
+# Every row must render identically on both sides. Keep in sync with the
+# parametrized Python cases above -- these ARE those cases, re-run through the
+# TypeScript implementation.
+_PARITY_CASES = [
+    ("form-2", "W-7", '"W-7" (form-2)'),
+    ("form-2", "Form 2", '"form-2"'),
+    ("i-90", "I 90", '"i-90"'),
+    ("my_form", "My Form", '"my_form"'),
+    ("w7", "W-7 (ITIN Application)", '"W-7 (ITIN Application)" (w7)'),
+    ("form-2", "", '"form-2"'),
+    ("form-2", "   ", '"form-2"'),
+]
+
+
+def test_the_typescript_mirror_exists_and_states_the_same_rule():
+    """The frontend formatter is present and documents the shared contract.
+
+    A full cross-language parity RUN would need node in the pytest environment,
+    which CI does not guarantee for the backend job -- so this pins what can be
+    checked from here: the mirror exists, names the backend helper, and encodes
+    the same two-branch rule. The behavioural half lives in kitName.test.ts,
+    whose cases are the same table as _PARITY_CASES above.
+
+    This is deliberately a WEAK check, and saying so matters: it cannot catch a
+    logic divergence, only a disappearance. The real protection is that both
+    sides carry the same case table, so a change to one that is not made to the
+    other reddens that side's own tests.
+    """
+    assert _KITNAME_TS.exists(), f"frontend mirror missing: {_KITNAME_TS}"
+    src = io.open(_KITNAME_TS, encoding="utf-8").read()
+    # It must point back here, or the next author cannot find the other half.
+    assert "_kit_name" in src or "editor_kit_routes" in src, (
+        "kitName.ts must name its backend counterpart so the mirror is findable"
+    )
+    # Both branches of the rule must be present.
+    assert "labelRestatesId" in src, "the restatement branch is missing"
+    assert "${kit.id}" in src, "the bare-id branch is missing"
+
+
+def test_python_side_matches_the_shared_parity_table():
+    """_kit_name agrees with every row of the table kitName.test.ts also uses."""
+    for kit_id, label, expected in _PARITY_CASES:
+        assert _kit_name(kit_id, {"label": label}) == expected, (
+            f"parity row diverged for id={kit_id!r} label={label!r}"
+        )

@@ -197,3 +197,47 @@ been waved through. Deleted. An exemption nothing needs is pure attack surface.
 The through-line across all three rounds: every finding was in a **check**, not
 in the shipped behaviour. The messages were right after round 1. What kept
 being wrong was my confidence that they would stay right.
+
+## Round 3: one more way to mutate a safe name, and the parity gap closed
+
+Round 2 hardened the detector against REBINDING a safe name. Round 3 found the
+same hazard through a different AST node: `label += f" ({kit_id})"` MUTATES the
+name without rebinding it, so the walk never saw it. Not contrived -- this very
+file builds messages with `+=` elsewhere.
+
+The fix does not stop at `AugAssign`. Anything that binds a name in a way this
+walk cannot classify -- a walrus, `with ... as`, `except ... as`, `global`,
+`nonlocal` -- now marks the name unsafe. A guard should fail loudly on a shape
+it does not understand rather than stay silent, and the cost of being wrong in
+that direction is an argument, not a shipped bug.
+
+**The parity gap, raised in rounds 1 and 2 and deferred both times, is now
+closed.** The two formatters cannot share code across the language boundary, so
+they share a CASE TABLE: the rows in `kitName.test.ts` are the rows in
+`_PARITY_CASES`. Changing the rule on one side without the other reddens that
+side. Writing the pin immediately found a real omission -- `kitName.ts` did not
+name its backend counterpart anywhere, so a reader had no way to discover the
+other half existed.
+
+The parity check's own weakness is stated in its docstring: it cannot execute
+the TypeScript from pytest, so it verifies the mirror exists and states the same
+rule, and leaves behaviour to the shared table. A check that overstates itself
+is the failure mode this whole bead kept rediscovering.
+
+## Three rounds, one pattern
+
+Every finding across all three rounds was in a CHECK, never in shipped
+behaviour. Both exit criteria passed from round 1 onward. What kept being wrong
+was the machinery meant to keep them passing:
+
+| Round | The check's blind spot |
+|-------|------------------------|
+| 1 | Enumerated variable NAMES, so a kit named through a local called `label` was invisible -- on the very route the bug was reported on |
+| 2 | Marked a name safe FOREVER after one safe assignment; six tests passed by fixture coincidence |
+| 3 | Tracked rebinding but not MUTATION (`+=`) |
+
+The lesson is not "write better guards." It is that a guard's claim is only as
+good as the question it asks, and the question is easy to get subtly wrong in a
+way no green run reveals. Each round's fix was correct and incomplete, which is
+exactly the shape CLAUDE.md scar #8 describes -- experienced here from the
+inside, in the checker rather than the code.
