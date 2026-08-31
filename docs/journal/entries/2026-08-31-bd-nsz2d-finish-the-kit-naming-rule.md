@@ -285,3 +285,53 @@ on something NEAR its target rather than the target.
 The correction is a question to ask before writing any check, not after review
 returns it: *what exactly must be true, and am I testing that, or something
 next to it?*
+
+## Round 5: stop patching, replace the mechanism
+
+Sixth defeat, and this one was demonstrated against real source rather than a
+synthetic string: an ordinary `//` comment containing a single backtick flips
+the whole-file parity and blinds the guard for **the rest of that file**. This
+source contains **171 such comments**. All three scanned files were passing only
+because their backtick totals happened to be even -- luck about today's prose,
+not a property.
+
+The reviewer's judgment, which I accept: a regex scan cannot distinguish a
+template literal from a comment, a string, or a regex without tokenizing
+TypeScript. That is structural. A sixth patch would repair the sixth case and
+open a seventh.
+
+**So the inference is gone.** A legitimate bare label now carries an explicit
+`// kit-label-ok:` marker in the source, and the guard asks one question with
+one answer: is the marker there? The entire exemption set is FOUR lines -- two
+tooltips, each a two-branch ternary -- so the cost is four comments, and the
+false-negative surface is zero for anything nobody deliberately marked.
+
+`tooltipSpans`, the brace tracking, the backtick parity, the comparison
+exclusion: all deleted. About 150 lines of logic that approximated an answer
+unreliably, replaced by a substring check.
+
+Every historical evasion is kept as a battery against the new scan -- sharing a
+line with a tooltip, sitting before one, sitting after one closes, sharing a
+line with a comparison, a multi-line template, and now the comment-backtick.
+None can hide a message any more, because none of them is a marker. A further
+test pins that a marker is not a file-wide amnesty: beyond its six-line reach a
+bare label is an offender again, since one annotation silently excusing
+everything below it is precisely how the parity bug behaved.
+
+## Six rounds, and the thing I should have asked sooner
+
+Every finding across both beads was in a check; the shipped messages were right
+from each bead's first pass. Two habits produced all of them:
+
+**Verifying the piece I just wrote** instead of the behaviour I care about --
+the guard tested variable names, the battery tested a helper.
+
+**Excusing by proximity** -- keying a carve-out on a CSS class, a line, a brace
+region, a neighbouring operator, a running character count. Each was correct for
+the case in hand and wrong for the next, because "near" is not a property
+anything preserves.
+
+The question that ends both, asked before writing a check rather than after
+review returns it: *what exactly must be true, and am I testing that, or
+something next to it?* And when the answer needs inference over untrusted text,
+the better move is usually to stop inferring and require the author to say so.

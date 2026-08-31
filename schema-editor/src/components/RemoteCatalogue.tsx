@@ -1146,6 +1146,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   onClick={() => onOpenKit(kit)}
                   disabled={!kit.hasSchema}
                   title={kit.hasSchema
+                    // kit-label-ok: the card's own hover tooltip. The id renders in
+                    // this same card three lines below, so both identities are
+                    // already side by side and repeating it here would say one
+                    // thing twice (bd polyglot-pdf-nsz2d).
                     ? `Open ${kit.label} for editing`
                     : `${kit.label} has no schema yet`}
                 >

@@ -84,139 +84,70 @@ describe('kit naming coverage (bd polyglot-pdf-kztlr)', () => {
   });
 });
 
+
 /**
  * A bare, interpolated KIT label -- the other half of the same rule
  * (bd polyglot-pdf-nsz2d).
  *
  * bd kztlr fixed every message naming a kit by its ID. It left the SUCCESS and
- * STATUS messages naming one by its LABEL, which is ambiguous in exactly the
- * same way and for the same reason: nothing enforces label uniqueness, so two
- * kits can legitimately share one. The sharpest case was the delete success
- * banner -- irreversible, and the card it names is gone from the catalogue by
- * the time it renders.
+ * STATUS messages naming one by its LABEL, which is ambiguous for the same
+ * reason: nothing enforces label uniqueness, so two kits can legitimately share
+ * one. The sharpest case was the delete success banner -- irreversible, and the
+ * card it names is gone from the catalogue by the time it renders.
  *
- * Scoped to `kit`/`entry`/`created`/`k`, the four names that hold a catalogue
- * entry. `field.label`, `section.label`, `source.label` and `target.label` are
- * NOT kits, and flagging them would make this guard noisy enough to be
- * suppressed.
+ * WHY THERE IS NO CLEVERNESS HERE. Five earlier versions tried to INFER which
+ * matches were user-facing -- excluding a line by its CSS class, then by
+ * containing `title={`, then by a brace region, then by a nearby `===`, then by
+ * counting backticks to guess "am I inside a template literal". A reviewer
+ * defeated every one, and the last was the worst: an ordinary `//` comment
+ * containing a single backtick flipped the parity and blinded the guard for the
+ * rest of the file. There are 171 such comments in this source; all three
+ * scanned files passed only because their totals happened to be even.
  *
- * The same limit as the id half applies: this matches a SHAPE. A label reached
- * some other way -- through a variable, a prop, a server message -- is
- * invisible here, and so is a JSX TEXT node (`<option>{k.label}</option>`),
- * which is a real gap tracked as bd polyglot-pdf-5ivqx.
+ * A regex scan cannot tell a template literal from a comment, a string, or a
+ * regex without tokenizing TypeScript. So it no longer tries. A legitimate bare
+ * label carries an explicit `// kit-label-ok:` marker in the source, and this
+ * asks one question with one answer: is the marker there? The whole exemption
+ * set is FOUR lines (two tooltips, each a two-branch ternary), so the cost is
+ * four comments and the false-negative surface is zero for anything nobody
+ * deliberately marked.
  *
- * `kitLabel` props are deliberately out of scope: the decision belongs at the
- * call site, which knows what else is on screen. (DeleteKitDialog does also
- * receive `kitId` -- it stays label-only in its heading for the reason its own
- * comment gives, not because no id was available.)
+ * The limit that REMAINS, stated because a guard that hides one reads as
+ * broader assurance than it is: this matches a SHAPE, `${kit.label}`. A label
+ * reaching a human another way -- through a variable, a prop, a server message,
+ * or a JSX text node like `<option>{k.label}</option>` (bd polyglot-pdf-5ivqx)
+ * -- is invisible to it. `kitLabel` props are deliberately out of scope: the
+ * call site knows what else is on screen, so the decision belongs there.
  */
 const BARE_KIT_LABEL = /\$\{\s*(?:kit|entry|created|k)\??\.label\b/;
-
-/** The same pattern, global -- the scan must see EVERY match on a line. */
 const ALL_BARE_KIT_LABELS = new RegExp(BARE_KIT_LABEL.source, 'g');
 
-/**
- * Character offsets of every `title={...}` tooltip expression in a file.
- *
- * WHY WHOLE-FILE RATHER THAN PER-LINE. Three per-line attempts were each
- * defeated, and the third failure is the instructive one: after `title={...}`
- * closed mid-line, the region kept extending, so an offender LATER on that
- * same line was swallowed. Tracking "am I inside a region" while walking one
- * line at a time meant re-deriving that state at every line boundary, and each
- * fix repaired one boundary case and opened the next.
- *
- * Computing the spans ONCE over the whole file removes the class: a span opens
- * at `title={` and closes when its braces balance, wherever that lands. There
- * is no per-line state left to get wrong, and "is this match inside a span" is
- * then a plain interval test.
- *
- * (This is still not a JSX parser: a `title={` inside a comment or a string
- * literal opens a phantom span. Where that phantom BALANCES it exempts a
- * little text it should not -- narrow, and the battery below pins the shapes
- * that matter. Where it does NOT balance the span is DISCARDED rather than
- * run to EOF, because a span that swallowed the rest of the file would
- * disable the guard everywhere downstream: maximum blast radius, zero
- * signal.)
- */
-function tooltipSpans(text: string): Array<[number, number]> {
-  const spans: Array<[number, number]> = [];
-  const OPEN = 'title={';
-  let at = text.indexOf(OPEN);
-  while (at >= 0) {
-    let depth = 0;
-    let i = at + OPEN.length - 1; // the '{' itself
-    for (; i < text.length; i += 1) {
-      if (text[i] === '{') depth += 1;
-      else if (text[i] === '}') {
-        depth -= 1;
-        if (depth === 0) break;
-      }
-    }
-    // AN UNBALANCED `title={` EXEMPTS NOTHING. Running off the end means the
-    // braces never closed -- a phantom opened by a `title={` inside a comment
-    // or a string literal. Extending such a span to EOF would silently
-    // disable this guard for the whole rest of the file, which is the worst
-    // possible failure for a check: maximum blast radius, zero signal. An
-    // exemption we cannot delimit is not an exemption we can trust, so it is
-    // dropped and the offenders after it are reported.
-    if (i < text.length) spans.push([at, i]);
-    at = text.indexOf(OPEN, (i < text.length ? i : at + OPEN.length) + 1);
-  }
-  return spans;
-}
+/** Marks a bare label as deliberate. Must sit within MARKER_REACH lines above. */
+const MARKER = '// kit-label-ok:';
+const MARKER_REACH = 6;
 
 /**
- * The guard itself, over one file's text -- returns the offending line numbers.
+ * Offending line numbers in one file's text.
  *
- * EXTRACTED SO THE BATTERY DRIVES THE REAL SCAN. An earlier battery exercised
- * `tooltipSpans` directly on synthetic strings, which felt equivalent and was
- * not: reverting the caller from `matchAll` back to a single-match `.search()`
- * left every one of those cases GREEN, because the helper was still correct and
- * only its consumer had regressed. A battery that tests a helper cannot see a
- * bug in the code around it -- so this takes text, not a path, and the battery
- * feeds it the same adversarial inputs the real files would contain.
+ * Takes TEXT, not a path, so the battery below drives THIS -- the real scan.
+ * An earlier battery exercised a helper instead, and stayed green when the code
+ * around the helper regressed.
  */
 function scanForBareLabels(text: string): number[] {
+  const lines = text.split('\n');
   const offenders: number[] = [];
-  const spans = tooltipSpans(text);
-  const lineStarts: number[] = [0];
-  text.split('\n').forEach((l) => lineStarts.push(
-    lineStarts[lineStarts.length - 1] + l.length + 1));
-
-  text.split('\n').forEach((line, i) => {
-    // EVERY match on the line, not just the first.
-    for (const m of line.matchAll(ALL_BARE_KIT_LABELS)) {
-      const col = m.index ?? 0;
-      const abs = lineStarts[i] + col;
-      // A card's own hover tooltip is the ONE place label-only is right: it is
-      // attached to the card, whose subtitle renders the id three lines below,
-      // so both identities are already side by side.
-      if (spans.some(([a, b]) => abs >= a && abs <= b)) continue;
-      // `${kit.label}` only reaches a human from inside a TEMPLATE LITERAL. The
-      // same characters in bare code are a comparison or a fallback
-      // (`label === kit.label`, `kit.label ?? kit.id`), which says nothing to
-      // anyone.
-      //
-      // An earlier version skipped the whole LINE when it saw `===`/`??`
-      // anywhere on it -- so `if (x === y) setNotice(\`"${kit.label}" done\`);`
-      // scanned clean. That is the fourth time in this bead an exemption keyed
-      // on something ADJACENT to its target excused something else, which is
-      // the rule this very file keeps restating.
-      //
-      // COUNTED FROM THE START OF THE FILE, not the line. A per-LINE count was
-      // the fifth instance of the same error, and this time in the UNSAFE
-      // direction: a template literal opened on an earlier line has zero
-      // backticks before the match on ITS line, so a real multi-line message
-      //     setNotice(`Deleted
-      //       ${kit.label}
-      //       permanently.`);
-      // read as "not prose" and went unflagged. Per-line state was exactly the
-      // bug already fixed once in tooltipSpans; I reintroduced it here rather
-      // than carrying the lesson across.
-      const backticksBefore = (text.slice(0, abs).match(/`/g) ?? []).length;
-      if (backticksBefore % 2 === 0) continue;
-      offenders.push(i + 1);
+  lines.forEach((line, i) => {
+    if (!ALL_BARE_KIT_LABELS.test(line)) {
+      ALL_BARE_KIT_LABELS.lastIndex = 0;
+      return;
     }
+    ALL_BARE_KIT_LABELS.lastIndex = 0;
+    // The marker may sit a few lines up: it explains a whole ternary, and
+    // prettier splits these across lines. Bounded so a marker cannot silently
+    // license an unrelated match far below it.
+    const from = Math.max(0, i - MARKER_REACH);
+    const covered = lines.slice(from, i + 1).some((l) => l.includes(MARKER));
+    if (!covered) offenders.push(i + 1);
   });
   return offenders;
 }
@@ -236,69 +167,55 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
       }
     }
     expect(offenders, `These name a kit by label alone, which does not identify `
-      + `it -- nothing stops two kits sharing a label. Use kitName(kit):\n  `
+      + `it -- nothing stops two kits sharing a label. Use kitName(kit), or add `
+      + `a "${MARKER} <why>" comment above if the id is genuinely adjacent:\n  `
       + offenders.join('\n  ')).toEqual([]);
   });
 
-  // TEST THE DETECTOR. Every one of these is an evasion that actually defeated
-  // an earlier version of this guard, kept as a battery so a future
-  // simplification cannot quietly reopen one (CLAUDE.md scar #8: when the same
-  // defect class survives twice, pin every earlier escape at once).
-  it('exempts a real tooltip but nothing beside it', () => {
-    // Driven through scanForBareLabels -- the REAL guard -- not through
-    // tooltipSpans alone. An earlier battery tested the helper directly and
-    // stayed green when the caller regressed from matchAll back to a
-    // single-match .search(): the helper was still right, and only the code
-    // around it was wrong. A battery aimed one layer below the bug proves
-    // nothing about the bug.
+  // TEST THE DETECTOR against every shape that defeated an earlier version.
+  // Each of these was a live evasion a reviewer found, kept so a future
+  // simplification cannot quietly reopen one (CLAUDE.md scar #8).
+  it('flags a bare label unless it is explicitly marked', () => {
+    const bare = 'setNotice(`"${kit.label}" was deleted permanently.`);';
+    expect(scanForBareLabels(bare)).toEqual([1]);
 
-    // A label INSIDE a tooltip is exempt.
-    expect(scanForBareLabels(
-      'title={kit.hasSchema ? `Open ${kit.label}` : `no`}')).toEqual([]);
+    // The marker, and only the marker, exempts it.
+    expect(scanForBareLabels([`  ${MARKER} the card's own tooltip`, bare]
+      .join(String.fromCharCode(10)))).toEqual([]);
 
-    // The offender AFTER a same-line tooltip closes -- the evasion that beat
-    // attempt three.
-    expect(scanForBareLabels(
-      '<b title={`x`} /> setNotice(`"${kit.label}" gone`);')).toEqual([1]);
+    // EVERY historical evasion. None of these can hide a message any more,
+    // because none of them is a marker.
+    const evasions = [
+      // shared a line with a tooltip (beat the line-keyed exemption)
+      '<b title={`x`} /> setNotice(`"${kit.label}" gone`);',
+      // sat before one (beat the offset-keyed exemption)
+      'setNotice(`"${kit.label}" gone`); const t = <b title={`x`} />;',
+      // sat after one closed (beat the brace-region exemption)
+      'const t = <b title={`x`} />; setNotice(`"${kit.label}" gone`);',
+      // shared a line with a comparison (beat the ===/?? exemption)
+      'if (x === y) setNotice(`"${kit.label}" done`);',
+    ];
+    for (const e of evasions) expect(scanForBareLabels(e)).toEqual([1]);
 
-    // ...and BEFORE it opens -- the evasion that beat attempt two.
-    expect(scanForBareLabels(
-      'setNotice(`"${kit.label}" gone`); const t = <b title={`x`} />;'))
-      .toEqual([1]);
-
-    // TWO labels on one line, the first exempted: the second must still be
-    // seen. A single-match scan skipped the whole line.
-    expect(scanForBareLabels(
-      '<b title={`${kit.label}`} /> setNotice(`"${entry.label}" x`);'))
-      .toEqual([1]);
-
-    // An UNBALANCED `title={` (a phantom from a comment or string literal)
-    // must exempt NOTHING rather than run to EOF.
-    expect(scanForBareLabels(['title={ // never closes',
-      'setNotice(`"${kit.label}" x`);'].join(String.fromCharCode(10)))).toEqual([2]);
-
-    // A COMPARISON on the same line must not excuse a real message. The
-    // line-wide `===`/`??` skip let this scan clean -- the fourth instance in
-    // this bead of an exemption excusing its neighbour.
-    expect(scanForBareLabels(
-      'if (x === y) setNotice(`"${kit.label}" done`);')).toEqual([1]);
-
-    // ...while a genuine comparison, which reaches nobody, stays exempt.
-    expect(scanForBareLabels('if (label === kit.label) return;')).toEqual([]);
-    expect(scanForBareLabels('const l = kit.label ?? kit.id;')).toEqual([]);
-
-    // Outside a template literal is not prose: a comment or a quoted string
-    // mentioning the shape is not a message to anyone.
-    expect(scanForBareLabels('// see ${kit.label} for details')).toEqual([]);
-
-    // A MULTI-LINE TEMPLATE LITERAL is still prose. Counting backticks per
-    // LINE read this as code (zero backticks before the match on line 2) and
-    // missed a real message -- a FALSE NEGATIVE, the direction that ships.
+    // A multi-line template literal (beat the per-line backtick count).
     expect(scanForBareLabels(['setNotice(`Deleted', '  ${kit.label}',
       '  permanently.`);'].join(String.fromCharCode(10)))).toEqual([2]);
 
-    // A multi-line tooltip still covers a label on its continuation line.
-    expect(scanForBareLabels(['title={a', '  ? `Open ${kit.label}`',
-      '  : `no`}', 'setNotice(1);'].join(String.fromCharCode(10)))).toEqual([]);
+    // AND the one that beat whole-file backtick parity: an ordinary comment
+    // containing a single backtick, of which this source has 171. Under the
+    // old mechanism everything after it went unseen.
+    expect(scanForBareLabels(['// see `kit.label` for the shape', bare]
+      .join(String.fromCharCode(10)))).toEqual([2]);
+  });
+
+  it('does not let a marker license an unrelated match far below it', () => {
+    // A marker is not a file-wide amnesty. Beyond its reach, a bare label is
+    // an offender again -- otherwise one annotation would silently excuse
+    // every message added after it, which is how the parity bug behaved.
+    const filler = new Array(MARKER_REACH + 2).fill('  // padding');
+    const lines = [`  ${MARKER} a real tooltip`, ...filler,
+      'setNotice(`"${kit.label}" gone`);'];
+    expect(scanForBareLabels(lines.join(String.fromCharCode(10))))
+      .toEqual([lines.length]);
   });
 });
