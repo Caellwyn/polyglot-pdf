@@ -328,7 +328,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       await deleteRemoteKit(kit.id, { acknowledged });
       setDeletePrompt(null);
       setDeleteWarning(null);
-      setNotice(`"${kit.label}" was deleted permanently.`);
+      setNotice(`${kitName(kit)} was deleted permanently.`);
       // Close the editor pane if the deleted kit was the OPEN one (bd
       // polyglot-pdf-hbfky) -- without this, the card vanishes from the
       // catalogue below while the editor keeps showing the deleted kit's
@@ -379,11 +379,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // the other person cannot be notified (there is no server-to-client
       // channel), so the person who did it should at least know they did.
       setNotice(res.preempted
-        ? `You took "${kit.label}" from an editor. They will find out when they `
+        ? `You took ${kitName(kit)} from an editor. They will find out when they `
           + 'next try to save.'
         : take
-          ? `You have "${kit.label}" for editing.`
-          : `Released "${kit.label}".`);
+          ? `You have ${kitName(kit)} for editing.`
+          : `Released ${kitName(kit)}.`);
       await refresh();
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
@@ -474,7 +474,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             `entr${result.retranslated === 1 ? 'y' : 'ies'} first.`
           : '';
         setNotice(
-          `"${kit.label}" marked complete -- it ships with the maintainer's ` +
+          `${kitName(kit)} marked complete -- it ships with the maintainer's ` +
           `next deploy.${drift}`,
         );
       } else if (status === 'unpublished') {
@@ -482,7 +482,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         // The stale two-branch notice called it "reverted to draft", which is
         // the wrong action AND implies it is editable again -- it is not.
         setNotice(
-          `"${kit.label}" is unpublished -- clients no longer see it, its `
+          `${kitName(kit)} is unpublished -- clients no longer see it, its `
           + 'files are kept, and it cannot be edited. Publish it again to put '
           + 'it back in service.',
         );
@@ -495,11 +495,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         // round 6). Name every status explicitly rather than relying on the
         // fall-through.
         setNotice(
-          `"${kit.label}" is submitted for review. An author checks it and `
+          `${kitName(kit)} is submitted for review. An author checks it and `
           + 'publishes it; it is frozen until they do.',
         );
       } else {
-        setNotice(`"${kit.label}" reverted to draft.`);
+        setNotice(`${kitName(kit)} reverted to draft.`);
       }
       await refresh();
     } catch (err) {
@@ -564,7 +564,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setError(null);
     try {
       await setRemoteLabel(kit.id, label);
-      setNotice(`Renamed "${kit.label}" to "${label}".`);
+      setNotice(`Renamed ${kitName(kit)} to "${label}".`);
       await refresh();
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) {
