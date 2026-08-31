@@ -12,11 +12,12 @@ retunes a live deployment by setting an env var and restarting -- no code edit,
 no redeploy of a new image. That is the same shape LINK_MINTING_ENABLED already
 uses in routes/link_routes.py, kept deliberately consistent.
 
-THE ADMIN CONSOLE IS THE PLANNED HOME. These become console-editable settings
-(bd polyglot-pdf-gob8l). Everything here is therefore written as "resolve a
-number for THIS firm / THIS kit", not as a global constant -- so the console
-later writes a stored value and the resolver reads it, without the call sites
-changing.
+THE ADMIN CONSOLE IS THE PLANNED HOME. These are still ENV-ONLY: the console's
+first slice (bd polyglot-pdf-gob8l) ships link minting and leaves both
+resolvers reading os.getenv at call time. Everything here is nonetheless
+written as "resolve a number for THIS firm / THIS kit", not as a global
+constant -- so a later console slice writes a stored value and the resolver
+reads it, without the call sites changing.
 
 PER-FORM CAPS ARE SUPPORTED HERE, BUT ARE NOT YET IN FORCE. The maintainer
 flagged possible per-form pricing (a $5 form and a $15 form under one firm).

@@ -14,8 +14,11 @@
  * grepping the SET found nine, and the three it missed -- the PDF fetch, the
  * filled-preview fetch, the archive read -- are ones a client link needs.
  * That is why this file counts by grep, not from memory, and why
- * sessionCredential.test.ts derives the set from the shipped sources so a
- * TENTH fails CI.) Threading a prop through all of them would leave the
+ * sessionCredential.test.ts derives the set from the shipped sources so a NEW
+ * site fails CI -- the guard asserts the offender list is EMPTY at any
+ * ordinal, so it keeps working as sites are added rather than pinning a
+ * count. The mint page at /console/links was the tenth and passes, because it
+ * routes through here.) Threading a prop through all of them would leave the
  * client tier
  * working on whichever sites got updated and silently unauthenticated on the
  * rest -- and the next new call site would default to broken. Resolving it in
