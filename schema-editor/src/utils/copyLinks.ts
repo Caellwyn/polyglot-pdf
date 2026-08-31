@@ -78,28 +78,51 @@ export function whyNotLinkable(
  * on the draft a human reviews -- the PDF filler skips an option value it
  * cannot match. Refusing at authoring time is the only place this is visible.
  *
- * Deliberately narrow: it refuses only what is provably wrong -- copying INTO a
- * choice field from something whose values cannot be its options. Loose pairs
+ * Deliberately narrow: it refuses only what is provably wrong -- copying INTO an
+ * option-backed field from something that has no options to draw on. Loose pairs
  * (text -> date, number -> text) are left alone, because a form legitimately
  * repeats one answer in differently-typed boxes and over-refusing would block
- * real authoring.
+ * real authoring. Two option-backed fields are left alone too: whether their
+ * option SETS line up is the author's judgment, not something to guess from
+ * types.
  */
-const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox_group']);
+
+/**
+ * Whether a field's value must be one of its own options.
+ *
+ * Derived from the DATA (does it carry options?), not from a hardcoded type
+ * list. An earlier cut listed select/radio/checkbox_group by name and so
+ * disagreed with the runtime's own predicate (schema-forms' isStringEnumField),
+ * which also counts a `type: "checkbox"` carrying options[] -- a real shape,
+ * 27 fields in the adult-intake demo and 59 in the i-589 draft. That mismatch
+ * both UNDER-refused (text -> options-bearing checkbox was allowed, the exact
+ * defect this guard exists to stop) and OVER-refused (that same checkbox as a
+ * SOURCE was wrongly rejected). Reading the options makes a new field type
+ * correct here for free (bd polyglot-pdf-g33y2, cross-surface round 2).
+ */
+function isOptionBacked(field: FormField): boolean {
+  const t = String(field.type);
+  if (t === 'select' || t === 'radio' || t === 'checkbox_group') return true;
+  // A standalone boolean checkbox is NOT option-backed; one carrying options is
+  // a group in all but name, and the runtime treats it as an enum field.
+  return t === 'checkbox' && copyTargetsSafeOptions(field).length > 0;
+}
+
+/** options[] of a field, tolerating a malformed value (shared shape guard). */
+function copyTargetsSafeOptions(field: FormField): unknown[] {
+  const raw = (field as { options?: unknown }).options;
+  return Array.isArray(raw) ? raw : [];
+}
 
 function whyIncompatible(
   source: FormField | undefined, target: FormField | undefined,
 ): string | null {
   if (!source || !target) return null;
-  const tType = String(target.type);
-  const sType = String(source.type);
-  if (!CHOICE_TYPES.has(tType)) return null;      // free-text target: anything goes
-  if (sType === tType) return null;               // same kind: option sets are the author's problem
-  if (!CHOICE_TYPES.has(sType)) {
-    return `"${target.spoken_name || target.name || target.id}" only accepts `
-      + 'its own answer choices, so a typed value copied into it would not '
-      + 'match any of them and would print blank.';
-  }
-  return null;
+  if (!isOptionBacked(target)) return null;   // free-text target: anything goes
+  if (isOptionBacked(source)) return null;    // both option-backed: the author's call
+  return `"${target.spoken_name || target.name || target.id}" only accepts `
+    + 'its own answer choices, so a typed value copied into it would not '
+    + 'match any of them and would print blank.';
 }
 
 /** Whether `from` reaches `to` by following copy_to. Depth-limited. */

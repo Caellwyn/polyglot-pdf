@@ -183,6 +183,53 @@ describe('pickers offer only legal choices', () => {
   });
 });
 
+// EVERY FieldType, so a new one cannot silently fall through the predicate --
+// which is exactly how an options-bearing `checkbox` was missed by a hardcoded
+// {select, radio, checkbox_group} list (cross-surface round 2).
+const ALL_TYPES = [
+  'text', 'textarea', 'date', 'number', 'tel', 'email',
+  'select', 'radio', 'checkbox', 'checkbox_group', 'signature', 'table',
+] as const;
+
+// Option-backed = its value must be one of its own options. Keyed on the DATA:
+// a `checkbox` is option-backed only when it carries options[].
+const OPTION_BACKED = new Set(['select', 'radio', 'checkbox_group']);
+
+function typed(id: string, type: string, withOptions = false): FormField {
+  return field({
+    id, type,
+    ...(withOptions
+      ? { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] }
+      : {}),
+  } as Partial<FormField> & { id: string });
+}
+
+describe('type compatibility: the full FieldType matrix', () => {
+  // A checkbox WITH options is option-backed; without, it is a boolean.
+  const backed = (t: string, opts: boolean) =>
+    OPTION_BACKED.has(t) || (t === 'checkbox' && opts);
+
+  for (const sType of ALL_TYPES) {
+    for (const sOpts of [false, true]) {
+      for (const tType of ALL_TYPES) {
+        for (const tOpts of [false, true]) {
+          const label = `${sType}${sOpts ? '(opts)' : ''} -> ${tType}${tOpts ? '(opts)' : ''}`;
+          it(label, () => {
+            const src = typed('src', sType, sOpts);
+            const tgt = typed('tgt', tType, tOpts);
+            const s = schema([src, tgt]);
+            const refused = whyNotLinkable(s, 'src', 'tgt') !== null;
+            // Refuse EXACTLY when the target is option-backed and the source
+            // is not -- a typed value copied into a choice field prints blank.
+            const shouldRefuse = backed(tType, tOpts) && !backed(sType, sOpts);
+            expect(refused).toBe(shouldRefuse);
+          });
+        }
+      }
+    }
+  }
+});
+
 describe('type compatibility', () => {
   const typed = (over: Partial<FormField>[] = []) => schema([
     field({ id: 'txt' }),
