@@ -92,8 +92,9 @@ app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
 # Client magic links (bd polyglot-pdf-ugm6): /mint is firm-staff-only and
 # /open is the CLIENT's unauthenticated entry. Both are inert until
-# LINK_MINTING_ENABLED, which stays false until the rate limits + session
-# cost ceiling land (bd polyglot-pdf-ik7e).
+# LINK_MINTING_ENABLED, which defaults false. The rate limits + session cost
+# ceiling it waited on (bd polyglot-pdf-ik7e) have landed, and the demo now
+# enables it (bd polyglot-pdf-gob8l).
 app.include_router(link_routes.router)
 app.include_router(editor_kit_routes.router)  # editor/author-gated hosted-editor surface (bd 92qe.1)
 app.include_router(editor_readiness_routes.router)  # local-save stamp refresh (bd na1zy)

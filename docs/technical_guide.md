@@ -729,8 +729,11 @@ The redeemed token lives in `sessionStorage` via
 `shared/sessionCredential.ts` -- TAB-SCOPED, so it survives a reload (the
 entry gate clears it from the URL, so memory-only stranded a client on any
 refresh) and dies with the tab. Never `localStorage`, which would outlive the
-browser session. All NINE backend-calling sites resolve through that one
-module; a tenth inline `user.getIdToken()` fails CI.
+browser session. EVERY backend-calling site resolves through that one
+module; an inline `user.getIdToken()` anywhere else fails CI. Deliberately not
+a COUNT: the guard asserts the allowlist is empty, not a number, so a count
+here goes stale silently every time a site is added (it said NINE until the
+mint page at `/console/links` made it ten, bd polyglot-pdf-gob8l).
 
 Frontend: `/f` renders `ClientLinkEntry` OUTSIDE `ProtectedRoute`
 (`frontend/src/schema-forms/AppRoutes.tsx` -- extracted from `main.tsx` so a

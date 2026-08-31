@@ -12,11 +12,12 @@ they are two halves of one contract -- what mint promises, open enforces:
 
 MINTING IS OFF BY DEFAULT (LINK_MINTING_ENABLED). A live link is an
 unauthenticated door to a paid Gemini session, and the rate limits + session
-cost ceiling that bound that spend are a SEPARATE bead (polyglot-pdf-ik7e)
-landing immediately after this one. The flag is what keeps those two facts
-from ever being false at the same time: this bead can merge, and be deployed,
-without a mintable link existing. ik7e flips it on. Do not default it to true
-before that bead ships.
+cost ceiling that bound that spend were a SEPARATE bead (polyglot-pdf-ik7e).
+THAT BEAD HAS SHIPPED, so the interlock is satisfied and enabling the flag is
+legitimate: deploy-demo.sh turns it on for the demo (bd polyglot-pdf-gob8l).
+The default stays false, and must stay false in any environment where the
+spend ceiling is not enforced -- the flag is what keeps "a mintable link
+exists" and "nothing bounds its spend" from ever being true at once.
 
 ASCII only.
 """
