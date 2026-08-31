@@ -9,6 +9,7 @@ import {
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
   type RetireCandidate,
 } from '../utils/remoteKitStore';
+import { kitName } from '../utils/kitName';
 import { ArchivedVersions } from './ArchivedVersions';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
@@ -596,7 +597,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     try {
       const created = await onboardRemoteKit(file);
       await refresh();
-      setNotice(`Added "${created.id}" -- run the extraction to produce its schema, then open it here.`);
+      setNotice(`Added ${kitName(created)} -- run the extraction to produce its schema, then open it here.`);
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) {
         onAuthError?.(err);
@@ -639,11 +640,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           warns ? `${warns} warning${warns === 1 ? '' : 's'}` : '',
         ].filter(Boolean).join(', ');
         setNotice(
-          `Extracted "${kit.id}" with issues (${parts || 'needs review'}). ` +
+          `Extracted ${kitName(kit)} with issues (${parts || 'needs review'}). ` +
           `Open it to review and repair before marking complete.`,
         );
       } else {
-        setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+        setNotice(`Extracted ${kitName(kit)} -- ${result.detail}. Open it to review.`);
       }
       setInstructionsPdfByKit((prev) => {
         const next = { ...prev };
@@ -688,20 +689,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           'and each flag shows on its answer choice in the field editor)'
         : '';
       if (!report.changed && flagCount === 0) {
-        setNotice(`"${kit.id}" option labels are already fully translated.`);
+        setNotice(`${kitName(kit)} option labels are already fully translated.`);
       } else if (!report.changed) {
         // No label changed, but the verify gate still flagged translations
         // (reachable on a force re-bake that reproduces identical values):
         // the backend persisted the flags into provenance, so point at the
         // flagged rows and reload the stored schema like any other change.
         setNotice(
-          `"${kit.id}" option labels are already fully translated` +
+          `${kitName(kit)} option labels are already fully translated` +
           flagNote + '.',
         );
         if (kit.id === selectedKitId) onOpenKit(kit);
       } else {
         setNotice(
-          `Translated option labels for "${kit.id}" -- ${updated} ` +
+          `Translated option labels for ${kitName(kit)} -- ${updated} ` +
           `option-language entr${updated === 1 ? 'y' : 'ies'} baked` +
           (failed.length
             ? `; FAILED: ${failed.join(', ')} (run again to fill the gap)`
