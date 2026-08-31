@@ -1,6 +1,6 @@
 /**
- * Clicking into a field moves the next-field search origin -- but NOT while the
- * model is speaking (bd polyglot-pdf-a08po).
+ * Clicking into a field moves the next-field search origin -- but NOT while ANY
+ * audio is playing (bd polyglot-pdf-a08po).
  *
  * Why the suppression matters: under DTI the model holds ONE field's schema at
  * a time and the backend coercion pointer (_current_field_id) is singular. If a
@@ -9,10 +9,14 @@
  * wrong field. Typing is unambiguous intent so it always moves the origin;
  * clicking is not (fidgeting during playback is common), so it waits.
  *
+ * The suppression is on the UNION (isAnyAudioPlaying), NOT isModelSpeaking --
+ * which is why this file drives TWO flags. A synthesized clip is audible while
+ * the model's own PCM count is zero, and the spell-back read-back lives entirely
+ * in that window; guarding on model PCM alone left it open (outer review).
+ *
  * Driven through the REAL SchemaForm and its REAL field components, so the
  * gesture under test is a genuine DOM focus/typing event rather than a direct
- * handler call. Same mock set as SchemaForm.previewEdit.test.tsx, plus a
- * controllable isModelSpeaking().
+ * handler call. Same mock set as SchemaForm.previewEdit.test.tsx.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -20,8 +24,15 @@ import { render, screen, cleanup, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { FormSchema } from '../types/schema';
 
-// Flipped per-test to simulate the model talking over the user's click.
+// Flipped per-test to simulate audio playing over the user's click.
+//
+// TWO flags, because the production guard must key on the UNION: `modelSpeaking`
+// is the model's own PCM, `clipPlaying` is a synthesized clip (the spell-back
+// read-back). The real isModelSpeaking() cannot see a clip -- the spell-back
+// player waits for the model's source count to reach ZERO before playing -- so a
+// guard on it alone leaves the whole spell-back window unprotected.
 let modelSpeaking = false;
+let clipPlaying = false;
 
 vi.mock('../../shared/config', () => ({
   isTestHarnessEnabled: () => true,
@@ -31,7 +42,10 @@ vi.mock('../../shared/connection', () => ({
     connect: vi.fn(),
     disconnect: vi.fn(),
     getAudioManager: () => ({
+      // Mirrors the real audioManager's semantics: isModelSpeaking is model PCM
+      // ONLY and is structurally blind to a clip; isAnyAudioPlaying is the union.
       isModelSpeaking: () => modelSpeaking,
+      isAnyAudioPlaying: () => modelSpeaking || clipPlaying,
     }),
   })),
 }));
@@ -138,6 +152,7 @@ describe('click-to-focus moves the search origin (bd a08po)', () => {
       },
     });
     modelSpeaking = false;
+    clipPlaying = false;
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       writable: true,
@@ -149,9 +164,10 @@ describe('click-to-focus moves the search origin (bd a08po)', () => {
     cleanup();
     vi.clearAllMocks();
     // Reset the module-level speaking flag (it is NOT a vi mock, so
-    // clearAllMocks does not touch it). Leaving it true would leak "the model
-    // is talking" into whatever runs next in this worker.
+    // clearAllMocks does not touch them). Leaving either true would leak
+    // "audio is playing" into whatever runs next in this worker.
     modelSpeaking = false;
+    clipPlaying = false;
     sessionStorage.clear();
   });
 
@@ -196,6 +212,30 @@ describe('click-to-focus moves the search origin (bd a08po)', () => {
     await user.click(f.f1);
     await user.click(f.f3);
     expect(storedOrigin()).toBe('f3');
+  });
+
+  it('a click during a CLIP (spell-back) does NOT move the origin -- the union, not model-PCM', async () => {
+    // The outer-review bug. The model is NOT emitting PCM here: the spell-back
+    // player waits for the model's source count to hit zero before it plays, so
+    // isModelSpeaking() reads FALSE for this entire window while the user is
+    // hearing "K-O-W-A-L-C-Z-Y-K, is that correct?" -- and the form stays
+    // clickable (only the mic is held).
+    //
+    // That window is the dangerous one: name_spellback carries NO field_id and
+    // resolves the field client-side via computeNextField. A click that moved
+    // the origin here would make the client spell a DIFFERENT field's value
+    // back, and the user -- hearing a plausible read-back -- would confirm it.
+    const f = await mountSimplified();
+    const user = userEvent.setup();
+
+    await user.click(f.f1);
+    expect(storedOrigin()).toBe('f1');
+
+    modelSpeaking = false; // the model is genuinely quiet...
+    clipPlaying = true;    // ...but a clip is audible.
+    await user.click(f.f3);
+
+    expect(storedOrigin()).toBe('f1');
   });
 
   it('TYPING moves the origin even while the model is speaking', async () => {

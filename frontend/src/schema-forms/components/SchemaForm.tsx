@@ -480,12 +480,28 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
    * this NEVER makes the model speak, it only changes which field is the
    * referent for whatever happens next.
    *
-   * Suppressed WHILE THE MODEL IS SPEAKING. Under DTI the model holds one
+   * Suppressed WHILE ANY AUDIO IS PLAYING. Under DTI the model holds one
    * field's schema at a time and the backend coercion pointer is singular, so
    * retargeting mid-question would leave the model asking about field A while
    * focus says field B -- and the spoken answer would mis-fill. Clicking is
    * also ambiguous (fidgeting); typing is not, which is why handleFieldChange
    * above moves the origin unconditionally and this does not.
+   *
+   * isAnyAudioPlaying(), NOT isModelSpeaking() -- the union INCLUDING a
+   * synthesized clip (outer review, bd polyglot-pdf-a08po). isModelSpeaking()
+   * is `activeAudioSources.length > 0`, model PCM only, and audioManager's own
+   * docstring calls it "structurally incapable of counting a clip"; the
+   * spell-back player deliberately WAITS for that count to hit zero before it
+   * plays. So during the whole spell-back window it reads "not speaking" while
+   * the user is hearing "K-O-W-A-L-C-Z-Y-K, is that correct?".
+   *
+   * That window is the dangerous one: name_spellback carries NO field_id on the
+   * wire (backend/config.py -- the client resolves the current field itself, so
+   * the spelled value can only be a STORED value, never the model's memory), and
+   * it resolves via computeNextField. A click that moved the origin mid-clip
+   * would make the client spell a DIFFERENT field's value back, and the user --
+   * hearing a plausible read-back -- would confirm it. Clip playback is
+   * playback, so it suppresses like any other.
    */
   const handleFieldFocus = (fieldId: string) => {
     // Feature-detect every hop: this runs on a raw DOM focus/click, which can
@@ -498,7 +514,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     const audio = typeof manager?.getAudioManager === 'function'
       ? manager.getAudioManager()
       : null;
-    if (typeof audio?.isModelSpeaking === 'function' && audio.isModelSpeaking()) {
+    if (typeof audio?.isAnyAudioPlaying === 'function' && audio.isAnyAudioPlaying()) {
       return;
     }
     // includesSelf: the user is POINTING at this field, so it must be the next

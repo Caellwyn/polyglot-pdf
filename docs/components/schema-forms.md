@@ -53,7 +53,13 @@ instances) operating on a `SchemaFormState` value:
   manual EDIT answers it (`false` -- resume AFTER it; the rotation still returns
   to it last if it is somehow still unconfirmed). Confirming or skipping a field
   advances the origin to it too, so a verbal jump-and-answer resumes from the
-  field just handled instead of falling back to a stale origin. A click is
+  field just handled instead of falling back to a stale origin. The click
+  suppression gates on `isAnyAudioPlaying()` -- the clip-INCLUSIVE union, not
+  `isModelSpeaking()`: the deterministic spell-back clip plays only after the
+  model's own PCM has drained, so a model-PCM-only gate leaves that whole window
+  open, and `name_spellback` carries no field_id (it resolves the field through
+  this same search), so a click there would spell a different field's value back.
+  A click is
   ignored while the model is SPEAKING — under DTI the model holds one field's
   schema and the backend coercion pointer is singular, so retargeting
   mid-question would mis-fill the spoken answer; typing is unambiguous and moves
