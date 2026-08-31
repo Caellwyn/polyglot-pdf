@@ -501,7 +501,11 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     if (typeof audio?.isModelSpeaking === 'function' && audio.isModelSpeaking()) {
       return;
     }
-    setState(prevState => SchemaFormStateManager.setSearchOrigin(prevState, fieldId));
+    // includesSelf: the user is POINTING at this field, so it must be the next
+    // field offered -- not its neighbour (fresh-eyes, criterion 1).
+    setState(prevState =>
+      SchemaFormStateManager.setSearchOrigin(prevState, fieldId, { includesSelf: true })
+    );
   };
 
   // 4dxt: force-skip a required-but-unanswered field. The user may defer to a

@@ -45,8 +45,15 @@ instances) operating on a `SchemaFormState` value:
   user filling out of order is not dragged back to the first unconfirmed field
   after every entry, while fields they skipped past are still swept up on the way
   around. It is an ORIGIN, not a pin: it never forces a field to be next (a live
-  `pinnedFieldId` still outranks it), the origin field is visited LAST in the
-  rotation, and a stale id degrades to the old top-of-form scan. A click is
+  `pinnedFieldId` still outranks it), and a stale id degrades to the old
+  top-of-form scan. The companion `searchOriginIncludesSelf` says WHERE the
+  origin sits in the rotation, because the two gestures mean opposite things
+  about the field they name: a CLICK points AT it (`true` -- it is offered next,
+  or the model would ask about a neighbour while the cursor sits here), while a
+  manual EDIT answers it (`false` -- resume AFTER it; the rotation still returns
+  to it last if it is somehow still unconfirmed). Confirming or skipping a field
+  advances the origin to it too, so a verbal jump-and-answer resumes from the
+  field just handled instead of falling back to a stale origin. A click is
   ignored while the model is SPEAKING — under DTI the model holds one field's
   schema and the backend coercion pointer is singular, so retargeting
   mid-question would mis-fill the spoken answer; typing is unambiguous and moves

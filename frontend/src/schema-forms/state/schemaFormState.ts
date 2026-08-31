@@ -92,6 +92,17 @@ export interface SchemaFormState {
   // rules, not by virtue of being the origin), and a stale value is harmless
   // -- an id that no longer resolves just falls back to index 0.
   searchOriginFieldId?: string | null;
+
+  // Whether the origin field is itself the FIRST candidate in the rotation
+  // (bd polyglot-pdf-a08po). The two gestures that set an origin mean opposite
+  // things about the field they name:
+  //   true  -- a CLICK/focus: the user is POINTING at it, so it must be offered
+  //            next, or the model asks about a neighbour while their cursor
+  //            sits here.
+  //   false -- a manual EDIT: the user just ANSWERED it, so the scan resumes
+  //            AFTER it (the rotation still returns to it last if it is
+  //            somehow still unconfirmed).
+  searchOriginIncludesSelf?: boolean;
 }
 
 export class SchemaFormStateManager {
@@ -172,6 +183,7 @@ export class SchemaFormStateManager {
       selectedLanguage: loadOnboardingState().language ?? undefined,
       pinnedFieldId: null, // Field-level navigation pin (bd jnjj.36)
       searchOriginFieldId: null, // Next-field search origin (bd a08po)
+      searchOriginIncludesSelf: false,
     };
 
     this.save(newState);
@@ -252,6 +264,9 @@ export class SchemaFormStateManager {
       // which is exactly the previous behavior.
       if (parsed.searchOriginFieldId === undefined) {
         parsed.searchOriginFieldId = null;
+      }
+      if (parsed.searchOriginIncludesSelf === undefined) {
+        parsed.searchOriginIncludesSelf = false;
       }
 
       // Initialize disclaimer fields if missing (migration for existing sessions)
@@ -1327,6 +1342,14 @@ export class SchemaFormStateManager {
       // A confirmed pinned field releases the pin -- the form resumes its
       // normal fill order (bd polyglot-pdf-jnjj.36).
       pinnedFieldId: state.pinnedFieldId === fieldId ? null : state.pinnedFieldId,
+      // ...and the search resumes from the field just answered, not from
+      // wherever the origin last pointed (bd polyglot-pdf-a08po, fresh-eyes).
+      // Without this, a voice jump-and-answer released the pin back onto a
+      // STALE origin -- the same "focus snaps backward" failure this bead
+      // exists to fix, arriving via the verbal path instead of the manual one.
+      // includesSelf=false: this field was just answered, so resume AFTER it.
+      searchOriginFieldId: fieldId,
+      searchOriginIncludesSelf: false,
       lastUpdated: Date.now()
     };
 
@@ -1408,6 +1431,13 @@ export class SchemaFormStateManager {
     if (newState.pinnedFieldId === fieldId) {
       newState.pinnedFieldId = null;
     }
+    // A skip is "done with this field" just as a confirm is, so it advances the
+    // search origin the same way (bd polyglot-pdf-a08po). Keeping these two in
+    // step matters: they are the pair that releases a pin, and an origin left
+    // stale by only ONE of them would strand the scan exactly where the other
+    // path fixed it.
+    newState.searchOriginFieldId = fieldId;
+    newState.searchOriginIncludesSelf = false;
 
     this.save(newState);
     return newState;
@@ -1511,9 +1541,29 @@ export class SchemaFormStateManager {
    * Deliberately NOT a pin: this only moves where the scan starts. The field
    * itself is returned only if the normal priority rules pick it.
    */
-  static setSearchOrigin(state: SchemaFormState, fieldId: string): SchemaFormState {
-    if (state.searchOriginFieldId === fieldId) return state;
-    const newState = { ...state, searchOriginFieldId: fieldId, lastUpdated: Date.now() };
+  static setSearchOrigin(
+    state: SchemaFormState,
+    fieldId: string,
+    // Does the search START at this field, or just after it? A CLICK points at
+    // the field (true); a manual EDIT answers it and moves on (false). See
+    // searchOriginIncludesSelf on the state interface.
+    options?: { includesSelf?: boolean },
+  ): SchemaFormState {
+    const includesSelf = options?.includesSelf === true;
+    // Compare BOTH halves: the same field can be re-set with the other
+    // intent (click a field, then type in it), and that must still persist.
+    if (
+      state.searchOriginFieldId === fieldId &&
+      state.searchOriginIncludesSelf === includesSelf
+    ) {
+      return state;
+    }
+    const newState = {
+      ...state,
+      searchOriginFieldId: fieldId,
+      searchOriginIncludesSelf: includesSelf,
+      lastUpdated: Date.now(),
+    };
     this.save(newState);
     return newState;
   }

@@ -8,9 +8,10 @@
  * mostly-manual user.
  *
  * The search origin is NOT a pin: it only moves where the scan STARTS. The
- * rotation visits the origin LAST, so the field the user just acted on is not
- * re-offered ahead of what follows it, but is still reached if nothing later
- * qualifies. Because the scan wraps, fields the user skipped PAST are swept up
+ * rotation places the origin according to the GESTURE that set it: a manual
+ * EDIT answers the field, so the scan resumes after it (and only returns to it
+ * last, if it is somehow still unconfirmed); a CLICK points at the field, so it
+ * is offered next. Because the scan wraps, fields the user skipped PAST are swept up
  * on the way around -- which is why there is no separate end-of-form
  * "go back for missed fields" phase, and why completion is unchanged (an empty
  * result still means every shown field is confirmed).
@@ -117,9 +118,10 @@ describe('next-field search origin + wrap-around (bd a08po)', () => {
     expect(computeNextField(afterD)?.id).toBe('a')
   })
 
-  it('visits the origin field LAST, not first', () => {
-    // 'c' is the origin AND is itself unconfirmed. The next thing to offer is
-    // what comes after it; 'c' is only returned once nothing else qualifies.
+  it('after an EDIT, visits the origin field LAST, not first', () => {
+    // 'c' was ANSWERED (no includesSelf), and is itself still unconfirmed. The
+    // next thing to offer is what comes after it; 'c' is only returned once
+    // nothing else qualifies. (The CLICK case is the opposite -- see below.)
     let state = baseState()
     state = {
       ...state,
@@ -196,6 +198,77 @@ describe('next-field search origin + wrap-around (bd a08po)', () => {
     }
     expect(computeNextField(all)).toBeNull()
     expect(isFormComplete(all)).toBe(true)
+  })
+
+  // --- the two gestures are opposite intents on the same field ------------
+  // (fresh-eyes gap: a CLICK points AT a field, a manual EDIT answers it and
+  // moves on. Treating both as "resume after" sent the model to the clicked
+  // field's NEIGHBOUR -- the wrong-field failure this bead exists to fix.)
+
+  it('a CLICK makes that field itself the next field (includesSelf)', () => {
+    // Every field empty. Clicking 'c' must offer 'c', not 'd'.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c', { includesSelf: true })
+
+    expect(computeNextField(state)?.id).toBe('c')
+  })
+
+  it('a click on an already-CONFIRMED field still moves on (no dead end)', () => {
+    // includesSelf must not resurrect a finished field: 'c' is confirmed, so the
+    // rotation starts at it, skips it, and offers the next open one.
+    let state = baseState()
+    state = { ...state, fieldValues: { c: confirmed('x') } }
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c', { includesSelf: true })
+
+    expect(computeNextField(state)?.id).toBe('d')
+  })
+
+  it('an EDIT resumes AFTER the field (default: not includesSelf)', () => {
+    // The complement of the click case, on the same field, from the same state.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c')
+
+    expect(computeNextField(state)?.id).toBe('d')
+  })
+
+  it('re-setting the same field with the OTHER intent persists (click, then type)', () => {
+    // The early-return guard must compare BOTH halves: clicking a field then
+    // typing in it is a real sequence, and the second call changes the meaning.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c', { includesSelf: true })
+    expect(computeNextField(state)?.id).toBe('c')
+
+    state = SchemaFormStateManager.setSearchOrigin(state, 'c')
+    expect(state.searchOriginIncludesSelf).toBe(false)
+    expect(computeNextField(state)?.id).toBe('d')
+  })
+
+  it('confirming a field advances the origin, so a voice jump does not snap backward', () => {
+    // fresh-eyes gap 2: switch_to_field pins 'd'; answering it releases the pin.
+    // Without advancing the origin the scan fell back to a STALE origin ('a'
+    // here) instead of continuing from the field just answered.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'a')
+    state = SchemaFormStateManager.pinField(state, 'd')
+    state = SchemaFormStateManager.updateField(state, 'd', 'answer')
+    state = SchemaFormStateManager.confirmField(state, 'd', 'ai_voice')
+
+    expect(state.pinnedFieldId).toBeNull()
+    expect(state.searchOriginFieldId).toBe('d')
+    expect(computeNextField(state)?.id).toBe('e')
+  })
+
+  it('skipping a field advances the origin the same way a confirm does', () => {
+    // The pin-releasing pair must stay in step -- an origin left stale by only
+    // one of them would strand the scan where the other path fixed it.
+    let state = baseState()
+    state = SchemaFormStateManager.setSearchOrigin(state, 'a')
+    state = SchemaFormStateManager.pinField(state, 'd')
+    state = SchemaFormStateManager.markFieldSkipped(state, 'd', 'manual_edit')
+
+    expect(state.pinnedFieldId).toBeNull()
+    expect(state.searchOriginFieldId).toBe('d')
+    expect(computeNextField(state)?.id).toBe('e')
   })
 
   it('the live pin still outranks the search origin', () => {

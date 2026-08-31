@@ -9,13 +9,14 @@
  * wrong field. Typing is unambiguous intent so it always moves the origin;
  * clicking is not (fidgeting during playback is common), so it waits.
  *
- * Driven through the REAL SchemaForm -> PreviewPane -> PDFViewer -> FieldOverlay
- * chain, because the click IS the gesture under test -- the same mock set as
- * SchemaForm.previewEdit.test.tsx, plus a controllable isModelSpeaking().
+ * Driven through the REAL SchemaForm and its REAL field components, so the
+ * gesture under test is a genuine DOM focus/typing event rather than a direct
+ * handler call. Same mock set as SchemaForm.previewEdit.test.tsx, plus a
+ * controllable isModelSpeaking().
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, act, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { FormSchema } from '../types/schema';
 
@@ -83,16 +84,59 @@ function storedOrigin(): string | null | undefined {
   return raw ? JSON.parse(raw).searchOriginFieldId : undefined;
 }
 
-async function mountInPreview() {
+/**
+ * Mount the SIMPLIFIED view and return the real <input> for each field.
+ *
+ * Deliberately NOT the Preview/PDF view: that path goes through a React.lazy
+ * chunk (PreviewPane -> PDFViewer -> FieldOverlay), and waiting on it made this
+ * suite fail intermittently under full-suite load -- a pre-existing fragility in
+ * that harness (SchemaForm.previewEdit.test.tsx shows the same flake), not
+ * something this bead's behavior depends on. `SectionRenderer` is a direct
+ * import, so the simplified view mounts synchronously.
+ *
+ * The behavior under test is identical on both surfaces: the same
+ * `handleFieldFocus` is wired to SectionRenderer's `onFieldFocus` and to
+ * PreviewPane's, and a native DOM focus is exactly what a real click produces.
+ */
+async function mountSimplified() {
   render(<SchemaForm schema={makeSchema()} kitId="test" pdfUrl="/fake.pdf" />);
   await act(async () => {});
-  fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
-  await screen.findByTestId('pdf-field-overlay-f1');
+  return {
+    f1: screen.getByLabelText(/First/i) as HTMLInputElement,
+    f2: screen.getByLabelText(/Second/i) as HTMLInputElement,
+    f3: screen.getByLabelText(/Third/i) as HTMLInputElement,
+  };
 }
 
 describe('click-to-focus moves the search origin (bd a08po)', () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    // Install a REAL, freshly-backed sessionStorage for every test in this file.
+    //
+    // This is not belt-and-braces, it is required: sibling suites -- notably
+    // schema-forms/state/schemaFormState.test.ts:28 -- ASSIGN `global.sessionStorage`
+    // to their own vi.fn()-based mock and never restore it, and one of their
+    // cases deliberately leaves a corrupt `'invalid json{'` value in it. When
+    // vitest schedules those files into the same worker before this one, this
+    // suite inherited that mock: SchemaForm's mount then failed to parse state,
+    // the lazy PreviewPane never rendered, and the overlay lookup timed out --
+    // intermittently, depending purely on file ordering.
+    //
+    // Clearing the ambient object is NOT enough (their `clear` is a spy over a
+    // closure this file cannot reach), so replace the object outright. It is
+    // re-installed per test rather than once, because a sibling can swap it back
+    // in between tests.
+    const store = new Map<string, string>();
+    Object.defineProperty(global, 'sessionStorage', {
+      configurable: true,
+      value: {
+        getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+        setItem: (k: string, v: string) => { store.set(k, String(v)); },
+        removeItem: (k: string) => { store.delete(k); },
+        clear: () => store.clear(),
+        key: (i: number) => Array.from(store.keys())[i] ?? null,
+        get length() { return store.size; },
+      },
+    });
     modelSpeaking = false;
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
@@ -104,43 +148,53 @@ describe('click-to-focus moves the search origin (bd a08po)', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    // Reset the module-level speaking flag (it is NOT a vi mock, so
+    // clearAllMocks does not touch it). Leaving it true would leak "the model
+    // is talking" into whatever runs next in this worker.
+    modelSpeaking = false;
+    sessionStorage.clear();
   });
 
   it('with the model SILENT, clicking a field makes it the search origin', async () => {
-    await mountInPreview();
+    const f = await mountSimplified();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    await user.click(f.f3);
 
     expect(storedOrigin()).toBe('f3');
   });
 
   it('while the model is SPEAKING, a click does NOT move the search origin', async () => {
-    await mountInPreview();
+    const f = await mountSimplified();
     const user = userEvent.setup();
 
     // Establish a known origin while silent...
-    await user.click(screen.getByTestId('pdf-field-overlay-f1'));
+    await user.click(f.f1);
     expect(storedOrigin()).toBe('f1');
 
     // ...then click elsewhere mid-utterance. The origin must not follow: the
     // model is mid-question about f1 and a spoken answer belongs to f1.
     modelSpeaking = true;
-    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    await user.click(f.f3);
 
     expect(storedOrigin()).toBe('f1');
   });
 
   it('once the model stops speaking, clicks move the origin again', async () => {
-    await mountInPreview();
+    const f = await mountSimplified();
     const user = userEvent.setup();
 
     modelSpeaking = true;
-    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    await user.click(f.f3);
     expect(storedOrigin()).toBeNull();
 
+    // Click AWAY and back once the model is silent. Clicking f3 a second time
+    // while it already holds DOM focus fires no new focus event -- that is real
+    // browser behavior, not a harness quirk, so the test has to move focus off
+    // and back to produce a genuine second gesture.
     modelSpeaking = false;
-    await user.click(screen.getByTestId('pdf-field-overlay-f3'));
+    await user.click(f.f1);
+    await user.click(f.f3);
     expect(storedOrigin()).toBe('f3');
   });
 
@@ -148,12 +202,11 @@ describe('click-to-focus moves the search origin (bd a08po)', () => {
     // The asymmetry that makes the suppression safe: a click is ambiguous, but
     // nobody types into a field by accident. A user who starts typing has
     // declared which field they are on, mid-utterance or not.
-    await mountInPreview();
+    const f = await mountSimplified();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId('pdf-field-overlay-f2'));
     modelSpeaking = true;
-    await user.type(screen.getByTestId('pdf-field-edit-popover-f2').querySelector('input')!, 'X');
+    await user.type(f.f2, 'X');
 
     expect(storedOrigin()).toBe('f2');
   });

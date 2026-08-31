@@ -188,17 +188,31 @@ export function computeNextField(
   // shown field is confirmed, exactly isFormComplete's condition). There is
   // therefore no separate end-of-form "go back for missed fields" phase.
   //
-  // The origin field itself is visited LAST, not first: the user just acted on
-  // it, so the next thing to offer is what comes AFTER it. If it is genuinely
-  // still unconfirmed (e.g. edited but not verified) the rotation comes back
-  // around to it once nothing later qualifies.
+  // WHERE the origin field sits in the rotation depends on the gesture that set
+  // it -- see searchOriginIncludesSelf below.
   //
   // A stale/unknown origin degrades to the previous behavior (start at 0).
+  //
+  // Where the origin field itself sits in the rotation depends on WHICH gesture
+  // set it -- the two are opposite intents on the same field:
+  //
+  //   searchOriginIncludesSelf = true  (a CLICK / focus): the user is POINTING
+  //     at this field. It must be the very next thing offered, or the model asks
+  //     about a neighbour while the user's cursor sits here -- the exact
+  //     wrong-field failure this bead exists to fix.
+  //
+  //   searchOriginIncludesSelf = false (a manual EDIT): the user just ANSWERED
+  //     this field. The next thing to offer is what comes AFTER it; the rotation
+  //     still comes back around to it last if it is somehow still unconfirmed
+  //     (e.g. edited but not verified), so nothing is stranded.
   const originIndex = state.searchOriginFieldId
     ? fieldsToCheck.findIndex(f => f.id === state.searchOriginFieldId)
     : -1;
+  // Rotate so the scan starts AT the origin (pointing) or just after it
+  // (answered). `start` is always a valid index into fieldsToCheck.
+  const start = state.searchOriginIncludesSelf ? originIndex : originIndex + 1;
   const searchOrder = originIndex >= 0
-    ? [...fieldsToCheck.slice(originIndex + 1), ...fieldsToCheck.slice(0, originIndex + 1)]
+    ? [...fieldsToCheck.slice(start), ...fieldsToCheck.slice(0, start)]
     : fieldsToCheck;
 
   // When skipConfirmed=false, just return first field (no prioritization)
