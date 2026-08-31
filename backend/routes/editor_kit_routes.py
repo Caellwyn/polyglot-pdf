@@ -3452,10 +3452,12 @@ async def delete_editor_kit(
         has_records = False
         unverifiable = str(exc)
 
-    # The human sees the LABEL; the id is internal (and the editor currently
-    # shows ids where labels belong -- bd polyglot-pdf-kztlr), so a refusal that
-    # names only the id is unreadable against the catalogue on screen.
-    label = (meta or {}).get("label") or kit_id
+    # Name it the way the catalogue does (bd polyglot-pdf-kztlr). This route is
+    # where the bug was REPORTED, and label-only was its first fix -- but
+    # nothing makes labels unique, so two kits can share one and a label-only
+    # refusal is ambiguous in exactly the way an id-only one was. _kit_name
+    # carries both, and drops the id only when the label restates it.
+    label = _kit_name(kit_id, meta)
 
     # An ever-live kit needs the STRONGER token specifically -- the weaker one
     # does not escalate into it, or the tier is decorative.
@@ -3467,7 +3469,7 @@ async def delete_editor_kit(
             status_code=409,
             detail=(
                 DELETE_NEEDS_DOUBLE_ACK_PREFIX
-                + f' "{label}" has been published, so clients may have filled it '
+                + f" {label} has been published, so clients may have filled it "
                 f"and agreed to what they saw. Their agreement records will "
                 f"survive this deletion -- but the exact form revision those "
                 f"records name will be gone, so you would no longer be able to "
@@ -3494,7 +3496,7 @@ async def delete_editor_kit(
             status_code=409,
             detail=(
                 DELETE_NEEDS_ACK_PREFIX
-                + f' "{label}" was never published, but {reason}. Deleting it '
+                + f" {label} was never published, but {reason}. Deleting it "
                 f"removes the form, its PDF and every archived version, "
                 f"permanently."
             ),

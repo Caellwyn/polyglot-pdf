@@ -25,8 +25,16 @@ from backend.routes.editor_kit_routes import _kit_name
 
 ROUTES_DIR = Path(__file__).resolve().parents[2] / "routes"
 
-# Names that hold a kit id in these modules.
-_ID_NAMES = {"kit_id", "superseded_kit", "other_id", "replaces_kit_id"}
+# Names that hold a kit identity in these modules.
+#
+# THIS LIST IS THE DETECTOR'S WEAK POINT, so it is deliberately wider than the
+# ids alone. A first version listed only the id-holding names, and was blind to
+# `delete_editor_kit` -- the very route the bug was reported on -- because it
+# names the kit through a local called `label`. A hand-typed vocabulary catches
+# the shapes its author imagined; the assertion below therefore requires the
+# CALL, not the absence of a name.
+_ID_NAMES = {"kit_id", "superseded_kit", "other_id", "replaces_kit_id",
+             "label", "own_label", "other_label", "superseded_label"}
 
 # The ONLY refusals allowed to name a bare id, each because no label exists to
 # name. Keyed by (module, function, the detail's leading text) rather than by
@@ -60,11 +68,28 @@ def _bare_id_refusals(path: Path):
     class V(ast.NodeVisitor):
         def __init__(self):
             self.fn = None
+            # Locals in the CURRENT function that already hold a formatted
+            # name (`label = _kit_name(kit_id, meta)`). Naming one of those is
+            # correct, so the detector follows the assignment rather than
+            # flagging the variable -- otherwise widening the vocabulary above
+            # just trades a blind spot for a false positive.
+            self.safe = set()
 
         def visit_FunctionDef(self, node):
-            prev, self.fn = self.fn, node.name
+            prev, prev_safe = self.fn, self.safe
+            self.fn = node.name
+            self.safe = set()
+            for n in ast.walk(node):
+                if not isinstance(n, ast.Assign):
+                    continue
+                if not (isinstance(n.value, ast.Call)
+                        and getattr(n.value.func, "id", "") == "_kit_name"):
+                    continue
+                for t in n.targets:
+                    self.safe |= {x.id for x in ast.walk(t)
+                                  if isinstance(x, ast.Name)}
             self.generic_visit(node)
-            self.fn = prev
+            self.fn, self.safe = prev, prev_safe
 
         visit_AsyncFunctionDef = visit_FunctionDef
 
@@ -84,6 +109,7 @@ def _bare_id_refusals(path: Path):
                         x.id for x in ast.walk(kw.value) if isinstance(x, ast.Name)
                     } & _ID_NAMES
                     bare -= wrapped
+                    bare -= self.safe
                     if bare:
                         found.append(
                             (path.name, self.fn, _detail_head(kw.value),

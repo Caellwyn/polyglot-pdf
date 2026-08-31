@@ -113,3 +113,43 @@ choice open ("either show the label wherever the id is currently shown, or show
 both with the id clearly secondary"). The cards already do the second. Changing
 them would have been churn, and the delete dialog makes the human TYPE the id --
 so the subtitle is load-bearing, not decoration.
+
+## What review found: my enumeration had the bug it was fixing
+
+The fresh-eyes round found two sites I had missed, and they are worth recording
+because they share one cause -- and it is the same cause as the original bug.
+
+**The delete route.** The route the maintainer actually hit. My guard did not
+flag it because the guard enumerated the NAMES an id could live under
+(`kit_id`, `superseded_kit`, ...) and that route names its kit through a local
+called `label`, assigned from `(meta or {}).get("label") or kit_id`. It had been
+"fixed" under bd `6zhaf` to say the label -- which is better than an id, and
+still not the rule this bead establishes: nothing makes labels unique, so a
+label-only refusal is ambiguous in exactly the way an id-only one was, just
+in the other direction.
+
+**`writeLocalStatus`.** A thrown `Error` in `formKitDirectory.ts` that
+surfaces through `FormCatalogue`'s error banner -- the same component whose
+notices I had just converted, one function away, in a util module my
+component-level scan never opened.
+
+Both were invisible for the same reason: **I enumerated the shapes I had
+already thought of.** That is the failure mode the guard existed to prevent,
+reproduced inside the guard itself.
+
+The fix was not to add two more names. It was to widen the vocabulary AND teach
+the detector to follow an assignment -- a local assigned from `_kit_name(...)`
+is correctly named, so flagging it would trade a blind spot for a false
+positive. Widening without that would have made the guard noisy, and a noisy
+guard gets suppressed, which is its own death.
+
+A frontend counterpart (`kitNameCoverage.test.ts`) now scans util modules too,
+scoped to kit entries specifically -- `field.id` is quoted the same way all
+over the validation code, and flagging those would have made it unusable. Its
+docstring states what it cannot see, because a guard that hides its limits
+reads as broader assurance than it is.
+
+Both fixes are mutation-verified against the reviewer's own findings rather
+than against convenient synthetic cases: reverting the delete route to
+label-only, and `writeLocalStatus` to a raw id, each reddens the guard that was
+blind to it an hour earlier.
