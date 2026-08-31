@@ -95,7 +95,7 @@ app.include_router(form_kit_routes.router)
 # LINK_MINTING_ENABLED, which stays false until the rate limits + session
 # cost ceiling land (bd polyglot-pdf-ik7e).
 app.include_router(link_routes.router)
-app.include_router(editor_kit_routes.router)  # token-gated hosted-editor surface (bd 92qe.1)
+app.include_router(editor_kit_routes.router)  # editor/author-gated hosted-editor surface (bd 92qe.1)
 app.include_router(editor_readiness_routes.router)  # local-save stamp refresh (bd na1zy)
 app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)
 

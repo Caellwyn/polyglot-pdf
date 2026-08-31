@@ -201,7 +201,7 @@ The same store also carries an **additive editor write/list surface**
 (`put_schema`, `put_metadata`, `load_metadata`, `list_kit_files`,
 `put_pdf_bytes`, and `put_json_artifact` / `load_json_artifact` for per-kit JSON
 artifacts such as the persisted AcroForm dump `acroform.json`, bd
-`polyglot-pdf-v96b`) consumed by the token-gated `/api/editor/*` routes
+`polyglot-pdf-v96b`) consumed by the editor/author-gated `/api/editor/*` routes
 (`backend/routes/editor_kit_routes.py`) that back the hosted schema editor (bd
 `polyglot-pdf-92qe.1`). PDF filling and the public `/api/form-kits*` routes never
 call the write surface; drafts stay invisible to the voice app (the complete-only

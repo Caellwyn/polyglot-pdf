@@ -1287,7 +1287,7 @@ class GCSFormKitStore(FormKitStore):
 		"""One flat listing under the prefix, grouped into kit_id -> filenames.
 
 		Unlike the manifest this includes DRAFT kits -- exactly what the
-		token-gated editor catalogue needs. Blobs nested deeper than
+		editor catalogue needs. Blobs nested deeper than
 		<prefix>/<kit>/<file> are ignored (kits are flat by convention).
 		"""
 		base = f"{self.prefix}/" if self.prefix else ""
