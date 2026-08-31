@@ -201,10 +201,19 @@ function scanForBareLabels(text: string): number[] {
       // anywhere on it -- so `if (x === y) setNotice(\`"${kit.label}" done\`);`
       // scanned clean. That is the fourth time in this bead an exemption keyed
       // on something ADJACENT to its target excused something else, which is
-      // the rule this very file keeps restating. Backtick-counting is not a
-      // parser either, but it keys on the thing itself: whether THIS match sits
-      // in prose.
-      const backticksBefore = (line.slice(0, col).match(/`/g) ?? []).length;
+      // the rule this very file keeps restating.
+      //
+      // COUNTED FROM THE START OF THE FILE, not the line. A per-LINE count was
+      // the fifth instance of the same error, and this time in the UNSAFE
+      // direction: a template literal opened on an earlier line has zero
+      // backticks before the match on ITS line, so a real multi-line message
+      //     setNotice(`Deleted
+      //       ${kit.label}
+      //       permanently.`);
+      // read as "not prose" and went unflagged. Per-line state was exactly the
+      // bug already fixed once in tooltipSpans; I reintroduced it here rather
+      // than carrying the lesson across.
+      const backticksBefore = (text.slice(0, abs).match(/`/g) ?? []).length;
       if (backticksBefore % 2 === 0) continue;
       offenders.push(i + 1);
     }
@@ -281,6 +290,12 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
     // Outside a template literal is not prose: a comment or a quoted string
     // mentioning the shape is not a message to anyone.
     expect(scanForBareLabels('// see ${kit.label} for details')).toEqual([]);
+
+    // A MULTI-LINE TEMPLATE LITERAL is still prose. Counting backticks per
+    // LINE read this as code (zero backticks before the match on line 2) and
+    // missed a real message -- a FALSE NEGATIVE, the direction that ships.
+    expect(scanForBareLabels(['setNotice(`Deleted', '  ${kit.label}',
+      '  permanently.`);'].join(String.fromCharCode(10)))).toEqual([2]);
 
     // A multi-line tooltip still covers a label on its continuation line.
     expect(scanForBareLabels(['title={a', '  ? `Open ${kit.label}`',

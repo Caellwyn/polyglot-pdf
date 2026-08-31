@@ -216,7 +216,8 @@ comment or a single-quoted string is no longer flagged, because neither is a
 template literal. Two findings, one root cause, one fix.
 
 Backtick counting is not a parser either, and the docstring says so. But it
-fails in the safe direction and it asks the right question.
+asks the right question. (An earlier draft of this paragraph claimed it "fails
+in the safe direction"; round 4 falsified that -- see below.)
 
 ## Four rounds across two beads: what the pattern actually is
 
@@ -239,3 +240,48 @@ The correction for both is the same question, asked before writing the check
 rather than after review returns it: *what exactly must be true, and can I test
 that directly?* If the answer involves anything's neighbour, it is the wrong
 test.
+
+## Round 4: a fifth time, and this one was unsafe
+
+The backtick test counted backticks on the CURRENT LINE before the match. A
+template literal opened on an earlier line has none before the match on its own
+line, so a genuinely user-facing message
+
+```
+setNotice(`Deleted
+  ${kit.label}
+  permanently.`);
+```
+
+read as "not prose" and went unflagged. **A false negative -- the direction that
+ships.** And my docstring had claimed the opposite: "it fails in the safe
+direction." That sentence is corrected above; it was wrong when written.
+
+Two things make this the sharpest round of the five.
+
+**It was per-line state again.** I had already diagnosed and removed exactly
+that error in `tooltipSpans` two rounds earlier, wrote a paragraph in this file
+about why whole-file beats per-line, and then wrote a per-line backtick count
+three functions away. Fixed by counting from the start of the file, which is
+what the span code already did.
+
+**I wrote the false claim in the same commit as the lesson about false claims.**
+The section above ends by saying a guard must state what it cannot see; the
+sentence immediately after it asserted a safety property I had not tested. The
+lesson and its violation shipped together.
+
+No live message is affected -- every multi-line notice in the tree today opens
+and closes its backticks on each line, joined with `+`. But that is luck about
+today's formatting, not a property anything enforces, which is exactly what a
+guard is supposed to supply.
+
+## Five rounds, one sentence
+
+Every finding across both beads was in a check, never in a shipped message, and
+each traced to one of two habits: **verifying the piece I just wrote instead of
+the behaviour I care about**, and **excusing by proximity** -- keying a carve-out
+on something NEAR its target rather than the target.
+
+The correction is a question to ask before writing any check, not after review
+returns it: *what exactly must be true, and am I testing that, or something
+next to it?*
