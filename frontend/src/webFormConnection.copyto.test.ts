@@ -6,11 +6,20 @@
  * that the voice path actually REACHES that chokepoint.
  *
  * Why both are needed -- fresh-eyes' finding. Real gating sits between Gemini's
- * message and the chokepoint: a read-only/hidden lock check, a validation
- * reject, and checkbox-group canonicalization. A chokepoint-only test cannot
- * catch a regression where the AI path stops reaching updateField at all -- for
- * instance a future change that special-cases a copy_to source upstream. Driving
- * applyAiValueWithValidation exercises that whole span.
+ * message and the chokepoint, and it sits at TWO levels:
+ *   - handleFieldUpdate (the message handler) does the read-only / hidden
+ *     availability check and refuses a locked field outright;
+ *   - applyAiValueWithValidation (below it) validates and canonicalizes.
+ * A chokepoint-only test cannot catch a regression where the AI path stops
+ * reaching updateField at all -- for instance a future change that
+ * special-cases a copy_to source upstream.
+ *
+ * So the LAST describe here drives handleFieldUpdate with a message-shaped
+ * payload, covering the whole span; the others drive
+ * applyAiValueWithValidation, which covers everything BELOW the availability
+ * gate. An earlier version of this docstring claimed the latter covered the
+ * lock check too -- it does not, that check lives one level above it
+ * (fresh-eyes, round 2).
  *
  * ASCII only.
  */
@@ -109,5 +118,34 @@ describe('the AI ingress reaches the copy_to fan-out (bd polyglot-pdf-gpaed)', (
 
     const reloaded = SchemaFormStateManager.load()
     expect(reloaded?.fieldValues['p8_family_name']?.value).toBe('GARCIA')
+  })
+})
+
+describe('the MESSAGE handler reaches the fan-out too (bd polyglot-pdf-gpaed)', () => {
+  beforeEach(() => { stubStorage() })
+
+  it('a field_update message fans the value out to the target', () => {
+    // One level ABOVE applyAiValueWithValidation: handleFieldUpdate does the
+    // read-only/hidden availability check and refuses a locked field. Driving
+    // it with a message-shaped payload covers that gate too, which the tests
+    // above deliberately do not.
+    const s = schema()
+    const conn = new WebFormConnection(s)
+    ;(conn as any).handleFieldUpdate({ updates: { family_name: 'GARCIA' } })
+
+    const state = (conn as any).state
+    expect(state.fieldValues['family_name']?.value).toBe('GARCIA')
+    expect(state.fieldValues['p8_family_name']?.value).toBe('GARCIA')
+  })
+
+  it('the SOURCE being writable is what matters, not the locked target', () => {
+    // The target is read_only, so the availability gate would refuse a direct
+    // AI write to it. The whole point of the fan-out is that the source is
+    // writable and carries the value across.
+    const s = schema()
+    const conn = new WebFormConnection(s)
+    ;(conn as any).handleFieldUpdate({ updates: { p8_family_name: 'DIRECT' } })
+    expect((conn as any).state.fieldValues['p8_family_name']?.value)
+      .not.toBe('DIRECT')
   })
 })
