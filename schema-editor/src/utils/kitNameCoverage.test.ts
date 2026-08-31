@@ -109,8 +109,13 @@ describe('kit naming coverage (bd polyglot-pdf-kztlr)', () => {
  * label carries an explicit `// kit-label-ok:` marker in the source, and this
  * asks one question with one answer: is the marker there? The whole exemption
  * set is FOUR lines (two tooltips, each a two-branch ternary), so the cost is
- * four comments and the false-negative surface is zero for anything nobody
- * deliberately marked.
+ * four comments, and nothing goes unflagged unless a human wrote the marker
+ * on its own line above it. That claim is narrower than the one this docstring
+ * first made ("the false-negative surface is zero"), which review falsified:
+ * the check used `.includes()` and kept the offender's own line, so the marker
+ * text inside a STRING LITERAL, or trailing on the offending line itself, both
+ * licensed a real message. Matching text instead of asking the question -- the
+ * same habit, one level up.
  *
  * The limit that REMAINS, stated because a guard that hides one reads as
  * broader assurance than it is: this matches a SHAPE, `${kit.label}`. A label
@@ -145,8 +150,21 @@ function scanForBareLabels(text: string): number[] {
     // The marker may sit a few lines up: it explains a whole ternary, and
     // prettier splits these across lines. Bounded so a marker cannot silently
     // license an unrelated match far below it.
+    //
+    // STRICTLY ABOVE, and the line must BE the comment rather than merely
+    // contain its text. Two evasions otherwise, both found by review and both
+    // the same old habit of matching text instead of asking the question:
+    //   - `.includes()` accepted the marker inside a STRING LITERAL, so
+    //     `const help = "write // kit-label-ok: first"` licensed a real
+    //     offender below it;
+    //   - `slice(from, i + 1)` kept the offender's OWN line, so a trailing
+    //     `// kit-label-ok:` on the same line self-exempted -- which also
+    //     contradicted this function's own "must sit above" docstring.
+    // An author annotating a real message in place is exactly the review
+    // signal the marker exists to create, so it must not be self-serve.
     const from = Math.max(0, i - MARKER_REACH);
-    const covered = lines.slice(from, i + 1).some((l) => l.includes(MARKER));
+    const covered = lines.slice(from, i)
+      .some((l) => l.trim().startsWith(MARKER));
     if (!covered) offenders.push(i + 1);
   });
   return offenders;
@@ -200,6 +218,24 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
     // A multi-line template literal (beat the per-line backtick count).
     expect(scanForBareLabels(['setNotice(`Deleted', '  ${kit.label}',
       '  permanently.`);'].join(String.fromCharCode(10)))).toEqual([2]);
+
+    // The marker must BE a comment, not merely appear in the text: its own
+    // characters inside a string literal license nothing.
+    expect(scanForBareLabels(['const help = "write ' + MARKER + ' first";', bare]
+      .join(String.fromCharCode(10)))).toEqual([2]);
+
+    // ...and it must sit ABOVE, not trail the offending line itself, or an
+    // author could self-exempt a real message in place.
+    expect(scanForBareLabels(bare + '  ' + MARKER + ' same-line trick'))
+      .toEqual([1]);
+
+    // The two guards above OVERLAP on a trailing marker (startsWith rejects it
+    // whatever the slice does), so the slice bound needs its own case or it is
+    // pinned by nothing: a line that BEGINS with the marker and also carries a
+    // bare label. Only excluding the offender's own line catches this, and
+    // without it the mutation `slice(from, i + 1)` passes every other test.
+    expect(scanForBareLabels(`  ${MARKER} why  setNotice(\`"\${kit.label}" x\`);`))
+      .toEqual([1]);
 
     // AND the one that beat whole-file backtick parity: an ordinary comment
     // containing a single backtick, of which this source has 171. Under the

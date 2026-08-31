@@ -335,3 +335,45 @@ The question that ends both, asked before writing a check rather than after
 review returns it: *what exactly must be true, and am I testing that, or
 something next to it?* And when the answer needs inference over untrusted text,
 the better move is usually to stop inferring and require the author to say so.
+
+## Round 6: the same habit, one level up
+
+The marker design is sound; my implementation of the marker CHECK repeated the
+habit it was meant to end. Two evasions, both found by review:
+
+- `.includes(MARKER)` accepted the marker's characters inside a STRING LITERAL,
+  so `const help = "write // kit-label-ok: first"` licensed a real message below
+  it.
+- `slice(from, i + 1)` kept the offender's OWN line, so a trailing
+  `// kit-label-ok:` self-exempted -- which also contradicted the function's own
+  "must sit above" docstring.
+
+Both are the old error relocated: matching TEXT instead of asking the question.
+The redesign moved inference out of offender-detection and I reintroduced it in
+marker-detection. Now the line must BE the comment (`trim().startsWith`) and sit
+strictly above.
+
+And I overclaimed again. The docstring said "the false-negative surface is zero
+for anything nobody deliberately marked" -- untrue as implemented, corrected to
+what the code actually guarantees.
+
+**A note on mutation testing that nearly slipped.** Reverting the slice fix left
+all five tests GREEN, because my same-line test put the marker AFTER the code,
+where `startsWith` rejects it whatever the slice does. The two fixes overlapped,
+so one was pinned by nothing. The case that separates them is a line that BEGINS
+with the marker and also carries a bare label; with it, each mutation reddens
+alone. Two fixes landing together need a case that isolates each, or the suite
+reports coverage it does not have.
+
+## Where this ended
+
+Six rounds on this bead, four on its predecessor. Every finding was in a check;
+no shipped message was ever wrong after the first pass of either bead.
+
+The guard is now roughly fifteen lines and asks one question. It got there by
+deleting about a hundred and fifty lines of cleverness that had been defeated
+six times -- and the deletion only happened because a reviewer said plainly that
+patching again was the wrong move. That was the right call, and I should have
+reached it two rounds earlier: the signal was already there in my own journal,
+which had recorded the same defect class three times before I stopped treating
+each one as a fresh case.
