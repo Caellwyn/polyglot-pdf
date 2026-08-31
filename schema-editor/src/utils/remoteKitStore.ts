@@ -1,6 +1,6 @@
 /**
- * Remote form-kit catalogue over the backend's token-gated /api/editor routes
- * (bd polyglot-pdf-92qe.2).
+ * Remote form-kit catalogue over the backend's editor/author-gated
+ * /api/editor routes (bd polyglot-pdf-92qe.2).
  *
  * The hosted delivery mode's counterpart of formKitDirectory.ts: instead of a
  * local directory picked via the File System Access API, kits live in the

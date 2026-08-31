@@ -1,6 +1,6 @@
 """
-Editor Kit Routes -- the token-gated read/write surface for the hosted schema
-editor (bd polyglot-pdf-92qe.1).
+Editor Kit Routes -- the editor/author-gated read/write surface for the hosted
+schema editor (bd polyglot-pdf-92qe.1).
 
 The public /api/form-kits* routes (form_kit_routes.py) serve the VOICE app and
 are manifest-gated: in GCS mode they never list or serve a draft kit. The hosted

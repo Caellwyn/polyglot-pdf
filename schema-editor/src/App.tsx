@@ -447,9 +447,9 @@ export const App: React.FC = () => {
   }, [hosted]);
 
   // Open a kit from the REMOTE catalogue (hosted mode, bd 92qe.2): pull its
-  // schema + PDF through the token-gated routes and drive the same schema +
-  // PDFViewer flow the local kit path uses. The save target is the kit id
-  // (saveRemoteSchema), not a file handle.
+  // schema + PDF through the editor/author-gated routes and drive the same
+  // schema + PDFViewer flow the local kit path uses. The save target is the
+  // kit id (saveRemoteSchema), not a file handle.
   // Monotonic open token: remote opens take real network time and the cards
   // stay clickable, so kit A's SLOW response must never apply after kit B was
   // opened -- the stale open would overwrite B's schema/kit id and leave the
@@ -1378,7 +1378,7 @@ export const App: React.FC = () => {
         </div>
 
         {/* The front door. Hosted mode (bd 92qe.2): the remote catalogue over
-            the token-gated editor routes. Local mode: the directory-based
+            the editor/author-gated routes. Local mode: the directory-based
             catalogue (bd b0pe), with the hardcoded FormSelector as a fallback
             for browsers without the directory API. */}
         {hosted && role ? (

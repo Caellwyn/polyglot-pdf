@@ -85,8 +85,9 @@ const STATUS_STYLE: Record<string, string> = {
 /**
  * The hosted editor's front door (bd polyglot-pdf-92qe.2): the same catalogue
  * card UI as the local FormCatalogue, but listing kits from the backend's
- * token-gated /api/editor routes (the shared store) instead of a picked local
- * directory. Drafts are included -- that IS the contractor's work list.
+ * editor/author-gated /api/editor routes (the shared store) instead of a
+ * picked local directory. Drafts are included -- that IS the contractor's
+ * work list.
  *
  * Deliberately a SIBLING of FormCatalogue rather than a mode inside it:
  * FormCatalogue is tightly bound to the File System Access directory API

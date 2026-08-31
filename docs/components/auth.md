@@ -311,7 +311,7 @@ guarded and staff-only (bd `polyglot-pdf-6x1j`).
 
 No UI ships with the route: the button belongs to the firm console (bd
 `polyglot-pdf-gob8l`), per the maintainer's 2026-08-20 decision -- deliberately
-not bolted onto the token-gated staff editor.
+not bolted onto the staff editor.
 
 `GET /api/form-kits/{kit_id}/pdf` is **ungated for PUBLIC kits only** (bd
 `polyglot-pdf-vccy` scoped the former blanket non-gate): a public kit's

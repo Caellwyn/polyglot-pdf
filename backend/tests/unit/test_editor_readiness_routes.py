@@ -6,7 +6,8 @@ readiness stamp -- the same `_stamp_readiness` the hosted save path runs, so
 there is exactly ONE stamp writer in the tree.
 
 Pinned here:
-1. The route is token-gated like every /api/editor route (401 / 404 / 422).
+1. The route requires editor/author identity like every /api/editor route
+   (401 / 404 / 422).
 2. The happy path persists a stamp measuring the POSTED schema into
    metadata.json, preserving every other metadata key.
 3. The never-destroy rule: unparseable metadata.json is left byte-identical
@@ -26,11 +27,8 @@ import backend.routes.editor_readiness_routes as err_routes
 from backend.services.form_kits import LocalFormKitStore
 
 
-def _settings(editor=None, author=None):
-    return SimpleNamespace(
-        SCHEMA_EDITOR_TOKEN=editor,
-        SCHEMA_AUTHOR_TOKEN=author,
-    )
+def _settings():
+    return SimpleNamespace()
 
 
 def _make_kit(root, kit_id, *, meta_text=None, meta=None):
@@ -68,9 +66,7 @@ def client(tmp_path, monkeypatch):
     # The route resolves the store via its own import; auth resolves settings
     # via the require_editor_role dependency it imports from ekr.
     monkeypatch.setattr(err_routes, "get_form_kit_store", lambda: store)
-    monkeypatch.setattr(
-        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
-    )
+    monkeypatch.setattr(ekr, "get_settings", lambda: _settings())
     return TestClient(app), tmp_path
 
 
