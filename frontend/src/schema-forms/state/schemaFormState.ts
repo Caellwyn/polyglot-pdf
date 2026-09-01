@@ -888,8 +888,11 @@ export class SchemaFormStateManager {
    *
    * Returns schema with ALL fields from the section, including locked/hidden fields.
    * Gemini receives the full manifest - dependency logic is handled by:
-   * - computeNextField() which skips locked/hidden fields for next_field_hint
-   * - Backend validation which rejects updates to locked fields with helpful error
+   * - computeNextField() filters on shouldShowField ALONE (bd polyglot-pdf-ubam);
+   *   it does NOT skip read_only/locked fields, so a locked field can still be
+   *   offered as next_field_hint
+   * - The locked-field refusal is a CLIENT-side gate: webFormConnection's
+   *   handleFieldUpdate checks isFieldReadOnly before accepting a write
    *
    * @param schema - Full form schema
    * @param sectionId - Section ID to extract
