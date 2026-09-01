@@ -206,17 +206,28 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // transition, which closed every deliberately-opened hidden kit on mount.
   const openKit = kits.find((k) => k.id === selectedKitId) ?? null;
   const openIsHidden = openKit === null ? null : openKit.hidden === true;
-  const wasVisible = React.useRef<boolean | null>(null);
+  // The baseline is stored WITH the id it describes, in ONE effect.
+  //
+  // A separate reset effect keyed on selectedKitId does not work, and the way
+  // it fails is quiet: effects run in declaration order, so switching straight
+  // from a visible kit to an already-hidden one ran the unwind FIRST, against
+  // the previous kit's stale `true`, and closed the kit just deliberately
+  // opened -- the same unopenable-hidden-kit bug as before, reached by prop
+  // change instead of mount. Pairing the flag with its id removes the ordering
+  // question entirely rather than depending on getting it right.
+  const lastSeen = React.useRef<{ id: string; visible: boolean } | null>(null);
   React.useEffect(() => {
-    // Fires ONLY on visible -> hidden for the same open kit. Arriving hidden
-    // (a deliberate open via Show hidden) leaves it alone, and an absent kit
-    // teaches the baseline nothing.
-    if (openIsHidden === true && wasVisible.current === true) clearOpenKit?.();
-    if (openIsHidden !== null) wasVisible.current = !openIsHidden;
-  }, [openIsHidden, clearOpenKit]);
-  // Switching forms re-baselines, so the previous kit's visibility is never
-  // carried forward onto the next one.
-  React.useEffect(() => { wasVisible.current = null; }, [selectedKitId]);
+    const prev = lastSeen.current;
+    // Fires ONLY on visible -> hidden for the SAME kit. Arriving hidden (a
+    // deliberate open via Show hidden) is left alone, an absent kit teaches
+    // the baseline nothing, and a different kit is not evidence about this one.
+    if (openIsHidden === true && prev?.id === selectedKitId && prev.visible) {
+      clearOpenKit?.();
+    }
+    lastSeen.current = (selectedKitId !== null && openIsHidden !== null)
+      ? { id: selectedKitId, visible: !openIsHidden }
+      : null;
+  }, [openIsHidden, selectedKitId, clearOpenKit]);
   const withheld = React.useMemo(
     () => hiddenByFilterCount(kits, filter), [kits, filter]);
 

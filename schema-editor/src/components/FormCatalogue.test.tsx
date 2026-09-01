@@ -1942,6 +1942,29 @@ describe('hiding kits and filtering the catalogue (local)', () => {
     await waitFor(() => expect(clearOpenKit).toHaveBeenCalledTimes(1));
   });
 
+  it('opening a hidden kit from an already-mounted session keeps it open',
+    async () => {
+      // The hosted twin's rerender case, mirrored. The unwind must fire on the
+      // transition, never on arriving hidden -- otherwise a hidden kit cannot
+      // be opened at all, which breaks retrievability while fixing a desync.
+      const clearOpenKit = vi.fn();
+      const root = manyRoot();
+      (window as unknown as Record<string, unknown>).showDirectoryPicker =
+        vi.fn(async () => root);
+      const view = render(<FormCatalogue onOpenKit={vi.fn()}
+        selectedKitId="form-2" clearOpenKit={clearOpenKit} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      // Opening the folder calls clearOpenKit itself, so count from here.
+      clearOpenKit.mockClear();
+
+      // form-4 is hidden. Open it the way App does: same mount, new prop.
+      view.rerender(<FormCatalogue onOpenKit={vi.fn()}
+        selectedKitId="form-4" clearOpenKit={clearOpenKit} />);
+      await waitFor(() => expect(screen.getByTestId('catalogue-strip')).toBeTruthy());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+    });
+
   it('hides through the SAME backend endpoint the hosted catalogue uses', async () => {
     // One implementation cannot drift from itself. Local mode already routes
     // status changes this way.

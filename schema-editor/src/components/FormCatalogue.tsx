@@ -134,6 +134,25 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // uses -- two implementations of "which kits exist" is how they drift.
   const [filter, setFilter] = React.useState<CatalogueFilter>(EMPTY_FILTER);
   const shown = React.useMemo(() => filterKits(kits, filter), [kits, filter]);
+  // The same concurrent-hide unwind as the hosted twin, and for the same
+  // reason: local mode writes hiding through the SHARED backend, so another
+  // session can hide the kit open here and this refresh brings it back hidden.
+  // "Local is single-user" is true of the FOLDER, not of the endpoint.
+  //
+  // Fires on the TRANSITION (visible -> hidden for the same kit), never on
+  // arriving hidden -- opening a hidden kit deliberately must not close it.
+  const openKit = kits.find((k) => k.id === selectedKitId) ?? null;
+  const openIsHidden = openKit === null ? null : openKit.hidden === true;
+  const lastSeen = React.useRef<{ id: string; visible: boolean } | null>(null);
+  React.useEffect(() => {
+    const prev = lastSeen.current;
+    if (openIsHidden === true && prev?.id === selectedKitId && prev.visible) {
+      clearOpenKit?.();
+    }
+    lastSeen.current = (selectedKitId !== null && openIsHidden !== null)
+      ? { id: selectedKitId, visible: !openIsHidden }
+      : null;
+  }, [openIsHidden, selectedKitId, clearOpenKit]);
   const withheld = React.useMemo(
     () => hiddenByFilterCount(kits, filter), [kits, filter]);
   // bd tynm parity: the card grid is collapsed by default behind a compact

@@ -230,3 +230,46 @@ That is the fourth vacuous test in this bead, and they share a shape: **the
 setup asserts the end state rather than performing the change**. Mounting
 already-hidden is not the same event as becoming hidden, any more than a folder
 open that itself calls `clearOpenKit` is the same as a Hide click doing so.
+
+## Round 4: effect ORDER was doing load-bearing work
+
+Two more. The first is the same unopenable-hidden-kit bug a third time, reached
+a third way.
+
+I had split the logic across two effects: the unwind, then a reset keyed on
+`selectedKitId`. Effects run in declaration order, so switching straight from a
+visible kit to an already-hidden one ran the unwind FIRST, against the previous
+kit's stale "visible", and closed the kit just opened. The reset that would have
+cleared it ran a line too late.
+
+The fix is not to reorder them. It is to stop depending on order at all: the
+baseline is now stored **with the id it describes**, in one effect, so "was THIS
+kit visible?" is answerable without a second effect having run yet.
+
+**And no existing test could have caught it**, which is the more useful half.
+Every test here mounts fresh, and this bug needs a *prop change on a live
+mount* -- which is how the real path works: the catalogue is already up, you
+tick Show hidden, you click a card, `App` sets `selectedKitId`. A `rerender`
+test now covers it, and reverting the id-pairing reddens exactly that test.
+
+**The local catalogue had no concurrent unwind at all.** I had reasoned that
+local mode is single-user -- but that is true of the FOLDER, not the endpoint:
+local writes hiding through the same shared backend, so another session can hide
+the kit open here. Same fix, same shape, now in both.
+
+## What five rounds actually cost, and why
+
+Nothing shipped wrong. But the same defect -- an open hidden kit closing itself
+-- appeared three times, through three different mechanisms: state instead of
+transition, then an empty-list first render, then effect ordering. Each fix was
+correct for the case in front of me and left the next one open.
+
+The tell I kept missing: I was reasoning about *when the effect fires* rather
+than *what it needs to know*. Once the answer became "was this specific kit
+visible a moment ago", the id-paired baseline made all three cases fall out at
+once, and there was no ordering question left to get wrong.
+
+The other recurring cost was test shape. Four vacuous tests, and one absent one,
+all sharing a cause: **mounting in the end state instead of performing the
+change**. A fresh mount cannot see a transition, and an assertion satisfied by
+the setup proves nothing about the code under it.

@@ -2222,6 +2222,32 @@ describe('hiding never strands a kit', () => {
     ).toBeInTheDocument());
   });
 
+  it('opening a hidden kit from an ALREADY-MOUNTED session keeps it open',
+    async () => {
+      // Every other test here mounts fresh. That is the rare path -- the real
+      // one is ticking Show hidden and clicking a hidden card while the
+      // catalogue is already up, which arrives as a selectedKitId PROP CHANGE.
+      //
+      // With the baseline held in a bare ref and reset by a second effect,
+      // effect declaration order meant the unwind ran first against the
+      // PREVIOUS kit's stale 'visible', and closed the kit just opened. A
+      // fresh-mount test cannot see that; only a rerender can.
+      const clearOpenKit = vi.fn();
+      vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+      const view = render(<RemoteCatalogue onOpenKit={() => {}}
+        selectedKitId="form-2" role="author" clearOpenKit={clearOpenKit} />);
+      await waitFor(() =>
+        expect(screen.getByText('Show form cards')).toBeInTheDocument());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+
+      // Now open the HIDDEN kit, the way App does: same mount, new prop.
+      view.rerender(<RemoteCatalogue onOpenKit={() => {}}
+        selectedKitId="form-3" role="author" clearOpenKit={clearOpenKit} />);
+      await waitFor(() =>
+        expect(screen.getByText('Show form cards')).toBeInTheDocument());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+    });
+
   it('per-status counts describe the GRID, not the store', async () => {
     // The store banner counts everything and says so; the per-status line sits
     // directly above the cards and describes THEM. Summing the raw list put
