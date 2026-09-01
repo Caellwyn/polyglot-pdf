@@ -79,7 +79,9 @@ def _backend_extra_env(script: Path) -> dict[str, str]:
     writes `LINK_BASE_URL=https://$STAGING_SITE.web.app`, and comparing the
     literal `$STAGING_SITE` would test the spelling rather than the origin.
     """
-    text = script.read_text(encoding="utf-8")
+    # LIVE text: a commented-out BACKEND_EXTRA_ENV would otherwise be parsed
+    # as the real one (F3, round 8).
+    text = _live_text(script)
     match = re.search(r'BACKEND_EXTRA_ENV="([^"]*)"', text)
     assert match, f"no BACKEND_EXTRA_ENV assignment found in {script.name}"
 
@@ -111,7 +113,7 @@ def _backend_extra_env(script: Path) -> dict[str, str]:
 
 
 def _secrets(script: Path) -> str:
-    text = script.read_text(encoding="utf-8")
+    text = _live_text(script)
     match = re.search(r'BACKEND_SECRETS_COMMON="([^"]*)"', text)
     assert match, f"no BACKEND_SECRETS_COMMON assignment found in {script.name}"
     return match.group(1)
@@ -308,20 +310,74 @@ def _api_enabling_scripts_that_bind_secrets() -> list[Path]:
     return found
 
 
+def _deploy_all_invocation(script: Path) -> list[str]:
+    """The env-prefix lines of this channel's `./deploy-all.sh` call.
+
+    A channel passes BACKEND_SECRETS as an env PREFIX -- a run of
+    `NAME="value" \\` continuation lines ending in `./deploy-all.sh ...`. Walk
+    BACKWARD from that call over the continued lines, so "is the hand-off part
+    of the invocation" is a structural question rather than "does the string
+    appear somewhere in the file".
+    """
+    lines = [_strip_comment(l).rstrip() for l in
+             script.read_text(encoding="utf-8").splitlines()]
+    call = next(
+        (i for i, l in enumerate(lines) if "./deploy-all.sh" in l), None
+    )
+    if call is None:
+        return []
+
+    prefix: list[str] = []
+    i = call - 1
+    while i >= 0 and lines[i].endswith("\\"):
+        prefix.append(lines[i].rstrip("\\").strip())
+        i -= 1
+    return prefix
+
+
 @pytest.mark.parametrize("script", [DEMO, STAGING], ids=["demo", "staging"])
 def test_channel_forwards_its_secrets_to_deploy_all(script: Path):
-    """The channel must PASS the constant, not merely define it."""
-    text = script.read_text(encoding="utf-8")
-    assert _has_live_line(script, 'BACKEND_SECRETS="$BACKEND_SECRETS_COMMON"'), (
-        f"{script.name} defines BACKEND_SECRETS_COMMON but never hands it to "
-        "deploy-all.sh, so the secret silently never binds"
+    """The channel must PASS the constant INTO the invocation, not merely set it.
+
+    Containment is not position. An earlier version asked only whether the
+    line existed anywhere live, so dropping its trailing backslash -- turning
+    the env prefix into a standalone assignment the child never sees, and
+    orphaning the BACKEND_EXTRA_ENV continuation with it -- passed 13/13 while
+    the secret never bound. That is the same containment-vs-proximity error
+    this file's argv parser exists to avoid, applied to the hand-off instead.
+    """
+    prefix = _deploy_all_invocation(script)
+
+    # Guard the guard: an empty prefix would satisfy any `not in` assertion.
+    assert prefix, (
+        f"could not locate {script.name}'s ./deploy-all.sh invocation, so this "
+        "guard would pass vacuously"
+    )
+
+    assert any('BACKEND_SECRETS="$BACKEND_SECRETS_COMMON"' in l for l in prefix), (
+        f"{script.name} does not hand BACKEND_SECRETS to deploy-all.sh as part "
+        f"of the invocation (env prefix is {prefix}) -- the secret never binds"
     )
 
 
 def test_deploy_all_builds_the_flag_from_backend_secrets():
     """deploy-all.sh must turn BACKEND_SECRETS into --set-secrets."""
     text = DEPLOY_ALL.read_text(encoding="utf-8")
-    assert _has_live_line(DEPLOY_ALL, 'SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")')
+    # PIN THE CONDITION, NOT JUST THE ASSIGNMENT. Every earlier version pinned
+    # the literal `SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")`, so renaming
+    # the variable in the GUARD -- `[ -n "$BACKEND_SECRETS_TYPO" ] && ...` --
+    # left the pinned string intact on a live line, parsed clean, and produced
+    # an empty array: --set-secrets reaches gcloud on NO channel and the mint
+    # route 503s, with all 13 tests green. Pinning a value without pinning the
+    # branch that reaches it is the bead's own premise turned on the guard.
+    assert _has_live_line(
+        DEPLOY_ALL,
+        '[ -n "$BACKEND_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")',
+    ), (
+        "deploy-all.sh must build SECRETS_FLAG from BACKEND_SECRETS on one live "
+        "line -- pinning the assignment alone lets a renamed guard variable "
+        "silently disable --set-secrets on every channel"
+    )
 
 
 def _gcloud_run_deploy_argv(text: str) -> list[str]:
