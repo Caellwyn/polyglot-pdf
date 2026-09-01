@@ -32,9 +32,30 @@ import full_form_script as ffs  # noqa: E402
 import scenario_events as se  # noqa: E402
 import measure_form_session_costs as mfc  # noqa: E402
 
+# full_form_script.load_schema() (and every helper in this file that calls it,
+# directly or via measure_form_session_costs.run(schema="i90-full")) reads
+# form-kits/i-90/schema.json, which no longer exists (bd polyglot-pdf-hydb0,
+# kit deprecated in favor of i-90_v2). Most of this file's coverage is
+# i-90-shaped (there is no w7/f1040 equivalent fixture here), but a real
+# subset (text-cost pricing, fill-failure classification, arm-flag logic) is
+# schema-agnostic and must keep running -- so this guards the specific
+# call sites/tests that need the real schema, not the whole module.
+needs_i90 = pytest.mark.skipif(
+    not (_REPO / "form-kits" / "i-90" / "schema.json").exists(),
+    reason="form-kits/i-90/schema.json not present (kit deprecated, bd "
+           "polyglot-pdf-hydb0)",
+)
+
+
+def _skip_if_no_i90():
+    if not (_REPO / "form-kits" / "i-90" / "schema.json").exists():
+        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
+                     "bd polyglot-pdf-hydb0)")
+
 
 # ---------------------------------------------------------------- generator
 
+@needs_i90
 def test_full_form_plan_counts_and_guards():
     plan = ffs.build_full_form_plan(ffs.load_schema())
     qs, expected = plan["questions"], plan["expected"]
@@ -57,6 +78,7 @@ def test_full_form_plan_counts_and_guards():
         "my_previous_card_has_been_lost_stolen_or_destroyed")
 
 
+@needs_i90
 def test_full_form_expected_passes_driver_drift_guard():
     schema = ffs.load_schema()
     plan = ffs.build_full_form_plan(schema)
@@ -65,6 +87,7 @@ def test_full_form_expected_passes_driver_drift_guard():
         {f["id"]: f for f in schema["fields"]}, plan["expected"])
 
 
+@needs_i90
 def test_no_degenerate_unhappy_wrong_utterances():
     """Every answered (non-empty-expected) question must have a 'wrong'
     utterance DISTINCT from 'say' -- a degenerate unhappy-path turn (REJECT
@@ -79,6 +102,7 @@ def test_no_degenerate_unhappy_wrong_utterances():
     assert degenerate == []
 
 
+@needs_i90
 def test_override_must_be_valid_option():
     schema = ffs.load_schema()
     orig = dict(ffs.ANSWER_OVERRIDES)
@@ -93,6 +117,7 @@ def test_override_must_be_valid_option():
 
 # ------------------------------------------------------- Spanish (E6, 0cyu)
 
+@needs_i90
 def test_es_plan_matches_en_field_ids_and_expected_canon():
     """The Spanish arm speaks the SAME persona in Spanish, but the form still
     fills in English: build_full_form_plan(schema, lang='es') must produce
@@ -112,6 +137,7 @@ def test_es_plan_matches_en_field_ids_and_expected_canon():
     assert plan_en["auto_apply"] == plan_es["auto_apply"]
 
 
+@needs_i90
 def test_no_degenerate_unhappy_wrong_utterances_es():
     """The same degenerate say==wrong guard the English arm relies on
     (bd polyglot-pdf-3gt9) must also hold for the Spanish arm's phrasings."""
@@ -122,6 +148,7 @@ def test_no_degenerate_unhappy_wrong_utterances_es():
     assert degenerate == []
 
 
+@needs_i90
 def test_es_phrasing_spot_checks():
     schema = ffs.load_schema()
     field_by_id = {f["id"]: f for f in schema["fields"]}
@@ -190,6 +217,7 @@ class _StubService:
 
 
 def _client(plan_fields=None):
+    _skip_if_no_i90()
     schema = ffs.load_schema()
     plan = [{"field_id": f, "say": "", "wrong": ""}
             for f in (plan_fields or ["p1_line1_aliennumber",
@@ -489,6 +517,7 @@ def _window_client():
     """A client whose active plan is EVERY real i-90 field visible for the
     default (name-unchanged) persona -- so field settledness can be driven
     directly through c.state without touching client-only plumbing."""
+    _skip_if_no_i90()
     schema = ffs.load_schema()
     field_ids = [f["id"] for f in schema["fields"]]
     plan = [{"field_id": f, "say": "", "wrong": ""} for f in field_ids]
@@ -605,6 +634,7 @@ def test_reconnect_rechecks_windows_and_redrains():
 
 # ------------------------------------------------------------ event weave
 
+@needs_i90
 def test_weave_and_scoring_roundtrip():
     plan = ffs.build_full_form_plan(ffs.load_schema())
     steps, exp2, planted = se.weave_events(
@@ -832,6 +862,7 @@ class _DryRunTextAIOneConflict(_DryRunTextAI):
         return {"conflicts": []}
 
 
+@needs_i90
 def test_dry_run_i90_full_emits_summary(monkeypatch, tmp_path):
     import argparse
 
@@ -883,6 +914,7 @@ def test_dry_run_i90_full_emits_summary(monkeypatch, tmp_path):
     assert turns_header.split(",") == mfc.TURNS_CSV_COLUMNS
 
 
+@needs_i90
 def test_dry_run_i90_full_drain_round_trip():
     """bd polyglot-pdf-0cyu: end-to-end OFFLINE drain lifecycle, driven
     directly against the FakeClient + the REAL FormFillingService (wired with
@@ -1220,6 +1252,7 @@ def test_dry_run_i90_v2_continuous_dti_drip_advances_past_section_boundary(
             f"question {i} got no tool calls: {tools}")
 
 
+@needs_i90
 def test_dry_run_legacy_i90_arm_still_runs(monkeypatch, tmp_path):
     """The pre-existing 34-q --schema i90 arm keeps working untouched (its
     sidecar stays UNWIRED by default -- text_usd must be zero)."""
@@ -1276,6 +1309,7 @@ def test_events_unhappy_path_happy_mismatch_exits_loudly(monkeypatch, tmp_path):
         asyncio.run(mfc.run(args))
 
 
+@needs_i90
 def test_events_unhappy_path_unhappy_is_allowed(monkeypatch, tmp_path):
     """The matched combination (--events unhappy --path unhappy) must NOT
     trip the guard. synth_only=True: run() exits 0 right after plan build +
@@ -1298,6 +1332,7 @@ def test_events_unhappy_path_unhappy_is_allowed(monkeypatch, tmp_path):
     assert rc == 0
 
 
+@needs_i90
 def test_events_unhappy_path_happy_allowed_with_override(monkeypatch, tmp_path):
     """--allow-path-mismatch lets the mismatched combination proceed
     (synth_only=True for speed, as above)."""
