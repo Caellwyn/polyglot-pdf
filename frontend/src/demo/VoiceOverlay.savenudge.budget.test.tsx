@@ -50,6 +50,24 @@ describe('the save nudge on a spend-ceiling close', () => {
     expect(statuses).toContain('reconnect_failed');
   });
 
+  it('does not show the button-less modal while the save nudge is up', () => {
+    // Opus cross-surface r2. Both dialogs carry the SAME words (the ending
+    // nudge and the budget modal are both the lifted voiceEnding copy), but
+    // the modal is position:fixed z-index 10000 with a 75% scrim and NO
+    // buttons, while the nudge underneath holds the working "Save my form"
+    // button -- and the nudge has no CSS of its own to compete with. Showing
+    // both told the client to save and then covered the only control that
+    // saves.
+    //
+    // Source-level for the same reason as the gate above: the overlay drags in
+    // audio/WS/PDF workers. Scoped to the modal's own JSX element so a
+    // neighbouring isOpen cannot satisfy it.
+    const start = SOURCE.indexOf('variant="budget_exhausted"');
+    expect(start).toBeGreaterThan(-1);
+    const element = SOURCE.slice(start, SOURCE.indexOf('/>', start));
+    expect(element).toContain('saveNudge.variant === null');
+  });
+
   it('keeps the comment and the code in agreement', () => {
     // The comment above the gate names the spend ceiling FIRST. It said so
     // while the code no longer covered it -- which is how the regression hid.

@@ -50,7 +50,11 @@ describe('the spend-exhausted modal', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('says the work is safe and names what still works', () => {
+  it('tells the client to save, and names what still works', () => {
+    // NOT "says the work is safe" -- the copy deliberately warns that answers
+    // CAN be lost unless saved (it is the lifted voiceEnding text; the earlier
+    // reassuring English was dropped because it contradicted its own 17
+    // translations, Opus cross-surface r1).
     renderBudget();
     const body = screen.getByText(CONNECTION_TIMEOUT_TRANSLATIONS['English'].budgetExhaustedMessage);
     expect(body).toBeTruthy();
