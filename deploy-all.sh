@@ -297,7 +297,14 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         aiplatform.googleapis.com \
         storage.googleapis.com \
         texttospeech.googleapis.com \
+        secretmanager.googleapis.com \
         --project "$POLYGLOT_PROJECT_NAME"
+    # secretmanager: --set-secrets below hard-depends on it (bd
+    # polyglot-pdf-hvui4). THIS list is the one that matters -- it runs on every
+    # backend deploy and self-heals, whereas scripts/setup-gcp-project.sh is a
+    # one-time bootstrap nobody re-runs. I added the API to the bootstrap first
+    # and missed this one; granting the ROLE without enabling the API was the
+    # round before that. Same dependency, three places.
 
     # Build the image using Cloud Build
     IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"

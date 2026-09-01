@@ -328,11 +328,23 @@ def test_setup_grants_the_role_that_set_secrets_requires():
     # not API-gated, so a script that grants without enabling exits 0 looking
     # complete and fails later at `gcloud run deploy`. I shipped exactly that
     # in the previous commit -- the role alone, claiming the gap was closed.
-    assert "secretmanager.googleapis.com" in setup, (
-        "the role is granted but secretmanager.googleapis.com is never enabled "
-        "-- add-iam-policy-binding succeeds regardless, so setup reports "
-        "success and the deploy fails on a fresh project"
-    )
+    #
+    # ENABLED IN EVERY LIST THAT CLAIMS TO GUARANTEE THE APIs, not just one.
+    # There are two: setup-gcp-project.sh (one-time bootstrap, nobody re-runs
+    # it) and deploy-all.sh (runs on EVERY backend deploy, the self-healing
+    # one). I fixed the bootstrap and missed the deploy path -- so the script
+    # that actually guarantees the API was the one still missing it, and this
+    # test stayed green because it read a single file. Same dependency, three
+    # places, three rounds.
+    for script, source in (
+        ("scripts/setup-gcp-project.sh", setup),
+        ("deploy-all.sh", deploy_all),
+    ):
+        assert "secretmanager.googleapis.com" in source, (
+            f"{script} does not enable secretmanager.googleapis.com, which "
+            "--set-secrets hard-depends on. add-iam-policy-binding succeeds "
+            "regardless, so the script reports success and the deploy fails."
+        )
 
 
 def test_no_secrets_means_no_flag():
