@@ -328,3 +328,36 @@ signal that meant nothing: a vacuous assertion, an absent transition test, and
 now a file that passes alone and breaks its neighbours. **Only the full-scope
 run can see the third kind** -- which is why it is the gate rather than a
 formality.
+
+## The re-clear: NO-GAPS, and two things worth fixing anyway
+
+Both layers cleared. The outer reviewer filed two non-blocking findings, and
+both were right enough to do now.
+
+**My own comment stated a false mechanism.** I wrote that the sibling describe
+block "already restores" the fetch stub. It does not: its cleanup is
+`vi.restoreAllMocks()`, which undoes `vi.fn`/`spyOn` and leaves a bare
+`global.fetch = ...` assignment untouched. The file stopped leaking only because
+my block happens to run **last** -- a property of ordering, not of cleanup, and
+one that breaks the moment anything moves. The comment would have taught the
+next author exactly the belief that caused the original ten-test failure. Both
+the comment and the sibling block are fixed.
+
+**The guard was tested everywhere except where it is defined.** Both catalogue
+suites inject a `vi.fn()` stub for `confirmDiscardOnHide`, so App's real
+implementation -- the one function whose entire purpose is preventing silent
+data loss -- was pinned by nothing. Reverting its body to `return true`
+reinstated the original bug with all 2165 tests green. `App.hideguard.test.tsx`
+now drives the real thing, and that mutation reddens it.
+
+That is scar #9 in its purest form, and it is worth stating plainly: **a guard
+mocked at every call site is an untested guard.** The stubs prove the callers
+honour a contract; only a test at the definition proves the contract means
+anything.
+
+The reviewer also credited a mitigation I had not: the backend's
+`_require_edit_lock` refuses a concurrent hide with a 409 whenever the person
+editing holds the kit's lock, so the residual (bd `polyglot-pdf-0s2wf`) is
+narrower than it first reads -- but it did fairly note this is the first
+mechanism in the codebase that destroys unsaved work in response to *another
+user's* action, which is why it stays filed rather than dismissed.

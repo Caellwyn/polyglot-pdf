@@ -875,7 +875,10 @@ describe('FormCatalogue -- run extraction', () => {
   const okJson = (b: unknown) => ({ ok: true, status: 200, json: async () => b } as unknown as Response);
   const errJson = (b: unknown) => ({ ok: false, status: 500, json: async () => b } as unknown as Response);
 
-  afterEach(() => { vi.restoreAllMocks(); });
+  // restoreAllMocks does NOT undo the direct `global.fetch = ...` assignments
+  // below, so capture and put it back explicitly.
+  const realFetch = global.fetch;
+  afterEach(() => { vi.restoreAllMocks(); global.fetch = realFetch; });
 
   it('hides the button (shows the manual hint) when the endpoint is absent', async () => {
     global.fetch = fetchMock({ get: () => ({ ok: false, status: 404, json: async () => ({}) } as unknown as Response) });
@@ -1858,8 +1861,14 @@ describe('local mode respects the submitted lock (bd polyglot-pdf-hqztg)', () =>
 describe('hiding kits and filtering the catalogue (local)', () => {
   // Tests here replace global.fetch. Without this, the LAST one to do so leaks
   // its stub into every later file in a full-suite run -- ten unrelated tests
-  // failed that way while this file passed alone. The sibling describe block
-  // above already restores; this one did not, which is the whole difference.
+  // failed that way while this file passed alone.
+  //
+  // A capture-and-restore, NOT vi.restoreAllMocks(): that undoes vi.fn/spyOn,
+  // and a bare `global.fetch = ...` is neither, so it survives untouched. An
+  // earlier version of this comment credited the sibling block above with
+  // cleaning up, which it does not -- the file stopped leaking only because
+  // this block happens to run last. That is a property of ordering, not of
+  // cleanup, and it would break the moment anything moved.
   const realFetch = global.fetch;
   afterEach(() => { global.fetch = realFetch; });
 
