@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import ts from 'typescript';
 
 const OVERLAYS = [
   ['VoiceOverlay', resolve(process.cwd(), 'src/demo/VoiceOverlay.tsx')],
@@ -24,38 +25,44 @@ const OVERLAYS = [
 ] as const;
 
 /**
- * Every BARE `setError(...)` argument that mentions a connection.
+ * THESE GUARDS USE THE TYPESCRIPT PARSER, after four hand-rolled versions were
+ * each defeated by a shape the previous one did not anticipate:
  *
- * Paren-BALANCED, because a regex cannot be. Three regex versions of this
- * guard were each defeated by a shape the previous one did not anticipate;
- * `setError(x.trim() + ' - Connection lost')` is the case that matters -- a
- * lazy pattern stops at the FIRST `)` and never sees the word.
+ *   1. `setError('Connection...')`  -- missed the ternary/template house style
+ *   2. `[^;]*?` + `\)\s*$`          -- missed a semicolon and a trailing comment
+ *   3. `[\s\S]*?`                   -- paren-unaware: a nested call hid the word
+ *   4. hand-counted parens/braces   -- string- and comment-unaware: a `)` in a
+ *                                      string, or a `{` in a COMMENT inside a
+ *                                      guard block, miscounts
+ *
+ * Each round I patched the symptom and shipped a guard that was defeatable in
+ * a way I had not thought of yet. That is not a tuning problem: these are TSX
+ * files where braces in comments and parens in strings are ordinary, and a
+ * character scan cannot tell code from prose. `typescript` is already a
+ * dependency and its parser knows the difference by construction, so the
+ * structural claims below ("this call", "inside this if-block") are asked of
+ * an AST rather than inferred from text.
  */
-function connectionErrorArgs(source: string): string[] {
-  const found: string[] = [];
-  const CALL = /(?<!Connection)\bsetError\(/g;
-  let match: RegExpExecArray | null;
+function parse(source: string, file: string): ts.SourceFile {
+  return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
 
-  while ((match = CALL.exec(source)) !== null) {
-    let depth = 1;
-    let i = match.index + match[0].length;
-    const start = i;
-    while (i < source.length && depth > 0) {
-      const ch = source[i];
-      if (ch === '(') depth += 1;
-      else if (ch === ')') depth -= 1;
-      i += 1;
+function connectionErrorArgs(source: string, file: string): string[] {
+  const found: string[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'setError'
+    ) {
+      const arg = node.arguments.map((a) => a.getText()).join(', ');
+      if (/connect/i.test(arg)) found.push(arg);
     }
-    // Unbalanced to EOF means the extractor lost track. Surface it rather than
-    // skipping, which would pass vacuously -- the failure mode this whole
-    // family of guards keeps hitting.
-    if (depth !== 0) {
-      found.push('<unbalanced setError( -- extractor failed>');
-      break;
-    }
-    const arg = source.slice(start, i - 1);
-    if (/connect/i.test(arg)) found.push(arg);
-  }
+    ts.forEachChild(node, visit);
+  };
+
+  ts.forEachChild(parse(source, file), visit);
   return found;
 }
 
@@ -67,25 +74,45 @@ function connectionErrorArgs(source: string): string[] {
  * guard and moving the write past its closing brace -- adjacent to a guard,
  * not guarded by one, suite still green.
  */
-function isInsideBudgetGuard(source: string, index: number): boolean {
-  const GUARD = /!== 'budget_exhausted'\)\s*\{/g;
-  let match: RegExpExecArray | null;
+function unguardedErrorStatusWrites(source: string, file: string): string[] {
+  const offenders: string[] = [];
 
-  while ((match = GUARD.exec(source)) !== null) {
-    const blockStart = match.index + match[0].length;
-    if (blockStart > index) break; // guards from here on start after the write
-
-    let depth = 1;
-    let i = blockStart;
-    while (i < source.length && depth > 0) {
-      const ch = source[i];
-      if (ch === '{') depth += 1;
-      else if (ch === '}') depth -= 1;
-      i += 1;
+  /** Does any ANCESTOR if-statement test !== 'budget_exhausted'? */
+  const guardedByAncestor = (node: ts.Node): boolean => {
+    for (let p = node.parent; p; p = p.parent) {
+      if (ts.isIfStatement(p) && /!==\s*['"]budget_exhausted['"]/.test(p.expression.getText())) {
+        // Containment is structural: the write is in the THEN branch, not
+        // merely after the guard. A write in the else branch is NOT guarded.
+        if (p.thenStatement.getStart() <= node.getStart() &&
+            node.getEnd() <= p.thenStatement.getEnd()) {
+          return true;
+        }
+      }
     }
-    if (depth === 0 && index >= blockStart && index < i - 1) return true;
-  }
-  return false;
+    return false;
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'setStatus' &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text === 'error' &&
+      !guardedByAncestor(node)
+    ) {
+      const { line } = ts.getLineAndCharacterOfPosition(
+        node.getSourceFile(),
+        node.getStart(),
+      );
+      offenders.push(`${file}:${line + 1}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  ts.forEachChild(parse(source, file), visit);
+  return offenders;
 }
 
 /**
@@ -129,28 +156,10 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     // setError bypasses the helper". A seventh site added later fails here
     // instead of shipping the same contradiction again.
     //
-    // MATCH THE CALL, NOT ONE SPELLING OF ITS ARGUMENT. My first version keyed
-    // on setError('Connection...') -- single-quoted string literals only -- and
-    // a second review pointed out that MISSES the house style: 7 of the 9 other
-    // setError calls in these files are
-    // `setError(err instanceof Error ? err.message : 'Connection failed')`,
-    // plus template literals and double quotes. A set defined by MEANING cannot
-    // be pinned by one syntactic shape; that is the same error as grepping a
-    // bead id instead of the claim.
-    //
-    // So: find every bare setError(, then keep the ones whose argument mentions
-    // a connection at all, however it is written.
-    //
-    // THREE regex versions of this failed, each to a shape the last did not
-    // anticipate: `[^;]*?` could not cross a semicolon; `\)\s*$` died on a
-    // trailing comment; and `[\s\S]*?` is paren-UNAWARE, so
-    // `setError(x.trim() + ' - Connection lost')` captured only up to the
-    // FIRST `)` and the filter never saw the word. A reviewer defeated that
-    // last one with a realistic regression and the suite stayed green.
-    //
-    // A regex cannot match balanced parens. So this scans forward counting
-    // depth -- a tiny parser, which is the right tool for a structural claim.
-    const bare = connectionErrorArgs(SOURCE);
+    // MATCH THE CALL, NOT ONE SPELLING OF ITS ARGUMENT. A set defined by
+    // MEANING cannot be pinned by a syntactic shape -- see the parser note at
+    // the top of this file for the four versions that proved it.
+    const bare = connectionErrorArgs(SOURCE, path);
     expect(bare).toEqual([]);
 
     // And the helper actually suppresses on the terminal status.
@@ -162,27 +171,45 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     // Suppressing the error TEXT while still writing setStatus('error') was the
     // incomplete half (Opus cross-surface r3). FOUR surfaces key off
     // budget_exhausted -- the spend-ceiling modal, the save nudge's voiceEnding
-    // gate (level-triggered, so an already-showing nudge vanishes), and the
-    // controls ternary, which renders Reconnect for 'error' -- plus solState.isOffline, which makes Sol LEAVE rather than dim. Overwriting the
-    // status therefore restores the dead button this work removed, and the
-    // parent cannot repair it (its sync effect keys on [sharedStatus], which
-    // never changes).
+    // gate (level-triggered, so an already-showing nudge vanishes), the
+    // controls ternary (which renders Reconnect for 'error'), and
+    // solState.isOffline (which makes Sol LEAVE rather than dim). Overwriting
+    // the status restores the dead button this work removed, and the parent
+    // cannot repair it: its sync effect keys on [sharedStatus], which never
+    // changes.
     //
-    // Only the desktop overlay writes a status in its connect catch; mobile
-    // never did, so it was already immune -- assert per file rather than
-    // assuming symmetry.
-    //
-    // CONTAINMENT, NOT PROXIMITY. An earlier version scanned 300 chars BEFORE
-    // each write for the guard text, and a reviewer defeated it by leaving an
-    // empty `if (... !== 'budget_exhausted') { }` and putting the write AFTER
-    // the closing brace: near the guard, not inside it, and the suite stayed
-    // green. Being adjacent to a guard is not being guarded by it.
-    const writes = [...SOURCE.matchAll(/setStatus\('error'\)/g)];
-    for (const write of writes) {
-      expect(
-        isInsideBudgetGuard(SOURCE, write.index!),
-        `setStatus('error') at index ${write.index} is not INSIDE a budget_exhausted guard`,
-      ).toBe(true);
-    }
+    // CONTAINMENT, NOT PROXIMITY: the write must be in the guard's THEN branch,
+    // which is an AST question, not a text-distance one.
+    expect(unguardedErrorStatusWrites(SOURCE, path)).toEqual([]);
   });
+});
+
+// The parametrized suite above asserts per file, but the STATUS test iterates
+// over whatever writes each file has -- and VoiceOverlayMobile has ZERO, so its
+// arm proves nothing on its own (scar #8: a loop over an empty set passes
+// vacuously). This asserts the property that actually matters and cannot go
+// vacuous: SOMEWHERE in the pair there is a real guarded write, so the guard
+// above is exercised against live code rather than an empty list.
+it('exercises the status guard against at least one real write', () => {
+  const total = OVERLAYS.reduce((n, [, file]) => {
+    const source = readFileSync(file, 'utf-8');
+    let count = 0;
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'setStatus' &&
+        node.arguments.length === 1 &&
+        ts.isStringLiteral(node.arguments[0]) &&
+        node.arguments[0].text === 'error'
+      ) {
+        count += 1;
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(parse(source, file), visit);
+    return n + count;
+  }, 0);
+
+  expect(total).toBeGreaterThan(0);
 });
