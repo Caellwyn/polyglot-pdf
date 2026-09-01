@@ -4,12 +4,17 @@ import {
   ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit, DeleteNeedsAcknowledgement, type DeleteEscalation,
   listArchivedRevisions, loadArchivedSchema,
-  onboardRemoteKit, releaseKitLock, setRemoteLabel, setRemoteStatus, takeKitLock,
+  onboardRemoteKit, releaseKitLock, setRemoteHidden, setRemoteLabel,
+  setRemoteStatus, takeKitLock,
   translateRemoteKitOptions, fetchRetireCandidates,
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
   type RetireCandidate,
 } from '../utils/remoteKitStore';
 import { kitName } from '../utils/kitName';
+import {
+  EMPTY_FILTER, filterKits, hiddenByFilterCount, isFilterActive,
+  type CatalogueFilter,
+} from '../utils/catalogueFilter';
 import { ArchivedVersions } from './ArchivedVersions';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
@@ -178,6 +183,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   const [completeElapsed, setCompleteElapsed] = React.useState(0);
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const isAuthor = role === 'author';
+
+  // ONE filter for BOTH surfaces below (bd tx8gi). The strip and the card grid
+  // render the same derived list, so they cannot disagree about what exists --
+  // a strip offering a kit the cards deny is worse than no filter at all.
+  const [filter, setFilter] = React.useState<CatalogueFilter>(EMPTY_FILTER);
+  const shown = React.useMemo(() => filterKits(kits, filter), [kits, filter]);
+  const withheld = React.useMemo(
+    () => hiddenByFilterCount(kits, filter), [kits, filter]);
 
   // Elapsed-seconds ticker while an extraction runs (it takes minutes; a dead
   // button with no feedback reads as a hang).
@@ -555,6 +568,33 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // renamingId gates the inline input.
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
+  // Hide a kit from the catalogue, or bring it back (bd n5fwd). Author-only,
+  // and the SERVER enforces that -- this button merely does not render for an
+  // editor. The refresh is awaited before the notice: the list must reflect
+  // what the server stored, or a failed hide leaves a kit missing from the
+  // only view that shows it.
+  const handleSetHidden = async (kit: RemoteKitEntry, hidden: boolean) => {
+    setNotice(null);
+    setError(null);
+    setBusy(true);
+    try {
+      await setRemoteHidden(kit.id, hidden);
+      await refresh();
+      setNotice(hidden
+        ? `${kitName(kit)} is hidden. Tick "Show hidden" to find it again.`
+        : `${kitName(kit)} is back in the catalogue.`);
+    } catch (err) {
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
+        return;
+      }
+      setError(err instanceof Error ? err.message
+        : `Could not ${hidden ? 'hide' : 'unhide'} the form`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRename = React.useCallback(async (kit: RemoteKitEntry) => {
     const label = renameText.trim();
     setRenamingId(null);
@@ -801,6 +841,64 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         </div>
       )}
 
+      {/* bd tx8gi: search + status filter. Rendered only once there is enough
+          to scan -- a filter above three kits is noise, and the demo store
+          crossing this threshold is the reason the bead exists. */}
+      {kits.length > 3 && (
+        <div className="mt-2 flex items-center gap-2 flex-wrap"
+             data-testid="catalogue-filter">
+          <input
+            className="input text-sm max-w-[14rem]"
+            type="search"
+            placeholder="Search forms..."
+            aria-label="Search forms by name or id"
+            value={filter.query}
+            onChange={(e) => setFilter((p) => ({ ...p, query: e.target.value }))}
+          />
+          <select
+            className="input text-sm"
+            aria-label="Filter by status"
+            value={[...filter.statuses][0] ?? ''}
+            onChange={(e) => setFilter((p) => ({
+              ...p,
+              statuses: e.target.value ? new Set([e.target.value]) : new Set<string>(),
+            }))}
+          >
+            <option value="">Any status</option>
+            <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
+            <option value="complete">Published</option>
+            <option value="unpublished">Unpublished</option>
+          </select>
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={filter.includeHidden}
+              onChange={(e) => setFilter((p) => ({
+                ...p, includeHidden: e.target.checked,
+              }))}
+            />
+            Show hidden
+          </label>
+          {/* THE WAY BACK. Without this line a filtered-out kit is
+              indistinguishable from a deleted one, which is the failure mode
+              that makes people distrust a filter. */}
+          {withheld > 0 && (
+            <span className="text-xs text-gray-500" data-testid="filter-withheld">
+              {withheld} not shown
+            </span>
+          )}
+          {isFilterActive(filter) && (
+            <button
+              className="btn-sm btn-secondary text-xs"
+              onClick={() => setFilter(EMPTY_FILTER)}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
       {/* bd tynm: the compact selector strip -- the default, low-footprint way
           to switch forms. The full card grid stays available behind the toggle. */}
       {kits.length > 0 && (
@@ -820,7 +918,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             <option value="" disabled>
               Select a form...
             </option>
-            {kits.map((k) => {
+            {shown.map((k) => {
               // Same precedence AND the same stamp rule as the expanded card
               // (sprint-18 C4): live > this session's saved value > the kit's
               // stamp. NEVER progress[].reviewPercent -- see the FormCatalogue
@@ -1091,9 +1189,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         </div>
       )}
 
-      {expanded && kits.length > 0 && (
+      {expanded && shown.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {kits.map((kit) => {
+          {shown.map((kit) => {
             const prog = progress[kit.id];
             // Precedence: the OPEN kit's live stats (tracks unsaved edits) >
             // the last remembered SAVED value for this kit > the scan.
@@ -1477,6 +1575,17 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       title="Delete this form permanently -- refused if anyone has already filled it"
                     >
                       Delete
+                    </button>
+                    <button
+                      className="ml-3 text-xs text-slate-400 hover:text-slate-700"
+                      onClick={() => void handleSetHidden(kit, !kit.hidden)}
+                      disabled={busy || deletingId !== null}
+                      title={kit.hidden
+                        ? 'Put this form back in the catalogue'
+                        : 'Take this form out of the catalogue. Nothing is '
+                          + 'deleted and you can bring it back at any time.'}
+                    >
+                      {kit.hidden ? 'Unhide' : 'Hide'}
                     </button>
                   </div>
                 )}

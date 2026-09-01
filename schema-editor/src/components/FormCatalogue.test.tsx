@@ -4,7 +4,7 @@
  * mocked via window.showDirectoryPicker.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 import { FormCatalogue } from './FormCatalogue';
 import { ForbiddenError } from '../utils/remoteKitStore';
@@ -1846,5 +1846,99 @@ describe('local mode respects the submitted lock (bd polyglot-pdf-hqztg)', () =>
 
     expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
     expect(screen.getByText(/an author publishes it/i)).toBeTruthy();
+  });
+});
+
+// --- Hiding kits + catalogue filter, LOCAL mode (bd n5fwd, tx8gi) ----------
+//
+// Local mode reads the same metadata.json the backend writes, so the flag must
+// work here too or "hidden" means different things on the two surfaces. These
+// pin the local half of both exit criteria.
+
+describe('hiding kits and filtering the catalogue (local)', () => {
+  const kitWith = (id: string, label: string, extra: Record<string, unknown> = {}) =>
+    mockKit(id, {
+      'schema.json': JSON.stringify(SCHEMA),
+      'metadata.json': JSON.stringify({ label, status: 'draft', ...extra }),
+    });
+
+  // Four kits, one already hidden -- above the filter bar's threshold.
+  const manyRoot = () => mockRoot([
+    kitWith('form-2', 'W-7 (ITIN)'),
+    kitWith('form-3', 'I-90', { status: 'complete' }),
+    kitWith('form-4', 'Junk One', { hidden: true }),
+    kitWith('form-5', 'Junk Two'),
+  ]);
+
+  async function openMany() {
+    const root = manyRoot();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker =
+      vi.fn(async () => root);
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-filter')).toBeTruthy());
+    return root;
+  }
+
+  it('keeps a hidden kit out of BOTH the cards and the selector strip', async () => {
+    await openMany();
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).queryByText(/Junk One/)).toBeNull();
+    expect(screen.queryByText('Junk One')).toBeNull();
+    expect(screen.getByText('W-7 (ITIN)')).toBeTruthy();
+  });
+
+  it('reads the SAME metadata key the backend writes', async () => {
+    // If local invented its own key, a kit hidden in the hosted editor would
+    // still show here -- two meanings of "hidden" on one store.
+    await openMany();
+    expect(screen.getByTestId('filter-withheld').textContent)
+      .toContain('1 not shown');
+  });
+
+  it('brings hidden kits back when asked', async () => {
+    await openMany();
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(screen.getByText('Junk One')).toBeTruthy());
+  });
+
+  it('searches by label and by id', async () => {
+    await openMany();
+    const box = screen.getByLabelText('Search forms by name or id');
+    fireEvent.change(box, { target: { value: 'itin' } });
+    await waitFor(() => expect(screen.queryByText('I-90')).toBeNull());
+    fireEvent.change(box, { target: { value: 'form-3' } });
+    await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
+  });
+
+  it('hides through the SAME backend endpoint the hosted catalogue uses', async () => {
+    // One implementation cannot drift from itself. Local mode already routes
+    // status changes this way.
+    let posted: { url: string; body: unknown } | null = null;
+    // The file's okJson helper is scoped to a different describe block; a local
+    // equivalent beats hoisting someone else's helper out of the block that
+    // owns it.
+    const json = (b: unknown) => ({
+      ok: true, status: 200, json: async () => b,
+    } as unknown as Response);
+    global.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? 'GET').toUpperCase() === 'POST' && url.includes('/hidden')) {
+        posted = { url, body: JSON.parse((init?.body as string) ?? '{}') };
+        return json({ ok: true, hidden: true });
+      }
+      return json({ ok: true, detail: 'available' });
+    }) as unknown as typeof fetch;
+
+    await openMany();
+    // Local sorts by LABEL (listKits), so the first card is I-90 = form-3 --
+    // NOT form-2 as the hosted twin's id-sorted list would give. Asserting the
+    // hosted order here would pass only by coincidence of the fixture.
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(posted!.url).toContain('/api/editor/kits/form-3/hidden');
+    expect(posted!.body).toEqual({ hidden: true });
   });
 });

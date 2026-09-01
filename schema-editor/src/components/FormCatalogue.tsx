@@ -17,9 +17,13 @@ import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStam
 // run in local mode too -- one implementation, not two that disagree.
 import {
   AuthError, ForbiddenError,
-  listArchivedRevisions, loadArchivedSchema, setRemoteStatus,
+  listArchivedRevisions, loadArchivedSchema, setRemoteHidden, setRemoteStatus,
 } from '../utils/remoteKitStore';
 import { kitName } from '../utils/kitName';
+import {
+  EMPTY_FILTER, filterKits, hiddenByFilterCount, isFilterActive,
+  type CatalogueFilter,
+} from '../utils/catalogueFilter';
 import { ArchivedVersions } from './ArchivedVersions';
 // Dev-only single-kit deploy (bd polyglot-pdf-ipzh): absent in a static/hosted
 // build, so the probe returns null there and the button never renders.
@@ -126,6 +130,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // added (today the picker is the only one) and fires exactly once per change.
   React.useEffect(() => { onRootChange?.(root); }, [root, onRootChange]);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
+  // ONE filter for BOTH surfaces (bd tx8gi), same module the hosted catalogue
+  // uses -- two implementations of "which kits exist" is how they drift.
+  const [filter, setFilter] = React.useState<CatalogueFilter>(EMPTY_FILTER);
+  const shown = React.useMemo(() => filterKits(kits, filter), [kits, filter]);
+  const withheld = React.useMemo(
+    () => hiddenByFilterCount(kits, filter), [kits, filter]);
   // bd tynm parity: the card grid is collapsed by default behind a compact
   // selector strip (a dropdown to switch forms + a "Show form cards" toggle), so
   // the header gives its vertical space to the editor. The full grid -- with its
@@ -449,6 +459,35 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // kit's directory/id never changes.
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
+  // Hide a kit, or bring it back (bd n5fwd). Routes through the SAME backend
+  // endpoint the hosted catalogue uses -- local mode already does this for
+  // status changes, and one implementation cannot drift from itself.
+  //
+  // NO role gate here, unlike the hosted twin: local mode has no editor/author
+  // split to enforce (it is the maintainer's own machine and their own folder).
+  // The SERVER still checks -- this button is not the guard.
+  const handleSetHidden = React.useCallback(async (kit: CatalogueEntry, hidden: boolean) => {
+    setNotice(null);
+    setError(null);
+    setBusy(true);
+    try {
+      await setRemoteHidden(kit.id, hidden);
+      if (root) await refresh(root);
+      setNotice(hidden
+        ? `${kitName(kit)} is hidden. Tick "Show hidden" to find it again.`
+        : `${kitName(kit)} is back in the catalogue.`);
+    } catch (err) {
+      if (err instanceof AuthError || err instanceof ForbiddenError) {
+        onAuthError?.(err);
+        return;
+      }
+      setError(err instanceof Error ? err.message
+        : `Could not ${hidden ? 'hide' : 'unhide'} the form`);
+    } finally {
+      setBusy(false);
+    }
+  }, [root, refresh, onAuthError]);
+
   const handleRename = React.useCallback(async (kit: CatalogueEntry) => {
     if (!root) return;
     const label = renameText.trim();
@@ -641,6 +680,60 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         </div>
       )}
 
+      {/* bd tx8gi: search + status filter, the same module and the same
+          threshold as the hosted twin. */}
+      {root && kits.length > 3 && (
+        <div className="mt-2 flex items-center gap-2 flex-wrap"
+             data-testid="catalogue-filter">
+          <input
+            className="input text-sm max-w-[14rem]"
+            type="search"
+            placeholder="Search forms..."
+            aria-label="Search forms by name or id"
+            value={filter.query}
+            onChange={(e) => setFilter((p) => ({ ...p, query: e.target.value }))}
+          />
+          <select
+            className="input text-sm"
+            aria-label="Filter by status"
+            value={[...filter.statuses][0] ?? ''}
+            onChange={(e) => setFilter((p) => ({
+              ...p,
+              statuses: e.target.value ? new Set([e.target.value]) : new Set<string>(),
+            }))}
+          >
+            <option value="">Any status</option>
+            <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
+            <option value="complete">Published</option>
+            <option value="unpublished">Unpublished</option>
+          </select>
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={filter.includeHidden}
+              onChange={(e) => setFilter((p) => ({
+                ...p, includeHidden: e.target.checked,
+              }))}
+            />
+            Show hidden
+          </label>
+          {withheld > 0 && (
+            <span className="text-xs text-gray-500" data-testid="filter-withheld">
+              {withheld} not shown
+            </span>
+          )}
+          {isFilterActive(filter) && (
+            <button
+              className="btn-sm btn-secondary text-xs"
+              onClick={() => setFilter(EMPTY_FILTER)}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
       {/* bd tynm parity: the compact selector strip -- the default, low-footprint
           way to switch forms. The full card grid stays available behind the
           toggle. Mirrors RemoteCatalogue's strip (dropdown + Show/Hide toggle). */}
@@ -661,7 +754,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             <option value="" disabled>
               Select a form...
             </option>
-            {kits.map((k) => {
+            {shown.map((k) => {
               // Same precedence as the card: live > cached-saved > disk scan.
               // Same precedence AND the same stamp rule as the expanded card
               // (sprint-18 C4): live > this session's saved value > the kit's
@@ -709,9 +802,9 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         </div>
       )}
 
-      {root && expanded && kits.length > 0 && (
+      {root && expanded && shown.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {kits.map((kit) => {
+          {shown.map((kit) => {
             const prog = progress[kit.id];
             // Precedence: the OPEN kit's live stats (tracks unsaved edits) > the
             // last remembered edited value for this kit > the disk-scan value.
@@ -876,6 +969,17 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                     Rename
                   </button>
                 )}
+                <button
+                  className="ml-2 text-xs text-slate-400 hover:text-slate-700"
+                  onClick={() => void handleSetHidden(kit, !kit.hidden)}
+                  disabled={busy}
+                  title={kit.hidden
+                    ? 'Put this form back in the catalogue'
+                    : 'Take this form out of the catalogue. Nothing is deleted '
+                      + 'and you can bring it back at any time.'}
+                >
+                  {kit.hidden ? 'Unhide' : 'Hide'}
+                </button>
               </div>
               {kit.hasSchema && (
                 <div className="mt-1 flex items-center justify-end gap-2 px-1">

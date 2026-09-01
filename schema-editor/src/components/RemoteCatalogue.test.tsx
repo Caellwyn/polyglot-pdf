@@ -19,6 +19,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     takeKitLock: vi.fn(),
     releaseKitLock: vi.fn(),
     setRemoteLabel: vi.fn(),
+    setRemoteHidden: vi.fn(),
     onboardRemoteKit: vi.fn(),
     extractRemoteKit: vi.fn(),
     translateRemoteKitOptions: vi.fn(),
@@ -30,7 +31,8 @@ import {
   AuthError, ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit, DeleteNeedsAcknowledgement,
   releaseKitLock, takeKitLock,
-  onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
+  onboardRemoteKit, setRemoteLabel, setRemoteHidden, setRemoteStatus,
+  translateRemoteKitOptions,
   fetchRetireCandidates,
   type RemoteKitEntry, type KitStatusResult, type RetireCandidate,
 } from '../utils/remoteKitStore';
@@ -1984,5 +1986,115 @@ describe('the submit notice names what happened (bd polyglot-pdf-hqztg)', () => 
     const notice = await screen.findByText(/submitted for review/);
     expect(notice.textContent).not.toMatch(/reverted to draft/);
     expect(notice.textContent).toMatch(/An author checks it/);
+  });
+});
+
+// --- Hiding kits + catalogue filter (bd n5fwd, tx8gi) ----------------------
+//
+// The demo store fills with junk kits that crowd out the real ones. Hiding is
+// the reversible half of clearing them (deletion is bd 6zhaf). These pin the
+// two exit criteria that matter: a hidden kit leaves BOTH surfaces, and it is
+// always retrievable.
+
+describe('hiding kits and filtering the catalogue', () => {
+  // Four kits: above the filter bar's threshold, and one already hidden.
+  const MANY: RemoteKitEntry[] = [
+    { id: 'form-2', label: 'W-7 (ITIN)', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    { id: 'form-3', label: 'I-90', status: 'complete', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    { id: 'form-4', label: 'Junk One', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf', hidden: true },
+    { id: 'form-5', label: 'Junk Two', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+  ];
+
+  async function openMany(role: 'author' | 'editor' = 'author') {
+    vi.mocked(listRemoteKits).mockResolvedValue([...MANY]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role={role} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-filter')).toBeInTheDocument());
+  }
+
+  it('keeps a hidden kit out of BOTH the cards and the selector strip', async () => {
+    // Exit criterion 1. Both surfaces or neither: a strip offering a kit the
+    // cards deny is the disagreement the shared filter exists to prevent.
+    await openMany();
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).queryByText(/Junk One/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Junk One')).not.toBeInTheDocument();
+    // ...while the visible ones are on both.
+    expect(within(strip).getByText(/W-7 \(ITIN\)/)).toBeInTheDocument();
+    expect(screen.getByText('W-7 (ITIN)')).toBeInTheDocument();
+  });
+
+  it('says how many it is holding back, so the list is never silently short',
+    async () => {
+      await openMany();
+      expect(screen.getByTestId('filter-withheld')).toHaveTextContent('1 not shown');
+    });
+
+  it('brings hidden kits back when asked -- nothing is unreachable', async () => {
+    // Exit criterion 2.
+    await openMany();
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(screen.getByText('Junk One')).toBeInTheDocument());
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).getByText(/Junk One/)).toBeInTheDocument();
+  });
+
+  it('searches by label AND by id', async () => {
+    await openMany();
+    const box = screen.getByLabelText('Search forms by name or id');
+
+    fireEvent.change(box, { target: { value: 'itin' } });
+    await waitFor(() => expect(screen.queryByText('I-90')).not.toBeInTheDocument());
+    expect(screen.getByText('W-7 (ITIN)')).toBeInTheDocument();
+
+    // The id matters: server refusals name kits by id, so an operator reading
+    // an error pastes THAT in.
+    fireEvent.change(box, { target: { value: 'form-3' } });
+    await waitFor(() => expect(screen.getByText('I-90')).toBeInTheDocument());
+    expect(screen.queryByText('W-7 (ITIN)')).not.toBeInTheDocument();
+  });
+
+  it('filters by status', async () => {
+    await openMany();
+    fireEvent.change(screen.getByLabelText('Filter by status'),
+      { target: { value: 'complete' } });
+    await waitFor(() => expect(screen.queryByText('W-7 (ITIN)')).not.toBeInTheDocument());
+    expect(screen.getByText('I-90')).toBeInTheDocument();
+  });
+
+  it('hides a kit through the server and refreshes from what it stored', async () => {
+    await openMany();
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() =>
+      expect(setRemoteHidden).toHaveBeenCalledWith('form-2', true));
+    // Re-listed rather than patched in memory: a failed hide must not leave a
+    // kit missing from the only view that shows it.
+    await waitFor(() =>
+      expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('offers Unhide on an already-hidden kit', async () => {
+    await openMany();
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(screen.getByText('Junk One')).toBeInTheDocument());
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByText('Unhide'));
+    await waitFor(() =>
+      expect(setRemoteHidden).toHaveBeenCalledWith('form-4', false));
+  });
+
+  it('does NOT offer Hide to an EDITOR', async () => {
+    // Maintainer decision: author-only, because hiding changes what OTHER
+    // people see. The server enforces it too; this pins the UI half.
+    await openMany('editor');
+    expect(screen.queryByText('Hide')).not.toBeInTheDocument();
   });
 });
