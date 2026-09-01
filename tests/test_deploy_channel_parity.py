@@ -230,6 +230,35 @@ def test_the_link_signing_key_is_actually_bound():
 DEPLOY_ALL = REPO_ROOT / "deploy-all.sh"
 
 
+def _strip_comment(line: str) -> str:
+    """The executable part of a shell line.
+
+    Splitting on the first '#' truncates a line whose '#' is inside quotes --
+    e.g. deploy-all.sh's `echo "...   # expect 200"`. No line these guards
+    inspect looks like that today, but a false NEGATIVE (claiming a live line
+    is absent) would silently disable a guard, so track quoting.
+    """
+    out: list[str] = []
+    quote: str | None = None
+    for ch in line:
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "#":
+            break
+        out.append(ch)
+    return "".join(out)
+
+
+def _live_text(script: Path) -> str:
+    """The script with comments removed -- what the shell actually runs."""
+    return "\n".join(
+        _strip_comment(l) for l in script.read_text(encoding="utf-8").splitlines()
+    )
+
+
 def _has_live_line(script: Path, token: str) -> bool:
     """Is `token` on a line the shell actually EXECUTES?
 
@@ -238,11 +267,8 @@ def _has_live_line(script: Path, token: str) -> bool:
     defeat this file already documents for the gcloud argv, which I then
     repeated in the provisioning guards below.
     """
-    for line in script.read_text(encoding="utf-8").splitlines():
-        code = line.split("#", 1)[0]
-        if token in code:
-            return True
-    return False
+    return any(token in _strip_comment(l)
+               for l in script.read_text(encoding="utf-8").splitlines())
 
 
 def _api_enabling_scripts_that_bind_secrets() -> list[Path]:
@@ -266,7 +292,11 @@ def _api_enabling_scripts_that_bind_secrets() -> list[Path]:
         rel_parts = path.relative_to(REPO_ROOT).parts
         if "node_modules" in rel_parts or ".claude" in rel_parts:
             continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
+        # LIVE lines only, like the assertions themselves: a script that merely
+        # MENTIONS BACKEND_SECRETS in prose would otherwise be required to
+        # enable an API it never uses -- a false positive that would send the
+        # next author chasing a non-dependency.
+        text = _live_text(path)
         if "gcloud services enable" not in text:
             continue
         binds = "--set-secrets" in text or "BACKEND_SECRETS" in text
