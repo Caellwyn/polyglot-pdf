@@ -63,6 +63,23 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Thinking indicator (bd polyglot-pdf-wpw.5): agent processing a turn.
 	const [thinking, setThinking] = useState<boolean>(false)
 	const [error, setError] = useState<string | null>(null)
+
+	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5).
+	// On a spent link the translated spend-ceiling modal already says voice has
+	// finished; an English "please try again" / "please click Reconnect" behind
+	// it contradicts that AND names a button bd cke6v removed. Mobile matters
+	// more: it has no save nudge, so that modal is the ONLY thing the client
+	// sees. Plain function, not useCallback -- this file uses no useCallback.
+	//
+	// Declared HERE, immediately after setError and above every caller: a
+	// `const` arrow is not hoisted, and the earliest call site is ~line 267.
+	const setConnectionError = (message: string) => {
+		if (connectionManager?.getStatus() === 'budget_exhausted') {
+			console.log('[VoiceOverlayMobile] Suppressing connection error on a spent link:', message)
+			return
+		}
+		setError(message)
+	}
 	const [isExpanded, setIsExpanded] = useState(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
 	// NOTE (bd polyglot-pdf-4l7p): the section-session display state desktop
@@ -264,7 +281,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 					}
 				} catch (err) {
 					console.error('[VoiceOverlayMobile] Failed to connect after pre-selected language:', err)
-					setError(err instanceof Error ? err.message : 'Connection failed')
+					setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 					setPendingDisclaimerRead(false)
 				}
 			}
@@ -754,7 +771,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// The useEffect watching status will send the disclaimer prompt when ready
 		} catch (err) {
 			console.error('[VoiceOverlayMobile] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			setPendingDisclaimerRead(false) // Clear flag on error
 		}
 	}
@@ -841,20 +858,6 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		)
 	}
 
-	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5).
-	// On a spent link the translated spend-ceiling modal already says voice has
-	// finished; an English "please try again" / "please click Reconnect" behind
-	// it contradicts that AND names a button bd cke6v removed. Mobile matters
-	// more: it has no save nudge, so that modal is the ONLY thing the client
-	// sees. Plain function, not useCallback -- this file uses no useCallback.
-	const setConnectionError = (message: string) => {
-		if (connectionManager?.getStatus() === 'budget_exhausted') {
-			console.log('[VoiceOverlayMobile] Suppressing connection error on a spent link:', message)
-			return
-		}
-		setError(message)
-	}
-
 	const handleDisclaimerAgree = async () => {
 		console.log('[VoiceOverlayMobile] User agreed to disclaimer')
 
@@ -898,7 +901,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				await handleConnect()
 			} catch (err) {
 				console.error('[VoiceOverlayMobile] [X] Connect failed after Agree:', err)
-				setError(err instanceof Error ? err.message : 'Connection failed')
+				setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			}
 			return
 		}
@@ -1063,7 +1066,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 		}
 	}
 

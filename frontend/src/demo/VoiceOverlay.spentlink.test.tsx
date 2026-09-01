@@ -63,7 +63,21 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     // So the assertion is not "these two are guarded" but "no connection-path
     // setError bypasses the helper". A seventh site added later fails here
     // instead of shipping the same contradiction again.
-    const bare = [...SOURCE.matchAll(/(?<!Connection)setError\('Connection[^']*'\)/g)];
+    //
+    // MATCH THE CALL, NOT ONE SPELLING OF ITS ARGUMENT. My first version keyed
+    // on setError('Connection...') -- single-quoted string literals only -- and
+    // a second review pointed out that MISSES the house style: 7 of the 9 other
+    // setError calls in these files are
+    // `setError(err instanceof Error ? err.message : 'Connection failed')`,
+    // plus template literals and double quotes. A set defined by MEANING cannot
+    // be pinned by one syntactic shape; that is the same error as grepping a
+    // bead id instead of the claim.
+    //
+    // So: find every bare setError(, then keep the ones whose argument mentions
+    // a connection at all, however it is written.
+    const bare = [...SOURCE.matchAll(/(?<!Connection)\bsetError\(([^;]*?)\)\s*$/gm)]
+      .map((m) => m[1])
+      .filter((arg) => /connect/i.test(arg));
     expect(bare).toEqual([]);
 
     // And the helper actually suppresses on the terminal status.

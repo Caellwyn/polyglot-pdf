@@ -427,7 +427,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					}
 				} catch (err) {
 					console.error('[VoiceOverlay] Failed to connect after pre-selected language:', err)
-					setError(err instanceof Error ? err.message : 'Connection failed')
+					setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 					setPendingDisclaimerRead(false)
 				}
 			}
@@ -978,7 +978,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			// Set the union status 'error', NOT a freeform 'Connection failed'
 			// string (bd polyglot-pdf-m77y): the freeform value matches no arm of
 			// the controls ternary, so a RE-failed Reconnect (both backends still
@@ -1376,7 +1376,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// The useEffect watching status will send the disclaimer prompt when ready
 		} catch (err) {
 			console.error('[VoiceOverlay] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			setPendingDisclaimerRead(false) // Clear flag on error
 		}
 	}
@@ -1520,7 +1520,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				await handleConnect()
 			} catch (err) {
 				console.error('[VoiceOverlay] [X] Connect failed after Agree:', err)
-				setError(err instanceof Error ? err.message : 'Connection failed')
+				setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			}
 			return
 		}
