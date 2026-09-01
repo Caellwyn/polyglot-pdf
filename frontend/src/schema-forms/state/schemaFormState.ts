@@ -362,6 +362,17 @@ export class SchemaFormStateManager {
     options?: {
       confirmed?: boolean;
       confirmationMethod?: 'ai_voice' | 'manual_edit';
+      // Internal: set on the recursive writes this method makes to a field's
+      // copy_to targets, so a target carrying its own copy_to does not chain.
+      // Callers should not pass it (bd polyglot-pdf-gpaed).
+      //
+      // NOTE for a future caller: the fan-out passes `value` through unchanged,
+      // so if you ever call updateField with a FieldValue OBJECT rather than a
+      // raw value, the branch below copies that object's OWN confirmed/method
+      // and the fan-out's `confirmed: true` is silently ignored -- re-opening
+      // the navigation trap. All 8 call sites pass raw values today; the
+      // signature (`value: any | FieldValue`) is what invites otherwise.
+      skipCopyTo?: boolean;
     }
   ): SchemaFormState {
     console.log(`[SchemaFormStateManager] updateField: ${fieldId} = ${JSON.stringify(value)}`);
@@ -481,6 +492,58 @@ export class SchemaFormStateManager {
     if (newState.validationErrors[fieldId]) {
       const { [fieldId]: removed, ...rest } = newState.validationErrors;
       newState.validationErrors = rest;
+    }
+
+    // AUTO-POPULATE (copy_to) fans out HERE, at the single write chokepoint, so
+    // EVERY path gets it (bd polyglot-pdf-gpaed). It used to live in exactly one
+    // caller -- SchemaForm's React manual-edit handler -- so the VOICE path
+    // never fanned out at all: a value Gemini filled left its copy targets
+    // blank. Combined with the read-only coupling the editor now applies to a
+    // copy target (bd polyglot-pdf-g33y2), a REQUIRED target was unreachable --
+    // the AI cannot write a read_only field and isSectionValid does not excuse
+    // it, so the section gate could never be satisfied.
+    //
+    // Placed before save() so the targets persist in the same write. Each hop
+    // RE-ENTERS this method, so a target is normalized against ITS OWN schema
+    // field -- source and target need not share a format_preset for the target
+    // to store a canonical value.
+    //
+    // ONE HOP, not transitive: a target's own copy_to is not followed. That
+    // matches what the single-caller version did, so this changes WHICH paths
+    // fan out, not how far. `skipCopyTo` makes the recursion explicit rather
+    // than relying on that -- a chained link would otherwise re-enter here per
+    // target and each re-entry would save() again.
+    if (!options?.skipCopyTo) {
+      const targets = Array.isArray(field?.copy_to) ? field.copy_to : [];
+      let fanned = newState;
+      for (const targetId of targets) {
+        if (typeof targetId !== 'string' || !targetId) continue;
+        if (targetId === fieldId) continue;          // self-link: hand-edited junk
+        // A fanned target is CONFIRMED, always -- even when the source write
+        // was not. A copy target is not a question anyone can answer: the AI
+        // is refused (it is read_only), and skip_field is refused too once it
+        // holds a value. So an unconfirmed target is a TRAP -- computeNextField
+        // navigates to the first filled-but-unconfirmed field, and on the
+        // shipped i-90 kits that is p8_a_number et al, which the model can
+        // neither fill nor skip. isFormComplete and computeReadyWindows also
+        // key on confirmed, so the form could never read complete.
+        //
+        // Inheriting confirmation is honest: the human DID answer this value,
+        // on the source. The method records HOW -- carrying the source's own
+        // confirmationMethod, or 'manual_edit' when the source write carried
+        // none (the AI-fill case), since a fan-out is a derived write rather
+        // than something the model said (fresh-eyes + cross-surface, round 2).
+        fanned = SchemaFormStateManager.updateField(fanned, targetId, value, {
+          ...options,
+          confirmed: true,
+          confirmationMethod: options?.confirmationMethod ?? 'manual_edit',
+          skipCopyTo: true,
+        });
+      }
+      if (fanned !== newState) {
+        this.save(fanned);
+        return fanned;
+      }
     }
 
     this.save(newState);

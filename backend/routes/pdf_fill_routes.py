@@ -623,6 +623,29 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 					and (field_obj.get("options") or [])
 				):
 					value = [part.strip() for part in value.split(",") if part.strip()]
+				# Coerce a boolean-INTENT string ("true"/"false", the exact-
+				# lowercase literal forms config.py documents for a standalone
+				# checkbox) to a real bool, but ONLY for a standalone checkbox
+				# (no options): validation.ts's boolean-intent carve-out
+				# already treats these strings as checked/unchecked
+				# case-insensitively, so a value that validates and stores was
+				# printing BLANK on the PDF (bd polyglot-pdf-oz558). This
+				# coercion is ALSO case-insensitive to match validation.ts, but
+				# note unwrapToBoolean/isCheckboxChecked (the two readers
+				# deciding what the UI actually RENDERS) compare case-
+				# sensitively -- a mixed-case value is not reachable in
+				# practice, since field_validator.py is case-sensitive too and
+				# drops it from form_state before any client sees it. An
+				# options-bearing field's "true"/"false" is left alone here
+				# (the branch above already excludes it from the comma-split,
+				# and it is not a real option value either way, so it
+				# correctly falls through to checkbox_unsupported_value below).
+				if (
+					isinstance(value, str)
+					and value.strip().lower() in ("true", "false")
+					and not (field_obj.get("options") or [])
+				):
+					value = value.strip().lower() == "true"
 				if isinstance(value, bool):
 					pdf_field_name = field_obj.get("pdf_field_name")
 					if not pdf_field_name:
