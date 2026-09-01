@@ -10,6 +10,9 @@ export interface SelectFieldProps {
   value: any;
   onChange: (value: string) => void;
   onBlur?: () => void;
+  // Cursor entered this field (bd polyglot-pdf-a08po) -- moves the next-field
+  // search origin; never makes the model speak.
+  onFocus?: () => void;
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
@@ -23,6 +26,7 @@ export function SelectField({
   value,
   onChange,
   onBlur,
+  onFocus,
   error,
   disabled = false,
   confirmed = false,
@@ -53,6 +57,7 @@ export function SelectField({
           value={displayValue}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
+          onFocus={onFocus}
           disabled={disabled}
           className={`form-field__input ${error ? "form-field__input--error" : ""}`}
           placeholder={field.help?.inline || field.help?.example || ""}
@@ -95,6 +100,7 @@ export function SelectField({
         value={currentValue}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={onBlur}
+        onFocus={onFocus}
         disabled={disabled}
         className={`form-field__select ${error ? "form-field__select--error" : ""}`}
         aria-invalid={error ? "true" : "false"}

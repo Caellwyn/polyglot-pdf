@@ -3234,10 +3234,19 @@ export class WebFormConnection {
    * name_spellback tool asks THIS client to play a letter-by-letter Cloud TTS
    * clip of the CURRENT field's stored value. The tool deliberately carries no
    * field_id -- the client resolves the current field itself with the same
-   * pin-aware computation the next-field path uses, so the spelled value can
-   * only ever be the stored value of the field under verification (bd h7wx: a
-   * read-back must never come from the model's memory, and bd jnjj.46: never
-   * trust a model-supplied field id).
+   * computeNextField the next-field path uses, so the spelled value can only
+   * ever be a STORED value, never the model's memory (bd h7wx: a read-back must
+   * never come from the model's memory, and bd jnjj.46: never trust a
+   * model-supplied field id).
+   *
+   * WHICH stored field that is depends on computeNextField's inputs, and those
+   * now include a USER gesture, not just the pin: a click moves the search
+   * origin (bd polyglot-pdf-a08po). That is why SchemaForm's click-to-focus
+   * guard suppresses on isAnyAudioPlaying() -- the clip-INCLUSIVE union -- and
+   * not isModelSpeaking(), which is model-PCM-only and reads false for this
+   * entire clip. Were the origin allowed to move mid-clip, the client would
+   * spell a DIFFERENT field's value back and the user would confirm it (outer
+   * review). If you change that guard, this resolution is what you are changing.
    *
    * The playback itself (mic hold, TTS fetch, blocking play, PTT interrupt)
    * lives in the connection manager via the onSpellbackRequest callback; this

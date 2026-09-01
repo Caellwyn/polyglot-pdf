@@ -464,8 +464,64 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
         });
       }
 
+      // Resume the next-field search from the field the user just edited
+      // (bd polyglot-pdf-a08po) -- see the matching move in connection.ts
+      // onManualEdit. Typing is an unambiguous act, so it moves the origin
+      // whether or not the model is currently speaking.
+      newState = SchemaFormStateManager.setSearchOrigin(newState, fieldId);
+
       return newState;
     });
+  };
+
+  /**
+   * The user put the cursor in a field (bd polyglot-pdf-a08po). Move the
+   * next-field search origin so the model's context follows them -- silently:
+   * this NEVER makes the model speak, it only changes which field is the
+   * referent for whatever happens next.
+   *
+   * Suppressed WHILE ANY AUDIO IS PLAYING. Under DTI the model holds one
+   * field's schema at a time and the backend coercion pointer is singular, so
+   * retargeting mid-question would leave the model asking about field A while
+   * focus says field B -- and the spoken answer would mis-fill. Clicking is
+   * also ambiguous (fidgeting); typing is not, which is why handleFieldChange
+   * above moves the origin unconditionally and this does not.
+   *
+   * isAnyAudioPlaying(), NOT isModelSpeaking() -- the union INCLUDING a
+   * synthesized clip (outer review, bd polyglot-pdf-a08po). isModelSpeaking()
+   * is `activeAudioSources.length > 0`, model PCM only, and audioManager's own
+   * docstring calls it "structurally incapable of counting a clip"; the
+   * spell-back player deliberately WAITS for that count to hit zero before it
+   * plays. So during the whole spell-back window it reads "not speaking" while
+   * the user is hearing "K-O-W-A-L-C-Z-Y-K, is that correct?".
+   *
+   * That window is the dangerous one: name_spellback carries NO field_id on the
+   * wire (backend/config.py -- the client resolves the current field itself, so
+   * the spelled value can only be a STORED value, never the model's memory), and
+   * it resolves via computeNextField. A click that moved the origin mid-clip
+   * would make the client spell a DIFFERENT field's value back, and the user --
+   * hearing a plausible read-back -- would confirm it. Clip playback is
+   * playback, so it suppresses like any other.
+   */
+  const handleFieldFocus = (fieldId: string) => {
+    // Feature-detect every hop: this runs on a raw DOM focus/click, which can
+    // fire before the connection manager is built, after teardown, or against a
+    // partial manager (the preview-edit tests supply one). A throw here would
+    // escape into the field's event handler and break plain typing, so the
+    // suppression check must never assume the chain exists -- absent audio
+    // means nothing is speaking, so the origin moves.
+    const manager = connectionManagerRef.current;
+    const audio = typeof manager?.getAudioManager === 'function'
+      ? manager.getAudioManager()
+      : null;
+    if (typeof audio?.isAnyAudioPlaying === 'function' && audio.isAnyAudioPlaying()) {
+      return;
+    }
+    // includesSelf: the user is POINTING at this field, so it must be the next
+    // field offered -- not its neighbour (fresh-eyes, criterion 1).
+    setState(prevState =>
+      SchemaFormStateManager.setSearchOrigin(prevState, fieldId, { includesSelf: true })
+    );
   };
 
   // 4dxt: force-skip a required-but-unanswered field. The user may defer to a
@@ -773,6 +829,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
               validationErrors={state.validationErrors}
               onFieldChange={handleFieldChange}
               onFieldBlur={handleFieldBlur}
+              onFieldFocus={handleFieldFocus}
             />
           </React.Suspense>
         </PdfViewErrorBoundary>
@@ -813,6 +870,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
             validationErrors={state.validationErrors}
             onFieldChange={handleFieldChange}
             onFieldBlur={handleFieldBlur}
+            onFieldFocus={handleFieldFocus}
             onFieldSkip={handleFieldSkip}
           />
         )}

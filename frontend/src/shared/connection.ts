@@ -374,12 +374,17 @@ export function createConnectionManager(
 			// every other field's value and badge disappear until Gemini's next
 			// message re-fills them.
 			const currentState = SchemaFormStateManager.load() || state
-			const updatedState = SchemaFormStateManager.updateField(
+			const edited = SchemaFormStateManager.updateField(
 				currentState,
 				fieldId,
 				value,
 				{ confirmed: true, confirmationMethod: 'manual_edit' }
 			)
+			// Resume the next-field search from the field the user just filled,
+			// not the top of the form (bd polyglot-pdf-a08po). Without this the
+			// model is re-targeted at the first unconfirmed field after EVERY
+			// manual edit, while the user works further down.
+			const updatedState = SchemaFormStateManager.setSearchOrigin(edited, fieldId)
 			// Keep closure reference in sync for subsequent calls
 			Object.assign(state, updatedState)
 
@@ -691,12 +696,16 @@ export function createConnectionManager(
 							// Load latest persisted state so this edit lands on top of any
 							// AI fills saved since the closure's `state` was last refreshed.
 							const currentState = SchemaFormStateManager.load() || state
-							const updatedState = SchemaFormStateManager.updateField(
+							const edited = SchemaFormStateManager.updateField(
 								currentState,
 								fieldId,
 								value,
 								{ confirmed: true, confirmationMethod: 'manual_edit' }
 							)
+							// Same search-origin move as the primary onManualEdit above
+							// (bd polyglot-pdf-a08po) -- these two closures are duplicates
+							// and must stay in step.
+							const updatedState = SchemaFormStateManager.setSearchOrigin(edited, fieldId)
 							Object.assign(state, updatedState)
 
 							// If connected, also notify Gemini

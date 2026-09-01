@@ -10,6 +10,9 @@ export interface RadioFieldProps {
   value: any;
   onChange: (value: string) => void;
   onBlur?: () => void;
+  // Cursor entered this field (bd polyglot-pdf-a08po) -- moves the next-field
+  // search origin; never makes the model speak.
+  onFocus?: () => void;
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
@@ -23,6 +26,7 @@ export function RadioField({
   value,
   onChange,
   onBlur,
+  onFocus,
   error,
   disabled = false,
   confirmed = false,
@@ -67,6 +71,7 @@ export function RadioField({
                 value={option.value}
                 checked={currentValue === option.value}
                 onChange={(e) => handleChange(e.target.value)}
+                onFocus={onFocus}
                 disabled={disabled}
                 className="form-field__radio-input"
               />
