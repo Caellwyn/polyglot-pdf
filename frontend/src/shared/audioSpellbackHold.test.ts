@@ -10,7 +10,7 @@
  * queueing behind the in-flight round-trip (see
  * docs/components/voice-ai.md's name_spellback bullet). Two distinct
  * behaviors, one per streaming discipline:
- * - native VAD: the stream must stay CONTINUOUS, so a held frame is replaced
+ * - (retired) native VAD: the stream had to stay CONTINUOUS, so a held frame was replaced
  *   with a zeroed buffer of the same length (the bd zivv silence pattern);
  * - manual/client-VAD modes: the stream is bursty anyway, so a held frame is
  *   simply dropped.

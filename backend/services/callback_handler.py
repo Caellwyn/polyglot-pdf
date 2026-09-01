@@ -66,11 +66,13 @@ class CallbackHandler:
         self._send_transcript = send_transcript
         self._ws_audio_chunk_count = 0
         # "Agent processing" (thinking-indicator) signal state (bd polyglot-pdf-wpw.5).
-        # True from a real user turn (on_user_activity, which fires in BOTH native and
-        # manual VAD on input transcription) until the agent's FIRST response audio of
-        # that turn -- the processing gap the frontend shows a calm indicator for.
-        # Backend-driven so it works in native-VAD mode too, where the client has no
-        # turn-end signal of its own. _ws_audio_chunk_count is session-cumulative, so
+        # True from a real user turn until the agent's FIRST response audio of that
+        # turn -- the processing gap the frontend shows a calm indicator for. It rides
+        # send_activity_end, the PTT release, which is the only turn signal
+        # (bd polyglot-pdf-v1m8g). on_user_activity (input transcription) ALSO sets it
+        # and still bumps liveness, but it was the retired native-VAD mode's turn-start
+        # signal and the native-audio model emits no input_transcription on Vertex, so
+        # in practice the PTT bracket is what fires this. Backend-driven either way. _ws_audio_chunk_count is session-cumulative, so
         # this flag (not the count) marks "first audio AFTER a start" as the clear edge.
         self._processing_active = False
         self._form_id = form_id  # For confirmation logging
@@ -337,9 +339,10 @@ class CallbackHandler:
 
     async def signal_processing_start(self) -> None:
         """Emit processing-start WITHOUT the liveness chain (bd polyglot-pdf-wpw.5).
-        Used by the manual/PTT path (send_activity_end), where the turn-end signal is
-        the client's vad_activity_end and liveness is handled separately on that path.
-        on_user_activity (native VAD) is the variant that ALSO bumps liveness."""
+        Used by the PTT path (send_activity_end) -- the ONLY turn signal since
+        bd polyglot-pdf-v1m8g -- where the turn-end boundary is the client's
+        vad_activity_end and liveness is handled separately on that path.
+        on_user_activity is the variant that ALSO bumps liveness."""
         await self._set_processing(True)
 
     async def on_user_activity(self) -> None:
@@ -348,13 +351,13 @@ class CallbackHandler:
         injected liveness callback (the idle-watchdog bump). PII-free: no text crosses
         here (the adapter passes none).
 
-        SCOPE (bd polyglot-pdf-fa4x): this fires on Gemini input_transcription, the
-        native-VAD turn-start signal. In practice the gemini-live native-audio model
-        emits NO input_transcription on Vertex, so in native VAD this currently does
-        not fire and the indicator only works in manual/PTT mode (driven by
-        signal_processing_start via send_activity_end). The native-VAD START signal is
-        the fa4x follow-up. The CLEAR path (first response audio / turn_complete)
-        already works in both modes."""
+        SCOPE (bd polyglot-pdf-fa4x): this fires on Gemini input_transcription, which
+        was the retired native-VAD mode's turn-start signal. The gemini-live
+        native-audio model emits NO input_transcription on Vertex, so in practice this
+        does not fire and the indicator is driven by signal_processing_start via
+        send_activity_end -- the PTT release, now the only turn signal (bd
+        polyglot-pdf-v1m8g). Kept because it still chains the idle-watchdog liveness
+        bump. The CLEAR path (first response audio / turn_complete) is unaffected."""
         await self._set_processing(True)
         if self._on_user_activity_inner is not None:
             try:

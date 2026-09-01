@@ -286,7 +286,7 @@ verifying:
    citations drifted once already when the builders moved down the file.
 
 3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
-   frontend switches on `case "field_update"` (`webFormConnection.ts:664` ->
+   frontend switches on `case "field_update"` (in `webFormConnection.ts`'s message switch ->
    `handleFieldUpdate`), but no backend `send_json` ever emits that type -- the
    live single-field push the backend actually sends is `form_updated`. So
    `field_update` is a dead/legacy receive path on the client; it is NOT in the

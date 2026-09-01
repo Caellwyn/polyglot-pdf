@@ -302,10 +302,10 @@ async def test_idle_watchdog_sends_message_then_closes_1000(
 
 # --------------------------------------------------------------------------
 # 3b. IDLE WATCHDOG resets on USER TURNS, not on raw audio (bd polyglot-pdf-l3a.4)
-#     In native VAD mode the client streams continuous audio incl. silence, so
-#     the watchdog must NOT treat inbound audio frames as activity -- otherwise a
+#     The watchdog must NOT treat inbound audio frames as activity -- otherwise a
 #     walk-away with the mic open never times out and burns Gemini's 15-min
-#     audio session. It DOES reset on a native-VAD user turn (on_user_activity).
+#     audio session. It DOES reset on a real user turn (on_user_activity) and on
+#     control messages, which is where push-to-talk's brackets arrive.
 # --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_idle_watchdog_ignores_inbound_audio_frames(
@@ -382,7 +382,7 @@ async def test_idle_watchdog_ignores_inbound_audio_frames(
 async def test_user_activity_callback_resets_idle_clock(
     mock_websocket, mock_service, monkeypatch
 ):
-    """The native-VAD on_user_activity callback bumps the idle clock.
+    """The on_user_activity callback bumps the idle clock.
 
     The route registers service._on_user_activity before start_session. Firing it
     must reset last_rx so an actively-conversing user is never timed out. We assert

@@ -420,8 +420,8 @@ class LiveAIGemini(ILiveAI):
         # may say nothing). Critically NOT tied to output transcripts, which are off
         # on the default production path (Codex PR #273).
         self._on_processing_done = None
-        # Fired when Gemini's native VAD produces an INPUT transcription -- i.e. it
-        # heard a real user utterance (bd polyglot-pdf-l3a.4). This is the only
+        # Fired when Gemini produces an INPUT transcription -- i.e. it heard a real
+        # user utterance (bd polyglot-pdf-l3a.4). This is the only
         # reliable "user is present / actually spoke" signal: continuous silence and
         # background noise stream as audio frames but do NOT yield an input
         # transcription. The idle-timeout watchdog resets on this (not on raw mic
@@ -563,8 +563,9 @@ class LiveAIGemini(ILiveAI):
         #   tool response is sent so the next turn starts fresh.
         # _timing_first_inbound_audio: monotonic timestamp of the FIRST inbound
         #   audio frame after the most recent tool response -- used as the burst
-        #   reference in native-VAD mode where no activity_end is sent. Set on
-        #   the first enqueued frame; reset after each tool response.
+        #   reference for a turn with no activity_end (it was the native-VAD case,
+        #   retired in bd polyglot-pdf-v1m8g). Set on the first enqueued frame;
+        #   reset after each tool response.
         # _timing_audio_dropped: count of audio frames dropped due to a full
         #   queue during this session. Included in session-end summary.
         self._timing_last_activity_end: Optional[float] = None
@@ -832,8 +833,8 @@ class LiveAIGemini(ILiveAI):
         on_interrupted is optional (bd polyglot-pdf-s7uf): fired on a Gemini
         barge-in interruption; callers that omit it leave the interruption
         logged-only (the pre-Stage-2 behavior).
-        on_user_activity is optional (bd polyglot-pdf-l3a.4): fired on a native-VAD
-        input transcription (a real user turn); callers that omit it leave input
+        on_user_activity is optional (bd polyglot-pdf-l3a.4): fired on an input
+        transcription (a real user turn); callers that omit it leave input
         transcription unsurfaced.
         """
         # Removed verbose logging - session lifecycle is logged elsewhere
@@ -1086,7 +1087,7 @@ class LiveAIGemini(ILiveAI):
         up" -- the property that stops the 1011. Variable-size inbound frames feed a
         byte accumulator that is re-chunked to fixed frame_bytes on emit. On a tick
         with a full frame buffered we send real audio; on an underrun we send one
-        silence frame (native-VAD gap-fill) if allowed, else nothing. The
+        silence frame (the retired native-VAD gap-fill) if allowed, else nothing. The
         accumulator is capped at max_buffer_bytes (drop OLDEST, frame-aligned) so we
         never fall more than AUDIO_MAX_BUFFER_MS behind real-time.
         """
@@ -1145,7 +1146,7 @@ class LiveAIGemini(ILiveAI):
             elif not stopping and gapfill_enabled and not (
                 self._close_after_flush or self._intentional_shutdown
             ):
-                # Genuine underrun: one silence frame keeps native-VAD's stream
+                # Genuine underrun: one silence frame kept the retired native-VAD stream
                 # continuous. Suppressed once a graceful shutdown owns the socket or
                 # a sentinel has begun the drain.
                 await send_frame(silence_frame, is_silence=True)
@@ -1168,7 +1169,7 @@ class LiveAIGemini(ILiveAI):
         Non-blocking get_nowait drains everything already queued; if still short of a
         full frame and time remains before the tick deadline, wait for ONE more item
         up to the remaining time (this doubles as the inter-tick idle wait so an idle
-        native-VAD stream still ticks silence every interval without busy-spinning).
+        the retired native-VAD stream still ticked silence without busy-spinning).
         Returns True iff the None sentinel was seen (caller should stop).
         """
         while True:
@@ -1262,7 +1263,7 @@ class LiveAIGemini(ILiveAI):
             if not hasattr(self, '_first_adapter_audio_logged'):
                 self._log.info("[mic] [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
                 self._first_adapter_audio_logged = True
-            # timing_activity_start/end checkpoint 3 (native-VAD burst reference):
+            # timing_activity_start/end checkpoint 3 (burst reference):
             # record the first inbound frame's monotonic time so timing_tool_call_received
             # has a reference even when no activity_end was sent (bd polyglot-pdf-cwsy).
             # Only set when no activity_end reference exists and not yet captured for
@@ -1426,7 +1427,7 @@ class LiveAIGemini(ILiveAI):
             await self._current_session.send_realtime_input(activity_start=types.ActivityStart())
             # timing_activity_start checkpoint 3 (bd polyglot-pdf-cwsy).
             # Record the timestamp of the forwarded activity_start signal; clear
-            # the native-VAD burst reference so the next audio burst starts fresh.
+            # the burst reference so the next audio burst starts fresh.
             self._timing_last_activity_end = None
             self._timing_first_inbound_audio = None
             self._log.info(
@@ -2610,7 +2611,7 @@ class LiveAIGemini(ILiveAI):
 
                                         # Handle input transcription (what Gemini heard from user)
                                         input_transcription = getattr(server_content, "input_transcription", None)
-                                        # A non-empty input transcription means native VAD detected a REAL
+                                        # A non-empty input transcription means Gemini heard a REAL
                                         # user utterance -- the one reliable "user is present" signal (bd
                                         # polyglot-pdf-l3a.4). Continuous silence / background noise stream as
                                         # audio frames but never produce one. Fire on_user_activity so the WS

@@ -38,8 +38,8 @@
  *   milliseconds instead of one full clip per call. Cooldown refusals do
  *   not refresh the window, so the drain always converges;
  * - for a value+language delivered within DELIVERED_DEDUP_WINDOW_MS: ack
- *   'delivered' (the user HAS heard it) -- covers open-mic native mode,
- *   where no held/pressed signal exists. The window is deliberately tight
+ *   'delivered' (the user HAS heard it) -- covers any caller with no held/
+ *   pressed signal to report. The window is deliberately tight
  *   so a genuine "read it again" (several seconds later) still plays.
  *
  * All environment touchpoints (fetch, Audio, blob URLs, clock, sleep) are
@@ -117,8 +117,7 @@ export interface SpellbackPlayerDeps {
   getHttpBase: () => string
   getToken?: () => Promise<string | undefined>
   // Whether the user is holding push-to-talk RIGHT NOW (bd kvrfq). Absent
-  // reads as never-held (open-mic native mode has no such signal; the
-  // delivered-dedup guard is what covers it there).
+  // reads as never-held (the delivered-dedup guard covers that case).
   isPttHeld?: () => boolean
   // Test seams; production uses the defaults.
   fetchImpl?: typeof fetch

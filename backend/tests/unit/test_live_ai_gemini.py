@@ -1209,7 +1209,7 @@ def test_build_live_config_input_transcription_for_liveness(mock_google_ai_clien
     """`input_audio_transcription` is requested whenever the idle-liveness callback
     is registered, EVEN with transcripts off (bd polyglot-pdf-l3a.4; Codex PR #214).
 
-    The idle watchdog's `on_user_activity` callback fires on a native-VAD
+    The idle watchdog's `on_user_activity` callback fires on an
     `input_transcription`, which Gemini only emits when `input_audio_transcription`
     is in the connect config. In the DEFAULT production path send_transcript=False,
     so without this the callback never fires and an actively-speaking user would be

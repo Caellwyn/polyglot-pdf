@@ -1338,8 +1338,7 @@ def get_settings() -> Settings:
 	"""Load and return validated settings.
 
 	Cached: Settings is static process-config built from os.environ, and several
-	hot-ish paths read it per call (e.g. the native-VAD guard fires get_settings()
-	per manual activity signal -- bd polyglot-pdf-efd), each previously
+	hot-ish paths read it per call (bd polyglot-pdf-efd), each previously
 	constructing a fresh Settings model. lru_cache returns one shared instance.
 	Tests that need a different config monkeypatch the module attribute
 	(monkeypatch.setattr(config, "get_settings", lambda: ...)), which replaces the

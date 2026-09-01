@@ -18,8 +18,7 @@ declare global {
 		vffOnSectionChanged?: () => void  // Called when Gemini switches sections
 		// TEST-ONLY (bd polyglot-pdf-fa4x): fired whenever the backend agent_processing
 		// signal arrives, so the voice harness can assert the thinking indicator armed
-		// in native VAD (processing:true at the user's turn end) without a human at the
-		// mic. Undefined in production; only the harness sets it.
+		// (processing:true at the user's turn end) without a human at the mic. Undefined in production; only the harness sets it.
 		vffOnAgentProcessing?: (processing: boolean) => void
 		// vffOnTurnComplete removed - now using audio silence detection (100ms threshold)
 		// TEST-ONLY (bd polyglot-pdf-g8w): dev gate + injection handle for the E2E
@@ -442,8 +441,8 @@ export function createConnectionManager(
 		// socket), so unblocking here is safe -- and it is the ONE funnel all
 		// reconnect paths share. The paused guard above keeps a mid-pause block
 		// intact (resume() clears `paused` before calling this).
-		// ACCEPTED narrow race (Opus review, bd polyglot-pdf-nm7z): in manual-VAD
-		// mode ONLY (PTT off + native VAD off, a non-default fallback), a
+		// ACCEPTED narrow race (Opus review, bd polyglot-pdf-nm7z): reachable only
+		// with PTT off, which no longer happens (bd polyglot-pdf-v1m8g), so a
 		// GoAway/auto-drop reconnect landing inside a live barge-in window unblocks
 		// a moment early, so the new session's first audio could briefly overlap
 		// the user's in-progress interruption -- sub-second, self-correcting on
@@ -819,8 +818,8 @@ export function createConnectionManager(
 			// here, EVERY AI audio chunk after resume is silently dropped in
 			// playAudio() -- the mic re-arms but the AI's voice never returns. Nothing
 			// else clears it on the default path: onVADSpeechEnd (the only other
-			// resumePlayback caller) early-returns under both PTT and native VAD, which
-			// are the defaults. So resume() must reset it itself (bd audio-resume).
+			// resumePlayback caller) early-returns under PTT, which is the only mode.
+			// So resume() must reset it itself (bd audio-resume).
 			if (audioManager) {
 				audioManager.resumePlayback()
 			}
@@ -1001,9 +1000,8 @@ export function createConnectionManager(
 			return pushToTalkMode
 		},
 
-		// bd polyglot-pdf-333: lets the UI (VoiceOverlay PTT effect) skip its own
-		// worklet/mute reconfiguration in native-VAD mode, so it can't re-arm the
-		// worklet noise gate that native mode deliberately bypasses.
+		// Lets the UI (VoiceOverlay PTT effect) read the mode the audio layer is
+		// configured with. Always true since bd polyglot-pdf-v1m8g.
 
 		getFieldManager() {
 			return fieldManager

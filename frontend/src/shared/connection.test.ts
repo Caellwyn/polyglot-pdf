@@ -8,9 +8,9 @@
  * names (currentPartId, startSection/switchSection/completeSection/
  * getCurrentSection/getCompletedSections) that the section-rename
  * (bd polyglot-pdf-gfb.4) removed; this rewrite targets the current API and the
- * three behaviors the bead names: (a) the section-based state contract,
- * (b) activity-signal suppression in native-VAD mode, and (c) audio-queue
- * barge-in flush/resume.
+ * behaviors the bead names: (a) the section-based state contract and (b) the
+ * audio-queue barge-in flush/resume. (A third -- activity-signal suppression in
+ * native-VAD mode -- went with that mode; bd polyglot-pdf-v1m8g.)
  *
  * WebFormConnection is mocked, so backend-driven handshake callbacks
  * is simulated by capturing the callbacks object the factory passes into the
@@ -246,19 +246,6 @@ describe('Connection Manager (connection.ts)', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // (b) Activity-signal suppression in native-VAD mode (bd polyglot-pdf-333/zivv)
-  //
-  // When the backend reports native VAD, Gemini owns turn detection: the client
-  // must suppress ALL manual turn signals -- activity_start AND activity_end (and
-  // the Silero barge-in callbacks). Native automatic VAD and the manual signals
-  // are mutually exclusive; forwarding activity_end (mapped to audio_stream_end on
-  // the backend) into the continuous native stream interrupts Gemini's response
-  // ("Gemini stops responding after PTT press" -- bd zivv). PTT under native VAD
-  // is ONLY an audio gate: audioManager streams SILENCE while the button is
-  // released so native VAD finds the boundary itself -- no manual end needed. This
-  // supersedes the earlier bd-6vo audio_stream_end behavior.
-  // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
   // (b2) Shared audio rehydration across reconnect paths (bd polyglot-pdf-z9bc)
   //
   // Every reconnect / session-restart cause funnels through ONE rehydrateAudio
@@ -365,7 +352,7 @@ describe('Connection Manager (connection.ts)', () => {
       // resume() must clear that block; otherwise every AI audio chunk after resume
       // is silently dropped in playAudio() -- the mic comes back but the AI's voice
       // never does. Nothing else clears it on the default path (onVADSpeechEnd early-
-      // returns under PTT and native VAD, both defaults).
+      // returns under PTT, the only mode).
       await manager.resume()
       expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
     })

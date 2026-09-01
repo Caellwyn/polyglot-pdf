@@ -1430,8 +1430,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// Step 1: Send activity_start FIRST to stop backend from sending more audio.
 		// The user just agreed, so cut off any still-playing disclaimer read instead
 		// of letting it finish (matches VoiceOverlayMobile; bd polyglot-pdf-zq9l).
-		// No-op in native VAD (connection.ts suppresses activity_start there); in
-		// manual VAD it opens the user turn that the sendActivityEnd below closes.
+		// This ALWAYS fires (bd polyglot-pdf-v1m8g): the native-VAD suppression that
+		// used to make it a no-op is gone, so it opens the user turn that the
+		// sendActivityEnd below closes.
 		console.log('[VoiceOverlay] Sending activity_start to interrupt Gemini')
 		connectionManager?.sendActivityStart()
 
@@ -1516,8 +1517,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// SKIP on the reconnect path (bd polyglot-pdf-ala0): the sendActivityStart
 			// above opened the turn on the OLD (stale) connection, so the new connection
 			// has no matching open turn -- sending activity_end here would be an unmatched
-			// signal (in native VAD the backend turns it into a spurious audio_stream_end
-			// on a turn that never opened). On reconnect, switchToFirstSection below
+			// signal on a turn that never opened. On reconnect, switchToFirstSection below
 			// restarts Gemini cleanly and drives the turn, so the end is unnecessary.
 			if (!reconnected) {
 				console.log('[VoiceOverlay] [mic] Sending activity_end to signal user turn complete')
@@ -1870,8 +1870,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					    "PTT" (send only while held); PTT off = "Auto" (stream
 					    continuously). The toggle is always enabled. */}
 
-					{/* Push-to-Talk button: visible whenever PTT gating is on (works in
-					    native VAD too -- it gates the client audio bytes). */}
+					{/* Push-to-Talk button: holding it is the turn signal (bd
+					    polyglot-pdf-v1m8g -- PTT is the only input mode). */}
 					{pushToTalkMode && isConnected && (
 						<div className="vff-ptt-button-container">
 							<button

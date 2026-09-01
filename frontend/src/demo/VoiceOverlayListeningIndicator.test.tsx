@@ -3,7 +3,7 @@
 // Regression test for the reversed listening indicator (bd polyglot-pdf-1dvp).
 //
 // The old `.vff-vad-indicator` "Listening" badge was gated on
-// `vad.userSpeaking && !pushToTalkMode && !nativeVad`, which in native-VAD mode
+// `vad.userSpeaking && !pushToTalkMode && !nativeVad`, which under the retired native-VAD mode
 // (the deployed default) lit when paused/disconnected and never when actually
 // listening. It was replaced with `.vff-listening` (ear glyph + mic-energy
 // meter), gated on a dedicated `isListening` flag = a steady `connected` session

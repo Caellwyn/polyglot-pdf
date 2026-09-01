@@ -145,9 +145,6 @@ export interface ConnectionCallbacks {
   onError?: (error: Error) => void;
   onAudioData?: (arrayBuffer: ArrayBuffer) => void;
   onNextField?: (fieldId: string | null) => void;
-  // Native-VAD mode toggle from the backend session_ready handshake (bd
-  // polyglot-pdf-333). When enabled, the connection layer must stop sending
-  // manual activity signals and stream continuous audio.
   // The Gemini Live server sent a GoAway: it is about to terminate this
   // connection (bd polyglot-pdf-c5t). timeLeft is a duration string (may be
   // null). The handler can pre-emptively reconnect before the abrupt close; the
@@ -745,7 +742,7 @@ export class WebFormConnection {
             this.clearThinking('agent_processing:false');
           }
           // TEST-ONLY observability (bd polyglot-pdf-fa4x): let the E2E voice
-          // harness see that the native-VAD START signal fired, without a human
+          // harness see that the thinking START signal fired, without a human
           // mic. Undefined in production; only the harness sets it.
           if (window.vffOnAgentProcessing) {
             window.vffOnAgentProcessing(message.processing === true);

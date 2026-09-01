@@ -163,9 +163,9 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let inputMuted = false // Track if input should be muted (send silence)
 	// Spell-back playback hold (bd polyglot-pdf-22h1f): while the deterministic
 	// letter-by-letter TTS clip plays, NOTHING from the mic may reach the model
-	// -- regardless of PTT mode or hold state. Under native VAD the stream is
-	// kept alive with silence (like PTT mute); in manual modes chunks are
-	// simply dropped. Cleared by the spell-back path's finally, and the PTT
+	// -- regardless of hold state: the chunk is simply DROPPED. (It used to
+	// substitute silence under native VAD, whose stream had to stay continuous;
+	// bd polyglot-pdf-v1m8g.) Cleared by the spell-back path's finally, and the PTT
 	// interrupt path clears it before capturing the user's barge-in.
 	let spellbackHold = false
 	let pttModeEnabled = false // FIX (Nov 7, 2025): Track PTT mode state
@@ -635,11 +635,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// on the resume() await when a drain (resetPlaybackClock /
 			// flushAudioQueue) lands belongs to the DEAD generation and must not
 			// schedule after the drain returns (bd s7uf).
-			// SCOPE: the suspended-resume window only opens on
-			// the manual-VAD tentative-pause path -- native VAD never suspends, so
-			// there this guard is a no-op by design. The native-VAD ordering
-			// hazard lives a layer up and is owned by the WS
-			// binaryType='arraybuffer' wire-order guarantee (webFormConnection).
+			// SCOPE: the suspended-resume window only opens on the client-VAD
+			// tentative-pause path, which does not run under push-to-talk (the only
+			// input mode, bd polyglot-pdf-v1m8g) -- so this guard is a no-op in
+			// practice. The ordering hazard it guarded lives a layer up and is owned
+			// by the WS binaryType='arraybuffer' wire-order guarantee.
 			const epochAtStart = playbackEpoch
 
 			// Resume context if suspended (browser autoplay policy)
@@ -1033,8 +1033,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		console.log('[AudioManager] setPTTMode:', enabled)
 		pttModeEnabled = enabled
 
-		// Notify worklet about PTT mode change (bypasses the RMS noise gate). The
-		// worklet gate must ALSO stay bypassed whenever native VAD is on -- Gemini's
+		// Notify worklet about PTT mode change (bypasses the RMS noise gate).
 		// PTT gating happens at the JS layer via inputMuted, not the worklet RMS
 		// gate. (The bypass used to be (PTT on) OR (native VAD on); the native arm
 		// is gone with the mode -- bd polyglot-pdf-v1m8g.)

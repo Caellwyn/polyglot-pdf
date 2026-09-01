@@ -278,11 +278,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Sync the audio pipeline to the current PTT mode (Codex review PR #119).
 	// The desktop overlay has this; mobile previously synced only inside the toggle
 	// HANDLER, so with the default pushToTalkMode=true the PTT bar showed but the
-	// audio layer kept pttModeEnabled=false / inputMuted=false -> under native VAD
-	// shouldSendAudioChunk streamed continuously while the UI claimed press-to-talk.
-	// Run the same mute/unmute + worklet config on connect and on every mode change.
-	// (setPTTMode keeps the worklet RMS gate bypassed under native VAD, so toggling
-	// PTT off does not re-arm it.)
+	// audio layer kept pttModeEnabled=false / inputMuted=false, so the gate did not
+	// match the UI's press-to-talk claim. Run the mute/unmute + worklet config on
+	// connect, so the audio layer always agrees with the (now constant) PTT mode.
 	useEffect(() => {
 		if (!connectionManager) return
 		connectionManager.setPushToTalkMode(pushToTalkMode)
@@ -955,8 +953,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// SKIP on the reconnect path (bd polyglot-pdf-ala0): the sendActivityStart
 			// above opened the turn on the OLD (stale) connection, so the new connection
 			// has no matching open turn -- sending activity_end here would be an unmatched
-			// signal (in native VAD the backend turns it into a spurious audio_stream_end
-			// on a turn that never opened). On reconnect, switchToFirstSection below
+			// signal on a turn that never opened. On reconnect, switchToFirstSection below
 			// restarts Gemini cleanly and drives the turn, so the end is unnecessary.
 			if (!reconnected) {
 				console.log('[VoiceOverlayMobile] [mic] Sending activity_end to signal user turn complete')
@@ -1057,14 +1054,6 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
 
-	// Handle push-to-talk mode toggle.
-	// PTT is a CLIENT-SIDE AUDIO GATE layered on top of native VAD (noisy-room
-	// support): native Gemini VAD always runs on the backend, but PTT (when on)
-	// gates which client audio bytes reach Gemini. We run the full mute/unmute +
-	// worklet reconfig regardless of native VAD -- audioManager.setPTTMode keeps the
-	// worklet noise gate bypassed under native VAD, so toggling PTT off does not
-	// re-arm the RMS gate. Manual activity_start/end stay suppressed in native mode
-	// (connection.ts); PTT only decides which bytes are sent.
 	// Handle push-to-talk button press (touch)
 	// TABLET FIX: Wrapper for touch events that prevents context menu
 	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
@@ -1479,8 +1468,8 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 
 
 
-					{/* Push-to-Talk bar: visible whenever PTT gating is on (works in
-					    native VAD too -- it gates the client audio bytes). */}
+					{/* Push-to-Talk bar: holding it is the turn signal (bd
+					    polyglot-pdf-v1m8g -- PTT is the only input mode). */}
 					{pushToTalkMode && isConnected && (
 						<div className="vff-ptt-bar-container">
 							<button
