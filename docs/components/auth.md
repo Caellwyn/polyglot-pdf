@@ -66,8 +66,8 @@ match /authorized_emails/{doc} {
 ```
 
 > **Deploy note.** The repo `firestore.rules` is the source of truth and is wired
-> into `firebase.json` (`firestore.rules`). `deploy-demo.sh` and
-> `deploy-production.sh` ship it (`firebase deploy --only firestore:rules`) on any
+> into `firebase.json` (`firestore.rules`). `deploy-demo.sh` ships it
+> (`firebase deploy --only firestore:rules`) on any
 > frontend/full deploy, so a normal deploy keeps the live rules in sync with the
 > repo. A project left on default-deny breaks BOTH email signup (the unauth
 > `authorized_emails` read) and the `users/{uid}` profile sync below. Deploy is a
@@ -124,7 +124,17 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 `backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
 dependency reading `Authorization: Bearer <idToken>` and delegating to
 `verify_token` (so the same dev bypass applies). It gates `POST
-/api/fill-pdf` (the body carries user-entered field values), the
+/api/fill-pdf` (the body carries user-entered field values), `POST
+/api/tts/notice` (bd `polyglot-pdf-dft1` -- the app's OWN safety notices,
+spoken free: the paid dependency would redeem the link, answering a
+budget-exhausted client with silence and burning a live client's link to
+deliver a warning we chose to give. It speaks only KEYED server-side text, so
+being free does not make it an open text-to-speech service), `POST
+/api/resume-form` (bd `polyglot-pdf-dft1` -- a client uploads the PDF they
+saved earlier; it reads the kit's own form.pdf as the REFERENCE to verify
+that upload against, so it carries the same gates as the fill route.
+Deliberately NOT `require_paid_client_work`: resuming your own saved work
+spends nothing and must not burn the link), the
 archived-revision reads `GET /api/form-kits/{kit_id}/archive` +
 `.../archive/{marker}/schema` (bd `polyglot-pdf-qfyxr`; same firm-visibility
 gates as the live schema read), `POST /api/form-kits/{kit_id}/retire` (bd
@@ -266,9 +276,15 @@ unauthenticated endpoint an oracle for probing which links and firms exist.
 Entitlement is RE-CHECKED at open rather than trusted from the mint-time
 snapshot, since a firm can be suspended in the 48 hours in between.
 
-**Minting is OFF by default** (`LINK_MINTING_ENABLED`) until the spend
-ceiling ships (bd `polyglot-pdf-ik7e`) -- see
-[config-deployment.md](config-deployment.md).
+**Minting is OFF by default** (`LINK_MINTING_ENABLED`); the spend ceiling it
+waited on (bd `polyglot-pdf-ik7e`) has shipped, and the DEMO now enables it --
+see [config-deployment.md](config-deployment.md).
+
+Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind
+`ProtectedRoute`. The page is only the door: `firm_id` and `employee_id` come
+from the VERIFIED token, never from anything the page sends, so a reachable
+page cannot grant itself a firm.
+
 ### The firm WRITE path: authorization is not authentication
 
 `POST /api/form-kits/{kit_id}/retire` (bd `polyglot-pdf-z6bk9`) is the firm
@@ -301,7 +317,7 @@ guarded and staff-only (bd `polyglot-pdf-6x1j`).
 
 No UI ships with the route: the button belongs to the firm console (bd
 `polyglot-pdf-gob8l`), per the maintainer's 2026-08-20 decision -- deliberately
-not bolted onto the token-gated staff editor.
+not bolted onto the staff editor.
 
 `GET /api/form-kits/{kit_id}/pdf` is **ungated for PUBLIC kits only** (bd
 `polyglot-pdf-vccy` scoped the former blanket non-gate): a public kit's

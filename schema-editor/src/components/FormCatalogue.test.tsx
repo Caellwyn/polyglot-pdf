@@ -937,6 +937,35 @@ describe('FormCatalogue -- run extraction', () => {
     expect(posted).toMatchObject({ id: 'w7', pdfFile: 'form.pdf', schemaFile: 'schema.json' });
   });
 
+  it('names a HUMAN-LABELLED kit by both label and id in the notice (bd kztlr)', async () => {
+    // The other extraction tests use a kit whose label ('W7') is a restatement
+    // of its id ('w7'), so kitName() correctly renders the bare '"w7"' -- which
+    // is BYTE-IDENTICAL to what the pre-fix code emitted. They therefore pass
+    // either way and cannot detect a revert. This is the case that can: an id
+    // and a label that are genuinely different, which is the whole bug (the
+    // maintainer's card read 'W-7' while the refusal said 'form-2').
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: () => okJson({ ok: true, detail: '61 fields, validated', schemaFile: 'schema.json' }),
+    });
+    const root = mockRoot([
+      mockKit('form-2', {
+        'form.pdf': 'PDF',
+        'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }),
+      }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(
+      screen.getByText(/Extracted "W-7" \(form-2\)/)).toBeTruthy());
+  });
+
   it('threads a selected instructions PDF into the kit dir AND the POST (bd s4dp.3)', async () => {
     let posted: Record<string, unknown> | null = null;
     global.fetch = fetchMock({

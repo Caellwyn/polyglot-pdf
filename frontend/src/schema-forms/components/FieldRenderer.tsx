@@ -19,6 +19,9 @@ export interface FieldRendererProps {
   value: any;
   onChange: (value: any) => void;
   onBlur?: (fieldId: string) => void;
+  // The user put the cursor in this field (bd polyglot-pdf-a08po). Moves the
+  // next-field search origin only -- it never makes the model speak.
+  onFocus?: (fieldId: string) => void;
   error?: string | null;
   disabled?: boolean;
   allFieldValues?: Record<string, any>; // For conditional logic
@@ -33,6 +36,7 @@ export function FieldRenderer({
   value,
   onChange,
   onBlur,
+  onFocus,
   error,
   disabled = false,
   allFieldValues = {},
@@ -83,6 +87,12 @@ export function FieldRenderer({
     }
   };
 
+  const handleFocus = () => {
+    if (onFocus) {
+      onFocus(field.id);
+    }
+  };
+
   // Route to appropriate field component based on type
   switch (field.type) {
     case "text":
@@ -94,6 +104,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
@@ -108,6 +119,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
@@ -122,6 +134,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
@@ -142,6 +155,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
@@ -156,6 +170,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
@@ -170,6 +185,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
@@ -191,6 +207,7 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           onBlur={handleBlur}
+          onFocus={handleFocus}
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}

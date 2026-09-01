@@ -10,6 +10,9 @@ export interface DateFieldProps {
   value: any; // Accept any type (primitive or FieldValue wrapper)
   onChange: (value: string) => void;
   onBlur?: () => void;
+  // Cursor entered this field (bd polyglot-pdf-a08po) -- moves the next-field
+  // search origin; never makes the model speak.
+  onFocus?: () => void;
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
@@ -23,6 +26,7 @@ export function DateField({
   value,
   onChange,
   onBlur,
+  onFocus,
   error,
   disabled = false,
   confirmed = false,
@@ -90,6 +94,7 @@ export function DateField({
         value={displayValue}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
+        onFocus={onFocus}
         placeholder={placeholder}
         // NO maxLength. field.max_length on a date is the PDF widget's COMB
         // CELL COUNT (W-7 dates are comb-8), not a text limit -- and

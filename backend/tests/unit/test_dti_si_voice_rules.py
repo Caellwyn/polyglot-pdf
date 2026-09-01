@@ -493,6 +493,9 @@ def test_i90_height_selects_are_never_force_recited():
     from pathlib import Path
 
     kit = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
+    if not kit.exists():
+        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
+                     "bd polyglot-pdf-hydb0)")
     schema = json.loads(kit.read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in schema["fields"]}
     for fid in ("height_feet", "height_inches"):

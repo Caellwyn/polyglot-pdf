@@ -1,12 +1,19 @@
 """
-Unit tests for the token-gated /api/editor/* surface (bd polyglot-pdf-92qe.1).
+Unit tests for the /api/editor/* surface (bd polyglot-pdf-92qe.1).
+
+Auth is per-person Firebase identity (backend/services/editor_auth.py,
+bd polyglot-pdf-hn0jq) -- there is no shared-secret token any more (the
+SCHEMA_EDITOR_TOKEN/SCHEMA_AUTHOR_TOKEN gate was deleted outright, bd
+polyglot-pdf-rhc2v). This suite's fixtures map the X-Editor-Token header
+values it already sends to per-user EditorActor overrides (see
+_install_actor_auth below), rather than exercising editor_auth.py directly.
 
 Covers the three exit criteria:
 1. Store write methods round-trip on LocalFormKitStore (put_schema, put_metadata,
    load_metadata, list_kit_files/list_kit_ids), with the GCS implementations
    covered via a mocked client.
-2. Every /api/editor/* route is token-gated: 401 wrong/missing token, 503 when no
-   token is configured; the editor kit list includes a DRAFT kit that the public
+2. Every /api/editor/* route requires editor/author identity: 401 for an
+   unrecognized caller; the editor kit list includes a DRAFT kit that the public
    manifest omits.
 3. PUT schema + POST status round-trip through the routes (a saved edit is
    re-readable; a status flip preserves the other metadata keys), and the public
@@ -74,10 +81,8 @@ VALID_SCHEMA = {
 }
 
 
-def _settings(editor=None, author=None, **overrides):
+def _settings(**overrides):
     base = dict(
-        SCHEMA_EDITOR_TOKEN=editor,
-        SCHEMA_AUTHOR_TOKEN=author,
         # Extraction knobs (bd 92qe.3) with test-friendly defaults.
         EXTRACTOR_MODEL="gemini-2.5-pro",
         EXTRACTOR_TIMEOUT_SEC=60.0,
@@ -165,8 +170,14 @@ def _install_actor_auth(app):
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     """A TestClient over ONLY the editor router, with a LocalFormKitStore on a
-    tmp dir and both tokens configured. Auth runs through the real dependency
-    wiring (no override), so 401/503 behavior is the deployed behavior.
+    tmp dir. Auth is OVERRIDDEN via _install_actor_auth (dependency_overrides
+    on require_editor_actor/require_author_actor), not the real
+    backend/services/editor_auth.py Bearer-token path -- bd polyglot-pdf-q1gtz
+    (a prior version of this docstring wrongly said "no override"). The fake
+    dependencies raise the same 401/403 the real ones do, so status-code
+    assertions still hold, but a regression in the real Firebase-verification
+    path itself would not be caught here; see test_editor_identity.py for
+    tests against the real dependency.
 
     The Mark-complete drift sweep (bd polyglot-pdf-783r) is stubbed to a clean
     no-op here so the OTHER gate tests (validate/lint/v2/PDF) exercise their own
@@ -177,9 +188,7 @@ def client(tmp_path, monkeypatch):
     _install_actor_auth(app)
     store = LocalFormKitStore(tmp_path)
     monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
-    monkeypatch.setattr(
-        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
-    )
+    monkeypatch.setattr(ekr, "get_settings", lambda: _settings())
 
     async def _no_drift(_store, _kit_id, _schema, _schema_file):
         return 0, None
@@ -1339,7 +1348,7 @@ def test_local_store_public_reads_stay_ungated(client):
 def test_editor_list_includes_draft_the_public_manifest_omits(client, monkeypatch):
     """GCS-shaped store: the public manifest lists only the COMPLETE kit, but the
     editor list (built from the storage listing) shows the draft too -- the whole
-    point of the token-gated surface."""
+    point of the editor-only surface."""
     c, _local_store, _root = client
 
     class _GcsShapedStore:
@@ -2184,8 +2193,7 @@ def test_mark_complete_blocked_when_translation_unconfigured(client, monkeypatch
     # No key AND not Vertex -> the sweep's auth gate fails.
     monkeypatch.setattr(
         ekr, "get_settings",
-        lambda: _settings(editor="edit-tok", author="auth-tok",
-                          GEMINI_API_KEY=None, VERTEXAI=False),
+        lambda: _settings(GEMINI_API_KEY=None, VERTEXAI=False),
     )
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA, label="I-90")
@@ -2621,7 +2629,7 @@ def test_onboard_rejects_non_pdf_and_oversize(client, monkeypatch):
     assert r.status_code == 422
     monkeypatch.setattr(
         ekr, "get_settings",
-        lambda: _settings(editor="edit-tok", author="auth-tok", EXTRACTOR_MAX_PDF_MB=0.00001),
+        lambda: _settings(EXTRACTOR_MAX_PDF_MB=0.00001),
     )
     r2 = _upload(c, "auth-tok")
     assert r2.status_code == 413
@@ -2639,9 +2647,7 @@ def test_concurrent_onboards_of_same_filename_both_persist(tmp_path, monkeypatch
 
     store = LocalFormKitStore(tmp_path)
     monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
-    monkeypatch.setattr(
-        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
-    )
+    monkeypatch.setattr(ekr, "get_settings", lambda: _settings())
 
     def _upload_file(payload: bytes) -> StarletteUploadFile:
         return StarletteUploadFile(
@@ -3069,8 +3075,7 @@ def test_extract_unconfigured_is_503(client, monkeypatch):
     # Non-gemini model (the container has no claude CLI) -> 503.
     monkeypatch.setattr(
         ekr, "get_settings",
-        lambda: _settings(editor="edit-tok", author="auth-tok",
-                          EXTRACTOR_MODEL="claude-opus-5"),
+        lambda: _settings(EXTRACTOR_MODEL="claude-opus-5"),
     )
     assert c.post(
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
@@ -3078,8 +3083,7 @@ def test_extract_unconfigured_is_503(client, monkeypatch):
     # No API key AND no Vertex -> 503 (genuinely no way to authenticate).
     monkeypatch.setattr(
         ekr, "get_settings",
-        lambda: _settings(editor="edit-tok", author="auth-tok",
-                          GEMINI_API_KEY=None, VERTEXAI=False),
+        lambda: _settings(GEMINI_API_KEY=None, VERTEXAI=False),
     )
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert c.post(
@@ -3096,8 +3100,7 @@ def test_extract_vertex_without_key_passes_the_config_gate(client, monkeypatch):
     _make_kit(root, "fresh")
     monkeypatch.setattr(
         ekr, "get_settings",
-        lambda: _settings(editor="edit-tok", author="auth-tok",
-                          GEMINI_API_KEY=None, VERTEXAI=True),
+        lambda: _settings(GEMINI_API_KEY=None, VERTEXAI=True),
     )
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr(
@@ -3508,7 +3511,7 @@ def test_translate_options_gates(client, translate_ai, monkeypatch):
     ).status_code == 409
     # No Gemini auth configured -> 503 (same gate as hosted extraction).
     monkeypatch.setattr(ekr, "get_settings", lambda: _settings(
-        editor="edit-tok", author="auth-tok", GEMINI_API_KEY=None, VERTEXAI=False))
+        GEMINI_API_KEY=None, VERTEXAI=False))
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert c.post(
         "/api/editor/kits/fresh/translate-options",

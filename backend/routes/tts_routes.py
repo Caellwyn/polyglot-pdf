@@ -30,7 +30,8 @@ from pydantic import BaseModel
 import structlog
 
 from backend.config import get_settings
-from backend.services.auth import require_paid_client_work
+from backend.services.auth import require_auth, require_paid_client_work
+from backend.services.notice_tts import KNOWN_NOTICES, synthesize_notice
 from backend.services.intro_tts import (
     KNOWN_FORMS,
     resolve_intro_language,
@@ -140,6 +141,61 @@ async def intro_tts(
         "ETag": etag,
         "X-Intro-Script-Version": script_version(resolve_intro_language(request.language)),
     }
+    if http_request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=audio, media_type="audio/mpeg", headers=headers)
+
+
+class NoticeRequest(BaseModel):
+    """A SAFETY NOTICE the app chose to speak (bd polyglot-pdf-dft1)."""
+
+    # A KEY, never text. The words live server-side; see services/notice_tts.py
+    # for why that is what keeps a free route from becoming an open
+    # text-to-speech service.
+    notice: str
+    language: str | None = None
+
+
+@router.post("/api/tts/notice")
+async def notice_tts(
+    request: NoticeRequest,
+    http_request: Request,
+    _user: dict = Depends(require_auth),
+) -> Response:
+    """Speak one of our own safety notices. FREE, deliberately.
+
+    require_auth, NOT require_paid_client_work -- the difference is the whole
+    point (maintainer, 2026-08-27). The paid dependency REDEEMS the link, so
+    using it here would:
+      - answer the budget-exhausted client with silence, when they are exactly
+        who needs to hear "save your form now", and
+      - BURN a live client's link to deliver a warning we chose to give.
+
+    A client still needs a valid credential to reach it, so this is not an open
+    endpoint -- it simply does not charge for our own words.
+    """
+    settings = get_settings()
+
+    notice = (request.notice or "").strip()
+    if notice not in KNOWN_NOTICES:
+        # Refuse BEFORE synthesis: the keyed-route contract.
+        raise HTTPException(status_code=400, detail="unknown notice")
+
+    try:
+        audio, etag = await synthesize_notice(request.language, notice, settings)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unknown notice")
+    except Exception as exc:
+        # Error TYPE only, consistent with the other two TTS routes.
+        _log.error("notice_tts_failed", error_type=type(exc).__name__)
+        raise HTTPException(status_code=502, detail="tts synthesis failed")
+
+    # Same manual-revalidation contract as the intro route above (bd
+    # polyglot-pdf-see5j): browsers neither cache POST responses nor
+    # auto-send If-None-Match on POST, so the client must store this ETag
+    # itself and hand-attach If-None-Match on a re-fetch to get the 304
+    # instead of re-downloading the clip.
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=86400"}
     if http_request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     return Response(content=audio, media_type="audio/mpeg", headers=headers)

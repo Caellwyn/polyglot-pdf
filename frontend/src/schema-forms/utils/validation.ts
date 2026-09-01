@@ -405,6 +405,29 @@ function parseDateComponents(
   return null;
 }
 
+/** Number of days in `month` (1-12) for `year`, honouring the Gregorian leap
+ * rule (divisible by 4, except centuries unless divisible by 400) -- so Feb
+ * 29 is valid exactly on real leap years. */
+function daysInMonth(year: number, month: number): number {
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const lengths = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return lengths[month - 1];
+}
+
+/** Whether {year,month,day} is a date that actually exists on the Gregorian
+ * calendar -- month in 1-12 and day within that month's real length (bd
+ * polyglot-pdf-vdyhb). parseDateComponents only checks SHAPE (a regex
+ * matching \d{1,2}/\d{1,2}/\d{4}), so "02/30/2020" parses to
+ * {year:2020,month:2,day:30} just fine as components -- this is the gate
+ * that catches it BEFORE the components are used for anything (a min/max
+ * comparison, or display), matching what the backend's
+ * datetime.strptime-based _validate_date already rejects. */
+function isValidCalendarDate(c: { year: number; month: number; day: number }): boolean {
+  if (c.month < 1 || c.month > 12) return false;
+  if (c.day < 1 || c.day > daysInMonth(c.year, c.month)) return false;
+  return true;
+}
+
 /** year*10000 + month*100 + day -- a numeric key two {year,month,day} dates
  * can compare directly, with no timezone conversion involved anywhere. */
 function dateComponentsKey(c: { year: number; month: number; day: number }): number {
@@ -424,6 +447,20 @@ function formatDateComponents(c: { year: number; month: number; day: number }): 
  * Validate date values
  */
 function validateDateValue(field: FormField, value: string, rules: ValidationRules): string | null {
+  // Reject a calendar-IMPOSSIBLE date (Feb 30, Apr 31, ...) BEFORE the
+  // new Date() check below: the JS Date constructor rolls an out-of-range
+  // day over into the next month ("02/30/2020" -> Mar 1) rather than
+  // returning NaN, so isNaN(dateValue.getTime()) never catches it (bd
+  // polyglot-pdf-vdyhb) -- the backend's datetime.strptime-based
+  // _validate_date DOES reject it, so this closes an FE/BE divergence.
+  // Only fires on the two layouts parseDateComponents recognizes; any
+  // other layout falls through to the pre-existing new Date() behavior,
+  // unchanged.
+  const earlyComponents = parseDateComponents(value);
+  if (earlyComponents && !isValidCalendarDate(earlyComponents)) {
+    return `${field.name} must be a valid date`;
+  }
+
   // Basic date format check
   const dateValue = new Date(value);
   if (isNaN(dateValue.getTime())) {

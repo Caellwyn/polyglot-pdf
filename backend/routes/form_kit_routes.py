@@ -74,7 +74,8 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     - **Manifest loads but does NOT list kit_id -> FormKitNotFound (404).** The GCS
       deploy gate keeps draft/unmarked kits out of the manifest, so serving a
       guessed id would leak an object the public list never advertised. Draft
-      access for the contractor editor is a separate token-gated route (Bead 2).
+      access for the contractor editor is a separate editor/author-gated route
+      (Bead 2).
     - **Manifest MISSING (FormKitNotFound from load_manifest) -> fall back to
       convention ONLY if `store.allow_convention_fallback`.** Local mode (True)
       synthesizes its manifest from disk, so "missing" just means an empty root.
@@ -520,7 +521,7 @@ async def retire_own_kit(
 
     No UI ships with this route: the button belongs to the firm console
     (bd polyglot-pdf-gob8l), per the maintainer's 2026-08-20 decision --
-    deliberately NOT bolted onto the token-gated staff editor.
+    deliberately NOT bolted onto the staff editor.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()

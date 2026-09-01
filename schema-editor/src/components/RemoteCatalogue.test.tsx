@@ -569,7 +569,8 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
       'fresh-kit', { instructionsPdf: undefined, translateOptions: true,
         enrichGuidance: true }));
     await waitFor(() =>
-      expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
+      expect(screen.getByText(/Extracted "Fresh Form" \(fresh-kit\)/))
+        .toBeInTheDocument());
   });
 
   it('unchecking the translate-options checkbox threads false (bd 2h9j)', async () => {
@@ -649,7 +650,8 @@ describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => 
 
       resolveExtract({ ok: true, detail: '[OK] wrote schema.json -- 7 fields' });
       await waitFor(() =>
-        expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
+        expect(screen.getByText(/Extracted "Fresh Form" \(fresh-kit\)/))
+        .toBeInTheDocument());
       expect(screen.queryByText(/Extracting\.\.\./)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -1644,6 +1646,35 @@ describe('guarded delete (bd polyglot-pdf-6x1j)', () => {
     fireEvent.click(screen.getByText('Show form cards'));
   }
 
+  // TWO KITS, ONE LABEL. Nothing enforces label uniqueness -- set_editor_kit_label
+  // validates characters and length, never collisions, and RetireCandidate's own
+  // docstring says two same-numbered kits legitimately coexist. So a success
+  // notice naming only the label cannot say WHICH kit it means, and delete is
+  // the one action where that question can never be re-asked: the card is gone
+  // from the catalogue by the time the notice renders (bd polyglot-pdf-nsz2d).
+  it('names the DELETED kit unambiguously when two kits share a label', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([
+      { id: 'w7-2024', label: 'W-7', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'w7-2025', label: 'W-7', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    ]);
+    vi.mocked(deleteRemoteKit).mockResolvedValueOnce(3);
+    await openCards('author');
+
+    fireEvent.click(screen.getAllByText('Delete')[0]);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Type/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'w7-2024' } });
+    fireEvent.click(screen.getByText('Delete permanently'));
+
+    // The id is what distinguishes them, so the notice must carry it.
+    const notice = await screen.findByText(/was deleted permanently/);
+    expect(notice.textContent).toContain('w7-2024');
+    // ...and must not name the survivor.
+    expect(notice.textContent).not.toContain('w7-2025');
+  });
+
   it('offers Delete to an AUTHOR', async () => {
     await openCards('author');
     expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
@@ -1885,7 +1916,8 @@ describe('the editing lock is reachable from the UI (bd polyglot-pdf-hqztg)', ()
     // The person who took it is TOLD they took it -- the other side cannot be
     // notified, so silently winning would leave nobody aware.
     await waitFor(() =>
-      expect(screen.getByText(/took "Draft Form" from an editor/)).toBeInTheDocument());
+      expect(screen.getByText(/took "Draft Form" \(draft-kit\) from an editor/))
+        .toBeInTheDocument());
   });
 
   it('does NOT offer an editor a kit an author holds', async () => {

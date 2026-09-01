@@ -144,10 +144,11 @@ def test_the_client_sends_NO_shared_credential_any_more():
     """The retired links must stay retired.
 
     Per-user sign-in (bd polyglot-pdf-yswp3) removed the build-baked token and
-    the X-Editor-Token header from the client. Re-adding either would put a
-    shared secret back into a bundle anyone can read -- the exact posture the
-    editor-identity epic exists to end -- and would do it silently, since the
-    server still accepts that header until bd polyglot-pdf-rhc2v removes it.
+    the X-Editor-Token header from the client; bd polyglot-pdf-rhc2v then
+    deleted the server-side shared-secret gate outright, so the header is no
+    longer accepted at all. Re-adding either would put a dead credential back
+    into a bundle anyone can read -- the exact posture the editor-identity
+    epic exists to end.
 
     Asserted over CODE, not prose: both names legitimately appear in comments
     explaining what was retired, and matching those would make this vacuous.
@@ -161,8 +162,9 @@ def test_the_client_sends_NO_shared_credential_any_more():
     )
     assert RETIRED_HEADER not in ts, (
         f"{STORE.name} sends the {RETIRED_HEADER} header again. The server "
-        f"still accepts it (until bd polyglot-pdf-rhc2v), so this would NOT "
-        f"fail loudly -- it would quietly restore the shared-secret path."
+        f"no longer reads it at all (bd polyglot-pdf-rhc2v deleted the "
+        f"shared-secret gate) -- re-adding it would silently do nothing, "
+        f"masking the mistake rather than failing loudly."
     )
 
 

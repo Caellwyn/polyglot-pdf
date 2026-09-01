@@ -14,6 +14,9 @@ export interface SectionRendererProps {
   validationErrors: Record<string, string>;
   onFieldChange: (fieldId: string, value: any) => void;
   onFieldBlur: (fieldId: string) => void;
+  // Cursor entered a field (bd polyglot-pdf-a08po). Optional so existing
+  // callers/tests that do not wire focus tracking still render.
+  onFieldFocus?: (fieldId: string) => void;
   // 4dxt: force-skip a required-but-unanswered field. Optional so existing
   // callers/tests that do not wire skipping still render.
   onFieldSkip?: (fieldId: string) => void;
@@ -38,6 +41,7 @@ export function SectionRenderer({
   validationErrors,
   onFieldChange,
   onFieldBlur,
+  onFieldFocus,
   onFieldSkip,
   disabled = false,
 }: SectionRendererProps) {
@@ -80,6 +84,7 @@ export function SectionRenderer({
                 value={fieldValue}
                 onChange={(value) => onFieldChange(field.id, value)}
                 onBlur={onFieldBlur}
+                onFocus={onFieldFocus}
                 error={validationErrors[field.id] || null}
                 disabled={disabled}
                 allFieldValues={fieldValues}

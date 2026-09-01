@@ -143,6 +143,47 @@ def test_unresolvable_value_drops_the_condition():
     assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
 
 
+def test_mixed_atom_and_bucket_condition_is_dropped_with_recorded_error():
+    """bd polyglot-pdf-2sli8: a condition dict carrying BOTH atom keys
+    (field/operator) AND a ConditionGroup bucket key (any_of/all_of/none_of)
+    is the exact malformed shape schema_lint's composite-depth ERROR rule
+    exists to catch ('this condition mixes a single rule with a group of
+    rules'). Before the fix this fell through to _rewrite_atom(cond, ...),
+    which read only the top-level field/operator/value keys and silently
+    discarded the any_of bucket with ZERO repairs entry logged -- worse than
+    fail-open, silent data loss a re-lint of the repaired schema would not
+    catch (the surviving atom lints clean, hiding that a whole branch of
+    authored logic vanished).
+
+    Now dropped entirely (like every other malformed drop path), NOT
+    repaired by guessing which the author meant: the ambiguity between "an
+    atom" and "a group containing that same atom" is exactly the kind of
+    guess this module's option_id/alias resolution already refuses to make.
+    """
+    fields = [
+        _group(),
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
+         "show_if": {
+             "field": "grp", "operator": "includes", "value": "alpha",
+             "any_of": [{"field": "grp", "operator": "includes", "value": "alpha"}],
+         }},
+    ]
+    repaired, repairs = repair(_schema(fields))
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert "show_if" not in dep, (
+        "the mixed shape must be DROPPED entirely, not repaired to a bare "
+        "atom -- the field stays visible instead of showing a condition "
+        "the author never actually wrote alone"
+    )
+    drops = [r for r in repairs if r["action"] == "drop-condition"]
+    assert len(drops) == 1 and drops[0]["error"] is True, (
+        "a mixed atom+bucket shape must be logged like every other "
+        "malformed-shape drop -- silently discarding it with NO repairs "
+        "entry is worse than fail-open"
+    )
+    assert not has_errors(lint_schema(repaired))
+
+
 # --------------------------------------------------------------------------- #
 # The alias table's observed shapes.
 # --------------------------------------------------------------------------- #

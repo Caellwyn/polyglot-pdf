@@ -912,3 +912,68 @@ describe('validateField (min/max as number | string, bd polyglot-pdf-hhwgi)', ()
     expect(validateField(strayEmptyBound, -5)).toBeNull();
   });
 });
+
+// bd polyglot-pdf-vdyhb: validateDateValue accepted calendar-IMPOSSIBLE
+// dates (Feb 30, Apr 31) because the JS Date constructor ROLLS OVER an
+// out-of-range day into the next month instead of returning NaN
+// ("02/30/2020" -> Mar 1), so isNaN(dateValue.getTime()) never caught it.
+// The backend's datetime.strptime-based _validate_date DOES reject these,
+// so a hand-typed impossible date used to pass the client gate while the
+// same value from the voice model was rejected server-side.
+describe('validateField (calendar-impossible dates, bd polyglot-pdf-vdyhb)', () => {
+  const dateFieldNoBounds: FormField = {
+    id: 'some_date',
+    name: 'Some Date',
+    spoken_name: 'some date',
+    type: 'date',
+    section_id: 'Part 1',
+    help: { format_hint: 'MM/DD/YYYY' },
+  };
+
+  it.each([
+    ['02/30/2020', 'Feb 30 (slash)'],
+    ['2020-02-30', 'Feb 30 (ISO)'],
+    ['04/31/2020', 'Apr 31 (slash, 30-day month)'],
+    ['2020-04-31', 'Apr 31 (ISO, 30-day month)'],
+    ['13/01/2020', 'month 13 (slash)'],
+    ['2020-13-01', 'month 13 (ISO)'],
+  ])('rejects %s -- %s', (value) => {
+    expect(validateField(dateFieldNoBounds, value)).not.toBeNull();
+  });
+
+  it('accepts a valid leap day (02/29/2020, a real leap year)', () => {
+    expect(validateField(dateFieldNoBounds, '02/29/2020')).toBeNull();
+  });
+
+  it('accepts a valid leap day in ISO form (2020-02-29)', () => {
+    expect(validateField(dateFieldNoBounds, '2020-02-29')).toBeNull();
+  });
+
+  it('rejects Feb 29 in a NON-leap year (2021)', () => {
+    expect(validateField(dateFieldNoBounds, '02/29/2021')).not.toBeNull();
+  });
+
+  it('rejects Feb 29 in a century non-leap year (2100, divisible by 100 not 400)', () => {
+    expect(validateField(dateFieldNoBounds, '02/29/2100')).not.toBeNull();
+  });
+
+  it('accepts Feb 29 in a 400-divisible century leap year (2000)', () => {
+    expect(validateField(dateFieldNoBounds, '02/29/2000')).toBeNull();
+  });
+
+  it('still accepts an ordinary valid date (03/15/2020)', () => {
+    expect(validateField(dateFieldNoBounds, '03/15/2020')).toBeNull();
+  });
+
+  it('an impossible date one day before a max bound is still rejected, not silently accepted by the bound check', () => {
+    // Exercises the path where valueComponents parses but fails calendar
+    // validity WHILE a max_date is also configured -- the early reject
+    // must fire before parseDateComponents(value) is even consulted by
+    // the min/max logic, not merely "happen to" pass the bound check.
+    const withMaxBound: FormField = {
+      ...dateFieldNoBounds,
+      max_date: '2020-12-31',
+    };
+    expect(validateField(withMaxBound, '02/30/2020')).not.toBeNull();
+  });
+});

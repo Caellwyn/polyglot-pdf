@@ -5,6 +5,14 @@ description: Run the automated voice form-fill E2E test against the real app + r
 
 # Voice form-fill E2E harness
 
+**CURRENTLY BROKEN (bd polyglot-pdf-tcemw):** this harness targets the i-90
+kit -- both the UI-navigation step below and harness.js's default field ids
+(p1_line1_aliennumber, p1_line2_acctidentifier). The i-90 kit was deleted
+(bd polyglot-pdf-hydb0, deprecated in favor of i-90_v2), so the "click i-90"
+step will not find that button. Do not attempt to just swap in a different
+kit name here -- repointing correctly means picking a field that plays the
+same structural role, tracked in the linked bead.
+
 Drives the real frontend (Chrome) against a local backend + real Gemini, feeding
 committed 16 kHz PCM16 WAV fixtures into the live WebSocket through a dev-gated
 in-app hook (`window.__VFF_TEST_INJECT`). Asserts on concrete outcomes (field

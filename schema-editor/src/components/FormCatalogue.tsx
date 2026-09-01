@@ -19,6 +19,7 @@ import {
   AuthError, ForbiddenError,
   listArchivedRevisions, loadArchivedSchema, setRemoteStatus,
 } from '../utils/remoteKitStore';
+import { kitName } from '../utils/kitName';
 import { ArchivedVersions } from './ArchivedVersions';
 // Dev-only single-kit deploy (bd polyglot-pdf-ipzh): absent in a static/hosted
 // build, so the probe returns null there and the button never renders.
@@ -274,12 +275,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setBusy(true);
     setError(null);
     try {
-      const { id } = await onboardPdf(root, pdf);
+      const { entry } = await onboardPdf(root, pdf);
       await refresh(root);
       // Do NOT auto-open: a freshly dropped PDF has no schema yet (extraction
       // runs separately), so opening it would error. Surface it as added; the
       // human opens it once it has a schema.
-      setNotice(`Added "${id}" -- run the extraction to produce its schema, then open it here.`);
+      setNotice(`Added ${kitName(entry)} -- run the extraction to produce its schema, then open it here.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add form');
     } finally {
@@ -308,7 +309,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     const republishViaServer = status === 'complete' && serverActionsOk;
     if (kit.status === 'unpublished' && !republishViaServer) {
       setError(
-        `"${kit.label}" is unpublished (a superseded revision). It cannot be `
+        `${kitName(kit)} is unpublished (a superseded revision). It cannot be `
         + 'edited or changed from this folder view -- its schema is what '
         + 'earlier confirmations were recorded against. Start the backend '
         + '(scripts/run-schema-editor.sh) to publish it again, which runs the '
@@ -341,14 +342,14 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       if (viaServer) {
         // The sweep makes one LLM call PER LANGUAGE with retry, so this is a
         // tens-of-seconds action -- say so rather than leaving a dead button.
-        setNotice(`Checking "${kit.label}" and re-translating anything missing...`);
+        setNotice(`Checking ${kitName(kit)} and re-translating anything missing...`);
         const result = await setRemoteStatus(kit.id, status, { authorVersion });
         setNotice(
           result.retranslated > 0
-            ? `"${kit.label}" is complete. Re-translated ${result.retranslated} `
+            ? `${kitName(kit)} is complete. Re-translated ${result.retranslated} `
               + `entr${result.retranslated === 1 ? 'y' : 'ies'}`
               + `${result.translationModel ? ` (${result.translationModel})` : ''}.`
-            : `"${kit.label}" is complete. Every translation was already current.`,
+            : `${kitName(kit)} is complete. Every translation was already current.`,
         );
       } else {
         await setKitStatus(kit, status);
@@ -356,7 +357,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           // Never let an UNCHECKED completion read like a verified one -- that
           // silence is the whole bug. Name what was skipped.
           setNotice(
-            `"${kit.label}" was marked complete WITHOUT the publish checks: the `
+            `${kitName(kit)} was marked complete WITHOUT the publish checks: the `
             + 'backend is not reachable for this folder, so its schema was not '
             + 'validated and missing translations were not re-baked. Start the '
             + 'backend (scripts/run-schema-editor.sh) and mark it complete again '
@@ -419,7 +420,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     // outward-facing and this button sits in a tool the maintainer already has
     // open, so publishing must stay a deliberate act (bd ipzh).
     const ok = window.confirm(
-      `Upload "${kit.label}" to ${deployTarget.bucket}?\n\n`
+      `Upload ${kitName(kit)} to ${deployTarget.bucket}?\n\n`
       + "This publishes this form's schema and PDF and regenerates the form "
       + 'manifest. It does NOT deploy the app itself.',
     );
@@ -458,7 +459,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setError(null);
     try {
       await setKitLabel(kit, label);
-      setNotice(`Renamed "${kit.label}" to "${label}".`);
+      setNotice(`Renamed ${kitName(kit)} to "${label}".`);
       await refresh(root);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to rename the form');
@@ -520,7 +521,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           // two can never both be set. Spelling out a condition that cannot
           // occur would imply an interaction that does not exist.
           !hostAnswered
-            ? `Cannot run extraction for "${kit.id}": the editor could not reach the `
+            ? `Cannot run extraction for ${kitName(kit)}: the editor could not reach the `
               + 'extraction service to confirm which folder it uses. Check the dev server '
               + 'is still running, then try again.'
             : folder.reason === 'unwritable'
@@ -530,7 +531,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // copy made anywhere else is by construction not the host root, and the
             // next click would just fail the mismatch branch instead. The only
             // route to a working state here is a writable host root.
-            ? `Cannot run extraction for "${kit.id}": the folder you opened cannot be `
+            ? `Cannot run extraction for ${kitName(kit)}: the folder you opened cannot be `
               + 'written to, so the editor cannot confirm it is the folder the extractor '
               + 'uses. Make this folder writable, or open the folder the dev server uses.'
             // Recommend OPENING the server's folder rather than repointing the
@@ -539,7 +540,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // ids independently -- so naming only the extractor's would unblock
             // extraction while silently switching the backend actions off. The
             // README carries the full two-variable recipe.
-            : `Cannot run extraction for "${kit.id}": the folder you opened is not the one the extractor `
+            : `Cannot run extraction for ${kitName(kit)}: the folder you opened is not the one the extractor `
               + `uses${folder.backendRoot ? ` (it uses ${folder.backendRoot})` : ''}, so it `
               + 'would rewrite a different copy of this form. Open that folder instead '
               + "(see the editor README to point the dev server somewhere else).",
@@ -562,7 +563,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       });
       if (result.ok) {
         await refresh(extractionRoot);
-        setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+        setNotice(`Extracted ${kitName(kit)} -- ${result.detail}. Open it to review.`);
         // Clear the consumed selection so a later re-run is /TU-only unless re-picked.
         setInstructionsPdfByKit((prev) => {
           const next = { ...prev };
@@ -570,7 +571,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           return next;
         });
       } else {
-        setError(`Extraction failed for "${kit.id}": ${result.detail}`);
+        setError(`Extraction failed for ${kitName(kit)}: ${result.detail}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Extraction failed');
@@ -760,6 +761,10 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                 onClick={() => onOpenKit(kit)}
                 disabled={!kit.hasSchema}
                 title={kit.hasSchema
+                  // kit-label-ok: the card's own hover tooltip. The id renders in
+                  // this same card three lines below, so both identities are
+                  // already side by side and repeating it here would say one
+                  // thing twice (bd polyglot-pdf-nsz2d).
                   ? `Open ${kit.label} for editing`
                   : `${kit.label} has no schema yet -- run the extraction first`}
               >

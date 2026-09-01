@@ -114,6 +114,16 @@ export type ConnectionStatus =
   // intentional/transient cases) so the UI can surface the connection-timeout
   // modal only on genuine give-up, not on every blip (bd polyglot-pdf-jf6w.3).
   | "reconnect_failed"
+  // The link's SPEND CEILING is used up (bd polyglot-pdf-cke6v). Terminal and
+  // NOT retryable: the backend closes 1013/budget_exhausted and will refuse
+  // every reconnect, so retrying only delays telling the client the truth.
+  // Deliberately NOT "reconnect_failed" -- that status drives a modal offering
+  // Reconnect, and a Reconnect button that cannot work reads as a broken app.
+  //
+  // Its sibling 1013/budget_unavailable (the spend store is unreachable) IS
+  // transient and keeps the normal retry path, so this branches on the REASON,
+  // never on the code alone.
+  | "budget_exhausted"
   | "error";
 
 export interface ConnectionCallbacks {
@@ -228,7 +238,7 @@ export class WebFormConnection {
   // an in-flight one -- else it would leak `true` and misfire the modal on a later
   // blip; two independent fresh-eyes reviews). Cleared in setStatus only on a
   // SETTLED status (connected / reconnect_failed / error / idle_timeout /
-  // disconnected) -- NOT on the intermediate "connecting" a backoff-driven reopen
+  // disconnected / budget_exhausted) -- NOT on the intermediate "connecting" a backoff-driven reopen
   // passes through, else the modal would vanish mid-recovery -- AND explicitly in
   // handleSessionReady. Read by the overlay to gate the modal. (fresh-eyes: the bare "reconnecting"
   // status is NOT unique to the drop path.)
@@ -3224,10 +3234,19 @@ export class WebFormConnection {
    * name_spellback tool asks THIS client to play a letter-by-letter Cloud TTS
    * clip of the CURRENT field's stored value. The tool deliberately carries no
    * field_id -- the client resolves the current field itself with the same
-   * pin-aware computation the next-field path uses, so the spelled value can
-   * only ever be the stored value of the field under verification (bd h7wx: a
-   * read-back must never come from the model's memory, and bd jnjj.46: never
-   * trust a model-supplied field id).
+   * computeNextField the next-field path uses, so the spelled value can only
+   * ever be a STORED value, never the model's memory (bd h7wx: a read-back must
+   * never come from the model's memory, and bd jnjj.46: never trust a
+   * model-supplied field id).
+   *
+   * WHICH stored field that is depends on computeNextField's inputs, and those
+   * now include a USER gesture, not just the pin: a click moves the search
+   * origin (bd polyglot-pdf-a08po). That is why SchemaForm's click-to-focus
+   * guard suppresses on isAnyAudioPlaying() -- the clip-INCLUSIVE union -- and
+   * not isModelSpeaking(), which is model-PCM-only and reads false for this
+   * entire clip. Were the origin allowed to move mid-clip, the client would
+   * spell a DIFFERENT field's value back and the user would confirm it (outer
+   * review). If you change that guard, this resolution is what you are changing.
    *
    * The playback itself (mic hold, TTS fetch, blocking play, PTT interrupt)
    * lives in the connection manager via the onSpellbackRequest callback; this
@@ -3508,6 +3527,41 @@ export class WebFormConnection {
       isSectionSwitching: this.isSectionSwitching,
       idleTimedOut: this.idleTimedOut
     });
+
+    // SPEND CEILING USED UP -- terminal, before every retry branch below (bd
+    // polyglot-pdf-cke6v). The backend closes 1013 with reason
+    // "budget_exhausted"; nothing about that is transient, so retrying burns
+    // the client's time on a socket that refuses every attempt and then lands
+    // them on a modal offering a Reconnect that cannot work.
+    //
+    // Branch on the REASON, not the code: 1013 "budget_unavailable" means the
+    // spend store was unreachable, which IS transient and must keep the normal
+    // retry path. Same code, opposite handling.
+    //
+    // Checked before !enableAutoReconnect so the FIRST connect on an exhausted
+    // link reports the real cause too -- that path otherwise reports a generic
+    // "disconnected", and a client returning to a used-up link hits exactly it.
+    if (event?.reason === "budget_exhausted") {
+      console.log('[WebFormConnection] Link spend ceiling reached -- terminal, no reconnect');
+      // TEAR DOWN AN IN-FLIGHT SECTION SWITCH FIRST, or this early return
+      // strands it (Opus cross-surface r1). The budget gate runs on EVERY
+      // /ws/fill connect and the backend accepts before closing, so the new
+      // socket's onopen fires and startSection's catch never runs: it clears
+      // isSectionSwitching and leaves switchInFlight set, waiting on a
+      // session_ready that will never arrive. Returning past the switchInFlight
+      // guard below leaves the watchdog armed, and 15s later it overwrites this
+      // terminal status with `error` -- which restores the Reconnect button
+      // this bead exists to remove. Clearing it here keeps budget_exhausted the
+      // FINAL word.
+      this.clearSectionSwitchWatchdog();
+      this.switchInFlight = false;
+      this.isSectionSwitching = false;
+      // Likewise the GoAway marker: a pre-emptive reconnect that lands on a
+      // spent link must not leave the in-flight flag set for a later close.
+      this.goAwayReconnectInFlight = false;
+      this.setStatus("budget_exhausted", "handleClose:budget-exhausted");
+      return;
+    }
 
     // Don't auto-reconnect if this is the initial connection attempt
     // (allows fallback logic in connection.ts to try cloud URL)
@@ -4135,7 +4189,7 @@ export class WebFormConnection {
 
     // Clear the drop-driven-reconnect marker only on a SETTLED status (bd
     // polyglot-pdf-ppfy): "connected" = recovered, and reconnect_failed / error /
-    // idle_timeout / disconnected = gave up. NOT on the intermediate "connecting"
+    // idle_timeout / disconnected / budget_exhausted = gave up. NOT on the intermediate "connecting"
     // that a live drop reconnect passes through -- a drop reconnect whose first
     // socket fails falls into attemptReconnect's backoff, whose connect() sets
     // "connecting"; clearing there would drop the marker mid-recovery and the
@@ -4149,7 +4203,13 @@ export class WebFormConnection {
       status === "reconnect_failed" ||
       status === "error" ||
       status === "idle_timeout" ||
-      status === "disconnected"
+      status === "disconnected" ||
+      // Terminal too (bd polyglot-pdf-cke6v). Omitting it would leave the
+      // marker set when a Gemini drop is followed by an exhausted budget, and
+      // the "having trouble reaching the AI" modal would stack on top of the
+      // spend-ceiling one -- two explanations for one event, the wrong one on
+      // top.
+      status === "budget_exhausted"
     ) {
       this.droppedReconnectInFlight = false;
     }

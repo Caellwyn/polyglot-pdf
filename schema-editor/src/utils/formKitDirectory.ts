@@ -13,6 +13,7 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
+import { kitName } from './kitName';
 import { readStampFromMetadata } from './readinessStamp';
 import type { ReadinessStamp } from './remoteKitStore';
 import { migrateLegacyRequired } from './schemaMigrate';
@@ -213,7 +214,7 @@ export async function setKitStatus(
   // caught here only because a test drove the real revert path.
   if (existing?.status === 'submitted' || existing?.status === 'unpublished') {
     throw new Error(
-      `"${entry.id}" is ${existing?.status} and cannot be changed by a local `
+      `${kitName(entry)} is ${existing?.status} and cannot be changed by a local `
       + 'write -- a submitted kit is awaiting author review, and a superseded '
       + 'one is what earlier confirmations point at. Use the backend, which '
       + 'runs the full gate.',
@@ -224,9 +225,13 @@ export async function setKitStatus(
   return readKitEntry(entry.id, dir);
 }
 
-/** Rename a kit's DISPLAY label (bd 15ic) -- the local-mode mirror of the
+/** Rename a kit's DISPLAY label (bd 15ic) -- the local-mode counterpart of the
  * hosted /label route: a read-merge-write of metadata.json's `label`. The kit's
- * identity (directory name / id) never changes, so nothing downstream breaks. */
+ * identity (directory name / id) never changes, so nothing downstream breaks.
+ * NOT a full mirror since bd polyglot-pdf-c63tu: the hosted route now 409s
+ * when a different editor holds the kit's edit lock; this local File System
+ * Access write has no shared lock to check against (a local folder is
+ * single-user), so it always succeeds. */
 export async function setKitLabel(
   entry: CatalogueEntry, label: string,
 ): Promise<CatalogueEntry> {

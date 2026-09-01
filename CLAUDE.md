@@ -36,8 +36,10 @@ React + TypeScript (Vite) frontend on **Firebase Hosting**; Python/FastAPI backe
 on **Cloud Run** (co-located with Gemini). Entry points: backend `backend/main.py`
 (WebSocket route `backend/routes/websocket_routes.py`, Gemini adapter
 `backend/adapters/live_ai_gemini.py`); frontend `frontend/src/` (WS config
-`frontend/src/shared/config.ts`). Deploy is **local/manual**
-(`deploy-demo.sh` / `deploy-production.sh`). For the current architecture --
+`frontend/src/shared/config.ts`). Deploy is **local/manual**, two
+channels: `deploy-staging.sh` (the test deploy) then `deploy-demo.sh` (the
+protected demo shown to investors/pilot firms). `deploy-production.sh` is DEAD
+and refuses to run. For the current architecture --
 including the **Surface contracts** map of every cross-surface data contract
 (producer/consumer code sites; the blast-radius reference for reviews) -- read
 [`docs/technical_guide.md`](docs/technical_guide.md) plus the per-surface
@@ -264,7 +266,11 @@ Run this decision procedure for any choice you face:
      you MAY run `deploy-demo.sh`, but it is a **per-instance ASK** (step 2 below),
      never standing pre-authorization, and only after the test gates in
      "Deployment / promotion" below. Running it without an explicit per-instance
-     yes is the violation.
+     yes is the violation. **`deploy-staging.sh` is gated the SAME way** for now
+     -- whether the disposable staging channel should instead be standing-
+     authorized is an open question left to the maintainer (see
+     [`docs/doctrine/promotion-tiers.md`](docs/doctrine/promotion-tiers.md));
+     do not widen it unilaterally.
    - **Syncing the LOCAL ROOT repo to `dev` is autonomous** -- pulling /
      fast-forwarding the main checkout to `origin/dev`, and running the local test
      stack (`scripts/dev-local.ps1` / the `/run-local` skill), need no ask.
@@ -489,21 +495,32 @@ the conversation.
 
 ### Deployment / promotion
 - **Flow:** worktree -> local test server (`scripts/dev-local.ps1`, via
-  `/run-local`) -> `dev` -> demo remote server (`deploy-demo.sh`). **There is NO
-  active prod** for this project. Details:
+  `/run-local`) -> `dev` -> **staging** remote (`deploy-staging.sh`) -> **demo**
+  remote (`deploy-demo.sh`). **There is NO prod** for this project --
+  `deploy-production.sh` targets a dead project and refuses to run. Details:
   [`docs/doctrine/promotion-tiers.md`](docs/doctrine/promotion-tiers.md).
-- **Demo deploy (`deploy-demo.sh`) is gated by ALL THREE (autonomy increase
-  2026-06-10):**
+- **The demo is the PROTECTED target** (investors + pilot firms). Staging exists
+  so deploy-only bugs -- Cloud Run WS timeouts, Vertex model-id resolution, the
+  IAM envelope (scar #7), the Hosting rewrite, per-mode Vite builds -- are found
+  WITHOUT breaking the demo. Never deploy to the demo a change that has not been
+  verified running on staging.
+- **Both deploys are gated by ALL THREE (autonomy increase 2026-06-10):**
   1. **Local test FIRST.** Start the local stack (`scripts/dev-local.ps1`) and
      actually EXERCISE the specific change working there -- behavioral
-     verification, not just "the server boots."
+     verification, not just "the server boots." For a DEMO deploy this step is
+     satisfied by a verified STAGING deploy, not by local testing alone.
   2. **Explicit per-instance permission.** Ping the maintainer and get a "yes"
-     BEFORE each `deploy-demo.sh` run. This is NOT standing pre-authorization --
+     BEFORE each deploy run. This is NOT standing pre-authorization --
      every deploy is its own ask, every time. (You may run the deploy; you may
      never run it without that specific yes.)
-  3. **Post-deploy test-drive.** After deploying, test-drive the LIVE demo to
+  3. **Post-deploy test-drive.** After deploying, test-drive the LIVE site to
      confirm the change actually works there -- the deploy isn't "done" until the
-     running demo is verified.
+     running site is verified.
+- **Staging and demo SHARE the project, the form-kits bucket, Firestore, and the
+  Firebase Auth user pool.** Staging contains broken CODE, not bad DATA:
+  `deploy-staging.sh --form-kits` publishes to the DEMO's form list, and
+  `firestore.rules` are project-wide (staging never deploys them). Treat kit
+  publishing and rules changes as demo actions whatever channel you ran them from.
 - **Syncing the local root repo to `dev`** (pull / fast-forward the main checkout
   to `origin/dev`) is autonomous -- no ask. Merging a PR INTO `dev` is autonomous
   ONLY under the auto-merge rule (adversarial-review CLEAN + green checks +

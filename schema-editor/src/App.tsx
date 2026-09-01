@@ -4,6 +4,7 @@ import { FormCatalogue } from './components/FormCatalogue';
 import { RemoteCatalogue } from './components/RemoteCatalogue';
 import { SignInGate } from './components/SignInGate';
 import { currentEditorEmail, signOutEditor } from './utils/editorAuth';
+import { kitName } from './utils/kitName';
 import { HostedGuide, hasSeenGuide } from './components/HostedGuide';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
@@ -351,7 +352,7 @@ export const App: React.FC = () => {
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
-        throw new Error(`${entry.label} has no schema yet -- run the extraction first.`);
+        throw new Error(`${kitName(entry)} has no schema yet -- run the extraction first.`);
       }
       // Save target = the kit's own schema.json handle (in-place save).
       fileHandleRef.current = await entry.dirHandle.getFileHandle(entry.schemaFile);
@@ -447,9 +448,9 @@ export const App: React.FC = () => {
   }, [hosted]);
 
   // Open a kit from the REMOTE catalogue (hosted mode, bd 92qe.2): pull its
-  // schema + PDF through the token-gated routes and drive the same schema +
-  // PDFViewer flow the local kit path uses. The save target is the kit id
-  // (saveRemoteSchema), not a file handle.
+  // schema + PDF through the editor/author-gated routes and drive the same
+  // schema + PDFViewer flow the local kit path uses. The save target is the
+  // kit id (saveRemoteSchema), not a file handle.
   // Monotonic open token: remote opens take real network time and the cards
   // stay clickable, so kit A's SLOW response must never apply after kit B was
   // opened -- the stale open would overwrite B's schema/kit id and leave the
@@ -478,7 +479,7 @@ export const App: React.FC = () => {
       const loaded = await loadRemoteSchema(entry.id);
       if (seq !== openSeqRef.current) return; // superseded by a newer open
       if (!loaded) {
-        throw new Error(`${entry.label} has no schema yet.`);
+        throw new Error(`${kitName(entry)} has no schema yet.`);
       }
       let pdfUrl = '';
       if (entry.hasPdf) {
@@ -1378,7 +1379,7 @@ export const App: React.FC = () => {
         </div>
 
         {/* The front door. Hosted mode (bd 92qe.2): the remote catalogue over
-            the token-gated editor routes. Local mode: the directory-based
+            the editor/author-gated routes. Local mode: the directory-based
             catalogue (bd b0pe), with the hardcoded FormSelector as a fallback
             for browsers without the directory API. */}
         {hosted && role ? (

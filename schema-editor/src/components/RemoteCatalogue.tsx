@@ -9,6 +9,7 @@ import {
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
   type RetireCandidate,
 } from '../utils/remoteKitStore';
+import { kitName } from '../utils/kitName';
 import { ArchivedVersions } from './ArchivedVersions';
 import { readStamp, stampHint, STAMP_MARKER_SHORT } from '../utils/readinessStamp';
 import { versionInfoFromSchema, type KitVersionInfo , isWriteLocked} from '../utils/formKitDirectory';
@@ -85,8 +86,9 @@ const STATUS_STYLE: Record<string, string> = {
 /**
  * The hosted editor's front door (bd polyglot-pdf-92qe.2): the same catalogue
  * card UI as the local FormCatalogue, but listing kits from the backend's
- * token-gated /api/editor routes (the shared store) instead of a picked local
- * directory. Drafts are included -- that IS the contractor's work list.
+ * editor/author-gated /api/editor routes (the shared store) instead of a
+ * picked local directory. Drafts are included -- that IS the contractor's
+ * work list.
  *
  * Deliberately a SIBLING of FormCatalogue rather than a mode inside it:
  * FormCatalogue is tightly bound to the File System Access directory API
@@ -326,7 +328,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       await deleteRemoteKit(kit.id, { acknowledged });
       setDeletePrompt(null);
       setDeleteWarning(null);
-      setNotice(`"${kit.label}" was deleted permanently.`);
+      setNotice(`${kitName(kit)} was deleted permanently.`);
       // Close the editor pane if the deleted kit was the OPEN one (bd
       // polyglot-pdf-hbfky) -- without this, the card vanishes from the
       // catalogue below while the editor keeps showing the deleted kit's
@@ -377,11 +379,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // the other person cannot be notified (there is no server-to-client
       // channel), so the person who did it should at least know they did.
       setNotice(res.preempted
-        ? `You took "${kit.label}" from an editor. They will find out when they `
+        ? `You took ${kitName(kit)} from an editor. They will find out when they `
           + 'next try to save.'
         : take
-          ? `You have "${kit.label}" for editing.`
-          : `Released "${kit.label}".`);
+          ? `You have ${kitName(kit)} for editing.`
+          : `Released ${kitName(kit)}.`);
       await refresh();
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) { onAuthError?.(err); return; }
@@ -472,7 +474,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             `entr${result.retranslated === 1 ? 'y' : 'ies'} first.`
           : '';
         setNotice(
-          `"${kit.label}" marked complete -- it ships with the maintainer's ` +
+          `${kitName(kit)} marked complete -- it ships with the maintainer's ` +
           `next deploy.${drift}`,
         );
       } else if (status === 'unpublished') {
@@ -480,7 +482,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         // The stale two-branch notice called it "reverted to draft", which is
         // the wrong action AND implies it is editable again -- it is not.
         setNotice(
-          `"${kit.label}" is unpublished -- clients no longer see it, its `
+          `${kitName(kit)} is unpublished -- clients no longer see it, its `
           + 'files are kept, and it cannot be edited. Publish it again to put '
           + 'it back in service.',
         );
@@ -493,11 +495,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         // round 6). Name every status explicitly rather than relying on the
         // fall-through.
         setNotice(
-          `"${kit.label}" is submitted for review. An author checks it and `
+          `${kitName(kit)} is submitted for review. An author checks it and `
           + 'publishes it; it is frozen until they do.',
         );
       } else {
-        setNotice(`"${kit.label}" reverted to draft.`);
+        setNotice(`${kitName(kit)} reverted to draft.`);
       }
       await refresh();
     } catch (err) {
@@ -546,9 +548,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
 
   handleSetStatusRef.current = handleSetStatus;
 
-  // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
-  // ANY selected kit (no open involved -- unlike the status actions, which
-  // need the parent-confirmed open). renamingId gates the inline input.
+  // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it needs no
+  // parent-confirmed open (unlike the status actions below). It CAN still be
+  // refused -- a 409 when a different editor holds the kit's edit lock (bd
+  // polyglot-pdf-c63tu), surfaced via setError same as any other refusal.
+  // renamingId gates the inline input.
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
   const handleRename = React.useCallback(async (kit: RemoteKitEntry) => {
@@ -560,7 +564,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setError(null);
     try {
       await setRemoteLabel(kit.id, label);
-      setNotice(`Renamed "${kit.label}" to "${label}".`);
+      setNotice(`Renamed ${kitName(kit)} to "${label}".`);
       await refresh();
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) {
@@ -593,7 +597,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     try {
       const created = await onboardRemoteKit(file);
       await refresh();
-      setNotice(`Added "${created.id}" -- run the extraction to produce its schema, then open it here.`);
+      setNotice(`Added ${kitName(created)} -- run the extraction to produce its schema, then open it here.`);
     } catch (err) {
       if (err instanceof AuthError || err instanceof ForbiddenError) {
         onAuthError?.(err);
@@ -636,11 +640,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           warns ? `${warns} warning${warns === 1 ? '' : 's'}` : '',
         ].filter(Boolean).join(', ');
         setNotice(
-          `Extracted "${kit.id}" with issues (${parts || 'needs review'}). ` +
+          `Extracted ${kitName(kit)} with issues (${parts || 'needs review'}). ` +
           `Open it to review and repair before marking complete.`,
         );
       } else {
-        setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+        setNotice(`Extracted ${kitName(kit)} -- ${result.detail}. Open it to review.`);
       }
       setInstructionsPdfByKit((prev) => {
         const next = { ...prev };
@@ -685,20 +689,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
           'and each flag shows on its answer choice in the field editor)'
         : '';
       if (!report.changed && flagCount === 0) {
-        setNotice(`"${kit.id}" option labels are already fully translated.`);
+        setNotice(`${kitName(kit)} option labels are already fully translated.`);
       } else if (!report.changed) {
         // No label changed, but the verify gate still flagged translations
         // (reachable on a force re-bake that reproduces identical values):
         // the backend persisted the flags into provenance, so point at the
         // flagged rows and reload the stored schema like any other change.
         setNotice(
-          `"${kit.id}" option labels are already fully translated` +
+          `${kitName(kit)} option labels are already fully translated` +
           flagNote + '.',
         );
         if (kit.id === selectedKitId) onOpenKit(kit);
       } else {
         setNotice(
-          `Translated option labels for "${kit.id}" -- ${updated} ` +
+          `Translated option labels for ${kitName(kit)} -- ${updated} ` +
           `option-language entr${updated === 1 ? 'y' : 'ies'} baked` +
           (failed.length
             ? `; FAILED: ${failed.join(', ')} (run again to fill the gap)`
@@ -848,9 +852,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             })}
           </select>
           {(() => {
-            // Rename (bd 15ic): metadata-only, safe for ANY selected kit --
-            // no open involved, so it is deliberately NOT gated on the
-            // parent-confirmed open (unlike the status actions below).
+            // Rename (bd 15ic): metadata-only, so it is deliberately NOT
+            // gated on the parent-confirmed open (unlike the status actions
+            // below) -- but it CAN still be refused, a 409 when a different
+            // editor holds the kit's edit lock (bd polyglot-pdf-c63tu).
             const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
             if (!kit) return null;
             if (renamingId === kit.id) {
@@ -1141,6 +1146,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   onClick={() => onOpenKit(kit)}
                   disabled={!kit.hasSchema}
                   title={kit.hasSchema
+                    // kit-label-ok: the card's own hover tooltip. The id renders in
+                    // this same card three lines below, so both identities are
+                    // already side by side and repeating it here would say one
+                    // thing twice (bd polyglot-pdf-nsz2d).
                     ? `Open ${kit.label} for editing`
                     : `${kit.label} has no schema yet`}
                 >

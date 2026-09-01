@@ -248,9 +248,13 @@ def enriched_field_list(dump: dict, max_fields: int | None = None,
             # SAMPLED, and said so -- see the twin in schema_contract.py
             # (bd polyglot-pdf-hmkas). A bare 12-of-63 render reads as the
             # complete set; the real set is backfilled from the dump.
-            choices = w0["choices"]
-            vals = ",".join(c["value"] for c in choices[:12])
-            more = len(choices) - 12
+            # .get()-guarded, not direct indexing (bd polyglot-pdf-r311s) --
+            # see the twin in schema_contract.py for why. Filtered BEFORE
+            # slicing to 12, not after, so `more` stays an accurate count of
+            # usable values hidden from the model (see the twin's comment).
+            usable = [c["value"] for c in w0["choices"] if isinstance(c, dict) and "value" in c]
+            vals = ",".join(usable[:12])
+            more = len(usable) - 12
             suffix = f", ... and {more} more" if more > 0 else ""
             bits.append(f"choices=[{vals}{suffix}]")
         ons = [w["on_value"] for w in f["widgets"] if w.get("on_value")]

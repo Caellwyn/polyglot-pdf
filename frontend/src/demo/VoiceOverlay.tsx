@@ -16,7 +16,7 @@ declare global {
 	}
 }
 
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
@@ -28,6 +28,18 @@ import { getOverlayStrings, formatFieldsCompleted } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
+import { SaveNudge } from '../schema-forms/components/SaveNudge'
+import { ResumeUpload } from '../schema-forms/components/ResumeUpload'
+import type { ResumeResult } from '../schema-forms/components/ResumeUpload'
+import { applyResume } from '../schema-forms/applyResume'
+import { loadOnboardingState } from '../schema-forms/onboardingStorage'
+import { useSaveNudge } from '../schema-forms/useSaveNudge'
+import {
+	createNoticeSpeaker,
+	NOTICE_SAVE_EARLY,
+	NOTICE_VOICE_ENDING,
+} from '../schema-forms/utils/noticeSpeech'
+import { hasClientLinkToken } from '../shared/sessionCredential'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState } from '../shared/solState'
 import { useGeminiSpeaking, useClipPlaying } from '../shared/useGeminiSpeaking'
@@ -167,6 +179,101 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => () => { introPlayerRef.current?.dispose() }, [])
 
 	// Panel UI copy in the session language (bd polyglot-pdf-ibxz); English fallback.
+	// SAVE NUDGE WIRING (bd polyglot-pdf-dft1).
+	//
+	// CLIENT SESSIONS ONLY. Staff work on their own machines with their own
+	// workflow; the nudge exists because a CLIENT's only copy is the file they
+	// save, and browser form state is discarded after 60 minutes.
+	const isClientSession = hasClientLinkToken()
+	const formState = SchemaFormStateManager.load()
+	const saveNudge = useSaveNudge({
+		formSessionId: formState?.formSessionId,
+		completedSectionCount: completedSections.size,
+		// The nudge fires when voice is ENDING for any reason -- the spend
+		// ceiling, an idle timeout, or the form finishing. All three are the last
+		// moment before a client might close the tab.
+		// budget_exhausted is listed EXPLICITLY (bd polyglot-pdf-cke6v). A spend
+		// close used to land on reconnect_failed, so this fired; giving it its
+		// own terminal status silently dropped the one case this comment names
+		// first -- and a client link is exactly who needs the nudge, since the
+		// file they save is their only copy.
+		voiceEnding: status.toLowerCase() === 'idle_timeout'
+			|| status.toLowerCase() === 'reconnect_failed'
+			|| status.toLowerCase() === 'budget_exhausted',
+		enabled: isClientSession,
+	})
+
+	// The notice speech route is FREE (require_auth, not the paid dependency),
+	// so a budget-exhausted client still HEARS how to keep their work.
+	const speakNotice = useMemo(() => {
+		// getToken for the same reason: /api/tts/notice is auth-gated, so a
+		// tokenless call is silent in every deployed environment.
+		const speaker = createNoticeSpeaker({
+			backendUrl: getBackendHttpUrl(),
+			getToken,
+		})
+		return (text: string, language?: string) => speaker(
+			text,
+			language,
+			saveNudge.variant === 'ending' ? NOTICE_VOICE_ENDING : NOTICE_SAVE_EARLY,
+		)
+	}, [saveNudge.variant, getToken])
+
+	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5,
+	// widened after the Opus cross-surface review found my first fix covered 2
+	// of 6 sites). On a spent link the translated spend-ceiling modal is
+	// already on screen saying voice has finished; an English "please try
+	// again" / "please click Reconnect" behind it contradicts that AND names a
+	// button bd cke6v deliberately removed. Suppressing CENTRALLY means a
+	// connection error added later inherits the behavior instead of becoming
+	// the seventh site -- pin the set, not the instances.
+	const setConnectionError = useCallback((message: string) => {
+		// Feature-detect getStatus, do not just null-check the manager: `?.`
+		// guards against null/undefined but NOT against an object that lacks
+		// the method, and several tests pass a partial ConnectionManager mock.
+		// CI caught this as a TypeError while my local run stayed green (a
+		// separate flake had shuffled the file ordering). Suppression is a
+		// nice-to-have; THROWING here would break the error path itself, which
+		// is strictly worse than showing one redundant message.
+		if (typeof connectionManager?.getStatus === 'function'
+			&& connectionManager.getStatus() === 'budget_exhausted') {
+			console.log('[VoiceOverlay] Suppressing connection error on a spent link:', message)
+			return
+		}
+		setError(message)
+	}, [connectionManager])
+
+	const handleNudgeSave = useCallback(() => {
+		saveNudge.markSaved()
+		// Hand off to the form's own download, which is what stamps the resume
+		// identity into the PDF. Dispatching rather than reaching across
+		// components: the overlay does not own the fill/download path.
+		window.dispatchEvent(new CustomEvent('polyglot:save-form'))
+	}, [saveNudge])
+
+	// RESUME CHOICE (bd polyglot-pdf-dft1). Offered BEFORE the disclaimer: a
+	// client resuming should pick "continue my saved form" first and THEN agree,
+	// so the acceptance record belongs to the session they are actually about to
+	// work in.
+	//
+	// Client sessions only, and only when they have not already started -- a
+	// client mid-form does not need a start-over prompt in their way.
+	const [resumeDismissed, setResumeDismissed] = useState(false)
+	const showResumeChoice = isClientSession
+		&& !resumeDismissed
+		&& !formState?.disclaimerAccepted
+		&& Object.keys(formState?.fieldValues ?? {}).length === 0
+
+	const handleResumed = useCallback((result: ResumeResult) => {
+		const current = SchemaFormStateManager.load()
+		if (current) {
+			// applyResume clears disclaimerAccepted on purpose, so the modal below
+			// opens next and the client agrees for THIS session.
+			SchemaFormStateManager.save(applyResume(current, result))
+		}
+		setResumeDismissed(true)
+	}, [])
+
 	const overlayText = getOverlayStrings(selectedLanguage)
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
@@ -191,6 +298,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// polyglot-pdf-jf6w.2). Reset whenever status leaves reconnect_failed so a
 	// later terminal drop re-shows the modal.
 	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
+	// The spend-ceiling notice is TERMINAL, so unlike reconnectModalDismissed
+	// this is never reset -- no later state should bring it back (bd
+	// polyglot-pdf-cke6v). It exists so the client can get past a full-viewport
+	// overlay to the typing and printing its own message promises they can do.
+	const [budgetModalDismissed, setBudgetModalDismissed] = useState(false)
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
@@ -323,7 +435,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					}
 				} catch (err) {
 					console.error('[VoiceOverlay] Failed to connect after pre-selected language:', err)
-					setError(err instanceof Error ? err.message : 'Connection failed')
+					setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 					setPendingDisclaimerRead(false)
 				}
 			}
@@ -852,6 +964,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					break
 				}
 
+				// A TERMINAL status will never become 'connected', so stop waiting
+				// (bd polyglot-pdf-wwwa5). The backend ACCEPTS the socket before
+				// closing it on a spent link, so connect() resolves and this loop
+				// would otherwise burn its full 5s against an already-decided
+				// outcome.
+				if (currentStatus === 'budget_exhausted') {
+					console.log('[VoiceOverlay] Link spend ceiling reached -- not waiting for connect')
+					break
+				}
+
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
 			}
@@ -860,21 +982,42 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlay] [X] Connection timeout, final status:', finalStatus)
-				setError('Connection timed out - please try again')
+				setConnectionError('Connection timed out - please try again')
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			// Set the union status 'error', NOT a freeform 'Connection failed'
 			// string (bd polyglot-pdf-m77y): the freeform value matches no arm of
 			// the controls ternary, so a RE-failed Reconnect (both backends still
 			// down) would fall back to no button -- the same dead end this bead
 			// fixes -- and only recover via the parent prop-sync effect winning a
 			// render race. 'error' is a real ConnectionStatus, so the Reconnect
-			// button renders deterministically. The failure message still reaches
-			// the user via setError above. (The mobile overlay's catch never set a
-			// status here, so it was already immune; this aligns desktop with it.)
-			setStatus('error')
+			// button renders deterministically. The failure message reaches the
+			// user via setConnectionError above -- except on a spent link, where
+			// the spend-ceiling modal is the single explanation. (The mobile
+			// overlay's catch never set a status here, so it was already immune;
+			// this aligns desktop with it.)
+			//
+			// NOT ON A SPENT LINK (bd polyglot-pdf-wwwa5). budget_exhausted is
+			// TERMINAL, and FOUR surfaces key off it: the spend-ceiling modal,
+			// the save nudge's voiceEnding gate (level-triggered, so an
+			// already-showing nudge would vanish), and the controls ternary,
+			// which renders Reconnect for 'error' -- plus solState.isOffline, which makes Sol LEAVE rather than dim. Overwriting the status here
+			// retracts the correct UI and restores the dead button this work
+			// removed -- and the parent cannot repair it, because its sync effect
+			// keys on [sharedStatus], which never changes. Suppressing the error
+			// TEXT while still writing this status was the incomplete half.
+			// Feature-detect (see setConnectionError): `?.` does not protect
+			// against a partial mock that lacks getStatus, and a throw here would
+			// break the error path itself. Unknown status -> set 'error', the
+			// pre-bead behavior, which is the safe fallback.
+			const statusNow = typeof connectionManager?.getStatus === 'function'
+				? connectionManager.getStatus()
+				: undefined
+			if (statusNow !== 'budget_exhausted') {
+				setStatus('error')
+			}
 		}
 	}
 
@@ -1262,7 +1405,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// The useEffect watching status will send the disclaimer prompt when ready
 		} catch (err) {
 			console.error('[VoiceOverlay] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			setPendingDisclaimerRead(false) // Clear flag on error
 		}
 	}
@@ -1406,7 +1549,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				await handleConnect()
 			} catch (err) {
 				console.error('[VoiceOverlay] [X] Connect failed after Agree:', err)
-				setError(err instanceof Error ? err.message : 'Connection failed')
+				setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			}
 			return
 		}
@@ -1473,14 +1616,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
 					console.error('[VoiceOverlay] [X] Reconnect timed out, status:', postReconnectStatus)
-					setError('Connection lost - please click Reconnect')
+					setConnectionError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
 				console.log('[VoiceOverlay] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
 				console.error('[VoiceOverlay] [X] Reconnection failed:', err)
-				setError('Connection lost - please click Reconnect')
+				setConnectionError('Connection lost - please click Reconnect')
 				return
 			}
 		}
@@ -2591,6 +2734,43 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				/>
 			)}
 
+			{/* RESUME CHOICE (bd polyglot-pdf-dft1). A client does not pick a
+			    FORM -- their link already did -- so this is one question: start
+			    fresh, or continue the file you saved. The upload is verified
+			    SERVER-side against the kit's own form.pdf; this component only
+			    collects the file. */}
+			<ResumeUpload
+				isOpen={showResumeChoice}
+				// The kit id the LINK pinned at open time. NOT
+				// form_metadata.form_number, which is the printed form NAME
+				// ("W-7") and not the kit directory ("w7") -- every resume
+				// would 404 and read as "that is not your form".
+				kitId={loadOnboardingState().formId ?? ''}
+				pdfFilename="form.pdf"
+				selectedLanguage={selectedLanguage}
+				backendUrl={getBackendHttpUrl()}
+				// /api/resume-form is auth-gated: without a token it 401s in
+				// every deployed environment, working only under the local
+				// VFF_DISABLE_AUTH bypass.
+				getToken={getToken}
+				onResumed={handleResumed}
+				onStartOver={() => setResumeDismissed(true)}
+			/>
+
+			{/* SAVE NUDGE (bd polyglot-pdf-dft1). The saved PDF is the only thing
+			    between a client and losing every answer -- browser form state is
+			    discarded after 60 minutes -- so the prompt has to find them rather
+			    than wait to be found. CLIENT SESSIONS ONLY: staff have their own
+			    workflow and their own machines. */}
+			<SaveNudge
+				isOpen={saveNudge.variant !== null}
+				variant={saveNudge.variant ?? 'early'}
+				selectedLanguage={selectedLanguage}
+				speak={speakNotice}
+				onSave={handleNudgeSave}
+				onDismiss={saveNudge.dismiss}
+			/>
+
 			{/* Disclaimer Modal - shown after language selection */}
 			<DisclaimerModal
 				isOpen={showDisclaimerModal}
@@ -2644,6 +2824,32 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				isOpen={status.toLowerCase() === 'reconnecting' && (connectionManager?.isDroppedReconnect?.() ?? false)}
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => {}}
+			/>
+
+			{/* Spend ceiling used up (bd polyglot-pdf-cke6v). Terminal and NOT
+			    dismissible: the client needs to know voice is over for this link,
+			    and there is no action that would bring it back. Deliberately no
+			    Reconnect -- the old behavior retried a socket that refuses every
+			    time and then offered a button that could not work.
+			    onReconnect is unused here but required by the prop shape.
+
+			    SUPPRESSED WHILE THE SAVE NUDGE IS UP (Opus cross-surface r2).
+			    Both dialogs now carry the SAME words -- the ending nudge and this
+			    modal are both the lifted voiceEnding copy -- but this one is
+			    position:fixed at z-index 10000 with a 75% scrim and no SAVE
+			    action, while the nudge underneath holds the working "Save my
+			    form" button. Showing both told the client to save and then covered the
+			    only control that saves. The nudge wins: identical message, plus
+			    an action. This modal is the fallback for a client who has already
+			    dismissed or completed the nudge. */}
+			<ConnectionTimeoutModal
+				variant="budget_exhausted"
+				isOpen={status.toLowerCase() === 'budget_exhausted'
+					&& saveNudge.variant === null
+					&& !budgetModalDismissed}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => {}}
+				onCancel={() => setBudgetModalDismissed(true)}
 			/>
 		</>
 	)

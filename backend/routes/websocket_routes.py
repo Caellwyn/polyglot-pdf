@@ -1387,23 +1387,28 @@ async def fill_form_from_schema(
 		# the honest code, and the reason token is on the wire for a client
 		# that wants to branch on it.
 		#
-		# NOTE, and it is a real gap: nothing in frontend/src BRANCHES on it
-		# today (handleClose logs event.code/event.reason and then keys every
-		# branch off internal flags), so a
-		# budget-exhausted client falls through to the generic bounded-retry
-		# path and lands on a "reconnect failed" modal offering a Reconnect
-		# that cannot work. Bounded, so not a runaway -- but the wrong
-		# message. bd polyglot-pdf-cke6v carries the fix, and it must branch
-		# on the REASON: budget_unavailable IS transient and should keep
-		# retrying, while budget_exhausted never will.
+		# The frontend BRANCHES ON THE REASON (bd polyglot-pdf-cke6v, shipped):
+		# webFormConnection.handleClose returns early on "budget_exhausted",
+		# setting a terminal status of the same name -- no retries -- and the
+		# overlay shows a modal with no RECOVERY action. "budget_unavailable" is
+		# deliberately NOT matched there: it means THIS spend store was
+		# unreachable, which IS transient, so it keeps the ordinary retry path.
+		# The two tokens are matched by STRING COMPARE across the wire, with no
+		# shared constant, so renaming either one here silently restores the old
+		# broken behavior -- keep them in step with that branch.
 		#
 		# The client keeps everything else: retrieval never redeems, so their
 		# download, print and preview still work and they can finish the
 		# remaining fields by typing (maintainer, 2026-08-27).
 		# NOTE: the global ceiling, not a per-form one. cost_ceiling_usd_for_kit
-		# supports per-form values and is tested, but resolving one here means
-		# an extra metadata load on EVERY client connect to serve a feature no
-		# kit uses yet. Thread the kit metadata through when one does.
+		# supports per-form values and is tested, but no kit metadata is passed
+		# here, so a kit's own link_cost_ceiling_usd is INERT.
+		#
+		# Two kits now declare one (w7 and i-90 at $3, bd polyglot-pdf-gob8l),
+		# so this is no longer hypothetical: those links are bounded at the
+		# GLOBAL default, not $3. Fails safe -- a higher ceiling, never an
+		# absent one. Threading the metadata through costs a kit load on EVERY
+		# client connect, which is why it is its own bead: polyglot-pdf-4tjt7.
 		try:
 			await asyncio.to_thread(check_budget, claims.get("jti"))
 		except LinkBudgetExhausted as exc:

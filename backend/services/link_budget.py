@@ -12,18 +12,26 @@ retunes a live deployment by setting an env var and restarting -- no code edit,
 no redeploy of a new image. That is the same shape LINK_MINTING_ENABLED already
 uses in routes/link_routes.py, kept deliberately consistent.
 
-THE ADMIN CONSOLE IS THE PLANNED HOME. These become console-editable settings
-(bd polyglot-pdf-gob8l). Everything here is therefore written as "resolve a
-number for THIS firm / THIS kit", not as a global constant -- so the console
-later writes a stored value and the resolver reads it, without the call sites
-changing.
+THE ADMIN CONSOLE IS THE PLANNED HOME. These are still ENV-ONLY: the console's
+first slice (bd polyglot-pdf-gob8l) ships link minting and leaves both
+resolvers reading os.getenv at call time. Everything here is nonetheless
+written as "resolve a number for THIS firm / THIS kit", not as a global
+constant -- so a later console slice writes a stored value and the resolver
+reads it, without the call sites changing.
 
-PER-FORM CAPS ARE ALREADY SUPPORTED. The maintainer flagged possible per-form
-pricing (a $5 form and a $15 form under one firm). `cost_ceiling_usd_for_kit`
-takes kit metadata and honours a `link_cost_ceiling_usd` key when the kit
-carries one, falling back to the global default. Nothing sets that key today --
-the ROOM is what was asked for, and a kit that omits it behaves exactly as
-before.
+PER-FORM CAPS ARE SUPPORTED HERE, BUT ARE NOT YET IN FORCE. The maintainer
+flagged possible per-form pricing (a $5 form and a $15 form under one firm).
+`cost_ceiling_usd_for_kit` takes kit metadata and honours a
+`link_cost_ceiling_usd` key when the kit carries one, falling back to the
+global default. A kit that omits it behaves exactly as before.
+
+Two kits DO set it now -- w7 and i-90 at $3 (bd polyglot-pdf-gob8l) -- but
+their links are still bounded by the GLOBAL default, because the only caller
+that matters (websocket_routes' check_budget at client-connect) passes no kit
+metadata. Resolving it there costs a kit load on every connect, so it is its
+own bead: polyglot-pdf-4tjt7. Until that lands, this function's per-form
+branch is exercised only by tests. Fails safe -- a higher ceiling, never an
+absent one.
 
 WHAT THIS MODULE DOES NOT DO. It holds no counters and reaches no datastore.
 It answers "what is the limit?" only. Enforcement -- accumulating spend against

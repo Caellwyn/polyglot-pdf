@@ -82,6 +82,9 @@ def test_w7_date_of_birth_rejects_iso_and_names_the_right_format():
 
 def test_i90_date_of_birth_resolves_layout_from_validation_hint():
     """i-90 carries the layout in validation.hint as well as help.format_hint."""
+    # The i-90 kit is back (this branch republishes it under the same id with
+    # the applicant-only v2 schema), so bd polyglot-pdf-hydb0's kit-absent skip
+    # no longer applies. The field id is the v2 one.
     field = _kit_field("i-90", "date_of_birth")
     assert _validate_date(field, "03/15/1985", "dob", "Date of birth") == []
 
