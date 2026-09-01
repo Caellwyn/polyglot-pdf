@@ -1030,6 +1030,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 					break
 				}
 
+				// Terminal status: stop waiting, it will never become 'connected'
+				// (bd polyglot-pdf-wwwa5). Same loop as the desktop overlay.
+				if (currentStatus === 'budget_exhausted') {
+					console.log('[VoiceOverlayMobile] Link spend ceiling reached -- not waiting for connect')
+					break
+				}
+
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
 			}
@@ -1038,7 +1045,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlayMobile] [X] Connection timeout, final status:', finalStatus)
-				setError('Connection timed out - please try again')
+				// Not for a spent link -- the modal already says it, translated,
+				// and this English string invites a retry that cannot work
+				// (bd polyglot-pdf-wwwa5). Mobile matters more here: it has no
+				// save nudge, so this modal is the ONLY thing the client sees.
+				if (finalStatus !== 'budget_exhausted') {
+					setError('Connection timed out - please try again')
+				}
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)

@@ -267,6 +267,22 @@ status; its reconnect button re-runs the same `handleConnect`/restore path, and 
 transient blip that still has attempts left stays on `reconnecting` and never
 surfaces the modal. (bd polyglot-pdf-jf6w.)
 
+**The OTHER terminal status: `budget_exhausted`** (bd polyglot-pdf-cke6v). A
+client link that has spent its ceiling is closed `1013` with reason
+`budget_exhausted`, and `handleClose` branches on that REASON before every
+retry branch -- so it never retries and never reaches `reconnect_failed`. Its
+sibling reason `budget_unavailable` (the spend store was unreachable) is
+deliberately NOT matched, because that IS transient and must keep the ordinary
+retry path: same close code, opposite handling. The two tokens are compared as
+strings across the language boundary with no shared constant, so each side
+carries its own pinning test.
+
+That status renders the same `ConnectionTimeoutModal` in a third variant,
+which offers **no recovery action** -- a Reconnect could not work -- but IS
+dismissible, because the overlay is full-viewport and its own copy tells the
+client they can still type, download and print. On desktop it yields to the
+save nudge, which carries the same words plus a working Save button.
+
 > **Doc-vs-code note:** `RECONNECTION_FLOW_SUMMARY.md` (repo root) is a *design
 > proposal* for auto-sending an initiating message on reconnect, not a description
 > of shipped behavior — treat it as historical. This doc describes the code as it

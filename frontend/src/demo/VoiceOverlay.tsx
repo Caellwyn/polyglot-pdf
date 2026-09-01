@@ -940,6 +940,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					break
 				}
 
+				// A TERMINAL status will never become 'connected', so stop waiting
+				// (bd polyglot-pdf-wwwa5). The backend ACCEPTS the socket before
+				// closing it on a spent link, so connect() resolves and this loop
+				// would otherwise burn its full 5s against an already-decided
+				// outcome.
+				if (currentStatus === 'budget_exhausted') {
+					console.log('[VoiceOverlay] Link spend ceiling reached -- not waiting for connect')
+					break
+				}
+
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
 			}
@@ -948,7 +958,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlay] [X] Connection timeout, final status:', finalStatus)
-				setError('Connection timed out - please try again')
+				// NOT for a spent link: the spend-ceiling modal already explains
+				// what happened, in the client's language. "Connection timed out --
+				// please try again" is untranslated English AND invites the exact
+				// retry bd cke6v exists to stop offering, so the panel behind the
+				// modal would contradict it (bd polyglot-pdf-wwwa5).
+				if (finalStatus !== 'budget_exhausted') {
+					setError('Connection timed out - please try again')
+				}
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
