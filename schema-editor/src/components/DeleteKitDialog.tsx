@@ -68,6 +68,12 @@ export function DeleteKitDialog({
       onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
     >
       <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+        {/* LABEL ONLY, deliberately (bd polyglot-pdf-nsz2d). Elsewhere a kit
+            is named "<label>" (<id>) because a label alone is ambiguous --
+            nothing enforces label uniqueness. Here the id is already on
+            screen a few lines down, where the human must TYPE it to confirm,
+            so repeating it in the heading would say the same thing twice in
+            one small dialog. */}
         <h2 id="delete-kit-title" className="text-base font-semibold text-red-800">
           Delete {kitLabel} permanently?
         </h2>
