@@ -189,6 +189,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // a strip offering a kit the cards deny is worse than no filter at all.
   const [filter, setFilter] = React.useState<CatalogueFilter>(EMPTY_FILTER);
   const shown = React.useMemo(() => filterKits(kits, filter), [kits, filter]);
+  // A CONCURRENT hide -- another author hiding the kit I have open, discovered
+  // on my next refresh -- must unwind the same way my own hide does. Without
+  // this the editor keeps showing a form that has left the catalogue, and the
+  // strip points elsewhere. Keyed on the kit being HIDDEN specifically, not on
+  // merely being filtered out: my own search box narrowing the list must not
+  // close the form I am editing.
+  const openIsHidden = kits.some((k) => k.id === selectedKitId && k.hidden === true);
+  React.useEffect(() => {
+    if (openIsHidden) clearOpenKit?.();
+  }, [openIsHidden, clearOpenKit]);
   const withheld = React.useMemo(
     () => hiddenByFilterCount(kits, filter), [kits, filter]);
 
@@ -972,7 +982,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             // gated on the parent-confirmed open (unlike the status actions
             // below) -- but it CAN still be refused, a 409 when a different
             // editor holds the kit's edit lock (bd polyglot-pdf-c63tu).
-            const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
+            // Resolved against SHOWN, not the raw list: these buttons act on
+            // whatever the dropdown above is offering, and the dropdown renders
+            // `shown`. Looking up the unfiltered list let the select display one
+            // kit (its value matching no rendered option, so the browser shows
+            // the first) while these acted on another -- a filtered-out kit
+            // still being publishable from a row that names something else.
+            const kit = shown.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
             if (!kit) return null;
             if (renamingId === kit.id) {
               return (
@@ -1018,7 +1034,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             );
           })()}
           {(() => {
-            const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
+            // Resolved against SHOWN, not the raw list: these buttons act on
+            // whatever the dropdown above is offering, and the dropdown renders
+            // `shown`. Looking up the unfiltered list let the select display one
+            // kit (its value matching no rendered option, so the browser shows
+            // the first) while these acted on another -- a filtered-out kit
+            // still being publishable from a row that names something else.
+            const kit = shown.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
             if (!kit) return null;
             // The open is ASYNC and can fail: `actionKitId` is set on selection
             // (optimistically), but selectedKitId only advances when the parent

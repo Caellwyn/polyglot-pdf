@@ -1913,6 +1913,35 @@ describe('hiding kits and filtering the catalogue (local)', () => {
     await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
   });
 
+  it('closes the editor when the OPEN kit is hidden (local too)', async () => {
+    // The hosted twin got this unwind first and local did not -- fixing the
+    // instance, not the set. Both catalogues render the same button, so both
+    // need the same close.
+    const clearOpenKit = vi.fn();
+    global.fetch = (async () => ({
+      ok: true, status: 200, json: async () => ({ ok: true, hidden: true }),
+    })) as unknown as typeof fetch;
+    const root = manyRoot();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker =
+      vi.fn(async () => root);
+    // form-3 is I-90, which sorts FIRST by label -- so it is the kit the first
+    // Hide button targets. Asserting against the hosted id order would pass by
+    // coincidence.
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId="form-3"
+      clearOpenKit={clearOpenKit} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    // OPENING THE FOLDER ALSO CALLS clearOpenKit (a fresh folder drops the
+    // open kit), so a bare toHaveBeenCalled() here passes before the Hide
+    // click ever happens -- it did, and the mutation survived. Count from the
+    // click instead.
+    clearOpenKit.mockClear();
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(clearOpenKit).toHaveBeenCalledTimes(1));
+  });
+
   it('hides through the SAME backend endpoint the hosted catalogue uses', async () => {
     // One implementation cannot drift from itself. Local mode already routes
     // status changes this way.

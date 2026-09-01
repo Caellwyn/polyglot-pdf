@@ -476,6 +476,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setBusy(true);
     try {
       await setRemoteHidden(kit.id, hidden);
+      // Same unwind as the hosted twin: hiding the OPEN kit leaves the editor
+      // showing a form whose card just left the grid. Missing it here was
+      // fixing the instance and not the set -- both catalogues render the
+      // same button, so both need the same close.
+      if (hidden && kit.id === selectedKitId) clearOpenKit?.();
       if (root) await refresh(root);
       setNotice(hidden
         ? `${kitName(kit)} is hidden. Tick "Show hidden" to find it again.`
@@ -490,7 +495,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     } finally {
       setBusy(false);
     }
-  }, [root, refresh, onAuthError]);
+  }, [root, refresh, onAuthError, selectedKitId, clearOpenKit]);
 
   const handleRename = React.useCallback(async (kit: CatalogueEntry) => {
     if (!root) return;

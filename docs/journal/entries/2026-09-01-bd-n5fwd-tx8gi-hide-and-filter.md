@@ -163,3 +163,37 @@ one refactor later.
 That is twice in this bead that a green suite meant "nothing tests this" rather
 than "this works" (the other was the fail-safe parametrization). Both times the
 tell was identical: I reverted the fix expecting red and got green.
+
+## Round 2: I fixed one catalogue and not its twin
+
+Three more, and the first is the plainest kind of miss. The open-kit unwind
+landed in the hosted catalogue and **not in the local one** -- same button, same
+bug, one of two places. Fixing the instance and not the set, in a bead whose
+whole shape is "there are two catalogues and four render sites".
+
+**The strip could act on a kit it was not offering.** The dropdown renders the
+filtered list; the action row beside it resolved its target from the raw one. So
+with the selected kit hidden, the `<select>`'s value matched no rendered option
+-- the browser shows something else -- while those buttons still operated on the
+hidden kit. A row naming form A and acting on form B. Both lookups now resolve
+against what the dropdown offers.
+
+**A concurrent hide.** Another author hides the kit I have open; I learn of it
+on my next refresh, and nothing in my session called the handler that unwinds
+it. An effect now closes the editor when the open kit arrives hidden -- keyed on
+*hidden*, not on absent-from-view, because my own search box narrowing the list
+must never close the form I am editing. That distinction has its own test.
+
+## Two vacuous tests, one after the other
+
+The action-lookup and local-unwind fixes both survived their mutations at first.
+
+The local one is the instructive failure. My test clicked "Open form-kits
+folder" and then asserted `clearOpenKit` had been called -- but **opening a
+folder calls `clearOpenKit` itself**, so the assertion was already satisfied
+before the Hide click happened. It passed identically with the fix removed.
+Clearing the mock immediately before the click fixed it.
+
+That is three times in this bead that reverting a fix produced green. Each time
+the tell was the same, and each time I only saw it because I ran the mutation
+rather than trusting the new test's name.
