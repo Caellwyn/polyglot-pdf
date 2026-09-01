@@ -298,7 +298,8 @@ dropped `kit_id` instead degrades to `kit_id=None`, a separate field).
   identity -- `kit_id` read before the JIT branch, `form_number`/`edition_date`
   inside it as `jit_form_number`/`jit_edition_date`), `resume` (the
   `is_reconnect` check, near the end of handshake parsing).
-- `full_schema` (sent at `schemaFormState.ts:979`/`:1070`): type-checked
+- `full_schema` (sent by `schemaFormState.ts`'s `getHandshakePayload` and
+  `getJITHandshakePayload`): type-checked
   `isinstance(dict)` only (the `full_schema` type-check right after handshake
   parsing), cached in
   `form_filling_service.py`'s `self._full_schema = full_schema` assignment
