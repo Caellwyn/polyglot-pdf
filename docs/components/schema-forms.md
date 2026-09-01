@@ -267,8 +267,12 @@ vs. a multi-select group). **Not yet implemented** (render a placeholder):
 `signature`, `address_group`, `table`. Unknown types render an error block.
 
 Manual edits from the React UI are **auto-confirmed** as `manual_edit`
-(`handleFieldChange`), and `field.copy_to` auto-copies the value to listed target
-fields (also auto-confirmed). Validation runs on blur (`validateField`).
+(`handleFieldChange`). `field.copy_to` auto-copies the value to listed target
+fields at the **write chokepoint** -- `SchemaFormStateManager.updateField` --
+so EVERY path fans out, the voice path included (bd polyglot-pdf-gpaed). A
+fanned target is always stamped confirmed, even when the source write was not:
+a copy target is read_only, so the AI can neither fill nor skip it, and leaving
+it unconfirmed would strand `computeNextField` on it. Validation runs on blur (`validateField`).
 **AI-applied values are validated too** (bd polyglot-pdf-wpw.3): the voice layer
 runs `validateField` on every value the model fills *before* it lands (see
 [tool-call-flow.md](tool-call-flow.md)), so an invalid enum/format/required value

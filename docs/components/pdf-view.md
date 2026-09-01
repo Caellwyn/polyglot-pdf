@@ -116,8 +116,10 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   positioned in page coordinate space (scrolls with the page, no scroll
   listeners): below the rect, flipped above near the page bottom, clamped
   horizontally, internal scroll for long option lists. Write-through on
-  change via SchemaForm's `handleFieldChange` (the single place stamping
-  `confirmed` + `manual_edit` and fanning out `copy_to`) -- overlays repaint
+  change via SchemaForm's `handleFieldChange` (which stamps `confirmed` +
+  `manual_edit`; the `copy_to` fan-out itself lives one level down, at the
+  `SchemaFormStateManager.updateField` chokepoint, so every write path gets it
+  -- bd polyglot-pdf-gpaed) -- overlays repaint
   live while typing. **Known gap (bd `polyglot-pdf-1utg`, open):** the popover's
   incoming value is read via a bare `fieldValues[editingHere.id]`, not the
   alias-aware `readFieldEntryWithAlias` the overlay itself uses -- if a
