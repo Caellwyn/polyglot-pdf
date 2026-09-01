@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-08-17 (bd polyglot-pdf-pfx1: hidden + show_if may not both be set -- shouldShowField resolves the contradiction toward the CONDITION, which is now pinned in all four combinations and made unauthorable upstream by the editor gate and the hidden-with-show-if lint ERROR).*
+*Last updated: 2026-08-31 (bd polyglot-pdf-a08po: `searchOriginFieldId` -- the next-field search resumes from the user's last-acted field and wraps, and a click moves focus only while NO audio is playing).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -38,6 +38,32 @@ instances) operating on a `SchemaFormState` value:
   (`markSectionComplete`/`switchToSection`, manual prev/next) drives real
   navigation only in the DEPRECATED section-reset fallback. Sections page the UI
   in both modes.
+- `searchOriginFieldId` — where `computeNextField`'s scan RESUMES from, set to
+  the field the user most recently acted on: a manual edit, or a click/focus
+  **while no audio is playing** (bd polyglot-pdf-a08po). The scan starts just
+  after it and WRAPS to the top, instead of always restarting at index 0 — so a
+  user filling out of order is not dragged back to the first unconfirmed field
+  after every entry, while fields they skipped past are still swept up on the way
+  around. It is an ORIGIN, not a pin: it never forces a field to be next (a live
+  `pinnedFieldId` still outranks it), and a stale id degrades to the old
+  top-of-form scan. The companion `searchOriginIncludesSelf` says WHERE the
+  origin sits in the rotation, because the two gestures mean opposite things
+  about the field they name: a CLICK points AT it (`true` -- it is offered next,
+  or the model would ask about a neighbour while the cursor sits here), while a
+  manual EDIT answers it (`false` -- resume AFTER it; the rotation still returns
+  to it last if it is somehow still unconfirmed). Confirming or skipping a field
+  advances the origin to it too, so a verbal jump-and-answer resumes from the
+  field just handled instead of falling back to a stale origin. The click
+  suppression gates on `isAnyAudioPlaying()` -- the clip-INCLUSIVE union, not
+  `isModelSpeaking()`: the deterministic spell-back clip plays only after the
+  model's own PCM has drained, so a model-PCM-only gate leaves that whole window
+  open, and `name_spellback` carries no field_id (it resolves the field through
+  this same search), so a click there would spell a different field's value back.
+  The reason a click waits at all: under DTI the model holds one field's schema
+  and the backend coercion pointer is singular, so retargeting mid-question would
+  mis-fill the spoken answer. Typing is unambiguous intent and moves the origin
+  either way. Completion is unchanged: an empty search still means every shown
+  field is confirmed.
 - `formSessionId` — persistent `fss_<base36-ts>_<random>`, survives reconnects
   (the durability boundary; see stateless-architecture).
 - `validationErrors`, `loadedFieldIds`/`jitModeEnabled` (JIT token-reduction),

@@ -66,22 +66,14 @@ def _kit(name: str) -> str:
 # The benchmark manifest. `gold` None = held out (no truth schema exists, on
 # purpose -- see form-kits/w9-heldout/NOTE.md). `widgets` = the structural
 # assertion's widget-leaf group for this form.
+#
+# i-90 was dropped from this manifest (bd polyglot-pdf-hydb0): the kit is
+# deprecated and form-kits/i-90/ no longer exists, so there is no gold schema
+# left to benchmark against. Its old P2_checkbox3 group-consolidation pin
+# (bd qmxb/0nxh) lives on as a standalone regression test in
+# tests/test_eval_extraction.py that reads form-kits/i-90/schema.json
+# directly and skips if the kit is absent, rather than through this manifest.
 _FORMS: list[dict[str, Any]] = [
-    {
-        "name": "i-90",
-        "pdf": os.path.join(_kit("i-90"), "form.pdf"),
-        "gold": os.path.join(_kit("i-90"), "schema.json"),
-        # Part-2 Q3 "reason for application (select only one)" -- 5 separate
-        # checkbox widgets consolidated into ONE radio field. This is the exact
-        # group the extractor USED to drop 4 of 5 of (bd 0nxh, hand-fixed) and
-        # that group-candidates-default-ON + _complete_grouped_families now cover
-        # deterministically (bd qmxb). The coverage check is modeling-agnostic: a
-        # DROP or de-identification of any of the 5 fails (passed=False -- the
-        # regression the qmxb fix prevents); a clean split into 5 standalone
-        # checkboxes still passes but reports consolidated=False, so the row shows
-        # whether the group was recognized as one field.
-        "widgets": [f"P2_checkbox3[{i}]" for i in range(5)],
-    },
     {
         "name": "w7",
         "pdf": os.path.join(_kit("w7"), "form.pdf"),

@@ -63,6 +63,29 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Thinking indicator (bd polyglot-pdf-wpw.5): agent processing a turn.
 	const [thinking, setThinking] = useState<boolean>(false)
 	const [error, setError] = useState<string | null>(null)
+
+	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5).
+	// On a spent link the translated spend-ceiling modal already says voice has
+	// finished; an English "please try again" / "please click Reconnect" behind
+	// it contradicts that AND names a button bd cke6v removed. Mobile matters
+	// more: it has no save nudge, so that modal is the ONLY thing the client
+	// sees. Plain function, not useCallback -- this file uses no useCallback.
+	//
+	// Declared HERE, immediately after setError and above every caller: a
+	// `const` arrow is not hoisted, and the earliest call site is ~line 267.
+	const setConnectionError = (message: string) => {
+		// Feature-detect getStatus, do not just null-check the manager: `?.`
+		// guards against null/undefined but NOT against a partial mock that
+		// lacks the method, which threw a TypeError in CI on the desktop twin.
+		// Suppression is a nice-to-have; throwing here would break the error
+		// path itself.
+		if (typeof connectionManager?.getStatus === 'function'
+			&& connectionManager.getStatus() === 'budget_exhausted') {
+			console.log('[VoiceOverlayMobile] Suppressing connection error on a spent link:', message)
+			return
+		}
+		setError(message)
+	}
 	const [isExpanded, setIsExpanded] = useState(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
 	// NOTE (bd polyglot-pdf-4l7p): the section-session display state desktop
@@ -95,6 +118,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// User dismissed the connection-timeout modal without reconnecting (bd
 	// polyglot-pdf-jf6w.2); reset when status leaves reconnect_failed.
 	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
+	// Terminal, so never reset (bd polyglot-pdf-cke6v). Mobile is the harder
+	// case: it has no SaveNudge at all, so this overlay is the ONLY thing a
+	// client sees when their link is spent -- and without a dismiss it would
+	// block the form outright.
+	const [budgetModalDismissed, setBudgetModalDismissed] = useState(false)
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')  // Track selected spoken language
@@ -259,7 +287,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 					}
 				} catch (err) {
 					console.error('[VoiceOverlayMobile] Failed to connect after pre-selected language:', err)
-					setError(err instanceof Error ? err.message : 'Connection failed')
+					setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 					setPendingDisclaimerRead(false)
 				}
 			}
@@ -749,7 +777,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// The useEffect watching status will send the disclaimer prompt when ready
 		} catch (err) {
 			console.error('[VoiceOverlayMobile] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			setPendingDisclaimerRead(false) // Clear flag on error
 		}
 	}
@@ -879,7 +907,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				await handleConnect()
 			} catch (err) {
 				console.error('[VoiceOverlayMobile] [X] Connect failed after Agree:', err)
-				setError(err instanceof Error ? err.message : 'Connection failed')
+				setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			}
 			return
 		}
@@ -942,14 +970,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
 					console.error('[VoiceOverlayMobile] [X] Reconnect timed out, status:', postReconnectStatus)
-					setError('Connection lost - please click Reconnect')
+					setConnectionError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
 				console.log('[VoiceOverlayMobile] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
 				console.error('[VoiceOverlayMobile] [X] Reconnection failed:', err)
-				setError('Connection lost - please click Reconnect')
+				setConnectionError('Connection lost - please click Reconnect')
 				return
 			}
 		}
@@ -1025,6 +1053,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 					break
 				}
 
+				// Terminal status: stop waiting, it will never become 'connected'
+				// (bd polyglot-pdf-wwwa5). Same loop as the desktop overlay.
+				if (currentStatus === 'budget_exhausted') {
+					console.log('[VoiceOverlayMobile] Link spend ceiling reached -- not waiting for connect')
+					break
+				}
+
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
 			}
@@ -1033,11 +1068,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlayMobile] [X] Connection timeout, final status:', finalStatus)
-				setError('Connection timed out - please try again')
+				setConnectionError('Connection timed out - please try again')
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 		}
 	}
 
@@ -1366,6 +1401,17 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => { setReconnectModalDismissed(false); handleConnect() }}
 				onCancel={() => setReconnectModalDismissed(true)}
+			/>
+			{/* Spend ceiling used up (bd polyglot-pdf-cke6v). Same terminal,
+			    terminal modal as the desktop overlay -- a client on a phone
+			    hits this exactly as often, and the mobile surface is where the
+			    dead Reconnect was hardest to recover from. */}
+			<ConnectionTimeoutModal
+				variant="budget_exhausted"
+				isOpen={status.toLowerCase() === 'budget_exhausted' && !budgetModalDismissed}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => {}}
+				onCancel={() => setBudgetModalDismissed(true)}
 			/>
 			{/* Main FAB */}
 			{/* The FAB is Sol (bd polyglot-pdf-2p4y). It replaces the pulsing blue

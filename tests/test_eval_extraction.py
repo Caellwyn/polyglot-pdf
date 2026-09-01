@@ -28,9 +28,18 @@ spec.loader.exec_module(ev)
 
 _BROKEN_DRAFT = _REPO / "backend" / "tests" / "fixtures" / "w7_broken_draft.json"
 _W7_KIT = _REPO / "form-kits" / "w7"
+_I90_KIT = _REPO / "form-kits" / "i-90"
 
 needs_w7 = pytest.mark.skipif(
     not (_W7_KIT / "form.pdf").exists(), reason="w7 kit not present"
+)
+# i-90 dropped from eval_extraction's own benchmark manifest (bd
+# polyglot-pdf-hydb0, kit deprecated), so its P2_checkbox3 pin below reads the
+# schema directly instead of going through ev._FORMS.
+needs_i90 = pytest.mark.skipif(
+    not (_I90_KIT / "schema.json").exists(),
+    reason="form-kits/i-90/schema.json not present (kit deprecated, bd "
+           "polyglot-pdf-hydb0)",
 )
 
 
@@ -270,7 +279,8 @@ def test_one_bad_draft_does_not_discard_the_whole_sweep(tmp_path, capsys):
     capsys.readouterr()
 
     rows = json.loads(out_json.read_text(encoding="utf-8"))
-    assert len(rows) == 4  # every benchmark form still reported
+    assert len(rows) == 3  # every benchmark form still reported (i-90 dropped,
+                            # bd polyglot-pdf-hydb0 -- kit deprecated)
     w7 = next(r for r in rows if r["form"] == "w7")
     assert w7["repair"].startswith("FAILED: ")
     # Scored RED like any other defective draft -- not skipped, not crashed.
@@ -375,17 +385,18 @@ def test_table_renders_relationship_columns_and_harvest_note():
 
 @needs_w7
 def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
+    # i-90 dropped from the benchmark manifest (bd polyglot-pdf-hydb0, kit
+    # deprecated); its P2_checkbox3 pin now lives in
+    # test_i90_pins_the_p2_checkbox3_select_one_group below, guarded to skip
+    # if form-kits/i-90/ is absent.
     out_json = tmp_path / "rows.json"
     rc = ev.main(["--json", str(out_json)])
     table = capsys.readouterr().out
     # Every benchmark form has a row.
-    for name in ("i-90", "w7", "f1040", "w9-heldout"):
+    for name in ("w7", "f1040", "w9-heldout"):
         assert name in table
     # Structural assertion column is rendered.
     assert "PASS (8w" in table
-    # i-90's P2_checkbox3 select-one group is pinned + recognized as consolidated
-    # (bd ox6y -- the regression guard for the qmxb grouping fix).
-    assert "PASS (5w, 1 group)" in table
     # The held-out form (no draft, no gold -- by design) is explicit, not silent.
     assert "held-out" in table
     # Post the P6.2 flip (bd h76m.16) every shipped kit is migrated to v2 and
@@ -393,8 +404,8 @@ def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
     # is resolved by the migration, so the whole table is GREEN -> exit 0.
     assert "RED" not in table and rc == 0
     rows = json.loads(out_json.read_text(encoding="utf-8"))
-    assert len(rows) == 4
-    # The three real kits score OK; the held-out row carries no verdict.
+    assert len(rows) == 3
+    # The two real kits score OK; the held-out row carries no verdict.
     assert all(r.get("verdict", "OK") == "OK" for r in rows)
 
 
@@ -444,16 +455,17 @@ def test_held_out_note_widget_claims_match_the_real_pdf():
 # bd ox6y: i-90's select-one group is pinned + measured (the qmxb regression guard)
 # --------------------------------------------------------------------------- #
 
+@needs_i90
 def test_i90_pins_the_p2_checkbox3_select_one_group():
-    form = next((f for f in ev._FORMS if f["name"] == "i-90"), None)
-    assert form is not None, "i-90 must be in the eval benchmark"
-    assert form["widgets"] == [f"P2_checkbox3[{i}]" for i in range(5)]
+    # i-90 was dropped from ev._FORMS (bd polyglot-pdf-hydb0, kit deprecated),
+    # so this reads the gold schema directly rather than through the manifest.
+    widgets = [f"P2_checkbox3[{i}]" for i in range(5)]
     # The shipped gold models it as ONE consolidated field (the 0nxh fix). The
     # coverage check is modeling-agnostic: a DROP/de-identification fails it (the
     # regression qmxb prevents), while a clean split still passes but is flagged
     # consolidated=False. So assert the gold both passes AND is consolidated.
-    gold = json.loads(pathlib.Path(form["gold"]).read_text(encoding="utf-8"))
-    r = ev.check_widget_coverage(gold, form["widgets"])
+    gold = json.loads((_I90_KIT / "schema.json").read_text(encoding="utf-8"))
+    r = ev.check_widget_coverage(gold, widgets)
     assert r["passed"] and r["consolidated"] and r["widgets"] == 5
 
 

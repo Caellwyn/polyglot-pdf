@@ -36,11 +36,22 @@ _W7 = _REPO / "form-kits" / "w7"
 _I90 = _REPO / "form-kits" / "i-90"
 _F1040 = _REPO / "form-kits" / "f1040"
 
+# Only W7 is required module-wide (w7_applied is the shared fixture). i-90 and
+# f1040 each have their own kit-specific tests below; OR-ing all three kits
+# into one module-level gate made the WHOLE file (including W7-only and
+# fully-synthetic tests) silently vacuous whenever any single kit was absent
+# -- e.g. once the i-90 kit was deprecated and deleted (bd polyglot-pdf-
+# hydb0). Caught by the outer cross-surface review, filed as bd polyglot-
+# pdf-cj8mg, fixed here rather than left skipped -- per-kit gating instead.
 pytestmark = pytest.mark.skipif(
-    not (_W7 / "form.pdf").exists() or not (_I90 / "form.pdf").exists()
-    or not (_F1040 / "form.pdf").exists(),
-    reason="checked-in form kits unavailable",
+    not (_W7 / "form.pdf").exists(), reason="w7 kit not present"
 )
+
+needs_i90 = pytest.mark.skipif(
+    not (_I90 / "form.pdf").exists(), reason="form-kits/i-90/form.pdf not "
+    "present (kit deprecated, bd polyglot-pdf-hydb0)")
+needs_f1040 = pytest.mark.skipif(
+    not (_F1040 / "form.pdf").exists(), reason="f1040 kit not present")
 
 
 def _load_kit(kit_dir):
@@ -103,6 +114,7 @@ def test_applied_w7_schema_validates(w7_applied):
         FormSchema.model_validate(schema)
 
 
+@needs_i90
 def test_i90_uses_name_convention_with_no_spurious_to_review():
     """The USCIS family: P{N}_ names drive the division -- INCLUDING
     consolidated options[] fields whose widget name lives on the options,
@@ -124,6 +136,7 @@ def test_i90_uses_name_convention_with_no_spurious_to_review():
     assert not any(sid.startswith("sec_to_review") for sid in section_ids)
 
 
+@needs_i90
 def test_i90_part8_repeat_rows_not_filed_under_name_subheading():
     """A sub-heading governs exactly one USCIS part (bd polyglot-pdf-h1eo).
 
@@ -149,6 +162,7 @@ def test_i90_part8_repeat_rows_not_filed_under_name_subheading():
         assert by_section[sid]["label"] == "Your Full Name", (fid, sid)
 
 
+@needs_f1040
 def test_f1040_dependents_cap_split_is_balanced():
     """The motivating real-kit case for the balanced-split policy (maintainer
     feedback at the 6cfu.1 checkpoint): f1040's 'Dependents' block (42 fields
@@ -182,6 +196,8 @@ def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
     conditions -- is pinned by test_derive_then_MUTATING_repair_* below, which
     is the one that catches a real regression.
     """
+    if not (kit / "form.pdf").exists():
+        pytest.skip(f"{kit.name} kit not present")
     from backend.services.schema_repair import repair
 
     schema = _load_kit(kit)

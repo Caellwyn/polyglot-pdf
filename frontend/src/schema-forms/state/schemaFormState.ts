@@ -72,6 +72,37 @@ export interface SchemaFormState {
   // follows the jump with no extra plumbing. Cleared when the pinned field is
   // confirmed or skipped (the form then resumes its normal fill order).
   pinnedFieldId?: string | null;
+
+  // Where the next-field search RESUMES from (bd polyglot-pdf-a08po). Set to
+  // the field the user most recently acted on -- a manual edit, or a click/
+  // focus while no audio is playing. computeNextField starts its scan at this
+  // field's position and WRAPS to the top, instead of always restarting at
+  // index 0.
+  //
+  // Why: without it, every manual edit re-targeted the model at the FIRST
+  // unconfirmed field while the user was working far below it, so a
+  // mostly-manual user had the model's focus yanked back to the top of the
+  // form after each entry. Wrapping also means fields the user skipped past
+  // are swept up on the way around -- there is no separate end-of-form
+  // "redirect to missed fields" phase, and completion is unchanged (the
+  // search coming up empty is still exactly isFormComplete's condition).
+  //
+  // This is a SEARCH ORIGIN, not a pin: it never forces a field to be next
+  // (an unconfirmed field AT the origin is returned by the normal priority
+  // rules, not by virtue of being the origin), and a stale value is harmless
+  // -- an id that no longer resolves just falls back to index 0.
+  searchOriginFieldId?: string | null;
+
+  // Whether the origin field is itself the FIRST candidate in the rotation
+  // (bd polyglot-pdf-a08po). The two gestures that set an origin mean opposite
+  // things about the field they name:
+  //   true  -- a CLICK/focus: the user is POINTING at it, so it must be offered
+  //            next, or the model asks about a neighbour while their cursor
+  //            sits here.
+  //   false -- a manual EDIT: the user just ANSWERED it, so the scan resumes
+  //            AFTER it (the rotation still returns to it last if it is
+  //            somehow still unconfirmed).
+  searchOriginIncludesSelf?: boolean;
 }
 
 export class SchemaFormStateManager {
@@ -151,6 +182,8 @@ export class SchemaFormStateManager {
       // intent defeated for the first connect).
       selectedLanguage: loadOnboardingState().language ?? undefined,
       pinnedFieldId: null, // Field-level navigation pin (bd jnjj.36)
+      searchOriginFieldId: null, // Next-field search origin (bd a08po)
+      searchOriginIncludesSelf: false,
     };
 
     this.save(newState);
@@ -224,6 +257,16 @@ export class SchemaFormStateManager {
       // Initialize the navigation pin if missing (old state, bd jnjj.36)
       if (parsed.pinnedFieldId === undefined) {
         parsed.pinnedFieldId = null;
+      }
+
+      // Initialize the search origin if missing (old state, bd a08po). A
+      // persisted session from before this field existed resumes from the top,
+      // which is exactly the previous behavior.
+      if (parsed.searchOriginFieldId === undefined) {
+        parsed.searchOriginFieldId = null;
+      }
+      if (parsed.searchOriginIncludesSelf === undefined) {
+        parsed.searchOriginIncludesSelf = false;
       }
 
       // Initialize disclaimer fields if missing (migration for existing sessions)
@@ -951,8 +994,11 @@ export class SchemaFormStateManager {
    *
    * Returns schema with ALL fields from the section, including locked/hidden fields.
    * Gemini receives the full manifest - dependency logic is handled by:
-   * - computeNextField() which skips locked/hidden fields for next_field_hint
-   * - Backend validation which rejects updates to locked fields with helpful error
+   * - computeNextField() filters on shouldShowField ALONE (bd polyglot-pdf-ubam);
+   *   it does NOT skip read_only/locked fields, so a locked field can still be
+   *   offered as next_field_hint
+   * - The locked-field refusal is a CLIENT-side gate: webFormConnection's
+   *   handleFieldUpdate checks isFieldReadOnly before accepting a write
    *
    * @param schema - Full form schema
    * @param sectionId - Section ID to extract
@@ -1362,6 +1408,14 @@ export class SchemaFormStateManager {
       // A confirmed pinned field releases the pin -- the form resumes its
       // normal fill order (bd polyglot-pdf-jnjj.36).
       pinnedFieldId: state.pinnedFieldId === fieldId ? null : state.pinnedFieldId,
+      // ...and the search resumes from the field just answered, not from
+      // wherever the origin last pointed (bd polyglot-pdf-a08po, fresh-eyes).
+      // Without this, a voice jump-and-answer released the pin back onto a
+      // STALE origin -- the same "focus snaps backward" failure this bead
+      // exists to fix, arriving via the verbal path instead of the manual one.
+      // includesSelf=false: this field was just answered, so resume AFTER it.
+      searchOriginFieldId: fieldId,
+      searchOriginIncludesSelf: false,
       lastUpdated: Date.now()
     };
 
@@ -1443,6 +1497,13 @@ export class SchemaFormStateManager {
     if (newState.pinnedFieldId === fieldId) {
       newState.pinnedFieldId = null;
     }
+    // A skip is "done with this field" just as a confirm is, so it advances the
+    // search origin the same way (bd polyglot-pdf-a08po). Keeping these two in
+    // step matters: they are the pair that releases a pin, and an origin left
+    // stale by only ONE of them would strand the scan exactly where the other
+    // path fixed it.
+    newState.searchOriginFieldId = fieldId;
+    newState.searchOriginIncludesSelf = false;
 
     this.save(newState);
     return newState;
@@ -1533,6 +1594,42 @@ export class SchemaFormStateManager {
    */
   static pinField(state: SchemaFormState, fieldId: string): SchemaFormState {
     const newState = { ...state, pinnedFieldId: fieldId, lastUpdated: Date.now() };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Move the next-field search origin to `fieldId` (see searchOriginFieldId on
+   * the state interface, bd polyglot-pdf-a08po). Called when the user acts on a
+   * field directly -- a manual edit, or a click/focus while no audio is playing
+   * -- so the search resumes from where they ARE instead of the top of the form.
+   *
+   * Deliberately NOT a pin: this only moves where the scan starts. The field
+   * itself is returned only if the normal priority rules pick it.
+   */
+  static setSearchOrigin(
+    state: SchemaFormState,
+    fieldId: string,
+    // Does the search START at this field, or just after it? A CLICK points at
+    // the field (true); a manual EDIT answers it and moves on (false). See
+    // searchOriginIncludesSelf on the state interface.
+    options?: { includesSelf?: boolean },
+  ): SchemaFormState {
+    const includesSelf = options?.includesSelf === true;
+    // Compare BOTH halves: the same field can be re-set with the other
+    // intent (click a field, then type in it), and that must still persist.
+    if (
+      state.searchOriginFieldId === fieldId &&
+      state.searchOriginIncludesSelf === includesSelf
+    ) {
+      return state;
+    }
+    const newState = {
+      ...state,
+      searchOriginFieldId: fieldId,
+      searchOriginIncludesSelf: includesSelf,
+      lastUpdated: Date.now(),
+    };
     this.save(newState);
     return newState;
   }

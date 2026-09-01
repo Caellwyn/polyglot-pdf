@@ -10,6 +10,9 @@ export interface CheckboxFieldProps {
   value: any;
   onChange: (value: boolean | string[]) => void;
   onBlur?: () => void;
+  // Cursor entered this field (bd polyglot-pdf-a08po) -- moves the next-field
+  // search origin; never makes the model speak.
+  onFocus?: () => void;
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
@@ -23,6 +26,7 @@ export function CheckboxField({
   value,
   onChange,
   onBlur,
+  onFocus,
   error,
   disabled = false,
   confirmed = false,
@@ -48,6 +52,7 @@ export function CheckboxField({
             name={field.id}
             checked={isChecked}
             onChange={(e) => handleChange(e.target.checked)}
+            onFocus={onFocus}
             disabled={disabled}
             className="form-field__checkbox-input"
           />
@@ -112,6 +117,7 @@ export function CheckboxField({
                 value={option.value}
                 checked={selectedValues.includes(option.value)}
                 onChange={() => handleToggle(option.value)}
+                onFocus={onFocus}
                 disabled={disabled}
                 className="form-field__checkbox-input"
               />
