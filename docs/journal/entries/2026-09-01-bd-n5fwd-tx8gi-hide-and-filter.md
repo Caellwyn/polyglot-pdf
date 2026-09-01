@@ -75,10 +75,11 @@ refusal names a kit by id (bd `kztlr`), so an operator reading an error pastes
 that in -- searching only labels would fail exactly the person who most needs to
 find the kit.
 
-The bar appears only above three kits: a filter over three rows is noise, and
-the demo store crossing that threshold is why the bead exists. A "N not shown"
-line renders whenever the filter is holding anything back, because a
-filtered-out kit that looks identical to a deleted one is what makes people
+The bar stays out of the way until there is enough to scan -- above three kits,
+or whenever anything is being withheld or the filter is active. (That second
+half was not in the first draft, and review found it mattered; see below.) A
+"N not shown" line renders whenever the filter is holding anything back, because
+a filtered-out kit that looks identical to a deleted one is what makes people
 distrust a filter.
 
 ## Both write paths, or local silently ignores it
@@ -118,3 +119,47 @@ sharpest, since a human hand-editing metadata writes it MEANING not-hidden.
 Worse: for two of those runs my `-k` filter did not match the test's name, so
 the "survived" verdict was measuring nothing at all. Read the collected count,
 not just the verdict.
+
+## Review: my own threshold could strand a kit
+
+I flagged the `> 3` filter-bar threshold as my own risk and asked review to check
+it. It was right to: gated on the raw kit count alone, a hidden kit in a
+two-kit store vanished from both surfaces **and the "Show hidden" control that
+would bring it back never rendered**. The bar that is the only way out was
+hidden by the same rule that hid the kit. That is exit criterion 2 failing
+outright, not a rough edge.
+
+The gate now also renders whenever anything is being withheld or the filter is
+doing something. **The way back must never be conditional on how many kits you
+happen to have.**
+
+Two more, both real:
+
+**The open kit.** Hiding the kit currently being edited left the editor pane
+showing it while its card left the catalogue, and the strip's controlled
+`<select>` pointing at an id its own option list no longer offered. Delete
+already unwinds exactly this (bd `hbfky`, with a comment saying why); hiding
+needed the same. Only on hide -- unhiding an open kit is fine, it is returning
+to a list the editor never left it for.
+
+**The per-status counts.** `2 in progress` sat above a one-card grid, because
+the summary summed the raw list while describing the filtered one. It now
+counts what is shown.
+
+Worth separating from that: the `N forms in the shared workspace` banner
+deliberately counts the STORE and says so in its own words. That is a different
+claim, not a contradiction -- and it is how an operator learns the store holds
+more than they are looking at. My first test asserted it should change, which
+would have removed the one line telling them so. Only the summary that
+*describes the grid* had to follow the grid.
+
+## A mutation that survived, again
+
+Two of the three fixes reddened their tests immediately. The summary fix did
+not -- nothing asserted the per-status counts at all, so changing them back was
+invisible. The line was fixed and unpinned, which is the same thing as unfixed
+one refactor later.
+
+That is twice in this bead that a green suite meant "nothing tests this" rather
+than "this works" (the other was the fail-safe parametrization). Both times the
+tell was identical: I reverted the fix expecting red and got green.

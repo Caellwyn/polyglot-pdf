@@ -208,7 +208,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     }
   }, []);
 
-  const summary = React.useMemo(() => summarizeCatalogue(kits), [kits]);
+  // Counts describe the list the human is LOOKING AT, not the folder -- the
+  // hosted twin does the same. Summing the raw kits put a "3 forms" banner
+  // above a grid showing two: one screen disagreeing with itself. `withheld`
+  // reports what is held back, so nothing is concealed.
+  const summary = React.useMemo(() => summarizeCatalogue(shown), [shown]);
 
   // Last live in-editor value seen per kit, kept SEPARATELY from the disk-scan
   // `progress` map so it survives after that kit stops being the live one AND is
@@ -680,9 +684,17 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         </div>
       )}
 
-      {/* bd tx8gi: search + status filter, the same module and the same
-          threshold as the hosted twin. */}
-      {root && kits.length > 3 && (
+      {/* bd tx8gi: search + status filter. A filter over three rows is noise,
+          so it stays out of the way until there is enough to scan.
+
+          BUT the threshold must never strand a kit. Gating on size ALONE
+          meant a hidden kit in a <=3-kit store vanished from both surfaces
+          with no "Show hidden" control rendered to bring it back -- the bar
+          that is the only way out was itself hidden by the same rule. So it
+          also renders whenever anything is being withheld, or the filter is
+          doing something. The way back is never conditional on how many kits
+          you happen to have. */}
+      {root && (kits.length > 3 || withheld > 0 || isFilterActive(filter)) && (
         <div className="mt-2 flex items-center gap-2 flex-wrap"
              data-testid="catalogue-filter">
           <input

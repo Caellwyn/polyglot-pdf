@@ -579,6 +579,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setBusy(true);
     try {
       await setRemoteHidden(kit.id, hidden);
+      // Close the editor pane if the kit being HIDDEN is the open one -- the
+      // same unwind delete does (bd hbfky), for the same reason: the card
+      // leaves the catalogue below while the editor keeps showing its fields,
+      // and the strip's controlled <select> would point at an id its own
+      // option list no longer offers. Only on hide; unhiding an open kit is
+      // fine, it is coming back into a list it never left the editor for.
+      if (hidden && kit.id === selectedKitId) clearOpenKit?.();
       await refresh();
       setNotice(hidden
         ? `${kitName(kit)} is hidden. Tick "Show hidden" to find it again.`
@@ -763,9 +770,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     }
   }, [translatingId, selectedKitId, onOpenKit, onAuthError]);
 
+  // Counts describe the list the human is LOOKING AT, not the store. Summing
+  // the raw `kits` put a "3 forms" banner directly above a grid showing two --
+  // the same screen disagreeing with itself, which is worse than either number
+  // alone. `withheld` says how many are held back, so nothing is concealed.
   const summary = React.useMemo(() => {
     let complete = 0, inProgress = 0, noSchema = 0, unpublished = 0;
-    for (const k of kits) {
+    for (const k of shown) {
       if (!k.hasSchema) noSchema++;
       else if (k.status === 'complete') complete++;
       // A retired revision is NOT pending work -- counting it as in-progress
@@ -773,8 +784,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       else if (k.status === 'unpublished') unpublished++;
       else inProgress++;
     }
-    return { total: kits.length, complete, inProgress, noSchema, unpublished };
-  }, [kits]);
+    return { total: shown.length, complete, inProgress, noSchema, unpublished };
+  }, [shown]);
 
   return (
     <div data-testid="remote-catalogue" className="px-4 py-2 bg-white border-b border-gray-200">
@@ -841,10 +852,17 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         </div>
       )}
 
-      {/* bd tx8gi: search + status filter. Rendered only once there is enough
-          to scan -- a filter above three kits is noise, and the demo store
-          crossing this threshold is the reason the bead exists. */}
-      {kits.length > 3 && (
+      {/* bd tx8gi: search + status filter. A filter over three rows is noise,
+          so it stays out of the way until there is enough to scan.
+
+          BUT the threshold must never strand a kit. Gating on size ALONE
+          meant a hidden kit in a <=3-kit store vanished from both surfaces
+          with no "Show hidden" control rendered to bring it back -- the bar
+          that is the only way out was itself hidden by the same rule. So it
+          also renders whenever anything is being withheld, or the filter is
+          doing something. The way back is never conditional on how many kits
+          you happen to have. */}
+      {(kits.length > 3 || withheld > 0 || isFilterActive(filter)) && (
         <div className="mt-2 flex items-center gap-2 flex-wrap"
              data-testid="catalogue-filter">
           <input
