@@ -992,10 +992,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// this aligns desktop with it.)
 			//
 			// NOT ON A SPENT LINK (bd polyglot-pdf-wwwa5). budget_exhausted is
-			// TERMINAL, and three surfaces key off it: the spend-ceiling modal,
+			// TERMINAL, and FOUR surfaces key off it: the spend-ceiling modal,
 			// the save nudge's voiceEnding gate (level-triggered, so an
 			// already-showing nudge would vanish), and the controls ternary,
-			// which renders Reconnect for 'error'. Overwriting the status here
+			// which renders Reconnect for 'error' -- plus solState.isOffline, which makes Sol LEAVE rather than dim. Overwriting the status here
 			// retracts the correct UI and restores the dead button this work
 			// removed -- and the parent cannot repair it, because its sync effect
 			// keys on [sharedStatus], which never changes. Suppressing the error
