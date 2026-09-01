@@ -616,8 +616,34 @@ def _rewrite_condition(cond: Any, owner_path: str, fields_by_id: Dict[str, dict]
         ref = atom.get("field")
         return fields_by_id.get(ref) if isinstance(ref, str) else None
 
-    # Already-composite v2 group: rewrite bucket members in place.
+    # Computed once, reused below: cond is never mutated between the two
+    # uses, so a second intersection would just recompute the same set.
     buckets = vocab.CONDITION_GROUP_BUCKETS & cond.keys()
+
+    # MIXED atom+bucket shape: field/operator keys present ALONGSIDE a
+    # ConditionGroup bucket key (bd polyglot-pdf-2sli8). This is exactly the
+    # malformed shape schema_lint.py's composite-depth ERROR rule exists to
+    # catch ("this condition mixes a single rule with a group of rules") --
+    # without this check it fell through to _rewrite_atom(cond, ...) below,
+    # which reads only the top-level field/operator/value keys and silently
+    # discards the bucket with ZERO repairs entry logged. Every OTHER
+    # malformed-shape drop in this module logs a 'drop-condition' entry with
+    # error:True per the module's own fail-open contract; this is the one
+    # that did not. Dropped rather than repaired (folding the atom into the
+    # bucket would GUESS which boolean relationship the author intended --
+    # the same never-guess rule as option_id/alias resolution above).
+    if buckets and ({"field", "operator"} & cond.keys()):
+        repairs.append({
+            "action": "drop-condition", "path": owner_path,
+            "detail": "condition mixes atom keys (field/operator) with a "
+                      f"group bucket ({sorted(buckets)}) -- "
+                      "ambiguous which the author intended, condition "
+                      "dropped, field stays visible",
+            "error": True,
+        })
+        return None
+
+    # Already-composite v2 group: rewrite bucket members in place.
     if buckets and not (
         {"field", "operator"} & cond.keys()
     ):
