@@ -25,13 +25,24 @@
  *   and what still works (typing, download, print, save; all true because
  *   retrieval never redeems the link).
  *
- *   The non-English strings here are NOT machine-translated: they are lifted
- *   from resumeStrings.ts's voiceEnding pair, which carries the same message in
- *   the same 17 non-English languages and has already been through the kit
- *   translation pipeline. Reusing reviewed copy beats inventing 18 new drafts
- *   in an immigration-intake context. The English is authored here (it names
- *   the spend ceiling, where voiceEnding only says "finishing") and is
- *   authoritative.
+ *   ALL 18 rows -- English included -- are lifted from resumeStrings.ts's
+ *   voiceEnding pair, which carries this message in the same languages and has
+ *   already been through the kit translation pipeline. Reusing reviewed copy
+ *   beats inventing 18 drafts in an immigration-intake context.
+ *
+ *   English is NOT authored separately here, deliberately (Opus cross-surface
+ *   r1). It was, and it diverged: it said "your answers are safe" while the 17
+ *   translations said "save now so you do not lose your answers" -- opposite
+ *   instructions to clients in the same state -- and only English named the
+ *   cause and the new-link remedy. One string could not be fixed by
+ *   translating the richer English into 17 languages without machine-
+ *   translating an immigration-intake message, so English moved instead.
+ *
+ *   WHAT THIS COPY STILL DOES NOT SAY: that the SPEND CEILING is the cause, or
+ *   that the firm can issue a new link. Both are real losses and both need a
+ *   copy+translation pass, not an English-only edit -- bd polyglot-pdf-7cy2f.
+ *   The title also still reads "is finishing" for a state that has already
+ *   finished; same bead.
  *
  * NOTE (bd polyglot-pdf-jf6w.1): the non-English strings are a first machine-
  * generated draft and should be reviewed by a native/fluent speaker before they
@@ -58,8 +69,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Not Now',
     reconnectingTitle: 'Reconnecting...',
     reconnectingMessage: 'Please wait -- we are having trouble reaching the AI assistant. Your progress is saved and we will reconnect you automatically.',
-    budgetExhaustedTitle: 'The voice assistant has finished for this form',
-    budgetExhaustedMessage: 'You have used the voice time included with this link. Your answers are safe. You can still type your remaining answers, and you can still download, print and save your form. To continue by voice, ask the office that sent you this form for a new link.',
+    budgetExhaustedTitle: 'The voice assistant is finishing',
+    budgetExhaustedMessage: 'Save your form now so you do not lose your answers. You can still type your remaining answers, and you can still download and print your form.',
   },
   'Spanish': {
     title: 'Se Agotó el Tiempo de Conexión',

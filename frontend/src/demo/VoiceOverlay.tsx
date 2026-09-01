@@ -192,8 +192,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// The nudge fires when voice is ENDING for any reason -- the spend
 		// ceiling, an idle timeout, or the form finishing. All three are the last
 		// moment before a client might close the tab.
+		// budget_exhausted is listed EXPLICITLY (bd polyglot-pdf-cke6v). A spend
+		// close used to land on reconnect_failed, so this fired; giving it its
+		// own terminal status silently dropped the one case this comment names
+		// first -- and a client link is exactly who needs the nudge, since the
+		// file they save is their only copy.
 		voiceEnding: status.toLowerCase() === 'idle_timeout'
-			|| status.toLowerCase() === 'reconnect_failed',
+			|| status.toLowerCase() === 'reconnect_failed'
+			|| status.toLowerCase() === 'budget_exhausted',
 		enabled: isClientSession,
 	})
 

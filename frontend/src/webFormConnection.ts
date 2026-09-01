@@ -3534,6 +3534,22 @@ export class WebFormConnection {
     // "disconnected", and a client returning to a used-up link hits exactly it.
     if (event?.reason === "budget_exhausted") {
       console.log('[WebFormConnection] Link spend ceiling reached -- terminal, no reconnect');
+      // TEAR DOWN AN IN-FLIGHT SECTION SWITCH FIRST, or this early return
+      // strands it (Opus cross-surface r1). The budget gate runs on EVERY
+      // /ws/fill connect and the backend accepts before closing, so the new
+      // socket's onopen fires and startSection's catch never runs: it clears
+      // isSectionSwitching and leaves switchInFlight set, waiting on a
+      // session_ready that will never arrive. Returning past the switchInFlight
+      // guard below leaves the watchdog armed, and 15s later it overwrites this
+      // terminal status with `error` -- which restores the Reconnect button
+      // this bead exists to remove. Clearing it here keeps budget_exhausted the
+      // FINAL word.
+      this.clearSectionSwitchWatchdog();
+      this.switchInFlight = false;
+      this.isSectionSwitching = false;
+      // Likewise the GoAway marker: a pre-emptive reconnect that lands on a
+      // spent link must not leave the in-flight flag set for a later close.
+      this.goAwayReconnectInFlight = false;
       this.setStatus("budget_exhausted", "handleClose:budget-exhausted");
       return;
     }

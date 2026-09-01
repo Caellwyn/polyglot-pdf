@@ -107,6 +107,53 @@ describe('a spend-exhausted link is terminal', () => {
     expect(fresh.status).toBe('budget_exhausted');
   });
 
+  it('pins the WIRE TOKENS the backend sends', () => {
+    // CROSS-LANGUAGE CONTRACT with no shared constant: the backend closes with
+    // these literals (websocket_routes.py) and this file string-compares them.
+    // Renaming either side alone silently restores the old broken behavior --
+    // no error, the client just falls back to the retry-then-dead-Reconnect
+    // path. Each side is independently pinned to the same literal: here, and
+    // test_websocket_ephemeral.py's `reason == "budget_exhausted"` assertion
+    // there. Not one source of truth (the languages cannot share one), but a
+    // unilateral change on EITHER side goes red, which is the property that
+    // matters.
+    closeWith(conn, 1013, 'budget_exhausted');
+    expect(conn.status).toBe('budget_exhausted');
+
+    // And the sibling token is NOT terminal -- also part of the contract.
+    const other: any = new WebFormConnection(SCHEMA, {}) as any;
+    other.enableAutoReconnect = true;
+    other.status = 'connected';
+    other.handleClose({ code: 1013, reason: 'budget_unavailable', wasClean: false } as any, undefined);
+    expect(other.status).not.toBe('budget_exhausted');
+  });
+
+  it('stays terminal when the ceiling is hit MID-SECTION-SWITCH', () => {
+    // Opus cross-surface r1, and the failure mode I was least sure of. The
+    // budget gate runs on EVERY connect and the backend accepts before closing,
+    // so a section switch's new socket opens and startSection's catch never
+    // runs: it clears isSectionSwitching and leaves switchInFlight set, waiting
+    // on a session_ready that never comes. If the terminal branch returns past
+    // the switchInFlight guard without tearing that down, the watchdog fires
+    // 15s later and OVERWRITES budget_exhausted with `error` -- which brings
+    // back the Reconnect button this whole bead exists to remove.
+    conn.switchInFlight = true;
+    // ARM THE REAL WATCHDOG -- no optional chaining. A `?.()` on a misremembered
+    // name silently no-ops, leaving no timer to overwrite the status and a test
+    // that passes for the wrong reason.
+    conn.armSectionSwitchWatchdog();
+    expect(conn.sectionSwitchWatchdog).not.toBeNull();
+
+    closeWith(conn, 1013, 'budget_exhausted');
+    expect(conn.status).toBe('budget_exhausted');
+
+    // Past the watchdog's 15s deadline: the status must NOT have moved.
+    vi.advanceTimersByTime(30000);
+    expect(conn.status).toBe('budget_exhausted');
+    expect(statuses).not.toContain('error');
+    expect(conn.switchInFlight).toBe(false);
+  });
+
   it('clears the AI-drop marker, so two modals cannot stack', () => {
     // A Gemini drop sets droppedReconnectInFlight to drive the "trouble
     // reaching the AI" modal. If the budget close does not clear it, that modal
