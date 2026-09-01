@@ -30,8 +30,15 @@ import pytest
 
 from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf
 
-# A field that is read-only in form.pdf AND unlocks via conditional_logic.
-_READONLY_FIELD_ID = "p1_line5a_familyname"
+# A field whose widget is read-only in form.pdf. The unlock descriptor is
+# INJECTED by the test rather than read from the kit (see _unlocking_schema):
+# the shipped applicant-only i-90 kit carries no field with an unlock, so
+# sourcing one from the kit made this guard hostage to kit churn -- it went
+# green-then-red on the v2 kit not because the filler regressed but because the
+# field had been renamed and its read_only dropped. What is under test is
+# apply_field_flag_changes reading pdf_field_flag_change from EITHER relationship
+# key, so the descriptor is the fixture and the kit supplies only the real PDF.
+_READONLY_FIELD_ID = "card_name_family"
 _READONLY_WIDGET_SUFFIX = "P1_Line5a_FamilyName[0]"
 _FILL_VALUE = "RoundtripUnlockTest"
 
@@ -58,8 +65,39 @@ def _widget_value(pdf_bytes: bytes, suffix: str):
 
 @pytest.mark.skipif(not (_KIT_ROOT / "form.pdf").exists(),
                     reason="i-90 kit not present")
-def test_readonly_field_unlocks_and_fills():
+def _unlocking_schema():
+    """The kit schema with an unlock descriptor forced onto the target field.
+
+    Stored under conditional_logic ON PURPOSE: that is the key the gold used and
+    the one bd polyglot-pdf-7a9.16 fixed the filler to read (it previously read
+    only conditional_behavior, so the unlock never fired). Reverting that fix
+    must turn this test red.
+    """
     schema = _load_gold_schema()
+    target = next(
+        (f for f in schema.get("fields", []) if f.get("id") == _READONLY_FIELD_ID),
+        None,
+    )
+    assert target is not None, (
+        f"{_READONLY_FIELD_ID} is absent from the i-90 kit -- repoint this test "
+        "at a field whose widget is read-only in form.pdf"
+    )
+    target["read_only"] = True
+    target["conditional_logic"] = {
+        **(target.get("conditional_logic") or {}),
+        "unlock_method": "flip_readonly_bit",
+        # bit 0 is the PDF ReadOnly field flag; it is SET (1) on this widget in
+        # form.pdf and must be cleared (0) for the field to render editable.
+        # This is verbatim the descriptor the gold kit carried.
+        "pdf_field_flag_change": {
+            "bit": 0, "current_value": 1, "required_value": 0,
+        },
+    }
+    return schema
+
+
+def test_readonly_field_unlocks_and_fills():
+    schema = _unlocking_schema()
 
     # Precondition: the target field is genuinely read-only in the source PDF
     # (otherwise the test would pass without exercising the unlock).
@@ -93,7 +131,7 @@ def test_readonly_field_unlocks_and_fills():
 # Since the schema-v2 migration (bd polyglot-pdf-c5r8) an option's VALUE is a
 # semantic slug (e.g. "white") resolved to its widget via option.pdf_field_name;
 # the widget LEAVES are unchanged (only option.value migrated).
-_RACE_FIELD_ID = "p3_race"
+_RACE_FIELD_ID = "race"
 # Option VALUES (schema-v2 slugs) for White and Black -- what a fill request sends.
 _RACE_SELECTED = ["white", "black_or_african_american"]
 # The widget leaves those two options resolve to.

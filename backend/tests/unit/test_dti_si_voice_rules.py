@@ -495,7 +495,7 @@ def test_i90_height_selects_are_never_force_recited():
     kit = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
     schema = json.loads(kit.read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in schema["fields"]}
-    for fid in ("p3_line8_heightfeet", "p3_line8_heightinches"):
+    for fid in ("height_feet", "height_inches"):
         f = fields[fid]
         assert f["type"] == "select", fid
         text = render_field_guidance(f)
@@ -652,10 +652,32 @@ def _load_kit_field(kit, field_id):
     return next(f for f in schema["fields"] if f["id"] == field_id)
 
 
+def _retired_p7_checkbox7():
+    """The I-90 preparer attorney declaration, frozen as a fixture.
+
+    This field is GONE from the shipped kit and is not coming back: the app is
+    filled by the APPLICANT, so the v2 kit models only applicant-completed
+    fields and drops the whole preparer/interpreter block (maintainer,
+    2026-08-31). It is preserved here because it remains the calibration data
+    for the bd 575i / 41fi two-option threshold -- a 2-option radio whose labels
+    are ~23- and ~27-word legal declarations, i.e. the ONLY known real field on
+    the "too substantive to collapse" side of the boundary. No shipped kit still
+    has one (checked across i-90/w7/f1040), so sourcing it live would silently
+    reduce these guards to testing a single side of the rule.
+
+    Frozen verbatim from the pre-v2 kit, all 17 baked languages intact.
+    """
+    import json
+    from pathlib import Path
+
+    p = Path(__file__).resolve().parent / "fixtures" / "i90_p7_checkbox7_retired.json"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def test_real_yes_no_fields_get_the_natural_question_marker():
     # bd 41fi criterion 1: the two named shipped fields render the two-option
     # marker, not the list recital.
-    for kit, fid in (("i-90", "p3_checkbox4[1]"), ("f1040", "fld_digital_assets")):
+    for kit, fid in (("i-90", "p3_removal_proceedings"), ("f1040", "fld_digital_assets")):
         f = _load_kit_field(kit, fid)
         assert len(f["options"]) == 2, fid
         text = render_field_guidance(f)
@@ -672,7 +694,7 @@ def test_substantive_two_option_pair_keeps_the_full_recital():
     # so ONE natural question drops the representation-scope clause -- load-
     # bearing legal text the user never hears. Too long to fold into one
     # question => the normal recital stands.
-    f = _load_kit_field("i-90", "p7_checkbox7")
+    f = _retired_p7_checkbox7()
     assert len(f["options"]) == 2
     text = render_field_guidance(f)
     assert "Options (2 -- read ALL 2 aloud when asking; " in text
@@ -722,7 +744,11 @@ def test_two_option_word_threshold_boundary_is_inclusive():
 @pytest.mark.parametrize("kit,fid,expect_natural", [
     # The two fields the threshold was calibrated to separate. Both must land
     # on the SAME side in EVERY baked language.
-    ("i-90", "p7_checkbox7", False),
+    # p7_checkbox7 is RETIRED from the shipped kit (applicant-only v2) and is
+    # loaded from a frozen fixture -- see _retired_p7_checkbox7. It stays in this
+    # matrix because it is the only known real field on the False side; dropping
+    # it would leave this guard testing one branch of a two-branch rule.
+    (None, "p7_checkbox7", False),
     ("w7", "previously_received_itin_or_irsn", True),
 ])
 def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_natural):
@@ -740,7 +766,7 @@ def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_
     # Parametrized over EVERY language the kit actually bakes, not a sample:
     # the two failures above hit disjoint language sets, so any fixed sample
     # would have missed one of them.
-    f = _load_kit_field(kit, fid)
+    f = _retired_p7_checkbox7() if kit is None else _load_kit_field(kit, fid)
     languages = sorted({
         lang
         for opt in f["options"]
@@ -989,7 +1015,7 @@ def test_legacy_options_bearing_checkbox_is_treated_as_a_multi_select():
     # Latent: no shipped kit carries this shape (repair retypes it), but a
     # hand-authored, editor-drafted, or pre-repair kit does.
     field = {
-        "id": "p3_race", "name": "Race", "spoken_name": "race",
+        "id": "race", "name": "Race", "spoken_name": "race",
         "type": "checkbox",
         "options": [{"value": "x", "label": "Deaf or hard of hearing"},
                     {"value": "y", "label": "Blind or low vision"}],
@@ -1049,7 +1075,7 @@ def test_real_multi_option_lists_keep_the_unconditional_recital():
     # bd 41fi + c2jy criterion 2: the two fields the original bug was about
     # still get the read-ALL imperative, kit-backed so a schema re-type or a
     # marker regression cannot slip through on synthetic fields alone.
-    for kit, fid, n in (("w7", "reason", 8), ("i-90", "p2_checkbox2[5]", 12)):
+    for kit, fid, n in (("w7", "reason", 8), ("i-90", "reason_section_a", 12)):
         f = _load_kit_field(kit, fid)
         text = render_field_guidance(f)
         assert f"Options ({n} -- read ALL {n} aloud when asking; " in text, fid

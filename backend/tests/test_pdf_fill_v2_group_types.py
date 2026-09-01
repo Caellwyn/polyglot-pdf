@@ -35,7 +35,7 @@ from backend.utils.field_validator import validate_field_value
 
 _KIT_ROOT = Path(__file__).resolve().parents[2] / "form-kits" / "i-90"
 
-_RACE_FIELD_ID = "p3_race"
+_RACE_FIELD_ID = "race"
 # Option VALUES (schema-v2 slugs, bd polyglot-pdf-c5r8) for White and Black --
 # what a fill request sends; each resolves to its own widget via
 # option.pdf_field_name. The widget LEAVES are unchanged by the migration.

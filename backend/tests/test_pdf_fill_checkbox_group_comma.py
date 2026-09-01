@@ -37,7 +37,7 @@ _KIT_ROOT = Path(__file__).resolve().parents[2] / "form-kits" / "i-90"
 # slug (e.g. "white") that the filler resolves to its own widget via
 # option.pdf_field_name; the widget LEAVES below are unchanged (only option.value
 # migrated).
-_RACE_FIELD_ID = "p3_race"
+_RACE_FIELD_ID = "race"
 # Option VALUES (schema-v2 slugs) for White and Black -- what a fill request sends.
 _RACE_SELECTED = ["white", "black_or_african_american"]
 # The widget leaves those two options resolve to (order-matched to _RACE_SELECTED),

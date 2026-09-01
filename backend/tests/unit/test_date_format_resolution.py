@@ -82,7 +82,7 @@ def test_w7_date_of_birth_rejects_iso_and_names_the_right_format():
 
 def test_i90_date_of_birth_resolves_layout_from_validation_hint():
     """i-90 carries the layout in validation.hint as well as help.format_hint."""
-    field = _kit_field("i-90", "p1_line9_dateofbirth")
+    field = _kit_field("i-90", "date_of_birth")
     assert _validate_date(field, "03/15/1985", "dob", "Date of birth") == []
 
 

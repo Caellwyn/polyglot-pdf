@@ -251,7 +251,7 @@ def test_dashed_ssn_is_not_rewritten_and_still_prints_in_full():
     cheaper failure. Restoring the cell look belongs in input normalization (a
     real 'ssn' digit preset), not in the filler.
     """
-    filled = _fill_kit("i-90", _I90_KIT, {"p1_line16_ssn": "123-45-6789"})
+    filled = _fill_kit("i-90", _I90_KIT, {"ssn": "123-45-6789"})
     assert _stored_value(filled, "P1_Line16_SSN[0]") == "123-45-6789"
     assert "123-45-6789" in _rendered_text(filled, "P1_Line16_SSN[0]")
 
@@ -267,7 +267,7 @@ def test_f1040_dashed_ssn_is_not_rewritten():
 def test_a_number_with_its_letter_prefix_relaxes_rather_than_truncating():
     """'A123456789' is 10 chars in 9 cells, so it relaxes -- and prints in full
     rather than losing its last digit to 'A12345678'."""
-    filled = _fill_kit("i-90", _I90_KIT, {"p1_line1_aliennumber": "A123456789"})
+    filled = _fill_kit("i-90", _I90_KIT, {"a_number": "A123456789"})
     printed = _rendered_text(filled, "P1_Line1_AlienNumber[0]")
     assert printed.endswith("A123456789"), printed
 

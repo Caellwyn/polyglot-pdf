@@ -704,7 +704,15 @@ def test_shipped_kits_lint_error_free(kit):
     # known WARNINGs (i-90's readonly-conditional-no-unlock + dump-widget-unclaimed,
     # bd 3fz7/0nxh) -- those are inventoried by test_kit_unfillable_field_inventory
     # below, not asserted away here. This test pins only that no ERROR ships.
-    findings = lint_schema(_load_kit_schema(kit))
+    #
+    # The dump is REQUIRED, not an optimization (bd polyglot-pdf-4we6j): a
+    # dropdown's option value must be the PDF's own export code ('AK', 'WY'),
+    # and option-value-slug exempts a value only when it can see that value in
+    # the form's choice list. Linting dump-less therefore reports every correct
+    # export code as an ERROR -- which is exactly what the i-90 v2 kit's 124
+    # state options hit. Passing the dump also widens this gate to the
+    # dump-dependent rules (widget multi-claim), so it is strictly stronger.
+    findings = lint_schema(_load_kit_schema(kit), _dump_kit(kit))
     assert not has_errors(findings), f"{kit}: " + "; ".join(
         f"{f.rule} {f.path}" for f in findings if f.severity == SEVERITY_ERROR
     )
@@ -745,7 +753,19 @@ def _dump_kit(kit):
 # fixing a form's data (which LOWERS a count) also fails -- prompting a deliberate
 # baseline update as the inventory shrinks toward zero.
 _UNFILLABLE_BASELINE = {
-    "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
+    # i-90 went 0 -> 45 on the v2 kit, and the rise is BY DESIGN, not a
+    # regression: this app is filled by the APPLICANT, so the v2 schema models
+    # only applicant-completed fields. The 45 unclaimed widgets are the blocks
+    # a preparer or interpreter fills, which the applicant must never complete
+    # (maintainer, 2026-08-31): 23 in Part 7 (preparer name/business/address/
+    # phone/fax/email/attestation), 20 in Part 6 (interpreter name/business/
+    # address/phone/email/language), and 2 Part 5 applicant-SIGNATURE widgets
+    # (a wet signature is not app-fillable). The PDF's 7 barcode widgets are
+    # excluded by the rule itself and are not in this count.
+    # Lowering this number means the applicant schema GREW to cover a widget it
+    # previously dropped; raising it again means more non-applicant scope was
+    # removed. Either way, confirm which of the four groups above moved.
+    "i-90": {"dump-widget-unclaimed": 45, "readonly-conditional-no-unlock": 0},
     # w7 went 2 -> 1, but read the SETS, not the count: they are disjoint.
     # The gold pass (bd polyglot-pdf-fjxe) modeled BOTH previously-unclaimed
     # "Other" lines (f1_04, f1_23), which is -2, and simultaneously quarantined
