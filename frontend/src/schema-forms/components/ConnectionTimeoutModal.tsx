@@ -98,9 +98,27 @@ export function ConnectionTimeoutModal({
 
         {/* The transient reconnecting variant is passive: a spinner, no actions.
             The terminal timeout variant keeps its reconnect / not-now buttons.
-            budget_exhausted renders NEITHER -- no spinner (nothing is coming)
-            and no buttons (nothing would work). The message is the whole UI. */}
-        {isBudgetExhausted ? null : isReconnecting ? (
+
+            budget_exhausted gets NO RECOVERY action -- no Reconnect, because
+            nothing would work, and no spinner, because nothing is coming. But
+            it MUST be dismissible (Opus cross-surface r3): this overlay is
+            position:fixed at z-index 10000 over the whole viewport, and the
+            message itself tells the client they can still type, download and
+            print. A terminal message that blocks the page contradicts its own
+            copy -- and because the ending save-nudge silences itself once the
+            client saves, "press Save" would otherwise summon a scrim with no
+            way out. Acknowledging is not recovering. */}
+        {isBudgetExhausted ? (
+          <div className="connection-timeout-modal-buttons">
+            <button
+              className="connection-timeout-modal-button connection-timeout-modal-button--primary"
+              onClick={onCancel}
+              type="button"
+            >
+              {copy.budgetExhaustedDismiss}
+            </button>
+          </div>
+        ) : isReconnecting ? (
           <div
             className="connection-timeout-modal-spinner"
             role="status"

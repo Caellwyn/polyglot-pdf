@@ -6,8 +6,8 @@
 // staring at a Reconnect button that could never work; a variant that renders
 // one anyway would look correct in every screenshot and be wrong in the only
 // way that matters.
-import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { ConnectionTimeoutModal } from './ConnectionTimeoutModal';
 import {
@@ -29,11 +29,41 @@ function renderBudget(language = 'English') {
 }
 
 describe('the spend-exhausted modal', () => {
-  it('offers NO buttons at all', () => {
+  it('offers no RECOVERY action, but IS dismissible', () => {
+    // The first version of this test asserted zero buttons -- and pinned a
+    // trap (Opus cross-surface r3). This overlay is position:fixed at z-index
+    // 10000 across the whole viewport, so a button-less terminal modal
+    // physically blocked the typing and printing its own message promises. On
+    // desktop the client reached it by pressing the save nudge's Save (which
+    // silences the nudge); on mobile, which has no nudge, it fired at once.
+    //
+    // So: exactly one button, and it dismisses rather than recovers.
     renderBudget();
-    // Not "no reconnect button" -- no actions, full stop. Every button on this
-    // surface would be a dead end.
-    expect(screen.queryAllByRole('button')).toEqual([]);
+    const buttons = screen.queryAllByRole('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent)
+      .toBe(CONNECTION_TIMEOUT_TRANSLATIONS['English'].budgetExhaustedDismiss);
+  });
+
+  it('calls onCancel -- not onReconnect -- when that button is pressed', () => {
+    // The distinction that matters: acknowledging is not recovering. Wiring it
+    // to onReconnect would re-run the connect path against a spent link.
+    const onReconnect = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <ConnectionTimeoutModal
+        variant="budget_exhausted"
+        isOpen
+        selectedLanguage="English"
+        onReconnect={onReconnect}
+        onCancel={onCancel}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onReconnect).not.toHaveBeenCalled();
   });
 
   it('does not show the reconnect or not-now labels from the other variant', () => {
@@ -91,7 +121,13 @@ describe('the spend-exhausted modal', () => {
 
     const missing = langs.filter((lang) => {
       const copy = CONNECTION_TIMEOUT_TRANSLATIONS[lang] as ConnectionTimeoutCopy;
-      return !copy.budgetExhaustedTitle?.trim() || !copy.budgetExhaustedMessage?.trim();
+      return (
+        !copy.budgetExhaustedTitle?.trim() ||
+        !copy.budgetExhaustedMessage?.trim() ||
+        // The dismiss label too: without it a client who reads no English
+        // gets a blank button on the only control that unblocks the page.
+        !copy.budgetExhaustedDismiss?.trim()
+      );
     });
     expect(missing).toEqual([]);
   });

@@ -274,6 +274,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// polyglot-pdf-jf6w.2). Reset whenever status leaves reconnect_failed so a
 	// later terminal drop re-shows the modal.
 	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
+	// The spend-ceiling notice is TERMINAL, so unlike reconnectModalDismissed
+	// this is never reset -- no later state should bring it back (bd
+	// polyglot-pdf-cke6v). It exists so the client can get past a full-viewport
+	// overlay to the typing and printing its own message promises they can do.
+	const [budgetModalDismissed, setBudgetModalDismissed] = useState(false)
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
@@ -2784,9 +2789,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			    dismissed or completed the nudge. */}
 			<ConnectionTimeoutModal
 				variant="budget_exhausted"
-				isOpen={status.toLowerCase() === 'budget_exhausted' && saveNudge.variant === null}
+				isOpen={status.toLowerCase() === 'budget_exhausted'
+					&& saveNudge.variant === null
+					&& !budgetModalDismissed}
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => {}}
+				onCancel={() => setBudgetModalDismissed(true)}
 			/>
 		</>
 	)

@@ -95,6 +95,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// User dismissed the connection-timeout modal without reconnecting (bd
 	// polyglot-pdf-jf6w.2); reset when status leaves reconnect_failed.
 	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
+	// Terminal, so never reset (bd polyglot-pdf-cke6v). Mobile is the harder
+	// case: it has no SaveNudge at all, so this overlay is the ONLY thing a
+	// client sees when their link is spent -- and without a dismiss it would
+	// block the form outright.
+	const [budgetModalDismissed, setBudgetModalDismissed] = useState(false)
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')  // Track selected spoken language
@@ -1373,9 +1378,10 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 			    dead Reconnect was hardest to recover from. */}
 			<ConnectionTimeoutModal
 				variant="budget_exhausted"
-				isOpen={status.toLowerCase() === 'budget_exhausted'}
+				isOpen={status.toLowerCase() === 'budget_exhausted' && !budgetModalDismissed}
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => {}}
+				onCancel={() => setBudgetModalDismissed(true)}
 			/>
 			{/* Main FAB */}
 			{/* The FAB is Sol (bd polyglot-pdf-2p4y). It replaces the pulsing blue

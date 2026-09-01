@@ -36,6 +36,7 @@ describe('CONNECTION_TIMEOUT_TRANSLATIONS map', () => {
     // spend-ceiling modal); this list is deliberately hand-written, so adding a
     // key MUST be a conscious edit here rather than something the guard infers.
     expect(englishKeys).toEqual([
+      'budgetExhaustedDismiss',
       'budgetExhaustedMessage',
       'budgetExhaustedTitle',
       'cancelButton',
