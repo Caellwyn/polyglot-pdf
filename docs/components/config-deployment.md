@@ -28,12 +28,11 @@ which bypasses the cache).
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
-  `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
+  `USE_DTI`, `SECRETARY_TIMEOUT_S`,
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
-  `EXTRACTOR_MAX_PDF_MB`, `VAD_START_SENSITIVITY` (default `HIGH`) /
-  `VAD_END_SENSITIVITY` (default `LOW`).
+  `EXTRACTOR_MAX_PDF_MB`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
@@ -50,7 +49,6 @@ which bypasses the cache).
 | `DISABLE_MODEL_THINKING` | `true` | Turn off model "thinking" tokens on the live session (the form-fill loop needs no chain-of-thought; thinking bills at the output rate). When on and the model is 2.5-family, the connect config carries `thinking_config={"thinking_budget": 0}`; 3.1 (different `thinking_level` field) is left at default. Effect on native-audio Live is unverified upstream, so safe-if-ignored. See [voice-ai.md](voice-ai.md). |
 | `USE_DTI` | `true` | Dynamic Turn Injection -- the shipped reduced-SI mode (code default flipped to `true` by bd `polyglot-pdf-7872` on 2026-07-11; `deploy-demo.sh` no longer needs to set it). A thin-principal SI carrying only the static backbone; the CURRENT field's guidance rides the initiating message and each next field's guidance rides the `confirm_field` tool response, instead of dumping the section's fields into the SI. `false` -> the legacy full-SI fallback (`SYSTEM_INSTRUCTION` with the whole current-section field dump). DTI is carried over the manifest-first handshake transport (`handshake_jit` / `jit_mode`). See [schema-forms.md](schema-forms.md), [websocket-routing.md](websocket-routing.md), and [../standards/si-reduction.md](../standards/si-reduction.md). |
 | `CONTINUOUS_SESSION` | `true` | Runs the whole form as one Gemini Live session bounded by context-window compression, instead of resetting the session per section (code default flipped to `true` alongside `USE_DTI` by bd `polyglot-pdf-7872`). Requires `USE_DTI`: if `CONTINUOUS_SESSION` is on and `USE_DTI` is off, `Settings` forces `USE_DTI` on and logs a warning rather than serve the inconsistent combination. `false` -> the legacy per-section-reset flow (used as the measurement-harness baseline). See [context-compression.md](context-compression.md). |
-| `DISABLE_GEMINI_VAD` | `false` (env-overridable) | `false` → native mode (Gemini's automatic VAD detects turns); `true` → manual mode (the client drives turn-taking with `activity_start/end`). See [voice-and-vad.md](../standards/voice-and-vad.md). |
 | `SPELLBACK_TOOL_ENABLED` | `true` | Deterministic spell-back verification clip (bd 22h1f/44ywm): declares the `name_spellback` tool, appends the DTI spell-back addendum to the SI, and un-503s `POST /api/tts/spellback`. See [voice-ai.md](voice-ai.md) and the routes table in [../technical_guide.md](../technical_guide.md). |
 | `INTRO_TTS_ENABLED` | `false` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3): un-503s `POST /api/tts/intro`. The BACKEND half of the epic's two-flag design -- the frontend flag is `VITE_INTRO_CLIP_ENABLED` (below), and the two can skew across the two-surface deploy (skew matrix in `docs/sprint_20_sol-intro-tts_plan.md`; deploy backend first, frontend second). |
 

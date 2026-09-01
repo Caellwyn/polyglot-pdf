@@ -60,11 +60,11 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
    `type: "handshake"` explicitly (bd wq9y) — the backend always defaulted a
    missing `type` to that, so the wire routing is unchanged.
 5. Backend replies `{"type": "session_ready", "session_id": "web_…", "ephemeral":
-   true, "jit_mode_enabled": <bool>, "native_vad": <bool>}`. The `session_id` is an
-   ephemeral per-connection id for log correlation only — it is **not** the
-   `form_session_id`. `native_vad` (= `not DISABLE_GEMINI_VAD`) tells the frontend
-   whether Gemini's own VAD is driving turns, so it can suppress manual activity
-   signals and stream continuous audio (bd polyglot-pdf-333; see voice-and-vad).
+   true, "jit_mode_enabled": <bool>}`. The `session_id` is an ephemeral
+   per-connection id for log correlation only — it is **not** the
+   `form_session_id`. There is no VAD-mode field: push-to-talk is the only input
+   mode, so the frontend always sends manual activity signals and has nothing to
+   negotiate (bd polyglot-pdf-v1m8g; see voice-and-vad).
 
 Malformed handshakes close with specific codes: non-text first frame → `1003`;
 bad JSON / not-an-object / missing schema → `1007`; bad `source` → `1008`.

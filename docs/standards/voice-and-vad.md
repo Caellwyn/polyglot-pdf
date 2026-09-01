@@ -182,10 +182,11 @@ stranded status is visible in the console.
 
 **Spell-back hold** (bd polyglot-pdf-22h1f, flag-gated `SPELLBACK_TOOL_ENABLED`):
 while the deterministic spell-back TTS clip plays, `audioManager.
-setSpellbackHold(true)` hard-gates the mic in EVERY input mode -- under native
-VAD it substitutes zeroed frames (the same silence pattern as PTT mute, so the
-continuous stream native VAD needs stays alive), and in the manual/client-VAD
-modes it drops frames outright. The tool response is held open for the whole
+setSpellbackHold(true)` hard-gates the mic: the frame is DROPPED, so the clip
+cannot leak back in as user speech. (It used to branch -- substituting zeroed
+frames under native VAD, to keep the continuous stream that detector needed alive
+-- but with native VAD gone there is nothing requiring a continuous stream, so
+the drop is unconditional; bd polyglot-pdf-v1m8g.) The tool response is held open for the whole
 clip, but that does NOT park the model (bd polyglot-pdf-kvrfq, wire-verified
 2026-08-26): under user barge-in pressure it keeps emitting further
 `name_spellback` calls, which queue behind the backend's blocked receive loop

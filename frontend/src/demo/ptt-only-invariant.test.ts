@@ -29,12 +29,34 @@ describe('PTT-only invariant (bd polyglot-pdf-v1m8g)', () => {
     expect(source(rel)).not.toContain('handlePushToTalkToggle')
   })
 
-  it.each(OVERLAYS)('%s never flips pushToTalkMode in React state', (rel) => {
-    // The React setter is what a toggle would need. connectionManager
-    // .setPushToTalkMode(...) is a DIFFERENT call (it pushes the constant down to
-    // the audio layer) and is expected to remain.
+  it.each(OVERLAYS)('%s declares no React setter for pushToTalkMode at all', (rel) => {
+    // Guard the PROPERTY -- "no code path can assign to this state" -- not the
+    // shape of the code that was deleted (CLAUDE.md: guard the property, not the
+    // code shape you deleted).
+    //
+    // The first cut matched `setPushToTalkMode(` followed by true|false|newMode|!,
+    // which was hand-fit to the ORIGINAL handler's local variable name. Fresh-eyes
+    // round 2 mutation-tested it and showed a realistic re-introduction slips
+    // straight through: `const next = !pushToTalkMode; setPushToTalkMode(next)` --
+    // the deleted code exactly, with the variable renamed -- passed silently.
+    //
+    // So do not pattern-match the CALL. Assert the setter is never destructured
+    // out of useState in the first place: with no setter binding there is no way
+    // to assign the state, whatever the argument looks like.
     const s = source(rel)
-    expect(s).not.toMatch(/(?<!connectionManager[?.]{0,2})\bsetPushToTalkMode\(\s*(true|false|newMode|!)/)
+    const declaresSetter =
+      /const\s*\[\s*pushToTalkMode\s*,\s*[A-Za-z_$][\w$]*\s*\]\s*=\s*useState/.test(s)
+    expect(
+      declaresSetter,
+      'pushToTalkMode must stay read-only: const [pushToTalkMode] = useState(true)',
+    ).toBe(false)
+
+    // Belt: no BARE `setPushToTalkMode` binding or call may exist.
+    // `connectionManager.setPushToTalkMode(...)` is a different, expected call
+    // (it pushes the constant down to the audio layer), so member accesses are
+    // excluded by requiring a non-`.` character before the name.
+    const bareSetter = /(^|[^.\w$])setPushToTalkMode\s*[(=]/m.test(s)
+    expect(bareSetter, 'no local setPushToTalkMode binding or call may exist').toBe(false)
   })
 
   it.each(OVERLAYS)('%s renders no input-mode toggle control', (rel) => {
