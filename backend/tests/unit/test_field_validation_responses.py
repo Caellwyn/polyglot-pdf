@@ -410,6 +410,9 @@ class TestANumberNestedFormatPreset:
         schema_path = os.path.join(
             os.path.dirname(__file__), "..", "..", "..",
             "form-kits", "i-90", "schema.json")
+        if not os.path.exists(schema_path):
+            pytest.skip("form-kits/i-90/schema.json not present (kit "
+                         "deprecated, bd polyglot-pdf-hydb0)")
         with open(schema_path, encoding="utf-8") as f:
             schema = json.load(f)
         anum = next(fld for fld in schema["fields"]
@@ -526,6 +529,9 @@ class TestNestedValidationConstraints:
         schema_path = os.path.join(
             os.path.dirname(__file__), "..", "..", "..",
             "form-kits", "i-90", "schema.json")
+        if not os.path.exists(schema_path):
+            pytest.skip("form-kits/i-90/schema.json not present (kit "
+                         "deprecated, bd polyglot-pdf-hydb0)")
         with open(schema_path, encoding="utf-8") as f:
             schema = json.load(f)
         return next(fld for fld in schema["fields"] if fld["id"] == field_id)
