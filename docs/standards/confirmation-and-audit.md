@@ -165,7 +165,7 @@ What a delete actually costs is the revision archive, NOT the records: those
 live here, in their own store, and survive. So the danger is a surviving record
 that names a revision nobody can produce any more.
 
-`kit_has_confirmation_records` still raises rather than returning False in THREE
+`kit_has_confirmation_records` still raises rather than returning False in FOUR
 cases, and each still escalates the warning:
 
 1. **The sink is disabled** (`CONFIRMATION_FIRESTORE_ENABLED` defaults false).
