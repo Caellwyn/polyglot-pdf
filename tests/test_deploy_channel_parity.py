@@ -300,6 +300,31 @@ def test_deploy_all_passes_the_flag_to_gcloud():
     assert any('"${SA_FLAG[@]}"' in arg for arg in argv)
 
 
+def test_setup_grants_the_role_that_set_secrets_requires():
+    """The provisioning script must grant what the deploy path depends on.
+
+    Cloud Run refuses a revision whose runtime SA cannot read a bound secret,
+    so passing --set-secrets creates a hard dependency on
+    roles/secretmanager.secretAccessor. The live SA already had it, granted out
+    of band -- but a project rebuilt from setup-gcp-project.sh alone would not,
+    and the failure lands at deploy time on a script someone runs unattended.
+
+    Tied to the SECRETS_FLAG wiring deliberately: if a later change removes the
+    flag this can go too, and if the flag stays the role must.
+    """
+    setup = (REPO_ROOT / "scripts" / "setup-gcp-project.sh").read_text(encoding="utf-8")
+    deploy_all = DEPLOY_ALL.read_text(encoding="utf-8")
+
+    if "SECRETS_FLAG" not in deploy_all:
+        pytest.skip("no --set-secrets wiring, so the role is not required")
+
+    assert "roles/secretmanager.secretAccessor" in setup, (
+        "deploy-all.sh binds secrets via --set-secrets, but "
+        "setup-gcp-project.sh does not grant secretmanager.secretAccessor -- a "
+        "project built from that script cannot deploy"
+    )
+
+
 def test_no_secrets_means_no_flag():
     """A channel that sets nothing must not change the invocation.
 

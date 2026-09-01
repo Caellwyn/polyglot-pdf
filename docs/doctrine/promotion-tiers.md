@@ -1,8 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-9qn64: added the STAGING tier. The
-demo is now the protected outward-facing target -- shown to investors and pilot
-firms -- and staging is the deploy target for finding deploy-only bugs.)*
+*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable

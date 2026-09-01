@@ -60,6 +60,19 @@ ROLES=(
     # empty while the app looks healthy. Re-run this script against an
     # existing project to add the binding.
     "roles/datastore.user"
+    # Secret Manager reader, REQUIRED by the --set-secrets bindings the channel
+    # deploys now pass (bd polyglot-pdf-hvui4): LINK_TOKEN_SECRET is the HMAC
+    # signing key for client links, and Cloud Run refuses a revision whose
+    # runtime SA cannot read a bound secret. Unlike the datastore role above
+    # this fails LOUDLY -- at deploy time, not silently at runtime -- but it
+    # fails on a script someone runs unattended.
+    #
+    # The live polyglot-demo-aa709 SA already holds this, granted OUT OF BAND
+    # (verified 2026-09-01: `gcloud projects get-iam-policy ... --filter
+    # bindings.members:polyglot-backend-sa` lists it). This line closes the gap
+    # so a project rebuilt from this script alone can deploy without a manual
+    # IAM step.
+    "roles/secretmanager.secretAccessor"
 )
 
 for role in "${ROLES[@]}"; do
