@@ -698,9 +698,21 @@ system that is NOT a Firebase account. Five coupled pieces:
   kits (8, 13 and 27 sections) while looking enforced -- caught in review, and
   pinned by `test_the_cost_counter_SURVIVES_a_section_switch`.
 
-  The client is NOT yet told why voice stopped: no frontend code reads the
-  close code or reason, so a budget-exhausted client sees the generic
-  bounded-retry path and a "reconnect failed" modal (bd polyglot-pdf-cke6v).
+  The client IS told why voice stopped (bd polyglot-pdf-cke6v, shipped).
+  `webFormConnection.handleClose` branches on the close REASON, not the code:
+  `budget_exhausted` returns early with a terminal status of the same name --
+  no retries -- and both overlays show a modal carrying the translated
+  voice-ending copy. `budget_unavailable` is deliberately NOT matched, because
+  an unreachable spend store IS transient and must keep the ordinary retry
+  path. Same code (1013), opposite handling; the two tokens are matched by
+  STRING COMPARE with no shared constant, so renaming either side silently
+  restores the old behavior -- each side carries its own pinning test.
+
+  That modal offers NO recovery action (a Reconnect could never work) but IS
+  dismissible: it is a full-viewport overlay, and its own copy promises the
+  client can still type, download and print -- so blocking the page would
+  contradict it. On desktop it yields to the save nudge, which carries the same
+  words plus a working Save button.
 
   Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
   and are tested in `link_budget.cost_ceiling_usd_for_kit`, but the socket

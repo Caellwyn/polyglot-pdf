@@ -238,7 +238,7 @@ export class WebFormConnection {
   // an in-flight one -- else it would leak `true` and misfire the modal on a later
   // blip; two independent fresh-eyes reviews). Cleared in setStatus only on a
   // SETTLED status (connected / reconnect_failed / error / idle_timeout /
-  // disconnected) -- NOT on the intermediate "connecting" a backoff-driven reopen
+  // disconnected / budget_exhausted) -- NOT on the intermediate "connecting" a backoff-driven reopen
   // passes through, else the modal would vanish mid-recovery -- AND explicitly in
   // handleSessionReady. Read by the overlay to gate the modal. (fresh-eyes: the bare "reconnecting"
   // status is NOT unique to the drop path.)
@@ -4180,7 +4180,7 @@ export class WebFormConnection {
 
     // Clear the drop-driven-reconnect marker only on a SETTLED status (bd
     // polyglot-pdf-ppfy): "connected" = recovered, and reconnect_failed / error /
-    // idle_timeout / disconnected = gave up. NOT on the intermediate "connecting"
+    // idle_timeout / disconnected / budget_exhausted = gave up. NOT on the intermediate "connecting"
     // that a live drop reconnect passes through -- a drop reconnect whose first
     // socket fails falls into attemptReconnect's backoff, whose connect() sets
     // "connecting"; clearing there would drop the marker mid-recovery and the

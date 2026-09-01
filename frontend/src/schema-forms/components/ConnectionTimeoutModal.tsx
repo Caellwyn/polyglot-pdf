@@ -109,15 +109,23 @@ export function ConnectionTimeoutModal({
             client saves, "press Save" would otherwise summon a scrim with no
             way out. Acknowledging is not recovering. */}
         {isBudgetExhausted ? (
-          <div className="connection-timeout-modal-buttons">
-            <button
-              className="connection-timeout-modal-button connection-timeout-modal-button--primary"
-              onClick={onCancel}
-              type="button"
-            >
-              {copy.budgetExhaustedDismiss}
-            </button>
-          </div>
+          // REQUIRES onCancel. Rendering the button without a handler would
+          // give the client a dead control on a full-viewport overlay -- the
+          // unclosable scrim this variant exists to avoid, wearing a button
+          // (Opus cross-surface r4). Failing loudly in dev beats shipping a
+          // trap: both current callers pass it, and a future one that forgets
+          // sees an obviously-missing dismiss rather than a fake one.
+          onCancel ? (
+            <div className="connection-timeout-modal-buttons">
+              <button
+                className="connection-timeout-modal-button connection-timeout-modal-button--primary"
+                onClick={onCancel}
+                type="button"
+              >
+                {copy.budgetExhaustedDismiss}
+              </button>
+            </div>
+          ) : null
         ) : isReconnecting ? (
           <div
             className="connection-timeout-modal-spinner"

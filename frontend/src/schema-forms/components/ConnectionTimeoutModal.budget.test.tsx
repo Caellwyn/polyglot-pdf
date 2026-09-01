@@ -18,12 +18,16 @@ import {
 afterEach(() => cleanup());
 
 function renderBudget(language = 'English') {
+  // onCancel is REQUIRED for this variant -- the dismiss is what stops a
+  // full-viewport overlay from trapping the client, so the component renders
+  // no button without a handler rather than a dead one.
   render(
     <ConnectionTimeoutModal
       variant="budget_exhausted"
       isOpen
       selectedLanguage={language}
       onReconnect={() => {}}
+      onCancel={() => {}}
     />,
   );
 }
@@ -130,6 +134,21 @@ describe('the spend-exhausted modal', () => {
       );
     });
     expect(missing).toEqual([]);
+  });
+
+  it('renders NO button rather than a dead one when onCancel is missing', () => {
+    // Opus cross-surface r4: the button used to render unconditionally while
+    // onCancel is optional, so a future caller that forgot it would resurrect
+    // the unclosable scrim -- with a button that looks like the way out.
+    render(
+      <ConnectionTimeoutModal
+        variant="budget_exhausted"
+        isOpen
+        selectedLanguage="English"
+        onReconnect={() => {}}
+      />,
+    );
+    expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
   it('stays closed when isOpen is false', () => {
