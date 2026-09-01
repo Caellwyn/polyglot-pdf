@@ -159,6 +159,7 @@ class NoticeRequest(BaseModel):
 @router.post("/api/tts/notice")
 async def notice_tts(
     request: NoticeRequest,
+    http_request: Request,
     _user: dict = Depends(require_auth),
 ) -> Response:
     """Speak one of our own safety notices. FREE, deliberately.
@@ -189,8 +190,12 @@ async def notice_tts(
         _log.error("notice_tts_failed", error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="tts synthesis failed")
 
-    return Response(
-        content=audio,
-        media_type="audio/mpeg",
-        headers={"ETag": etag, "Cache-Control": "private, max-age=86400"},
-    )
+    # Same manual-revalidation contract as the intro route above (bd
+    # polyglot-pdf-see5j): browsers neither cache POST responses nor
+    # auto-send If-None-Match on POST, so the client must store this ETag
+    # itself and hand-attach If-None-Match on a re-fetch to get the 304
+    # instead of re-downloading the clip.
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=86400"}
+    if http_request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=audio, media_type="audio/mpeg", headers=headers)
