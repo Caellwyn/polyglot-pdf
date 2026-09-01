@@ -22,9 +22,6 @@
  */
 
 export interface OverlayStrings {
-  inputMode: string;        // label for the PTT/Auto toggle row
-  modeAuto: string;         // continuous-mic mode name
-  modePTT: string;          // push-to-talk mode name (acronym kept as-is)
   holdToTalk: string;       // PTT button, idle state, desktop (icon added in JSX)
   tapHoldToTalk: string;    // PTT button, idle state, mobile (no spacebar hint)
   recording: string;        // PTT button, held state
@@ -40,9 +37,6 @@ export interface OverlayStrings {
 
 export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
   'English': {
-    inputMode: 'Input Mode:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Hold to Talk (or Spacebar)',
     tapHoldToTalk: 'Tap & Hold to Talk',
     recording: 'Recording...',
@@ -56,9 +50,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Microphone Error:',
   },
   'Spanish': {
-    inputMode: 'Modo de entrada:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Mantenga presionado para hablar (o barra espaciadora)',
     tapHoldToTalk: 'Mantenga presionado para hablar',
     recording: 'Grabando...',
@@ -72,9 +63,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Error de micrófono:',
   },
   'Chinese': {
-    inputMode: '输入模式：',
-    modeAuto: '自动',
-    modePTT: 'PTT',
     holdToTalk: '按住说话（或空格键）',
     tapHoldToTalk: '按住说话',
     recording: '录音中...',
@@ -88,9 +76,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: '麦克风错误：',
   },
   'Tagalog': {
-    inputMode: 'Paraan ng Input:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Pindutin nang matagal para magsalita (o Spacebar)',
     tapHoldToTalk: 'Pindutin nang matagal para magsalita',
     recording: 'Nagre-record...',
@@ -104,9 +89,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Error sa Mikropono:',
   },
   'Arabic': {
-    inputMode: 'وضع الإدخال:',
-    modeAuto: 'تلقائي',
-    modePTT: 'PTT',
     holdToTalk: 'اضغط مع الاستمرار للتحدث (أو مفتاح المسافة)',
     tapHoldToTalk: 'اضغط مع الاستمرار للتحدث',
     recording: 'جارٍ التسجيل...',
@@ -120,9 +102,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'خطأ في الميكروفون:',
   },
   'French': {
-    inputMode: 'Mode de saisie :',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: "Maintenez pour parler (ou barre d'espace)",
     tapHoldToTalk: 'Appuyez et maintenez pour parler',
     recording: 'Enregistrement...',
@@ -136,9 +115,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Erreur de microphone :',
   },
   'Korean': {
-    inputMode: '입력 모드:',
-    modeAuto: '자동',
-    modePTT: 'PTT',
     holdToTalk: '누른 채로 말하기 (또는 스페이스바)',
     tapHoldToTalk: '길게 눌러 말하기',
     recording: '녹음 중...',
@@ -152,9 +128,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: '마이크 오류:',
   },
   'German': {
-    inputMode: 'Eingabemodus:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Zum Sprechen gedrückt halten (oder Leertaste)',
     tapHoldToTalk: 'Zum Sprechen gedrückt halten',
     recording: 'Aufnahme...',
@@ -168,9 +141,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Mikrofonfehler:',
   },
   'Portuguese': {
-    inputMode: 'Modo de entrada:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Segure para falar (ou barra de espaço)',
     tapHoldToTalk: 'Toque e segure para falar',
     recording: 'Gravando...',
@@ -184,9 +154,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Erro de microfone:',
   },
   'Hindi': {
-    inputMode: 'इनपुट मोड:',
-    modeAuto: 'ऑटो',
-    modePTT: 'PTT',
     holdToTalk: 'बोलने के लिए दबाए रखें (या स्पेसबार)',
     tapHoldToTalk: 'बोलने के लिए दबाकर रखें',
     recording: 'रिकॉर्डिंग...',
@@ -200,9 +167,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'माइक्रोफ़ोन त्रुटि:',
   },
   'Italian': {
-    inputMode: 'Modalità di input:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Tieni premuto per parlare (o barra spaziatrice)',
     tapHoldToTalk: 'Tieni premuto per parlare',
     recording: 'Registrazione...',
@@ -216,9 +180,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Errore del microfono:',
   },
   'Urdu': {
-    inputMode: 'اِن پٹ موڈ:',
-    modeAuto: 'خودکار',
-    modePTT: 'PTT',
     holdToTalk: 'بولنے کے لیے دبائے رکھیں (یا اسپیس بار)',
     tapHoldToTalk: 'بولنے کے لیے دبائے رکھیں',
     recording: 'ریکارڈنگ جاری ہے...',
@@ -232,9 +193,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'مائیکروفون کی خرابی:',
   },
   'Persian': {
-    inputMode: 'حالت ورودی:',
-    modeAuto: 'خودکار',
-    modePTT: 'PTT',
     holdToTalk: 'برای صحبت نگه دارید (یا کلید فاصله)',
     tapHoldToTalk: 'برای صحبت نگه دارید',
     recording: 'در حال ضبط...',
@@ -248,9 +206,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'خطای میکروفون:',
   },
   'Dutch': {
-    inputMode: 'Invoermodus:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Ingedrukt houden om te spreken (of spatiebalk)',
     tapHoldToTalk: 'Houd ingedrukt om te spreken',
     recording: 'Opnemen...',
@@ -264,9 +219,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Microfoonfout:',
   },
   'Ukrainian': {
-    inputMode: 'Режим введення:',
-    modeAuto: 'Авто',
-    modePTT: 'PTT',
     holdToTalk: 'Утримуйте, щоб говорити (або пробіл)',
     tapHoldToTalk: 'Натисніть і утримуйте, щоб говорити',
     recording: 'Запис...',
@@ -280,9 +232,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Помилка мікрофона:',
   },
   'Russian': {
-    inputMode: 'Режим ввода:',
-    modeAuto: 'Авто',
-    modePTT: 'PTT',
     holdToTalk: 'Удерживайте, чтобы говорить (или пробел)',
     tapHoldToTalk: 'Нажмите и удерживайте, чтобы говорить',
     recording: 'Запись...',
@@ -296,9 +245,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Ошибка микрофона:',
   },
   'Swedish': {
-    inputMode: 'Inmatningsläge:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
     holdToTalk: 'Håll ned för att tala (eller mellanslag)',
     tapHoldToTalk: 'Håll ned för att tala',
     recording: 'Spelar in...',
@@ -312,9 +258,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     micErrorLabel: 'Mikrofonfel:',
   },
   'Afrikaans': {
-    inputMode: 'Invoermodus:',
-    modeAuto: 'Outo',
-    modePTT: 'PTT',
     holdToTalk: 'Hou in om te praat (of spasiebalk)',
     tapHoldToTalk: 'Hou in om te praat',
     recording: 'Neem op...',

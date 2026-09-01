@@ -75,13 +75,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// breakpoint cross) restore the user's actual choice from the connection rather
 	// than resetting to true (Codex review PR #119) -- otherwise a flip silently
 	// reverts Auto back to PTT and stops streaming.
-	const [pushToTalkMode, setPushToTalkMode] = useState(
-		() => sharedConnectionManager?.getPushToTalkMode?.() ?? true
-	)
-	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD drives turns. Set by
-	// the backend at session_ready (mirror of DISABLE_GEMINI_VAD). When true the
-	// manual PTT toggle does not apply, so it is disabled and the displayed mode
-	// reflects native VAD instead of a stale "PTT".
+	// PTT is the ONLY input mode (bd polyglot-pdf-v1m8g), so this is a constant,
+	// not a restored user choice -- the mode toggle that used to set it is gone.
+	// Kept as state rather than inlined `true` because the PTT press/release
+	// handlers and the audio gate still read it as the "is PTT active" predicate.
+	const [pushToTalkMode] = useState(true)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	// Live mic-energy meter (bd polyglot-pdf-s3zv): mirrors the desktop overlay.
 	// `micEnergy` is the worklet's smoothed RMS (0-100); `micSending` is whether the
@@ -1067,39 +1065,6 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// worklet noise gate bypassed under native VAD, so toggling PTT off does not
 	// re-arm the RMS gate. Manual activity_start/end stay suppressed in native mode
 	// (connection.ts); PTT only decides which bytes are sent.
-	const handlePushToTalkToggle = async () => {
-		const newMode = !pushToTalkMode
-		setPushToTalkMode(newMode)
-
-		// Update connection manager PTT mode (disables energy-based barge-in)
-		connectionManager?.setPushToTalkMode(newMode)
-		// A mode toggle ends any notion of an active hold; clear the hold flag so it
-		// can never go stale-true across the mode change (bd polyglot-pdf-qt7w).
-		connectionManager?.setPushToTalkHeld(false)
-
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
-		                            status.toLowerCase().startsWith('connected ') || 
-		                            status.toLowerCase() === 'switching_section' || 
-		                            status.toLowerCase().startsWith('reconnecting')
-		
-		const audioManager = connectionManager?.getAudioManager()
-		
-		// FIX (Nov 7, 2025): Notify audio worklet about PTT mode (bypasses noise gate)
-		audioManager?.setPTTMode(newMode)
-		
-		if (newMode) {
-			// Switching to PTT: pause VAD
-			vad.pause()
-			// Mute input so only silence is sent until button is pressed
-			audioManager?.muteInput()
-		} else {
-			// Switching to VAD mode
-			// FIX #2: VAD will auto-start via consolidated useEffect (monitors pushToTalkMode)
-			// Unmute input for normal VAD operation
-			audioManager?.unmuteInput()
-		}
-	}
-
 	// Handle push-to-talk button press (touch)
 	// TABLET FIX: Wrapper for touch events that prevents context menu
 	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
@@ -1513,30 +1478,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 						</div>
 
 
-					{/* Input-mode toggle. PTT is a client-side audio gate that works in
-					    BOTH modes: native Gemini VAD always runs on the backend; PTT (on)
-					    sends audio only while held (noisy-room support), PTT (off) streams
-					    continuously. Always enabled. Left icon = continuous, right = PTT. */}
-					<div className="vff-ptt-toggle-container-mobile">
-						<label
-							className="vff-ptt-toggle-label-mobile"
-							title={pushToTalkMode
-								? 'Push-to-talk: audio is sent only while you hold the button (good for noisy rooms).'
-								: 'Continuous: your mic streams to Gemini and its voice detection decides when you are speaking.'}
-						>
-							<span className="vff-ptt-icon-left">🎤</span>
-							<div className="vff-ptt-toggle-switch-mobile">
-								<input
-									type="checkbox"
-									checked={pushToTalkMode}
-									onChange={handlePushToTalkToggle}
-									className="vff-ptt-toggle-input-mobile"
-								/>
-								<span className="vff-ptt-toggle-slider-mobile"></span>
-							</div>
-							<span className="vff-ptt-icon-right">⌨️</span>
-						</label>
-					</div>
 
 					{/* Push-to-Talk bar: visible whenever PTT gating is on (works in
 					    native VAD too -- it gates the client audio bytes). */}
@@ -1915,12 +1856,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 					box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 				}
 
-				.vff-ptt-toggle-mobile {
-					padding: 10px 12px;
-					background: #f8f9ff;
-					border-radius: 8px;
-					border: 1px solid #d0dbff;
-				}
 
 				.vff-toggle-label-row {
 					display: flex;
@@ -2108,84 +2043,19 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				}
 
 				/* Mobile Adjustments */
-				/* Mobile PTT Toggle Styles - Row 1, columns 3-4 */
-			.vff-ptt-toggle-container-mobile {
-				grid-column: 3 / 5;
-				grid-row: 1;
-				padding: 8px;
-				background: #f8f9ff;
-				border-radius: 6px;
-				border: 1px solid #d0dbff;
-				display: flex;
-				justify-content: center;
-			}
 
-			.vff-ptt-toggle-label-mobile {
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				gap: 6px;
-				cursor: pointer;
-			}
 
 			.vff-ptt-label-text-mobile {
 				display: none;
 			}
 
-			.vff-ptt-icon-left,
-			.vff-ptt-icon-right {
-				font-size: 16px;
-			}
 
-			.vff-ptt-toggle-switch-mobile {
-				position: relative;
-				display: inline-block;
-				width: 50px;
-				height: 24px;
-			}
 
-			.vff-ptt-toggle-input-mobile {
-				opacity: 0;
-				width: 0;
-				height: 0;
-			}
 
-			.vff-ptt-toggle-slider-mobile {
-				position: absolute;
-				cursor: pointer;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				background-color: #667eea;
-				transition: 0.3s;
-				border-radius: 24px;
-			}
 
-			.vff-ptt-toggle-slider-mobile:before {
-				content: "";
-				position: absolute;
-				height: 18px;
-				width: 18px;
-				left: 3px;
-				bottom: 3px;
-				background-color: white;
-				transition: 0.3s;
-				border-radius: 50%;
-				box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-			}
 
-			.vff-ptt-toggle-input-mobile:checked + .vff-ptt-toggle-slider-mobile {
-				background-color: #4c51bf;
-			}
 
-			.vff-ptt-toggle-input-mobile:checked + .vff-ptt-toggle-slider-mobile:before {
-				transform: translateX(26px);
-			}
 
-			.vff-ptt-toggle-input-mobile:focus + .vff-ptt-toggle-slider-mobile {
-				box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
-			}
 
 			/* Mobile PTT Bar Button - Row 3, full width, maximum accessibility */
 			.vff-ptt-bar-container {

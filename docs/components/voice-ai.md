@@ -144,16 +144,18 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   callers that need to know whether Gemini actually got the text (e.g. the
   validator-steer hold) check the return instead of assuming success.
 
-## Activity signals (VAD modes)
+## Activity signals
 
-Turn-taking depends on the `DISABLE_GEMINI_VAD` flag (bd polyglot-pdf-333; default
-`False` = **native** Gemini VAD). In **manual** mode (`DISABLE_GEMINI_VAD=True`)
-the adapter sends `send_activity_start()` / `send_activity_end()` →
-`session.send_realtime_input(activity_start=types.ActivityStart())` /
-`ActivityEnd()` (both guard on `self._current_session is None`). In **native**
-mode these methods **no-op early** -- Gemini's own VAD drives turns, so forwarding
-manual signals would create a conflicting turn-taking state. Full rationale, the
-single-toggle revert, and the frontend continuous-audio requirement are in
+There is no VAD mode (bd polyglot-pdf-v1m8g). Push-to-talk owns activation, so
+`send_activity_start()` / `send_activity_end()` are the ONLY turn signal and fire
+unconditionally -> `session.send_realtime_input(activity_start=types.ActivityStart())`
+/ `ActivityEnd()` (both guard on `self._current_session is None`, and nothing
+else). `_build_vad_settings` returns the constant `{'disabled': True}`.
+
+The `DISABLE_GEMINI_VAD` flag, the native/manual split it selected, and the
+early-return guard that dropped manual signals when Gemini's own detector was
+running are all gone -- PTT *knows* when the user is speaking, so a second gate
+inferring it could only disagree. Full rationale in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
 ## Barge-in

@@ -1762,8 +1762,10 @@ class LiveAIGemini(ILiveAI):
                 resuming=bool(self._resumption_handle),
             )
 
-        # Enable automatic voice activity detection for realtime audio input
-        # This allows Gemini to detect when user starts/stops speaking
+        # DISABLE Gemini's automatic voice activity detection (bd polyglot-pdf-v1m8g).
+        # _build_vad_settings returns the constant {'disabled': True}: push-to-talk
+        # owns activation and brackets turns with activity_start/end, so a second
+        # detector inferring the same thing could only disagree with it.
         try:
             config["realtime_input_config"] = {
                 "automatic_activity_detection": self._build_vad_settings(settings)

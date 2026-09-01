@@ -97,9 +97,9 @@ generation on the same connection, so an unpaired block would kill it -- the
 nm7z trap; `flushAudioQueue` keeps the blocking behavior for the
 pause/section-switch paths and delegates the drain).
 See [voice-ai.md](../components/voice-ai.md#barge-in).
-**Push-to-talk mode** (`setPushToTalkMode(true)`, the default in `VoiceOverlay`)
-disables the energy-based barge-in path entirely (`onVADSpeechStart`/`End`
-early-return).
+**Push-to-talk** (`setPushToTalkMode(true)`) is the ONLY mode -- there is no
+alternative to be the default against (bd polyglot-pdf-v1m8g) -- and it disables
+the energy-based barge-in path entirely (`onVADSpeechStart`/`End` early-return).
 
 > **The instant client-side flush does not run.** It lived on the Silero
 > `onVADSpeechStart` path, which PTT mode early-returns from — and PTT is the only

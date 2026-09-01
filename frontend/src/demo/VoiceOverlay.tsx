@@ -97,19 +97,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// overlay is remounted onto an ALREADY-LIVE session (a desktop<->mobile
 	// breakpoint cross) restore the user's actual choice from the connection rather
 	// than resetting to true (Codex review PR #119).
-	const [pushToTalkMode, setPushToTalkMode] = useState(
-		() => sharedConnectionManager?.getPushToTalkMode?.() ?? true
-	)
-	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD is driving turns. Set
-	// by the backend at session_ready (mirror of DISABLE_GEMINI_VAD) and reported
-	// via connectionManager.isNativeVad(). When true, Gemini's VAD streams
-	// continuous audio and the manual PTT control does not apply -- the toggle is
-	// disabled and the displayed mode reflects native VAD (not a stale "PTT").
-	// Continuous-session mode (bd polyglot-pdf-x8rt): when on, the form is one
-	// session with no sections to navigate -- the section-picker dropdown is hidden
-	// so a user cannot trigger a manual section switch (which would reset the
-	// session we deliberately keep open). Read from the persisted form state, which
-	// handleSessionReady sets from the backend flag.
+	// PTT is the ONLY input mode (bd polyglot-pdf-v1m8g), so this is a constant,
+	// not a restored user choice -- the mode toggle that used to set it is gone.
+	// Kept as state rather than inlined `true` because the PTT press/release
+	// handlers and the audio gate still read it as the "is PTT active" predicate.
+	const [pushToTalkMode] = useState(true)
 	const [continuousSession, setContinuousSession] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
@@ -961,51 +953,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
 
 	// Handle push-to-talk mode toggle
-	const handlePushToTalkToggle = async () => {
-		// PTT is a CLIENT-SIDE AUDIO GATE layered on top of native VAD (user request,
-		// noisy-room support): native Gemini VAD always runs on the backend, but PTT
-		// can still gate which client audio bytes reach Gemini. So we run the full
-		// mute/unmute + worklet reconfig regardless of native-VAD mode. (We still
-		// never send manual activity_start/end in native mode -- those stay
-		// suppressed in connection.ts; PTT only decides which bytes are sent.)
-		const newMode = !pushToTalkMode
-		setPushToTalkMode(newMode)
-
-		// Update connection manager PTT mode (disables energy-based barge-in)
-		connectionManager?.setPushToTalkMode(newMode)
-		// A mode toggle ends any notion of an active hold; clear the hold flag so it
-		// can never go stale-true across the mode change (bd polyglot-pdf-qt7w). Both
-		// branches below re-apply the correct mute/unmute for the new mode.
-		connectionManager?.setPushToTalkHeld(false)
-
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
-			status.toLowerCase().startsWith('connected ') ||
-			status.toLowerCase() === 'switching_section' ||
-			status.toLowerCase().startsWith('reconnecting')
-
-		if (newMode) {
-			// Switching to push-to-talk: pause VAD (but keep mic recording for heartbeat)
-			vad.pause()
-			// Mute input so only silence is sent until button is pressed
-			const audioManager = connectionManager?.getAudioManager()
-			audioManager?.muteInput()
-		} else {
-			// Switching to VAD mode
-			// FIX #2: VAD will auto-start via consolidated useEffect (monitors pushToTalkMode)
-			// Unmute input for normal VAD operation
-			const audioManager = connectionManager?.getAudioManager()
-			audioManager?.unmuteInput()
-		}
-
-		// Blur the checkbox so spacebar doesn't toggle it again
-		setTimeout(() => {
-			const checkbox = document.activeElement as HTMLElement
-			if (checkbox && checkbox.tagName === 'INPUT') {
-				checkbox.blur()
-			}
-		}, 0)
-	}
-
 	// Handle push-to-talk button press (mouse/touch)
 	// TABLET FIX: Wrapper for touch events that prevents context menu
 	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
@@ -1922,34 +1869,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					    noisy rooms so background noise doesn't trip Gemini's VAD. PTT on =
 					    "PTT" (send only while held); PTT off = "Auto" (stream
 					    continuously). The toggle is always enabled. */}
-					<div className="vff-ptt-toggle-container">
-						<label
-							className="vff-ptt-toggle-label"
-							title={pushToTalkMode
-								? 'Push-to-talk: audio is sent only while you hold the button (good for noisy rooms).'
-								: 'Continuous: your mic streams to Gemini and its voice detection decides when you are speaking.'}
-						>
-							<span className="vff-ptt-label-text">{overlayText.inputMode}</span>
-							<div className="vff-ptt-toggle-switch">
-								<input
-									type="checkbox"
-									checked={pushToTalkMode}
-									onChange={handlePushToTalkToggle}
-									className="vff-ptt-toggle-input"
-									onKeyDown={(e) => {
-										if (e.code === 'Space') {
-											e.preventDefault() // Prevent spacebar from toggling checkbox when focused
-										}
-									}}
-								/>
-								<span className="vff-ptt-toggle-slider">
-									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-auto">🎤</span>
-									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
-								</span>
-							</div>
-							<span className="vff-ptt-mode-label">{pushToTalkMode ? overlayText.modePTT : overlayText.modeAuto}</span>
-						</label>
-					</div>
 
 					{/* Push-to-Talk button: visible whenever PTT gating is on (works in
 					    native VAD too -- it gates the client audio bytes). */}
@@ -2346,12 +2265,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					margin-bottom: 16px;
 				}
 
-				.vff-ptt-toggle {
-					padding: 12px;
-					background: #f8f9ff;
-					border-radius: 8px;
-					border: 1px solid #d0dbff;
-				}
 
 				.vff-toggle-label-row {
 					display: flex;
@@ -2427,113 +2340,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					text-align: center;
 				}
 
-				/* PTT Toggle Container */
-				.vff-ptt-toggle-container {
-					padding: 12px;
-					background: #f8f9ff;
-					border-radius: 8px;
-					border: 1px solid #d0dbff;
-					margin-bottom: 12px;
-				}
 
-				.vff-ptt-toggle-label {
-					display: flex;
-					align-items: center;
-					justify-content: space-between;
-					gap: 10px;
-					cursor: pointer;
-				}
 
-				.vff-ptt-label-text {
-					font-size: 13px;
-					font-weight: 600;
-					color: #374151;
-				}
 
-				.vff-ptt-toggle-switch {
-					position: relative;
-					display: inline-block;
-					width: 50px;
-					height: 24px;
-				}
 
-				.vff-ptt-toggle-input {
-					opacity: 0;
-					width: 0;
-					height: 0;
-				}
 
-				.vff-ptt-toggle-slider {
-					position: absolute;
-					cursor: pointer;
-					top: 0;
-					left: 0;
-					right: 0;
-					bottom: 0;
-					background-color: #667eea;
-					transition: 0.3s;
-					border-radius: 24px;
-					display: flex;
-					align-items: center;
-					justify-content: space-between;
-					padding: 0 4px;
-				}
 
-				.vff-ptt-toggle-slider:before {
-					content: "";
-					position: absolute;
-					height: 18px;
-					width: 18px;
-					left: 3px;
-					bottom: 3px;
-					background-color: white;
-					transition: 0.3s;
-					border-radius: 50%;
-					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-					z-index: 1;
-				}
 
-				.vff-ptt-toggle-input:checked + .vff-ptt-toggle-slider {
-					background-color: #4c51bf;
-				}
 
-				.vff-ptt-toggle-input:checked + .vff-ptt-toggle-slider:before {
-					transform: translateX(26px);
-				}
 
-				.vff-ptt-toggle-input:focus + .vff-ptt-toggle-slider {
-					box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
-				}
 
-				.vff-ptt-toggle-icon {
-					font-size: 12px;
-					opacity: 0.7;
-					transition: opacity 0.3s;
-				}
 
-				.vff-ptt-toggle-icon-auto {
-					order: 1;
-				}
 
-				.vff-ptt-toggle-icon-ptt {
-					order: 2;
-				}
 
-				.vff-ptt-toggle-input:not(:checked) ~ .vff-ptt-toggle-slider .vff-ptt-toggle-icon-auto {
-					opacity: 1;
-				}
 
-				.vff-ptt-toggle-input:checked ~ .vff-ptt-toggle-slider .vff-ptt-toggle-icon-ptt {
-					opacity: 1;
-				}
 
-				.vff-ptt-mode-label {
-					font-size: 13px;
-					font-weight: 600;
-					color: #6b7280;
-					min-width: 40px;
-					text-align: right;
-				}
 
 			.vff-ptt-button-container {
 				margin-bottom: 12px;
