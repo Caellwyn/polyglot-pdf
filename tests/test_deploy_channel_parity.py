@@ -246,6 +246,37 @@ def test_deploy_all_builds_the_flag_from_backend_secrets():
     assert '[ -n "$BACKEND_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")' in text
 
 
+def _gcloud_run_deploy_argv(text: str) -> list[str]:
+    """The ARGUMENT lines of the gcloud run deploy invocation, comments removed.
+
+    Follows backslash continuations from the command line and stops at the
+    first line that does not continue -- which is what "the invocation" means.
+
+    An earlier version sliced to the next blank line. That overran by ~14 lines
+    (the line after the last argument is four spaces, not empty), so a reviewer
+    disabled the flag and left the literal in a trailing COMMENT: gcloud never
+    saw --set-secrets, bash -n parsed clean, and the suite passed 12/12. Being
+    NEAR the invocation is not being IN it -- the same containment-vs-proximity
+    error this repo has paid for before.
+    """
+    lines = text.splitlines()
+    start = next(i for i, l in enumerate(lines) if "gcloud run deploy" in l)
+
+    argv: list[str] = []
+    i = start
+    while i < len(lines):
+        line = lines[i]
+        # A comment line is not an argument, even mid-continuation.
+        code = line.split("#", 1)[0].rstrip()
+        if code.strip():
+            argv.append(code.strip())
+        continued = code.endswith("\\")
+        i += 1
+        if not continued:
+            break
+    return argv
+
+
 def test_deploy_all_passes_the_flag_to_gcloud():
     """...and must actually include it in the gcloud argv.
 
@@ -253,15 +284,20 @@ def test_deploy_all_passes_the_flag_to_gcloud():
     suite green: building the array and never expanding it is exactly the
     "documented but never passed" bug this bead is named for.
     """
-    text = DEPLOY_ALL.read_text(encoding="utf-8")
-    deploy_start = text.index("gcloud run deploy")
-    # The invocation ends at the first line that is not a continuation.
-    invocation = text[deploy_start : text.index("\n\n", deploy_start)]
-    assert '"${SECRETS_FLAG[@]}"' in invocation, (
+    argv = _gcloud_run_deploy_argv(DEPLOY_ALL.read_text(encoding="utf-8"))
+
+    # Guard the guard: an extractor that finds nothing passes vacuously.
+    assert len(argv) > 5, f"could not parse the gcloud invocation (got {argv})"
+
+    assert any('"${SECRETS_FLAG[@]}"' in arg for arg in argv), (
         "SECRETS_FLAG is built but never passed to gcloud run deploy -- the "
         "secret would silently never bind, which is bd polyglot-pdf-hvui4 "
-        "reintroduced"
+        f"reintroduced. Parsed argv: {argv}"
     )
+
+    # The SA flag rides the same mechanism; if it vanished from argv the
+    # parser has drifted rather than the script.
+    assert any('"${SA_FLAG[@]}"' in arg for arg in argv)
 
 
 def test_no_secrets_means_no_flag():

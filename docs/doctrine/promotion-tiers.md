@@ -55,7 +55,8 @@ would need its own IAM bootstrap, Firebase Auth user pool, and enrolment run.
 | Firebase Auth users | **shared** | **shared** |
 
 **Staging protects against broken CODE reaching the demo. It does NOT protect
-against bad DATA.** Concretely, three things still cross the boundary:
+against bad DATA.** Concretely, these cross the boundary (the list read
+"three things" while enumerating four; client links are the fifth):
 
 1. A kit marked `status:complete` deploys to the one shared bucket and appears
    in the **demo's** form list. `deploy-staging.sh` therefore does **not** deploy
@@ -65,9 +66,17 @@ against bad DATA.** Concretely, three things still cross the boundary:
 3. `firestore.rules` are PROJECT-wide, not per-site. `deploy-staging.sh`
    deliberately does **not** deploy them; rules ship with `deploy-demo.sh`.
 4. A user enrolled for staging can also sign into the demo.
+5. **CLIENT LINKS are fully shared** (bd `polyglot-pdf-hvui4` turned minting on
+   for staging; the consequences are bd `polyglot-pdf-3q9qn`). Both channels
+   sign with the SAME `LINK_TOKEN_SECRET` and link tokens carry no channel or
+   audience claim, so **a staging-minted link verifies on the demo backend**.
+   The `link_redemptions` ledger is keyed by `jti` alone, so a staging
+   test-drive burns a real link's single redemption; and `record_mint`
+   increments the same `firms/{id}/link_usage/{YYYY-MM}` counter the per-link
+   pricing bills against. Treat a staging mint as spending real pilot state.
 
-Treat kit publishing, rules changes, and Firestore writes as production actions
-regardless of which channel you ran them from.
+Treat kit publishing, rules changes, Firestore writes and client-link minting
+as production actions regardless of which channel you ran them from.
 
 ## One-time staging setup
 

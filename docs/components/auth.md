@@ -277,7 +277,8 @@ Entitlement is RE-CHECKED at open rather than trusted from the mint-time
 snapshot, since a firm can be suspended in the 48 hours in between.
 
 **Minting is OFF by default** (`LINK_MINTING_ENABLED`); the spend ceiling it
-waited on (bd `polyglot-pdf-ik7e`) has shipped, and the DEMO now enables it --
+waited on (bd `polyglot-pdf-ik7e`) has shipped, and BOTH deployed channels now
+enable it (demo and staging, bd `polyglot-pdf-hvui4`) --
 see [config-deployment.md](config-deployment.md).
 
 Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind
