@@ -105,7 +105,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// via connectionManager.isNativeVad(). When true, Gemini's VAD streams
 	// continuous audio and the manual PTT control does not apply -- the toggle is
 	// disabled and the displayed mode reflects native VAD (not a stale "PTT").
-	const [nativeVad, setNativeVad] = useState(false)
 	// Continuous-session mode (bd polyglot-pdf-x8rt): when on, the form is one
 	// session with no sections to navigate -- the section-picker dropdown is hidden
 	// so a user cannot trigger a manual section switch (which would reset the
@@ -426,11 +425,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}, [pushToTalkMode])
 
 	// Ensure connection manager + audio pipeline reflect current PTT mode.
-	// PTT is a client-side audio gate that works EVEN under native VAD (noisy-room
-	// support): we always apply the mute/unmute so PTT gates which client bytes
-	// reach Gemini. The worklet noise gate stays bypassed in native mode regardless
-	// of PTT (audioManager.setPTTMode honors nativeVad), so toggling PTT off does
-	// not re-arm the RMS gate and starve Gemini's VAD of its silence stream.
+	// PTT is the only input mode (bd polyglot-pdf-v1m8g): the mute/unmute here is
+	// what decides which client bytes reach Gemini, and holding the button is the
+	// turn signal itself.
 	useEffect(() => {
 		if (!connectionManager) return
 
@@ -502,25 +499,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 	}, [connectionManager, status])
 
-	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected. The
-	// session_ready handshake fires onNativeVadMode BEFORE flipping status to
-	// "connected", so isNativeVad() is reliable on connect. In native-VAD mode
-	// Gemini drives turns on a continuous stream -- NEITHER PTT nor client-side
-	// Silero VAD applies -- so the Input-Mode toggle is disabled and the displayed
-	// mode reads "Native" (see the JSX + the shouldRunVAD / PTT-button /
-	// Listening-badge guards, all keyed on `nativeVad`). We deliberately do NOT
-	// mutate pushToTalkMode: forcing it false would satisfy `!pushToTalkMode` and
-	// start Silero VAD in native mode, whose callbacks would block Gemini's audio
-	// (fresh-eyes on PR #110). Reset to false when not connected so a
-	// disconnect/reconnect into manual mode shows the normal enabled toggle.
+	// Read the connected-session flags the UI keys on. (This used to also learn
+	// the backend's VAD mode; that mode is gone -- bd polyglot-pdf-v1m8g -- so
+	// push-to-talk is unconditional and there is nothing to learn.)
 	useEffect(() => {
 		if (!connectionManager) {
-			setNativeVad(false)
 			return
 		}
-		const isConnected = status.toLowerCase() === 'connected' ||
-			status.toLowerCase().startsWith('connected ')
-		setNativeVad(isConnected ? connectionManager.isNativeVad() : false)
 		// Continuous-session mode is set on the persisted state by handleSessionReady.
 		try {
 			setContinuousSession(SchemaFormStateManager.load()?.continuousSessionEnabled === true)
@@ -870,16 +855,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const isConnected = status.toLowerCase() === 'connected' ||
 			status.toLowerCase().startsWith('connected ')
 
-		// VAD should run when:
-		// 1. Connected to backend
-		// 2. NOT in push-to-talk mode
-		// 3. VAD library finished loading
-		// 4. No VAD errors occurred
-		// bd polyglot-pdf-tlc: never run client Silero VAD in native mode -- Gemini's
-		// own VAD drives turns there, and Silero's onSpeechStart/End would block
-		// playback (flushAudioQueue) without a matching resume (onVADSpeechEnd
-		// no-ops on nativeVad).
-		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
+		// Client Silero VAD runs only when PTT is off -- which, since PTT is now the
+		// ONLY input mode (bd polyglot-pdf-v1m8g), means never in practice. The
+		// condition is kept rather than hardcoded false so the pause() branch below
+		// still fires if a VAD session were somehow live across the cutover; the
+		// hook itself is retired separately (bd polyglot-pdf-ggdpn).
+		const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
 			console.log('[VoiceOverlay] [mic] Starting VAD (conditions met)')
@@ -896,7 +877,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// NOTE: vad.start and vad.pause intentionally excluded from deps
 		// They are stable callbacks that shouldn't trigger re-renders
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [status, pushToTalkMode, nativeVad, vad.loading, vad.errored, vad.userSpeaking])
+	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 	// Handle connect button
 	const handleConnect = async () => {

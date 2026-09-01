@@ -12,7 +12,7 @@
  * (b) activity-signal suppression in native-VAD mode, and (c) audio-queue
  * barge-in flush/resume.
  *
- * WebFormConnection is mocked, so the backend-driven onNativeVadMode handshake
+ * WebFormConnection is mocked, so backend-driven handshake callbacks
  * is simulated by capturing the callbacks object the factory passes into the
  * WebFormConnection constructor and invoking it directly.
  */
@@ -24,7 +24,7 @@ import type { FormSchema } from '../schema-forms/types/schema'
 
 // Capture the most recent ConnectionCallbacks the factory hands to
 // WebFormConnection, plus the AudioManager mock, so a test can drive the
-// backend-originated callbacks (onNativeVadMode, etc.) and assert on the
+// backend-originated callbacks and assert on the
 // audio layer the factory wires up.
 let capturedCallbacks: any = null
 let audioManagerMock: any = null
@@ -74,7 +74,7 @@ vi.mock('./audioManager', () => ({
 vi.mock('../webFormConnection', () => ({
   WebFormConnection: vi.fn(function (this: any, _schema: any, callbacks: any) {
     // Record the callbacks the factory passes in so a test can fire the
-    // backend handshake events (onNativeVadMode) by hand.
+    // backend handshake events by hand.
     capturedCallbacks = callbacks
     this.connect = vi.fn(() => Promise.resolve())
     this.disconnect = vi.fn()
@@ -259,66 +259,6 @@ describe('Connection Manager (connection.ts)', () => {
   // released so native VAD finds the boundary itself -- no manual end needed. This
   // supersedes the earlier bd-6vo audio_stream_end behavior.
   // ---------------------------------------------------------------------------
-  describe('native-VAD activity-signal suppression', () => {
-    async function connected() {
-      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
-      await manager.connect()
-      // The factory created WebFormConnection and we captured its callbacks.
-      expect(capturedCallbacks).not.toBeNull()
-      return manager
-    }
-
-    it('forwards activity_start when NOT in native-VAD mode', async () => {
-      const manager = await connected()
-      manager.sendActivityStart()
-      expect(webFormConnectionMock.sendActivityStart).toHaveBeenCalledTimes(1)
-    })
-
-    it('suppresses activity_start once the backend reports native VAD', async () => {
-      const manager = await connected()
-      capturedCallbacks.onNativeVadMode(true)
-
-      manager.sendActivityStart()
-      expect(webFormConnectionMock.sendActivityStart).not.toHaveBeenCalled()
-      // Native mode reconfigures the audio layer to stream continuous audio.
-      expect(audioManagerMock.setNativeVad).toHaveBeenCalledWith(true)
-    })
-
-    it('suppresses activity_end in native-VAD mode (bd zivv -- no manual turn signal)', async () => {
-      const manager = await connected()
-      capturedCallbacks.onNativeVadMode(true)
-
-      await manager.sendActivityEnd()
-      // activity_end IS suppressed under native VAD: forwarding it (backend maps to
-      // audio_stream_end) into the continuous stream interrupts Gemini's response.
-      // The turn closes from the trailing SILENCE the audio layer streams while PTT
-      // is released, not from a manual end signal.
-      expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
-    })
-
-    it('still forwards activity_end in MANUAL-VAD mode (real activity_end)', async () => {
-      const manager = await connected()
-      // No native-VAD report -> manual mode; activity_end must still flow.
-      await manager.sendActivityEnd()
-      expect(webFormConnectionMock.sendActivityEnd).toHaveBeenCalledTimes(1)
-    })
-
-    it('suppresses the Silero barge-in callbacks in native-VAD mode', async () => {
-      const manager = await connected()
-      capturedCallbacks.onNativeVadMode(true)
-
-      manager.onVADSpeechStart()
-      manager.onVADSpeechEnd()
-      // No client-side flush/resume: Gemini owns interruption in native mode.
-      expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
-      expect(audioManagerMock.resumePlayback).not.toHaveBeenCalled()
-      // And the Silero end-path must NOT forward activity_end in native mode --
-      // only the PTT wrapper (manager.sendActivityEnd) does, per criterion 2(b).
-      // Without the nativeVad gate on onVADSpeechEnd this would spuriously fire.
-      expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
-    })
-  })
-
   // ---------------------------------------------------------------------------
   // (b2) Shared audio rehydration across reconnect paths (bd polyglot-pdf-z9bc)
   //
@@ -784,15 +724,16 @@ describe('Connection Manager (connection.ts)', () => {
       expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
     })
 
-    it('sendActivityStart cancels the re-prompt even under native VAD (signal suppressed, cancel not)', async () => {
+    it('sendActivityStart cancels the pending re-prompt', async () => {
+      // The user speaking supersedes a queued post-resume re-prompt (bd
+      // polyglot-pdf-yo5t). This used to also assert the signal itself was
+      // SUPPRESSED under native VAD; that mode is gone (bd polyglot-pdf-v1m8g),
+      // so the signal is now always forwarded -- and the cancel still happens.
       const manager = await pausedManager()
-      // Backend reports native VAD: the activity SIGNAL is suppressed, but the
-      // user-spoke fact must still cancel the pending re-prompt.
-      capturedCallbacks.onNativeVadMode(true)
 
       await manager.resume()
       manager.sendActivityStart()
-      expect(webFormConnectionMock.sendActivityStart).not.toHaveBeenCalled()
+      expect(webFormConnectionMock.sendActivityStart).toHaveBeenCalled()
 
       vi.advanceTimersByTime(5000)
       expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()

@@ -1602,10 +1602,11 @@ async def fill_form_from_schema(
 		# single whole-form handshake and stop advancing sections, so the whole form
 		# runs as one compression-bounded session.
 		"continuous_session_enabled": settings.CONTINUOUS_SESSION,
-		# Native-VAD mode toggle (bd polyglot-pdf-333): when True, Gemini's own VAD
-		# drives turns -- the frontend must stop sending manual activity signals and
-		# stream continuous audio. Mirror of the backend DISABLE_GEMINI_VAD flag.
-		"native_vad": not settings.DISABLE_GEMINI_VAD,
+		# NOTE: `native_vad` is GONE from this payload (bd polyglot-pdf-v1m8g).
+		# It told the client whether Gemini's own VAD was driving turns; that mode
+		# no longer exists, so there is nothing to signal -- push-to-talk is the
+		# only input mode and the client always brackets turns with manual
+		# activity signals. The client-side reader was removed in the same change.
 	})
 
 	# Start form filling session with schema and current values

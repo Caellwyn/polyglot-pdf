@@ -86,41 +86,36 @@ describe('audioManager spell-back hold (bd polyglot-pdf-22h1f)', () => {
     return mgr
   }
 
-  it('native VAD open mic: hold substitutes zeroed frames, release restores real audio', async () => {
+  it('PTT HELD (unmuted): the hold still silences -- the clip must not leak in mid-hold', async () => {
+    // The invariant this file exists for: while the deterministic spell-back clip
+    // plays, the mic must not carry it back in as user speech -- even with the
+    // button held down, which is the one state that would otherwise stream real
+    // audio. (Two sibling cases covering the same rule via the native-VAD open-mic
+    // path were removed with that mode, bd polyglot-pdf-v1m8g; under PTT the hold
+    // DROPS frames rather than substituting silence, since the stream is bursty
+    // and nothing needs it kept continuous.)
     const sent: ArrayBuffer[] = []
     const mgr = await startedManager(sent)
-    mgr.setNativeVad(true) // open mic: continuous ungated stream
-
-    mgr.setSpellbackHold(true)
-    fireFrame(SIGNAL)
-    // The stream must stay alive (native VAD needs it) but carry NO mic audio.
-    expect(sent).toHaveLength(1)
-    expect(isAllZero(sent[0])).toBe(true)
-    expect(sent[0].byteLength).toBe(SIGNAL.buffer.byteLength)
-
-    mgr.setSpellbackHold(false)
-    fireFrame(SIGNAL)
-    expect(sent).toHaveLength(2)
-    expect(isAllZero(sent[1])).toBe(false)
-  })
-
-  it('native VAD + PTT HELD (unmuted): hold still silences -- the clip must not leak in mid-hold', async () => {
-    const sent: ArrayBuffer[] = []
-    const mgr = await startedManager(sent)
-    mgr.setNativeVad(true)
     mgr.setPTTMode(true)
     mgr.unmuteInput() // button held down
 
     mgr.setSpellbackHold(true)
     fireFrame(SIGNAL)
+    expect(sent).toHaveLength(0)
+
+    mgr.setSpellbackHold(false)
+    fireFrame(SIGNAL)
     expect(sent).toHaveLength(1)
-    expect(isAllZero(sent[0])).toBe(true)
+    expect(isAllZero(sent[0])).toBe(false)
   })
 
-  it('client-VAD mode: hold drops frames entirely, release restores flow', async () => {
+  it('hold drops frames entirely, release restores flow', async () => {
     const sent: ArrayBuffer[] = []
     const mgr = await startedManager(sent)
-    mgr.setVADActive(true) // client VAD says speech -- gate would pass
+    // PTT held is the only way the gate passes now (bd polyglot-pdf-v1m8g);
+    // setVADActive no longer opens it.
+    mgr.setPTTMode(true)
+    mgr.unmuteInput()
 
     mgr.setSpellbackHold(true)
     fireFrame(SIGNAL)

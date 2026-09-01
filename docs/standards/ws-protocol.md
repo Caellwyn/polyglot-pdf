@@ -110,7 +110,6 @@ The backend replies with `session_ready` (websocket_routes.py, the
 | `ephemeral` | bool (`true`) | Signals the client the backend is stateless. |
 | `jit_mode_enabled` | bool | Mirrors backend `USE_DTI` (the JIT SI mode was removed, bd polyglot-pdf-en2j); names the manifest-first handshake TRANSPORT the client should build next time -- DTI rides it. |
 | `dti_mode_enabled` | bool | Mirrors backend `USE_DTI`; consumed by the client's `handleSessionReady` destructure (sent-but-undocumented until the ceyt contract tests caught it). |
-| `native_vad` | bool | Mirrors `not DISABLE_GEMINI_VAD`; when true the client streams continuous audio and stops sending manual activity signals (bd polyglot-pdf-333). |
 | `continuous_session_enabled` | bool | Mirrors backend `CONTINUOUS_SESSION`; when true the client builds a single whole-form handshake and stops advancing sections, so the whole form runs as one compression-bounded session (bd polyglot-pdf-x8rt). |
 
 ---

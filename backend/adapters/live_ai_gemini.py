@@ -973,28 +973,26 @@ class LiveAIGemini(ILiveAI):
         underrun tick. When disabled, the legacy wait_for/timeout gap-fill path runs
         (a clean revert switch preserving the bd 7f7m behavior).
 
-        Gap-fill / silence still fires ONLY after real audio has started and NOT once
-        a graceful shutdown has begun (the drain path owns the socket + sentinel
-        then); the None sentinel exits cleanly on either path. Native-VAD only:
-        manual-VAD (DISABLE_GEMINI_VAD=true) brackets turns with activity_start/end,
-        so injecting silence between turns is wrong (bd 7f7m). Config is read ONCE per
-        session; extracted to a method (not a closure) so the cadence logic is
-        unit-testable with a mock session + injectable clock.
+        Gap-fill is now permanently OFF (bd polyglot-pdf-v1m8g) -- see the note at
+        its pin below. The surrounding cadence/pacing logic still runs. Config is
+        read ONCE per session; extracted to a method (not a closure) so the cadence
+        logic is unit-testable with a mock session + injectable clock.
         """
         chunk_count = 0
         from backend.config import get_settings
         _settings = get_settings()
         _in_rate = int(getattr(_settings, "AUDIO_IN_RATE", 16000))
         _mime_type = f"audio/pcm;rate={_in_rate}"
-        # Gap-fill is a NATIVE-VAD keepalive: it manufactures a continuous stream so
-        # Gemini's own VAD is not starved of trailing audio. In manual-VAD mode
-        # (DISABLE_GEMINI_VAD=true) turns are bracketed by activity_start/end and
-        # audio is expected ONLY inside a bracket -- injecting silence between PTT
-        # turns would send un-bracketed audio and desync the turn state. So gap-fill
-        # is gated OFF whenever native VAD is off, independent of AUDIO_GAPFILL_ENABLED
-        # (Opus fresh-eyes finding, bd polyglot-pdf-7f7m).
-        _native_vad = not bool(getattr(_settings, "DISABLE_GEMINI_VAD", False))
-        _gapfill_enabled = _native_vad and bool(getattr(_settings, "AUDIO_GAPFILL_ENABLED", False))
+        # Gap-fill is DEAD (bd polyglot-pdf-v1m8g). It existed to keep Gemini's own
+        # VAD from being starved of trailing audio by manufacturing a continuous
+        # stream; with that VAD gone, turns are bracketed by activity_start/end and
+        # audio is expected ONLY inside a bracket, so injecting silence between PTT
+        # turns would send un-bracketed audio and desync the turn state (the exact
+        # hazard bd polyglot-pdf-7f7m documented). Pinned False here rather than
+        # left reading AUDIO_GAPFILL_ENABLED, so the setting cannot resurrect a
+        # path that is now always wrong. Removing the plumbing it threads through
+        # (both senders) is bd polyglot-pdf-ggdpn.
+        _gapfill_enabled = False
         _gapfill_timeout_s = (
             max(1, int(getattr(_settings, "AUDIO_GAPFILL_INTERVAL_MS", 25))) / 1000.0
         )
@@ -1414,15 +1412,10 @@ class LiveAIGemini(ILiveAI):
 
         Reference: Gemini Live API docs lines 419-435
         """
-        # Native-VAD guard (bd polyglot-pdf-333): when Gemini's own VAD is enabled
-        # (DISABLE_GEMINI_VAD=False), manual activity signals must NOT be sent --
-        # interleaving them with automatic detection is the conflicting turn-taking
-        # state _build_vad_settings warns about. Drop them server-side regardless of
-        # what the frontend sends.
-        from backend.config import get_settings
-        if not get_settings().DISABLE_GEMINI_VAD:
-            return
-
+        # No native-VAD guard any more (bd polyglot-pdf-v1m8g): Gemini's automatic
+        # detection is unconditionally disabled, so these manual brackets are the
+        # ONLY turn signal and are always sent. The guard that used to drop them
+        # existed to avoid interleaving two detectors; there is only one now.
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             self._log.warning("[warn] ACTIVITY_START called but session is None")
@@ -1451,42 +1444,32 @@ class LiveAIGemini(ILiveAI):
 
         Reference: Gemini Live API docs lines 419-435
         """
-        from backend.config import get_settings
-        native_vad = not get_settings().DISABLE_GEMINI_VAD
-
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             self._log.warning("[warn] ACTIVITY_END called but session is None")
             return
 
-        # Native-VAD turn boundary for PTT (bd polyglot-pdf-6vo, Codex review PR #119).
-        # In native mode the manual activity_start/end are suppressed (interleaving
-        # them with automatic VAD is the conflicting state bd-333 warns about). But
-        # PTT-as-a-gate then withholds all audio after release, so Gemini would get
-        # NEITHER an activity_end NOR trailing silence and its VAD may never close the
-        # turn -> session goes silent after PTT release. audio_stream_end is the
-        # documented realtime signal to finalize the audio segment and is compatible
-        # with automatic VAD (it is not the conflicting activity_end), so we send THAT
-        # in native mode and the real activity_end only in manual mode.
+        # PTT release IS the turn boundary (bd polyglot-pdf-v1m8g). With Gemini's
+        # automatic detection off, activity_end is the documented way to close the
+        # turn and there is no second detector to conflict with -- so it is sent
+        # unconditionally. The old native-VAD arm sent audio_stream_end instead,
+        # because manual activity signals were suppressed in that mode and PTT
+        # otherwise left Gemini with neither a boundary nor trailing silence; that
+        # whole branch is gone with the mode it served.
         try:
             _t_act_end = time.monotonic()
-            if native_vad:
-                await self._current_session.send_realtime_input(audio_stream_end=True)
-            else:
-                await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
+            await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
             # timing_activity_end checkpoint 3 (bd polyglot-pdf-cwsy).
             # Record the timestamp so timing_tool_call_received can compute
-            # since_activity_end_ms. Clear the native-VAD first-audio reference
-            # (activity_end supersedes it as the burst anchor).
+            # since_activity_end_ms.
             self._timing_last_activity_end = _t_act_end
             self._timing_first_inbound_audio = None
             self._log.info(
                 "timing_activity_end",
                 ts_monotonic=round(_t_act_end, 4),
-                native_vad=native_vad,
             )
         except Exception as e:
-            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e), native_vad=native_vad)
+            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e))
 
     def begin_graceful_shutdown(self) -> asyncio.Event:
         """Ask the receive loop to exit cleanly AFTER flushing pending tool responses.
@@ -1707,69 +1690,26 @@ class LiveAIGemini(ILiveAI):
 
     @staticmethod
     def _build_vad_settings(settings) -> Dict[str, Any]:
-        """Build the ``automatic_activity_detection`` config from settings.
+        """Gemini's automatic activity detection is ALWAYS disabled.
 
-        The Live API REJECTS (close code 1007) a config that sets
-        ``disabled=True`` AND any of the sensitivity/padding fields together.
-        So this is a hard either/or:
+        Push-to-talk owns activation (bd polyglot-pdf-v1m8g). PTT *knows* when the
+        user is speaking -- they are holding the button -- and the client brackets
+        each turn with explicit ``activity_start`` / ``activity_end``. Letting
+        Gemini's VAD *infer* the same thing from the audio would add a second gate
+        that can only estimate what the first one states exactly, and the two can
+        disagree. One turn signal, not two.
 
-        - VAD disabled (``DISABLE_GEMINI_VAD=True``; NOT the default --
-          ``config.py`` defaults it to false, so Gemini's native VAD is ON
-          unless the env opts out): return ONLY ``{'disabled': True}``. We
-          drive turn-taking with manual ``activity_start`` / ``activity_end``
-          signals instead -- see ``docs/standards/voice-and-vad.md``.
-        - VAD enabled: omit ``disabled`` and pass through whichever
-          sensitivity/padding knobs (``VAD_*``) are configured.
+        So this returns the constant ``{'disabled': True}``. The sensitivity and
+        padding knobs it used to read are GONE from config rather than defaulted
+        off: the Live API REJECTS (close code 1007) a config that sets
+        ``disabled=True`` alongside any of them, so they were never expressible
+        together anyway, and a knob nothing can safely turn on is a trap for the
+        next caller (CLAUDE.md scar #7).
 
-        Returns ``{}`` when VAD is enabled but no knobs are set (Gemini then
-        uses its own defaults). bd polyglot-pdf-p1t
-
-        A *typo'd* sensitivity value (e.g. ``VAD_*_SENSITIVITY=MEDIUM``) is
-        whitelisted/skipped with a warning rather than allowed to raise: an
-        unrecognized enum lookup used to ``KeyError`` out of here and the broad
-        ``except`` in the caller dropped the ENTIRE ``realtime_input_config``,
-        silently reverting to Gemini's default VAD while the adapter still sent
-        manual ``activity_start/end`` -- a conflicting turn-taking state.
-        bd polyglot-pdf-u01
+        `settings` is retained (unused) so the call sites and the contract smoke
+        test keep their shape. See docs/standards/voice-and-vad.md.
         """
-        if settings.DISABLE_GEMINI_VAD:
-            return {'disabled': True}
-
-        # Valid sensitivities are LOW / HIGH (UNSPECIFIED means "leave unset");
-        # anything else is a config typo and is skipped, not fatal.
-        _VALID_SENSITIVITY = {'LOW', 'HIGH', 'UNSPECIFIED'}
-
-        def _resolve_sensitivity(raw, enum_type, prefix, field):
-            if not raw or raw == 'UNSPECIFIED':
-                return None
-            if raw not in _VALID_SENSITIVITY:
-                structlog.get_logger().warning(
-                    "invalid_vad_sensitivity_skipped",
-                    field=field,
-                    value=raw,
-                    valid=sorted(_VALID_SENSITIVITY),
-                )
-                return None
-            return enum_type[f"{prefix}_{raw}"]
-
-        vad_settings: Dict[str, Any] = {}
-        start = _resolve_sensitivity(
-            settings.VAD_START_SENSITIVITY, types.StartSensitivity,
-            'START_SENSITIVITY', 'VAD_START_SENSITIVITY',
-        )
-        if start is not None:
-            vad_settings['start_of_speech_sensitivity'] = start
-        end = _resolve_sensitivity(
-            settings.VAD_END_SENSITIVITY, types.EndSensitivity,
-            'END_SENSITIVITY', 'VAD_END_SENSITIVITY',
-        )
-        if end is not None:
-            vad_settings['end_of_speech_sensitivity'] = end
-        if settings.VAD_PREFIX_PADDING_MS is not None:
-            vad_settings['prefix_padding_ms'] = settings.VAD_PREFIX_PADDING_MS
-        if settings.VAD_SILENCE_DURATION_MS is not None:
-            vad_settings['silence_duration_ms'] = settings.VAD_SILENCE_DURATION_MS
-        return vad_settings
+        return {'disabled': True}
 
     def _build_live_config(self, settings) -> Dict[str, Any]:
         """Build the Live connect config exactly as the session loop sends it.

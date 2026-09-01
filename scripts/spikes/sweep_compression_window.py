@@ -129,10 +129,9 @@ def _patch_vad_bug_for_sweep(settings) -> None:
     disabled=True alongside sensitivity fields with 1007). Mutates the passed
     instance; no production file is touched.
     """
-    settings.VAD_START_SENSITIVITY = "UNSPECIFIED"
-    settings.VAD_END_SENSITIVITY = "UNSPECIFIED"
-    settings.VAD_PREFIX_PADDING_MS = None
-    settings.VAD_SILENCE_DURATION_MS = None
+    # (The VAD sensitivity knobs that used to be neutralized here are gone --
+    # bd polyglot-pdf-v1m8g retired native VAD, so automatic detection is
+    # always disabled and there is nothing to override.)
 
 
 # standard-2.5 is EXCLUDED (reliably 1011 on the first real-audio turn -- bd

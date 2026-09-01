@@ -82,7 +82,6 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// the backend at session_ready (mirror of DISABLE_GEMINI_VAD). When true the
 	// manual PTT toggle does not apply, so it is disabled and the displayed mode
 	// reflects native VAD instead of a stale "PTT".
-	const [nativeVad, setNativeVad] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	// Live mic-energy meter (bd polyglot-pdf-s3zv): mirrors the desktop overlay.
 	// `micEnergy` is the worklet's smoothed RMS (0-100); `micSending` is whether the
@@ -357,22 +356,6 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}, [status, reconnectModalDismissed])
 
-	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected (mirror of
-	// the desktop overlay). onNativeVadMode fires before status flips to
-	// "connected", so isNativeVad() is reliable on connect. In native-VAD mode
-	// neither PTT nor client Silero VAD applies, so the toggle is disabled and the
-	// shouldRunVAD / PTT-button / Listening-badge guards key on `nativeVad`. We do
-	// NOT force pushToTalkMode false -- that would start Silero in native mode and
-	// block Gemini audio (fresh-eyes on PR #110). Reset on disconnect.
-	useEffect(() => {
-		if (!connectionManager) {
-			setNativeVad(false)
-			return
-		}
-		const isConn = status.toLowerCase() === 'connected' ||
-			status.toLowerCase().startsWith('connected ')
-		setNativeVad(isConn ? connectionManager.isNativeVad() : false)
-	}, [connectionManager, status])
 
 	// Keep isHoldingPushToTalk ref updated
 	useEffect(() => {
@@ -703,9 +686,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// 2. NOT in push-to-talk mode
 		// 3. VAD library finished loading
 		// 4. No VAD errors occurred
-		// bd polyglot-pdf-tlc: never run client Silero VAD in native mode (Gemini's
-		// VAD drives turns; Silero would block playback without a matching resume).
-		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
+		// PTT is the only input mode (bd polyglot-pdf-v1m8g), so !pushToTalkMode is
+		// effectively never true; mirror of the desktop overlay.
+		const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
 			console.log('[VoiceOverlayMobile] [mic] Starting VAD (conditions met)')
@@ -722,7 +705,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// NOTE: vad.start and vad.pause intentionally excluded from deps
 		// They are stable callbacks that shouldn't trigger re-renders
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [status, pushToTalkMode, nativeVad, vad.loading, vad.errored, vad.userSpeaking])
+	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 
 	// Handle initial language selection from modal (fallback when initialLanguage not provided)
@@ -1417,10 +1400,9 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 			>
 				{/* Mic-activity badge (bd polyglot-pdf-8v53): green dot while audio is
 				    actually reaching the backend. Gated on `isListening && micSending`
-				    (the same live signals as the panel's listening indicator) so it
-				    works in native VAD mode -- the old `vad.userSpeaking && !nativeVad`
-				    gate needed client Silero VAD, which never runs in the deployed
-				    native-VAD default, leaving the dot permanently dark. Kept on top of
+				    -- the live send signals -- rather than on client Silero VAD, which
+				    does not run under push-to-talk (the only input mode since bd
+				    polyglot-pdf-v1m8g) and left the dot permanently dark. Kept on top of
 				    Sol: it reports the mic SEND GATE specifically, which Sol's
 				    listening state cannot distinguish from "mic alive but gated". */}
 				{isListening && micSending && (
