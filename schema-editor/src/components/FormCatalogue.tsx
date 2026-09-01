@@ -309,7 +309,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     const republishViaServer = status === 'complete' && serverActionsOk;
     if (kit.status === 'unpublished' && !republishViaServer) {
       setError(
-        `"${kit.label}" is unpublished (a superseded revision). It cannot be `
+        `${kitName(kit)} is unpublished (a superseded revision). It cannot be `
         + 'edited or changed from this folder view -- its schema is what '
         + 'earlier confirmations were recorded against. Start the backend '
         + '(scripts/run-schema-editor.sh) to publish it again, which runs the '
@@ -342,14 +342,14 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       if (viaServer) {
         // The sweep makes one LLM call PER LANGUAGE with retry, so this is a
         // tens-of-seconds action -- say so rather than leaving a dead button.
-        setNotice(`Checking "${kit.label}" and re-translating anything missing...`);
+        setNotice(`Checking ${kitName(kit)} and re-translating anything missing...`);
         const result = await setRemoteStatus(kit.id, status, { authorVersion });
         setNotice(
           result.retranslated > 0
-            ? `"${kit.label}" is complete. Re-translated ${result.retranslated} `
+            ? `${kitName(kit)} is complete. Re-translated ${result.retranslated} `
               + `entr${result.retranslated === 1 ? 'y' : 'ies'}`
               + `${result.translationModel ? ` (${result.translationModel})` : ''}.`
-            : `"${kit.label}" is complete. Every translation was already current.`,
+            : `${kitName(kit)} is complete. Every translation was already current.`,
         );
       } else {
         await setKitStatus(kit, status);
@@ -357,7 +357,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           // Never let an UNCHECKED completion read like a verified one -- that
           // silence is the whole bug. Name what was skipped.
           setNotice(
-            `"${kit.label}" was marked complete WITHOUT the publish checks: the `
+            `${kitName(kit)} was marked complete WITHOUT the publish checks: the `
             + 'backend is not reachable for this folder, so its schema was not '
             + 'validated and missing translations were not re-baked. Start the '
             + 'backend (scripts/run-schema-editor.sh) and mark it complete again '
@@ -420,7 +420,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     // outward-facing and this button sits in a tool the maintainer already has
     // open, so publishing must stay a deliberate act (bd ipzh).
     const ok = window.confirm(
-      `Upload "${kit.label}" to ${deployTarget.bucket}?\n\n`
+      `Upload ${kitName(kit)} to ${deployTarget.bucket}?\n\n`
       + "This publishes this form's schema and PDF and regenerates the form "
       + 'manifest. It does NOT deploy the app itself.',
     );
@@ -459,7 +459,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setError(null);
     try {
       await setKitLabel(kit, label);
-      setNotice(`Renamed "${kit.label}" to "${label}".`);
+      setNotice(`Renamed ${kitName(kit)} to "${label}".`);
       await refresh(root);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to rename the form');
@@ -761,6 +761,10 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                 onClick={() => onOpenKit(kit)}
                 disabled={!kit.hasSchema}
                 title={kit.hasSchema
+                  // kit-label-ok: the card's own hover tooltip. The id renders in
+                  // this same card three lines below, so both identities are
+                  // already side by side and repeating it here would say one
+                  // thing twice (bd polyglot-pdf-nsz2d).
                   ? `Open ${kit.label} for editing`
                   : `${kit.label} has no schema yet -- run the extraction first`}
               >

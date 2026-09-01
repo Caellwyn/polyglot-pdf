@@ -4,6 +4,7 @@ import { FormCatalogue } from './components/FormCatalogue';
 import { RemoteCatalogue } from './components/RemoteCatalogue';
 import { SignInGate } from './components/SignInGate';
 import { currentEditorEmail, signOutEditor } from './utils/editorAuth';
+import { kitName } from './utils/kitName';
 import { HostedGuide, hasSeenGuide } from './components/HostedGuide';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
@@ -351,7 +352,7 @@ export const App: React.FC = () => {
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
-        throw new Error(`${entry.label} has no schema yet -- run the extraction first.`);
+        throw new Error(`${kitName(entry)} has no schema yet -- run the extraction first.`);
       }
       // Save target = the kit's own schema.json handle (in-place save).
       fileHandleRef.current = await entry.dirHandle.getFileHandle(entry.schemaFile);
@@ -478,7 +479,7 @@ export const App: React.FC = () => {
       const loaded = await loadRemoteSchema(entry.id);
       if (seq !== openSeqRef.current) return; // superseded by a newer open
       if (!loaded) {
-        throw new Error(`${entry.label} has no schema yet.`);
+        throw new Error(`${kitName(entry)} has no schema yet.`);
       }
       let pdfUrl = '';
       if (entry.hasPdf) {
