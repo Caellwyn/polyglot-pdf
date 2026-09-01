@@ -228,7 +228,15 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// connection error added later inherits the behavior instead of becoming
 	// the seventh site -- pin the set, not the instances.
 	const setConnectionError = useCallback((message: string) => {
-		if (connectionManager?.getStatus() === 'budget_exhausted') {
+		// Feature-detect getStatus, do not just null-check the manager: `?.`
+		// guards against null/undefined but NOT against an object that lacks
+		// the method, and several tests pass a partial ConnectionManager mock.
+		// CI caught this as a TypeError while my local run stayed green (a
+		// separate flake had shuffled the file ordering). Suppression is a
+		// nice-to-have; THROWING here would break the error path itself, which
+		// is strictly worse than showing one redundant message.
+		if (typeof connectionManager?.getStatus === 'function'
+			&& connectionManager.getStatus() === 'budget_exhausted') {
 			console.log('[VoiceOverlay] Suppressing connection error on a spent link:', message)
 			return
 		}
@@ -1000,7 +1008,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// removed -- and the parent cannot repair it, because its sync effect
 			// keys on [sharedStatus], which never changes. Suppressing the error
 			// TEXT while still writing this status was the incomplete half.
-			if (connectionManager?.getStatus() !== 'budget_exhausted') {
+			// Feature-detect (see setConnectionError): `?.` does not protect
+			// against a partial mock that lacks getStatus, and a throw here would
+			// break the error path itself. Unknown status -> set 'error', the
+			// pre-bead behavior, which is the safe fallback.
+			const statusNow = typeof connectionManager?.getStatus === 'function'
+				? connectionManager.getStatus()
+				: undefined
+			if (statusNow !== 'budget_exhausted') {
 				setStatus('error')
 			}
 		}

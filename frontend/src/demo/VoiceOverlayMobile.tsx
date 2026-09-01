@@ -74,7 +74,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Declared HERE, immediately after setError and above every caller: a
 	// `const` arrow is not hoisted, and the earliest call site is ~line 267.
 	const setConnectionError = (message: string) => {
-		if (connectionManager?.getStatus() === 'budget_exhausted') {
+		// Feature-detect getStatus, do not just null-check the manager: `?.`
+		// guards against null/undefined but NOT against a partial mock that
+		// lacks the method, which threw a TypeError in CI on the desktop twin.
+		// Suppression is a nice-to-have; throwing here would break the error
+		// path itself.
+		if (typeof connectionManager?.getStatus === 'function'
+			&& connectionManager.getStatus() === 'budget_exhausted') {
 			console.log('[VoiceOverlayMobile] Suppressing connection error on a spent link:', message)
 			return
 		}

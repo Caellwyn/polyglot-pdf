@@ -162,9 +162,15 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     const bare = connectionErrorArgs(SOURCE, path);
     expect(bare).toEqual([]);
 
-    // And the helper actually suppresses on the terminal status.
-    const helper = SOURCE.slice(SOURCE.indexOf('const setConnectionError'));
-    expect(helper.slice(0, 500)).toContain("=== 'budget_exhausted'");
+    // And the helper actually suppresses on the terminal status. Asserted on
+    // the TOKEN, not a comparison spelling: the helper now feature-detects
+    // getStatus before calling it (a partial mock lacking the method threw a
+    // TypeError in CI), so `=== 'budget_exhausted'` moved inside a compound
+    // condition. Pinning the operator would break on every such refactor
+    // while proving nothing extra -- this file's whole lesson.
+    const helperStart = SOURCE.indexOf('const setConnectionError');
+    expect(helperStart).toBeGreaterThan(-1);
+    expect(SOURCE.slice(helperStart, helperStart + 700)).toContain("'budget_exhausted'");
   });
 
   it('does not overwrite the terminal STATUS either', () => {
