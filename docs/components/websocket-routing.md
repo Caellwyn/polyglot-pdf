@@ -2,9 +2,10 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the `spellback_response`
-row to the control-channel table -- the flag-gated deterministic spell-back
-round-trip.)*
+*Last updated: 2026-08-31 (bd polyglot-pdf-lvhqa: documented the SECOND
+terminal status, `budget_exhausted` -- why one close code carries two reasons
+with opposite handling, and that the tokens are matched by string compare with
+no shared constant.)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser

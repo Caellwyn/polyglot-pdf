@@ -219,6 +219,22 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		)
 	}, [saveNudge.variant, getToken])
 
+	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5,
+	// widened after the Opus cross-surface review found my first fix covered 2
+	// of 6 sites). On a spent link the translated spend-ceiling modal is
+	// already on screen saying voice has finished; an English "please try
+	// again" / "please click Reconnect" behind it contradicts that AND names a
+	// button bd cke6v deliberately removed. Suppressing CENTRALLY means a
+	// connection error added later inherits the behavior instead of becoming
+	// the seventh site -- pin the set, not the instances.
+	const setConnectionError = useCallback((message: string) => {
+		if (connectionManager?.getStatus() === 'budget_exhausted') {
+			console.log('[VoiceOverlay] Suppressing connection error on a spent link:', message)
+			return
+		}
+		setError(message)
+	}, [connectionManager])
+
 	const handleNudgeSave = useCallback(() => {
 		saveNudge.markSaved()
 		// Hand off to the form's own download, which is what stamps the resume
@@ -958,14 +974,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlay] [X] Connection timeout, final status:', finalStatus)
-				// NOT for a spent link: the spend-ceiling modal already explains
-				// what happened, in the client's language. "Connection timed out --
-				// please try again" is untranslated English AND invites the exact
-				// retry bd cke6v exists to stop offering, so the panel behind the
-				// modal would contradict it (bd polyglot-pdf-wwwa5).
-				if (finalStatus !== 'budget_exhausted') {
-					setError('Connection timed out - please try again')
-				}
+				setConnectionError('Connection timed out - please try again')
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
@@ -1578,14 +1587,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
 					console.error('[VoiceOverlay] [X] Reconnect timed out, status:', postReconnectStatus)
-					setError('Connection lost - please click Reconnect')
+					setConnectionError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
 				console.log('[VoiceOverlay] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
 				console.error('[VoiceOverlay] [X] Reconnection failed:', err)
-				setError('Connection lost - please click Reconnect')
+				setConnectionError('Connection lost - please click Reconnect')
 				return
 			}
 		}

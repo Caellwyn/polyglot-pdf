@@ -50,8 +50,14 @@ interface ConnectionTimeoutModalBaseProps {
  * dismiss button, so a caller that forgets `onCancel` leaves the client
  * trapped on a page the modal's own copy tells them they can still use. That
  * was previously guarded at runtime (render nothing rather than a dead
- * button) plus a test. `npm run typecheck` is a required CI job, so making it
- * a type error catches the mistake before it can ship at all.
+ * button) plus a test. Making it a TYPE error catches the mistake at author
+ * time -- in the editor and in any local/CI typecheck run -- rather than only
+ * when someone exercises the path.
+ *
+ * NOTE the runtime guard below is still load-bearing: this repo's CI is
+ * NON-BLOCKING BY DESIGN (see .github/workflows/ci.yml, bd
+ * polyglot-pdf-uov.3), so a red typecheck reports but does not gate the merge.
+ * Do not delete the runtime fallback on the theory that CI would stop it.
  *
  * The other two variants keep `onCancel` optional: "timeout" renders it as a
  * secondary action when present, and "reconnecting" is passive by design.
@@ -139,12 +145,12 @@ export function ConnectionTimeoutModal({
             client saves, "press Save" would otherwise summon a scrim with no
             way out. Acknowledging is not recovering. */}
         {isBudgetExhausted ? (
-          // The TYPE now requires onCancel for this variant (bd
-          // polyglot-pdf-leakz), so this check is unreachable from TypeScript
-          // callers. Kept anyway: it costs nothing, and it still holds for a
-          // plain-JS caller or a cast. A dead button on a full-viewport
-          // overlay is the trap this variant exists to avoid, so failing to
-          // no button beats rendering a fake one.
+          // The TYPE requires onCancel for this variant (bd
+          // polyglot-pdf-leakz), but this guard is NOT redundant: CI here is
+          // non-blocking, so a red typecheck does not stop a merge -- plus a
+          // plain-JS caller or a cast bypasses the type entirely. A dead
+          // button on a full-viewport overlay is the trap this variant exists
+          // to avoid, so rendering NO button beats rendering a fake one.
           onCancel ? (
             <div className="connection-timeout-modal-buttons">
               <button

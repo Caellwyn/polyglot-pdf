@@ -23,10 +23,18 @@ const OVERLAYS = [
   ['VoiceOverlayMobile', resolve(process.cwd(), 'src/demo/VoiceOverlayMobile.tsx')],
 ] as const;
 
-/** The connect-poll block: from the wait loop to the timeout error. */
+/**
+ * The connect-poll block: from the wait loop to the timeout error.
+ *
+ * Anchored on `setConnectionError('Connection timed out` -- NOT on the bare
+ * `setError(`, which the helper refactor removed and which silently emptied
+ * this extractor (caught by the length guard below, which is why it is there).
+ * If that English string is ever translated, this returns '' and the tests go
+ * RED rather than silently green -- the safe direction.
+ */
 function connectPollBlock(source: string): string {
   const start = source.indexOf('const maxWaitMs');
-  const end = source.indexOf("setError('Connection timed out - please try again')", start);
+  const end = source.indexOf("setConnectionError('Connection timed out", start);
   if (start === -1 || end === -1) return '';
   return source.slice(start, end + 80);
 }
@@ -45,13 +53,21 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     expect(block).toContain("=== 'budget_exhausted'");
   });
 
-  it('does not set the contradictory English timeout error', () => {
-    const block = connectPollBlock(SOURCE);
-    expect(block.length).toBeGreaterThan(100);
+  it('routes EVERY connection error through the suppressing helper', () => {
+    // PIN THE SET, NOT THE INSTANCES (CLAUDE.md scar #7). My first fix guarded
+    // the two timeout sites with an inline `if`; the cross-surface review
+    // found four MORE -- 'Connection lost - please click Reconnect' on the
+    // disclaimer-agree reconnect, which is the DEFAULT production path (the
+    // intro clip is off by default) and names a button bd cke6v removed.
+    //
+    // So the assertion is not "these two are guarded" but "no connection-path
+    // setError bypasses the helper". A seventh site added later fails here
+    // instead of shipping the same contradiction again.
+    const bare = [...SOURCE.matchAll(/(?<!Connection)setError\('Connection[^']*'\)/g)];
+    expect(bare).toEqual([]);
 
-    // The setError is guarded so a spent link falls through it. Scoped to the
-    // final-status check, so the loop's own break cannot satisfy this.
-    const finalCheck = block.slice(block.indexOf('const finalStatus'));
-    expect(finalCheck).toContain("finalStatus !== 'budget_exhausted'");
+    // And the helper actually suppresses on the terminal status.
+    const helper = SOURCE.slice(SOURCE.indexOf('const setConnectionError'));
+    expect(helper.slice(0, 500)).toContain("=== 'budget_exhausted'");
   });
 });

@@ -138,10 +138,11 @@ describe('the spend-exhausted modal', () => {
 
   it('renders NO button rather than a dead one when onCancel is missing', () => {
     // Omitting onCancel on this variant is now a TYPE ERROR (bd
-    // polyglot-pdf-leakz) -- `npm run typecheck` is a required CI job, so a
-    // forgetful caller cannot reach main. The cast below deliberately defeats
-    // that to exercise the surviving RUNTIME guard, which still matters for a
-    // plain-JS caller or another cast.
+    // polyglot-pdf-leakz), so a forgetful caller is caught at author time.
+    // But this repo's CI is NON-BLOCKING (ci.yml, bd polyglot-pdf-uov.3): a
+    // red typecheck reports without gating the merge, so the RUNTIME guard
+    // this test exercises is a real backstop, not decoration. The cast below
+    // deliberately defeats the type to reach it.
     //
     // The property under test is the same either way: no dead button on a
     // full-viewport overlay whose only exit is that button.

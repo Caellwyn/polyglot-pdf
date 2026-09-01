@@ -841,6 +841,20 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		)
 	}
 
+	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5).
+	// On a spent link the translated spend-ceiling modal already says voice has
+	// finished; an English "please try again" / "please click Reconnect" behind
+	// it contradicts that AND names a button bd cke6v removed. Mobile matters
+	// more: it has no save nudge, so that modal is the ONLY thing the client
+	// sees. Plain function, not useCallback -- this file uses no useCallback.
+	const setConnectionError = (message: string) => {
+		if (connectionManager?.getStatus() === 'budget_exhausted') {
+			console.log('[VoiceOverlayMobile] Suppressing connection error on a spent link:', message)
+			return
+		}
+		setError(message)
+	}
+
 	const handleDisclaimerAgree = async () => {
 		console.log('[VoiceOverlayMobile] User agreed to disclaimer')
 
@@ -947,14 +961,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
 					console.error('[VoiceOverlayMobile] [X] Reconnect timed out, status:', postReconnectStatus)
-					setError('Connection lost - please click Reconnect')
+					setConnectionError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
 				console.log('[VoiceOverlayMobile] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
 				console.error('[VoiceOverlayMobile] [X] Reconnection failed:', err)
-				setError('Connection lost - please click Reconnect')
+				setConnectionError('Connection lost - please click Reconnect')
 				return
 			}
 		}
@@ -1045,13 +1059,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlayMobile] [X] Connection timeout, final status:', finalStatus)
-				// Not for a spent link -- the modal already says it, translated,
-				// and this English string invites a retry that cannot work
-				// (bd polyglot-pdf-wwwa5). Mobile matters more here: it has no
-				// save nudge, so this modal is the ONLY thing the client sees.
-				if (finalStatus !== 'budget_exhausted') {
-					setError('Connection timed out - please try again')
-				}
+				setConnectionError('Connection timed out - please try again')
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
