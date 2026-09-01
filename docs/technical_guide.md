@@ -2,6 +2,12 @@
 
 *Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.)*
 
+> **Line-number citations in this file are not trustworthy without re-verifying
+> against source.** This doc has drifted the same way repeatedly -- bd
+> `polyglot-pdf-vdcm4` re-anchored one class of citation, then bd
+> `polyglot-pdf-nyc5j`/`qn8wv`/`x6dq1` had to re-anchor contract 2 again. Cite
+> a SYMBOL NAME rather than a line number when adding one.
+
 The [Surface contracts](#surface-contracts) section is the code-derived
 cross-surface data-contract map for blast-radius review. Continuous-DTI is the
 production default (`USE_DTI` / `CONTINUOUS_SESSION` /
