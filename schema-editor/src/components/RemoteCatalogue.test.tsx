@@ -2144,15 +2144,41 @@ describe('hiding never strands a kit', () => {
 
   it('closes the editor when ANOTHER session hides the open kit', async () => {
     // Concurrency: an author elsewhere hides the kit I have open, and I learn
-    // of it on my next refresh. My own handleSetHidden cannot cover this --
-    // nothing in my session called it.
+    // of it on my next refresh. Nothing in my session called handleSetHidden.
+    //
+    // It must be driven as a TRANSITION -- visible, then hidden on a later
+    // refresh. Mounting with it already hidden is the DELIBERATE-open case
+    // (see the next test), and a version of this test that did that passed
+    // against both the right fix and the wrong one.
+    const clearOpenKit = vi.fn();
+    const visible = TWO.map((k) => ({ ...k, hidden: false }));
+    vi.mocked(listRemoteKits).mockResolvedValue(visible);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-3"
+      role="author" clearOpenKit={clearOpenKit} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    expect(clearOpenKit).not.toHaveBeenCalled();   // still visible: no unwind
+
+    // Someone else hides it; my next refresh brings it back hidden.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      visible.map((k) => (k.id === 'form-3' ? { ...k, hidden: true } : k)));
+    fireEvent.click(screen.getByText('Refresh'));
+    await waitFor(() => expect(clearOpenKit).toHaveBeenCalled());
+  });
+
+  it('lets an author OPEN a hidden kit without it closing itself', async () => {
+    // The unwind fires on the TRANSITION, not the state. Keying it on "this
+    // open kit is hidden" would also fire when someone ticks Show hidden and
+    // deliberately opens one -- making a hidden kit unopenable, which breaks
+    // retrievability in a new way while fixing a desync.
     const clearOpenKit = vi.fn();
     vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
     render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-3"
       role="author" clearOpenKit={clearOpenKit} />);
-    // form-3 arrives already hidden -- exactly what a refresh after someone
-    // else's hide looks like.
-    await waitFor(() => expect(clearOpenKit).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    // form-3 is hidden and open -- a deliberate open. It stays open.
+    expect(clearOpenKit).not.toHaveBeenCalled();
   });
 
   it('does NOT close the editor merely because a SEARCH filters the kit out',

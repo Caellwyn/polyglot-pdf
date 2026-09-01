@@ -197,3 +197,36 @@ Clearing the mock immediately before the click fixed it.
 That is three times in this bead that reverting a fix produced green. Each time
 the tell was the same, and each time I only saw it because I ran the mutation
 rather than trusting the new test's name.
+
+## Round 3: my fix for the desync made hidden kits unopenable
+
+I asked review to check whether the concurrent-hide unwind had broken opening a
+hidden kit deliberately. It had.
+
+The effect keyed on the STATE -- "the open kit is hidden" -- which is equally
+true when someone ticks Show hidden and clicks a hidden card on purpose. So the
+editor opened and immediately closed itself. A fix for one desync creating a
+dead end: exit criterion 2 failing again, in a new way, from the repair of the
+last failure.
+
+It now fires on the **transition**: visible last render, hidden now. Arriving
+hidden is a deliberate act and is left alone.
+
+**The first attempt at that was still wrong**, and the reason is worth keeping.
+A boolean "was it visible?" flag starts false, but `kits` starts EMPTY -- so on
+the first render the open kit is absent, which read as "not hidden", set the
+baseline, and then flipped when the list loaded. Indistinguishable from a real
+transition. The flag is now tri-state: **unknown** until the open kit is
+actually present in a loaded list, so an absent kit teaches the baseline
+nothing. Both directions are pinned -- over-firing reddens the deliberate-open
+test, under-firing reddens the concurrency one.
+
+**And the concurrency test that was meant to catch this could not.** It mounted
+with the kit already hidden, which is the deliberate-open case, so it passed
+against both the right behaviour and the wrong one. It now drives the real
+sequence: render visible, assert nothing closed, then refresh with it hidden.
+
+That is the fourth vacuous test in this bead, and they share a shape: **the
+setup asserts the end state rather than performing the change**. Mounting
+already-hidden is not the same event as becoming hidden, any more than a folder
+open that itself calls `clearOpenKit` is the same as a Hide click doing so.

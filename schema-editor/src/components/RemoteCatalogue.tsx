@@ -190,15 +190,33 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   const [filter, setFilter] = React.useState<CatalogueFilter>(EMPTY_FILTER);
   const shown = React.useMemo(() => filterKits(kits, filter), [kits, filter]);
   // A CONCURRENT hide -- another author hiding the kit I have open, discovered
-  // on my next refresh -- must unwind the same way my own hide does. Without
-  // this the editor keeps showing a form that has left the catalogue, and the
-  // strip points elsewhere. Keyed on the kit being HIDDEN specifically, not on
-  // merely being filtered out: my own search box narrowing the list must not
-  // close the form I am editing.
-  const openIsHidden = kits.some((k) => k.id === selectedKitId && k.hidden === true);
+  // on my next refresh -- must unwind the same way my own hide does, or the
+  // editor keeps showing a form that has left the catalogue while the strip
+  // points elsewhere.
+  //
+  // It fires on the TRANSITION, not the state. "This open kit is hidden" is
+  // also true when someone ticks Show hidden and deliberately opens one, and
+  // closing THAT would make a hidden kit unopenable -- breaking retrievability
+  // in a new way while fixing a desync. So the trigger is: it was visible last
+  // render, and it is hidden now. Opening one that was already hidden is a
+  // deliberate act and is left alone.
+  // Tri-state on purpose: UNKNOWN until the open kit is actually present in a
+  // loaded list. `kits` starts EMPTY, so a plain boolean reads "not hidden"
+  // during the first render and then flips -- indistinguishable from a real
+  // transition, which closed every deliberately-opened hidden kit on mount.
+  const openKit = kits.find((k) => k.id === selectedKitId) ?? null;
+  const openIsHidden = openKit === null ? null : openKit.hidden === true;
+  const wasVisible = React.useRef<boolean | null>(null);
   React.useEffect(() => {
-    if (openIsHidden) clearOpenKit?.();
+    // Fires ONLY on visible -> hidden for the same open kit. Arriving hidden
+    // (a deliberate open via Show hidden) leaves it alone, and an absent kit
+    // teaches the baseline nothing.
+    if (openIsHidden === true && wasVisible.current === true) clearOpenKit?.();
+    if (openIsHidden !== null) wasVisible.current = !openIsHidden;
   }, [openIsHidden, clearOpenKit]);
+  // Switching forms re-baselines, so the previous kit's visibility is never
+  // carried forward onto the next one.
+  React.useEffect(() => { wasVisible.current = null; }, [selectedKitId]);
   const withheld = React.useMemo(
     () => hiddenByFilterCount(kits, filter), [kits, filter]);
 
