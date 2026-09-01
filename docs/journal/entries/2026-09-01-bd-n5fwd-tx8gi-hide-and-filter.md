@@ -273,3 +273,37 @@ The other recurring cost was test shape. Four vacuous tests, and one absent one,
 all sharing a cause: **mounting in the end state instead of performing the
 change**. A fresh mount cannot see a transition, and an assertion satisfied by
 the setup proves nothing about the code under it.
+
+## The cross-surface pass: one real gap, and it was mine
+
+The outer review traced the contracts outward and confirmed the thing I most
+wanted checked: **no metadata writer reconstructs from a fixed field list.** All
+ten backend `put_metadata` sites and all three local writers merge with a
+spread, so hide-then-rename/publish/retire cannot silently unhide a kit. The
+deploy scripts' `metadata.json` greps look for quoted strings, and `hidden` is a
+boolean, so it cannot be captured by them. A hidden-but-published kit stays
+fillable, in the manifest, and reachable by a client -- hiding is an
+editor-view concept and stays one.
+
+The gap was elsewhere, and it is a genuine data-loss path I introduced:
+
+**Hiding the open kit silently discarded unsaved edits.** `clearOpenKit` wipes
+the schema and the whole undo stack. Its two existing callers were both already
+guarded -- the folder switch asks, and the delete unwind follows a destructive
+confirmation dialog. Hiding made it **one click, with no prompt**, and its own
+tooltip promises "nothing is deleted and you can bring it back at any time" --
+true of the FORM, and not of the edits in front of you. The concurrent case was
+worse: another author's hide would destroy my unsaved work on my next refresh.
+
+Now gated by `confirmDiscardOnHide`, threaded from App to both catalogues, and
+consulted **only** when the kit being hidden is the open one and there is
+actually something to lose -- so the common case stays a single click. Unhiding
+never closes anything and is never gated. Both directions are pinned: removing
+the guard reddens one test, asking on every hide reddens the other.
+
+**Five inner rounds could not have found it.** Every catalogue test stubs
+`clearOpenKit` with a mock, so what happens *behind* that callback is invisible
+there -- the loss lives one component up, in App. That is precisely the
+cross-surface reviewer's job, and the split earned its keep here: the inner loop
+verified the contract was called correctly, and the outer one asked what
+answering that call actually costs.

@@ -534,6 +534,21 @@ export const App: React.FC = () => {
     return true;
   }, [hasUnsavedChanges]);
 
+  // Hiding the OPEN kit closes the editor, which discards unsaved edits and the
+  // undo stack (bd polyglot-pdf-n5fwd). Every other path that can lose that work
+  // asks first; hiding must too, and it needs asking MORE than most because its
+  // own tooltip promises "nothing is deleted and you can bring it back" -- true
+  // of the FORM, and not of the edits in front of you.
+  //
+  // Returns true when there is nothing to lose, so the common case is silent.
+  const confirmDiscardOnHide = React.useCallback((): boolean => {
+    if (!hasUnsavedChanges) return true;
+    return window.confirm(
+      'Hiding this form closes it, and your unsaved changes will be lost. '
+      + 'Save first, or hide it anyway?'
+    );
+  }, [hasUnsavedChanges]);
+
   // Drop the open-kit state AFTER a new folder is actually chosen, so a same-named
   // kit in the new folder can't inherit the old form's live progress (Codex PR
   // #224). Clears savedFileName too, else the header keeps showing "Saved to <old
@@ -1395,6 +1410,7 @@ export const App: React.FC = () => {
             // polyglot-pdf-hbfky), the same callback FormCatalogue below
             // already receives for this purpose.
             clearOpenKit={clearOpenKit}
+            confirmDiscardOnHide={confirmDiscardOnHide}
             liveProgress={
               selectedKitId && schema
                 ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema, lintFindings) }
@@ -1405,6 +1421,7 @@ export const App: React.FC = () => {
           <FormCatalogue
             onOpenKit={handleOpenKit}
             confirmFolderChange={confirmFolderChange}
+            confirmDiscardOnHide={confirmDiscardOnHide}
             clearOpenKit={clearOpenKit}
             onAuthError={handleAuthExpired}
             onRootChange={handleRootChange}

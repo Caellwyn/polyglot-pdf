@@ -2248,6 +2248,44 @@ describe('hiding never strands a kit', () => {
       expect(clearOpenKit).not.toHaveBeenCalled();
     });
 
+  it('asks before hiding the OPEN kit, because that discards unsaved edits',
+    async () => {
+      // Hiding closes the editor, taking the undo stack with it. Every other
+      // path that can lose that work asks first; hiding needs asking MORE than
+      // most, because its own tooltip promises "nothing is deleted and you can
+      // bring it back" -- true of the FORM, not of the edits on screen.
+      const confirmDiscardOnHide = vi.fn(() => false);   // the human says no
+      vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+      render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-2"
+        role="author" confirmDiscardOnHide={confirmDiscardOnHide} />);
+      await waitFor(() =>
+        expect(screen.getByText('Show form cards')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Show form cards'));
+      await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+      fireEvent.click(screen.getAllByText('Hide')[0]);
+      await waitFor(() => expect(confirmDiscardOnHide).toHaveBeenCalled());
+      // Declined -- nothing was hidden.
+      expect(setRemoteHidden).not.toHaveBeenCalled();
+    });
+
+  it('does NOT ask when hiding a kit that is not the open one', async () => {
+    // The common case stays one click. Hiding some other form costs nothing.
+    const confirmDiscardOnHide = vi.fn(() => true);
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null}
+      role="author" confirmDiscardOnHide={confirmDiscardOnHide} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(setRemoteHidden).toHaveBeenCalled());
+    expect(confirmDiscardOnHide).not.toHaveBeenCalled();
+  });
+
   it('per-status counts describe the GRID, not the store', async () => {
     // The store banner counts everything and says so; the per-status line sits
     // directly above the cards and describes THEM. Summing the raw list put

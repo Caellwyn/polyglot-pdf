@@ -65,6 +65,13 @@ interface RemoteCatalogueProps {
    * contract shouldn't force one) is not required to supply it.
    */
   clearOpenKit?: () => void;
+  /**
+   * Guard run BEFORE hiding the OPEN kit, which closes the editor and so
+   * discards unsaved edits and the undo stack (bd polyglot-pdf-n5fwd).
+   * Returns false to ABORT the hide. Not consulted when the kit being hidden
+   * is not the open one -- there is nothing to lose then.
+   */
+  confirmDiscardOnHide?: () => boolean;
 }
 
 interface RemoteKitProgress {
@@ -102,7 +109,7 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   onOpenKit, selectedKitId, role, onAuthError, liveProgress,
-  defaultExpanded = false, onStatusRefusal, clearOpenKit,
+  defaultExpanded = false, onStatusRefusal, clearOpenKit, confirmDiscardOnHide,
 }) => {
   const [kits, setKits] = React.useState<RemoteKitEntry[]>([]);
   // bd tynm: the card grid is collapsed by default behind a compact selector
@@ -613,6 +620,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // what the server stored, or a failed hide leaves a kit missing from the
   // only view that shows it.
   const handleSetHidden = async (kit: RemoteKitEntry, hidden: boolean) => {
+    // Hiding the OPEN kit closes the editor, taking unsaved edits and the undo
+    // stack with it. Ask first -- and only then: hiding some OTHER kit costs
+    // nothing, so the common case stays a single click. Unhiding never closes
+    // anything, so it is never gated.
+    if (hidden && kit.id === selectedKitId && confirmDiscardOnHide
+        && !confirmDiscardOnHide()) {
+      return;
+    }
     setNotice(null);
     setError(null);
     setBusy(true);

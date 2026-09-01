@@ -46,6 +46,13 @@ interface FormCatalogueProps {
    */
   clearOpenKit?: () => void;
   /**
+   * Guard run BEFORE hiding the OPEN kit, which closes the editor and so
+   * discards unsaved edits and the undo stack (bd polyglot-pdf-n5fwd).
+   * Returns false to ABORT the hide. Not consulted when the kit being hidden
+   * is not the open one -- there is nothing to lose then.
+   */
+  confirmDiscardOnHide?: () => boolean;
+  /**
    * Auth failure on one of the SERVER-backed actions -- the host routes it:
    * 401 back to sign-in, 403 to the refused screen (bd polyglot-pdf-yswp3).
    *
@@ -119,7 +126,8 @@ const STATUS_STYLE: Record<string, string> = {
  * the browser lacks the File System Access directory API.
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
-  onOpenKit, confirmFolderChange, clearOpenKit, onAuthError, selectedKitId, liveProgress,
+  onOpenKit, confirmFolderChange, clearOpenKit, confirmDiscardOnHide,
+  onAuthError, selectedKitId, liveProgress,
   onRootChange, serverActionsOk = false, onStatusRefusal,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
@@ -490,6 +498,14 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // split to enforce (it is the maintainer's own machine and their own folder).
   // The SERVER still checks -- this button is not the guard.
   const handleSetHidden = React.useCallback(async (kit: CatalogueEntry, hidden: boolean) => {
+    // Hiding the OPEN kit closes the editor, taking unsaved edits and the undo
+    // stack with it. Ask first -- and only then: hiding some OTHER kit costs
+    // nothing, so the common case stays a single click. Unhiding never closes
+    // anything, so it is never gated.
+    if (hidden && kit.id === selectedKitId && confirmDiscardOnHide
+        && !confirmDiscardOnHide()) {
+      return;
+    }
     setNotice(null);
     setError(null);
     setBusy(true);
@@ -514,7 +530,8 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     } finally {
       setBusy(false);
     }
-  }, [root, refresh, onAuthError, selectedKitId, clearOpenKit]);
+  }, [root, refresh, onAuthError, selectedKitId, clearOpenKit,
+      confirmDiscardOnHide]);
 
   const handleRename = React.useCallback(async (kit: CatalogueEntry) => {
     if (!root) return;
