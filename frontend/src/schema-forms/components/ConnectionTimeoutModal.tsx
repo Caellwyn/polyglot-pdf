@@ -1,7 +1,7 @@
 /**
  * ConnectionTimeoutModal - connection-recovery prompt (bd polyglot-pdf-jf6w.2).
  *
- * Two variants:
+ * Three variants:
  *
  * - "timeout" (default): shown when the voice connection drops in a way the app
  *   cannot silently auto-recover from (WebFormConnection surfaces the terminal
@@ -19,11 +19,13 @@
  *   the "timeout" variant if auto-reconnect gives up (status -> reconnect_failed).
  *
  * - "budget_exhausted" (bd polyglot-pdf-cke6v): the link's SPEND CEILING is used
- *   up. Terminal like "timeout", but with NO buttons at all -- a Reconnect that
- *   cannot possibly work reads as a broken app, which is the whole complaint
- *   this variant answers. The copy's job is to say what happened and what still
- *   works: typing the remaining answers, and download/print/preview (all true --
- *   retrieval never redeems the link).
+ *   up. Terminal like "timeout", but with NO RECOVERY action -- a Reconnect
+ *   that cannot possibly work reads as a broken app, which is the whole
+ *   complaint this variant answers. It DOES carry a dismiss (and must: the
+ *   overlay is full-viewport, so a button-less version blocked the typing
+ *   and printing its own copy promises). The copy's job is to say what
+ *   happened and what still works: typing the remaining answers, and
+ *   download/print/preview (all true -- retrieval never redeems the link).
  *
  * Mirrors the DisclaimerModal house pattern (inline per-language copy, no i18n
  * library; copy lives in connectionTimeoutTranslations.ts). The copy renders in
@@ -42,9 +44,9 @@ export interface ConnectionTimeoutModalProps {
   /**
    * "timeout" (default) = terminal give-up with a reconnect button.
    * "reconnecting" = transient auto-reconnect notice, no buttons (bd ppfy).
-   * "budget_exhausted" = terminal, no buttons: the link's spend ceiling is
-   *   used up, so reconnecting is impossible rather than merely unlikely
-   *   (bd cke6v).
+   * "budget_exhausted" = terminal, no RECOVERY action but dismissible: the
+   *   link's spend ceiling is used up, so reconnecting is impossible rather
+   *   than merely unlikely. Requires onCancel (bd cke6v).
    */
   variant?: 'timeout' | 'reconnecting' | 'budget_exhausted';
 }

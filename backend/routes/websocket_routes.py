@@ -1390,7 +1390,7 @@ async def fill_form_from_schema(
 		# The frontend BRANCHES ON THE REASON (bd polyglot-pdf-cke6v, shipped):
 		# webFormConnection.handleClose returns early on "budget_exhausted",
 		# setting a terminal status of the same name -- no retries -- and the
-		# overlay shows a modal with NO buttons. "budget_unavailable" is
+		# overlay shows a modal with no RECOVERY action. "budget_unavailable" is
 		# deliberately NOT matched there: it means THIS spend store was
 		# unreachable, which IS transient, so it keeps the ordinary retry path.
 		# The two tokens are matched by STRING COMPARE across the wire, with no

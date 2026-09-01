@@ -1373,7 +1373,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				onCancel={() => setReconnectModalDismissed(true)}
 			/>
 			{/* Spend ceiling used up (bd polyglot-pdf-cke6v). Same terminal,
-			    button-less modal as the desktop overlay -- a client on a phone
+			    terminal modal as the desktop overlay -- a client on a phone
 			    hits this exactly as often, and the mobile surface is where the
 			    dead Reconnect was hardest to recover from. */}
 			<ConnectionTimeoutModal
