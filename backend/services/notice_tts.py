@@ -32,11 +32,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 from typing import Optional
 
 import structlog
 
-from backend.services.intro_tts import INTRO_GAIN_DB, resolve_intro_language
+from backend.services.intro_tts import INTRO_GAIN_DB
 from backend.services.spellback_tts import (
     _synthesize_sync,
     resolve_spellback_voice,
@@ -295,8 +296,36 @@ NOTICE_TEXT: dict[str, dict[str, str]] = {
 }
 
 
-def notice_text(language_name: Optional[str], notice_key: str) -> str:
-    """The text for this notice, in this language. Raises on an unknown key.
+_FALLBACK_LANGUAGE = "English"
+
+
+def resolve_notice_language(language_name: Optional[str]) -> str:
+    """The NOTICE_TEXT-cased language name for a wire language name.
+
+    Case-insensitive, against THIS module's own table -- deliberately NOT
+    resolve_intro_language (intro_tts's _LANGUAGES table), which can carry a
+    different language SET than NOTICE_TEXT (bd polyglot-pdf-see5j, Opus
+    cross-surface finding 1: the two tables are only coincidentally in
+    sync, and coupling this resolution to the wrong table let a
+    case-mismatched request's resolved cache key disagree with the text it
+    actually spoke -- e.g. "spanish" synthesized ENGLISH text but cached
+    under the key ("Spanish", ...), so the next genuinely-cased Spanish
+    request served the English clip for the rest of the process lifetime).
+    Unknown/empty falls back to English, same as notice_text's own fallback.
+    """
+    if language_name:
+        wanted = str(language_name).strip().casefold()
+        for name in NOTICE_TEXT:
+            if name.casefold() == wanted:
+                return name
+    return _FALLBACK_LANGUAGE
+
+
+def notice_text(language: str, notice_key: str) -> str:
+    """The text for this notice, in this ALREADY-RESOLVED language name
+    (call resolve_notice_language first -- every caller must resolve once
+    and reuse the SAME value for both the text lookup and any cache key
+    derived from it, or the two can disagree). Raises on an unknown key.
 
     Falls back to English for a language we have no translation for, which is
     how a newly-supported language degrades to something audible rather than to
@@ -304,7 +333,7 @@ def notice_text(language_name: Optional[str], notice_key: str) -> str:
     """
     if notice_key not in KNOWN_NOTICES:
         raise ValueError("unknown notice")
-    table = NOTICE_TEXT.get(language_name or "", NOTICE_TEXT["English"])
+    table = NOTICE_TEXT.get(language, NOTICE_TEXT["English"])
     text = table.get(notice_key) or NOTICE_TEXT["English"][notice_key]
     if len(text) > MAX_NOTICE_CHARS:
         # Our own table is too long: a bug here, never caller input.
@@ -312,16 +341,38 @@ def notice_text(language_name: Optional[str], notice_key: str) -> str:
     return text
 
 
+# (resolved language, notice_key) -> (audio bytes, etag). Process lifetime;
+# len(NOTICE_TEXT languages) x len(KNOWN_NOTICES) entries at most -- the
+# same shape as intro_tts's cache, for the same reason (bd
+# polyglot-pdf-see5j): the notice text set is tiny and fully static (2 keys
+# x ~18 languages today), so a repeat request never needs to re-synthesize.
+# No eviction needed. First writer wins so the ETag stays stable across
+# concurrent first requests for the same key.
+_cache: dict = {}
+_cache_lock = threading.Lock()
+
+
 async def synthesize_notice(
     language_name: Optional[str], notice_key: str, settings
 ) -> tuple[bytes, str]:
-    """Synthesize a fixed safety notice. Returns (mp3_bytes, etag).
+    """Synthesize (or serve from cache) a fixed safety notice. Returns
+    (mp3_bytes, etag).
 
     Raises ValueError on an unknown key -- the route maps that to a 400 before
     anything reaches the TTS backend.
     """
-    text = notice_text(language_name, notice_key)          # raises on unknown
-    language = resolve_intro_language(language_name)
+    # Resolve ONCE, use the SAME value for the text lookup and the cache key
+    # (bd polyglot-pdf-see5j, Opus cross-surface finding 1) -- resolving
+    # twice, or resolving against a different table than the one the text
+    # lookup uses, is exactly what let a case-mismatched request's cached
+    # key disagree with the text it actually spoke.
+    language = resolve_notice_language(language_name)
+    text = notice_text(language, notice_key)                # raises on unknown
+    key = (language, notice_key)
+    with _cache_lock:
+        hit = _cache.get(key)
+    if hit is not None:
+        return hit
 
     def _resolve_and_synthesize() -> bytes:
         # Same voice resolution and gain as the intro clip, so a notice does
@@ -334,11 +385,19 @@ async def synthesize_notice(
     audio = await asyncio.to_thread(_resolve_and_synthesize)
 
     etag = '"notice-%s"' % hashlib.sha256(audio).hexdigest()[:24]
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit is None:
+            hit = (audio, etag)
+            _cache[key] = hit
 
     _log.info(
         "notice_tts_synthesized",
         notice=notice_key,
         language=language,
-        bytes=len(audio),
+        # The CACHED winner's size, not this thread's draw -- under a
+        # concurrent first-request race the loser's bytes are discarded (same
+        # shape as intro_tts.synthesize_intro).
+        bytes=len(hit[0]),
     )
-    return audio, etag
+    return hit
