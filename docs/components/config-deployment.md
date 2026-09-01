@@ -246,7 +246,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `scripts/authoring/extract_form.py` as a subprocess — the image is built from
   the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
   `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
-  Cloud Build upload lean. Needs `GEMINI_API_KEY` mounted (Secret Manager).
+  Cloud Build upload lean. Needs `GEMINI_API_KEY` on the AI Studio path — which
+  no deploy script binds today (`--set-secrets` carries `LINK_TOKEN_SECRET`
+  alone); the deployed channels run Vertex, where the key is unused.
 - **`OPTION_TRANSLATION_MODEL`** — the authoring-time option-label translation
   model (bd `polyglot-pdf-2h9j`; default `gemini-2.5-pro`, same one-off-per-form
   rationale). Read by the extraction post-pass (skippable via the extract

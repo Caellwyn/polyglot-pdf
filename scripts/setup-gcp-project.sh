@@ -28,7 +28,15 @@ gcloud services enable \
     aiplatform.googleapis.com \
     storage.googleapis.com \
     texttospeech.googleapis.com \
+    secretmanager.googleapis.com \
     --project "$PROJECT_ID"
+# secretmanager: the channel deploys pass --set-secrets (bd
+# polyglot-pdf-hvui4), binding LINK_TOKEN_SECRET. Granting the ROLE below is
+# not enough -- add-iam-policy-binding is not API-gated, so without this line
+# the script exits 0 looking complete and the failure surfaces later at
+# `gcloud run deploy`, which is the exact "rebuilt from this script alone
+# cannot deploy" case the role was added to prevent. Enabled out of band on
+# polyglot-demo-aa709 (verified 2026-09-01), which is why nothing noticed.
 # texttospeech: the deterministic spell-back clip (bd polyglot-pdf-22h1f).
 # Synthesis needs only an authenticated principal + the API enabled -- no
 # extra IAM role on the service account.

@@ -324,6 +324,16 @@ def test_setup_grants_the_role_that_set_secrets_requires():
         "project built from that script cannot deploy"
     )
 
+    # AND the API. Granting the role is not enough: add-iam-policy-binding is
+    # not API-gated, so a script that grants without enabling exits 0 looking
+    # complete and fails later at `gcloud run deploy`. I shipped exactly that
+    # in the previous commit -- the role alone, claiming the gap was closed.
+    assert "secretmanager.googleapis.com" in setup, (
+        "the role is granted but secretmanager.googleapis.com is never enabled "
+        "-- add-iam-policy-binding succeeds regardless, so setup reports "
+        "success and the deploy fails on a fresh project"
+    )
+
 
 def test_no_secrets_means_no_flag():
     """A channel that sets nothing must not change the invocation.

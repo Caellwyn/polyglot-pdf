@@ -108,8 +108,11 @@ if [ "$DEPLOY_GCP" = true ]; then
     # keeps client data out of Google's model training. config.py REFUSES to
     # start with VERTEXAI=false whenever K_SERVICE is set, and there is no
     # override flag. Test 3.1 LOCALLY (no K_SERVICE) and deploy it only once it
-    # is GA for Vertex customers. GEMINI_API_KEY (still injected via Secret
-    # Manager) is unused on this Vertex path. See docs/standards/ai-models.md.
+    # is GA for Vertex customers. GEMINI_API_KEY is unused on this Vertex path
+    # -- and is NOT bound by any deploy script: --set-secrets carries
+    # LINK_TOKEN_SECRET alone (see BACKEND_SECRETS_COMMON above). Add it there
+    # if a channel ever needs the AI Studio path. See
+    # docs/standards/ai-models.md.
     # BACKEND_SERVICE_ACCOUNT pins the Cloud Run runtime identity (the custom SA
     # that holds roles/aiplatform.user for the Vertex path) IN the deploy itself,
     # so the new revision is created+routed under the right SA from the start --
