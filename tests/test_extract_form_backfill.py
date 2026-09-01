@@ -2242,3 +2242,50 @@ def test_a_REAL_pdf_dropdown_gets_speakable_labels_end_to_end(tmp_path):
     # The VALUES stay the export codes -- they are what prints (bd hmkas).
     assert sorted(labels) == ["AA", "AK", "AL", "WY"]
     assert report["unspeakable"] == []
+
+
+def test_the_unspeakable_report_ROUND_TRIPS_to_the_saved_schema(tmp_path, monkeypatch):
+    """The report must reach the SAVED FILE, not just stderr.
+
+    Driven through the real extract() rather than the backfill alone: a stderr
+    line is lost on a batch/CI extraction, and the whole point of persisting is
+    that a human opening the schema later is told. Fresh-eyes noted that the
+    existing end-to-end tests all use schemas with NO select fields, so they
+    exercised this read path with an always-empty list -- safe, but never a
+    genuine round-trip of a POPULATED report.
+    """
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    w = fitz.Widget()
+    w.field_name = "region[0]"
+    w.field_type = fitz.PDF_WIDGET_TYPE_COMBOBOX
+    # "AL" the table CAN expand; "ABCD" it cannot -- so exactly one is reported.
+    w.choice_values = ["AL", "ABCD"]
+    w.rect = fitz.Rect(100, 200, 136, 218)
+    page.add_widget(w)
+    pdf = tmp_path / "form.pdf"
+    doc.save(str(pdf))
+    doc.close()
+    out = str(tmp_path / "schema.json")
+
+    def _stub_run(pdf_path, dump_path, model, **kw):
+        return {
+            "form_metadata": {"title": "T", "form_number": "T-1",
+                              "version": "1", "language": "en"},
+            "fields": [{"id": "region", "name": "Region",
+                        "spoken_name": "region", "type": "select",
+                        "pdf_field_name": "region[0]"}],
+        }
+
+    monkeypatch.setattr(ef.arm_llm_native, "run", _stub_run)
+    ef.extract(str(pdf), out, translate_options=False, enrich_guidance=False)
+
+    saved = json.loads(pathlib.Path(out).read_text(encoding="utf-8"))
+    authoring = saved["_bakeoff"]["authoring"]
+    # The POPULATED report survived the save.
+    assert authoring["dropdown_labels_unspeakable"] == ["region:ABCD"]
+    # ...and the mappable code was labelled rather than reported.
+    labels = {o["value"]: o["label"]
+              for o in saved["fields"][0]["options"]}
+    assert labels == {"AL": "Alabama (AL)", "ABCD": "ABCD"}
