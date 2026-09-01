@@ -493,6 +493,9 @@ def test_i90_height_selects_are_never_force_recited():
     from pathlib import Path
 
     kit = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
+    if not kit.exists():
+        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
+                     "bd polyglot-pdf-hydb0)")
     schema = json.loads(kit.read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in schema["fields"]}
     for fid in ("p3_line8_heightfeet", "p3_line8_heightinches"):
@@ -654,8 +657,15 @@ def _load_kit_field(kit, field_id):
 
 def test_real_yes_no_fields_get_the_natural_question_marker():
     # bd 41fi criterion 1: the two named shipped fields render the two-option
-    # marker, not the list recital.
+    # marker, not the list recital. i-90's case is skipped (not dropped) once
+    # its kit is absent (deprecated, bd polyglot-pdf-hydb0), so f1040's pin
+    # still holds even when i-90 is gone.
+    from pathlib import Path
+
+    _kits_root = Path(__file__).resolve().parents[3] / "form-kits"
     for kit, fid in (("i-90", "p3_checkbox4[1]"), ("f1040", "fld_digital_assets")):
+        if not (_kits_root / kit / "schema.json").exists():
+            continue
         f = _load_kit_field(kit, fid)
         assert len(f["options"]) == 2, fid
         text = render_field_guidance(f)
@@ -672,6 +682,12 @@ def test_substantive_two_option_pair_keeps_the_full_recital():
     # so ONE natural question drops the representation-scope clause -- load-
     # bearing legal text the user never hears. Too long to fold into one
     # question => the normal recital stands.
+    from pathlib import Path
+
+    if not (Path(__file__).resolve().parents[3] / "form-kits" / "i-90" /
+            "schema.json").exists():
+        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
+                     "bd polyglot-pdf-hydb0)")
     f = _load_kit_field("i-90", "p7_checkbox7")
     assert len(f["options"]) == 2
     text = render_field_guidance(f)
@@ -740,6 +756,14 @@ def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_
     # Parametrized over EVERY language the kit actually bakes, not a sample:
     # the two failures above hit disjoint language sets, so any fixed sample
     # would have missed one of them.
+    from pathlib import Path
+
+    if not (Path(__file__).resolve().parents[3] / "form-kits" / kit /
+            "schema.json").exists():
+        pytest.skip(f"form-kits/{kit}/schema.json not present (kit "
+                     "deprecated, bd polyglot-pdf-hydb0)"
+                     if kit == "i-90" else
+                     f"form-kits/{kit}/schema.json not present in this checkout")
     f = _load_kit_field(kit, fid)
     languages = sorted({
         lang
@@ -1048,8 +1072,15 @@ def test_f1040_line_reference_pair_still_asks_a_natural_question():
 def test_real_multi_option_lists_keep_the_unconditional_recital():
     # bd 41fi + c2jy criterion 2: the two fields the original bug was about
     # still get the read-ALL imperative, kit-backed so a schema re-type or a
-    # marker regression cannot slip through on synthetic fields alone.
+    # marker regression cannot slip through on synthetic fields alone. i-90's
+    # case is skipped (not dropped) once its kit is absent (deprecated, bd
+    # polyglot-pdf-hydb0), so w7's pin still holds even when i-90 is gone.
+    from pathlib import Path
+
+    _kits_root = Path(__file__).resolve().parents[3] / "form-kits"
     for kit, fid, n in (("w7", "reason", 8), ("i-90", "p2_checkbox2[5]", 12)):
+        if not (_kits_root / kit / "schema.json").exists():
+            continue
         f = _load_kit_field(kit, fid)
         text = render_field_guidance(f)
         assert f"Options ({n} -- read ALL {n} aloud when asking; " in text, fid

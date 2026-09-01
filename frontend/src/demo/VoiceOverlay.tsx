@@ -192,8 +192,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// The nudge fires when voice is ENDING for any reason -- the spend
 		// ceiling, an idle timeout, or the form finishing. All three are the last
 		// moment before a client might close the tab.
+		// budget_exhausted is listed EXPLICITLY (bd polyglot-pdf-cke6v). A spend
+		// close used to land on reconnect_failed, so this fired; giving it its
+		// own terminal status silently dropped the one case this comment names
+		// first -- and a client link is exactly who needs the nudge, since the
+		// file they save is their only copy.
 		voiceEnding: status.toLowerCase() === 'idle_timeout'
-			|| status.toLowerCase() === 'reconnect_failed',
+			|| status.toLowerCase() === 'reconnect_failed'
+			|| status.toLowerCase() === 'budget_exhausted',
 		enabled: isClientSession,
 	})
 
@@ -268,6 +274,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// polyglot-pdf-jf6w.2). Reset whenever status leaves reconnect_failed so a
 	// later terminal drop re-shows the modal.
 	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
+	// The spend-ceiling notice is TERMINAL, so unlike reconnectModalDismissed
+	// this is never reset -- no later state should bring it back (bd
+	// polyglot-pdf-cke6v). It exists so the client can get past a full-viewport
+	// overlay to the typing and printing its own message promises they can do.
+	const [budgetModalDismissed, setBudgetModalDismissed] = useState(false)
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
@@ -2758,6 +2769,32 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				isOpen={status.toLowerCase() === 'reconnecting' && (connectionManager?.isDroppedReconnect?.() ?? false)}
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => {}}
+			/>
+
+			{/* Spend ceiling used up (bd polyglot-pdf-cke6v). Terminal and NOT
+			    dismissible: the client needs to know voice is over for this link,
+			    and there is no action that would bring it back. Deliberately no
+			    Reconnect -- the old behavior retried a socket that refuses every
+			    time and then offered a button that could not work.
+			    onReconnect is unused here but required by the prop shape.
+
+			    SUPPRESSED WHILE THE SAVE NUDGE IS UP (Opus cross-surface r2).
+			    Both dialogs now carry the SAME words -- the ending nudge and this
+			    modal are both the lifted voiceEnding copy -- but this one is
+			    position:fixed at z-index 10000 with a 75% scrim and no SAVE
+			    action, while the nudge underneath holds the working "Save my
+			    form" button. Showing both told the client to save and then covered the
+			    only control that saves. The nudge wins: identical message, plus
+			    an action. This modal is the fallback for a client who has already
+			    dismissed or completed the nudge. */}
+			<ConnectionTimeoutModal
+				variant="budget_exhausted"
+				isOpen={status.toLowerCase() === 'budget_exhausted'
+					&& saveNudge.variant === null
+					&& !budgetModalDismissed}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => {}}
+				onCancel={() => setBudgetModalDismissed(true)}
 			/>
 		</>
 	)

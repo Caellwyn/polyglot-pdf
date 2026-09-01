@@ -77,6 +77,12 @@ export function RetireCandidatesDialog({
                   onChange={() => setSelected(c.kitId)}
                   disabled={busy}
                 />
+                {/* Label AND id, which is kitName()'s rule (bd nsz2d) spelled
+                    out in JSX rather than a string -- these are separate
+                    elements so the id can be styled as secondary. Two kits
+                    can share a label, and this list exists precisely to pick
+                    ONE of several revisions of the same form, so the id is
+                    what distinguishes the rows. */}
                 <span className="text-sm">
                   <span className="font-medium">{c.label}</span>
                   <span className="text-slate-500"> ({c.kitId})</span>

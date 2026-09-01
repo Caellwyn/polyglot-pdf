@@ -161,14 +161,29 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				// Check if it's a radio group or checkbox group (multiple with same name)
 				if (inputs.length > 1) {
 					if (firstInput.type === 'radio') {
-						// This is a radio group
-						handleRadioGroup(inputs as NodeListOf<HTMLInputElement>, newValue, update.fieldId)
-						results.success.push(update.fieldId)
+						// This is a radio group. Gate success on the actual match
+						// (bd polyglot-pdf-c6t0e) -- this branch never reaches the
+						// blanket "if (element)" badge block below, so an
+						// unconditional push here was the ONLY success-tracking
+						// site for radio groups, and it reported success (with
+						// NO badge at all, since handleRadioGroup itself only
+						// badges on a real match) even when nothing was selected.
+						const groupMatched = handleRadioGroup(inputs as NodeListOf<HTMLInputElement>, newValue, update.fieldId)
+						if (groupMatched) {
+							results.success.push(update.fieldId)
+						} else {
+							results.notFound.push(update.fieldId)
+						}
 						continue
 					} else if (firstInput.type === 'checkbox') {
-						// This is a checkbox group (multiple checkboxes with same name)
-						handleCheckboxGroup(inputs as NodeListOf<HTMLInputElement>, newValue, update.fieldId)
-						results.success.push(update.fieldId)
+						// This is a checkbox group (multiple checkboxes with same
+						// name). Same fix as the radio group above.
+						const groupMatched = handleCheckboxGroup(inputs as NodeListOf<HTMLInputElement>, newValue, update.fieldId)
+						if (groupMatched) {
+							results.success.push(update.fieldId)
+						} else {
+							results.notFound.push(update.fieldId)
+						}
 						continue
 					}
 				}
@@ -196,48 +211,94 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		}		// Apply value to field based on element type
 		const inputEl = element as HTMLInputElement
 		const inputType = inputEl.type?.toLowerCase()
-		
+
+		// Whether this element's value was actually applied (bd
+		// polyglot-pdf-c6t0e): defaults true for handler shapes that always
+		// succeed at doing exactly what was asked (checkbox toggle, plain
+		// text/textarea write) -- only select/single-radio can silently
+		// fail to match, so only they can flip this to false.
+		let matched = true
+
 		// Handle different input types
 		if (element.tagName === 'SELECT') {
-			handleSelect(element as HTMLSelectElement, newValue, update.fieldId)
-			
+			matched = handleSelect(element as HTMLSelectElement, newValue, update.fieldId)
+
 		} else if (inputType === 'checkbox') {
 			handleCheckbox(inputEl, newValue, update.fieldId)
-			
+
 		} else if (inputType === 'radio') {
 			// Single radio button - should have been caught by name selector above
-			handleSingleRadio(inputEl, newValue, update.fieldId)
-			
+			matched = handleSingleRadio(inputEl, newValue, update.fieldId)
+
 		} else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
 			// Text, email, tel, textarea, etc.
 			// Convert to string to handle numbers and other types safely
 			const stringValue = String(newValue)
 			;(element as HTMLInputElement | HTMLTextAreaElement).value = stringValue
-			
+
 			// Dispatch events for form handlers
 			element.dispatchEvent(new Event('input', { bubbles: true }))
 			element.dispatchEvent(new Event('change', { bubbles: true }))
-			
+
 			// Safe logging with truncation
 			const displayValue = stringValue.substring(0, 50)
 			console.log('[VFF FieldManager] Updated text field:', update.fieldId, '->', displayValue)
 		}
-		
-		// Mark as AI-confirmed
+
+		// Listen for manual edits regardless of match outcome (bd
+		// polyglot-pdf-c6t0e, Opus cross-surface round 3): this used to live
+		// INSIDE the matched-only branch below, which meant a no-match fill
+		// left the field with NO listener at all -- for any field not yet
+		// in the DOM at FieldManager construction time (setupAllFieldListeners
+		// only finds elements present then; SchemaForm renders one section
+		// at a time), this call is the field's ONLY chance to ever get one.
+		// A subsequent manual correction on that field would then be
+		// silently dropped: onManualEdit never fires, so the correction
+		// never reaches SchemaFormStateManager or the AI -- exactly the
+		// "the user fixed it and nothing noticed" failure this bead exists
+		// to prevent, just relocated from the badge to the listener.
 		if (element) {
+			setupEditListener(element, update.fieldId)
+		}
+
+		// Mark as AI-confirmed -- ONLY when the value was actually applied
+		// (bd polyglot-pdf-c6t0e). Previously this ran unconditionally
+		// whenever `element` resolved, so a select/radio that matched
+		// nothing (a total non-match, or an ambiguous fuzzy match since bd
+		// polyglot-pdf-jbek5) still got the green outline + checkmark badge
+		// and was listed as a success -- an empty field decorated as
+		// AI-confirmed on a legal intake form.
+		if (element && matched) {
 			element.setAttribute('data-vff-confirmed', 'true')
 			confirmedFields.add(update.fieldId)
 
 			// Add visual confirmation (green outline + checkmark)
 			addConfirmationBadge(element)
 
-			// Listen for manual edits
-			setupEditListener(element, update.fieldId)
-			
 			// Track success
 			results.success.push(update.fieldId)
-			
+
 			// Clear AI updating flag after a brief delay (allow events to settle)
+			setTimeout(() => {
+				aiUpdatingFields.delete(update.fieldId)
+			}, 50)
+		} else if (element) {
+			console.warn('[VFF FieldManager] [warn] No value applied, skipping confirmation badge:', update.fieldId)
+			results.notFound.push(update.fieldId)
+
+			// Same 50ms deferral as the matched branch above, for the same
+			// reason (bd polyglot-pdf-pg0m6): setupEditListener's handleEdit
+			// (registered on 'change' for every schema field at construction
+			// time, before any applyUpdates call) is the only thing standing
+			// between a genuinely-coincident LATER 'change' event -- e.g. a
+			// controlled re-render, or a user interaction landing in the
+			// same tick right after applyUpdates returns -- and a false
+			// "manual edit" report. A synchronous clear here leaves that
+			// window open immediately; the deferral is what keeps it closed
+			// long enough. Pinned by a test that dispatches a SECOND change
+			// event after applyUpdates returns and asserts onManualEdit is
+			// not misfired (mutation-verified: a synchronous clear here
+			// reddens that test).
 			setTimeout(() => {
 				aiUpdatingFields.delete(update.fieldId)
 			}, 50)
@@ -266,9 +327,12 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 }
 	
 	/**
-	 * Handle select dropdown
+	 * Handle select dropdown. Returns whether an option was actually selected
+	 * (bd polyglot-pdf-c6t0e): a caller must not badge/confirm a field this
+	 * left unfilled -- a clear (empty newValue) counts as handled, since
+	 * that is the AI's actual intent, not a failed match.
 	 */
-	function handleSelect(selectEl: HTMLSelectElement, newValue: string, fieldId: string): void {
+	function handleSelect(selectEl: HTMLSelectElement, newValue: string, fieldId: string): boolean {
 		// An empty string means "clear this field" (bd polyglot-pdf-jbxm). Prefer
 		// the explicit empty-value option when present (index 0 placeholder); fall
 		// back to selectedIndex = -1 so the DOM reflects no selection.
@@ -282,7 +346,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			selectEl.dispatchEvent(new Event('change', { bubbles: true }))
 			selectEl.dispatchEvent(new Event('input', { bubbles: true }))
 			console.log('[VFF FieldManager] [check] Cleared select:', fieldId)
-			return
+			return true
 		}
 
 		// Try exact match first
@@ -366,8 +430,10 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		// Dispatch change event for form handlers
 		selectEl.dispatchEvent(new Event('change', { bubbles: true }))
 		selectEl.dispatchEvent(new Event('input', { bubbles: true }))
+
+		return matched
 	}
-	
+
 	/**
 	 * Handle checkbox input
 	 */
@@ -393,8 +459,18 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	/**
 	 * Handle checkbox group (multiple checkboxes with same name)
 	 * Example: name="reason[]" with values ["Depressed Mood", "Divorce/Custody"]
+	 *
+	 * Returns whether AT LEAST ONE requested value was actually matched and
+	 * checked (bd polyglot-pdf-c6t0e) -- a caller must not badge/confirm a
+	 * group where every requested value failed to match (previously reported
+	 * unconditional success even when unmatchedValues covered the whole
+	 * request). A clear (empty newValue) counts as handled. This is
+	 * deliberately ANY-matched, not ALL-matched: a partial match still
+	 * changed real DOM state the confirmation badge should reflect, and the
+	 * per-checkbox unmatched list is already logged separately for whoever
+	 * reads the console.
 	 */
-	function handleCheckboxGroup(checkboxInputs: NodeListOf<HTMLInputElement>, newValue: any, fieldId: string): void {
+	function handleCheckboxGroup(checkboxInputs: NodeListOf<HTMLInputElement>, newValue: any, fieldId: string): boolean {
 		// Empty means clear all checkboxes (bd polyglot-pdf-qc46): the bare '' that
 		// applyUpdates passes (it coerces null/undefined to '' via `value || ''`), or
 		// an all-empty / empty array (the AI's "no selection" shape, which survives
@@ -411,7 +487,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				checkbox.dispatchEvent(new Event('input', { bubbles: true }))
 			}
 			console.log('[VFF FieldManager] [check] Cleared checkbox group:', fieldId)
-			return
+			return true
 		}
 
 		// Convert single value to array
@@ -527,13 +603,15 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		if (matchedValues.length > 0) {
 			console.log('  [check] Matched & checked:', matchedValues)
 		}
-		
+
 		if (unmatchedValues.length > 0) {
 			console.warn('  [warn] Could not match:', unmatchedValues)
 			console.warn('  [idea] Try one of:', availableValues)
 		}
+
+		return matchedValues.length > 0
 	}
-	
+
 	/**
 	 * Get the label text associated with a checkbox
 	 */
@@ -565,9 +643,17 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 
 	
 	/**
-	 * Handle radio group (multiple radio inputs with same name)
+	 * Handle radio group (multiple radio inputs with same name). Returns
+	 * whether a radio was actually selected (bd polyglot-pdf-c6t0e) -- this
+	 * function badges/confirms internally on a real match already, but its
+	 * caller in applyUpdates pushed results.success UNCONDITIONALLY on
+	 * every call (this function never falls through to applyUpdates' own
+	 * blanket badge block, so that unconditional push was the only place a
+	 * no-match radio group still reported success with no badge at all,
+	 * a silent-failure state worse than the badged-but-empty case that
+	 * bug also covers). A clear (empty newValue) counts as handled.
 	 */
-	function handleRadioGroup(radioInputs: NodeListOf<HTMLInputElement>, newValue: string, fieldId: string): void {
+	function handleRadioGroup(radioInputs: NodeListOf<HTMLInputElement>, newValue: string, fieldId: string): boolean {
 		// Empty string means clear: uncheck all (bd polyglot-pdf-qc46).
 		// Without this guard, lowerRadioValue.includes('') is true for every option
 		// so the fuzzy-match loop below would select the FIRST radio instead of clearing.
@@ -578,7 +664,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				radio.dispatchEvent(new Event('input', { bubbles: true }))
 			}
 			console.log('[VFF FieldManager] [check] Cleared radio group:', fieldId)
-			return
+			return true
 		}
 
 		let matched = false
@@ -632,12 +718,19 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		if (!matched) {
 			console.warn('[VFF FieldManager] [warn] No matching radio option found for:', newValue, 'in', fieldId)
 		}
+
+		return matched
 	}
-	
+
 	/**
-	 * Handle single radio button (fallback)
+	 * Handle single radio button (fallback). Returns whether it was
+	 * actually selected (bd polyglot-pdf-c6t0e): unlike handleRadioGroup,
+	 * this handler applies NO badge internally on match either -- both the
+	 * match and no-match paths previously relied on applyUpdates' blanket
+	 * badge block, which does not check the outcome. A clear (empty
+	 * newValue) counts as handled.
 	 */
-	function handleSingleRadio(radioEl: HTMLInputElement, newValue: string, fieldId: string): void {
+	function handleSingleRadio(radioEl: HTMLInputElement, newValue: string, fieldId: string): boolean {
 		// Empty string means clear: uncheck (bd polyglot-pdf-qc46). Without this,
 		// a clear request on a single radio found by id is silently ignored (the
 		// value-mismatch warn branch) instead of unchecking.
@@ -646,7 +739,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			radioEl.dispatchEvent(new Event('change', { bubbles: true }))
 			radioEl.dispatchEvent(new Event('input', { bubbles: true }))
 			console.log('[VFF FieldManager] [check] Cleared single radio:', fieldId)
-			return
+			return true
 		}
 
 		// Check if value matches
@@ -658,11 +751,13 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			radioEl.dispatchEvent(new Event('input', { bubbles: true }))
 
 			console.log('[VFF FieldManager] [check] Selected single radio:', fieldId)
-		} else {
-			console.warn('[VFF FieldManager] [warn] Radio value mismatch:', radioEl.value, '!==', newValue)
+			return true
 		}
+
+		console.warn('[VFF FieldManager] [warn] Radio value mismatch:', radioEl.value, '!==', newValue)
+		return false
 	}
-	
+
 	/**
 	 * Handle combobox (React/custom dropdowns)
 	 */

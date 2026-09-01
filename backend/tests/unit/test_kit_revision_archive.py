@@ -738,6 +738,94 @@ def test_repeating_the_same_colliding_revision_still_skips(tmp_path):
     assert len(_run(store.list_archived_markers("w7"))) == 2
 
 
+# The COMPLETE partition of every route on ekr.router, by (method, path).
+# Every entry MUST land in exactly one of the two sets below -- a route
+# in neither fails test_every_ekr_route_is_accounted_for_by_the_write_lock_
+# partition, so a NEW route (gated or not) cannot silently escape this
+# file's notice the way bd polyglot-pdf-yofv4 found the hand-typed list
+# already had (restore_kit_draft_snapshot calls store.put_schema and IS
+# _is_write_locked-gated, but was never exercised by the hand-typed list
+# below -- caught while deriving this partition, not by the old test).
+#
+# GATED: exercised by test_every_schema_writing_editor_route_refuses_a_
+# published_kit below and asserted to 409 on a write-locked kit.
+_WRITE_LOCK_GATED_ROUTES = {
+    ("PUT", "/api/editor/kits/{kit_id}/schema"),
+    ("POST", "/api/editor/kits/{kit_id}/repair"),
+    ("POST", "/api/editor/kits/{kit_id}/translate-options"),
+    ("POST", "/api/editor/kits/{kit_id}/derive-divisions"),
+    ("POST", "/api/editor/kits/{kit_id}/regenerate-guidance"),
+    ("POST", "/api/editor/kits/{kit_id}/extract"),
+    ("POST", "/api/editor/kits/{kit_id}/draft-snapshots/{snapshot_id}/restore"),
+}
+
+# EXEMPT: a route this test deliberately does NOT drive to a 409, with the
+# reason inline. A route landing here without a reason that survives review
+# is exactly how this bead's gap happened in the first place -- keep this
+# list short and each reason concrete.
+_WRITE_LOCK_EXEMPT_ROUTES = {
+    ("GET", "/api/editor/session"): "reads nothing kit-scoped",
+    ("POST", "/api/editor/store-handshake"): "reads nothing kit-scoped",
+    ("GET", "/api/editor/kits"): "list, no write",
+    ("GET", "/api/editor/kits/{kit_id}/draft-snapshots"): "list, no write",
+    ("GET", "/api/editor/kits/{kit_id}/archive"): "list, no write",
+    ("GET", "/api/editor/kits/{kit_id}/archive/{marker}/schema"): "read-only, no write counterpart exists",
+    ("GET", "/api/editor/kits/{kit_id}/retire-candidates"): "read-only",
+    ("GET", "/api/editor/kits/{kit_id}/schema"): "read-only",
+    ("GET", "/api/editor/kits/{kit_id}/pdf"): "read-only",
+    ("POST", "/api/editor/lint"): "lints a POSTED schema, never writes the store",
+    ("POST", "/api/editor/kits/{kit_id}/lint"): "lints the STORED schema, never writes it",
+    ("GET", "/api/editor/kits/{kit_id}/unclaimed-widgets"): "read-only",
+    ("POST", "/api/editor/kits/{kit_id}/status"): (
+        "the drift sweep DOES write schema.json on a complete->complete "
+        "re-press, but only bakes translation metadata, which "
+        "resolve_edition_marker excludes from the fingerprint -- see "
+        "test_drift_sweep_write_does_not_change_the_revision_marker. The "
+        "actual status TRANSITION (draft<->complete) is the archive/revert "
+        "mechanism itself, not a rival write path."
+    ),
+    ("DELETE", "/api/editor/kits/{kit_id}"): "delete, not a shape write; retirement's own gate is separate",
+    ("POST", "/api/editor/kits/{kit_id}/lock"): "acquires the edit-checkout lock, writes no schema",
+    ("DELETE", "/api/editor/kits/{kit_id}/lock"): "releases the edit-checkout lock, writes no schema",
+    ("POST", "/api/editor/kits/{kit_id}/label"): "writes a display label, not the answerable shape",
+    ("POST", "/api/editor/kits"): "onboards a NEW kit_id; nothing published yet to protect",
+}
+
+
+def test_every_ekr_route_is_accounted_for_by_the_write_lock_partition():
+    """Enumerates the block, per CLAUDE.md scar #7 -- does not hand-list it.
+
+    The property this bead exists to protect (bd polyglot-pdf-yofv4): a NEW
+    route on ekr.router that writes a write-locked kit's answerable shape
+    must be caught, not silently skipped because nobody remembered to add
+    it to a hand-typed HTTP-call list. Deriving the CURRENT route set from
+    the router itself and asserting it partitions cleanly into the two
+    sets above means a brand-new route -- gated or not -- fails THIS test
+    the moment it is added, forcing a decision (add it to _WRITE_LOCK_
+    GATED_ROUTES and drive it below, or to _WRITE_LOCK_EXEMPT_ROUTES with a
+    reason) instead of shipping unexamined.
+    """
+    live = {
+        (method, route.path)
+        for route in ekr.router.routes
+        for method in route.methods
+    }
+    accounted = _WRITE_LOCK_GATED_ROUTES | set(_WRITE_LOCK_EXEMPT_ROUTES)
+    missing = live - accounted
+    assert missing == set(), (
+        f"New/unaccounted route(s) on ekr.router: {missing}. Decide: does it "
+        "write a write-locked kit's answerable shape? If so, add it to "
+        "_WRITE_LOCK_GATED_ROUTES and drive it in "
+        "test_every_schema_writing_editor_route_refuses_a_published_kit. If "
+        "not, add it to _WRITE_LOCK_EXEMPT_ROUTES with a concrete reason."
+    )
+    stale = accounted - live
+    assert stale == set(), (
+        f"Route(s) no longer on ekr.router but still listed: {stale}. "
+        "Remove them from whichever set names them."
+    )
+
+
 @pytest.mark.parametrize("locked_status", ["complete", "unpublished"])
 def test_every_schema_writing_editor_route_refuses_a_published_kit(
     route_client, locked_status,
@@ -761,8 +849,14 @@ def test_every_schema_writing_editor_route_refuses_a_published_kit(
     revision -- see test_drift_sweep_write_does_not_change_the_revision_marker.
 
     Pinning the property rather than the one route found missing it: the extract
-    route had no complete-gate, which silently falsified the design premise. A
-    new SHAPE-writing route added later must gate or fail this test.
+    route had no complete-gate, which silently falsified the design premise.
+    The route SET driven below is not hand-typed judgment any more -- it is
+    _WRITE_LOCK_GATED_ROUTES, which
+    test_every_ekr_route_is_accounted_for_by_the_write_lock_partition proves
+    is the complete gated subset of ekr.router's CURRENT routes (bd
+    polyglot-pdf-yofv4: the hand-typed list this replaced had silently
+    missed restore_kit_draft_snapshot, a genuine store.put_schema call this
+    same gate protects).
     """
     client, _store, root = route_client
     _make_kit(root, "w7", _schema("a", edition="12/2024"), {"status": locked_status})
@@ -770,20 +864,53 @@ def test_every_schema_writing_editor_route_refuses_a_published_kit(
     hdr = {"X-Editor-Token": "edit-tok"}
     author = {"X-Editor-Token": "auth-tok"}
 
-    # Every route that can write schema.json for an EXISTING kit.
-    assert client.put("/api/editor/kits/w7/schema", json={"fields": []},
-                      headers=hdr).status_code == 409
-    assert client.post("/api/editor/kits/w7/repair", headers=author).status_code == 409
-    assert client.post("/api/editor/kits/w7/translate-options",
-                       headers=author).status_code == 409
-    assert client.post("/api/editor/kits/w7/derive-divisions",
-                       headers=author).status_code == 409
-    assert client.post("/api/editor/kits/w7/regenerate-guidance",
-                       headers=author).status_code == 409
-    # The one this bead's review found ungated: force=true would have
-    # overwritten the published schema in place, bypassing the archive.
-    assert client.post("/api/editor/kits/w7/extract", data={"force": "true"},
-                       headers=author).status_code == 409
+    # Every route in _WRITE_LOCK_GATED_ROUTES, driven with the minimal
+    # request that reaches its _is_write_locked check (verified per-route
+    # that the check runs before any body/param validation that would
+    # otherwise mask it with a 400/422 instead of the 409 under test).
+    # driven tracks EXACTLY which (method, path) pairs got asserted below,
+    # so the closing assert catches THIS test silently losing an entry --
+    # not two independent hardcoded counts that can drift apart in lockstep
+    # (Opus cross-surface finding, bd polyglot-pdf-yofv4: an earlier version
+    # used `assert len(_WRITE_LOCK_GATED_ROUTES) == 7`, which stayed green
+    # even with a driven assertion deleted, since nothing tied the count to
+    # what was actually exercised).
+    driven: set[tuple[str, str]] = set()
+
+    def _assert_gated(method: str, path_suffix: str, **kwargs) -> None:
+        # path_suffix is relative to /api/editor, e.g. "/kits/w7/schema".
+        driven.add((method, "/api/editor" + path_suffix))
+        resp = getattr(client, method.lower())(
+            "/api/editor" + path_suffix, **kwargs)
+        assert resp.status_code == 409, f"{method} {path_suffix}: {resp.status_code}"
+
+    _assert_gated("PUT", "/kits/w7/schema", json={"fields": []}, headers=hdr)
+    _assert_gated("POST", "/kits/w7/repair", headers=author)
+    _assert_gated("POST", "/kits/w7/translate-options", headers=author)
+    _assert_gated("POST", "/kits/w7/derive-divisions", headers=author)
+    _assert_gated("POST", "/kits/w7/regenerate-guidance", headers=author)
+    # The one an earlier round of this bead's review found ungated:
+    # force=true would have overwritten the published schema in place,
+    # bypassing the archive.
+    _assert_gated("POST", "/kits/w7/extract", data={"force": "true"}, headers=author)
+    # The one THIS bead's derivation found missing entirely: a restore
+    # replaces the live draft via store.put_schema, gated the same way, but
+    # was never exercised by the old hand-typed list. snapshot_id "1" need
+    # not exist -- _is_write_locked runs before the store is asked to load
+    # it, so the 409 fires first regardless.
+    _assert_gated("POST", "/kits/w7/draft-snapshots/1/restore", headers=author)
+
+    # The route set driven above must be EXACTLY _WRITE_LOCK_GATED_ROUTES --
+    # not a subset that happens to also pass, and not merely the same SIZE
+    # (a length check alone cannot tell "missing X, extra Y" from "complete").
+    # Path params are templated for the comparison since _assert_gated's
+    # paths are concrete (e.g. "w7") while the maintained set uses
+    # {kit_id}/{snapshot_id}.
+    templated = {
+        (m, p.replace("/w7", "/{kit_id}").replace("/1/restore", "/{snapshot_id}/restore"))
+        for (m, p) in driven
+    }
+    assert templated == _WRITE_LOCK_GATED_ROUTES
 
 
 def test_drift_sweep_write_does_not_change_the_revision_marker():
