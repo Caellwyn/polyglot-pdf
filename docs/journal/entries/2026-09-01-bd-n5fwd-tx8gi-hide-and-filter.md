@@ -307,3 +307,24 @@ there -- the loss lives one component up, in App. That is precisely the
 cross-surface reviewer's job, and the split earned its keep here: the inner loop
 verified the contract was called correctly, and the outer one asked what
 answering that call actually costs.
+
+## Round 6, and a leak the full suite caught
+
+The re-clear returned NO-GAPS. The reviewer filed two beads rather than
+blocking, and one was worth doing immediately: the new guard was tested in the
+hosted catalogue only. Given that this bead's own history is three rounds of
+fixing one catalogue and missing its twin, shipping the guard with coverage on
+one of two call sites repeats that at the test layer -- a refactor dropping the
+clause from the local file alone would pass the whole suite. It now reddens.
+
+**Then the full suite caught something isolated runs could not.** My new test
+replaces `global.fetch`, and its `describe` block had no `afterEach` to restore
+it -- so the stub leaked into every later file. Ten unrelated tests failed in
+the full run while this file passed alone. The sibling block above it already
+restored; mine did not, and that was the entire difference.
+
+Worth naming because it is the third distinct way this bead produced a green
+signal that meant nothing: a vacuous assertion, an absent transition test, and
+now a file that passes alone and breaks its neighbours. **Only the full-scope
+run can see the third kind** -- which is why it is the gate rather than a
+formality.

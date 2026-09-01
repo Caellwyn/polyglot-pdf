@@ -1856,6 +1856,13 @@ describe('local mode respects the submitted lock (bd polyglot-pdf-hqztg)', () =>
 // pin the local half of both exit criteria.
 
 describe('hiding kits and filtering the catalogue (local)', () => {
+  // Tests here replace global.fetch. Without this, the LAST one to do so leaks
+  // its stub into every later file in a full-suite run -- ten unrelated tests
+  // failed that way while this file passed alone. The sibling describe block
+  // above already restores; this one did not, which is the whole difference.
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; });
+
   const kitWith = (id: string, label: string, extra: Record<string, unknown> = {}) =>
     mockKit(id, {
       'schema.json': JSON.stringify(SCHEMA),
@@ -1964,6 +1971,35 @@ describe('hiding kits and filtering the catalogue (local)', () => {
       await waitFor(() => expect(screen.getByTestId('catalogue-strip')).toBeTruthy());
       expect(clearOpenKit).not.toHaveBeenCalled();
     });
+
+  it('asks before hiding the OPEN kit here too (local parity)', async () => {
+    // The guard is an exact mirror of the hosted one, and this bead's own
+    // history is three rounds of fixing one catalogue and missing its twin.
+    // Covering only one call site repeats that at the test layer: a refactor
+    // dropping the clause from THIS file alone would pass the whole suite.
+    const confirmDiscardOnHide = vi.fn(() => false);   // the human says no
+    let posted = false;
+    global.fetch = (async (input: unknown, init?: RequestInit) => {
+      if ((init?.method ?? 'GET').toUpperCase() === 'POST'
+          && String(input).includes('/hidden')) posted = true;
+      return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const root = manyRoot();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker =
+      vi.fn(async () => root);
+    // form-3 is I-90, which sorts FIRST by label -- the kit the first Hide
+    // button targets, and the one we mark open.
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId="form-3"
+      confirmDiscardOnHide={confirmDiscardOnHide} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(confirmDiscardOnHide).toHaveBeenCalled());
+    expect(posted).toBe(false);   // declined -- nothing was hidden
+  });
 
   it('hides through the SAME backend endpoint the hosted catalogue uses', async () => {
     // One implementation cannot drift from itself. Local mode already routes
