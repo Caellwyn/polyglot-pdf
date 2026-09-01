@@ -101,8 +101,12 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   that path (see the Vertex-only rule below). See
   [ai-models.md](../standards/ai-models.md).
 - **`GEMINI_API_KEY`** — required when `VERTEXAI=false` (AI Studio key); unused on
-  the Vertex path. On the demo Cloud Run service it is injected via **Secret
-  Manager** (`--set-secrets`), never as a plaintext env var.
+  the Vertex path, which is what the demo runs. A credential belongs in **Secret
+  Manager**, never in a plaintext env var — but note this key is **not bound by
+  any deploy script today**: `--set-secrets` existed only in comments until bd
+  `polyglot-pdf-hvui4`, and the channel scripts now bind `LINK_TOKEN_SECRET`
+  alone. Add it to `BACKEND_SECRETS_COMMON` if a channel ever needs the AI Studio
+  path.
 - **`backend/.env.DEV` marker file** — this **file's existence** (NOT an env var)
   flips `DEV_LOGGING_ENABLED` in `backend/utils/dev_file_logger.py`, which is the
   **single gate** for *both* dev-logging paths: the `DevFileLogger` itself **and**
@@ -291,7 +295,15 @@ two channel scripts use.
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
-  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`). The
+  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`).
+  **`--set-secrets`** is added when the wrapper sets `BACKEND_SECRETS` (bd
+  `polyglot-pdf-hvui4`); a channel that sets none produces an invocation
+  identical to before the flag existed. It **REPLACES the service's entire
+  secret block** — gcloud's own help says "All existing secrets will be removed
+  first" — so a channel must list every binding it wants to survive, not just
+  the one it is adding. The
+
+
   container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
   backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,

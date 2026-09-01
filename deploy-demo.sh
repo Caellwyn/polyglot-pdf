@@ -167,13 +167,14 @@ if [ "$DEPLOY_GCP" = true ]; then
     # Firestore is the only durable one-time-use record -- same reason
     # CONFIRMATION_FIRESTORE_ENABLED is set in deploy-all.sh.
     #
-    # STILL REQUIRED AND NOT SET HERE: LINK_TOKEN_SECRET (>=32 chars). It is
-    # the HMAC SIGNING KEY for every link token, so it must be injected via
-    # Secret Manager (--set-secrets), NEVER as a plaintext env var -- the same
-    # rule this script's own comment states for GEMINI_API_KEY. Without it
-    # minting 503s. The mint page names BOTH this and LINK_BASE_URL on a 503,
-    # because the route cannot distinguish them. Provisioning it is a
-    # maintainer step.
+    # LINK_TOKEN_SECRET (>=32 chars) is the HMAC SIGNING KEY for every link
+    # token, so it is injected via Secret Manager, NEVER as a plaintext env
+    # var. It IS wired now -- see BACKEND_SECRETS_COMMON near the top of this
+    # file, passed as --set-secrets (bd polyglot-pdf-hvui4); this block used to
+    # say it was still unset, which my own change falsified. Without the
+    # binding, minting 503s and the mint page names BOTH this and LINK_BASE_URL,
+    # because the route cannot distinguish them. Provisioning the secret itself
+    # remains a maintainer step; this only binds an existing one.
     #
     # NOTE --set-env-vars REPLACES the whole env block, so a LINK_* var set by
     # hand on the service does NOT survive the next deploy. That is why these

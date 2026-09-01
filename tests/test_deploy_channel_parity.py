@@ -39,11 +39,37 @@ CHANNEL_SPECIFIC = {
 
 
 def _shell_constants(text: str) -> dict[str, str]:
-    """Top-level FOO="bar" assignments, for expanding $VAR references below."""
-    return {
+    """Top-level FOO="bar" assignments, resolved transitively.
+
+    An earlier version excluded any value containing `$`, which silently
+    dropped every DERIVED constant (GCP_PROJECT, FIREBASE_PROJECT, SA_EMAIL...)
+    -- so `expand()` fell back to the literal "$NAME" and two channels writing
+    the SAME unresolved token compared equal while resolving to different
+    origins at deploy time. A guard that cannot resolve a value must not
+    silently treat it as comparable.
+    """
+    raw = {
         m.group(1): m.group(2)
-        for m in re.finditer(r'^([A-Z_][A-Z0-9_]*)="([^"$]*)"', text, re.MULTILINE)
+        for m in re.finditer(r'^([A-Z_][A-Z0-9_]*)="([^"]*)"', text, re.MULTILINE)
     }
+
+    # Resolve nested references. Bounded iteration, not recursion: a cycle
+    # leaves the token unresolved, which _expand then reports rather than
+    # silently comparing.
+    for _ in range(5):
+        changed = False
+        for name, value in list(raw.items()):
+            new = re.sub(
+                r"\$\{?([A-Z_][A-Z0-9_]*)\}?",
+                lambda m: raw.get(m.group(1), m.group(0)),
+                value,
+            )
+            if new != value:
+                raw[name] = new
+                changed = True
+        if not changed:
+            break
+    return raw
 
 
 def _backend_extra_env(script: Path) -> dict[str, str]:
@@ -60,11 +86,20 @@ def _backend_extra_env(script: Path) -> dict[str, str]:
     constants = _shell_constants(text)
 
     def expand(value: str) -> str:
-        return re.sub(
-            r"\$([A-Z_][A-Z0-9_]*)",
+        expanded = re.sub(
+            r"\$\{?([A-Z_][A-Z0-9_]*)\}?",
             lambda m: constants.get(m.group(1), m.group(0)),
             value,
         )
+        # An UNRESOLVED token must not be compared as if it were a value: two
+        # channels both writing "$GCP_PROJECT" would compare equal while
+        # resolving to different origins. Fail loudly instead.
+        assert "$" not in expanded, (
+            f"{script.name}: could not resolve {value!r} (got {expanded!r}). "
+            "Add the constant to the script or teach _shell_constants about it "
+            "-- comparing an unresolved token would pass for the wrong reason."
+        )
+        return expanded
 
     pairs: dict[str, str] = {}
     for chunk in match.group(1).split(","):
