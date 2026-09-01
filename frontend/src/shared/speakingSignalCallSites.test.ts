@@ -57,16 +57,34 @@ function allProductionFiles(dir = SRC, acc: string[] = []): string[] {
 }
 
 /**
+ * The REAL predicate discoverConsumers() applies to each file's content --
+ * pulled out and named so a test can drive the exact production logic
+ * directly, instead of hand-recomposing CALL + splitCodeLines inline (a
+ * hand-recomposed copy can silently drift from what discoverConsumers()
+ * actually runs, pinning nothing real -- CLAUDE.md scar #8).
+ *
+ * CALL-shaped, not a bare name match: a file merely MENTIONING the
+ * accessors in prose (a comment, a doc reference) is not a decision site.
+ * Reusing CALL keeps discovery and classification in agreement -- and
+ * COMMENTS ARE STRIPPED FIRST (splitCodeLines, the same stripper the
+ * per-line classification walk uses below), so a JSDoc mention of e.g.
+ * isAnyAudioPlaying() cannot make a file a "consumer" on the strength of
+ * prose alone (bd polyglot-pdf-hb583: this used to be true only by
+ * accident, because the pre-fix CALL regex's third alternative was a
+ * literal 0x08 byte that happened to also never match comment text).
+ */
+function isConsumerContent(rawText: string): boolean {
+  return CALL.test(splitCodeLines(rawText).join('\n'))
+}
+
+/**
  * Files that reference a speaking accessor, discovered from source.
  * audioManager.ts itself DEFINES them, so it is excluded from call-site duty.
  */
 function discoverConsumers(): string[] {
   return allProductionFiles()
     .filter(f => basename(f) !== 'audioManager.ts')
-    // CALL-shaped, not a bare name match: a file merely MENTIONING the
-    // accessors in prose (a comment, a doc reference) is not a decision
-    // site. Reusing CALL keeps discovery and classification in agreement.
-    .filter(f => CALL.test(readFileSync(f, 'utf8')))
+    .filter(f => isConsumerContent(readFileSync(f, 'utf8')))
 }
 
 /**
@@ -197,7 +215,7 @@ function codeLines(file: string): string[] {
 //                            receiver (`getAudioManager()?.isSpeaking()`)
 //   ['isModelSpeaking']()    computed member
 //   isSpeaking()             a bare call from a destructured binding
-const CALL = /(?:\.\s*|\[\s*['"`]|)(isSpeaking|isModelSpeaking)(?:['"`]\s*\])?\s*\(\s*\)/
+const CALL = /(?:\.\s*|\[\s*['"`]|\b)(isSpeaking|isModelSpeaking)(?:['"`]\s*\])?\s*\(\s*\)/
 
 // Match a site by its ACCESSOR-INDEPENDENT shape, so regressing the accessor
 // still MATCHES the entry and trips the accessor assertion (the informative
@@ -309,5 +327,43 @@ describe('speaking-signal call sites are classified (bd polyglot-pdf-uxc6s)', ()
     const turn = CLASSIFIED.filter(c => c.signal === 'isSpeaking')
     expect(model.length, 'no barge-in sites classified').toBeGreaterThanOrEqual(5)
     expect(turn.length, 'no suspend/resume sites classified').toBeGreaterThanOrEqual(3)
+  })
+
+  it('CALL matches a bare destructured call, not just member calls (bd polyglot-pdf-hb583)', () => {
+    // The third documented shape (line ~199 above): "isSpeaking() a bare call
+    // from a destructured binding". Mutation-verified: this goes red against
+    // the pre-fix regex, whose third alternative was a literal 0x08 byte that
+    // matches nothing in real source, so only the FIRST two shapes (member
+    // call, computed member) were ever actually reachable.
+    expect(CALL.test('if (isSpeaking()) { flush() }')).toBe(true)
+    expect(CALL.test('const { isAnyAudioPlaying } = am; if (isAnyAudioPlaying()) return')).toBe(false) // isAnyAudioPlaying is not in this alternation's name group -- unaffected by this bead, see the comment above CALL for why
+    expect(CALL.test('return isModelSpeaking() ? 1 : 0')).toBe(true)
+    // The other two shapes must keep matching -- this bead must not narrow them.
+    expect(CALL.test('audio.isSpeaking()')).toBe(true)
+    expect(CALL.test("obj['isModelSpeaking']()")).toBe(true)
+  })
+
+  it('a comment-only mention does not make a file a "consumer" (bd polyglot-pdf-hb583)', () => {
+    // Calls isConsumerContent() DIRECTLY -- the exact predicate
+    // discoverConsumers() applies to every file's content, not a
+    // hand-recomposed CALL+splitCodeLines expression that could silently
+    // drift from the real one (CLAUDE.md scar #8: a mutation-test caught
+    // exactly this drift risk during review -- the first version of this
+    // test called CALL.test() directly and stayed green even when
+    // discoverConsumers()'s own comment-stripping was reverted). Not a
+    // throwaway fixture FILE, because the production behavior IS "run
+    // isConsumerContent on this text" -- calling the real function is the
+    // faithful, minimal pin; a fixture file would only re-derive the same
+    // call through an extra layer of disk I/O.
+    const commentOnly = '/**\n * calls isModelSpeaking() eventually\n */\nexport const x = 1\n'
+    const realCall = '  const x = () => { isModelSpeaking() }\n'
+    expect(
+      isConsumerContent(commentOnly),
+      'a comment-only mention must NOT make a file a "consumer"',
+    ).toBe(false)
+    expect(
+      isConsumerContent(realCall),
+      'a real call must still make a file a "consumer"',
+    ).toBe(true)
   })
 })
