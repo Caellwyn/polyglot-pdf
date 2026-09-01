@@ -27,6 +27,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import { SchemaFormStateManager } from './schema-forms/state/schemaFormState'
+import { computeNextField } from './navigation'
 import type { FormSchema } from './schema-forms/types/schema'
 
 /** The i-90 shape: a Part 1 answer repeating on page 8, target read-only. */
@@ -147,5 +148,55 @@ describe('the MESSAGE handler reaches the fan-out too (bd polyglot-pdf-gpaed)', 
     ;(conn as any).handleFieldUpdate({ updates: { p8_family_name: 'DIRECT' } })
     expect((conn as any).state.fieldValues['p8_family_name']?.value)
       .not.toBe('DIRECT')
+  })
+})
+
+describe('the fan-out must not TRAP the session (bd polyglot-pdf-gpaed)', () => {
+  beforeEach(() => { stubStorage() })
+
+  /** Source, a normal next question, and the read_only copy target. */
+  function nav(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: {
+        title: 'T', version: '1.0.0', language: 'en',
+        form_number: 'I-90', edition_date: '01/01/25', page_count: 1,
+      },
+      fields: [
+        { id: 'a_number', name: 'a_number', spoken_name: 'A number',
+          type: 'text', section_id: 'sec', copy_to: ['p8_a_number'] },
+        { id: 'uscis_account', name: 'uscis_account',
+          spoken_name: 'USCIS account', type: 'text', section_id: 'sec' },
+        { id: 'p8_a_number', name: 'p8_a_number', spoken_name: 'A number (p8)',
+          type: 'text', section_id: 'sec', read_only: true },
+      ],
+      sections: [{ id: 'sec', label: 'Sec', order: 1,
+        fields: ['a_number', 'uscis_account', 'p8_a_number'] }],
+    } as unknown as FormSchema
+  }
+
+  it('never navigates to the copy target after an AI fill', () => {
+    // The cross-surface finding, at the level that matters. An AI fill lands
+    // confirmed:false; if the fan-out inherited that, computeNextField's
+    // filled-but-unconfirmed pass would send the session to p8_a_number -- a
+    // read_only field the model cannot fill (refused) and can no longer skip
+    // (it now holds a value). A dead end worse than the bug being fixed.
+    const s = nav()
+    const conn = new WebFormConnection(s)
+    ;(conn as any).handleFieldUpdate({ updates: { a_number: 'A123' } })
+
+    const next = computeNextField((conn as any).state)
+    expect(next?.id).not.toBe('p8_a_number')
+  })
+
+  it('the copy target is not left as an unconfirmed loose end', () => {
+    const s = nav()
+    const conn = new WebFormConnection(s)
+    ;(conn as any).handleFieldUpdate({ updates: { a_number: 'A123' } })
+
+    const unconfirmed = SchemaFormStateManager
+      .getUnconfirmedFields((conn as any).state)
+      .map((f: any) => (typeof f === 'string' ? f : f.id))
+    expect(unconfirmed).not.toContain('p8_a_number')
   })
 })

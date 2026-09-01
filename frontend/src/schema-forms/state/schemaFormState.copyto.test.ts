@@ -75,12 +75,14 @@ describe('copy_to fans out from the write chokepoint (bd polyglot-pdf-gpaed)', (
     }
   })
 
-  it('an AI_VOICE fill reaches the copy target -- the bug this closes', () => {
-    // The AI ingress (webFormConnection) writes with confirmationMethod
-    // 'ai_voice'. Before this fix the target stayed undefined.
+  it('an AI fill reaches the copy target -- the bug this closes', () => {
+    // The REAL AI ingress passes confirmed:undefined, NOT confirmed:true --
+    // webFormConnection.ts derives finalConfirmed from it and lands false. An
+    // earlier version of this test passed confirmed:true and so pinned a state
+    // the voice path can never produce (cross-surface review). The
+    // webFormConnection.copyto.test.ts sibling drives the real thing.
     const s = SchemaFormStateManager.updateField(
-      fresh(schema()), 'family_name', 'GARCIA',
-      { confirmed: true, confirmationMethod: 'ai_voice' })
+      fresh(schema()), 'family_name', 'GARCIA', { confirmed: false })
     expect(valueOf(s, 'p8_family_name')).toBe('GARCIA')
   })
 
@@ -91,11 +93,30 @@ describe('copy_to fans out from the write chokepoint (bd polyglot-pdf-gpaed)', (
     expect(valueOf(s, 'p8_family_name')).toBe('GARCIA')
   })
 
-  it('the target is stamped confirmed, so it does not re-ask', () => {
+  it('the target is CONFIRMED even when the source write was not', () => {
+    // The cross-surface finding. An AI fill lands confirmed:false, and an
+    // unconfirmed target is a TRAP: computeNextField navigates to the first
+    // filled-but-unconfirmed field, and a copy target is read_only (the AI is
+    // refused) and now holds a value (skip_field is refused too). So the fan-out
+    // confirms unconditionally -- the human DID answer this, on the source.
     const s = SchemaFormStateManager.updateField(
+      fresh(schema()), 'family_name', 'GARCIA', { confirmed: false })
+    expect(s.fieldValues['p8_family_name'].confirmed).toBe(true)
+    expect(s.fieldValues['family_name'].confirmed).toBe(false)   // source untouched
+  })
+
+  it('records HOW the target was confirmed, defaulting to manual_edit', () => {
+    // A fan-out is a derived write, not something the model said, so an AI fill
+    // (which carries no method) records manual_edit rather than ai_voice.
+    const ai = SchemaFormStateManager.updateField(
+      fresh(schema()), 'family_name', 'GARCIA', { confirmed: false })
+    expect(ai.fieldValues['p8_family_name'].confirmationMethod).toBe('manual_edit')
+
+    // A source that DOES carry a method passes it through.
+    const voiced = SchemaFormStateManager.updateField(
       fresh(schema()), 'family_name', 'GARCIA',
       { confirmed: true, confirmationMethod: 'ai_voice' })
-    expect(s.fieldValues['p8_family_name'].confirmed).toBe(true)
+    expect(voiced.fieldValues['p8_family_name'].confirmationMethod).toBe('ai_voice')
   })
 
   it('fans out to SEVERAL targets', () => {

@@ -469,8 +469,24 @@ export class SchemaFormStateManager {
       for (const targetId of targets) {
         if (typeof targetId !== 'string' || !targetId) continue;
         if (targetId === fieldId) continue;          // self-link: hand-edited junk
+        // A fanned target is CONFIRMED, always -- even when the source write
+        // was not. A copy target is not a question anyone can answer: the AI
+        // is refused (it is read_only), and skip_field is refused too once it
+        // holds a value. So an unconfirmed target is a TRAP -- computeNextField
+        // navigates to the first filled-but-unconfirmed field, and on the
+        // shipped i-90 kits that is p8_a_number et al, which the model can
+        // neither fill nor skip. isFormComplete and computeReadyWindows also
+        // key on confirmed, so the form could never read complete.
+        //
+        // Inheriting confirmation is honest: the human DID answer this value,
+        // on the source. The method records HOW -- carrying the source's own
+        // confirmationMethod, or 'manual_edit' when the source write carried
+        // none (the AI-fill case), since a fan-out is a derived write rather
+        // than something the model said (fresh-eyes + cross-surface, round 2).
         fanned = SchemaFormStateManager.updateField(fanned, targetId, value, {
           ...options,
+          confirmed: true,
+          confirmationMethod: options?.confirmationMethod ?? 'manual_edit',
           skipCopyTo: true,
         });
       }
