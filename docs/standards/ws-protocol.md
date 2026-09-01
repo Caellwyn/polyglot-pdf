@@ -281,8 +281,9 @@ verifying:
    (`previous_spoken_names` / `initial_field_hint` reads in websocket_routes.py's
    handshake handling) and now stores `form_title` into
    `schema["form_metadata"]`. The legacy builder always sent `previous_spoken_names`
-   (`schemaFormState.ts:984`); the JIT builder now matches (`schemaFormState.ts:1106`,
-   with `form_title` at `schemaFormState.ts:1084`).
+   (`schemaFormState.ts`, `getHandshakePayload`); the JIT builder now matches
+   (`schemaFormState.ts`, `getJITHandshakePayload` -- which sets both
+   `form_title` and `previous_spoken_names`).
 
 3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
    frontend switches on `case "field_update"` (`webFormConnection.ts:664` ->
