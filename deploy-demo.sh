@@ -37,6 +37,22 @@ BUCKET_NAME="$CONSOLIDATED_PROJECT-form-kits"
 SA_NAME="polyglot-backend-sa"
 SA_EMAIL="$SA_NAME@$GCP_PROJECT.iam.gserviceaccount.com"
 
+# Secret Manager bindings, passed to gcloud as --set-secrets (bd
+# polyglot-pdf-hvui4). MUST stay identical to deploy-staging.sh's copy -- pinned
+# by tests/test_deploy_channel_parity.py, which derives both lists from the two
+# scripts rather than restating them.
+#
+# --set-secrets REPLACES the whole secret block, so this must name EVERY
+# binding the service should keep, not just the one being added. Today that is
+# the link signing key alone: the two SCHEMA_*_TOKEN bindings currently live on
+# this service are hand-applied drift for a gate that is RETIRED
+# (deploy-editor.sh, bd rhc2v), so the next deploy deliberately drops them.
+#
+# LINK_TOKEN_SECRET gates client-link minting: without it the mint route 503s.
+# The secret itself is provisioned out of band (maintainer, 2026-09-01); this
+# only binds the existing secret's latest version to the env var.
+BACKEND_SECRETS_COMMON="LINK_TOKEN_SECRET=LINK_TOKEN_SECRET:latest"
+
 # Determine which components to deploy
 DEPLOY_GCP=true
 DEPLOY_FIREBASE=true
@@ -169,6 +185,7 @@ if [ "$DEPLOY_GCP" = true ]; then
     # token rides in the URL FRAGMENT, which browsers never send to a server,
     # so it stays out of access logs and referrers.
     BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://polyglot-demo-aa709.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+        BACKEND_SECRETS="$BACKEND_SECRETS_COMMON" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

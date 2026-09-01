@@ -310,8 +310,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # here (e.g. the demo sets VERTEXAI=true,USE_PREMIUM_MODEL=false -- the demo
     # runs on Vertex ADC, see deploy-demo.sh).
     # Default empty -> prod keeps the Vertex defaults baked into config.py.
-    # GEMINI_API_KEY is injected separately via Secret Manager (--set-secrets),
-    # NOT here -- never put the key in plaintext env vars.
+    # GEMINI_API_KEY and any other credential belong in Secret Manager, NOT
+    # here -- never put a key in a plaintext env var. The channel supplies them
+    # via BACKEND_SECRETS (see SECRETS_FLAG below); this script passes nothing
+    # of its own, so a channel that sets no secrets attaches none.
     # CONFIRMATION_FIRESTORE_ENABLED (bd polyglot-pdf-z2is): mirror the
     # liability confirmation trail to Firestore. Cloud Run's filesystem is
     # ephemeral tmpfs, so the file-only trail did NOT survive deployment --
@@ -337,6 +339,26 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     SA_FLAG=()
     [ -n "$BACKEND_SERVICE_ACCOUNT" ] && SA_FLAG=(--service-account "$BACKEND_SERVICE_ACCOUNT")
 
+    # BACKEND_SECRETS: Secret Manager bindings, same optional-array shape as
+    # SA_FLAG above -- a channel that sets nothing produces a byte-identical
+    # gcloud invocation to before this existed.
+    #
+    # This flag was DOCUMENTED HERE FOR MONTHS AND NEVER PASSED (bd
+    # polyglot-pdf-hvui4). The comment below said GEMINI_API_KEY "is injected
+    # separately via Secret Manager (--set-secrets)"; grep across every
+    # deploy-*.sh found the flag only in that sentence. Anything relying on it
+    # -- LINK_TOKEN_SECRET, which gates client-link minting -- silently got
+    # nothing and the route 503'd.
+    #
+    # --set-secrets REPLACES the service's entire secret block, exactly like
+    # --set-env-vars does for env. So a channel must list EVERY binding it
+    # wants to survive, not just the one it is adding. The live demo currently
+    # carries two hand-applied bindings no script sets (SCHEMA_EDITOR_TOKEN,
+    # SCHEMA_AUTHOR_TOKEN -- both retired per deploy-editor.sh, bd rhc2v);
+    # passing a partial list here would drop them without a word.
+    SECRETS_FLAG=()
+    [ -n "$BACKEND_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")
+
     # --timeout: Cloud Run kills any request at this limit, including live
     # WebSockets. The 300s default terminated every /ws/fill session at exactly
     # 5 minutes (bd polyglot-pdf-9w5k); 3600s is the Cloud Run maximum, so WS
@@ -356,7 +378,8 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --memory=1Gi \
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="$BACKEND_ENV" \
-        "${SA_FLAG[@]}"
+        "${SA_FLAG[@]}" \
+        "${SECRETS_FLAG[@]}"
     
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
     log_success "✅ Backend deployed successfully!"
