@@ -257,6 +257,10 @@ class EditorKitInfo(BaseModel):
     # The person holding it (email, else uid). None for a lock written before
     # 5tuas, which stored only a role.
     heldByLabel: Optional[str] = None
+    # Hidden from the default catalogue (bd polyglot-pdf-n5fwd). DEFAULTED, so
+    # the onboard route's own EditorKitInfo need not name it: a kit is created
+    # visible, and only an explicit author action hides it.
+    hidden: bool = False
 
 
 class EditorKitListResponse(BaseModel):
@@ -337,6 +341,21 @@ class KitLabelBody(BaseModel):
     """The new display label for a kit (bd 15ic). Whitespace-stripped server-side;
     an empty/blank label is a 422."""
     label: str
+
+
+class KitHiddenBody(BaseModel):
+    """Whether a kit is HIDDEN from the catalogue (bd polyglot-pdf-n5fwd).
+
+    Deliberately a separate metadata key rather than a fifth lifecycle status:
+    status answers "where is this in its life?" and drags the write-lock set
+    with it, while hiding answers "do I want to look at this?" and must stay
+    orthogonal -- a published kit can be hidden, and hiding must not change
+    what anyone may do to it.
+
+    NOT the per-kit revision "archive", which is the frozen audit copy a
+    confirmation record points at. Different thing, different word.
+    """
+    hidden: bool
 
 
 class LintFindingOut(BaseModel):
@@ -744,6 +763,21 @@ def _status_of(meta: Optional[dict]) -> str:
 def _is_write_locked(meta: Optional[dict]) -> bool:
     """True when this kit's schema must not be rewritten in place."""
     return _status_of(meta) in _WRITE_LOCKED_STATUSES
+
+
+_HIDDEN_KEY = "hidden"
+
+
+def _is_hidden(meta: Optional[dict]) -> bool:
+    """True when this kit is hidden from the default catalogue (bd n5fwd).
+
+    TOLERANT BY DESIGN, and it fails VISIBLE. Anything that is not exactly
+    True -- absent, null, a string someone hand-edited in, unreadable metadata
+    -- means "not hidden", so a malformed value can never make a kit vanish
+    from the only list that shows it. Hiding must be something a human chose,
+    never something a parse accident did.
+    """
+    return (meta or {}).get(_HIDDEN_KEY) is True
 
 
 def _lock_reason(meta: Optional[dict]) -> str:
@@ -1154,6 +1188,7 @@ async def list_editor_kits(
                 # Rides along on the metadata this loop already read -- no extra
                 # per-kit fetch (sprint-18 C4).
                 readiness=_readiness_out(meta),
+                hidden=_is_hidden(meta),
             )
         )
     _log.info("editor_kits_listed", count=len(kits), role=role.role, actor=role.label())
@@ -3680,6 +3715,50 @@ async def set_editor_kit_label(
         raise HTTPException(status_code=502, detail="Unable to update label") from exc
     _log.info("editor_label_set", kit_id=kit_id, role=role.role, actor=role.label())
     return {"ok": True, "label": label}
+
+
+@router.post("/kits/{kit_id}/hidden")
+async def set_editor_kit_hidden(
+    kit_id: str,
+    body: KitHiddenBody,
+    role: Annotated[EditorActor, Depends(require_author_role)],
+) -> dict:
+    """Hide a kit from the default catalogue, or bring it back (bd n5fwd).
+
+    The demo store fills with junk kits nobody is working on, and they crowd
+    out the real ones. Deleting them is the destructive half (bd 6zhaf); this
+    is the reversible half -- out of the way, nothing destroyed, one click back.
+
+    AUTHOR-ONLY (maintainer decision 2026-09-01). By the tier line this looks
+    editor-ish: it is reversible, spends no tokens and creates nothing, which
+    is where `POST /label` sits. But hiding changes what OTHER people see, and
+    the maintainer judged that consequential enough to restrict. An editor
+    tidying their own view is not worth a colleague losing sight of a form.
+
+    NO write-lock gate, matching /label: hiding touches no schema bytes, so a
+    complete or unpublished kit can be hidden. The revision an audit record
+    names is untouched -- it is still published, still fillable by a client,
+    still in the manifest. Only this catalogue view changes.
+
+    The edit lock IS honoured, also matching /label: hiding a kit out from
+    under someone mid-edit is exactly the disruption that lock exists to stop.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    _require_edit_lock(meta, role)
+    next_meta = {**(meta or {}), _HIDDEN_KEY: bool(body.hidden)}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        _log.error("editor_hidden_save_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to update whether {_kit_name(kit_id, meta)} is hidden",
+        ) from exc
+    _log.info("editor_kit_hidden_set", kit_id=kit_id, hidden=bool(body.hidden),
+              role=role.role, actor=role.label())
+    return {"ok": True, "hidden": bool(body.hidden)}
 
 
 # --- author tier: PDF onboarding + hosted extraction (bd polyglot-pdf-92qe.3) --

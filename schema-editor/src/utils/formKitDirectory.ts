@@ -52,6 +52,9 @@ export interface KitMetadata {
   // share with hosted mode. Local mode reads the same file the backend wrote,
   // so both catalogues render one definition of progress.
   readiness?: Record<string, unknown>;
+  // Hidden from the default catalogue (bd polyglot-pdf-n5fwd). The same key
+  // the backend writes, read straight off the same file here.
+  hidden?: boolean;
 }
 
 export interface CatalogueEntry {
@@ -69,6 +72,15 @@ export interface CatalogueEntry {
   // so a caller constructing an entry cannot be forced to invent a stamp;
   // readStamp treats undefined and null identically.
   readiness?: ReadinessStamp | null;
+  // Hidden from the default catalogue (bd polyglot-pdf-n5fwd). FAILS VISIBLE:
+  // only a literal true hides, matching the backend's _is_hidden, so a
+  // hand-edited "false" or a malformed value can never make a kit vanish
+  // from the only list that shows it.
+  //
+  // OPTIONAL for the same reason `readiness` is: a caller constructing an
+  // entry should not be forced to state a default, and `undefined` already
+  // means visible everywhere it is read.
+  hidden?: boolean;
 }
 
 const SCHEMA_DEFAULT = 'schema.json';
@@ -144,6 +156,7 @@ export async function readKitEntry(
     pdfFile,
     dirHandle: dir,
     readiness: readStampFromMetadata(meta?.readiness),
+    hidden: meta?.hidden === true,
   };
 }
 

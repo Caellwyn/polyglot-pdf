@@ -88,6 +88,13 @@ export interface RemoteKitEntry {
   /** Who holds this kit for editing, if anyone (bd polyglot-pdf-hqztg).
    * 'editor' | 'author' | null -- a ROLE, not a person. */
   heldBy?: string | null;
+  /** Hidden from the default catalogue (bd polyglot-pdf-n5fwd).
+   *
+   * OPTIONAL, and absent means visible: a kit whose metadata predates this
+   * feature carries no such key, and the server defaults it false. Nothing is
+   * backfilled. Distinct from the per-kit revision ARCHIVE, which is the
+   * frozen audit copy a confirmation record points at. */
+  hidden?: boolean;
 }
 
 /** The sign-in was missing or refused (HTTP 401): sign in again. */
@@ -718,6 +725,22 @@ export async function setRemoteLabel(kitId: string, label: string): Promise<void
     body: JSON.stringify({ label }),
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not rename the form'));
+}
+
+/** Hide a kit from the default catalogue, or bring it back (bd n5fwd).
+ *
+ * AUTHOR-ONLY server-side, so an editor calling this gets a 403 -- the UI
+ * hides the control for them, but the server is what enforces it. */
+export async function setRemoteHidden(kitId: string, hidden: boolean): Promise<void> {
+  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/hidden`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hidden }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorDetail(
+      res, hidden ? 'Could not hide the form' : 'Could not unhide the form'));
+  }
 }
 
 // --- author tier (bd polyglot-pdf-92qe.3) ----------------------------------
