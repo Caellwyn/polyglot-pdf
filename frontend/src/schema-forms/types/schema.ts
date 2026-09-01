@@ -388,7 +388,14 @@ export interface FormSession {
 export type FieldAvailability = 'available' | 'locked' | 'hidden';
 
 export interface FieldValue {
-  value: string | boolean | null;
+  // string[] admits a checkbox_group answer (bd polyglot-pdf-8ewxs): groups
+  // have always stored an array here at runtime (unwrapFieldValue,
+  // CheckboxField's Array.isArray branch, validateOptionMembership all
+  // already handle it) -- this declaration was simply never updated to say
+  // so, so a resumed multi-select round-tripped correctly but only by tsc
+  // never actually checking the claim (payload arrives through `as any`
+  // JSON, per applyResume.ts's ResumePayload).
+  value: string | string[] | boolean | null;
   confirmed?: boolean;  // User has confirmed this field value (explicit or implicit)
   confirmedAt?: string;  // ISO timestamp when field was confirmed
   confirmationMethod?: 'ai_voice' | 'manual_edit';  // How the field was confirmed
