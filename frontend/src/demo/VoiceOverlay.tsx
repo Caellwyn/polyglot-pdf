@@ -985,10 +985,24 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// down) would fall back to no button -- the same dead end this bead
 			// fixes -- and only recover via the parent prop-sync effect winning a
 			// render race. 'error' is a real ConnectionStatus, so the Reconnect
-			// button renders deterministically. The failure message still reaches
-			// the user via setError above. (The mobile overlay's catch never set a
-			// status here, so it was already immune; this aligns desktop with it.)
-			setStatus('error')
+			// button renders deterministically. The failure message reaches the
+			// user via setConnectionError above -- except on a spent link, where
+			// the spend-ceiling modal is the single explanation. (The mobile
+			// overlay's catch never set a status here, so it was already immune;
+			// this aligns desktop with it.)
+			//
+			// NOT ON A SPENT LINK (bd polyglot-pdf-wwwa5). budget_exhausted is
+			// TERMINAL, and three surfaces key off it: the spend-ceiling modal,
+			// the save nudge's voiceEnding gate (level-triggered, so an
+			// already-showing nudge would vanish), and the controls ternary,
+			// which renders Reconnect for 'error'. Overwriting the status here
+			// retracts the correct UI and restores the dead button this work
+			// removed -- and the parent cannot repair it, because its sync effect
+			// keys on [sharedStatus], which never changes. Suppressing the error
+			// TEXT while still writing this status was the incomplete half.
+			if (connectionManager?.getStatus() !== 'budget_exhausted') {
+				setStatus('error')
+			}
 		}
 	}
 

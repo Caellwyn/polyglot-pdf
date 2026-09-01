@@ -75,7 +75,13 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     //
     // So: find every bare setError(, then keep the ones whose argument mentions
     // a connection at all, however it is written.
-    const bare = [...SOURCE.matchAll(/(?<!Connection)\bsetError\(([^;]*?)\)\s*$/gm)]
+    // Anchored on neither the line end nor a semicolon: an earlier version used
+    // `[^;]*?` plus `\)\s*$`, which silently missed
+    // `setError('Connection x');` and a trailing-comment form. These files are
+    // semicolon-free today, but the neighbouring SchemaForm.tsx is not, so a
+    // copied line would have defeated the guard -- the same one-shape failure
+    // this guard exists to prevent, one iteration out.
+    const bare = [...SOURCE.matchAll(/(?<!Connection)\bsetError\(([\s\S]*?)\)/g)]
       .map((m) => m[1])
       .filter((arg) => /connect/i.test(arg));
     expect(bare).toEqual([]);
@@ -83,5 +89,27 @@ describe.each(OVERLAYS)('%s: a spent link', (_name, path) => {
     // And the helper actually suppresses on the terminal status.
     const helper = SOURCE.slice(SOURCE.indexOf('const setConnectionError'));
     expect(helper.slice(0, 500)).toContain("=== 'budget_exhausted'");
+  });
+
+  it('does not overwrite the terminal STATUS either', () => {
+    // Suppressing the error TEXT while still writing setStatus('error') was the
+    // incomplete half (Opus cross-surface r3). Three surfaces key off
+    // budget_exhausted -- the spend-ceiling modal, the save nudge's voiceEnding
+    // gate (level-triggered, so an already-showing nudge vanishes), and the
+    // controls ternary, which renders Reconnect for 'error'. Overwriting the
+    // status therefore restores the dead button this work removed, and the
+    // parent cannot repair it (its sync effect keys on [sharedStatus], which
+    // never changes).
+    //
+    // Only the desktop overlay writes a status in its connect catch; mobile
+    // never did, so it was already immune -- assert per file rather than
+    // assuming symmetry.
+    const writes = [...SOURCE.matchAll(/setStatus\('error'\)/g)];
+    for (const write of writes) {
+      // Each write must sit inside a budget_exhausted guard. Scope the window
+      // to the preceding lines only, so a neighbouring guard cannot satisfy it.
+      const before = SOURCE.slice(Math.max(0, write.index! - 300), write.index!);
+      expect(before).toContain("!== 'budget_exhausted'");
+    }
   });
 });
