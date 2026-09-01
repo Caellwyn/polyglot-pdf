@@ -81,7 +81,11 @@ function isOffline(s: string): boolean {
 		s === 'disconnected' ||
 		s === 'error' ||
 		s === 'idle_timeout' ||
-		s === 'reconnect_failed'
+		s === 'reconnect_failed' ||
+		// The link's spend ceiling is used up (bd polyglot-pdf-cke6v). Voice is
+		// over for good, so Sol LEAVES rather than dimming -- dimming reads as
+		// "paused, coming back", which is the one thing this state is not.
+		s === 'budget_exhausted'
 	)
 }
 

@@ -135,7 +135,7 @@ insertion point.
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
-| POST | `/api/tts/notice` | Speak one of the app's OWN safety notices (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and deliberately NOT `require_paid_client_work`: the paid dependency redeems the link, which would answer a budget-exhausted client with silence and burn a live client's link to deliver a warning we chose to give. Caller sends a KEY, never text, so being free does not make it an open text-to-speech service. `components/voice-ai.md` |
+| POST | `/api/tts/notice` | Speak one of the app's OWN safety notices (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and deliberately NOT `require_paid_client_work`: the paid dependency redeems the link, which would answer a budget-exhausted client with silence and burn a live client's link to deliver a warning we chose to give. Caller sends a KEY, never text, so being free does not make it an open text-to-speech service. In-process cache per `(language, notice_key)`; `Cache-Control: private` + ETag with If-None-Match 304 (bd polyglot-pdf-see5j). `backend/services/notice_tts.py` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (default ON since bd polyglot-pdf-apkdl; bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
@@ -698,9 +698,21 @@ system that is NOT a Firebase account. Five coupled pieces:
   kits (8, 13 and 27 sections) while looking enforced -- caught in review, and
   pinned by `test_the_cost_counter_SURVIVES_a_section_switch`.
 
-  The client is NOT yet told why voice stopped: no frontend code reads the
-  close code or reason, so a budget-exhausted client sees the generic
-  bounded-retry path and a "reconnect failed" modal (bd polyglot-pdf-cke6v).
+  The client IS told why voice stopped (bd polyglot-pdf-cke6v, shipped).
+  `webFormConnection.handleClose` branches on the close REASON, not the code:
+  `budget_exhausted` returns early with a terminal status of the same name --
+  no retries -- and both overlays show a modal carrying the translated
+  voice-ending copy. `budget_unavailable` is deliberately NOT matched, because
+  an unreachable spend store IS transient and must keep the ordinary retry
+  path. Same code (1013), opposite handling; the two tokens are matched by
+  STRING COMPARE with no shared constant, so renaming either side silently
+  restores the old behavior -- each side carries its own pinning test.
+
+  That modal offers NO recovery action (a Reconnect could never work) but IS
+  dismissible: it is a full-viewport overlay, and its own copy promises the
+  client can still type, download and print -- so blocking the page would
+  contradict it. On desktop it yields to the save nudge, which carries the same
+  words plus a working Save button.
 
   Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
   and are tested in `link_budget.cost_ceiling_usd_for_kit`, but the socket
