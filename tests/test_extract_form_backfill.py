@@ -2155,6 +2155,33 @@ def test_a_model_written_label_still_wins_over_both(tmp_path):
     assert schema["fields"][0]["options"][0]["label"] == "Alabama, USA"
 
 
+@pytest.mark.parametrize("code", ["XQ", "ABCD", "ZZZZZZ"])
+def test_an_unmappable_code_of_ANY_LENGTH_is_reported(tmp_path, code):
+    """The report must not have a length blind spot.
+
+    An earlier cut gated it at `len(value) <= 3`, restating the speakability
+    rule in the caller with a cutoff the helper did not have -- so a 4-letter
+    code like "ABCD" shipped bare with NO report, which is exactly the failure
+    the report exists to prevent (fresh-eyes). An unmapped 4-letter code is as
+    unsayable as a 2-letter one.
+    """
+    report, options = _one_select(
+        [{"value": code, "display": code}], fid="mystery", tmp=tmp_path)
+    assert options[0]["label"] == code          # value never invented
+    assert report["unspeakable"] == [f"mystery:{code}"]
+
+
+@pytest.mark.parametrize("code", ["5", "11", "A1", "1A"])
+def test_a_code_that_is_SPEAKABLE_as_itself_is_never_reported(tmp_path, code):
+    """The other side of the same predicate: crying wolf on legitimate data is
+    its own failure. A digit is speakable as itself; a mixed token is not the
+    state-code shape this closes."""
+    report, options = _one_select(
+        [{"value": code, "display": code}], fid="f", tmp=tmp_path)
+    assert options[0]["label"] == code
+    assert report["unspeakable"] == []
+
+
 def test_an_UNKNOWN_alphabetic_code_is_reported_for_a_human(tmp_path):
     """Exit criterion 1's second branch. A table cannot cover every form's
     codes, so anything it cannot expand keeps the code as its label AND is

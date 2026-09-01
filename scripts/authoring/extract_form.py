@@ -442,6 +442,23 @@ _US_STATE_NAMES: dict[str, str] = {
 }
 
 
+def _is_speakable_as_itself(value: str) -> bool:
+    """Whether the bare code IS a legitimate label, needing no expansion.
+
+    A digit is speakable as itself -- height_feet's `5` is labelled "5" and that
+    is CORRECT. An ALPHABETIC token is not: nobody says "A L" for Alabama. Any
+    length: an unmapped 4-letter code is exactly as unsayable as a 2-letter one,
+    and an earlier cut of this gated the report at `len <= 3`, so a code like
+    "ABCD" shipped bare with NO report -- the blind spot the report exists to
+    close (fresh-eyes, bd polyglot-pdf-jpjcv).
+
+    Mixed tokens ("A1") are treated as speakable: they are not the state-code
+    shape this closes, and reporting them would cry wolf on legitimate data.
+    """
+    v = value.strip()
+    return not v.isalpha()
+
+
 def _speakable_label(value: str, display: str | None) -> str | None:
     """A label a voice model can SAY, or None if the code must go to a human.
 
@@ -460,9 +477,7 @@ def _speakable_label(value: str, display: str | None) -> str | None:
     name = _US_STATE_NAMES.get(value.strip().upper())
     if name:
         return f"{name} ({value.strip().upper()})"
-    if not value.strip().isalpha() or len(value.strip()) > 3:
-        return None                     # digits/long tokens: the code IS the label
-    return None                         # an alphabetic code we cannot expand
+    return None                         # nothing speakable: caller reports it
 
 
 def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
@@ -486,12 +501,21 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
     selects a real pdf_on_value channel, at which point this backfill should
     write code -> pdf_on_value and a slug -> value instead.
 
-    Label: a label the model already wrote for that exact code wins, else the
-    dump's display string, else the code itself. The value and the option SET
-    are always the dump's -- only the PDF knows the codes -- but the label is
-    what the voice model SPEAKS, and a state dropdown's display string is just
-    the code again ("AA" read aloud as letters vs "Armed Forces Americas (AA)").
-    The dump cannot know that; a model often can.
+    Label precedence: a label the model already wrote for that exact code wins,
+    else a SPEAKABLE label (_speakable_label: the dump's display string when it
+    is a real name, else the US code table), else the bare code -- and that last
+    case is named in the report's "unspeakable" list so a human editor is told.
+
+    The value and the option SET are always the dump's -- only the PDF knows the
+    codes -- but the label is what the voice model SPEAKS, and a state
+    dropdown's display string is just the code again ("AA" read aloud as letters
+    vs "Armed Forces Americas (AA)").
+
+    The model is NOT a reliable source for this any more: bd polyglot-pdf-hmkas
+    tells it to omit a select's options entirely (it only ever sees a truncated
+    12-item sample), so for a freshly extracted kit there is never a prior label
+    and the fallback is the only path. That is why the table exists
+    (bd polyglot-pdf-jpjcv).
 
     The BLANK placeholder choice is dropped -- an empty selection is the absence
     of a value, not a selectable option, and the filler skips empty values.
@@ -588,7 +612,11 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
                     )
                 if not label:
                     label = value
-                    if value.strip().isalpha() and len(value.strip()) <= 3:
+                    # ONE definition of "speakable", shared with the helper
+                    # above. An earlier cut restated the rule here with a
+                    # `len <= 3` cutoff the helper did not have, so a 4-letter
+                    # code shipped bare with NO report (fresh-eyes).
+                    if not _is_speakable_as_itself(value):
                         unspeakable.append(f"{fid}:{value}")
                 options.append({"value": value, "label": label})
             if options:
@@ -1821,6 +1849,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "positions_derived": completion_positions["fields_filled"],
         "option_positions_derived": completion_positions["options_filled"],
         "option_positions_unmatched": completion_positions["unmatched"],
+        # Dropdown options left with a bare CODE for a label. Persisted, not
+        # just printed: a stderr line is lost on a batch/CI extraction, and
+        # every sibling diagnostic in this block survives in the saved schema
+        # for whoever opens it later (fresh-eyes, bd polyglot-pdf-jpjcv).
+        "dropdown_labels_unspeakable": dropdowns["unspeakable"],
         # THE LIVE DIAGNOSTIC that positions_filled: 0 used to be -- see
         # _count_unresolved_positions. Expected 0 on an AcroForm.
         "positions_unresolved": _count_unresolved_positions(schema),
