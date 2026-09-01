@@ -279,7 +279,7 @@ rules in `_collect_v2_problems` (:786) enforced on every `model_validate`.
 
 ### 2. WS handshake: client -> backend (`/ws/fill` first frame)
 
-Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts:955`)
+Producer: `getHandshakePayload` (legacy, `frontend/src/schema-forms/state/schemaFormState.ts`)
 / `getJITHandshakePayload` (DTI, :1015), sent by `frontend/src/webFormConnection.ts`'s
 `this.send(handshake)` call.
 Consumer: `fill_form_from_schema` (`backend/routes/websocket_routes.py`'s
@@ -408,7 +408,8 @@ templates and the prose, not key names. System instruction:
 ### 5. Fill round-trip: sessionStorage -> `/api/fill-pdf` -> AcroForm
 
 Producer: client state `SchemaFormState.fieldValues`
-(`frontend/src/schema-forms/state/schemaFormState.ts:27`, persisted :248-263).
+(`frontend/src/schema-forms/state/schemaFormState.ts`, the `jitModeEnabled`
+field on `SchemaFormState`, persisted by `save`).
 THREE call sites assemble the request -- download and print
 (`frontend/src/schema-forms/components/SchemaForm.tsx:610-646` and :650-678)
 plus the in-browser preview
@@ -476,8 +477,9 @@ Firestore `confirmation_events` (`_submit_firestore_write` checks the
 to `_firestore_write`, which does the actual write and sets the optional
 `expire_at` TTL). The
 identity keys (`kit_id`, `form_number`, `edition_date`) originate in the
-handshake -- sent by the JIT builder at `schemaFormState.ts:1091` (form_number),
-`:1104` (kit_id), `:1105` (edition_date), read as `kit_id`/`jit_form_number`/
+handshake -- sent by the JIT builder (`getJITHandshakePayload` in
+`schemaFormState.ts`, which sets `form_number`, `kit_id` and `edition_date`),
+read as `kit_id`/`jit_form_number`/
 `jit_edition_date` in websocket_routes.py's handshake handling -- see
 contract 2. The
 `edition_date` COLUMN carries whichever revision marker won

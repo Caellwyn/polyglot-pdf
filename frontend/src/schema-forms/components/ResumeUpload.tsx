@@ -16,8 +16,17 @@ import { useCallback, useRef, useState } from 'react';
 import { resumeStrings } from '../resumeStrings';
 
 export interface ResumeResult {
-  /** schema field id -> value, ready to merge into form state. */
-  fieldValues: Record<string, string>;
+  /** schema field id -> value, ready to merge into form state.
+   * /api/resume-form returns Dict[str, str | list[str] | bool]
+   * (bd polyglot-pdf-8ewxs, Opus cross-surface finding 1 --
+   * pdf_fill_routes.py restores a standalone checkbox as the client's own
+   * `True`, not the PDF's on-state): a checkbox_group answer comes back as
+   * string[], a standalone checkbox as bool. Both shapes already survived
+   * the full round-trip at runtime before this declaration admitted them --
+   * this was a lying declaration, not a lost value. See
+   * docs/components/pdf-filling.md's Resume section for the third shape
+   * (text/select/radio) this union's plain `string` member covers. */
+  fieldValues: Record<string, string | string[] | boolean>;
   /** The session id carried in the file, when it had one. */
   formSessionId?: string;
   /** Link ids this form has used, oldest first (bd polyglot-pdf-1uyof). */

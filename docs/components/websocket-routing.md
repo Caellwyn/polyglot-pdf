@@ -2,9 +2,10 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-08-07 (bd polyglot-pdf-22h1f: added the `spellback_response`
-row to the control-channel table -- the flag-gated deterministic spell-back
-round-trip.)*
+*Last updated: 2026-08-31 (bd polyglot-pdf-lvhqa: documented the SECOND
+terminal status, `budget_exhausted` -- why one close code carries two reasons
+with opposite handling, and that the tokens are matched by string compare with
+no shared constant.)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -266,6 +267,22 @@ status; its reconnect button re-runs the same `handleConnect`/restore path, and 
 "not now" dismissal is reset once the connection leaves `reconnect_failed`. A
 transient blip that still has attempts left stays on `reconnecting` and never
 surfaces the modal. (bd polyglot-pdf-jf6w.)
+
+**The OTHER terminal status: `budget_exhausted`** (bd polyglot-pdf-cke6v). A
+client link that has spent its ceiling is closed `1013` with reason
+`budget_exhausted`, and `handleClose` branches on that REASON before every
+retry branch -- so it never retries and never reaches `reconnect_failed`. Its
+sibling reason `budget_unavailable` (the spend store was unreachable) is
+deliberately NOT matched, because that IS transient and must keep the ordinary
+retry path: same close code, opposite handling. The two tokens are compared as
+strings across the language boundary with no shared constant, so each side
+carries its own pinning test.
+
+That status renders the same `ConnectionTimeoutModal` in a third variant,
+which offers **no recovery action** -- a Reconnect could not work -- but IS
+dismissible, because the overlay is full-viewport and its own copy tells the
+client they can still type, download and print. On desktop it yields to the
+save nudge, which carries the same words plus a working Save button.
 
 > **Doc-vs-code note:** `RECONNECTION_FLOW_SUMMARY.md` (repo root) is a *design
 > proposal* for auto-sending an initiating message on reconnect, not a description

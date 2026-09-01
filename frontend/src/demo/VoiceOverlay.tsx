@@ -210,6 +210,30 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		)
 	}, [saveNudge.variant, getToken])
 
+	// EVERY connection-path error goes through here (bd polyglot-pdf-wwwa5,
+	// widened after the Opus cross-surface review found my first fix covered 2
+	// of 6 sites). On a spent link the translated spend-ceiling modal is
+	// already on screen saying voice has finished; an English "please try
+	// again" / "please click Reconnect" behind it contradicts that AND names a
+	// button bd cke6v deliberately removed. Suppressing CENTRALLY means a
+	// connection error added later inherits the behavior instead of becoming
+	// the seventh site -- pin the set, not the instances.
+	const setConnectionError = useCallback((message: string) => {
+		// Feature-detect getStatus, do not just null-check the manager: `?.`
+		// guards against null/undefined but NOT against an object that lacks
+		// the method, and several tests pass a partial ConnectionManager mock.
+		// CI caught this as a TypeError while my local run stayed green (a
+		// separate flake had shuffled the file ordering). Suppression is a
+		// nice-to-have; THROWING here would break the error path itself, which
+		// is strictly worse than showing one redundant message.
+		if (typeof connectionManager?.getStatus === 'function'
+			&& connectionManager.getStatus() === 'budget_exhausted') {
+			console.log('[VoiceOverlay] Suppressing connection error on a spent link:', message)
+			return
+		}
+		setError(message)
+	}, [connectionManager])
+
 	const handleNudgeSave = useCallback(() => {
 		saveNudge.markSaved()
 		// Hand off to the form's own download, which is what stamps the resume
@@ -402,7 +426,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					}
 				} catch (err) {
 					console.error('[VoiceOverlay] Failed to connect after pre-selected language:', err)
-					setError(err instanceof Error ? err.message : 'Connection failed')
+					setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 					setPendingDisclaimerRead(false)
 				}
 			}
@@ -913,6 +937,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					break
 				}
 
+				// A TERMINAL status will never become 'connected', so stop waiting
+				// (bd polyglot-pdf-wwwa5). The backend ACCEPTS the socket before
+				// closing it on a spent link, so connect() resolves and this loop
+				// would otherwise burn its full 5s against an already-decided
+				// outcome.
+				if (currentStatus === 'budget_exhausted') {
+					console.log('[VoiceOverlay] Link spend ceiling reached -- not waiting for connect')
+					break
+				}
+
 				// Wait 50ms before checking again
 				await new Promise(resolve => setTimeout(resolve, 50))
 			}
@@ -921,21 +955,42 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
 				console.error('[VoiceOverlay] [X] Connection timeout, final status:', finalStatus)
-				setError('Connection timed out - please try again')
+				setConnectionError('Connection timed out - please try again')
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			// Set the union status 'error', NOT a freeform 'Connection failed'
 			// string (bd polyglot-pdf-m77y): the freeform value matches no arm of
 			// the controls ternary, so a RE-failed Reconnect (both backends still
 			// down) would fall back to no button -- the same dead end this bead
 			// fixes -- and only recover via the parent prop-sync effect winning a
 			// render race. 'error' is a real ConnectionStatus, so the Reconnect
-			// button renders deterministically. The failure message still reaches
-			// the user via setError above. (The mobile overlay's catch never set a
-			// status here, so it was already immune; this aligns desktop with it.)
-			setStatus('error')
+			// button renders deterministically. The failure message reaches the
+			// user via setConnectionError above -- except on a spent link, where
+			// the spend-ceiling modal is the single explanation. (The mobile
+			// overlay's catch never set a status here, so it was already immune;
+			// this aligns desktop with it.)
+			//
+			// NOT ON A SPENT LINK (bd polyglot-pdf-wwwa5). budget_exhausted is
+			// TERMINAL, and FOUR surfaces key off it: the spend-ceiling modal,
+			// the save nudge's voiceEnding gate (level-triggered, so an
+			// already-showing nudge would vanish), and the controls ternary,
+			// which renders Reconnect for 'error' -- plus solState.isOffline, which makes Sol LEAVE rather than dim. Overwriting the status here
+			// retracts the correct UI and restores the dead button this work
+			// removed -- and the parent cannot repair it, because its sync effect
+			// keys on [sharedStatus], which never changes. Suppressing the error
+			// TEXT while still writing this status was the incomplete half.
+			// Feature-detect (see setConnectionError): `?.` does not protect
+			// against a partial mock that lacks getStatus, and a throw here would
+			// break the error path itself. Unknown status -> set 'error', the
+			// pre-bead behavior, which is the safe fallback.
+			const statusNow = typeof connectionManager?.getStatus === 'function'
+				? connectionManager.getStatus()
+				: undefined
+			if (statusNow !== 'budget_exhausted') {
+				setStatus('error')
+			}
 		}
 	}
 
@@ -1278,7 +1333,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// The useEffect watching status will send the disclaimer prompt when ready
 		} catch (err) {
 			console.error('[VoiceOverlay] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			setPendingDisclaimerRead(false) // Clear flag on error
 		}
 	}
@@ -1422,7 +1477,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				await handleConnect()
 			} catch (err) {
 				console.error('[VoiceOverlay] [X] Connect failed after Agree:', err)
-				setError(err instanceof Error ? err.message : 'Connection failed')
+				setConnectionError(err instanceof Error ? err.message : 'Connection failed')
 			}
 			return
 		}
@@ -1490,14 +1545,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
 					console.error('[VoiceOverlay] [X] Reconnect timed out, status:', postReconnectStatus)
-					setError('Connection lost - please click Reconnect')
+					setConnectionError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
 				console.log('[VoiceOverlay] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
 				console.error('[VoiceOverlay] [X] Reconnection failed:', err)
-				setError('Connection lost - please click Reconnect')
+				setConnectionError('Connection lost - please click Reconnect')
 				return
 			}
 		}

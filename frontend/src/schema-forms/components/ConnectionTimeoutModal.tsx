@@ -36,20 +36,54 @@ import React from 'react';
 import { CONNECTION_TIMEOUT_TRANSLATIONS } from './connectionTimeoutTranslations';
 import './ConnectionTimeoutModal.css';
 
-export interface ConnectionTimeoutModalProps {
+interface ConnectionTimeoutModalBaseProps {
   isOpen: boolean;
   selectedLanguage: string;
   onReconnect: () => void;
-  onCancel?: () => void;
-  /**
-   * "timeout" (default) = terminal give-up with a reconnect button.
-   * "reconnecting" = transient auto-reconnect notice, no buttons (bd ppfy).
-   * "budget_exhausted" = terminal, no RECOVERY action but dismissible: the
-   *   link's spend ceiling is used up, so reconnecting is impossible rather
-   *   than merely unlikely. Requires onCancel (bd cke6v).
-   */
-  variant?: 'timeout' | 'reconnecting' | 'budget_exhausted';
 }
+
+/**
+ * A DISCRIMINATED UNION so the compiler enforces what a comment used to ask
+ * for (bd polyglot-pdf-leakz).
+ *
+ * `budget_exhausted` renders a full-viewport overlay whose ONLY exit is the
+ * dismiss button, so a caller that forgets `onCancel` leaves the client
+ * trapped on a page the modal's own copy tells them they can still use. That
+ * was previously guarded at runtime (render nothing rather than a dead
+ * button) plus a test. Making it a TYPE error catches the mistake at author
+ * time -- in the editor and in any local/CI typecheck run -- rather than only
+ * when someone exercises the path.
+ *
+ * NOTE the runtime guard below is still load-bearing: this repo's CI is
+ * NON-BLOCKING BY DESIGN (see .github/workflows/ci.yml, bd
+ * polyglot-pdf-uov.3), so a red typecheck reports but does not gate the merge.
+ * Do not delete the runtime fallback on the theory that CI would stop it.
+ *
+ * The other two variants keep `onCancel` optional: "timeout" renders it as a
+ * secondary action when present, and "reconnecting" is passive by design.
+ */
+export type ConnectionTimeoutModalProps = ConnectionTimeoutModalBaseProps &
+  (
+    | {
+        /** Terminal give-up with a reconnect button. The default. */
+        variant?: 'timeout';
+        onCancel?: () => void;
+      }
+    | {
+        /** Transient auto-reconnect notice, no buttons (bd ppfy). */
+        variant: 'reconnecting';
+        onCancel?: () => void;
+      }
+    | {
+        /**
+         * Terminal, no RECOVERY action but dismissible: the link's spend
+         * ceiling is used up, so reconnecting is impossible rather than merely
+         * unlikely (bd cke6v). onCancel is REQUIRED -- see above.
+         */
+        variant: 'budget_exhausted';
+        onCancel: () => void;
+      }
+  );
 
 export function ConnectionTimeoutModal({
   isOpen,
@@ -111,12 +145,12 @@ export function ConnectionTimeoutModal({
             client saves, "press Save" would otherwise summon a scrim with no
             way out. Acknowledging is not recovering. */}
         {isBudgetExhausted ? (
-          // REQUIRES onCancel. Rendering the button without a handler would
-          // give the client a dead control on a full-viewport overlay -- the
-          // unclosable scrim this variant exists to avoid, wearing a button
-          // (Opus cross-surface r4). Failing loudly in dev beats shipping a
-          // trap: both current callers pass it, and a future one that forgets
-          // sees an obviously-missing dismiss rather than a fake one.
+          // The TYPE requires onCancel for this variant (bd
+          // polyglot-pdf-leakz), but this guard is NOT redundant: CI here is
+          // non-blocking, so a red typecheck does not stop a merge -- plus a
+          // plain-JS caller or a cast bypasses the type entirely. A dead
+          // button on a full-viewport overlay is the trap this variant exists
+          // to avoid, so rendering NO button beats rendering a fake one.
           onCancel ? (
             <div className="connection-timeout-modal-buttons">
               <button

@@ -89,6 +89,22 @@ gap, but never shadows a distinct real field that happens to lack its own
   now canonicalizes the same string to `string[]` at the AI-value ingress
   (`webFormConnection.canonicalizeAiCheckboxGroupValue`); the backend split is
   the defensive layer for sessions whose stored values predate that fix.
+  A boolean-INTENT `str` (`"true"`/`"false"`, the exact-lowercase literal
+  forms `config.py` documents for a standalone checkbox in the voice tool
+  contract) is coerced to a real `bool` for a **standalone** (no-options)
+  checkbox before the fill branch (bd `polyglot-pdf-oz558`): `validation.ts`'s
+  boolean-intent carve-out already treats these strings as checked/unchecked
+  case-insensitively, so the value validated and stored, but printed blank
+  on the PDF. The coercion here is ALSO case-insensitive (a defensive
+  superset, matching validation.ts) -- but `unwrapToBoolean`
+  (`fieldValue.ts`) and `isCheckboxChecked` (`valuePainting.ts`), the two
+  readers deciding what the UI preview/download RENDERS, compare
+  case-SENSITIVELY (`=== 'true'`); a mixed-case string is not reachable in
+  practice, though, since the backend's own field validator
+  (`field_validator.py`) is case-sensitive too and drops a mixed-case value
+  from `form_state` before it ever reaches a client. Scoped OUT for an
+  options-bearing field: its `"true"`/`"false"` is not a real option value
+  either way, so it correctly falls through to `checkbox_unsupported_value`.
 
 ### The widget gotchas (scar tissue)
 

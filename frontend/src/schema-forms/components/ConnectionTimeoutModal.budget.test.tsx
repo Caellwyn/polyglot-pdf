@@ -137,17 +137,23 @@ describe('the spend-exhausted modal', () => {
   });
 
   it('renders NO button rather than a dead one when onCancel is missing', () => {
-    // Opus cross-surface r4: the button used to render unconditionally while
-    // onCancel is optional, so a future caller that forgot it would resurrect
-    // the unclosable scrim -- with a button that looks like the way out.
-    render(
-      <ConnectionTimeoutModal
-        variant="budget_exhausted"
-        isOpen
-        selectedLanguage="English"
-        onReconnect={() => {}}
-      />,
-    );
+    // Omitting onCancel on this variant is now a TYPE ERROR (bd
+    // polyglot-pdf-leakz), so a forgetful caller is caught at author time.
+    // But this repo's CI is NON-BLOCKING (ci.yml, bd polyglot-pdf-uov.3): a
+    // red typecheck reports without gating the merge, so the RUNTIME guard
+    // this test exercises is a real backstop, not decoration. The cast below
+    // deliberately defeats the type to reach it.
+    //
+    // The property under test is the same either way: no dead button on a
+    // full-viewport overlay whose only exit is that button.
+    const props = {
+      variant: 'budget_exhausted',
+      isOpen: true,
+      selectedLanguage: 'English',
+      onReconnect: () => {},
+    } as unknown as React.ComponentProps<typeof ConnectionTimeoutModal>;
+
+    render(<ConnectionTimeoutModal {...props} />);
     expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
@@ -158,6 +164,7 @@ describe('the spend-exhausted modal', () => {
         isOpen={false}
         selectedLanguage="English"
         onReconnect={() => {}}
+        onCancel={() => {}}
       />,
     );
     expect(screen.queryByRole('dialog')).toBeNull();

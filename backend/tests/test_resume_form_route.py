@@ -553,12 +553,20 @@ def test_a_MULTI_TICKED_single_choice_field_is_dropped_not_guessed():
     )
 
 
-def test_an_UNREADABLE_kit_is_a_502_not_an_unhandled_500():
+def test_an_UNREADABLE_REFERENCE_pdf_is_a_502_not_an_unhandled_500():
     """Matches /api/fill-pdf, which maps the same store error the same way.
 
     An earlier version caught only FormKitNotFound while its comment claimed
     both, so an unreadable kit leaked a stack trace to a client trying to
     recover their work.
+
+    ONLY load_pdf_bytes fails here -- load_schema is left working (bd
+    polyglot-pdf-tj430). The original single test set BOTH handlers to
+    _boom, so the reference load (which runs first) always raised first and
+    the schema-load's OWN except-clause was never reached at all: deleting
+    just that later handler still left this test green. Split into two
+    tests, each isolating ONE load's failure, so a regression in either
+    handler is caught by name.
     """
     from unittest.mock import patch
 
@@ -575,15 +583,53 @@ def test_an_UNREADABLE_kit_is_a_502_not_an_unhandled_500():
         async def _meta(*_a, **_k):
             return {"status": "complete"}
 
-        store.load_schema = _boom
         store.load_pdf_bytes = _boom
         store.load_metadata = _meta
 
         with pytest.raises(HTTPException) as exc:
             _call(_W7.read_bytes())
 
-    assert exc.value.status_code in (404, 502), (
-        f"an unreadable kit produced {exc.value.status_code}, not a handled error"
+    # Exact match, not `in (404, 502)`: a set including 404 does not pin the
+    # 502 mapping even for the one load it reaches (bd polyglot-pdf-tj430).
+    assert exc.value.status_code == 502, (
+        f"an unreadable reference PDF produced {exc.value.status_code}, "
+        "not the handled 502"
+    )
+
+
+def test_an_UNREADABLE_SCHEMA_is_a_502_not_an_unhandled_500():
+    """The schema-load's OWN except-clause (bd polyglot-pdf-tj430) -- the gap
+    an earlier round found and the reason this split exists. The reference
+    PDF load must SUCCEED here so the schema load is actually reached;
+    load_schema is the one call that fails."""
+    from unittest.mock import patch
+
+    from backend.services.form_kits import FormKitStoreError
+
+    with patch(
+        "backend.routes.pdf_fill_routes.get_form_kit_store"
+    ) as store_factory:
+        store = store_factory.return_value
+
+        async def _boom(*_a, **_k):
+            raise FormKitStoreError("bucket unreachable")
+
+        async def _real_pdf(*_a, **_k):
+            return _W7.read_bytes()
+
+        async def _meta(*_a, **_k):
+            return {"status": "complete"}
+
+        store.load_schema = _boom
+        store.load_pdf_bytes = _real_pdf
+        store.load_metadata = _meta
+
+        with pytest.raises(HTTPException) as exc:
+            _call(_W7.read_bytes())
+
+    assert exc.value.status_code == 502, (
+        f"an unreadable schema produced {exc.value.status_code}, "
+        "not the handled 502"
     )
 
 
