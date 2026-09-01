@@ -410,8 +410,27 @@ def acroform_field_list(dump: dict, max_fields: Optional[int] = None) -> str:
             # is only a hint that the field IS a dropdown and roughly what its
             # values look like.
             choices = w0["choices"]
-            vals = ",".join(c["value"] for c in choices[:12])
-            more = len(choices) - 12
+            # .get(), not direct indexing (bd polyglot-pdf-r311s): a choice
+            # dict missing "value" (a malformed/hand-edited dump, or a future
+            # producer with a different shape) must degrade to a skipped
+            # sample entry, matching this file's defensive style elsewhere --
+            # not crash prompt building outright on a hot path every
+            # extraction runs through. Not reachable via the current
+            # acroform_dump.py producer (it always writes value+display), but
+            # latent.
+            # Sliced to 12 AFTER filtering, not before (bd polyglot-pdf-r311s,
+            # Opus cross-surface finding): filtering the already-sliced
+            # choices[:12] would shrink the SAMPLE below 12 whenever a
+            # value-less dict falls within the first 12 slots, while `more`
+            # still only counted entries past index 12 -- undercounting the
+            # true number hidden from the model (shown + more != total),
+            # exactly the unmarked-truncation failure bd hmkas exists to
+            # prevent. Filtering first keeps shown + more == len(usable
+            # values) always, and a value-less choice simply does not count
+            # toward either shown or hidden.
+            usable = [c["value"] for c in choices if isinstance(c, dict) and "value" in c]
+            vals = ",".join(usable[:12])
+            more = len(usable) - 12
             suffix = f", ... and {more} more" if more > 0 else ""
             bits.append(f"choices=[{vals}{suffix}]")
         if any("on_value" in w for w in f["widgets"]):
