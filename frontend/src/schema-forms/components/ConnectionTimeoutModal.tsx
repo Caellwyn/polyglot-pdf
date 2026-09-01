@@ -18,6 +18,13 @@
  *   flipping isOpen once the session recovers (status -> connected), or swaps to
  *   the "timeout" variant if auto-reconnect gives up (status -> reconnect_failed).
  *
+ * - "budget_exhausted" (bd polyglot-pdf-cke6v): the link's SPEND CEILING is used
+ *   up. Terminal like "timeout", but with NO buttons at all -- a Reconnect that
+ *   cannot possibly work reads as a broken app, which is the whole complaint
+ *   this variant answers. The copy's job is to say what happened and what still
+ *   works: typing the remaining answers, and download/print/preview (all true --
+ *   retrieval never redeems the link).
+ *
  * Mirrors the DisclaimerModal house pattern (inline per-language copy, no i18n
  * library; copy lives in connectionTimeoutTranslations.ts). The copy renders in
  * the user's selectedLanguage with an English fallback.
@@ -35,8 +42,11 @@ export interface ConnectionTimeoutModalProps {
   /**
    * "timeout" (default) = terminal give-up with a reconnect button.
    * "reconnecting" = transient auto-reconnect notice, no buttons (bd ppfy).
+   * "budget_exhausted" = terminal, no buttons: the link's spend ceiling is
+   *   used up, so reconnecting is impossible rather than merely unlikely
+   *   (bd cke6v).
    */
-  variant?: 'timeout' | 'reconnecting';
+  variant?: 'timeout' | 'reconnecting' | 'budget_exhausted';
 }
 
 export function ConnectionTimeoutModal({
@@ -54,8 +64,17 @@ export function ConnectionTimeoutModal({
     CONNECTION_TIMEOUT_TRANSLATIONS['English'];
 
   const isReconnecting = variant === 'reconnecting';
-  const title = isReconnecting ? copy.reconnectingTitle : copy.title;
-  const message = isReconnecting ? copy.reconnectingMessage : copy.message;
+  const isBudgetExhausted = variant === 'budget_exhausted';
+  const title = isReconnecting
+    ? copy.reconnectingTitle
+    : isBudgetExhausted
+      ? copy.budgetExhaustedTitle
+      : copy.title;
+  const message = isReconnecting
+    ? copy.reconnectingMessage
+    : isBudgetExhausted
+      ? copy.budgetExhaustedMessage
+      : copy.message;
 
   return (
     <div
@@ -78,8 +97,10 @@ export function ConnectionTimeoutModal({
         <p className="connection-timeout-modal-message">{message}</p>
 
         {/* The transient reconnecting variant is passive: a spinner, no actions.
-            The terminal timeout variant keeps its reconnect / not-now buttons. */}
-        {isReconnecting ? (
+            The terminal timeout variant keeps its reconnect / not-now buttons.
+            budget_exhausted renders NEITHER -- no spinner (nothing is coming)
+            and no buttons (nothing would work). The message is the whole UI. */}
+        {isBudgetExhausted ? null : isReconnecting ? (
           <div
             className="connection-timeout-modal-spinner"
             role="status"

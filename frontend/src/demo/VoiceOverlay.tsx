@@ -2759,6 +2759,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => {}}
 			/>
+
+			{/* Spend ceiling used up (bd polyglot-pdf-cke6v). Terminal and NOT
+			    dismissible: the client needs to know voice is over for this link,
+			    and there is no action that would bring it back. Deliberately no
+			    Reconnect -- the old behavior retried a socket that refuses every
+			    time and then offered a button that could not work.
+			    onReconnect is unused here but required by the prop shape. */}
+			<ConnectionTimeoutModal
+				variant="budget_exhausted"
+				isOpen={status.toLowerCase() === 'budget_exhausted'}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => {}}
+			/>
 		</>
 	)
 }

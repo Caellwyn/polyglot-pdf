@@ -19,6 +19,19 @@
  *                       reconnecting after a spontaneous AI-session drop (e.g. a
  *                       Gemini 1011). No button; it auto-clears on recovery.
  * - reconnectingMessage: reassurance shown during that transient reconnect.
+ * - budgetExhaustedTitle / budgetExhaustedMessage (bd polyglot-pdf-cke6v): the
+ *   link's SPEND CEILING is used up. Terminal and NOT recoverable, so this
+ *   variant offers no button -- the copy's whole job is to say what happened
+ *   and what still works (typing, download, print, save; all true because
+ *   retrieval never redeems the link).
+ *
+ *   The non-English strings here are NOT machine-translated: they are lifted
+ *   from resumeStrings.ts's voiceEnding pair, which carries the same message in
+ *   the same 17 non-English languages and has already been through the kit
+ *   translation pipeline. Reusing reviewed copy beats inventing 18 new drafts
+ *   in an immigration-intake context. The English is authored here (it names
+ *   the spend ceiling, where voiceEnding only says "finishing") and is
+ *   authoritative.
  *
  * NOTE (bd polyglot-pdf-jf6w.1): the non-English strings are a first machine-
  * generated draft and should be reviewed by a native/fluent speaker before they
@@ -33,6 +46,8 @@ export interface ConnectionTimeoutCopy {
   cancelButton: string;
   reconnectingTitle: string;
   reconnectingMessage: string;
+  budgetExhaustedTitle: string;
+  budgetExhaustedMessage: string;
 }
 
 export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCopy> = {
@@ -43,6 +58,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Not Now',
     reconnectingTitle: 'Reconnecting...',
     reconnectingMessage: 'Please wait -- we are having trouble reaching the AI assistant. Your progress is saved and we will reconnect you automatically.',
+    budgetExhaustedTitle: 'The voice assistant has finished for this form',
+    budgetExhaustedMessage: 'You have used the voice time included with this link. Your answers are safe. You can still type your remaining answers, and you can still download, print and save your form. To continue by voice, ask the office that sent you this form for a new link.',
   },
   'Spanish': {
     title: 'Se Agotó el Tiempo de Conexión',
@@ -51,6 +68,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Ahora No',
     reconnectingTitle: 'Reconectando...',
     reconnectingMessage: 'Por favor espere: estamos teniendo problemas para conectar con el asistente de IA. Su progreso está guardado y lo reconectaremos automaticamente.',
+    budgetExhaustedTitle: 'El asistente de voz esta terminando',
+    budgetExhaustedMessage: 'Guarde su formulario ahora para no perder sus respuestas. Todavia puede escribir las respuestas que faltan, y todavia puede descargar e imprimir su formulario.',
   },
   'Chinese': {
     title: '连接已超时',
@@ -59,6 +78,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: '暂不',
     reconnectingTitle: '正在重新连接...',
     reconnectingMessage: '请稍候 -- 我们暂时无法连接到 AI 助手。您的进度已保存，我们会自动为您重新连接。',
+    budgetExhaustedTitle: '语音助手即将结束',
+    budgetExhaustedMessage: '请立即保存表格，以免丢失您的答案。您仍然可以输入其余答案，也仍然可以下载和打印表格。',
   },
   'Tagalog': {
     title: 'Nag-time Out ang Koneksyon',
@@ -67,6 +88,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Hindi Ngayon',
     reconnectingTitle: 'Kumokonekta Muli...',
     reconnectingMessage: 'Mangyaring maghintay -- nahihirapan kaming maabot ang AI assistant. Naka-save ang iyong progreso at awtomatiko ka naming ikokonekta muli.',
+    budgetExhaustedTitle: 'Natatapos na ang voice assistant',
+    budgetExhaustedMessage: 'I-save ang inyong form ngayon para hindi mawala ang inyong mga sagot. Maaari pa rin kayong mag-type ng natitirang sagot, at maaari pa rin kayong mag-download at mag-print ng inyong form.',
   },
   'Arabic': {
     title: 'انتهت مهلة الاتصال',
@@ -75,6 +98,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'ليس الآن',
     reconnectingTitle: 'جارٍ إعادة الاتصال...',
     reconnectingMessage: 'يرجى الانتظار -- نواجه مشكلة في الوصول إلى المساعد الذكي. تم حفظ تقدمك وسنعيد الاتصال تلقائيًا.',
+    budgetExhaustedTitle: 'المساعد الصوتي على وشك الانتهاء',
+    budgetExhaustedMessage: 'احفظ استمارتك الآن حتى لا تفقد إجاباتك. لا يزال بإمكانك كتابة الإجابات المتبقية، ولا يزال بإمكانك تنزيل استمارتك وطباعتها.',
   },
   'French': {
     title: 'Délai de Connexion Dépassé',
@@ -83,6 +108,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Pas Maintenant',
     reconnectingTitle: 'Reconnexion...',
     reconnectingMessage: 'Veuillez patienter -- nous avons des difficultes a joindre l\'assistant IA. Votre progression est enregistree et nous vous reconnecterons automatiquement.',
+    budgetExhaustedTitle: 'L assistant vocal se termine',
+    budgetExhaustedMessage: 'Enregistrez votre formulaire maintenant pour ne pas perdre vos reponses. Vous pouvez toujours saisir les reponses restantes, et vous pouvez toujours telecharger et imprimer votre formulaire.',
   },
   'Korean': {
     title: '연결 시간 초과',
@@ -91,6 +118,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: '나중에',
     reconnectingTitle: '다시 연결 중...',
     reconnectingMessage: '잠시만 기다려 주세요 -- AI 어시스턴트에 연결하는 데 문제가 있습니다. 진행 상황은 저장되었으며 자동으로 다시 연결됩니다.',
+    budgetExhaustedTitle: '음성 도우미가 종료됩니다',
+    budgetExhaustedMessage: '답변을 잃지 않도록 지금 양식을 저장하세요. 남은 답변은 직접 입력할 수 있으며, 양식을 다운로드하고 인쇄하는 것도 계속 가능합니다.',
   },
   'German': {
     title: 'Verbindung Unterbrochen',
@@ -99,6 +128,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Jetzt Nicht',
     reconnectingTitle: 'Verbindung wird wiederhergestellt...',
     reconnectingMessage: 'Bitte warten -- wir haben Probleme, den KI-Assistenten zu erreichen. Ihr Fortschritt ist gespeichert und wir verbinden Sie automatisch wieder.',
+    budgetExhaustedTitle: 'Der Sprachassistent wird beendet',
+    budgetExhaustedMessage: 'Speichern Sie Ihr Formular jetzt, damit Ihre Antworten nicht verloren gehen. Sie koennen die restlichen Antworten weiterhin eingeben und Ihr Formular weiterhin herunterladen und drucken.',
   },
   'Portuguese': {
     title: 'Tempo de Conexão Esgotado',
@@ -107,6 +138,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Agora Não',
     reconnectingTitle: 'Reconectando...',
     reconnectingMessage: 'Aguarde -- estamos com dificuldade para conectar ao assistente de IA. Seu progresso esta salvo e vamos reconectar voce automaticamente.',
+    budgetExhaustedTitle: 'O assistente de voz esta terminando',
+    budgetExhaustedMessage: 'Salve seu formulario agora para nao perder suas respostas. Voce ainda pode digitar as respostas restantes e ainda pode baixar e imprimir seu formulario.',
   },
   'Hindi': {
     title: 'कनेक्शन समय समाप्त',
@@ -115,6 +148,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'अभी नहीं',
     reconnectingTitle: 'फिर से कनेक्ट हो रहा है...',
     reconnectingMessage: 'कृपया प्रतीक्षा करें -- हमें AI सहायक तक पहुंचने में समस्या हो रही है। आपकी प्रगति सहेजी गई है और हम आपको स्वचालित रूप से फिर से कनेक्ट कर देंगे।',
+    budgetExhaustedTitle: 'वॉइस सहायक समाप्त हो रहा है',
+    budgetExhaustedMessage: 'अपने उत्तर खोने से बचने के लिए अभी अपना फॉर्म सहेजें। आप शेष उत्तर टाइप कर सकते हैं, और अपना फॉर्म डाउनलोड और प्रिंट भी कर सकते हैं।',
   },
   'Italian': {
     title: 'Connessione Scaduta',
@@ -123,6 +158,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Non Ora',
     reconnectingTitle: 'Riconnessione...',
     reconnectingMessage: 'Attendere prego -- stiamo riscontrando problemi a raggiungere l\'assistente IA. I tuoi progressi sono salvati e ti riconnetteremo automaticamente.',
+    budgetExhaustedTitle: 'L assistente vocale sta terminando',
+    budgetExhaustedMessage: 'Salva ora il modulo per non perdere le tue risposte. Puoi ancora digitare le risposte rimanenti e puoi ancora scaricare e stampare il modulo.',
   },
   'Urdu': {
     title: 'کنکشن کا وقت ختم',
@@ -131,6 +168,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'ابھی نہیں',
     reconnectingTitle: 'دوبارہ منسلک ہو رہا ہے...',
     reconnectingMessage: 'براہ کرم انتظار کریں -- ہمیں AI اسسٹنٹ تک پہنچنے میں دشواری ہو رہی ہے۔ آپ کی پیش رفت محفوظ ہے اور ہم آپ کو خودکار طور پر دوبارہ منسلک کر دیں گے۔',
+    budgetExhaustedTitle: 'صوتی معاون ختم ہو رہا ہے',
+    budgetExhaustedMessage: 'اپنے جوابات ضائع ہونے سے بچانے کے لیے ابھی اپنا فارم محفوظ کریں۔ آپ باقی جوابات ٹائپ کر سکتے ہیں، اور اپنا فارم ڈاؤن لوڈ اور پرنٹ بھی کر سکتے ہیں۔',
   },
   'Persian': {
     title: 'مهلت اتصال به پایان رسید',
@@ -139,6 +178,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'الان نه',
     reconnectingTitle: 'در حال اتصال مجدد...',
     reconnectingMessage: 'لطفا صبر کنید -- در برقراری ارتباط با دستیار هوش مصنوعی مشکل داریم. پیشرفت شما ذخیره شده است و به طور خودکار شما را دوباره متصل می‌کنیم.',
+    budgetExhaustedTitle: 'دستیار صوتی در حال پایان است',
+    budgetExhaustedMessage: 'اکنون فرم خود را ذخیره کنید تا پاسخ‌هایتان از بین نرود. همچنان می‌توانید پاسخ‌های باقی‌مانده را تایپ کنید و فرم خود را دانلود و چاپ کنید.',
   },
   'Dutch': {
     title: 'Verbinding Verlopen',
@@ -147,6 +188,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Niet Nu',
     reconnectingTitle: 'Opnieuw verbinden...',
     reconnectingMessage: 'Even geduld -- we hebben moeite om de AI-assistent te bereiken. Uw voortgang is opgeslagen en we verbinden u automatisch opnieuw.',
+    budgetExhaustedTitle: 'De spraakassistent stopt',
+    budgetExhaustedMessage: 'Sla uw formulier nu op zodat u uw antwoorden niet kwijtraakt. U kunt de resterende antwoorden nog typen en u kunt uw formulier nog downloaden en afdrukken.',
   },
   'Ukrainian': {
     title: 'Час Очікування Зʼєднання Вичерпано',
@@ -155,6 +198,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Не Зараз',
     reconnectingTitle: 'Повторне підключення...',
     reconnectingMessage: 'Будь ласка, зачекайте -- у нас виникли труднощі зі звʼязком з AI-помічником. Ваш прогрес збережено, і ми автоматично підключимо вас знову.',
+    budgetExhaustedTitle: 'Голосовий помічник завершує роботу',
+    budgetExhaustedMessage: 'Збережіть форму зараз, щоб не втратити відповіді. Ви все ще можете вписати решту відповідей, а також завантажити та роздрукувати форму.',
   },
   'Russian': {
     title: 'Время Ожидания Соединения Истекло',
@@ -163,6 +208,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Не Сейчас',
     reconnectingTitle: 'Переподключение...',
     reconnectingMessage: 'Пожалуйста, подождите -- у нас возникли трудности со связью с ИИ-помощником. Ваш прогресс сохранён, и мы автоматически подключим вас снова.',
+    budgetExhaustedTitle: 'Голосовой помощник завершает работу',
+    budgetExhaustedMessage: 'Сохраните форму сейчас, чтобы не потерять ответы. Вы по-прежнему можете вписать оставшиеся ответы, а также скачать и распечатать форму.',
   },
   'Swedish': {
     title: 'Anslutningen Tog Slut',
@@ -171,6 +218,8 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Inte Nu',
     reconnectingTitle: 'Återansluter...',
     reconnectingMessage: 'Vänligen vänta -- vi har problem att nå AI-assistenten. Dina framsteg är sparade och vi återansluter dig automatiskt.',
+    budgetExhaustedTitle: 'Rostassistenten avslutas',
+    budgetExhaustedMessage: 'Spara ditt formular nu sa att du inte forlorar dina svar. Du kan fortfarande skriva in de svar som aterstar, och du kan fortfarande ladda ner och skriva ut ditt formular.',
   },
   'Afrikaans': {
     title: 'Verbinding Het Uitgetel',
@@ -179,5 +228,7 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     cancelButton: 'Nie Nou Nie',
     reconnectingTitle: 'Herverbind tans...',
     reconnectingMessage: 'Wag asseblief -- ons het probleme om die KI-assistent te bereik. Jou vordering is gestoor en ons sal jou outomaties herverbind.',
+    budgetExhaustedTitle: 'Die stemassistent is besig om te eindig',
+    budgetExhaustedMessage: 'Stoor jou vorm nou sodat jy nie jou antwoorde verloor nie. Jy kan steeds die oorblywende antwoorde intik, en jy kan steeds jou vorm aflaai en druk.',
   },
 };

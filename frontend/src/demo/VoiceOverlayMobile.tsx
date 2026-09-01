@@ -1367,6 +1367,16 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				onReconnect={() => { setReconnectModalDismissed(false); handleConnect() }}
 				onCancel={() => setReconnectModalDismissed(true)}
 			/>
+			{/* Spend ceiling used up (bd polyglot-pdf-cke6v). Same terminal,
+			    button-less modal as the desktop overlay -- a client on a phone
+			    hits this exactly as often, and the mobile surface is where the
+			    dead Reconnect was hardest to recover from. */}
+			<ConnectionTimeoutModal
+				variant="budget_exhausted"
+				isOpen={status.toLowerCase() === 'budget_exhausted'}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => {}}
+			/>
 			{/* Main FAB */}
 			{/* The FAB is Sol (bd polyglot-pdf-2p4y). It replaces the pulsing blue
 			    ring + coloured mic-emoji puck: that ring pulsed on a fixed 2s loop

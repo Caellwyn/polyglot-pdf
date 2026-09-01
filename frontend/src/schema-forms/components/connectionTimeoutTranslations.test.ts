@@ -32,7 +32,12 @@ describe('CONNECTION_TIMEOUT_TRANSLATIONS map', () => {
       CONNECTION_TIMEOUT_TRANSLATIONS['English']
     ).sort();
     // Guard against the degenerate case of English itself losing keys.
+    // budgetExhausted* joined the set in bd polyglot-pdf-cke6v (the terminal
+    // spend-ceiling modal); this list is deliberately hand-written, so adding a
+    // key MUST be a conscious edit here rather than something the guard infers.
     expect(englishKeys).toEqual([
+      'budgetExhaustedMessage',
+      'budgetExhaustedTitle',
       'cancelButton',
       'message',
       'reconnectButton',

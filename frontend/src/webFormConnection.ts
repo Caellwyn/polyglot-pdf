@@ -114,6 +114,16 @@ export type ConnectionStatus =
   // intentional/transient cases) so the UI can surface the connection-timeout
   // modal only on genuine give-up, not on every blip (bd polyglot-pdf-jf6w.3).
   | "reconnect_failed"
+  // The link's SPEND CEILING is used up (bd polyglot-pdf-cke6v). Terminal and
+  // NOT retryable: the backend closes 1013/budget_exhausted and will refuse
+  // every reconnect, so retrying only delays telling the client the truth.
+  // Deliberately NOT "reconnect_failed" -- that status drives a modal offering
+  // Reconnect, and a Reconnect button that cannot work reads as a broken app.
+  //
+  // Its sibling 1013/budget_unavailable (the spend store is unreachable) IS
+  // transient and keeps the normal retry path, so this branches on the REASON,
+  // never on the code alone.
+  | "budget_exhausted"
   | "error";
 
 export interface ConnectionCallbacks {
@@ -3509,6 +3519,25 @@ export class WebFormConnection {
       idleTimedOut: this.idleTimedOut
     });
 
+    // SPEND CEILING USED UP -- terminal, before every retry branch below (bd
+    // polyglot-pdf-cke6v). The backend closes 1013 with reason
+    // "budget_exhausted"; nothing about that is transient, so retrying burns
+    // the client's time on a socket that refuses every attempt and then lands
+    // them on a modal offering a Reconnect that cannot work.
+    //
+    // Branch on the REASON, not the code: 1013 "budget_unavailable" means the
+    // spend store was unreachable, which IS transient and must keep the normal
+    // retry path. Same code, opposite handling.
+    //
+    // Checked before !enableAutoReconnect so the FIRST connect on an exhausted
+    // link reports the real cause too -- that path otherwise reports a generic
+    // "disconnected", and a client returning to a used-up link hits exactly it.
+    if (event?.reason === "budget_exhausted") {
+      console.log('[WebFormConnection] Link spend ceiling reached -- terminal, no reconnect');
+      this.setStatus("budget_exhausted", "handleClose:budget-exhausted");
+      return;
+    }
+
     // Don't auto-reconnect if this is the initial connection attempt
     // (allows fallback logic in connection.ts to try cloud URL)
     if (!this.enableAutoReconnect) {
@@ -4149,7 +4178,13 @@ export class WebFormConnection {
       status === "reconnect_failed" ||
       status === "error" ||
       status === "idle_timeout" ||
-      status === "disconnected"
+      status === "disconnected" ||
+      // Terminal too (bd polyglot-pdf-cke6v). Omitting it would leave the
+      // marker set when a Gemini drop is followed by an exhausted budget, and
+      // the "having trouble reaching the AI" modal would stack on top of the
+      // spend-ceiling one -- two explanations for one event, the wrong one on
+      // top.
+      status === "budget_exhausted"
     ) {
       this.droppedReconnectInFlight = false;
     }
