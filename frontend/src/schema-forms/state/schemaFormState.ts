@@ -322,6 +322,13 @@ export class SchemaFormStateManager {
       // Internal: set on the recursive writes this method makes to a field's
       // copy_to targets, so a target carrying its own copy_to does not chain.
       // Callers should not pass it (bd polyglot-pdf-gpaed).
+      //
+      // NOTE for a future caller: the fan-out passes `value` through unchanged,
+      // so if you ever call updateField with a FieldValue OBJECT rather than a
+      // raw value, the branch below copies that object's OWN confirmed/method
+      // and the fan-out's `confirmed: true` is silently ignored -- re-opening
+      // the navigation trap. All 8 call sites pass raw values today; the
+      // signature (`value: any | FieldValue`) is what invites otherwise.
       skipCopyTo?: boolean;
     }
   ): SchemaFormState {

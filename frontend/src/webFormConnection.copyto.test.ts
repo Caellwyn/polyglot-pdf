@@ -181,12 +181,22 @@ describe('the fan-out must not TRAP the session (bd polyglot-pdf-gpaed)', () => 
     // filled-but-unconfirmed pass would send the session to p8_a_number -- a
     // read_only field the model cannot fill (refused) and can no longer skip
     // (it now holds a value). A dead end worse than the bug being fixed.
+    //
+    // THE CONFIRM STEP IS LOAD-BEARING. Asserting straight after the fill is
+    // VACUOUS: the source is itself filled-and-unconfirmed and sits first in
+    // schema order, so priority-1 stops there and never reaches the target --
+    // this test passed with the bug fully restored until the confirm was added
+    // (cross-surface round 2, bd polyglot-pdf-zl5p4). Confirming the source is
+    // also the live sequence: it is where the trap actually fires.
     const s = nav()
     const conn = new WebFormConnection(s)
     ;(conn as any).handleFieldUpdate({ updates: { a_number: 'A123' } })
+    ;(conn as any).state = SchemaFormStateManager.confirmField(
+      (conn as any).state, 'a_number', 'ai_voice')
 
-    const next = computeNextField((conn as any).state)
-    expect(next?.id).not.toBe('p8_a_number')
+    // Assert the POSITIVE destination: `not.toBe` would also pass on a null
+    // return, which is its own bug.
+    expect(computeNextField((conn as any).state)?.id).toBe('uscis_account')
   })
 
   it('the copy target is not left as an unconfirmed loose end', () => {
