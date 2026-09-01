@@ -29,9 +29,14 @@ _KITS = Path(__file__).resolve().parents[2] / "form-kits"
 _W7 = _KITS / "w7" / "form.pdf"
 _I90 = _KITS / "i-90" / "form.pdf"
 
-pytestmark = pytest.mark.skipif(
-    not _W7.exists() or not _I90.exists(), reason="form kits not present"
-)
+# Only W7 is required module-wide -- every test in this file uses it as the
+# baseline form. i-90 is used by exactly one test (test_a_DIFFERENT_FORM_is_
+# refused, as "some other form"); gating the WHOLE file (including the W7-only
+# prompt-injection/hostile-upload security tests, bd dft1) on i-90's presence
+# too made them silently vacuous once the i-90 kit was deprecated and deleted
+# (bd polyglot-pdf-hydb0) -- caught by the outer cross-surface review, filed
+# as bd polyglot-pdf-cj8mg, fixed here rather than left skipped.
+pytestmark = pytest.mark.skipif(not _W7.exists(), reason="w7 kit not present")
 
 
 def _w7_bytes() -> bytes:
@@ -100,6 +105,8 @@ def test_a_LEGITIMATE_filled_resume_is_accepted():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not _I90.exists(), reason="form-kits/i-90/form.pdf not "
+                     "present (kit deprecated, bd polyglot-pdf-hydb0)")
 def test_a_DIFFERENT_FORM_is_refused():
     """A client has exactly one form per link. Another kit is not it."""
     with pytest.raises(StructureMismatch):

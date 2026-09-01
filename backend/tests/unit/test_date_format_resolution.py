@@ -82,6 +82,9 @@ def test_w7_date_of_birth_rejects_iso_and_names_the_right_format():
 
 def test_i90_date_of_birth_resolves_layout_from_validation_hint():
     """i-90 carries the layout in validation.hint as well as help.format_hint."""
+    if not (_KITS / "i-90" / "schema.json").exists():
+        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
+                     "bd polyglot-pdf-hydb0)")
     field = _kit_field("i-90", "p1_line9_dateofbirth")
     assert _validate_date(field, "03/15/1985", "dob", "Date of birth") == []
 

@@ -705,8 +705,8 @@ system that is NOT a Firebase account. Five coupled pieces:
   Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
   and are tested in `link_budget.cost_ceiling_usd_for_kit`, but the socket
   passes no kit metadata, so a kit's own `link_cost_ceiling_usd` is INERT --
-  and two kits now declare one (w7 and i-90 at $3, bd polyglot-pdf-gob8l), so
-  those links are bounded by the GLOBAL default rather than the declared $3.
+  and w7 now declares one (at $3, bd polyglot-pdf-gob8l), so
+  that link is bounded by the GLOBAL default rather than the declared $3.
   Fails safe: a higher ceiling, never an absent one. Threading it through
   costs a metadata load on every client connect, so it is its own bead
   (polyglot-pdf-4tjt7). And the check is at CONNECT, so a single session that

@@ -23,9 +23,19 @@ _KITS = Path(__file__).resolve().parents[2] / "form-kits"
 _W7 = _KITS / "w7" / "form.pdf"
 _I90 = _KITS / "i-90" / "form.pdf"
 
-pytestmark = pytest.mark.skipif(
-    not _W7.exists() or not _I90.exists(), reason="form kits not present"
-)
+# Only W7 is required module-wide -- every test in this file uses it as the
+# baseline form; the _ALL_KITS-parametrized tests already guard their own
+# per-kit existence inside each test body. Gating the WHOLE file on i-90's
+# presence too made everything silently vacuous once the i-90 kit was
+# deprecated and deleted (bd polyglot-pdf-hydb0) -- caught by the outer
+# cross-surface review, filed as bd polyglot-pdf-cj8mg, fixed here rather
+# than left skipped. The 2 tests that directly need i-90's PDF (as "some
+# other form") carry their own scoped skip below.
+pytestmark = pytest.mark.skipif(not _W7.exists(), reason="w7 kit not present")
+
+needs_i90 = pytest.mark.skipif(
+    not _I90.exists(), reason="form-kits/i-90/form.pdf not present (kit "
+    "deprecated, bd polyglot-pdf-hydb0)")
 
 _USER = {"uid": None, "firm_id": "firm-a", "link_kit_id": "w7", "is_client_link": True}
 
@@ -120,6 +130,7 @@ def test_an_UNSTAMPED_but_valid_form_still_resumes():
 # ---------------------------------------------------------------------------
 
 
+@needs_i90
 def test_a_DIFFERENT_FORM_is_refused_by_the_route():
     with pytest.raises(HTTPException) as exc:
         _call(_I90.read_bytes())
@@ -197,8 +208,11 @@ def test_the_refusal_does_not_say_WHICH_check_failed():
     finally:
         doc.close()
 
+    hostile_inputs = [injected, b"not a pdf"]
+    if _I90.exists():
+        hostile_inputs.insert(1, _I90.read_bytes())
     messages = set()
-    for hostile in (injected, _I90.read_bytes(), b"not a pdf"):
+    for hostile in hostile_inputs:
         with pytest.raises(HTTPException) as exc:
             _call(hostile)
         messages.add(str(exc.value.detail))
