@@ -210,3 +210,69 @@ def test_both_channels_bind_the_same_secrets():
 def test_the_link_signing_key_is_actually_bound():
     """Without it the mint route 503s, which is the whole point of this bead."""
     assert "LINK_TOKEN_SECRET" in _secrets(STAGING)
+
+
+# ---------------------------------------------------------------------------
+# THE WIRING, not just the values.
+#
+# The first version of this file asserted only that the two string CONSTANTS
+# existed and matched. A reviewer deleted the entire fix -- first the
+# `BACKEND_SECRETS=` hand-off in deploy-staging.sh, then `"${SECRETS_FLAG[@]}"`
+# from the gcloud invocation itself, reproducing the exact hvui4 bug where
+# --set-secrets never reaches gcloud on ANY channel -- and the suite passed
+# 7/7 both times.
+#
+# A constant nothing forwards is the same defect this bead exists to fix: a
+# value that looks configured and never reaches the service. So each link in
+# the chain gets its own assertion.
+# ---------------------------------------------------------------------------
+
+DEPLOY_ALL = REPO_ROOT / "deploy-all.sh"
+
+
+@pytest.mark.parametrize("script", [DEMO, STAGING], ids=["demo", "staging"])
+def test_channel_forwards_its_secrets_to_deploy_all(script: Path):
+    """The channel must PASS the constant, not merely define it."""
+    text = script.read_text(encoding="utf-8")
+    assert 'BACKEND_SECRETS="$BACKEND_SECRETS_COMMON"' in text, (
+        f"{script.name} defines BACKEND_SECRETS_COMMON but never hands it to "
+        "deploy-all.sh, so the secret silently never binds"
+    )
+
+
+def test_deploy_all_builds_the_flag_from_backend_secrets():
+    """deploy-all.sh must turn BACKEND_SECRETS into --set-secrets."""
+    text = DEPLOY_ALL.read_text(encoding="utf-8")
+    assert '[ -n "$BACKEND_SECRETS" ] && SECRETS_FLAG=(--set-secrets "$BACKEND_SECRETS")' in text
+
+
+def test_deploy_all_passes_the_flag_to_gcloud():
+    """...and must actually include it in the gcloud argv.
+
+    This is the assertion whose absence let a reviewer delete the fix with the
+    suite green: building the array and never expanding it is exactly the
+    "documented but never passed" bug this bead is named for.
+    """
+    text = DEPLOY_ALL.read_text(encoding="utf-8")
+    deploy_start = text.index("gcloud run deploy")
+    # The invocation ends at the first line that is not a continuation.
+    invocation = text[deploy_start : text.index("\n\n", deploy_start)]
+    assert '"${SECRETS_FLAG[@]}"' in invocation, (
+        "SECRETS_FLAG is built but never passed to gcloud run deploy -- the "
+        "secret would silently never bind, which is bd polyglot-pdf-hvui4 "
+        "reintroduced"
+    )
+
+
+def test_no_secrets_means_no_flag():
+    """A channel that sets nothing must not change the invocation.
+
+    deploy-production.sh and a bare deploy-all.sh run pass no BACKEND_SECRETS;
+    an unconditional --set-secrets would send gcloud an empty value and wipe
+    every binding on the service.
+    """
+    text = DEPLOY_ALL.read_text(encoding="utf-8")
+    assert "SECRETS_FLAG=()" in text, (
+        "the array must default EMPTY so a channel with no secrets produces "
+        "the same invocation as before this flag existed"
+    )

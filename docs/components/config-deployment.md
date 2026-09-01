@@ -169,8 +169,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
     404s while this is unset, which remains the default anywhere it is not
     explicitly set. What it guarded -- the per-jti/per-firm limits and the
     session cost ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so
-    enabling it is now legitimate: the DEMO sets it in `deploy-demo.sh`
-    (maintainer, 2026-08-28, so testers can reach the deployed app). Enabling
+    enabling it is now legitimate: BOTH deployed channels set it --
+    `deploy-demo.sh` (maintainer, 2026-08-28, so testers can reach the deployed
+    app) and `deploy-staging.sh` (bd `polyglot-pdf-hvui4`, so staging can
+    actually exercise the feature it exists to rehearse). Enabling
     it in any environment where the ceiling is NOT enforced would still mean
     an unauthenticated entry point to a paid session with nothing bounding
     spend. The ceiling actually in force is the global
@@ -302,8 +304,6 @@ two channel scripts use.
   secret block** — gcloud's own help says "All existing secrets will be removed
   first" — so a channel must list every binding it wants to survive, not just
   the one it is adding. The
-
-
   container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
   backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,

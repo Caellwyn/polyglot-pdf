@@ -344,11 +344,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # gcloud invocation to before this existed.
     #
     # This flag was DOCUMENTED HERE FOR MONTHS AND NEVER PASSED (bd
-    # polyglot-pdf-hvui4). The comment below said GEMINI_API_KEY "is injected
-    # separately via Secret Manager (--set-secrets)"; grep across every
-    # deploy-*.sh found the flag only in that sentence. Anything relying on it
-    # -- LINK_TOKEN_SECRET, which gates client-link minting -- silently got
-    # nothing and the route 503'd.
+    # polyglot-pdf-hvui4). The BACKEND_ENV comment ABOVE used to say
+    # GEMINI_API_KEY "is injected separately via Secret Manager
+    # (--set-secrets)"; grep across every deploy-*.sh found the flag only in
+    # that sentence. Anything relying on it -- LINK_TOKEN_SECRET, which gates
+    # client-link minting -- silently got nothing and the route 503'd.
     #
     # --set-secrets REPLACES the service's entire secret block, exactly like
     # --set-env-vars does for env. So a channel must list EVERY binding it
