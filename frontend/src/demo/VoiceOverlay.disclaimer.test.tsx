@@ -73,7 +73,6 @@ function makeMockManager(calls: string[]) {
     // effects (PTT/VAD wiring) so it does not crash before we reach Agree:
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
-    setNativeVad: vi.fn(),
     setEnergyCallback: vi.fn(),
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
@@ -118,7 +117,6 @@ function makeMockManager(calls: string[]) {
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => false),
-    isNativeVad: vi.fn(() => true),
     getFieldManager: vi.fn(() => null),
     startRecording: vi.fn(async () => {}),
     stopRecording: vi.fn(),

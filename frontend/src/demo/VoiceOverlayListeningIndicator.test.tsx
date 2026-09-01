@@ -78,7 +78,6 @@ function makeMockManager(status: string, opts?: { sendingMic?: boolean }): Conne
   const audioManager = {
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
-    setNativeVad: vi.fn(),
     setEnergyCallback: vi.fn(),
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
@@ -111,7 +110,6 @@ function makeMockManager(status: string, opts?: { sendingMic?: boolean }): Conne
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => true),
-    isNativeVad: vi.fn(() => true),  // deployed default: native VAD
     getFieldManager: vi.fn(() => null),
     getAudioManager: vi.fn(() => audioManager),
     startRecording: vi.fn(async () => {}),
@@ -284,10 +282,10 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
 describe('Mobile FAB mic-activity badge (bd polyglot-pdf-8v53)', () => {
   // The badge is driven by `micSending`, which the energy-meter effect computes
   // inside a requestAnimationFrame tick -- so this block fakes rAF + performance
-  // and advances one frame after feeding the worklet energy callback. Runs in
-  // native VAD mode (the mock manager's isNativeVad() is true and the mocked
-  // useDemoVAD keeps userSpeaking false), proving the badge no longer depends on
-  // the dead client-VAD gate.
+  // and advances one frame after feeding the worklet energy callback. The mocked
+  // useDemoVAD keeps userSpeaking false throughout, which is the point: it proves
+  // the badge does not depend on the client-VAD gate -- which never runs at all
+  // now that push-to-talk is the only input mode (bd polyglot-pdf-v1m8g).
   beforeEach(() => {
     vi.useFakeTimers({
       toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',

@@ -73,7 +73,7 @@ closed); the cited code path is the ground truth when a doc and the code disagre
 | Schema forms / client state (`frontend/src/schema-forms/`, `frontend/src/shared/`) | `docs/components/schema-forms.md` |
 | PDF filling (`backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py`) | `docs/components/pdf-filling.md` |
 | Anything logging PII/PHI or audit trails | `docs/standards/hipaa-pii-policy.md` + `docs/standards/confirmation-and-audit.md` |
-| VAD / activity signals (`DISABLE_GEMINI_VAD`, `activity_start/end`) | `docs/standards/voice-and-vad.md` |
+| Turn-taking / activity signals (`activity_start/end`; PTT is the only input mode) | `docs/standards/voice-and-vad.md` |
 | Running a measurement/probe experiment against the live app (new `scripts/spikes/*` or `backend/scripts/probe_*.py` work, cost/accuracy/latency sweeps) | [`.claude/skills/experimentation/SKILL.md`](.claude/skills/experimentation/SKILL.md) -- mandatory prior-work audit + pre-spend cost estimate gates before any API call |
 | Planning a feature/epic, filing a bead, or model-tiering a task (`/plan-epic`, exit criteria, SPEAR) | [`docs/doctrine/planning.md`](docs/doctrine/planning.md) |
 | Session drain/handover hooks (`scripts/drain_flag.py`, PreCompact/SessionStart wiring) | [`docs/doctrine/drain-handover.md`](docs/doctrine/drain-handover.md) |

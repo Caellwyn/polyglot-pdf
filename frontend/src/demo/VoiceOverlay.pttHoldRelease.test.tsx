@@ -66,7 +66,6 @@ function makeConnectedMock() {
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: heldSpy,
     getPushToTalkMode: vi.fn(() => true),
-    isNativeVad: vi.fn(() => false),
     getFieldManager: vi.fn(() => null),
     startRecording: vi.fn(async () => {}),
     stopRecording: vi.fn(),

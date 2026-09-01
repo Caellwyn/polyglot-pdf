@@ -130,8 +130,9 @@ VAD start/end signals alongside the existing `voice_activity` field.
 `LiveServerMessage` now has both `voice_activity` and
 `voice_activity_detection_signal` fields (verified present in 2.8.0 type).
 These are intended to replace manual `activity_start`/`activity_end` signaling
-for VAD-aware clients; our current VAD path (via `DISABLE_GEMINI_VAD` and
-`activity_start`/`activity_end`) remains the only endpoint-verified approach.
+for VAD-aware clients; our path -- automatic activity detection DISABLED, with
+push-to-talk bracketing every turn in `activity_start`/`activity_end` (bd
+polyglot-pdf-v1m8g) -- remains the only endpoint-verified approach.
 
 ### Transcription language codes (available as of 2.8.0, endpoint-verified on the default tier 2026-07-16)
 

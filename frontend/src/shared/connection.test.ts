@@ -60,7 +60,6 @@ vi.mock('./audioManager', () => ({
       flushAudioQueue: vi.fn(),
       resumePlayback: vi.fn(),
       resumeAudioContext: vi.fn(),
-      setNativeVad: vi.fn(),
       // Used by the shared rehydrateAudio routine (bd polyglot-pdf-z9bc) to
       // re-sync PTT/mute after arming.
       setPTTMode: vi.fn(),

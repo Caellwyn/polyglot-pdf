@@ -63,7 +63,6 @@ function makeResizeFlipMock(): ConnectionManager & {
   const audioManager = {
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
-    setNativeVad: vi.fn(),
     setEnergyCallback: setEnergyCbSpy,
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
@@ -98,7 +97,6 @@ function makeResizeFlipMock(): ConnectionManager & {
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => true),
-    isNativeVad: vi.fn(() => false),
     getFieldManager: vi.fn(() => null),
     getAudioManager: vi.fn(() => audioManager),
     startRecording: vi.fn(async () => {}),
