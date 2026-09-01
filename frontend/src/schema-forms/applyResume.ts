@@ -21,7 +21,10 @@ import type { FieldValue } from './types/schema';
 import type { SchemaFormState } from './state/schemaFormState';
 
 export interface ResumePayload {
-  fieldValues: Record<string, string>;
+  /** A checkbox_group answer arrives as string[], a standalone checkbox as
+   * bool (bd polyglot-pdf-8ewxs) -- matches ResumeUpload's
+   * ResumeResult.fieldValues, which this is always fed from verbatim. */
+  fieldValues: Record<string, string | string[] | boolean>;
   formSessionId?: string;
   linkJtis: string[];
 }

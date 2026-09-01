@@ -150,6 +150,43 @@ describe('applyResume', () => {
     expect(next.fieldValues.last_name.value).toBe('X');
   });
 
+  it('brings back a checkbox_group answer as an ARRAY, not a stringified list (bd polyglot-pdf-8ewxs)', () => {
+    // /api/resume-form returns Dict[str, str | list[str]] -- a checkbox_group
+    // answer comes back as a real list, not a scalar. ResumePayload.fieldValues
+    // (and FieldValue.value) were declared Record<string, string> even though
+    // the array shape already survived the round-trip at runtime; this pins
+    // the declaration matches reality AND that applyResume's merge does not
+    // coerce/collapse the array along the way (e.g. String(value), or a
+    // .join(',') "normalization" that looked harmless on scalar strings).
+    const next = applyResume(baseState(), {
+      fieldValues: { last_name: 'Okonkwo', race: ['white', 'asian'] },
+      linkJtis: [],
+    });
+    expect(next.fieldValues.race.value).toEqual(['white', 'asian']);
+    expect(Array.isArray(next.fieldValues.race.value)).toBe(true);
+    // The scalar sibling in the SAME payload must be unaffected -- this is
+    // not a fix that only works when every value is an array.
+    expect(next.fieldValues.last_name.value).toBe('Okonkwo');
+  });
+
+  it('brings back a standalone checkbox answer as a BOOLEAN, not a stringified "true" (bd polyglot-pdf-8ewxs, Opus cross-surface finding 1)', () => {
+    // /api/resume-form's actual return shape is
+    // Dict[str, str | list[str] | bool] -- pdf_fill_routes.py restores a
+    // standalone checkbox as the client's own `True`, not the PDF's
+    // on-state. The first version of this bead's fix only widened the
+    // union to string|string[], still refusing the bool this shape
+    // actually needs -- caught by the Opus cross-surface review (a tsc
+    // probe: `{fieldValues: {agrees: true}, linkJtis: []}` failed
+    // TS2322 against the pre-fix union).
+    const next = applyResume(baseState(), {
+      fieldValues: { last_name: 'Okonkwo', agrees: true },
+      linkJtis: [],
+    });
+    expect(next.fieldValues.agrees.value).toBe(true);
+    expect(typeof next.fieldValues.agrees.value).toBe('boolean');
+    expect(next.fieldValues.last_name.value).toBe('Okonkwo');
+  });
+
   it('does not mutate the state handed in', () => {
     const before = baseState({ fieldValues: { last_name: fv('old') } });
     applyResume(before, { fieldValues: { last_name: 'new' }, linkJtis: [] });
