@@ -19,13 +19,14 @@ import pytest
 # backend/tests/unit/test_g1b_answer_key_coherence.py -> parents[3] is the repo root.
 _I90_SCHEMA_PATH = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
 
-# g1b_answer_key.load_schema_fields() reads the i-90 schema at import time (via
-# module-level code in g1b_corpus.py), so this whole file fails at collection,
-# not at test time, once the i-90 kit is gone (bd polyglot-pdf-hydb0, deprecated
-# in favor of i-90_v2). ANSWER_KEY is hand-authored against the OLD schema's
-# field ids/section structure, which is NOT compatible with i-90_v2's (different
-# ids, 94 vs 132 fields) -- so this skips rather than repoints until the corpus
-# is re-authored. pytest.mark.skipif is not enough: the crash happens in the
+# This file's own _FIELDS_BY_ID (module-level, below) calls
+# g1b_answer_key.load_schema_fields(), which reads the i-90 schema at IMPORT
+# time -- so this whole file fails at collection, not at test time, once the
+# i-90 kit is gone (bd polyglot-pdf-hydb0, deprecated in favor of i-90_v2).
+# ANSWER_KEY is hand-authored against the OLD schema's field ids/section
+# structure, which is NOT compatible with i-90_v2's (different ids, 94 vs 132
+# fields) -- so this skips rather than repoints until the corpus is
+# re-authored. pytest.mark.skipif is not enough: the crash happens in the
 # import statement itself, before pytest can apply the marker, so this must
 # skip BEFORE importing -- same absent-file check as test_ai_context.py /
 # test_measure_harness_i90v2_plan.py, just moved ahead of the import.
