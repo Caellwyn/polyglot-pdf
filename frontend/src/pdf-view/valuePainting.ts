@@ -51,8 +51,24 @@ export function paintedValueFor(field: FormField, raw: unknown): PaintedValue {
     }
     case 'checkbox_group':
       return paintSelectedLabels(field, raw);
-    case 'radio':
     case 'select': {
+      // A select paints its VALUE, not its label -- because for a select the
+      // value IS what PyMuPDF writes into the combobox (bd polyglot-pdf-hmkas),
+      // so painting it makes the overlay show exactly what will print.
+      //
+      // It is also the only thing that FITS. Labels became speakable names for
+      // the voice model (bd polyglot-pdf-jpjcv): "Armed Forces Americas (AA)"
+      // needs ~86px at the 6px font floor, in an i-90 state box 36px wide, and
+      // .pdf-field-overlay clips -- so the author would read "Armed For" where
+      // "AA" used to sit crisp at 11px. Same class as the jq17 checkbox bug
+      // above: a label sized for reading aloud overflowing a widget rect.
+      if (typeof raw !== 'string' || raw === '') return { kind: 'none' };
+      return { kind: 'text', text: raw };
+    }
+    case 'radio': {
+      // A radio keeps painting its LABEL: its value is an internal slug
+      // ('apply_new_itin') that never prints -- widget identity lives in
+      // pdf_on_value -- so the value would be meaningless on the page.
       if (typeof raw !== 'string' || raw === '') return { kind: 'none' };
       return { kind: 'text', text: optionLabel(field, raw) };
     }
