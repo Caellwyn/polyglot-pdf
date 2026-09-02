@@ -19,7 +19,7 @@ import {
   AuthError, ForbiddenError,
   listArchivedRevisions, loadArchivedSchema, setRemoteHidden, setRemoteStatus,
 } from '../utils/remoteKitStore';
-import { kitName } from '../utils/kitName';
+import { kitName, kitOptionName } from '../utils/kitName';
 import {
   EMPTY_FILTER, filterKits, hiddenByFilterCount, isFilterActive,
   type CatalogueFilter,
@@ -840,7 +840,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                 && !progress[k.id]?.schemaError;
               return (
                 <option key={k.id} value={k.id}>
-                  {k.label} -- {k.status}
+                  {kitOptionName(k)} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
                   {stripUnmeasured ? STAMP_MARKER_SHORT : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
@@ -920,6 +920,10 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   : `${kit.label} has no schema yet -- run the extraction first`}
               >
                 <div className="flex items-center justify-between gap-2">
+                  {/* kit-label-ok: the card TITLE. Its own subtitle renders {kit.id} two
+                      lines below, so both identities are already on screen together --
+                      the condition kitName() exists to create. Putting the id here too
+                      would print it twice on one card. */}
                   <span className="font-medium text-gray-900 truncate">{kit.label}</span>
                   <span className={`text-xs px-2 py-0.5 rounded ${STATUS_STYLE[kit.status]}`}>
                     {kit.status}

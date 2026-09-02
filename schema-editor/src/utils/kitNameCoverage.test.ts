@@ -118,17 +118,46 @@ describe('kit naming coverage (bd polyglot-pdf-kztlr)', () => {
  * same habit, one level up.
  *
  * The limit that REMAINS, stated because a guard that hides one reads as
- * broader assurance than it is: this matches a SHAPE, `${kit.label}`. A label
- * reaching a human another way -- through a variable, a prop, a server message,
- * or a JSX text node like `<option>{k.label}</option>` (bd polyglot-pdf-5ivqx)
- * -- is invisible to it. `kitLabel` props are deliberately out of scope: the
- * call site knows what else is on screen, so the decision belongs there.
+ * broader assurance than it is: this matches SHAPES, not meaning. It knows two
+ * -- template interpolation `${kit.label}`, and a bare JSX child
+ * `<option>{k.label}</option>` (bd polyglot-pdf-5ivqx, which shipped precisely
+ * because the second shape carries the same ambiguity through different
+ * syntax, and the pattern only knew the first). A label reaching a human any
+ * OTHER way -- through a variable, a prop, or a server message -- is still
+ * invisible to it. `kitLabel` props are deliberately out of scope: the call
+ * site knows what else is on screen, so the decision belongs there.
  */
-const BARE_KIT_LABEL = /\$\{\s*(?:kit|entry|created|k)\??\.label\b/;
+const KIT_HOLDER = String.raw`(?:kit|entry|created|k)\??\.label\b`;
+// TWO shapes, one ambiguity. `${kit.label}` inside a template literal, and a
+// bare JSX child `{k.label}` -- the second is how the catalogue-switcher
+// <option> named a kit (bd polyglot-pdf-5ivqx), invisible to a pattern that
+// knew only the first.
+//
+// The arms cannot double-count a template interpolation, and NOT because
+// anything here prevents it: alternation is first-match-wins, so at a
+// `${k.label}` the template arm matches first and the JSX arm never sees that
+// position. An earlier draft carried a `(?<!\$)` lookbehind to "stop" this;
+// mutation-testing showed removing it changed no result, so it was unreachable
+// code defended by a mechanism that was not real. The negative case below
+// pins the property itself instead.
+const BARE_KIT_LABEL = new RegExp(
+  String.raw`\$\{\s*` + KIT_HOLDER
+  + '|' + String.raw`\{\s*` + KIT_HOLDER + String.raw`\s*\}`);
 const ALL_BARE_KIT_LABELS = new RegExp(BARE_KIT_LABEL.source, 'g');
 
 /** Marks a bare label as deliberate. Must sit within MARKER_REACH lines above. */
 const MARKER = '// kit-label-ok:';
+/**
+ * The same marker written as a JSX comment.
+ *
+ * A bare `//` is only a comment inside a JSX EXPRESSION (`title={...}`). In a
+ * JSX CHILD position -- which is where the newly-matched `<span>{kit.label}`
+ * shape lives -- it is ordinary text and would RENDER on the card. Requiring a
+ * form that cannot be written there would push an author into the one thing
+ * this guard cannot see: rewording the message to dodge the pattern. So both
+ * spellings are accepted, and the check still asks the same single question.
+ */
+const MARKER_JSX = '{/* kit-label-ok:';
 const MARKER_REACH = 6;
 
 /**
@@ -164,7 +193,10 @@ function scanForBareLabels(text: string): number[] {
     // signal the marker exists to create, so it must not be self-serve.
     const from = Math.max(0, i - MARKER_REACH);
     const covered = lines.slice(from, i)
-      .some((l) => l.trim().startsWith(MARKER));
+      .some((l) => {
+        const t = l.trim();
+        return t.startsWith(MARKER) || t.startsWith(MARKER_JSX);
+      });
     if (!covered) offenders.push(i + 1);
   });
   return offenders;
@@ -242,6 +274,66 @@ describe('kit label coverage (bd polyglot-pdf-nsz2d)', () => {
     // old mechanism everything after it went unseen.
     expect(scanForBareLabels(['// see `kit.label` for the shape', bare]
       .join(String.fromCharCode(10)))).toEqual([2]);
+  });
+
+  // The JSX TEXT-NODE arm (bd polyglot-pdf-5ivqx). Same ambiguity, different
+  // syntax: this is the shape the catalogue-switcher <option> actually used,
+  // and the template-literal-only pattern could not see it.
+  it('flags a bare label rendered as a JSX child', () => {
+    expect(scanForBareLabels('<option value={k.id}>{k.label} -- {k.status}</option>'))
+      .toEqual([1]);
+    // Whitespace and optional chaining are how prettier and TS spell it.
+    expect(scanForBareLabels('<span>{ kit?.label }</span>')).toEqual([1]);
+    // Split across lines, as prettier writes a long option.
+    expect(scanForBareLabels(['<option value={k.id}>', '  {k.label}',
+      '</option>'].join(String.fromCharCode(10)))).toEqual([2]);
+    // The marker exempts it, exactly as it does the template shape.
+    expect(scanForBareLabels(['  ' + MARKER + ' id is on the row above',
+      '<span>{k.label}</span>'].join(String.fromCharCode(10)))).toEqual([]);
+  });
+
+  it('accepts the marker written as a JSX comment', () => {
+    // In a JSX CHILD position a bare `//` renders as visible text, so the
+    // card title -- the one legitimate bare label -- cannot use that
+    // spelling. Both are accepted; neither is self-serve.
+    expect(scanForBareLabels(['  ' + MARKER_JSX + ' id is on the row below */}',
+      '<span>{kit.label}</span>'].join(String.fromCharCode(10)))).toEqual([]);
+
+    // Still must BE the comment, not merely contain its characters: the JSX
+    // spelling inside a string literal licenses nothing, same as the `//` one.
+    expect(scanForBareLabels(['const h = "type ' + MARKER_JSX + ' first";',
+      '<span>{kit.label}</span>'].join(String.fromCharCode(10)))).toEqual([2]);
+
+    // ...and still must sit ABOVE, not trail the offending line.
+    expect(scanForBareLabels('<span>{kit.label}</span>  ' + MARKER_JSX + ' x */}'))
+      .toEqual([1]);
+
+    // ...and is bounded by the same reach, so it is not a file-wide amnesty.
+    const filler = new Array(MARKER_REACH + 2).fill('  // padding');
+    const lines = ['  ' + MARKER_JSX + ' a real card */}', ...filler,
+      '<span>{kit.label}</span>'];
+    expect(scanForBareLabels(lines.join(String.fromCharCode(10))))
+      .toEqual([lines.length]);
+  });
+
+  // NEGATIVE cases. A noisy detector gets suppressed, which is its own death
+  // -- so what must NOT flag is pinned too, not just what must.
+  it('does not flag shapes that are not a bare kit label', () => {
+    // The fixed call. If this flagged, the fix could not be applied.
+    expect(scanForBareLabels('<option value={k.id}>{kitOptionName(k)}</option>'))
+      .toEqual([]);
+    // A DIFFERENT thing's label -- fields and sections have them too, and
+    // they are not kits.
+    expect(scanForBareLabels('<span>{field.label}</span>')).toEqual([]);
+    expect(scanForBareLabels('<span>{section.label}</span>')).toEqual([]);
+    // A property READ that goes nowhere near a human.
+    expect(scanForBareLabels('const sorted = kits.sort((a, b) => a.label > b.label ? 1 : -1);'))
+      .toEqual([]);
+    // One template interpolation is ONE offender, not two: `${k.label}` contains
+    // `{k.label}` as a substring, so a future rewrite that reports per MATCH
+    // rather than per LINE would double-count it. Pins the property, not the
+    // implementation detail that currently delivers it.
+    expect(scanForBareLabels('setNotice(`${k.label} gone`);')).toEqual([1]);
   });
 
   it('does not let a marker license an unrelated match far below it', () => {

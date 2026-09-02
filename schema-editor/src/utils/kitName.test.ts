@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kitName } from './kitName';
+import { kitName, kitOptionName } from './kitName';
 
 /**
  * These cases are the SHARED CONTRACT with the backend's `_kit_name`.
@@ -42,3 +42,64 @@ describe('kitName -- naming a kit in prose (bd polyglot-pdf-kztlr)', () => {
     expect(kitName({ id: 'MY-FORM', label: 'my form' })).toBe('"MY-FORM"');
   });
 });
+
+describe('kitOptionName -- naming a kit inside a control (bd polyglot-pdf-5ivqx)',
+  () => {
+    it('lets a human tell apart two kits that share a label', () => {
+      // THE BUG. Nothing enforces label uniqueness, so two kits can both read
+      // "W-7" in the catalogue-switcher dropdown. value={k.id} disambiguates
+      // what the select SUBMITS, but not what the human reads before choosing
+      // -- and choosing the wrong form is how you edit the wrong form.
+      const a = { id: 'form-2', label: 'W-7' };
+      const b = { id: 'form-9', label: 'W-7' };
+      expect(kitOptionName(a)).not.toBe(kitOptionName(b));
+      expect(kitOptionName(a)).toBe('W-7 (form-2)');
+      expect(kitOptionName(b)).toBe('W-7 (form-9)');
+    });
+
+    it('does NOT quote, unlike the prose form', () => {
+      // An <option> is not a sentence, and the strip appends "-- draft, 42%"
+      // right after this, so quotes would read as part of the label itself.
+      expect(kitOptionName({ id: 'form-2', label: 'W-7' })).toBe('W-7 (form-2)');
+      expect(kitName({ id: 'form-2', label: 'W-7' })).toBe('"W-7" (form-2)');
+    });
+
+    it('drops the id when the label merely restates it', () => {
+      // Shares labelRestatesId with kitName: whenever kitName judges a label
+      // to be noise, this suppresses the parenthesised id too, so the dropdown
+      // and the messages about it agree on what a kit is called.
+      for (const kit of [
+        { id: 'form-2', label: 'Form 2' },   // synthesised from the id
+        { id: 'w7', label: 'W7' },
+        { id: 'my_form', label: 'My Form' }, // separator- and case-insensitive
+      ]) {
+        expect(kitOptionName(kit)).not.toContain('(');
+        // kitName agrees the label adds nothing -- it falls back to the id.
+        expect(kitName(kit)).toBe(`"${kit.id}"`);
+      }
+    });
+
+    it('KEEPS the label the human typed, rather than the folder name', () => {
+      // Where it deliberately differs from kitName. A kit labelled "I-90" in a
+      // folder called `i-90` is a restatement, so no id is appended -- but the
+      // option must still read "I-90", not the lowercase folder name. Both are
+      // the same string bar spelling, so neither disambiguates better and only
+      // one is what the human wrote. Returning kit.id here reddens a shipped
+      // strip test, which is how this was caught.
+      expect(kitOptionName({ id: 'i-90', label: 'I-90' })).toBe('I-90');
+      expect(kitOptionName({ id: 'my_form', label: 'My Form' })).toBe('My Form');
+      // Prose still quotes the identifier, and that stays correct there.
+      expect(kitName({ id: 'i-90', label: 'I-90' })).toBe('"i-90"');
+    });
+
+    it('falls back to the id only when there is no label at all', () => {
+      expect(kitOptionName({ id: 'form-2' })).toBe('form-2');
+      expect(kitOptionName({ id: 'form-2', label: null })).toBe('form-2');
+      expect(kitOptionName({ id: 'form-2', label: '   ' })).toBe('form-2');
+    });
+
+    it('keeps a label that adds words to the id', () => {
+      expect(kitOptionName({ id: 'w7', label: 'W-7 (ITIN Application)' }))
+        .toBe('W-7 (ITIN Application) (w7)');
+    });
+  });

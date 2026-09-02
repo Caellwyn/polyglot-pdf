@@ -55,3 +55,36 @@ export function kitName(kit: NameableKit): string {
   if (!label || labelRestatesId(label, kit.id)) return `"${kit.id}"`;
   return `"${label}" (${kit.id})`;
 }
+
+/**
+ * How a kit is named INSIDE a control -- the catalogue-switcher <option> text
+ * (bd polyglot-pdf-5ivqx).
+ *
+ * Same identity rule as `kitName`, different typography. Prose quotes the name
+ * because it sits inside a sentence; an <option> is not a sentence, and the
+ * strip already appends `-- status, 42%` after this, so quotes there would
+ * read as part of the label.
+ *
+ * The ambiguity is real: nothing enforces label uniqueness, so two kits can
+ * both read "W-7" in the dropdown. `value={k.id}` disambiguates what the
+ * SELECT submits, but not what the human reads before choosing -- and choosing
+ * the wrong form is how you edit the wrong form.
+ *
+ * Deliberately shares `labelRestatesId` with kitName rather than re-deriving
+ * it: two copies of one rule is how the pair silently drifts apart.
+ *
+ * WHERE IT DIVERGES FROM kitName, and why. On a restatement kitName falls back
+ * to the ID (`"i-90"`); this keeps the LABEL (`I-90`). Both are correct for
+ * their surface. A refusal quotes an identifier, so the id is the honest thing
+ * to quote. A dropdown shows a NAME, and `i-90` is a folder; substituting it
+ * for the `I-90` the human typed silently downgrades their capitalisation and
+ * punctuation for no gain -- the two are the same string bar spelling, so
+ * neither disambiguates better, and only one is what they wrote. Caught by an
+ * existing strip test going red on exactly that kit.
+ */
+export function kitOptionName(kit: NameableKit): string {
+  const label = (kit.label ?? '').trim();
+  if (!label) return kit.id;
+  if (labelRestatesId(label, kit.id)) return label;
+  return `${label} (${kit.id})`;
+}
