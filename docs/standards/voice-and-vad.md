@@ -158,14 +158,23 @@ shapes: an unmute that raced the teardown stranded the turn forever, because the
 only flush path then required a further mute/unmute cycle that a user with no
 reason to touch the toggle never performs.
 
-**"Can carry it" means a live CONSUMER, not merely a queue object.** `finalize()`
-cancels the text sender and only nulls the queue several awaits later, so there is
-a window where the queue still exists and a put cheerfully succeeds onto a pipe
-whose reader is already dead -- the turn then dies with the queue, having been
-logged as sent and cleared. Teardown is a multi-await process with an observable
-middle state, not one instant. The sender task is the honest signal, which is why
-the flush checks it and why the second flush site sits at the sender's START
-rather than at queue creation.
+**Neither the queue nor the sender task can tell you the pipeline is usable.**
+Teardown happens in stages, and each stage defeats a different naive check:
+
+| Stage | What still looks healthy |
+|---|---|
+| A `None` sentinel is queued (the sender loop will exit on it) | the queue accepts puts; the task is not `done()` |
+| The sender is cancelled | the queue accepts puts |
+| The queue is nulled -- several awaits later | -- |
+
+So a put can succeed onto a pipe that will never be read, and the turn is then
+cleared as "sent" and lost. `_text_pipeline_closing` is set at the top of the
+drain, **before any await and before the sentinel**, and cleared only when a new
+sender is actually running -- it states the fact instead of inferring it from a
+proxy. The queue and task checks remain as cheap backstops for what the flag does
+not cover (no session yet, sender already exited). The second flush site sits at
+the sender's START, not at queue creation: a queue with no reader is not a
+pipeline.
 
 For the same reason **both** elicitation paths check the mute flag BEFORE their
 queue/session guards. A hint arriving while muted and mid-teardown must still be

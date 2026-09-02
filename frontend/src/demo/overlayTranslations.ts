@@ -94,7 +94,7 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     resume: 'Ituloy',
     pause: 'I-pause',
     switchToManual: 'Tahimik na Mode',
-    switchToVoice: 'Voice Mode',
+    switchToVoice: 'Boses Mode',
     clearForm: 'Burahin ang Form',
     clearFormConfirm: 'Burahin ang lahat ng datos ng form?\n\nBubura nito ang lahat ng field at ire-reload ang pahina.\nHindi na ito maibabalik.',
     fieldsCompleted: '{filled} sa {total} na field ang tapos na',

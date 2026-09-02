@@ -114,7 +114,7 @@ an absolute. PTT holds the mic at a resting mute between presses, so `muteInput`
 is already called once at mount; an absolute assertion there would have been
 measuring PTT rather than this control.
 
-## The same defect four times, and what finally ended it
+## The same defect five times, and what finally ended it
 
 Review found the held-context mechanism broken in three rounds. Each fix was
 locally correct; each left one more ordering open. Worth recording because the
@@ -147,7 +147,15 @@ The mechanism fix is one `_flush_muted_context()` that asks whether both
 preconditions hold RIGHT NOW, called from every site where either can become
 true. Whichever arrives second delivers, so no single site owns the decision.
 
-**R4 is the more interesting failure, because the mechanism was already right.**
+- **R5.** The precondition was still a proxy. Teardown queues a `None` sentinel
+  BEFORE cancelling the sender, and the loop exits on it -- so a turn queued
+  behind the sentinel is unreadable while the task is not yet `done()`. Checking
+  the consumer was better than checking the queue, and still not the fact itself.
+  Fixed with an explicit `_text_pipeline_closing` flag set at the top of the
+  drain, before any await and before the sentinel.
+
+**R4 and R5 are the more interesting failures, because the mechanism was already
+right.**
 I had written into that function's docstring that "a new ordering cannot open a
 fourth variant" -- and a fourth ordering promptly appeared, because the mechanism
 was asking the wrong QUESTION. It tested for a queue object; what it needed was a
@@ -157,11 +165,24 @@ an observable middle state where the queue lies about being usable.
 
 Two lessons worth separating. Changing from event-keyed to condition-keyed was
 genuinely the right move and it did close R1-R3. But a condition is only as good
-as the thing it measures, and "there is a queue" was a proxy for "something will
-read this". **When a fix's correctness rests on a precondition, the next question
-is whether that precondition can be true while the thing it stands for is false.**
-And a confident no-more-bugs claim in a comment is a smell: I wrote one, and the
-next review round disproved it.
+as the thing it measures, and I reached for a proxy twice running: "there is a
+queue" stood in for "something will read this" (R4), and then "the reader task is
+alive" stood in for the same thing (R5). Both are true during teardown while the
+fact they represent is false, because teardown is STAGED -- sentinel, then cancel,
+then null -- and each stage falsifies a different proxy.
+
+**When a fix's correctness rests on a precondition, ask whether that precondition
+can be true while the thing it stands for is false.** If the answer is yes,
+recording the fact directly (a flag set by the code that knows) beats inferring it
+from a nearby observable, however natural the inference looks. And a confident
+no-more-bugs claim in a comment is a smell: I wrote one, and the next review round
+disproved it.
+
+A useful detail from R5: the sentinel-state test failed on FIRST run, for a
+second reason -- the test mirror had not been taught to clear the new flag, so
+the flush it modelled was a no-op. That is the mirror-drift the ast guard exists
+to prevent, catching itself in the act. The guard now pins both halves of the
+restart (flush AND clear), so a future mirror cannot silently diverge on either.
 
 **Pinning a test that mirrors production.** Driving the real queue-creation path
 spawns the live session loop, so the tests use a small helper mirroring its two
@@ -176,12 +197,44 @@ teardown" against `send_client_content` -- which never reads `_text_queue`, so t
 line asserted nothing. When simulating a state, check that the code under test
 actually reads the thing you are setting.
 
+## Presence is not translation
+
+Separately from the replay saga, review caught one Tagalog label shipped as bare
+English while the label on the line ABOVE it was translated -- my own
+inconsistency, and a straight failure of "translated in every shipped language".
+
+The interesting part is why the completeness test missed it. That test asserts
+every language HAS every key with a non-empty value; a value left as English
+satisfies it perfectly. Presence is not translation, and the two look identical to
+a truthiness check.
+
+The new guard flags any value byte-identical to the English one, written as an
+ALLOWLIST rather than a blanket rule -- two entries legitimately match ("Pause" is
+the ordinary French and German word), and a rule forbidding that would be wrong
+for real loanwords. The allowlist entry is where you record WHY a match is
+deliberate. It is mutation-verified in both directions: it names the exact
+offender when a translation is missed, and it fails when an allowlist entry goes
+stale because someone later translates that word -- a guard that can rot silently
+buys little.
+
+One process note worth keeping: the new test PASSED while `tsc` failed on it. Had
+I stopped at green tests, that would have been a CI break shipped by a change
+whose whole purpose was catching an omission.
+
 ## Verification
 
-- Backend: 4418 passed, 0 failed on the full CI scope (`backend/tests tests`).
-- Frontend: 1892 passed; the single failure is `SchemaForm.previewEdit`, the
-  known pre-existing flake proven on `origin/dev` and tracked as bd
-  `polyglot-pdf-7y2yk` (passes in isolation).
+- Backend: 4430 passed, 0 failed on the full CI scope (`backend/tests tests`).
+
+  A caveat worth recording, because it cost a re-run: an EARLIER full run of this
+  same tree reported 2 failures, both in guards that read
+  `backend/adapters/live_ai_gemini.py` FROM DISK to assert structural properties.
+  They were reading a file my mutation probes had temporarily modified -- the
+  suite and the probes were running concurrently. Both pass in isolation on the
+  clean tree. A source-reading guard cannot run while anything edits the files it
+  inspects, so mutation probes and a full suite must not overlap.
+- Frontend: 1894 passed, all 133 files. (`SchemaForm.previewEdit` failed on an
+  earlier run and passed on this one -- the known pre-existing flake proven on
+  `origin/dev`, tracked as bd `polyglot-pdf-7y2yk`.)
 - Control copy translated across all 18 shipped languages. The existing
   derived-from-`SPOKEN_LANGUAGES` completeness test covers the new keys, and was
   itself mutation-verified: removing one language's string fails CI rather than

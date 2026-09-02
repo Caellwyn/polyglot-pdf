@@ -95,6 +95,7 @@ def _restart_text_pipeline(adapter):
     """
     adapter._text_queue = asyncio.Queue()
     adapter._current_text_sender_task = _FakeSenderTask()
+    adapter._text_pipeline_closing = False
     adapter._flush_muted_context("sender_started")
 
 
@@ -437,14 +438,36 @@ def test_the_sender_start_site_flushes():
             if not registers:
                 continue
             after = body[i + 1 : i + 4]
-            if any(
+            flushes = any(
                 isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Attribute)
                 and n.func.attr == "_flush_muted_context"
                 for nxt in after
                 for n in ast.walk(nxt)
-            ):
-                return
+            )
+            if not flushes:
+                continue
+            # ...and it must ALSO clear the closing flag there, or the flush it
+            # just made is a no-op (the flag would still say "tearing down").
+            # _restart_text_pipeline mirrors both lines; this is what stops the
+            # mirror drifting apart from production.
+            reopens = any(
+                isinstance(n, ast.Assign)
+                and any(
+                    isinstance(t, ast.Attribute) and t.attr == "_text_pipeline_closing"
+                    for t in n.targets
+                )
+                and isinstance(n.value, ast.Constant)
+                and n.value.value is False
+                for nxt in after
+                for n in ast.walk(nxt)
+            )
+            assert reopens, (
+                "the text sender is registered and the held turn flushed, but "
+                "_text_pipeline_closing is never cleared there -- the flush would "
+                "be a no-op and the turn stranded (bd polyglot-pdf-wurj8)"
+            )
+            return
 
     raise AssertionError(
         "the text sender is registered without flushing a held manual-mode turn "
@@ -491,3 +514,96 @@ async def test_a_missing_reader_is_also_not_delivery():
 
     assert adapter._muted_context == "next field is date of birth"
     assert _drain(adapter._text_queue) == []
+
+
+@pytest.mark.asyncio
+async def test_a_sentinel_already_queued_is_not_a_live_pipeline():
+    """The sharpest teardown state: reader alive, but it will never reach us.
+
+    finalize() queues a None SENTINEL that makes the sender loop exit, THEN
+    cancels the task, THEN nulls the queue. Between the sentinel and the cancel
+    the task is not done() and the queue accepts a put -- yet anything queued
+    behind that sentinel is already unreadable. Neither the queue nor the task
+    can report this, which is why the adapter tracks the teardown explicitly.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    # Exactly the state finalize() creates before it cancels anything.
+    adapter._text_queue.put_nowait(None)
+    adapter._text_pipeline_closing = True
+    adapter.set_voice_muted(False)
+
+    assert adapter._muted_context == "next field is date of birth"
+    assert _drain(adapter._text_queue) == [None]
+
+    # ...and it still reaches the replacement pipeline.
+    _restart_text_pipeline(adapter)
+    assert _drain(adapter._text_queue) == ["next field is date of birth"]
+
+
+def test_the_teardown_marks_the_pipeline_closing_before_it_queues_the_sentinel():
+    """The flag must be set before the sentinel, or it is useless.
+
+    An unmute racing the teardown runs on a DIFFERENT task, so the ordering here
+    is what makes the flag meaningful: once the sentinel is queued a put is
+    already unreadable, and if the flag were set after it there would be a window
+    where nothing says so -- the exact hole this closes.
+
+    Scoped to the ONE function that does the teardown, and matched on the sentinel
+    put that targets the TEXT queue specifically: the file has other
+    put_nowait(None) calls (the audio pipeline, a restart path) whose line
+    numbers are meaningless for this comparison.
+    """
+    import ast
+    import inspect
+
+    from backend.adapters import live_ai_gemini
+
+    src = textwrap.dedent(inspect.getsource(live_ai_gemini.LiveAIGemini))
+    tree = ast.parse(src)
+
+    # The function containing the text-queue drain is the subject.
+    def _sets_closing_true(node):
+        return (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(t, ast.Attribute) and t.attr == "_text_pipeline_closing"
+                for t in node.targets
+            )
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is True
+        )
+
+    def _queues_text_sentinel(node):
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "put_nowait"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "_text_queue"
+            and any(isinstance(a, ast.Constant) and a.value is None for a in node.args)
+        )
+
+    subjects = [
+        fn
+        for fn in ast.walk(tree)
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(_sets_closing_true(n) for n in ast.walk(fn))
+        and any(_queues_text_sentinel(n) for n in ast.walk(fn))
+    ]
+    assert subjects, (
+        "no single function both marks the text pipeline closing and queues its "
+        "sentinel -- the teardown moved; re-check this guard"
+    )
+
+    for fn in subjects:
+        flag_line = min(n.lineno for n in ast.walk(fn) if _sets_closing_true(n))
+        sentinel_line = min(n.lineno for n in ast.walk(fn) if _queues_text_sentinel(n))
+        assert flag_line < sentinel_line, (
+            "the pipeline is marked closing AFTER the sentinel is queued in "
+            + fn.name
+            + "; a concurrent unmute in between would put a turn behind the "
+            "sentinel and lose it (bd polyglot-pdf-wurj8)"
+        )

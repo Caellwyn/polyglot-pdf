@@ -533,6 +533,12 @@ class LiveAIGemini(ILiveAI):
         # backlog would both confuse the model and bill for every one.
         self._voice_muted: bool = False
         self._muted_context: Optional[str] = None
+        # True from the moment the text pipeline starts closing until a new sender
+        # is running (bd polyglot-pdf-wurj8). Teardown queues a None sentinel that
+        # makes the sender exit, so anything put AFTER it is never read even
+        # though the task is not yet done() -- neither the queue nor the task can
+        # report that on its own. See _flush_muted_context.
+        self._text_pipeline_closing: bool = False
 
         # Rate limiting for audio queue warnings
         self._last_audio_queue_warning: float = 0.0  # Timestamp of last warning
@@ -1465,7 +1471,9 @@ class LiveAIGemini(ILiveAI):
         become true in EITHER ORDER:
 
           - unmute arrives while the pipeline is up  -> set_voice_muted flushes;
-          - unmute arrives mid-teardown, pipeline later -> set_callbacks flushes.
+          - unmute arrives mid-teardown, pipeline later -> the text sender's own
+            start site flushes (inside the session loop, where the sender task is
+            registered -- NOT set_callbacks, which only reaches it indirectly).
 
         Keying the flush on the unmute EVENT rather than on this CONDITION is what
         made the same defect keep reappearing in new shapes: an unmute that raced
@@ -1473,21 +1481,35 @@ class LiveAIGemini(ILiveAI):
         flush path then required a further mute->unmute transition that a user
         with no reason to touch the toggle never performs.
 
-        "CAN CARRY IT" MEANS A LIVE CONSUMER, NOT MERELY A QUEUE OBJECT. finalize()
-        cancels _current_text_sender_task and only nulls _text_queue several
-        awaits later, so there is a window where the queue still exists and
-        put_nowait cheerfully succeeds onto a pipe whose reader is already dead --
-        and the turn then dies with the queue while we have logged it as sent and
-        cleared it. The consumer task is the honest signal; the queue object is
-        not. Checking it also makes this correct BY THE SAME TEST for any future
-        teardown ordering, rather than by enumerating the ones we know about.
+        "CAN CARRY IT" IS NOT SOMETHING THE QUEUE OR THE TASK CAN TELL US.
+        finalize() tears the text pipeline down in stages: it queues a None
+        SENTINEL (which makes the sender loop exit), then cancels the sender, then
+        several awaits later nulls the queue. Each stage defeats a different naive
+        check --
+
+          - the queue object still exists throughout, and put_nowait succeeds
+            onto it right up to the last step;
+          - the sender task is not done() until after the cancel settles, yet
+            anything queued BEHIND the sentinel is already unreadable.
+
+        so both "is there a queue" and "is the task alive" report a healthy
+        pipeline while a put is silently lost. _text_pipeline_closing is set at
+        the top of the drain, before any await, and cleared only when a new sender
+        is actually running -- it states the fact directly instead of inferring it
+        from a proxy. The task/queue checks are kept as cheap backstops for the
+        states the flag does not cover (no session yet, sender already exited).
 
         The turn is cleared ONLY once a live pipeline has accepted it.
         """
         if self._voice_muted or self._muted_context is None:
             return
         sender = self._current_text_sender_task
-        if self._text_queue is None or sender is None or sender.done():
+        if (
+            self._text_pipeline_closing
+            or self._text_queue is None
+            or sender is None
+            or sender.done()
+        ):
             self._log.info("VOICE_UNMUTE_REPLAY_DEFERRED_NO_CONSUMER", reason=reason)
             return
         try:
@@ -1762,7 +1784,11 @@ class LiveAIGemini(ILiveAI):
 
                 self._audio_queue = None
 
-            # Drain/clear the text queue
+            # Drain/clear the text queue. Mark the pipeline closing FIRST: from
+            # here on a put is unreadable (the sentinel below makes the sender
+            # exit), and this runs before any await, so no concurrent unmute can
+            # slip in between (bd polyglot-pdf-wurj8).
+            self._text_pipeline_closing = True
             if self._text_queue is not None:
                 while not self._text_queue.empty():
                     try:
@@ -2380,6 +2406,8 @@ class LiveAIGemini(ILiveAI):
 
                 text_sender_task = asyncio.create_task(text_sender())
                 self._current_text_sender_task = text_sender_task
+                # A live reader again (bd polyglot-pdf-wurj8).
+                self._text_pipeline_closing = False
                 # A turn held through a teardown is delivered as soon as there is
                 # a live READER for it (bd polyglot-pdf-wurj8). This is the second
                 # of the two flush sites, and it sits here rather than at queue
