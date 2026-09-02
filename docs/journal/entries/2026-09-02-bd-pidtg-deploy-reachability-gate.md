@@ -95,9 +95,50 @@ like `roles/run.invoker.custom` cannot satisfy it either). stderr is no longer
 merged into the captured value, so gcloud nags cannot satisfy a text match on
 their own.
 
+## ...and then the fix had the OPPOSITE bug
+
+The outer cross-surface review caught that adding `--filter` **without**
+`--flatten` introduced a FALSE FAIL. `--filter` on `get-iam-policy` is evaluated
+against the whole policy resource, not per binding, and `value(bindings.role)`
+emits every role `;`-joined on ONE line:
+
+```
+roles/run.invoker;roles/run.admin        <- one line, so grep -qx never matches
+```
+
+So the gate would have refused to deploy the moment a service had a SECOND
+binding -- an operator's `roles/run.admin`, a service-to-service invoker, a
+Cloud Scheduler SA. Both live services happen to carry exactly one binding
+today, so it passed every check I ran and would have surfaced later, blocking a
+perfectly reachable demo deploy at the worst possible moment.
+
+`--flatten='bindings[].members'` makes each member/role pair its own record, so
+the filter really is per-binding and each surviving role prints on its own line.
+Verified in both directions against gcloud's real output.
+
+**The lesson across the two rounds:** I wrote a check with a false PASS, fixed it
+into a check with a false FAIL, and needed two independent reviewers to land on
+one that is correct in both directions. Both failure modes are bad for different
+reasons -- failing open hides the bug behind a green check; failing closed blocks
+good deploys, and a gate that cries wolf gets deleted, taking the real check with
+it. A guard is not done when it catches the bug; it is done when it *only*
+catches the bug.
+
+## And the test that pinned the bug
+
+Removing `--flatten` from the query left all 30 tests GREEN, because the
+assertion looked for the flag anywhere in `deploy-all.sh` -- and the comment
+block above the query names every flag it uses. The prose satisfied the test.
+
+Fixed by extracting a `_reachability_query()` helper that returns only the
+gcloud invocation, and asserting the flags against THAT. Re-running the same
+mutation now reddens 2 tests. (Repo scar tissue, stated almost exactly: *a
+checker that infers a claim from text must scope the evidence region to exactly
+the claim* -- widening it turns nearby prose into evidence.)
+
 ## Testing
 
-Five tests in `test_deploy_channel_isolation.py`, each mutation-verified against
+Six tests in `test_deploy_channel_isolation.py`, each mutation-verified against
 the mutation that matters (scar #9):
 
 | mutation | caught |
@@ -109,6 +150,7 @@ the mutation that matters (scar #9):
 | **revert to the loose `allUsers` text grep (the false pass)** | **yes (3 tests)** |
 | loosen `grep -qx` to a substring match (lookalike role) | yes (2 tests) |
 | re-merge stderr into the captured value | yes |
+| **remove `--flatten` from the query (the false fail)** | **yes (2 tests)** -- but only AFTER the assertion was scoped to the query; it was green before |
 
 The tests pin the fatality, the warn/fail split, and the role-specificity as
 PROPERTIES, not merely the presence of a check.

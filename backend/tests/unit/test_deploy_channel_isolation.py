@@ -343,6 +343,23 @@ def test_dead_prod_doc_set_is_complete():
 # ---------------------------------------------------------------------------
 
 
+def _reachability_query() -> str:
+    """The gcloud invocation itself -- NOT the whole file.
+
+    Scoping matters: the comment block above the query NAMES every flag it uses
+    and explains why. A test asserting a flag appears anywhere in deploy-all.sh
+    is satisfied by that prose, so deleting the flag from the actual command
+    leaves the test GREEN. That vacuity was demonstrated, not theorised: removing
+    --flatten from the command left all 30 tests passing until this helper
+    existed. (Repo scar tissue: "a checker that infers a claim from text must
+    scope the evidence region to exactly the claim".)
+    """
+    body = _read("deploy-all.sh")
+    marker = "INVOKER_ROLES=$(gcloud run services get-iam-policy"
+    assert marker in body, "the reachability query is gone entirely"
+    # From the command's start to the end of its command substitution.
+    return body.split(marker)[1].split("|| INVOKER_ROLES=")[0]
+
 def test_deploy_verifies_public_reachability_after_deploying():
     """`--allow-unauthenticated` can be REFUSED while the deploy still exits 0.
 
@@ -364,7 +381,12 @@ def test_deploy_verifies_public_reachability_after_deploying():
         "otherwise a refused invoker binding leaves an unreachable service and "
         "the deploy still exits 0."
     )
-    assert "--filter='bindings.members:allUsers'" in body, (
+    query = _reachability_query()
+    assert "--flatten='bindings[].members'" in query, (
+        "the reachability QUERY must FLATTEN to one member/role pair per "
+        "record -- see test_check_requires_the_invoker_role_specifically."
+    )
+    assert "--filter='bindings.members:allUsers'" in query, (
         "the reachability check must FILTER the policy to bindings whose "
         "members include allUsers, so the role and member are evaluated "
         "TOGETHER -- see test_check_requires_the_invoker_role_specifically."
@@ -431,16 +453,39 @@ def test_check_requires_the_invoker_role_specifically():
     So the query filters to bindings whose MEMBERS include allUsers and returns
     their ROLES, and the match is exact (grep -qx) -- role and member are
     evaluated together, and a lookalike role name cannot satisfy it either.
+
+    THE OPPOSITE TRAP, caught by the OUTER review one round later: adding
+    --filter WITHOUT --flatten introduced a FALSE FAIL. --filter is evaluated
+    against the whole policy resource rather than per binding, and
+    value(bindings.role) emits every role ';'-joined on ONE line, so grep -qx
+    stopped matching the moment a service had a SECOND binding -- blocking a
+    deploy of a perfectly reachable service. Both live services happened to
+    carry exactly one binding, so it would not have surfaced until someone
+    granted an operator roles/run.admin or a service-to-service invoker.
+
+    Both directions are pinned below: --flatten (no false fail) AND the
+    role-specific exact match (no false pass).
     """
-    body = _read("deploy-all.sh")
-    assert "--filter='bindings.members:allUsers'" in body, (
+    query = _reachability_query()
+    assert "--flatten='bindings[].members'" in query, (
+        "--flatten is LOAD-BEARING. Without it, --filter is evaluated against "
+        "the WHOLE policy (not per binding) and value(bindings.role) emits every "
+        "role ';'-joined on ONE line -- so grep -qx stops matching as soon as "
+        "the service has a SECOND binding, and a perfectly reachable service is "
+        "refused. That is the FALSE-FAIL direction: a gate that cries wolf gets "
+        "deleted, taking the real check with it."
+    )
+    assert "--filter='bindings.members:allUsers'" in query, (
         "the query must filter on the MEMBER so that only roles actually bound "
         "to allUsers are returned"
     )
-    assert "--format='value(bindings.role)'" in body, (
+    assert "--format='value(bindings.role)'" in query, (
         "the query must return the ROLES of those bindings, so the check can "
         "require roles/run.invoker specifically"
     )
+    # The grep is the NEXT statement, outside the command substitution, so it is
+    # matched against the whole file rather than the extracted query.
+    body = _read("deploy-all.sh")
     assert 'grep -qx "roles/run.invoker"' in body, (
         "the match must be EXACT (grep -qx). A substring match would accept a "
         "lookalike role such as roles/run.invoker.custom."

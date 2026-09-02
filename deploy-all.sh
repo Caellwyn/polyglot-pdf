@@ -425,20 +425,38 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # permission to read the policy, a transient API error) WARN instead -- they
     # do not prove the service is broken, and failing the deploy on an
     # inconclusive check would be its own false alarm.
-    # The query asks gcloud to FILTER to bindings whose members include allUsers
-    # and return only their ROLES, so the role and member are checked TOGETHER.
-    # Grepping the raw policy text for "allUsers" was a FALSE-PASS trap (caught
-    # in review): `roles/run.viewer -> allUsers` would satisfy it while the
-    # INVOKER binding was still missing and the service still 403'd everything --
-    # precisely the bug this gate exists to catch. Failing OPEN in the dangerous
-    # direction is worse than no gate, because it also looks like a green check.
+    # --flatten='bindings[].members' is LOAD-BEARING, and both halves of this
+    # query were got wrong once each before it was right:
+    #
+    #   1. Grepping the raw policy text for "allUsers" FALSE-PASSED: a
+    #      `roles/run.viewer -> allUsers` binding satisfied it while the INVOKER
+    #      binding was missing and the service still 403'd everything -- the very
+    #      bug this gate exists to catch, reported as a green check.
+    #   2. Adding --filter WITHOUT --flatten then FALSE-FAILED: --filter is
+    #      evaluated against the WHOLE policy resource, not per binding, and
+    #      `value(bindings.role)` emits every role ';'-joined on ONE line. So
+    #      `grep -qx` stopped matching the moment a service had a SECOND binding
+    #      (an operator's roles/run.admin, a service-to-service invoker), and a
+    #      perfectly reachable demo would have refused to deploy.
+    #
+    # --flatten makes each member/role pair its own record, so the filter really
+    # is per-binding and each surviving role prints on its own line. Then
+    # `grep -qx` means exactly "allUsers is bound to roles/run.invoker".
+    #
+    # BOTH failure directions matter. Failing OPEN hides the bug behind a green
+    # check; failing CLOSED blocks a good deploy, and a gate that cries wolf gets
+    # deleted -- taking the real check with it.
     #
     # stderr is NOT merged into the value (no 2>&1): a gcloud component-update
     # nag or deprecation notice landing in the variable could otherwise satisfy
     # a text match on its own. stderr goes to the operator's terminal where it
     # belongs; only the parsed value drives the decision.
     log_info "🔎 Verifying the service is publicly reachable..."
-    INVOKER_ROLES=$(gcloud run services get-iam-policy "$BACKEND_SERVICE_NAME"         --region "$REGION" --project "$POLYGLOT_PROJECT_NAME"         --filter='bindings.members:allUsers'         --format='value(bindings.role)') || INVOKER_ROLES="__QUERY_FAILED__"
+    INVOKER_ROLES=$(gcloud run services get-iam-policy "$BACKEND_SERVICE_NAME" \
+        --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" \
+        --flatten='bindings[].members' \
+        --filter='bindings.members:allUsers' \
+        --format='value(bindings.role)') || INVOKER_ROLES="__QUERY_FAILED__"
 
     if [ "$INVOKER_ROLES" = "__QUERY_FAILED__" ]; then
         log_warn "Could not read the IAM policy for $BACKEND_SERVICE_NAME -- skipping the"
