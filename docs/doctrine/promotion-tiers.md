@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.)*
+*Last updated: 2026-09-01 (bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -64,14 +64,22 @@ against bad DATA.** Concretely, these cross the boundary (the list read
 3. `firestore.rules` are PROJECT-wide, not per-site. `deploy-staging.sh`
    deliberately does **not** deploy them; rules ship with `deploy-demo.sh`.
 4. A user enrolled for staging can also sign into the demo.
-5. **CLIENT LINKS are fully shared** (bd `polyglot-pdf-hvui4` turned minting on
-   for staging; the consequences are bd `polyglot-pdf-3q9qn`). Both channels
-   sign with the SAME `LINK_TOKEN_SECRET` and link tokens carry no channel or
-   audience claim, so **a staging-minted link verifies on the demo backend**.
-   The `link_redemptions` ledger is keyed by `jti` alone, so a staging
-   test-drive burns a real link's single redemption; and `record_mint`
-   increments the same `firms/{id}/link_usage/{YYYY-MM}` counter the per-link
-   pricing bills against. Treat a staging mint as spending real pilot state.
+5. **CLIENT LINKS are isolated per channel** (bd `polyglot-pdf-3q9qn`), which
+   is the one boundary on this list that is CLOSED. Every token carries an
+   `aud` claim naming the channel that may open it, so a staging-minted link is
+   refused on the demo and vice versa, and each channel keeps its own
+   redemption ledger (`link_redemptions` for the demo,
+   `link_redemptions_<channel>` elsewhere) so a staging test cannot burn a demo
+   link's single use. `LINK_CHANNEL` is what sets this, and both deploy scripts
+   set it explicitly.
+
+   **What is still shared: the BILLING counter, via the firm.** `record_mint`
+   increments `firms/{id}/link_usage/{YYYY-MM}`, which is firm-scoped, not
+   channel-scoped -- so minting from staging against a REAL firm's id still
+   bills that firm. The isolation here rests on staging using its own mock firm
+   (create one with `scripts/bootstrap_firm.py` and stamp the dev account with
+   it), not on code. Never sign into staging with an account carrying a real
+   firm's `firm_id`.
 
 Treat kit publishing, rules changes, Firestore writes and client-link minting
 as production actions regardless of which channel you ran them from.
