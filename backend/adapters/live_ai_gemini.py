@@ -1322,17 +1322,25 @@ class LiveAIGemini(ILiveAI):
         Messages are queued and sent asynchronously without blocking.
         Used for providing context to Gemini after tool responses.
         """
-        if self._text_queue is None:
-            # If the queue isn't started, drop message (no-op) for safety
-            return
-
         # Manual mode (bd polyglot-pdf-wurj8): hold, do not send. Every text turn
         # asks the model to respond, so sending this would break the silence the
         # user asked for. Keep only the newest -- see _muted_context.
+        #
+        # CHECKED BEFORE THE QUEUE GUARD, mirroring send_client_content. If the
+        # queue guard ran first, a hint arriving while muted AND mid-teardown
+        # (_text_queue is None between a section switch and the next connect)
+        # would return without recording anything -- so the deferred replay would
+        # later voice an OLDER hint as if it were current. That is worse than
+        # dropping it: the model states the wrong field confidently instead of
+        # staying silent. Holding is independent of whether a queue exists.
         if self._voice_muted:
             self._muted_context = text
             self._log.debug("TEXT_MESSAGE_HELD_MUTED",
                           message_length=len(text))  # never log message text -- bd hjo
+            return
+
+        if self._text_queue is None:
+            # If the queue isn't started, drop message (no-op) for safety
             return
 
         # Log text message for debugging -- never log the text itself: callers

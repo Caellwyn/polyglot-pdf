@@ -266,3 +266,49 @@ async def test_a_deferred_context_still_loses_to_a_newer_one():
     adapter.set_voice_muted(False)
 
     assert _drain(adapter._text_queue) == ["next field is last name"]
+
+
+@pytest.mark.asyncio
+async def test_a_hint_arriving_DURING_the_teardown_gap_still_wins():
+    """The newest hint wins even when it lands while no queue exists.
+
+    The sharp case, and the one worth stating plainly: holding must not depend on
+    a queue being present. If it did, a hint arriving in the teardown window would
+    return without recording anything, and the deferred replay would then voice an
+    OLDER hint as if it were current -- the model confidently naming the wrong
+    field, which is worse than saying nothing. So the mute check runs BEFORE the
+    queue guard in send_text_message, mirroring send_client_content.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is first name")
+
+    # Teardown: the queue is gone, and a fresher hint arrives anyway.
+    adapter._text_queue = None
+    await adapter.send_text_message("next field is last name")
+
+    assert adapter._muted_context == "next field is last name"
+
+    # ...and it is the fresher one that reaches the replacement session.
+    adapter._text_queue = asyncio.Queue(maxsize=100)
+    adapter.set_voice_muted(False)
+
+    assert _drain(adapter._text_queue) == ["next field is last name"]
+
+
+@pytest.mark.asyncio
+async def test_the_same_holds_for_the_direct_speak_path_during_teardown():
+    """send_client_content had the ordering right already -- pin it so it stays.
+
+    The two elicitation paths must agree about this, or the newest-wins rule
+    depends on which channel a message happened to arrive on.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_client_content("next field is first name")
+
+    adapter._text_queue = None
+    delivered = await adapter.send_client_content("next field is last name")
+
+    assert delivered is False
+    assert adapter._muted_context == "next field is last name"

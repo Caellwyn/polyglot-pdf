@@ -149,6 +149,12 @@ drains it. Deferring instead means the next turn on the fresh session carries it
 and a newer turn still wins -- an unmute during that gap degrades to "replay a
 moment later" rather than losing the re-orientation.
 
+For that to hold, **both** elicitation paths check the mute flag BEFORE their
+queue/session guards. A hint arriving while muted and mid-teardown must still be
+recorded, or the deferred replay voices an OLDER hint as if it were current --
+the model naming the wrong field confidently, which is worse than saying
+nothing.
+
 **A PTT press leaves manual mode**, at both ends: the client flips its own toggle
 in `sendActivityStart`, and the backend unmutes on `vad_activity_start` before
 forwarding it. Pressing to talk is an unambiguous request for the assistant, so
