@@ -513,6 +513,27 @@ class LiveAIGemini(ILiveAI):
         self._session_ready: bool = False  # True when Gemini session is ready to receive messages
         self._pending_client_content: List[str] = []  # Queue for send_client_content() calls before session ready
 
+        # MANUAL MODE (bd polyglot-pdf-wurj8). While True the model's PROACTIVE
+        # speech is suppressed at the point a text turn would reach Gemini.
+        #
+        # WHY HERE AND NOT ON THE CLIENT. Every text turn we send carries
+        # turn_complete=True, i.e. it ASKS the model to respond. Muting the
+        # speaker client-side (the pause() this replaces) leaves the model
+        # talking into a discarded buffer: billed, unheard, and then waiting on
+        # an answer to a question the user never got. Dropping the turn instead
+        # makes manual mode genuinely silent AND free.
+        #
+        # WHY WE STILL BUFFER. Manual mode's whole promise is that the assistant
+        # is correctly ORIENTED the instant it is wanted, so context must not be
+        # lost -- but it cannot be delivered live either, because delivering it
+        # is what makes the model speak. So the LATEST context turn is held and
+        # replayed on unmute. Only the latest: these messages restate whole
+        # current state ("next unfilled field is X"), so an older one is not
+        # additional information, it is a stale contradiction -- and replaying a
+        # backlog would both confuse the model and bill for every one.
+        self._voice_muted: bool = False
+        self._muted_context: Optional[str] = None
+
         # Rate limiting for audio queue warnings
         self._last_audio_queue_warning: float = 0.0  # Timestamp of last warning
         self._audio_queue_warning_interval: float = 5.0  # Log at most once per 5 seconds
@@ -1305,6 +1326,15 @@ class LiveAIGemini(ILiveAI):
             # If the queue isn't started, drop message (no-op) for safety
             return
 
+        # Manual mode (bd polyglot-pdf-wurj8): hold, do not send. Every text turn
+        # asks the model to respond, so sending this would break the silence the
+        # user asked for. Keep only the newest -- see _muted_context.
+        if self._voice_muted:
+            self._muted_context = text
+            self._log.debug("TEXT_MESSAGE_HELD_MUTED",
+                          message_length=len(text))  # never log message text -- bd hjo
+            return
+
         # Log text message for debugging -- never log the text itself: callers
         # build it with field values (e.g. audio_handler "...with value: X"). bd hjo
         self._log.debug("TEXT_MESSAGE_QUEUED",
@@ -1364,6 +1394,20 @@ class LiveAIGemini(ILiveAI):
         # the section -- a steer that was not actually voiced must not trap the user
         # (Codex/Opus PR #275).
         #
+        # Manual mode (bd polyglot-pdf-wurj8): this path exists SPECIFICALLY to
+        # make the model speak, so it is exactly what manual mode suppresses.
+        # Held (newest only) and replayed on unmute so the model comes back
+        # oriented rather than mid-thought. Returns False = not delivered, which
+        # every caller already handles (a queued/failed send returns False too),
+        # so a held turn cannot make a caller believe it was voiced -- the
+        # validator steer in particular must not HOLD a section on a turn the
+        # user never heard.
+        if self._voice_muted:
+            self._muted_context = text
+            self._log.info("CLIENT_CONTENT_HELD_MUTED",
+                          message_length=len(text))  # never log message text -- bd hjo
+            return False
+
         # Check if session is ready - if not, queue the message
         if not self._session_ready:
             self._log.info("[config] CLIENT_CONTENT_QUEUED (session not ready yet)",
@@ -1404,6 +1448,44 @@ class LiveAIGemini(ILiveAI):
         except Exception as exc:
             self._log.error("send_client_content_failed", error=str(exc), message_length=len(text))  # never log message text -- bd hjo
             return False
+
+    def set_voice_muted(self, muted: bool) -> None:
+        """Enter or leave manual mode (bd polyglot-pdf-wurj8).
+
+        Synchronous on purpose: callers flip this from the WS control path and
+        from a PTT press, where an await would let a text turn slip out between
+        the user's press and the flag taking effect.
+
+        Leaving manual mode does NOT itself make the model talk. The held
+        context is put back on the ordinary text queue, so if it was an
+        elicitation the model resumes asking, and if it was a plain state update
+        it just re-orients -- the same turn that would have flowed anyway. The
+        user's PTT press (which is what usually unmutes) then arrives as its own
+        turn, so a user who unmutes by speaking is answered rather than talked
+        over.
+        """
+        was_muted = self._voice_muted
+        self._voice_muted = muted
+        if muted:
+            if not was_muted:
+                self._log.info("VOICE_MUTED")
+            return
+
+        held, self._muted_context = self._muted_context, None
+        if not was_muted:
+            return
+        self._log.info("VOICE_UNMUTED", had_held_context=bool(held))
+        if held is None:
+            return
+        # Re-enter through the normal path so the queue-not-started and
+        # session-not-ready guards still apply. _voice_muted is already False,
+        # so this cannot recurse back into the hold.
+        if self._text_queue is None:
+            return
+        try:
+            self._text_queue.put_nowait(held)
+        except Exception as exc:  # pragma: no cover - queue is unbounded
+            self._log.warning("VOICE_UNMUTE_REPLAY_FAILED", error=str(exc))
 
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking).

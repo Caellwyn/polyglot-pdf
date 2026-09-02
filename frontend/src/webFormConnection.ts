@@ -3944,6 +3944,32 @@ export class WebFormConnection {
   }
 
   /**
+   * Tell the backend which mode the user is in (bd polyglot-pdf-wurj8).
+   *
+   * 'manual' suppresses the model's proactive speech AT THE BACKEND, which is
+   * what makes manual mode both silent and free -- muting the speaker here
+   * would leave the model talking (and billing) into a discarded buffer, the
+   * defect in the pause() this replaces. The session stays live and the mic
+   * stays usable in both modes.
+   *
+   * Fire-and-forget, and deliberately silent when the socket is not open: the
+   * mode is re-sent on every (re)connect from the client's own state, so a
+   * send that misses a closed socket is repaired by the reconnect rather than
+   * needing to be queued here.
+   */
+  setVoiceMode(mode: 'manual' | 'voice'): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log(`[WebFormConnection] setVoiceMode(${mode}) skipped - socket not open (re-sent on reconnect)`);
+      return;
+    }
+    console.log(`[WebFormConnection] [send] Sending voice_mode: ${mode}`)
+    this.send({
+      type: 'voice_mode',
+      mode,
+    });
+  }
+
+  /**
    * Send activity_end signal to Gemini (user stopped speaking).
    * Signals the end of user speech and flushes Gemini's cached audio buffer.
    */

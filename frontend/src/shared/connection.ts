@@ -77,6 +77,13 @@ export function shouldSendMicChunk(status: ConnectionStatus, socketOpen: boolean
 	return false;
 }
 
+/**
+ * Manual/voice mode (bd polyglot-pdf-wurj8) -- the sticky half of the two-control
+ * voice UI (the other is PTT, which is non-sticky). Named for the two modes
+ * rather than for an action, because it is a state the user sits in.
+ */
+export type VoiceMode = 'manual' | 'voice'
+
 export interface ConnectionManager {
 	connect: () => Promise<void>
 	pause: () => void  // Pause recording but keep connection warm
@@ -101,6 +108,15 @@ export interface ConnectionManager {
 	stopRecording: () => void
 	isRecording: () => boolean
 	isPaused: () => boolean
+	// Manual/voice mode (bd polyglot-pdf-wurj8). Replaces the old pause button.
+	// MANUAL: the model neither speaks nor elicits, but the session stays LIVE,
+	// the mic stays usable, and field/focus tracking keeps running underneath --
+	// so the assistant is correctly oriented the instant it is wanted. VOICE:
+	// today's behaviour. Distinct from pause() above, which SUSPENDS the session
+	// (mic torn down, in-flight question destroyed, a paid re-ask to come back);
+	// pause() survives only as the idle/reconnect machinery's internal state.
+	setVoiceMode: (mode: VoiceMode) => void
+	getVoiceMode: () => VoiceMode
 	// Re-arm mic capture after an overlay remount onto an already-live session
 	// (e.g. a desktop<->mobile resize flip). The WebSocket and Gemini session
 	// survive the flip; only the old overlay's unmount tears down audio capture,
@@ -266,6 +282,12 @@ export function createConnectionManager(
 	let audioManager: AudioManager | null = null
 	let fillLanguage: string = initialFillLanguage
 	let paused: boolean = false
+	// Manual/voice mode (bd polyglot-pdf-wurj8). Sticky, client-owned, and
+	// re-asserted to the backend on every (re)connect -- the backend is stateless
+	// and a reconnect builds a fresh Gemini session that would otherwise default
+	// to speaking. Defaults to 'voice': a user who has expressed no preference
+	// gets the assistant, since a silent-by-default app reads as broken.
+	let voiceMode: VoiceMode = 'voice'
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
 	// Debounced post-unpause re-prompt (bd polyglot-pdf-yo5t). pause() discards the
 	// AI's in-flight audio CLIENT-side only -- Gemini finished asking its question
@@ -415,6 +437,24 @@ export function createConnectionManager(
 	// survive the socket swap and `recording` stays true, so this is a no-op
 	// re-sync -- NOT the isRecording()-guarded skip-the-whole-arm that made the
 	// earlier fix (PR #339) wrong.
+	// Re-assert the user's manual/voice choice onto a freshly-established Gemini
+	// session (bd polyglot-pdf-wurj8). The backend is stateless and every
+	// (re)connect builds a session that defaults to SPEAKING, so without this a
+	// GoAway/auto-drop/warm-restart silently drops a user out of manual mode --
+	// the assistant starts talking again with no user action, which is the exact
+	// surprise manual mode exists to prevent.
+	//
+	// Deliberately NOT folded into rehydrateAudio: that routine early-returns
+	// under the test harness and while paused, and the mode must be re-sent on
+	// those paths too (it is a protocol fact, not an audio-device fact). Only
+	// sent for 'manual' -- 'voice' is the backend's own default for a new
+	// session, so re-sending it is pure traffic.
+	const reassertVoiceMode = (reason: string): void => {
+		if (voiceMode !== 'manual') return
+		console.log('[VFF Connection] Re-asserting manual mode after ' + reason)
+		connection?.setVoiceMode('manual')
+	}
+
 	const rehydrateAudio = async (reason: string): Promise<void> => {
 		if (isTestHarnessEnabled()) {
 			console.log('[VFF Connection] rehydrateAudio: TEST harness active -- skipping (' + reason + ')')
@@ -507,6 +547,10 @@ export function createConnectionManager(
 			// Initialize metrics for this session
 			metrics.startSession(sessionId)
 
+			// A new Gemini session defaults to speaking -- restore the user's choice
+			// before anything can elicit (bd polyglot-pdf-wurj8).
+			reassertVoiceMode('onSessionReady')
+
 			// Rehydrate audio through the shared routine (bd polyglot-pdf-z9bc). This
 			// is the callback the AUTOMATIC/INTERNAL reconnects surface through --
 			// GoAway (handleGoAwayReconnect) and auto-drop (attemptReconnect) -- which
@@ -526,6 +570,10 @@ export function createConnectionManager(
 		onSessionRestarted: () => {
 			// Backend confirms Gemini session has been restarted
 			onStatusChange('connected')
+
+			// A warm restart builds a fresh Gemini session too, so the mode has to
+			// be re-asserted here as well (bd polyglot-pdf-wurj8).
+			reassertVoiceMode('onSessionRestarted')
 
 			// Warm restart (restart_gemini_session) keeps the SAME socket + mic, so
 			// this is normally a pure PTT re-sync no-op; routed through the shared
@@ -928,6 +976,17 @@ export function createConnectionManager(
 			// here is gone with the mode (bd polyglot-pdf-v1m8g): PTT owns
 			// activation, so this signal is always sent.
 			clearResumeReprompt()
+			// A PTT press is an unambiguous request FOR the assistant, so it leaves
+			// manual mode without making the user find the toggle first (bd
+			// polyglot-pdf-wurj8, exit criterion 2). Routed through the manager's own
+			// setter so the UI's mode state and the backend are updated the same way
+			// a click would -- and BEFORE sendActivityStart, so the turn the user is
+			// opening is not the one still suppressed. The backend independently
+			// unmutes on vad_activity_start, which covers the case where this message
+			// and the activity signal race or the socket reopened underneath us.
+			if (voiceMode !== 'voice') {
+				manager.setVoiceMode('voice')
+			}
 			console.log('[ConnectionManager] sendActivityStart called, connection:', connection, 'isNull:', connection === null)
 			if (connection) {
 				connection.sendActivityStart()
@@ -1052,6 +1111,38 @@ export function createConnectionManager(
 
 		isRecording() {
 			return audioManager?.isRecording() ?? false
+		},
+
+		setVoiceMode(mode: VoiceMode) {
+			// Idempotent: the PTT auto-unmute path can fire on every press, and a
+			// re-send per press is pointless traffic. The mode is authoritative
+			// CLIENT-side (the backend is stateless and rebuilds from what we tell
+			// it), so the local flag is set even when the socket is down -- the
+			// (re)connect path re-asserts it.
+			if (voiceMode === mode) return
+			voiceMode = mode
+			console.log('[VFF Connection] Voice mode ->', mode)
+			// Entering manual mode: stop what is ALREADY in the air. The backend
+			// gate stops future proactive turns, but a reply that is mid-flight was
+			// authorised before the toggle and would keep talking over a user who
+			// just asked for silence. The spell-back clip is a separate audio path
+			// with its own player, so it needs its own cancel (bd 22h1f).
+			//
+			// The mic is deliberately NOT touched in either direction -- manual mode
+			// keeps it usable, which is the whole difference from the pause() this
+			// replaces. Nothing here sets playbackBlocked, so the flush-without-a-
+			// paired-resume trap (bd nm7z) cannot fire: resetPlaybackClock drains
+			// what is queued without latching a block, so the NEXT model turn plays
+			// normally.
+			if (mode === 'manual') {
+				spellback.cancel()
+				audioManager?.resetPlaybackClock()
+			}
+			connection?.setVoiceMode(mode)
+		},
+
+		getVoiceMode() {
+			return voiceMode
 		},
 
 		isPaused() {

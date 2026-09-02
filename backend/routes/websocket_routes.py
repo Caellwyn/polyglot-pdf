@@ -763,10 +763,31 @@ async def _handle_fill_session(
 							_log.error("recovery_prompt_failed", error=str(e), level=level)
 							await websocket.send_json({"type": "error", "code": "recovery_prompt_failed", "message": str(e)})
 					continue
+				elif mtype == "voice_mode":
+					# Manual/voice mode toggle (bd polyglot-pdf-wurj8). "manual"
+					# suppresses the model's proactive speech while the session
+					# stays live and the mic stays usable; "voice" restores it.
+					# An unrecognised value is treated as VOICE: the failure mode
+					# of a silent assistant is a user who thinks the app is
+					# broken, so a malformed toggle must not be able to mute.
+					mode = obj.get("mode")
+					if mode not in ("manual", "voice"):
+						await websocket.send_json({"type": "error", "code": "invalid_voice_mode", "reason": "mode_must_be_manual_or_voice"})
+					else:
+						service.set_voice_muted(mode == "manual")
+						await websocket.send_json({"type": "voice_mode_ack", "mode": mode})
+					continue
 				elif mtype == "vad_activity_start":
 					# Frontend VAD detected user started speaking
 					# Send activity_start signal before audio chunks
 					_log.info("[mic] [WebSocket] Received vad_activity_start from frontend", session_id=session_id)
+					# A PTT press is an unambiguous request FOR the assistant, so it
+					# leaves manual mode without the user hunting for the toggle (bd
+					# polyglot-pdf-wurj8, exit criterion 2). Done BEFORE
+					# send_activity_start so the turn the user is opening is not the
+					# one still being suppressed. The client flips its own toggle to
+					# match; this is the authoritative half.
+					service.set_voice_muted(False)
 					await service.send_activity_start()
 					# No acknowledgment needed - fire-and-forget signal
 					continue

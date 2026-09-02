@@ -617,6 +617,16 @@ class FormFillingService:
         if self._audio_handler:
             await self._audio_handler.send_context_hint(hint_text)
 
+    def set_voice_muted(self, muted: bool) -> None:
+        """Enter/leave manual mode (bd polyglot-pdf-wurj8). Delegates to the adapter.
+
+        Synchronous, mirroring the port: the PTT path flips this immediately
+        before the user's turn opens, and an await there would leave a window in
+        which a proactive turn could still escape.
+        """
+        if self._live_ai is not None:
+            self._live_ai.set_voice_muted(muted)
+
     async def send_manual_field_update(self, field_id: str, field_name: str, value: Any,
                                        next_field_hint: Optional[str] = None,
                                        next_field_schema: Optional[Dict[str, Any]] = None):
