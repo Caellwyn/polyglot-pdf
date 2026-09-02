@@ -919,6 +919,52 @@ def check_code_citations(
     return findings
 
 
+def report_unbumped_stamps(base: str = "origin/dev", quiet: bool = False) -> None:
+    """Docs whose BODY changed on this branch while their stamp did not.
+
+    The complement of the staleness check above, which answers "did code move
+    without its doc?". This answers "did a doc body move without its stamp?" --
+    and the two miss different things. An ALREADY-stale doc edited without a
+    bump stays stale either way, so a count of stale docs (dev 25 vs branch 24)
+    looks unchanged and the omission is invisible. That is exactly how
+    technical_guide.md slipped through three review rounds on bd
+    polyglot-pdf-3q9qn while its three sibling docs were bumped correctly.
+
+    Warn-only, like everything else here.
+    """
+    try:
+        changed = subprocess.run(
+            ["git", "diff", "--name-only", f"{base}...HEAD", "--", "docs/"],
+            capture_output=True, text=True, cwd=REPO_ROOT, check=True,
+        ).stdout.split()
+    except Exception:
+        return  # no git, detached, or no such base -- silently skip
+
+    offenders = []
+    for rel in changed:
+        if not rel.endswith(".md") or "/journal/" in rel:
+            continue  # journal entries are dated by filename, not stamped
+        diff = subprocess.run(
+            ["git", "diff", f"{base}...HEAD", "--", rel],
+            capture_output=True, text=True, cwd=REPO_ROOT,
+        ).stdout
+        body = [l for l in diff.splitlines()
+                if l[:1] in "+-" and not l.startswith(("+++", "---"))]
+        if not body:
+            continue
+        if not any("*Last updated:" in l for l in body):
+            offenders.append(rel)
+
+    if offenders:
+        print("")
+        print("Docs edited WITHOUT bumping *Last updated:*")
+        for rel in offenders:
+            print(f"  UNBUMPED: {rel}")
+        print("Bump the stamp, or the change is attributed to the previous bead.")
+    elif not quiet:
+        print("Doc stamps: clean (every doc edited on this branch bumped its stamp).")
+
+
 def report_doc_conventions(*, quiet: bool = False) -> bool:
     """Print convention-check findings. Returns True if anything was flagged.
 
@@ -1296,6 +1342,8 @@ def main() -> int:
     # Doc-convention check (current-state-only enforcement). Same warn-only
     # severity; the CI test in tests/test_doc_freshness.py is the gate.
     report_doc_conventions(quiet=args.quiet)
+
+    report_unbumped_stamps(quiet=args.quiet)
 
     # Out-of-bounds code-citation check (bd polyglot-pdf-3pii5). Same
     # warn-only severity; the CI test in tests/test_doc_freshness.py is the
