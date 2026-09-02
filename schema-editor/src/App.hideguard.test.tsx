@@ -200,6 +200,22 @@ describe('App tells the user when someone else closed their form', () => {
       expect(screen.queryByText(/Someone else hid this form/)).toBeNull();
     });
 
+  it('retires when a DIFFERENT form is opened', async () => {
+    // The banner is ABOUT the kit that was open. Left standing while another
+    // form is on screen it describes the wrong one -- and in the "Nothing was
+    // lost" wording it makes a false claim about the CURRENT form's save
+    // state. Its sibling saveError is cleared at exactly the same three
+    // handlers, which is the tell that this one had to be too.
+    await openAndEdit(true);
+    fireEvent.click(screen.getByText('other-hid-it'));
+    await screen.findByText(/Someone else hid this form/);
+
+    fireEvent.click(screen.getByText('open-kit'));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Someone else hid this form/)).toBeNull());
+  });
+
   it('can be dismissed, and does not come back on its own', async () => {
     // It is a banner, not a modal: the editor stays usable underneath and the
     // user closes it when they have read it.

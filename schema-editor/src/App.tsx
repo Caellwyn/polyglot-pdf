@@ -312,6 +312,10 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSaveError(null);
+    // The concurrent-close banner is ABOUT the kit that was open, so opening
+    // another one retires it (bd polyglot-pdf-0s2wf). Same three sites as
+    // saveError: these are the handlers that change what "this form" means.
+    setClosedByOther(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
@@ -354,6 +358,10 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSaveError(null);
+    // The concurrent-close banner is ABOUT the kit that was open, so opening
+    // another one retires it (bd polyglot-pdf-0s2wf). Same three sites as
+    // saveError: these are the handlers that change what "this form" means.
+    setClosedByOther(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
@@ -478,6 +486,10 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSaveError(null);
+    // The concurrent-close banner is ABOUT the kit that was open, so opening
+    // another one retires it (bd polyglot-pdf-0s2wf). Same three sites as
+    // saveError: these are the handlers that change what "this form" means.
+    setClosedByOther(null);
     setSelectedFieldId(null);
     setGroupSelection([]);
     setViewMode('edit');
