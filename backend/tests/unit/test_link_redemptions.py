@@ -335,3 +335,51 @@ def test_the_gate_tolerates_an_IMPLAUSIBLE_stored_open_time(
     # directions: an epoch stamp would compute a 1970 deadline, a far-future
     # one an unbounded window, and neither survives.
     assert record["opened_at"] == now, why
+
+
+# --- channel isolation of the LEDGER (bd polyglot-pdf-3q9qn) ----------------
+#
+# The token's `aud` claim stops a staging link OPENING on the demo. It does
+# NOT stop the two channels writing over each other's ledger: the burn is
+# recorded under the jti alone, so a shared collection means a staging
+# test-drive marks a DEMO link used and the client finds a dead link.
+#
+# These drive the real _collection_name(). The FakeCollection above ignores the
+# name it is given, so a test that went through it would pass no matter what
+# this function returned -- exactly the stand-in trap this file's own header
+# warns about, and it left this surface unpinned on the first attempt.
+
+
+def test_the_demo_keeps_the_BARE_collection_name(monkeypatch):
+    """Renaming the demo's collection would orphan every burn already recorded."""
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    assert lrd._collection_name() == "link_redemptions"
+
+
+def test_an_UNSET_channel_also_keeps_the_bare_name(monkeypatch):
+    """The default must not silently move the demo's ledger."""
+    monkeypatch.delenv("LINK_CHANNEL", raising=False)
+    assert lrd._collection_name() == "link_redemptions"
+
+
+def test_staging_gets_its_OWN_collection(monkeypatch):
+    """The isolation itself."""
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    assert lrd._collection_name() == "link_redemptions_staging"
+
+
+def test_two_channels_never_share_a_collection(monkeypatch):
+    """The PROPERTY, not the two names.
+
+    Asserting only the literal pair would pass if a third channel collided
+    with either -- and channels are added by setting one env var.
+    """
+    names = []
+    for channel in ("demo", "staging", "pilot", "local"):
+        monkeypatch.setenv("LINK_CHANNEL", channel)
+        names.append(lrd._collection_name())
+
+    assert len(set(names)) == len(names), (
+        f"two channels share a redemption collection: {names} -- a burn in one "
+        "would mark the other's link used"
+    )

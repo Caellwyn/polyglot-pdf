@@ -35,6 +35,10 @@ CHANNEL_SPECIFIC = {
     # OWN frontend -- staging pointing at the demo origin would mint links that
     # open the demo, silently testing the wrong deployment.
     "LINK_BASE_URL",
+    # The channel's own name, minted into every token as `aud` and verified on
+    # open (bd polyglot-pdf-3q9qn). Identical values would defeat the isolation
+    # completely, so this MUST differ -- asserted below, not merely permitted.
+    "LINK_CHANNEL",
 }
 
 
@@ -175,6 +179,29 @@ def test_shared_variables_have_identical_values(demo_env, staging_env):
         "difference is deliberate, add the name to CHANNEL_SPECIFIC with the "
         "reason -- do not let it drift silently."
     )
+
+
+def test_each_channel_declares_its_own_link_channel():
+    """The isolation claim's whole basis: the two names must differ.
+
+    CHANNEL_SPECIFIC exempts LINK_CHANNEL from the equality check, so without
+    this the two could carry the SAME value and nothing would notice -- and a
+    shared channel name means every token's `aud` matches both backends, which
+    is exactly the state bd polyglot-pdf-3q9qn exists to end. An exemption
+    without an assertion is a hole.
+    """
+    demo = _backend_extra_env(DEMO)["LINK_CHANNEL"]
+    staging = _backend_extra_env(STAGING)["LINK_CHANNEL"]
+
+    assert demo != staging, (
+        f"both channels declare LINK_CHANNEL={demo!r}; every link would open "
+        "on either backend, which is the bug this claim exists to fix"
+    )
+    # Pinned to the literal names because the redemption collection derives
+    # from them: link_redemptions for the demo, link_redemptions_<channel>
+    # elsewhere. Renaming a channel silently orphans its ledger.
+    assert demo == "demo", f"demo declares LINK_CHANNEL={demo!r}"
+    assert staging == "staging", f"staging declares LINK_CHANNEL={staging!r}"
 
 
 def test_link_base_url_points_at_each_channels_own_site():

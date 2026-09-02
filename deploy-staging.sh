@@ -174,7 +174,7 @@ if [ "$DEPLOY_GCP" = true ] || [ "$DEPLOY_FORM_KITS" = true ]; then
     # client-app route (AppRoutes.tsx CLIENT_LINK_PATH), so pointing staging at
     # the demo origin would mint links that open the DEMO -- silently testing
     # the wrong deployment, which is worse than not minting at all.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://$STAGING_SITE.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_CHANNEL=staging,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://$STAGING_SITE.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SECRETS="$BACKEND_SECRETS_COMMON" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         BACKEND_SERVICE_NAME="$STAGING_SERVICE_NAME" \

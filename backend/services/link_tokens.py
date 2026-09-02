@@ -145,6 +145,30 @@ def _sign(payload_b64: str) -> str:
                           hashlib.sha256).digest())
 
 
+# The channel this process serves. Minted into every token as `aud` and
+# checked on verify, so a link cannot cross channels (bd polyglot-pdf-3q9qn;
+# maintainer, 2026-09-01: "staging links only work for staging firms on the
+# staging site, and same with demo").
+#
+# WHY A CLAIM RATHER THAN A SEPARATE SECRET PER CHANNEL. A different key also
+# stops cross-channel verification, but it fails as "bad signature" -- the same
+# error a forged token gives -- so an operator debugging a link that should
+# work sees a security failure instead of a configuration one. It also does
+# nothing for the shared redemption ledger. The claim refuses with a reason.
+#
+# DEFAULTS TO "demo", deliberately, and the default is the SAFE side: an
+# unconfigured deploy keeps minting and opening exactly the links it does
+# today. Staging sets LINK_CHANNEL=staging explicitly. A default of "" or a
+# hard failure would take the demo down on the first deploy after this ships,
+# to fix a problem the demo does not have.
+DEFAULT_CHANNEL = "demo"
+
+
+def link_channel() -> str:
+    """Which channel this process is: `demo`, `staging`, or a local name."""
+    return os.getenv("LINK_CHANNEL", "").strip() or DEFAULT_CHANNEL
+
+
 def mint_link_token(
     firm_id: str,
     kit_id: str,
@@ -175,6 +199,7 @@ def mint_link_token(
 
     payload = {
         "v": TOKEN_VERSION,
+        "aud": link_channel(),                   # channel that may open this
         "firm_id": firm_id,
         "kit_id": kit_id,
         "employee_id": employee_id,
@@ -224,6 +249,24 @@ def verify_link_token(token: str, now: Optional[float] = None) -> dict:
     # today's rules.
     if payload.get("v") != TOKEN_VERSION:
         raise LinkTokenError("unsupported token version")
+
+    # CHANNEL, checked before the field sweep so a cross-channel token is
+    # refused with a reason rather than falling through to a generic error
+    # (bd polyglot-pdf-3q9qn). A staging-minted link opening on the demo is
+    # not a forged token -- it is a real link at the wrong address, and the
+    # operator debugging it needs to be told which.
+    #
+    # A token minted BEFORE this shipped carries no `aud`. There are no live
+    # client links today, but treating a missing claim as "this channel" would
+    # silently re-open the hole for any that exist; treating it as a refusal
+    # would strand them. Refuse, and say so -- with no links in flight the
+    # blast radius is zero, and the honest error beats a silent pass.
+    expected = link_channel()
+    aud = payload.get("aud")
+    if aud != expected:
+        raise LinkTokenError(
+            f"link belongs to channel {aud!r}, this is {expected!r}"
+        )
 
     for key in ("firm_id", "kit_id", "employee_id", "jti", "iat", "exp", "cw"):
         if key not in payload:
