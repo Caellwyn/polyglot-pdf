@@ -336,3 +336,180 @@ def test_dead_prod_doc_set_is_complete():
         f"  unlisted (add them): {sorted(found - set(DOCS_MENTIONING_DEAD_PROD))}\n"
         f"  listed but clean (remove): {sorted(set(DOCS_MENTIONING_DEAD_PROD) - found)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. A deploy must not report success while leaving an UNREACHABLE service.
+# ---------------------------------------------------------------------------
+
+
+def _reachability_query() -> str:
+    """The gcloud invocation itself -- NOT the whole file.
+
+    Scoping matters: the comment block above the query NAMES every flag it uses
+    and explains why. A test asserting a flag appears anywhere in deploy-all.sh
+    is satisfied by that prose, so deleting the flag from the actual command
+    leaves the test GREEN. That vacuity was demonstrated, not theorised: removing
+    --flatten from the command left all 30 tests passing until this helper
+    existed. (Repo scar tissue: "a checker that infers a claim from text must
+    scope the evidence region to exactly the claim".)
+    """
+    body = _read("deploy-all.sh")
+    marker = "INVOKER_ROLES=$(gcloud run services get-iam-policy"
+    assert marker in body, "the reachability query is gone entirely"
+    # From the command's start to the end of its command substitution.
+    return body.split(marker)[1].split("|| INVOKER_ROLES=")[0]
+
+def test_deploy_verifies_public_reachability_after_deploying():
+    """`--allow-unauthenticated` can be REFUSED while the deploy still exits 0.
+
+    Hit for real on the first deploy of polyglot-backend-staging (bd
+    polyglot-pdf-pidtg): the domain-restricted-sharing org policy rejected
+    `allUsers` as an IAM member, gcloud created the service anyway with a
+    NON-FATAL warning, and the service 403'd every request at Cloud Run's own
+    gate -- before any application code ran. An EXISTING service never shows
+    this, because its binding predates the policy and is not retroactively
+    stripped, so the failure appears only when standing up a NEW service.
+
+    CLAUDE.md scar #7 one layer out: scar #7 is the runtime SA lacking a
+    permission; this is the SERVICE's own ingress. Same shape -- asked for an
+    IAM grant, refused, reported success.
+    """
+    body = _read("deploy-all.sh")
+    assert "get-iam-policy" in body, (
+        "deploy-all.sh must READ the service's IAM policy after deploying -- "
+        "otherwise a refused invoker binding leaves an unreachable service and "
+        "the deploy still exits 0."
+    )
+    query = _reachability_query()
+    assert "--flatten='bindings[].members'" in query, (
+        "the reachability QUERY must FLATTEN to one member/role pair per "
+        "record -- see test_check_requires_the_invoker_role_specifically."
+    )
+    assert "--filter='bindings.members:allUsers'" in query, (
+        "the reachability check must FILTER the policy to bindings whose "
+        "members include allUsers, so the role and member are evaluated "
+        "TOGETHER -- see test_check_requires_the_invoker_role_specifically."
+    )
+
+
+def test_unreachable_service_is_a_FATAL_deploy_error():
+    """A deploy leaving an unreachable service must NOT exit 0.
+
+    Pins the fatality, not merely the presence of a check: a check that only
+    warns would have let the original bug through unchanged.
+    """
+    body = _read("deploy-all.sh")
+    # Isolate the branch that fires when allUsers is absent.
+    marker = 'elif ! echo "$INVOKER_ROLES" | grep -qx "roles/run.invoker"; then'
+    assert marker in body, "the missing-binding branch is gone"
+    branch = body.split(marker)[1].split("\n    fi")[0]
+    assert "exit 1" in branch, (
+        "a missing invoker binding must ABORT the deploy (exit 1). Warning and "
+        "continuing reproduces the original bug: a green deploy of a service "
+        "that 403s every request."
+    )
+    # And it must tell the operator how to fix it, not just that it failed.
+    assert "add-iam-policy-binding" in branch, (
+        "the failure message must name the remedy command"
+    )
+
+
+def test_inconclusive_iam_query_warns_rather_than_failing():
+    """Not being ABLE to check is not proof the service is broken.
+
+    Failing the deploy when the IAM read itself fails (no permission, transient
+    API error) would be its own false alarm -- and a deploy gate that cries wolf
+    gets disabled, taking the real check with it.
+    """
+    body = _read("deploy-all.sh")
+    assert '|| INVOKER_ROLES="__QUERY_FAILED__"' in body, (
+        "a failed IAM read must be distinguishable from a genuinely missing "
+        "binding"
+    )
+    marker = 'if [ "$INVOKER_ROLES" = "__QUERY_FAILED__" ]; then'
+    assert marker in body
+    branch = body.split(marker)[1].split("elif")[0]
+    assert "log_warn" in branch and "exit 1" not in branch, (
+        "an inconclusive IAM query must WARN, never abort the deploy"
+    )
+
+
+def test_check_requires_the_invoker_role_specifically():
+    """allUsers on SOME OTHER role must not satisfy the gate.
+
+    THE FALSE-PASS TRAP (caught by the pre-PR review, not by the author's own
+    mutation testing). The first version of this gate grepped the raw policy
+    text for the bare string "allUsers". A policy like
+
+        roles/run.viewer   -> allUsers
+        roles/run.invoker  -> serviceAccount:...
+
+    satisfied it while the service was still completely un-invokable and 403'd
+    every request -- the exact bug this gate exists to catch, passing cleanly.
+
+    Failing OPEN is the dangerous direction: it does not merely miss the bug, it
+    reports a GREEN check over it, which is worse than having no gate at all.
+    So the query filters to bindings whose MEMBERS include allUsers and returns
+    their ROLES, and the match is exact (grep -qx) -- role and member are
+    evaluated together, and a lookalike role name cannot satisfy it either.
+
+    THE OPPOSITE TRAP, caught by the OUTER review one round later: adding
+    --filter WITHOUT --flatten introduced a FALSE FAIL. --filter is evaluated
+    against the whole policy resource rather than per binding, and
+    value(bindings.role) emits every role ';'-joined on ONE line, so grep -qx
+    stopped matching the moment a service had a SECOND binding -- blocking a
+    deploy of a perfectly reachable service. Both live services happened to
+    carry exactly one binding, so it would not have surfaced until someone
+    granted an operator roles/run.admin or a service-to-service invoker.
+
+    Both directions are pinned below: --flatten (no false fail) AND the
+    role-specific exact match (no false pass).
+    """
+    query = _reachability_query()
+    assert "--flatten='bindings[].members'" in query, (
+        "--flatten is LOAD-BEARING. Without it, --filter is evaluated against "
+        "the WHOLE policy (not per binding) and value(bindings.role) emits every "
+        "role ';'-joined on ONE line -- so grep -qx stops matching as soon as "
+        "the service has a SECOND binding, and a perfectly reachable service is "
+        "refused. That is the FALSE-FAIL direction: a gate that cries wolf gets "
+        "deleted, taking the real check with it."
+    )
+    assert "--filter='bindings.members:allUsers'" in query, (
+        "the query must filter on the MEMBER so that only roles actually bound "
+        "to allUsers are returned"
+    )
+    assert "--format='value(bindings.role)'" in query, (
+        "the query must return the ROLES of those bindings, so the check can "
+        "require roles/run.invoker specifically"
+    )
+    # The grep is the NEXT statement, outside the command substitution, so it is
+    # matched against the whole file rather than the extracted query.
+    body = _read("deploy-all.sh")
+    assert 'grep -qx "roles/run.invoker"' in body, (
+        "the match must be EXACT (grep -qx). A substring match would accept a "
+        "lookalike role such as roles/run.invoker.custom."
+    )
+    # And the loose original must not come back.
+    assert 'grep -q "allUsers"' not in body, (
+        "the loose raw-text grep for allUsers is a FALSE PASS -- allUsers bound "
+        "to any unrelated role would satisfy it while the service stays "
+        "un-invokable."
+    )
+
+
+def test_iam_query_does_not_merge_stderr_into_the_value():
+    """gcloud noise must not be able to satisfy the check.
+
+    With `2>&1` the captured value carries gcloud's stderr -- a component-update
+    nag or deprecation notice mentioning the matched text could satisfy the
+    check on its own. stderr belongs on the operator's terminal; only the parsed
+    value drives the decision.
+    """
+    body = _read("deploy-all.sh")
+    marker = "INVOKER_ROLES=$(gcloud run services get-iam-policy"
+    assert marker in body
+    query = body.split(marker)[1].split("\n\n")[0]
+    assert "2>&1" not in query, (
+        "the reachability query must not merge stderr into the captured value"
+    )

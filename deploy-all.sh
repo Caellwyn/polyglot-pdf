@@ -388,8 +388,103 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         "${SA_FLAG[@]}" \
         "${SECRETS_FLAG[@]}"
     
+    # REACHABILITY GATE (bd polyglot-pdf-pidtg). `gcloud run deploy` above asks
+    # for the public invoker binding via --allow-unauthenticated, but that
+    # request can be REFUSED while the deploy still succeeds and exits 0.
+    #
+    # How this bit us for real (first deploy of polyglot-backend-staging): the
+    # DOMAIN-RESTRICTED-SHARING org policy (constraints/iam.allowedPolicyMember
+    # Domains) rejects `allUsers` as an IAM member. gcloud created the service,
+    # printed a NON-FATAL warning, and exited 0 -- leaving a service with NO
+    # invoker binding that 403s every request at Cloud Run's own gate, BEFORE
+    # any application code runs. The browser then showed the app's
+    # "Not authorized to load form kits (sign in again?)", an auth message that
+    # has nothing to do with Firebase auth, sending the operator to debug the
+    # wrong layer entirely.
+    #
+    # An EXISTING service (the demo) never showed this: its binding predates the
+    # policy and is not retroactively stripped. So the failure only appears the
+    # first time someone stands up a NEW service -- precisely when they are
+    # least able to tell a config bug from a code bug.
+    #
+    # This is CLAUDE.md scar #7 one layer out: scar #7 is about the RUNTIME SA
+    # lacking a permission it needs; this is about the SERVICE's own INGRESS.
+    # Both share the shape "we asked for an IAM grant, were refused, and
+    # reported success".
+    #
+    # WHY CHECK THE BINDING AND NOT curl /health: a health probe conflates this
+    # bug with ordinary startup failures (a crashing container, a cold start, a
+    # transient platform blip) and adds cold-start latency to every deploy. The
+    # binding is the exact thing that silently fails here, and reading it is
+    # fast and deterministic. (Not hypothetical: the morning after this bug the
+    # demo went down with containers failing their startup probes -- an
+    # unrelated platform issue a health gate would have blamed on the deploy.)
+    #
+    # Failure is FATAL: a deploy that leaves an unreachable service must not
+    # exit 0. Verification failures that are NOT a missing binding (no
+    # permission to read the policy, a transient API error) WARN instead -- they
+    # do not prove the service is broken, and failing the deploy on an
+    # inconclusive check would be its own false alarm.
+    # --flatten='bindings[].members' is LOAD-BEARING, and both halves of this
+    # query were got wrong once each before it was right:
+    #
+    #   1. Grepping the raw policy text for "allUsers" FALSE-PASSED: a
+    #      `roles/run.viewer -> allUsers` binding satisfied it while the INVOKER
+    #      binding was missing and the service still 403'd everything -- the very
+    #      bug this gate exists to catch, reported as a green check.
+    #   2. Adding --filter WITHOUT --flatten then FALSE-FAILED: --filter is
+    #      evaluated against the WHOLE policy resource, not per binding, and
+    #      `value(bindings.role)` emits every role ';'-joined on ONE line. So
+    #      `grep -qx` stopped matching the moment a service had a SECOND binding
+    #      (an operator's roles/run.admin, a service-to-service invoker), and a
+    #      perfectly reachable demo would have refused to deploy.
+    #
+    # --flatten makes each member/role pair its own record, so the filter really
+    # is per-binding and each surviving role prints on its own line. Then
+    # `grep -qx` means exactly "allUsers is bound to roles/run.invoker".
+    #
+    # BOTH failure directions matter. Failing OPEN hides the bug behind a green
+    # check; failing CLOSED blocks a good deploy, and a gate that cries wolf gets
+    # deleted -- taking the real check with it.
+    #
+    # stderr is NOT merged into the value (no 2>&1): a gcloud component-update
+    # nag or deprecation notice landing in the variable could otherwise satisfy
+    # a text match on its own. stderr goes to the operator's terminal where it
+    # belongs; only the parsed value drives the decision.
+    log_info "🔎 Verifying the service is publicly reachable..."
+    INVOKER_ROLES=$(gcloud run services get-iam-policy "$BACKEND_SERVICE_NAME" \
+        --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" \
+        --flatten='bindings[].members' \
+        --filter='bindings.members:allUsers' \
+        --format='value(bindings.role)') || INVOKER_ROLES="__QUERY_FAILED__"
+
+    if [ "$INVOKER_ROLES" = "__QUERY_FAILED__" ]; then
+        log_warn "Could not read the IAM policy for $BACKEND_SERVICE_NAME -- skipping the"
+        log_warn "reachability check. If the app cannot reach the backend, verify manually:"
+        log_warn "  gcloud run services get-iam-policy $BACKEND_SERVICE_NAME --region $REGION --project $POLYGLOT_PROJECT_NAME"
+    elif ! echo "$INVOKER_ROLES" | grep -qx "roles/run.invoker"; then
+        log_error "═══════════════════════════════════════════════════════════"
+        log_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+        log_error "═══════════════════════════════════════════════════════════"
+        log_error "Service '$BACKEND_SERVICE_NAME' has no allUsers invoker binding, so"
+        log_error "Cloud Run will 403 EVERY request before your app ever sees it."
+        log_error ""
+        log_error "--allow-unauthenticated was passed, but the binding was refused --"
+        log_error "almost always the domain-restricted-sharing org policy."
+        log_error ""
+        log_error "Fix it with:"
+        log_error "  gcloud run services add-iam-policy-binding $BACKEND_SERVICE_NAME \\"
+        log_error "    --region $REGION --project $POLYGLOT_PROJECT_NAME \\"
+        log_error "    --member=allUsers --role=roles/run.invoker"
+        log_error ""
+        log_error "If that is itself refused, the org policy must be relaxed for this"
+        log_error "project first (constraints/iam.allowedPolicyMemberDomains)."
+        log_error "See bd polyglot-pdf-pidtg."
+        exit 1
+    fi
+
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
-    log_success "✅ Backend deployed successfully!"
+    log_success "✅ Backend deployed successfully (and publicly reachable)!"
     echo "   URL: $BACKEND_URL"
     echo ""
     

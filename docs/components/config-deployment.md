@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-02 (bd polyglot-pdf-pidtg: the backend deploy now verifies the service is publicly reachable and aborts if the invoker binding was refused.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -309,6 +309,19 @@ two channel scripts use.
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,
   live WebSockets included, and the 300s default terminated every voice session
   at exactly 5 minutes (bd polyglot-pdf-9w5k).
+
+  **Reachability gate (bd `polyglot-pdf-pidtg`).** After the deploy, `deploy-all.sh`
+  reads the service's IAM policy and **aborts with `exit 1` if there is no
+  `allUsers` invoker binding.** `--allow-unauthenticated` REQUESTS that binding but
+  the request can be REFUSED while the deploy still succeeds and exits 0 -- which is
+  exactly what happened on the first deploy of `polyglot-backend-staging`: the
+  domain-restricted-sharing org policy rejected `allUsers`, gcloud warned
+  non-fatally, and the service 403'd every request at Cloud Run's gate *before any
+  application code ran*. An EXISTING service never shows this (its binding predates
+  the policy and is not retroactively stripped), so the failure surfaces only when
+  standing up a NEW service. If the IAM read itself fails (no permission, transient
+  error) the gate WARNS instead of aborting -- being unable to check is not proof the
+  service is broken.
 - **Form-kits** — uploads the **complete** kits from the local `form-kits/` tree
   to `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
   `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`. A kit is
