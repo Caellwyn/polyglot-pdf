@@ -294,3 +294,56 @@ def test_gcloud_stderr_cannot_satisfy_the_check(tmp_path):
         "check -- the query must not merge stderr into the captured value"
     )
     assert "REACHED_END" not in proc.stdout
+
+
+def _run_gate_with_helpers(tmp_path: Path):
+    """Run the gate in a shell that DEFINES log_warn/log_error, as deploy-all.sh does."""
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        "YELLOW=$'\033[1;33m'; RED=$'\033[0;31m'; NC=$'\033[0m'\n"
+        'log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }\n'
+        'log_error() { echo -e "${RED}[ERROR]${NC} $1"; }\n'
+        "gcloud() { echo \"\"; return 0; }\n"
+        + _gate_function(DEPLOY_ALL)
+        + '\nverify_service_publicly_reachable "svc" "r" "p"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    proc = subprocess.run(
+        [BASH, "driver.sh"],
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def test_gate_reuses_the_callers_log_helpers_when_they_exist(tmp_path):
+    """deploy-all.sh must keep its coloured [ERROR] on STDOUT, as before.
+
+    Extracting the gate into a helper-free function silently moved deploy-all.sh's
+    warnings from stdout (coloured, via log_warn/log_error) to plain stderr --
+    caught in review. A wrapper capturing only stdout would have lost them, and
+    "behavior-preserving" would have been false.
+
+    The function now delegates to log_warn/log_error WHEN THEY ARE DEFINED and
+    falls back to stderr otherwise, so it stays self-contained for
+    backend/deploy-new.sh (which defines neither) without changing deploy-all.sh.
+    """
+    rc, out, err = _run_gate_with_helpers(tmp_path)
+    assert rc == 1
+    assert "DEPLOY FAILED" in out, (
+        "with log_error defined, the gate's message must go to STDOUT via it -- "
+        "not to stderr, which is where the helper-free fallback writes"
+    )
+    assert "\033" in out, "log_error's colour must survive the delegation"
+
+
+def test_gate_falls_back_to_stderr_without_log_helpers(tmp_path):
+    """backend/deploy-new.sh defines no log_* helpers and must still report."""
+    rc, out, err = _run_gate(tmp_path, [])
+    assert rc == 1
+    assert "DEPLOY FAILED" in err, (
+        "without log_error, the gate must still emit its message (on stderr)"
+    )

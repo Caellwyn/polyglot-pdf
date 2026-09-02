@@ -76,6 +76,24 @@ Two other traps hit on the way:
   Reworded the comment rather than loosening their parser -- that guard exists
   because a reviewer once disabled a flag by moving it into a trailing comment.
 
+## The extraction was not quite behavior-preserving
+
+I described the extraction as behavior-preserving. The pre-PR review found it was
+not: the function wrote plain `[WARN]`/`[ERROR]` to **stderr**, while the inline
+code it replaced used `log_warn`/`log_error`, which `echo -e` to **stdout with
+ANSI colour**. So deploy-all.sh's diagnostics silently changed stream and lost
+their colour -- and a wrapper capturing only stdout would have lost them
+entirely. Nothing in the repo does that today, but the claim was still false.
+
+The motivation was real (`deploy-new.sh` defines no `log_*` helpers), but it was
+applied to BOTH copies when only one needed it. The function now delegates:
+
+    _gate_error() { if declare -f log_error >/dev/null 2>&1; then log_error "$1"
+                    else echo "[ERROR] $1" >&2; fi; }
+
+`deploy-all.sh` keeps its original coloured stdout exactly; `deploy-new.sh` falls
+back to stderr. Both paths are pinned by tests and mutation-verified.
+
 ## An overclaim I made and then disproved
 
 The supersession note first said "nothing was dropped in the move -- only
@@ -105,10 +123,11 @@ confident one that overstates its coverage.
 
 ## Testing
 
-Seven mutations, each confirmed to apply before trusting the result: remove
+Eight mutations, each confirmed to apply before trusting the result: remove
 `--flatten` (from both copies, so identity could not mask it), `grep -qx` ->
 `grep -q`, `exit 1` -> `return 0`, a third ungated script, drift between the two
-copies, removing `deploy-new.sh`'s call, and re-merging stderr. All caught by the
-intended test except the last, which is analysed above.
+copies, removing `deploy-new.sh`'s call, re-merging stderr, and reverting
+the log-helper delegation. All caught by the intended test except the stderr
+one, which is analysed above.
 
-Full suite: 4386 passed, 126 skipped, exit 0.
+Full suite: 4388 passed, 126 skipped, exit 0.

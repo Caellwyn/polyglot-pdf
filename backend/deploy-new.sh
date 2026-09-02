@@ -48,6 +48,14 @@ set -e
 # tests/test_deploy_reachability_gate.py).
 verify_service_publicly_reachable() {
     local svc="$1" region="$2" project="$3" invoker_roles
+    # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
+    # coloured [WARN]/[ERROR] on stdout exactly as before this was extracted
+    # (a pre-PR review caught the extraction silently moving them to stderr and
+    # dropping the colour). backend/deploy-new.sh defines no such helpers, so it
+    # falls back to plain stderr -- which is why the function must not simply
+    # call log_warn/log_error unconditionally.
+    _gate_warn()  { if declare -f log_warn  >/dev/null 2>&1; then log_warn  "$1"; else echo "[WARN] $1"  >&2; fi; }
+    _gate_error() { if declare -f log_error >/dev/null 2>&1; then log_error "$1"; else echo "[ERROR] $1" >&2; fi; }
     invoker_roles=$(gcloud run services get-iam-policy "$svc" \
         --region "$region" --project "$project" \
         --flatten='bindings[].members' \
@@ -55,31 +63,31 @@ verify_service_publicly_reachable() {
         --format='value(bindings.role)') || invoker_roles="__QUERY_FAILED__"
 
     if [ "$invoker_roles" = "__QUERY_FAILED__" ]; then
-        echo "[WARN] Could not read the IAM policy for $svc -- skipping the" >&2
-        echo "[WARN] reachability check. If the app cannot reach the backend, verify manually:" >&2
-        echo "[WARN]   gcloud run services get-iam-policy $svc --region $region --project $project" >&2
+    _gate_warn "Could not read the IAM policy for $svc -- skipping the"
+    _gate_warn "reachability check. If the app cannot reach the backend, verify manually:"
+    _gate_warn "  gcloud run services get-iam-policy $svc --region $region --project $project"
         return 0
     fi
     if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
         return 0
     fi
-    echo "[ERROR] ===========================================================" >&2
-    echo "[ERROR]   DEPLOY FAILED: the service is NOT publicly reachable" >&2
-    echo "[ERROR] ===========================================================" >&2
-    echo "[ERROR] Service '$svc' has no allUsers invoker binding, so" >&2
-    echo "[ERROR] Cloud Run will 403 EVERY request before your app ever sees it." >&2
-    echo "[ERROR]" >&2
-    echo "[ERROR] --allow-unauthenticated was passed, but the binding was refused --" >&2
-    echo "[ERROR] almost always the domain-restricted-sharing org policy." >&2
-    echo "[ERROR]" >&2
-    echo "[ERROR] Fix it with:" >&2
-    echo "[ERROR]   gcloud run services add-iam-policy-binding $svc \\" >&2
-    echo "[ERROR]     --region $region --project $project \\" >&2
-    echo "[ERROR]     --member=allUsers --role=roles/run.invoker" >&2
-    echo "[ERROR]" >&2
-    echo "[ERROR] If that is itself refused, the org policy must be relaxed for this" >&2
-    echo "[ERROR] project first (constraints/iam.allowedPolicyMemberDomains)." >&2
-    echo "[ERROR] See bd polyglot-pdf-pidtg." >&2
+    _gate_error "==========================================================="
+    _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    _gate_error "==========================================================="
+    _gate_error "Service '$svc' has no allUsers invoker binding, so"
+    _gate_error "Cloud Run will 403 EVERY request before your app ever sees it."
+    _gate_error ""
+    _gate_error "--allow-unauthenticated was passed, but the binding was refused --"
+    _gate_error "almost always the domain-restricted-sharing org policy."
+    _gate_error ""
+    _gate_error "Fix it with:"
+    _gate_error "  gcloud run services add-iam-policy-binding $svc \\"
+    _gate_error "    --region $region --project $project \\"
+    _gate_error "    --member=allUsers --role=roles/run.invoker"
+    _gate_error ""
+    _gate_error "If that is itself refused, the org policy must be relaxed for this"
+    _gate_error "project first (constraints/iam.allowedPolicyMemberDomains)."
+    _gate_error "See bd polyglot-pdf-pidtg."
     exit 1
 }
 
