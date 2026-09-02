@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-08-31 (i-90 kit removed, bd polyglot-pdf-hydb0 -- two shipped kits (f1040, w7) now carry option-position backfill; the preview UI remains CUT OVER per bd polyglot-pdf-v437). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for cutover closeout details.*
+*Last updated: 2026-09-02 (the i-90 kit id is BACK, now carrying the applicant-only v2 schema -- three shipped kits (i-90, f1040, w7) carry option-position backfill; the preview UI remains CUT OVER per bd polyglot-pdf-v437). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for cutover closeout details.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -169,17 +169,15 @@ approximation for feedback; this modal (and download) is the ground truth.
   font shrink); the FilledPreviewModal is the exact render.
 - Radio/checkbox-group selections paint marks at their own option boxes only
   where the schema carries per-option `pdf_position` (backfilled into the
-  shipped kits -- f1040, w7); a schema without option rects falls back
+  shipped kits -- i-90, f1040, w7); a schema without option rects falls back
   to labels at the field-level rect (tiny for 10px option boxes).
-- Known gap (bd `polyglot-pdf-ks1y`, open -- kit REMOVED from the repo,
-  bd polyglot-pdf-hydb0, deprecated in favor of i-90_v2; whether this bead
-  still applies to a live deploy is unverified from the repo alone): 8
-  choice fields on the old i-90 (e.g. `p3_checkbox4[1]`) carried field-level
-  rects derived under an older extraction rule, predating the current
-  "field rect = first option's widget" convention. When no per-option
-  `pdf_position` is available their label-at-field-rect fallback could paint
-  42-108pt away from the correct printed box. A fresh `i-90_v2` extraction
-  is self-consistent by construction and needs no patch.
+- Retired gap (bd `polyglot-pdf-ks1y`): 8 choice fields on the OLD i-90
+  (e.g. `p3_checkbox4[1]`) carried field-level rects derived under an older
+  extraction rule, so their label-at-field-rect fallback could paint 42-108pt
+  away from the correct printed box. That schema is gone -- the `i-90` kit id
+  now serves the applicant-only v2 extraction, which is self-consistent by
+  construction and carries per-option `pdf_position` on 14 of its choice
+  fields. None of the named field ids still exist.
 - Known gap (bd `polyglot-pdf-1utg`, open): see the click-to-edit paragraph
   above -- the edit popover's value read is exact-key-only, so a value
   stored under the other `[]`-bracket variant opens the popover blank even

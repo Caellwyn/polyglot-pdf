@@ -375,8 +375,8 @@ def test_lint_kits_sweeps_real_repo_kits():
                     if line.count("/") >= 2}
     glossary = load_glossary()
     results = lint_kits(kits_root, glossary)
-    assert {"f1040", "w7"} <= set(results)
-    assert {"f1040", "w7"} <= tracked_kits
+    assert {"f1040", "i-90", "w7"} <= set(results)
+    assert {"f1040", "i-90", "w7"} <= tracked_kits
     assert "_translation" not in results
     for kit_id, findings in results.items():
         if kit_id not in tracked_kits:

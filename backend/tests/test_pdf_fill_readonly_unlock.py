@@ -63,8 +63,6 @@ def _widget_value(pdf_bytes: bytes, suffix: str):
     return None, None
 
 
-@pytest.mark.skipif(not (_KIT_ROOT / "form.pdf").exists(),
-                    reason="i-90 kit not present")
 def _unlocking_schema():
     """The kit schema with an unlock descriptor forced onto the target field.
 
@@ -96,6 +94,8 @@ def _unlocking_schema():
     return schema
 
 
+@pytest.mark.skipif(not (_KIT_ROOT / "form.pdf").exists(),
+                    reason="i-90 kit not present")
 def test_readonly_field_unlocks_and_fills():
     schema = _unlocking_schema()
 

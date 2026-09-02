@@ -6,12 +6,15 @@ description: Run the automated voice form-fill E2E test against the real app + r
 # Voice form-fill E2E harness
 
 **CURRENTLY BROKEN (bd polyglot-pdf-tcemw):** this harness targets the i-90
-kit -- both the UI-navigation step below and harness.js's default field ids
-(p1_line1_aliennumber, p1_line2_acctidentifier). The i-90 kit was deleted
-(bd polyglot-pdf-hydb0, deprecated in favor of i-90_v2), so the "click i-90"
-step will not find that button. Do not attempt to just swap in a different
-kit name here -- repointing correctly means picking a field that plays the
-same structural role, tracked in the linked bead.
+kit. The "click i-90" navigation step below is FINE again -- that kit id is
+back in the catalogue, now serving the applicant-only v2 schema. What is still
+broken is harness.js's default field ids: `p1_line1_aliennumber` and
+`p1_line2_acctidentifier` do NOT exist in the v2 schema (verified), which
+renamed every field. Their closest counterparts are `a_number` and
+`uscis_account`, but do not just swap the strings in -- v2 is applicant-only
+and dropped Parts 6/7 entirely, so repointing correctly means picking fields
+that still play the same structural role in the harness's cycle. Tracked in
+the linked bead.
 
 Drives the real frontend (Chrome) against a local backend + real Gemini, feeding
 committed 16 kHz PCM16 WAV fixtures into the live WebSocket through a dev-gated
