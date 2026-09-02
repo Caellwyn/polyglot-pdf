@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-01 (bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -53,8 +53,9 @@ would need its own IAM bootstrap, Firebase Auth user pool, and enrolment run.
 | Firebase Auth users | **shared** | **shared** |
 
 **Staging protects against broken CODE reaching the demo. It does NOT protect
-against bad DATA.** Concretely, these cross the boundary (the list read
-"three things" while enumerating four; client links are the fifth):
+against bad DATA.** Concretely, items 1-4 below cross the boundary; item 5
+(client links) is listed because it USED to and no longer does -- it is the one
+that has been closed, and it records what is still shared:
 
 1. A kit marked `status:complete` deploys to the one shared bucket and appears
    in the **demo's** form list. `deploy-staging.sh` therefore does **not** deploy

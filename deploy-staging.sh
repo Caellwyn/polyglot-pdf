@@ -169,11 +169,20 @@ if [ "$DEPLOY_GCP" = true ] || [ "$DEPLOY_FORM_KITS" = true ]; then
     # cannot exercise the pilot's core feature does not predict demo behavior,
     # which is the one job stated at the top of this block.
     #
-    # LINK_BASE_URL is the STAGING frontend, and that is the ONE link value that
-    # must NOT match the demo. A minted link is `<base>/f#t=<token>` and /f is a
-    # client-app route (AppRoutes.tsx CLIENT_LINK_PATH), so pointing staging at
-    # the demo origin would mint links that open the DEMO -- silently testing
-    # the wrong deployment, which is worse than not minting at all.
+    # TWO link values must NOT match the demo. Copying either one verbatim
+    # from deploy-demo.sh silently breaks a guarantee:
+    #
+    #   LINK_BASE_URL -- the STAGING frontend. A minted link is
+    #   `<base>/f#t=<token>` and /f is a client-app route (AppRoutes.tsx
+    #   CLIENT_LINK_PATH), so pointing staging at the demo origin would mint
+    #   links that open the DEMO -- silently testing the wrong deployment,
+    #   which is worse than not minting at all.
+    #
+    #   LINK_CHANNEL -- the channel name minted into every token as `aud` and
+    #   checked on open (bd polyglot-pdf-3q9qn). Matching the demo's value
+    #   would make staging links verify on the demo AND put both channels on
+    #   one redemption ledger, so a staging test could burn a real client's
+    #   link. tests/test_deploy_channel_parity.py asserts both differ.
     BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,SPELLBACK_TOOL_ENABLED=true,LIVE_TEMPERATURE=0.4,EXTRACTOR_MODEL=gemini-2.5-pro,LINK_MINTING_ENABLED=true,LINK_CHANNEL=staging,LINK_REDEMPTIONS_FIRESTORE_ENABLED=true,LINK_BASE_URL=https://$STAGING_SITE.web.app,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SECRETS="$BACKEND_SECRETS_COMMON" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
