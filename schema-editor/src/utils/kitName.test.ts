@@ -41,6 +41,46 @@ describe('kitName -- naming a kit in prose (bd polyglot-pdf-kztlr)', () => {
     expect(kitName({ id: 'my_form', label: 'My Form' })).toBe('"my_form"');
     expect(kitName({ id: 'MY-FORM', label: 'my form' })).toBe('"MY-FORM"');
   });
+
+  /**
+   * NON-ASCII rows (bd polyglot-pdf-th60w). The shared table was all-ASCII, so
+   * it could not see that `\s` and `.trim()`/`.strip()` mean DIFFERENT things
+   * in the two languages. Measured across the whole code space on both
+   * runtimes, they disagree on SIX characters in BOTH directions:
+   *
+   *   Python strips, JS does not:  U+001C U+001D U+001E U+001F U+0085
+   *   JS strips, Python does not:  U+FEFF
+   *
+   * Every ASCII row passed throughout. These are the rows that would not have.
+   */
+  it('agrees with the backend on characters the two languages dispute', () => {
+    // U+FEFF -- JS whitespace, Python's is not. An ordinary paste artifact
+    // from a spreadsheet or a UTF-8-BOM file; the backend's _safe_label lets
+    // it through (it rejects only quotes, backslashes and ord < 32).
+    expect(kitName({ id: 'form-2', label: 'Form\ufeff2' })).toBe('"form-2"');
+    expect(kitName({ id: 'form-2', label: '\ufeffW-7' })).toBe('"W-7" (form-2)');
+    expect(kitName({ id: 'form-2', label: 'W-7\ufeff' })).toBe('"W-7" (form-2)');
+
+    // U+0085 (NEL) -- the MIRROR case, and the one the bead reported as
+    // agreeing. Python's whitespace, JavaScript's is not, so the shared class
+    // is what makes this row hold here.
+    expect(kitName({ id: 'form-2', label: 'Form\u00852' })).toBe('"form-2"');
+    expect(kitName({ id: 'form-2', label: '\u0085W-7' })).toBe('"W-7" (form-2)');
+  });
+
+  it('leaves alone characters NEITHER language treats as space', () => {
+    // The class must not quietly grow past what it claims. U+200B is the trap:
+    // it LOOKS like whitespace and is not, on either side.
+    expect(kitName({ id: 'form-2', label: 'Form\u200b2' }))
+      .toBe('"Form\u200b2" (form-2)');
+    expect(kitName({ id: 'form-2', label: 'Form\u2013 2' }))
+      .toBe('"Form\u2013 2" (form-2)');
+  });
+
+  it('treats characters BOTH languages strip like a plain space', () => {
+    expect(kitName({ id: 'form-2', label: 'Form\u00a02' })).toBe('"form-2"');
+    expect(kitName({ id: 'form-2', label: 'Form\u30002' })).toBe('"form-2"');
+  });
 });
 
 describe('kitOptionName -- naming a kit inside a control (bd polyglot-pdf-5ivqx)',
