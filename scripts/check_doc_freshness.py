@@ -34,6 +34,14 @@ script" paragraph below):
    `check_code_citations` for why it deliberately does NOT try to verify a
    citation points at the SPECIFIC construct its prose names.
 
+5. **Unbumped stamps** (bd polyglot-pdf-3q9qn). A doc whose BODY changed on
+   this branch while its `*Last updated:*` line did not -- so the edit is
+   attributed to the previous bead. The complement of check 1: that one asks
+   "did code move without its doc?", this asks "did a doc move without its
+   stamp?". They miss different things, and an ALREADY-stale doc edited
+   without a bump is invisible to check 1 and to any COUNT of stale docs,
+   which is exactly how it slipped three review rounds.
+
 Why every check lives in one script, not one script per check: they're
 all facets of the same doc discipline, and they all want the same hook
 (warn-only on every commit, full sweep at sprint closeout). Splitting
@@ -41,7 +49,7 @@ them into separate scripts would duplicate the argparse/exit-code/print
 plumbing across each one; co-locating them means the closeout
 `python scripts/check_doc_freshness.py` invocation already covers all of
 them -- deliberately count-free phrasing (bd polyglot-pdf-82rzp), so
-adding a fifth check here never requires updating this paragraph.
+adding another check here never requires updating this paragraph.
 
 Why parse the stamp instead of using the doc's git commit time? Because the
 sprint-closeout checklist tells the user to "bump its *Last updated:* line"
