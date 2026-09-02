@@ -291,7 +291,12 @@ staging isolates broken CODE, not bad DATA -- see
 All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
 a brand-new Cloud Run service by name -- not part of the regular update flow the
-two channel scripts use.
+two channel scripts use. It carries a **byte-identical copy** of
+`deploy-all.sh`'s `verify_service_publicly_reachable` reachability gate (bd
+`polyglot-pdf-6oi9s`); the two copies are pinned identical by
+`tests/test_deploy_reachability_gate.py`, which also asserts the COMPLETE set of
+scripts passing `--allow-unauthenticated` each carry the gate, so a third such
+script cannot ship ungated.
 
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
