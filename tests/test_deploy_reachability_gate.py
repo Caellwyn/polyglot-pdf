@@ -101,6 +101,7 @@ def _run_gate(tmp_path: Path, policy: list[tuple[str, str]], gcloud_rc: int = 0)
         [BASH, "driver.sh"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=str(tmp_path),
         timeout=60,
     )
@@ -286,6 +287,7 @@ def test_gcloud_stderr_cannot_satisfy_the_check(tmp_path):
         [BASH, "driver.sh"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=str(tmp_path),
         timeout=60,
     )
@@ -313,6 +315,7 @@ def _run_gate_with_helpers(tmp_path: Path):
         [BASH, "driver.sh"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=str(tmp_path),
         timeout=60,
     )
@@ -368,11 +371,29 @@ def test_gate_is_called_as_a_bare_command(rel):
     Deleting the call outright was already caught. This pins the SHAPE of the
     surviving call, which is the part that can be broken while still looking
     present.
+
+    LINE CONTINUATIONS ARE JOINED FIRST, and that is not a detail. The first
+    version of this test split on raw lines, so deploy-all.sh's call --
+
+        verify_service_publicly_reachable \\
+            "$BACKEND_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME"
+
+    -- was only ever inspected as `verify_service_publicly_reachable \\`. The
+    ARGUMENTS line, which is exactly where a neutering `| cat` would go, was
+    invisible. So the guard protected deploy-new.sh and left deploy-all.sh --
+    the script already written in the vulnerable shape -- unguarded. A second
+    review round caught it by appending `| cat` there and watching all 15 tests
+    pass while the deploy reported success over an unreachable service.
+
+    Fixing one member of a set and believing the set is done is scar #8; doing
+    it inside the very test written to prevent that is worth the extra comment.
     """
     body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    # Join backslash continuations so each call is ONE logical line.
+    logical = body.replace("\\\n", " ")
     calls = [
         ln.strip()
-        for ln in body.splitlines()
+        for ln in logical.splitlines()
         if "verify_service_publicly_reachable" in ln
         and not ln.strip().startswith("#")
         and "()" not in ln  # the definition itself
@@ -391,3 +412,59 @@ def test_gate_is_called_as_a_bare_command(rel):
                 f"and the deploy would report success over an unreachable "
                 f"service. Found: {call!r}"
             )
+
+
+# Each gated script's success banner -- the line that must never print for an
+# unreachable service. (deploy-all.sh's banner is emitted by log_success.)
+SUCCESS_BANNERS = {
+    "deploy-all.sh": 'log_success "',
+    "backend/deploy-new.sh": 'echo "',
+}
+
+
+@pytest.mark.parametrize("rel", GATED_DEPLOY_SCRIPTS)
+def test_gate_runs_before_the_success_banner(rel):
+    """Ordering is load-bearing, and the comments say so -- so pin it.
+
+    backend/deploy-new.sh's own comment reads: "Runs BEFORE the success banner:
+    a service that 403s everything must never be reported as 'Deployment
+    Complete'." Nothing enforced that. Moving the call BELOW the banner left the
+    suite fully green while the operator saw success printed first and only then
+    an abort -- code contradicting its own comment, with the comment asserting a
+    guarantee no test held (found by the pre-PR cross-surface review).
+    """
+    body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    logical = body.replace("\\n", " ")
+    lines = logical.splitlines()
+
+    call_idx = next(
+        (
+            i
+            for i, ln in enumerate(lines)
+            if "verify_service_publicly_reachable" in ln
+            and not ln.strip().startswith("#")
+            and "()" not in ln
+        ),
+        None,
+    )
+    assert call_idx is not None, f"{rel} never calls the gate"
+
+    banner_idx = next(
+        (
+            i
+            for i, ln in enumerate(lines)
+            if SUCCESS_BANNERS[rel] in ln
+            and ("Deployment Complete" in ln or "deployed successfully" in ln)
+            and not ln.strip().startswith("#")
+        ),
+        None,
+    )
+    assert banner_idx is not None, (
+        f"{rel}: could not find the success banner -- if its wording changed, "
+        f"update SUCCESS_BANNERS so this ordering guard keeps working."
+    )
+    assert call_idx < banner_idx, (
+        f"{rel}: the reachability gate is called AFTER the success banner "
+        f"(line {call_idx + 1} vs {banner_idx + 1}). A service that 403s every "
+        f"request would be reported as a successful deploy before the abort."
+    )

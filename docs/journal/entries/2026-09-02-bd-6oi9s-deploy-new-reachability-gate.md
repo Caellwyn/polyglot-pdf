@@ -127,15 +127,49 @@ That is the third variation of one lesson in this bead: a guard is only as good
 as the narrowest thing it actually asserts. Presence, shape, and behavior are
 three different claims.
 
-## A consistency change that had to be reverted
+## The guard I wrote to prevent scar #8, committing scar #8
 
-The reviewer noted the gate's error banner uses plain ASCII `=` while the rest of
-`deploy-all.sh` uses box-drawing `=`. Matching the surrounding style broke four
-tests: the banner is read back through a Python subprocess, and on Windows the
-default cp1252 decode of that glyph raises `UnicodeDecodeError` -- CLAUDE.md
-scar #6, hit from a direction the rule does not literally cover (it names
-`.py`/`.ts`, not shell). Reverted, with the reason recorded at the line so nobody
-"fixes" the inconsistency again.
+Round two found the call-shape guard **did not see `deploy-all.sh` at all**. Its
+call is already a line continuation:
+
+```
+    verify_service_publicly_reachable         "$BACKEND_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME"
+```
+
+A line-oriented collector only ever inspected `verify_service_publicly_reachable
+\` -- the ARGUMENTS line, exactly where a neutering `| cat` goes, was invisible.
+So the guard protected `deploy-new.sh` and left unguarded the script already
+written in the vulnerable shape. The reviewer proved it by appending `| cat`
+there: 15 tests green, deploy reporting success over an unreachable service.
+
+Fixed by joining continuations before splitting. The irony is the point: this was
+a guard written specifically to stop "fixed one member, believed the set was
+done", and it committed that error in its own implementation one round later.
+
+The same round found the **ordering** half of the finding still unpinned --
+moving the gate below the success banner also stayed green, though
+`deploy-new.sh`'s own comment calls that ordering load-bearing. Now pinned by
+`test_gate_runs_before_the_success_banner`.
+
+## A comment that stated a false cause
+
+I had matched the error banner to the box-drawing glyph the rest of
+`deploy-all.sh` uses; it broke four tests with `UnicodeDecodeError`, so I
+reverted to ASCII and wrote a comment blaming Windows' cp1252 handling of shell
+output -- citing scar #6.
+
+The reviewer showed that reason was wrong. The constraint was **my test's**:
+`subprocess.run(..., text=True)` with no `encoding=`, so the child's output was
+decoded with the locale codec. Adding `encoding="utf-8"` makes the glyph
+round-trip cleanly -- verified by experiment. The comment also claimed "this file
+uses box-drawing elsewhere", which is false for `backend/deploy-new.sh` (no
+box-drawing at all), and the two copies are byte-identical, so it was wrong in
+one of the two files it appeared in.
+
+Fixed the real defect (explicit UTF-8 at all three capture sites) and rewrote the
+comment to say ASCII is a free choice rather than a constraint. A comment
+recording a phantom rule is worse than no comment: the next author avoids
+something harmless for a reason that does not exist.
 
 ## Exit criteria
 
@@ -148,11 +182,11 @@ scar #6, hit from a direction the rule does not literally cover (it names
 
 ## Testing
 
-Ten mutations, each confirmed to apply before trusting the result: remove
+Twelve mutations, each confirmed to apply before trusting the result: remove
 `--flatten` (from both copies, so identity could not mask it), `grep -qx` ->
 `grep -q`, `exit 1` -> `return 0`, a third ungated script, drift between the two
 copies, removing `deploy-new.sh`'s call, re-merging stderr, and reverting
 the log-helper delegation. All caught by the intended test except the stderr
 one, which is analysed above.
 
-Full suite: 4390 passed, 126 skipped, exit 0.
+Full suite: 4392 passed, 126 skipped, exit 0.

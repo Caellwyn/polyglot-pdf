@@ -71,12 +71,12 @@ verify_service_publicly_reachable() {
     if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
         return 0
     fi
-    # PLAIN ASCII '=' here, deliberately, even though this file uses box-drawing
-    # '=' elsewhere: this line is read back by tests/test_deploy_reachability_gate.py
-    # through a Python subprocess, and on Windows the default cp1252 decode of a
-    # box-drawing glyph raises UnicodeDecodeError -- CLAUDE.md scar #6. Tried the
-    # matching glyph for consistency; it broke 4 tests. Consistency loses to not
-    # crashing.
+    # Plain ASCII '=' -- a free choice, not a constraint. An earlier comment here
+    # claimed the shell could not carry a box-drawing glyph because the tests
+    # decode it as cp1252 on Windows; that was the TEST's defect (a
+    # subprocess.run without encoding=), since fixed, and this function is
+    # byte-identical in backend/deploy-new.sh, which has no box-drawing at all.
+    # ASCII simply travels everywhere without depending on the reader's codec.
     _gate_error "==========================================================="
     _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
     _gate_error "==========================================================="
