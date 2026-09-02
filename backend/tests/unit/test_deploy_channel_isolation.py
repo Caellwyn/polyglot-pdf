@@ -336,3 +336,78 @@ def test_dead_prod_doc_set_is_complete():
         f"  unlisted (add them): {sorted(found - set(DOCS_MENTIONING_DEAD_PROD))}\n"
         f"  listed but clean (remove): {sorted(set(DOCS_MENTIONING_DEAD_PROD) - found)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. A deploy must not report success while leaving an UNREACHABLE service.
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_verifies_public_reachability_after_deploying():
+    """`--allow-unauthenticated` can be REFUSED while the deploy still exits 0.
+
+    Hit for real on the first deploy of polyglot-backend-staging (bd
+    polyglot-pdf-pidtg): the domain-restricted-sharing org policy rejected
+    `allUsers` as an IAM member, gcloud created the service anyway with a
+    NON-FATAL warning, and the service 403'd every request at Cloud Run's own
+    gate -- before any application code ran. An EXISTING service never shows
+    this, because its binding predates the policy and is not retroactively
+    stripped, so the failure appears only when standing up a NEW service.
+
+    CLAUDE.md scar #7 one layer out: scar #7 is the runtime SA lacking a
+    permission; this is the SERVICE's own ingress. Same shape -- asked for an
+    IAM grant, refused, reported success.
+    """
+    body = _read("deploy-all.sh")
+    assert "get-iam-policy" in body, (
+        "deploy-all.sh must READ the service's IAM policy after deploying -- "
+        "otherwise a refused invoker binding leaves an unreachable service and "
+        "the deploy still exits 0."
+    )
+    assert 'grep -q "allUsers"' in body, (
+        "the reachability check must look for the allUsers invoker binding "
+        "specifically -- that is the binding --allow-unauthenticated requests "
+        "and the one the org policy refuses."
+    )
+
+
+def test_unreachable_service_is_a_FATAL_deploy_error():
+    """A deploy leaving an unreachable service must NOT exit 0.
+
+    Pins the fatality, not merely the presence of a check: a check that only
+    warns would have let the original bug through unchanged.
+    """
+    body = _read("deploy-all.sh")
+    # Isolate the branch that fires when allUsers is absent.
+    marker = 'elif ! echo "$INVOKER_POLICY" | grep -q "allUsers"; then'
+    assert marker in body, "the missing-binding branch is gone"
+    branch = body.split(marker)[1].split("\n    fi")[0]
+    assert "exit 1" in branch, (
+        "a missing invoker binding must ABORT the deploy (exit 1). Warning and "
+        "continuing reproduces the original bug: a green deploy of a service "
+        "that 403s every request."
+    )
+    # And it must tell the operator how to fix it, not just that it failed.
+    assert "add-iam-policy-binding" in branch, (
+        "the failure message must name the remedy command"
+    )
+
+
+def test_inconclusive_iam_query_warns_rather_than_failing():
+    """Not being ABLE to check is not proof the service is broken.
+
+    Failing the deploy when the IAM read itself fails (no permission, transient
+    API error) would be its own false alarm -- and a deploy gate that cries wolf
+    gets disabled, taking the real check with it.
+    """
+    body = _read("deploy-all.sh")
+    assert '|| INVOKER_POLICY="__QUERY_FAILED__"' in body, (
+        "a failed IAM read must be distinguishable from a genuinely missing "
+        "binding"
+    )
+    marker = 'if [ "$INVOKER_POLICY" = "__QUERY_FAILED__" ]; then'
+    assert marker in body
+    branch = body.split(marker)[1].split("elif")[0]
+    assert "log_warn" in branch and "exit 1" not in branch, (
+        "an inconclusive IAM query must WARN, never abort the deploy"
+    )

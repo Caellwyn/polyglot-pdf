@@ -91,6 +91,28 @@ Then add `polyglot-app-staging.web.app` to **Firebase console -> Authentication
 unlisted domain *with the whole config present and valid*, so no build check can
 catch it -- the failure appears only at a human's first sign-in attempt.
 
+### Public ingress for a NEW Cloud Run service
+
+`--allow-unauthenticated` REQUESTS the `allUsers` invoker binding, but that
+request can be **refused while the deploy still succeeds and exits 0** -- the
+domain-restricted-sharing org policy
+(`constraints/iam.allowedPolicyMemberDomains`) rejects `allUsers`. The service is
+then created with no invoker binding and 403s every request at Cloud Run's own
+gate, *before any application code runs*. An EXISTING service never shows this:
+its binding predates the policy and is not retroactively stripped.
+
+`deploy-all.sh` now **aborts** rather than reporting success in that case (bd
+`polyglot-pdf-pidtg`). If it fires:
+
+```bash
+gcloud run services add-iam-policy-binding <service> --region us-central1 --project polyglot-demo-aa709 --member=allUsers --role=roles/run.invoker
+```
+
+If that is itself refused, the org policy must be relaxed for the project first.
+DRS is currently **disabled** for `polyglot-demo-aa709` (maintainer, 2026-09-01),
+so this should now succeed; the gate remains because the policy can be
+re-enabled, and because it catches any other cause of a missing binding.
+
 - **Feature branches** always branch off freshly-pulled `dev`. A bead never spans
   PRs (one bead = one branch = one PR); a PR may bundle several small whole beads
   and closes at least one. See [`workflow.md`](workflow.md#bead-lifecycle).
