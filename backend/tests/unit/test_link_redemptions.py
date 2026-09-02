@@ -383,3 +383,37 @@ def test_two_channels_never_share_a_collection(monkeypatch):
         f"two channels share a redemption collection: {names} -- a burn in one "
         "would mark the other's link used"
     )
+
+
+def test_the_real_collection_accessor_ASKS_FIRESTORE_for_the_channel_name(
+        monkeypatch):
+    """The one line that wires _collection_name() into Firestore.
+
+    Every other test in this file monkeypatches `_collection` wholesale, so
+    reverting `db.collection(_collection_name())` to `db.collection(COLLECTION)`
+    left the ENTIRE 4390-test suite green while silently restoring the shared
+    ledger. Pinning the pure function was not enough -- nothing proved the
+    production path ever called it.
+
+    So this drives the real `_collection()` with a recording client and asserts
+    the NAME Firestore is actually asked for.
+    """
+    asked: list[str] = []
+
+    class _RecordingDb:
+        def collection(self, name):
+            asked.append(name)
+            return object()
+
+    monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", "true")
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: _RecordingDb())
+
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    lrd._collection()
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    lrd._collection()
+
+    assert asked == ["link_redemptions_staging", "link_redemptions"], (
+        f"the collection accessor asked Firestore for {asked} -- the channel "
+        "name is not reaching the query, so both channels share one ledger"
+    )

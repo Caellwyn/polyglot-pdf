@@ -214,8 +214,9 @@ does not work. `employee_id` on the same records is what makes a CLIENT
 session satisfy the telemetry requirement (firm + form + originating
 employee) despite there being no account anywhere.
 
-**The token carries `{firm_id, kit_id, employee_id, jti, iat, exp, cw}` and
-DELIBERATELY no client identifier.** That absence is the product's legal
+**The token carries `{v, aud, firm_id, kit_id, employee_id, jti, iat, exp,
+cw}` and DELIBERATELY no client identifier.** (`aud` names the CHANNEL that may
+open the link -- an environment, never a person; see bd `polyglot-pdf-3q9qn`.) That absence is the product's legal
 posture, not privacy hygiene: WE hold a pseudonymous record keyed by `jti`,
 THE FIRM holds the identity mapping, and neither side alone can connect a
 record to a person. Re-identification requires the firm to act, which puts

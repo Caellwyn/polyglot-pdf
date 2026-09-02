@@ -640,7 +640,8 @@ system that is NOT a Firebase account. Five coupled pieces:
   silently corrected -- a substitution would produce a confirmation record
   naming a form the client never saw. Any future code path that trusts the
   handshake's `kit_id` for a link session reopens this.
-- **One-time use lives in Firestore** (`link_redemptions`), not the token: a
+- **One-time use lives in Firestore** (`link_redemptions` on the demo,
+  `link_redemptions_<channel>` elsewhere -- see `LINK_CHANNEL`), not the token: a
   signed bearer string is replayable by construction. FAILS CLOSED BY
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing
