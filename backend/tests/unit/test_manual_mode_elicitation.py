@@ -23,6 +23,7 @@ is not LOST -- it is replayed on unmute).
 """
 
 import asyncio
+import textwrap
 
 import pytest
 
@@ -58,6 +59,19 @@ def _make_adapter():
     adapter._session_ready = True
     adapter._current_session = _RecordingSession()
     return adapter
+
+
+def _rebuild_queue(adapter):
+    """Do what set_callbacks does when a replacement session starts its queue.
+
+    Mirrors the two lines that matter here -- build the queue, then flush -- so
+    the test does not spawn the real _run_session_loop background task (which
+    would need a live Gemini connection and leaves a pending task behind).
+    test_set_callbacks_flushes_on_queue_creation below pins that set_callbacks
+    really does call the flush, so this helper cannot drift away from it.
+    """
+    adapter._text_queue = asyncio.Queue()
+    adapter._flush_muted_context("queue_created")
 
 
 def _drain(queue):
@@ -297,18 +311,112 @@ async def test_a_hint_arriving_DURING_the_teardown_gap_still_wins():
 
 
 @pytest.mark.asyncio
-async def test_the_same_holds_for_the_direct_speak_path_during_teardown():
-    """send_client_content had the ordering right already -- pin it so it stays.
+async def test_the_direct_speak_path_holds_the_newest_even_with_no_session():
+    """send_client_content records the newest turn regardless of session state.
 
-    The two elicitation paths must agree about this, or the newest-wins rule
-    depends on which channel a message happened to arrive on.
+    The two elicitation paths must agree about what counts as newest, or the rule
+    depends on which channel a message happened to arrive on. The session-not-
+    ready guard is the one that could plausibly be reordered ahead of the mute
+    check here (that is exactly the mistake made on the other path), so the
+    not-ready state is what this drives -- setting _text_queue would assert
+    nothing, since send_client_content never reads it.
     """
     adapter = _make_adapter()
     adapter.set_voice_muted(True)
     await adapter.send_client_content("next field is first name")
 
-    adapter._text_queue = None
+    adapter._session_ready = False
+    adapter._current_session = None
     delivered = await adapter.send_client_content("next field is last name")
 
     assert delivered is False
     assert adapter._muted_context == "next field is last name"
+    # ...and it did NOT fall into the not-ready queue, which would voice it the
+    # moment the session came up, defeating the mute.
+    assert adapter._pending_client_content == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_held_through_teardown_flushes_when_the_QUEUE_returns():
+    """The other ordering: the unmute itself is what raced the teardown.
+
+    The user unmutes mid-teardown and then never touches the toggle again -- why
+    would they? So a flush keyed on the unmute EVENT strands the turn forever.
+    Keying it on the CONDITION (not muted AND a queue exists) means whichever of
+    the two arrives second does the delivering.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    # Teardown, then the ONLY unmute -- no second mute/unmute cycle follows.
+    adapter._text_queue = None
+    adapter.set_voice_muted(False)
+    assert adapter._muted_context == "next field is date of birth"
+
+    # The replacement session builds its queue; that alone must deliver it.
+    _rebuild_queue(adapter)
+
+    assert _drain(adapter._text_queue) == ["next field is date of birth"]
+    assert adapter._muted_context is None
+
+
+@pytest.mark.asyncio
+async def test_queue_creation_does_not_flush_while_still_muted():
+    """A new session must not break the silence the user is still asking for."""
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+    adapter._text_queue = None
+
+    _rebuild_queue(adapter)
+
+    assert _drain(adapter._text_queue) == []
+    assert adapter._muted_context == "next field is date of birth"
+
+
+def test_set_callbacks_flushes_on_queue_creation():
+    """The real queue-creation site calls the flush -- not just the test helper.
+
+    _rebuild_queue above mirrors what set_callbacks does. That mirror is only
+    worth anything if the real function actually does it, so this reads the
+    shipped source and asserts the flush call sits inside the queue-creation
+    branch. Without this, deleting the call from set_callbacks would leave every
+    teardown test green while the stranding bug was back in production.
+    """
+    import ast
+    import inspect
+
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    src = inspect.getsource(LiveAIGemini.set_callbacks)
+    tree = ast.parse(textwrap.dedent(src))
+
+    # Find the branch that creates the text queue, and require the flush inside
+    # THAT branch -- a call somewhere else in the function would not run on the
+    # path that matters.
+    creating_branches = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and any(
+            isinstance(n, ast.Attribute) and n.attr == "_text_queue"
+            for stmt in node.body
+            for n in ast.walk(stmt)
+            if isinstance(stmt, ast.Assign)
+        )
+    ]
+    assert creating_branches, "set_callbacks no longer creates _text_queue where expected"
+
+    flushed = any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "_flush_muted_context"
+        for branch in creating_branches
+        for n in ast.walk(branch)
+    )
+    assert flushed, (
+        "set_callbacks builds a new _text_queue without flushing a held "
+        "manual-mode turn -- a turn held through a teardown would be stranded "
+        "whenever the unmute itself raced the teardown (bd polyglot-pdf-wurj8)"
+    )

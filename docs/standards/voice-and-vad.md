@@ -141,19 +141,27 @@ newest: these messages restate whole current state ("the next unfilled field is
 X"), so an older one is a stale contradiction rather than extra information, and
 replaying a backlog would bill for every one.
 
-The held turn is **cleared only once it has actually reached a live queue.** A
-section switch tears the session down (`_text_queue = None`) and the next connect
-builds a new one; an unmute landing between the two would otherwise drop the
-context silently, since a put on an orphaned queue raises nothing and nobody
-drains it. Deferring instead means the next turn on the fresh session carries it,
-and a newer turn still wins -- an unmute during that gap degrades to "replay a
-moment later" rather than losing the re-orientation.
+**Delivery is keyed on a CONDITION, not on an event.** A section switch tears the
+session down (`_text_queue = None`) and the next connect builds a new one, so the
+two things a held turn needs -- the user no longer muted, and a live queue --
+become true in either order:
 
-For that to hold, **both** elicitation paths check the mute flag BEFORE their
+| Order | Who delivers |
+|---|---|
+| Unmute arrives while a queue exists | `set_voice_muted` |
+| Unmute arrives mid-teardown, queue comes later | `set_callbacks` (queue creation) |
+
+Both call the one shared `_flush_muted_context`, which delivers only when BOTH
+hold and clears the turn only once the queue has accepted it. Keying the flush on
+the unmute EVENT instead is what made this defect keep reappearing in new shapes:
+an unmute that raced the teardown stranded the turn forever, because the only
+flush path then required a further mute/unmute cycle that a user with no reason
+to touch the toggle never performs.
+
+For the same reason **both** elicitation paths check the mute flag BEFORE their
 queue/session guards. A hint arriving while muted and mid-teardown must still be
-recorded, or the deferred replay voices an OLDER hint as if it were current --
-the model naming the wrong field confidently, which is worse than saying
-nothing.
+recorded, or the replay voices an OLDER hint as if it were current -- the model
+naming the wrong field confidently, which is worse than saying nothing.
 
 **A PTT press leaves manual mode**, at both ends: the client flips its own toggle
 in `sendActivityStart`, and the backend unmutes on `vad_activity_start` before
