@@ -800,12 +800,19 @@ describe('FormCatalogue -- compact selector strip (bd tynm)', () => {
     expect(new Set(shown).size).toBe(shown.length);
   });
 
-  it('does not repeat an id that the label merely restates', async () => {
-    // The other half of the rule. An unlabelled kit gets a label synthesised
-    // from its id ('form-2' -> "Form 2"), and printing "Form 2 (form-2)" shows
-    // one fact twice. Same restatement rule as kitName, shared not copied.
+  it('appends the id only when the label adds something', async () => {
+    // BOTH kinds in ONE render, because a restating label alone proves
+    // nothing: kitOptionName returns it unchanged, byte-identical to the bare
+    // {k.label} this replaced. An earlier draft asserted only that case and
+    // could not tell the fix from the bug -- it re-covered kitOptionName's
+    // unit behaviour, which kitName.test.ts already pins. The non-restating
+    // kit is what makes this test about the WIRING.
     const root = mockRoot([
+      // No label in metadata -> the catalogue synthesises "Form 2" from the
+      // id, so appending "(form-2)" would print one fact twice.
       mockKit('form-2', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ status: 'draft' }) }),
+      // A label a human chose -> both identities are real and both are shown.
+      mockKit('form-9', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
     ]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
 
@@ -815,11 +822,10 @@ describe('FormCatalogue -- compact selector strip (bd tynm)', () => {
 
     const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
     const text = Array.from(select.options).map((o) => o.text).join('|');
-    // The catalogue synthesises "Form 2" from `form-2` when metadata carries
-    // no label, so that is what the option shows -- once. Appending the id
-    // would print one fact twice.
     expect(text).toContain('Form 2');
     expect(text).not.toContain('(form-2)');   // no parenthesised repeat
+    // ...and the half that reverting the JSX to {k.label} breaks.
+    expect(text).toContain('W-7 (form-9)');
   });
 
   it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {

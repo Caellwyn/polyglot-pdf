@@ -38,6 +38,10 @@ vi.mock('./components/FormCatalogue', () => ({
   }) => (
     <div>
       <button onClick={() => onOpenKit(kit())}>open-kit</button>
+      {/* A genuinely DIFFERENT kit id. Reopening the same one cannot tell
+          "clears on any open" from "clears only when the id changed", and
+          App conditions other per-form resets on exactly that distinction. */}
+      <button onClick={() => onOpenKit(kit('i-90', 'I-90'))}>open-other-kit</button>
       <button onClick={() => { lastAnswer = confirmDiscardOnHide?.() ?? null; }}>
         ask-hide
       </button>
@@ -84,9 +88,9 @@ const SCHEMA: FormSchema = {
   fields: [{ id: 'f1', name: 'F1', type: 'text' }],
 } as unknown as FormSchema;
 
-function kit(): CatalogueEntry {
+function kit(id = 'w7', label = 'W-7'): CatalogueEntry {
   return {
-    id: 'w7', label: 'W-7', status: 'draft', hasSchema: true, hasPdf: false,
+    id, label, status: 'draft', hasSchema: true, hasPdf: false,
     schemaFile: 'schema.json', pdfFile: 'form.pdf',
     dirHandle: { getFileHandle: async () => ({}) } as unknown as CatalogueEntry['dirHandle'],
   };
@@ -210,7 +214,27 @@ describe('App tells the user when someone else closed their form', () => {
     fireEvent.click(screen.getByText('other-hid-it'));
     await screen.findByText(/Someone else hid this form/);
 
-    fireEvent.click(screen.getByText('open-kit'));
+    // A DIFFERENT id, not the same fixture reopened -- otherwise the test
+    // cannot distinguish "clears on any open" from "clears only when the kit
+    // actually changed", and App conditions other per-form resets on exactly
+    // that difference.
+    fireEvent.click(screen.getByText('open-other-kit'));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Someone else hid this form/)).toBeNull());
+  });
+
+  it('retires on a no-reason close, such as a folder change', async () => {
+    // The path the FIRST fix missed. clearOpenKit() with no reason is how a
+    // folder change closes the open kit, and it does not go through any of
+    // the open handlers -- so clearing the banner there alone left it standing,
+    // describing a form nobody is looking at. clearOpenKit now owns the state
+    // in both directions, which is why no caller can reintroduce this.
+    await openAndEdit(true);
+    fireEvent.click(screen.getByText('other-hid-it'));
+    await screen.findByText(/Someone else hid this form/);
+
+    fireEvent.click(screen.getByText('close-normally'));
 
     await waitFor(() =>
       expect(screen.queryByText(/Someone else hid this form/)).toBeNull());

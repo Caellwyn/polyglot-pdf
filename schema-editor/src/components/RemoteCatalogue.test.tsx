@@ -735,12 +735,19 @@ describe('compact selector strip (bd tynm)', () => {
     expect(new Set(shown).size).toBe(shown.length);
   });
 
-  it('does not repeat an id that the label merely restates', async () => {
-    // The other half of the rule, and the half that caught a real regression:
-    // returning the ID on a restatement downgraded a kit labelled "I-90" to
-    // its lowercase folder name. The label the human typed is what shows.
+  it('appends the id only when the label adds something', async () => {
+    // BOTH kinds in ONE render. A restating label alone proves nothing here:
+    // kitOptionName returns it unchanged, byte-identical to the bare
+    // {k.label} this replaced, so such a test cannot tell the fix from the
+    // bug. The non-restating kit is what makes this about the WIRING.
     vi.mocked(listRemoteKits).mockResolvedValue([
+      // Label restates the id -- and note the CASE differs, which is the
+      // regression this caught: returning kit.id would downgrade the human's
+      // "I-90" to the lowercase folder name.
       { id: 'i-90', label: 'I-90', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      // A label a human chose -- both identities are real, both are shown.
+      { id: 'form-9', label: 'W-7', status: 'draft', hasSchema: true,
         hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
     ] as never);
 
@@ -752,6 +759,8 @@ describe('compact selector strip (bd tynm)', () => {
     const text = Array.from(select.options).map((o) => o.text).join('|');
     expect(text).toContain('I-90');       // the human's spelling, not `i-90`
     expect(text).not.toContain('(i-90)'); // and no parenthesised repeat
+    // ...and the half that reverting the JSX to {k.label} breaks.
+    expect(text).toContain('W-7 (form-9)');
   });
 
   it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {

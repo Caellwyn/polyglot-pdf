@@ -583,9 +583,17 @@ export const App: React.FC = () => {
     // by moving this block below clearSchema(): all seven tests stay green.
     // What WOULD break it is reading dirtiness from a ref or from freshly-read
     // state instead of the closure.
-    if (reason === 'hidden-by-other') {
-      setClosedByOther({ lostUnsavedWork: hasUnsavedChanges });
-    }
+    //
+    // BOTH directions, in one place. Closing for any OTHER reason retires the
+    // banner: it is about the kit that WAS open, so a folder change or a
+    // delete must not leave it describing a form nobody is looking at. An
+    // earlier fix added the clear at the three open handlers instead, which
+    // enumerated instances rather than the set -- a no-reason clearOpenKit()
+    // (the folder change) still went past it. Owning the state here means a
+    // new caller cannot forget.
+    setClosedByOther(reason === 'hidden-by-other'
+      ? { lostUnsavedWork: hasUnsavedChanges }
+      : null);
     setSelectedKitId(null);
     setSelectedForm(null);
     setSavedFileName(null);
