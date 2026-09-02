@@ -267,13 +267,18 @@ export const App: React.FC = () => {
   // drops the schema -- a failed save must never cost the work being saved
   // (bd 92qe.5).
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  // Someone ELSE hid the form this session had open, and the next refresh
-  // closed it (bd polyglot-pdf-0s2wf). No dialog is possible: that unwind runs
-  // from a background refresh, outside any user gesture, where a synchronous
-  // window.confirm() reads as a hostage prompt and can be popup-blocked. The
-  // work is already gone by the time this renders -- the banner exists to say
-  // SO, because the alternative shipped behaviour was the editor emptying
-  // itself with no explanation at all.
+  // Someone ELSE hid the form this session had open, and the next refetch of
+  // the catalogue closed it (bd polyglot-pdf-0s2wf).
+  //
+  // No dialog is possible, and the reason is NOT that a poller fires it -- the
+  // editor has no background refresh (the only intervals are elapsed-second
+  // tickers; every refresh() sits in a handler for something this session did).
+  // It is that the discovery is INCIDENTAL: the user clicked Refresh, or did
+  // something that refreshes as a side effect, and the answer to a confirm()
+  // could not change anything anyway -- the kit is already hidden on the
+  // server and the effect only reconciles the UI to that. So the banner exists
+  // to SAY what happened, because the alternative shipped behaviour was the
+  // editor emptying itself with no explanation at all.
   const [closedByOther, setClosedByOther] =
     React.useState<{ lostUnsavedWork: boolean } | null>(null);
   // First-run guide (hosted): shown once per browser, reopenable via Help.

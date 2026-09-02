@@ -45,9 +45,9 @@ vi.mock('./components/FormCatalogue', () => ({
       <button onClick={() => { lastAnswer = confirmDiscardOnHide?.() ?? null; }}>
         ask-hide
       </button>
-      {/* Stands in for the real catalogues' unwind effect, which fires from a
-          background refresh when another author hid the open kit. It calls the
-          same function with the same argument they pass. */}
+      {/* Stands in for the real catalogues' unwind effect, which fires on the
+          next catalogue refetch after another author hid the open kit. It
+          calls the same function with the same argument they pass. */}
       <button onClick={() => clearOpenKit?.('hidden-by-other')}>
         other-hid-it
       </button>
@@ -148,10 +148,11 @@ describe("App's unsaved-edits guard for hiding (bd polyglot-pdf-n5fwd)", () => {
 
 /**
  * The CONCURRENT case (bd polyglot-pdf-0s2wf). When ANOTHER author hides the
- * form this session has open, the next background refresh closes it here --
- * and no dialog can be asked, because that unwind runs outside any user
- * gesture. bd n5fwd shipped that close SILENTLY: the editor emptied itself
- * with no explanation, and any unsaved edits went with it.
+ * form this session has open, the next catalogue refetch closes it here -- and
+ * no dialog can be asked, because by then the kit is already hidden on the
+ * server and the answer could not change anything. bd n5fwd shipped that close
+ * SILENTLY: the editor emptied itself with no explanation, and any unsaved
+ * edits went with it.
  *
  * These drive App's real clearOpenKit, not a stub. Both catalogue suites pass
  * a vi.fn() for it, so a test living there would pin nothing.

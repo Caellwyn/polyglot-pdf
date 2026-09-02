@@ -22,10 +22,17 @@ small for its own review cycle; bundled into one PR.
 ### 0s2wf -- the silence, not the loss
 
 `n5fwd` gated the open kit's OWN hide click behind `confirmDiscardOnHide`. That
-guard cannot reach the concurrent case: the unwind runs from a background
-refresh, outside any user gesture, where a synchronous `window.confirm()` reads
-as a hostage prompt and can be popup-blocked. By the time the client knows, the
-work is already gone.
+guard cannot reach the concurrent case: the unwind fires on the next catalogue
+refetch, and by then the kit is already hidden on the server -- the answer to a
+`confirm()` could not change anything, because the effect is only reconciling
+the UI to a decision someone else already made. The work is already gone.
+
+(An earlier draft of this reasoning said the unwind runs "from a background
+refresh, outside any user gesture". The outer reviewer checked: there IS no
+background refresh -- the only intervals are elapsed-second tickers, and every
+`refresh()` sits in a handler for something this session did. The conclusion
+held; the stated mechanism did not. That is the THIRD false-mechanism comment
+on this branch, and the pattern is below.)
 
 So the fixable part was never the loss -- it was the silence. `clearOpenKit`
 now takes an optional reason; passing none is byte-for-byte the old behaviour,
@@ -76,7 +83,9 @@ no way to notice from inside either language.
 
 Two mutations survived across this branch, and BOTH were category (1) --
 structurally impossible, not an unpinned hole. In each case my code comment had
-asserted a mechanism that was not real:
+asserted a mechanism that was not real -- as did a THIRD comment nobody could
+mutate at all (the "background refresh", corrected above), which is the tell
+that the habit is writing the explanation rather than testing it:
 
 1. **`0s2wf`.** Moving the dirtiness capture below `clearSchema()` changed
    nothing, because `hasUnsavedChanges` is the render's closed-over value and
@@ -95,7 +104,7 @@ implementation detail that happens to deliver it.
 
 This is the same defect the `check-defects-proximity-and-wrong-layer` memory
 describes -- writing a claim about a mechanism instead of testing it -- and it
-recurred twice in one branch despite being a known trap. The cheap tell: if a
+recurred three times in one branch despite being a known trap. The cheap tell: if a
 comment explains WHY something is safe and you have not mutated that exact
 thing, the explanation is a guess.
 
@@ -119,7 +128,7 @@ Six mutations for `th60w` alone (each flattener reverted to its own `\s`, one
 character dropped from one side's class, a literal BOM pasted where an escape
 belongs).
 
-Full CI scope: 4383 passed backend (both directories), 2186 schema-editor.
+Full CI scope: 4383 passed backend (both directories), 2190 schema-editor.
 
 Three schema-editor tests failed on one full run and passed on the next, in
 files this diff does not touch; they ran concurrently with the backend suite.
