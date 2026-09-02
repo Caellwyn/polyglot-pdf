@@ -59,11 +59,15 @@ MULTI_SELECT_OPTION_TYPES = {
 }
 
 # The same marker also assumes both labels are short enough to fold into one
-# natural question. Two shipped-kit pairs are not (bd polyglot-pdf-575i): I-90
-# 'p7_checkbox7' carries ~23- and ~27-word legal declarations whose
-# representation-scope clause a single question drops outright. Above this word
-# count the pair falls back to the normal recital, so the full substance of both
-# options is still read aloud.
+# natural question. The calibrating case (bd polyglot-pdf-575i) was I-90
+# 'p7_checkbox7' -- ~23- and ~27-word legal declarations whose
+# representation-scope clause a single question drops outright. That field is
+# RETIRED (the applicant-only v2 i-90 drops the preparer block), so no SHIPPED
+# kit now exceeds the threshold -- the longest 2-option label left is W-7's 17
+# words. The threshold is still live and still calibrated on that field, which
+# is frozen at backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json.
+# Above this word count the pair falls back to the normal recital, so the full
+# substance of both options is still read aloud.
 #
 # 20 sits in the gap this corpus actually shows. Measured over every 2-option
 # field in the three shipped kits, the longest label of each pair runs

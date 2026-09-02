@@ -2,7 +2,9 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-08-28 (bd polyglot-pdf-6zhaf: kit deletion is
+*Last updated: 2026-09-02 (the i-90 kit id now serves the applicant-only v2
+schema, so NO shipped kit exercises the widget-name suffix fallback any more;
+the earlier note follows -- bd polyglot-pdf-6zhaf: kit deletion is
 GRADUATED, not a permanent refusal -- the old three-state guard turned an
 unrunnable confirmation check into a 409 with no override, and
 un-attributable legacy records make it permanently unrunnable, so every kit
@@ -406,8 +408,12 @@ attacker which check caught them tells them what to fix.
 Values come back keyed by SCHEMA FIELD ID, never by PDF widget name; the two
 namespaces are disjoint (zero of the W-7's 53 ids equal their
 `pdf_field_name`). Widget lookup tries exact then `endswith`, mirroring
-`find_widget` in the fill path -- all 114 of the i-90's mappings resolve only
-by suffix.
+`find_widget` in the fill path. No shipped kit currently needs the `endswith`
+leg -- measured 2026-09-02, i-90 79/79, w7 47/47 and f1040 167/167 resolve
+EXACTLY (the applicant-only v2 i-90 stores fully-qualified widget names; its
+132-field predecessor was the inverse, 0 exact / 114 suffix-only). The fallback
+stays because a kit MAY map the bare leaf, but it is unexercised by committed
+data.
 
 Three shapes carry answers, and missing any one loses a client's work:
 
