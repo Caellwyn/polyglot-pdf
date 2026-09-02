@@ -414,11 +414,20 @@ def test_gate_is_called_as_a_bare_command(rel):
             )
 
 
-# Each gated script's success banner -- the line that must never print for an
-# unreachable service. (deploy-all.sh's banner is emitted by log_success.)
+# The EXACT success banner each gated script must not print for an unreachable
+# service. These are full, distinctive substrings on purpose.
+#
+# A looser pair of conditions ('log_success "' AND "deployed successfully") was
+# a VACUOUS-PASS trap: deploy-all.sh has THREE such banners -- backend (the one
+# the gate must precede), form-kits, and frontend. Taking the FIRST match meant
+# rewording the backend banner silently fell through to the form-kits one 117
+# lines later, and the ordering assertion then held for almost any gate
+# placement. The `banner_idx is not None` check, whose whole job was to make a
+# rewording fail LOUDLY, was itself satisfied by the wrong banner.
+# (Found by the pre-PR cross-surface review, round 3.)
 SUCCESS_BANNERS = {
-    "deploy-all.sh": 'log_success "',
-    "backend/deploy-new.sh": 'echo "',
+    "deploy-all.sh": "Backend deployed successfully",
+    "backend/deploy-new.sh": "Deployment Complete!",
 }
 
 
@@ -434,8 +443,10 @@ def test_gate_runs_before_the_success_banner(rel):
     guarantee no test held (found by the pre-PR cross-surface review).
     """
     body = (REPO_ROOT / rel).read_text(encoding="utf-8")
-    logical = body.replace("\\n", " ")
-    lines = logical.splitlines()
+    # A REAL continuation join (backslash-newline), not the literal two-character
+    # "\\n" this line first contained -- which matched nothing and silently made
+    # the join a no-op, the very defect this guard's sibling was added to fix.
+    lines = body.replace("\\\n", " ").splitlines()
 
     call_idx = next(
         (
@@ -449,20 +460,24 @@ def test_gate_runs_before_the_success_banner(rel):
     )
     assert call_idx is not None, f"{rel} never calls the gate"
 
-    banner_idx = next(
-        (
-            i
-            for i, ln in enumerate(lines)
-            if SUCCESS_BANNERS[rel] in ln
-            and ("Deployment Complete" in ln or "deployed successfully" in ln)
-            and not ln.strip().startswith("#")
-        ),
-        None,
+    banner = SUCCESS_BANNERS[rel]
+    banner_hits = [
+        i
+        for i, ln in enumerate(lines)
+        if banner in ln and not ln.strip().startswith("#")
+    ]
+    assert banner_hits, (
+        f"{rel}: could not find the success banner {banner!r}. If its wording "
+        f"changed, update SUCCESS_BANNERS -- do NOT loosen the match, which is "
+        f"what made this guard pass vacuously before."
     )
-    assert banner_idx is not None, (
-        f"{rel}: could not find the success banner -- if its wording changed, "
-        f"update SUCCESS_BANNERS so this ordering guard keeps working."
+    assert len(banner_hits) == 1, (
+        f"{rel}: {banner!r} matches {len(banner_hits)} lines "
+        f"{[i + 1 for i in banner_hits]}. The banner substring must identify "
+        f"EXACTLY the one the gate has to precede -- with several matches this "
+        f"guard silently compares against the wrong one."
     )
+    banner_idx = banner_hits[0]
     assert call_idx < banner_idx, (
         f"{rel}: the reachability gate is called AFTER the success banner "
         f"(line {call_idx + 1} vs {banner_idx + 1}). A service that 403s every "

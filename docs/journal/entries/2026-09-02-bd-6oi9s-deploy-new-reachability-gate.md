@@ -171,6 +171,28 @@ comment to say ASCII is a free choice rather than a constraint. A comment
 recording a phantom rule is worse than no comment: the next author avoids
 something harmless for a reason that does not exist.
 
+## Round three: the ordering guard had both defects it was written to prevent
+
+The guard added in round two to pin ordering turned out to carry, simultaneously,
+the two failure shapes this bead had already been burned by:
+
+**Vacuous pass.** It matched a banner with two loose conditions
+(`log_success "` plus "deployed successfully") and took the FIRST hit. But
+`deploy-all.sh` has THREE such banners -- backend, form-kits, frontend. Rewording
+the backend one silently fell through to the form-kits banner 117 lines later,
+and the ordering assertion then held for almost any gate placement. The
+`banner_idx is not None` check, whose entire job was to make a rewording fail
+LOUDLY, was itself satisfied by the wrong banner. Fixed by matching one exact,
+distinctive substring per script and asserting it matches EXACTLY ONE line.
+
+**A no-op join.** Its continuation join was written `body.replace("\n", " ")` --
+the literal two characters backslash-n, not a backslash followed by a newline. It
+matched nothing (766 lines before, 766 after; the correct form gives 738). That is
+the identical defect the sibling guard had been fixed for one round earlier, in
+the very commit that fixed it.
+
+Both found by the outer review, both mutation-verified after fixing.
+
 ## Exit criteria
 
 1. **Met.** `deploy-new.sh` verifies the binding and exits non-zero when it is
@@ -182,7 +204,7 @@ something harmless for a reason that does not exist.
 
 ## Testing
 
-Twelve mutations, each confirmed to apply before trusting the result: remove
+Fourteen mutations, each confirmed to apply before trusting the result: remove
 `--flatten` (from both copies, so identity could not mask it), `grep -qx` ->
 `grep -q`, `exit 1` -> `return 0`, a third ungated script, drift between the two
 copies, removing `deploy-new.sh`'s call, re-merging stderr, and reverting
