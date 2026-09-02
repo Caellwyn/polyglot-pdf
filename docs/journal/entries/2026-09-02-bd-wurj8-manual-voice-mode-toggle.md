@@ -114,7 +114,7 @@ an absolute. PTT holds the mic at a resting mute between presses, so `muteInput`
 is already called once at mount; an absolute assertion there would have been
 measuring PTT rather than this control.
 
-## The same defect three times, and what finally ended it
+## The same defect four times, and what finally ended it
 
 Review found the held-context mechanism broken in three rounds. Each fix was
 locally correct; each left one more ordering open. Worth recording because the
@@ -133,15 +133,35 @@ progression is the lesson, not any individual bug.
   the only flush site was the unmute branch, gated on `was_muted`, and a user who
   has already unmuted never touches the toggle again.
 
+- **R4.** The mechanism fix was right and its PRECONDITION was wrong. `finalize()`
+  cancels the text sender and only nulls the queue several awaits later, so there
+  is a window where the queue still exists and a put succeeds onto a pipe whose
+  reader is already dead. The turn was logged as sent, cleared, and then died with
+  the queue.
+
 Every fix was "handle one more ordering", and every finding differed from the last
 only in WHICH order two events arrived. That is the tell from scar #8: stop
 patching instances, change the mechanism.
 
 The mechanism fix is one `_flush_muted_context()` that asks whether both
-preconditions hold RIGHT NOW -- not muted, and a live queue -- called from every
-site where either can become true (the unmute path and queue creation). Whichever
-arrives second delivers. A new ordering cannot open a fourth variant, because no
-single site owns the decision any more.
+preconditions hold RIGHT NOW, called from every site where either can become
+true. Whichever arrives second delivers, so no single site owns the decision.
+
+**R4 is the more interesting failure, because the mechanism was already right.**
+I had written into that function's docstring that "a new ordering cannot open a
+fourth variant" -- and a fourth ordering promptly appeared, because the mechanism
+was asking the wrong QUESTION. It tested for a queue object; what it needed was a
+live consumer. Every test, every doc sentence and my own reasoning had modelled
+teardown as one instant (`Queue` -> `None`), when it is a multi-await process with
+an observable middle state where the queue lies about being usable.
+
+Two lessons worth separating. Changing from event-keyed to condition-keyed was
+genuinely the right move and it did close R1-R3. But a condition is only as good
+as the thing it measures, and "there is a queue" was a proxy for "something will
+read this". **When a fix's correctness rests on a precondition, the next question
+is whether that precondition can be true while the thing it stands for is false.**
+And a confident no-more-bugs claim in a comment is a smell: I wrote one, and the
+next review round disproved it.
 
 **Pinning a test that mirrors production.** Driving the real queue-creation path
 spawns the live session loop, so the tests use a small helper mirroring its two

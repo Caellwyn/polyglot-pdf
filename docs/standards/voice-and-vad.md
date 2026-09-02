@@ -142,21 +142,30 @@ X"), so an older one is a stale contradiction rather than extra information, and
 replaying a backlog would bill for every one.
 
 **Delivery is keyed on a CONDITION, not on an event.** A section switch tears the
-session down (`_text_queue = None`) and the next connect builds a new one, so the
-two things a held turn needs -- the user no longer muted, and a live queue --
+text pipeline down and the next connect builds a new one, so the two things a
+held turn needs -- the user no longer muted, and a pipeline that can carry it --
 become true in either order:
 
 | Order | Who delivers |
 |---|---|
-| Unmute arrives while a queue exists | `set_voice_muted` |
-| Unmute arrives mid-teardown, queue comes later | `set_callbacks` (queue creation) |
+| Unmute arrives while the pipeline is up | `set_voice_muted` |
+| Unmute arrives mid-teardown, pipeline comes later | the text sender's start site |
 
 Both call the one shared `_flush_muted_context`, which delivers only when BOTH
-hold and clears the turn only once the queue has accepted it. Keying the flush on
-the unmute EVENT instead is what made this defect keep reappearing in new shapes:
-an unmute that raced the teardown stranded the turn forever, because the only
-flush path then required a further mute/unmute cycle that a user with no reason
-to touch the toggle never performs.
+hold and clears the turn only once a live pipeline has accepted it. Keying the
+flush on the unmute EVENT instead is what made this defect keep reappearing in new
+shapes: an unmute that raced the teardown stranded the turn forever, because the
+only flush path then required a further mute/unmute cycle that a user with no
+reason to touch the toggle never performs.
+
+**"Can carry it" means a live CONSUMER, not merely a queue object.** `finalize()`
+cancels the text sender and only nulls the queue several awaits later, so there is
+a window where the queue still exists and a put cheerfully succeeds onto a pipe
+whose reader is already dead -- the turn then dies with the queue, having been
+logged as sent and cleared. Teardown is a multi-await process with an observable
+middle state, not one instant. The sender task is the honest signal, which is why
+the flush checks it and why the second flush site sits at the sender's START
+rather than at queue creation.
 
 For the same reason **both** elicitation paths check the mute flag BEFORE their
 queue/session guards. A hint arriving while muted and mid-teardown must still be

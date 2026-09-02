@@ -904,11 +904,6 @@ class LiveAIGemini(ILiveAI):
             # Audio queue has max size to prevent blocking - drops frames if backed up
             self._audio_queue = asyncio.Queue(maxsize=100)  # ~2 seconds of audio at 50fps
             self._text_queue = asyncio.Queue()
-            # A turn held through a teardown is delivered as soon as there is
-            # somewhere to put it (bd polyglot-pdf-wurj8). Covers the ordering
-            # where the user unmuted DURING the teardown: no further mute/unmute
-            # will ever come, so the unmute path alone would strand it.
-            self._flush_muted_context("queue_created")
             closed_event = asyncio.Event()
             self._closed_event = closed_event
             self._bg_task = asyncio.create_task(self._run_session_loop())
@@ -1465,26 +1460,35 @@ class LiveAIGemini(ILiveAI):
     def _flush_muted_context(self, reason: str) -> None:
         """Deliver the held manual-mode turn if it can go out right now.
 
-        THE SINGLE FLUSH SITE (bd polyglot-pdf-wurj8). Two things have to be true
-        for the held turn to be delivered -- the user is no longer muted, and a
-        live text queue exists -- and they become true in EITHER ORDER:
+        THE SINGLE FLUSH SITE (bd polyglot-pdf-wurj8). Delivery needs the user to
+        be unmuted AND a text pipeline that can actually carry the turn, and those
+        become true in EITHER ORDER:
 
-          - unmute arrives while a queue exists      -> set_voice_muted flushes;
-          - unmute arrives mid-teardown, queue later -> set_callbacks flushes.
+          - unmute arrives while the pipeline is up  -> set_voice_muted flushes;
+          - unmute arrives mid-teardown, pipeline later -> set_callbacks flushes.
 
-        Keying the flush on the unmute EVENT instead of on this CONDITION is what
+        Keying the flush on the unmute EVENT rather than on this CONDITION is what
         made the same defect keep reappearing in new shapes: an unmute that raced
         the section-switch teardown left the turn held forever, because the only
-        flush path required a further mute->unmute transition that a user with no
-        reason to touch the toggle never performs. Both callers now ask the same
-        question, so a new ordering cannot open a fourth variant.
+        flush path then required a further mute->unmute transition that a user
+        with no reason to touch the toggle never performs.
 
-        The turn is cleared ONLY once the queue has actually accepted it.
+        "CAN CARRY IT" MEANS A LIVE CONSUMER, NOT MERELY A QUEUE OBJECT. finalize()
+        cancels _current_text_sender_task and only nulls _text_queue several
+        awaits later, so there is a window where the queue still exists and
+        put_nowait cheerfully succeeds onto a pipe whose reader is already dead --
+        and the turn then dies with the queue while we have logged it as sent and
+        cleared it. The consumer task is the honest signal; the queue object is
+        not. Checking it also makes this correct BY THE SAME TEST for any future
+        teardown ordering, rather than by enumerating the ones we know about.
+
+        The turn is cleared ONLY once a live pipeline has accepted it.
         """
         if self._voice_muted or self._muted_context is None:
             return
-        if self._text_queue is None:
-            self._log.info("VOICE_UNMUTE_REPLAY_DEFERRED_NO_QUEUE", reason=reason)
+        sender = self._current_text_sender_task
+        if self._text_queue is None or sender is None or sender.done():
+            self._log.info("VOICE_UNMUTE_REPLAY_DEFERRED_NO_CONSUMER", reason=reason)
             return
         try:
             self._text_queue.put_nowait(self._muted_context)
@@ -2376,6 +2380,14 @@ class LiveAIGemini(ILiveAI):
 
                 text_sender_task = asyncio.create_task(text_sender())
                 self._current_text_sender_task = text_sender_task
+                # A turn held through a teardown is delivered as soon as there is
+                # a live READER for it (bd polyglot-pdf-wurj8). This is the second
+                # of the two flush sites, and it sits here rather than at queue
+                # creation because a queue with no consumer swallows the turn --
+                # see _flush_muted_context. Covers the ordering where the user
+                # unmuted DURING the teardown: no further mute/unmute is coming,
+                # so the unmute path alone would strand it forever.
+                self._flush_muted_context("sender_started")
                 # Store session reference for potential direct sends
                 self._current_session = session
 

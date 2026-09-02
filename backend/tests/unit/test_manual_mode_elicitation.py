@@ -52,26 +52,50 @@ class _RecordingSession:
             self.activity_ends += 1
 
 
+class _FakeSenderTask:
+    """Stands in for _current_text_sender_task: the live reader of _text_queue.
+
+    Only `done()` matters to the code under test -- the flush treats a missing or
+    finished sender as "nothing will ever read this queue" (see
+    _flush_muted_context). Using a fake rather than a real asyncio.Task keeps
+    these tests free of a background task that would need a live Gemini session.
+    """
+
+    def __init__(self, done: bool = False):
+        self._done = done
+
+    def done(self) -> bool:
+        return self._done
+
+
 def _make_adapter():
-    """An adapter wired far enough to exercise the two elicitation paths."""
+    """An adapter wired far enough to exercise the two elicitation paths.
+
+    Includes a live sender task: a queue with no reader is treated as no
+    pipeline at all, so without this every delivery assertion below would fail
+    for the wrong reason.
+    """
     adapter = LiveAIGemini(api_key="test_key")
     adapter._text_queue = asyncio.Queue(maxsize=100)
+    adapter._current_text_sender_task = _FakeSenderTask()
     adapter._session_ready = True
     adapter._current_session = _RecordingSession()
     return adapter
 
 
-def _rebuild_queue(adapter):
-    """Do what set_callbacks does when a replacement session starts its queue.
+def _restart_text_pipeline(adapter):
+    """Do what a replacement session does when its text sender comes up.
 
-    Mirrors the two lines that matter here -- build the queue, then flush -- so
-    the test does not spawn the real _run_session_loop background task (which
-    would need a live Gemini connection and leaves a pending task behind).
-    test_set_callbacks_flushes_on_queue_creation below pins that set_callbacks
-    really does call the flush, so this helper cannot drift away from it.
+    Mirrors the lines that matter -- a queue, a live reader, then the flush --
+    without spawning the real _run_session_loop (which needs a live Gemini
+    connection and leaves a pending task behind).
+    test_the_sender_start_site_flushes below reads the SHIPPED source and pins
+    that the real code really does flush there, so this mirror cannot drift away
+    from production and quietly make these tests vacuous.
     """
     adapter._text_queue = asyncio.Queue()
-    adapter._flush_muted_context("queue_created")
+    adapter._current_text_sender_task = _FakeSenderTask()
+    adapter._flush_muted_context("sender_started")
 
 
 def _drain(queue):
@@ -355,7 +379,7 @@ async def test_a_turn_held_through_teardown_flushes_when_the_QUEUE_returns():
     assert adapter._muted_context == "next field is date of birth"
 
     # The replacement session builds its queue; that alone must deliver it.
-    _rebuild_queue(adapter)
+    _restart_text_pipeline(adapter)
 
     assert _drain(adapter._text_queue) == ["next field is date of birth"]
     assert adapter._muted_context is None
@@ -369,54 +393,101 @@ async def test_queue_creation_does_not_flush_while_still_muted():
     await adapter.send_text_message("next field is date of birth")
     adapter._text_queue = None
 
-    _rebuild_queue(adapter)
+    _restart_text_pipeline(adapter)
 
     assert _drain(adapter._text_queue) == []
     assert adapter._muted_context == "next field is date of birth"
 
 
-def test_set_callbacks_flushes_on_queue_creation():
-    """The real queue-creation site calls the flush -- not just the test helper.
+def test_the_sender_start_site_flushes():
+    """The REAL pipeline-start site calls the flush -- not just the test mirror.
 
-    _rebuild_queue above mirrors what set_callbacks does. That mirror is only
-    worth anything if the real function actually does it, so this reads the
-    shipped source and asserts the flush call sits inside the queue-creation
-    branch. Without this, deleting the call from set_callbacks would leave every
-    teardown test green while the stranding bug was back in production.
+    _restart_text_pipeline above mirrors what production does when a replacement
+    session's text sender comes up. A mirror is only worth something if the real
+    code does the same thing, so this reads the shipped source and requires the
+    flush call to sit right where the sender task is registered. Without it,
+    deleting that call would leave every teardown test green while the stranding
+    bug was back in production.
     """
     import ast
     import inspect
 
-    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend.adapters import live_ai_gemini
 
-    src = inspect.getsource(LiveAIGemini.set_callbacks)
+    src = inspect.getsource(live_ai_gemini.LiveAIGemini)
     tree = ast.parse(textwrap.dedent(src))
 
-    # Find the branch that creates the text queue, and require the flush inside
-    # THAT branch -- a call somewhere else in the function would not run on the
-    # path that matters.
-    creating_branches = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.If)
-        and any(
-            isinstance(n, ast.Attribute) and n.attr == "_text_queue"
-            for stmt in node.body
-            for n in ast.walk(stmt)
-            if isinstance(stmt, ast.Assign)
-        )
-    ]
-    assert creating_branches, "set_callbacks no longer creates _text_queue where expected"
+    # Find the statement that registers the sender task, then require the flush
+    # among its immediate neighbours -- a call somewhere else in the file would
+    # not run on the path that matters.
+    for parent in ast.walk(tree):
+        body = getattr(parent, "body", None)
+        if not isinstance(body, list):
+            continue
+        for i, stmt in enumerate(body):
+            registers = (
+                isinstance(stmt, ast.Assign)
+                and any(
+                    isinstance(t, ast.Attribute) and t.attr == "_current_text_sender_task"
+                    for t in stmt.targets
+                )
+                # the teardown also assigns it (to None) -- that one must NOT flush
+                and not isinstance(stmt.value, ast.Constant)
+            )
+            if not registers:
+                continue
+            after = body[i + 1 : i + 4]
+            if any(
+                isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "_flush_muted_context"
+                for nxt in after
+                for n in ast.walk(nxt)
+            ):
+                return
 
-    flushed = any(
-        isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == "_flush_muted_context"
-        for branch in creating_branches
-        for n in ast.walk(branch)
+    raise AssertionError(
+        "the text sender is registered without flushing a held manual-mode turn "
+        "-- a turn held through a teardown would be stranded whenever the unmute "
+        "itself raced the teardown (bd polyglot-pdf-wurj8)"
     )
-    assert flushed, (
-        "set_callbacks builds a new _text_queue without flushing a held "
-        "manual-mode turn -- a turn held through a teardown would be stranded "
-        "whenever the unmute itself raced the teardown (bd polyglot-pdf-wurj8)"
-    )
+
+
+@pytest.mark.asyncio
+async def test_a_queue_whose_reader_is_dying_is_not_treated_as_delivery():
+    """The teardown window is not one instant, and the queue lies during it.
+
+    finalize() cancels the sender task and only nulls _text_queue several awaits
+    later, so in between there is a real queue that accepts a put -- onto a pipe
+    whose reader is already dead. Trusting put_nowait there would log the turn as
+    sent, clear it, and then lose it when the queue is dropped. A live CONSUMER
+    is the honest signal; the queue object is not.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    # Mid-teardown: queue still present, its reader already finished.
+    adapter._current_text_sender_task = _FakeSenderTask(done=True)
+    adapter.set_voice_muted(False)
+
+    assert adapter._muted_context == "next field is date of birth"
+    assert _drain(adapter._text_queue) == []
+
+    # ...and it survives to the replacement pipeline.
+    _restart_text_pipeline(adapter)
+    assert _drain(adapter._text_queue) == ["next field is date of birth"]
+
+
+@pytest.mark.asyncio
+async def test_a_missing_reader_is_also_not_delivery():
+    """Same for a queue with no sender task registered at all."""
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    adapter._current_text_sender_task = None
+    adapter.set_voice_muted(False)
+
+    assert adapter._muted_context == "next field is date of birth"
+    assert _drain(adapter._text_queue) == []
