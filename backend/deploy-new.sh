@@ -4,6 +4,85 @@
 
 set -e
 
+# Verify a just-deployed Cloud Run service is PUBLICLY REACHABLE, and abort if
+# it is not (bd polyglot-pdf-pidtg, extended to this script by bd
+# polyglot-pdf-6oi9s).
+#
+# WHY THIS EXISTS. A `gcloud run` deployment with --allow-unauthenticated only
+# REQUESTS an
+# allUsers -> roles/run.invoker binding, but that request can be REFUSED while
+# the deploy still succeeds and exits 0. The domain-restricted-sharing org
+# policy (constraints/iam.allowedPolicyMemberDomains) rejects allUsers; gcloud
+# creates the service, prints a NON-FATAL warning, and exits 0 -- leaving a
+# service that 403s every request at Cloud Run's own gate, BEFORE any
+# application code runs. The app then shows an auth error that has nothing to do
+# with app auth, sending the operator to debug the wrong layer entirely.
+#
+# It bites only a NEW service: an existing one's binding predates the policy and
+# is not retroactively stripped. So the scripts that create services are exactly
+# where this must be checked.
+#
+# --flatten='bindings[].members' is LOAD-BEARING, and both halves of the query
+# were got wrong once each before this was right:
+#   1. Grepping the raw policy text for "allUsers" FALSE-PASSED: a
+#      `roles/run.viewer -> allUsers` binding satisfied it while the INVOKER
+#      binding was missing and the service still 403'd everything.
+#   2. Adding --filter WITHOUT --flatten then FALSE-FAILED: --filter is
+#      evaluated against the WHOLE policy resource, not per binding, and
+#      `value(bindings.role)` emits every role ';'-joined on ONE line, so
+#      `grep -qx` stopped matching as soon as a service had a SECOND binding.
+# --flatten makes each member/role pair its own record, so the filter is
+# genuinely per-binding and each surviving role prints on its own line.
+#
+# BOTH failure directions matter. Failing OPEN hides the bug behind a green
+# check; failing CLOSED blocks a good deploy, and a gate that cries wolf gets
+# deleted -- taking the real check with it. An inconclusive IAM READ therefore
+# WARNS rather than aborting: being unable to check is not proof of breakage.
+#
+# stderr is NOT merged into the value (no 2>&1): a gcloud component-update nag
+# landing in the variable could otherwise satisfy a text match on its own.
+#
+# Args: $1 service name, $2 region, $3 project id.
+# Exits 1 when the service is definitively unreachable. MUST match
+# backend/deploy-new.sh's copy exactly (pinned by
+# tests/test_deploy_reachability_gate.py).
+verify_service_publicly_reachable() {
+    local svc="$1" region="$2" project="$3" invoker_roles
+    invoker_roles=$(gcloud run services get-iam-policy "$svc" \
+        --region "$region" --project "$project" \
+        --flatten='bindings[].members' \
+        --filter='bindings.members:allUsers' \
+        --format='value(bindings.role)') || invoker_roles="__QUERY_FAILED__"
+
+    if [ "$invoker_roles" = "__QUERY_FAILED__" ]; then
+        echo "[WARN] Could not read the IAM policy for $svc -- skipping the" >&2
+        echo "[WARN] reachability check. If the app cannot reach the backend, verify manually:" >&2
+        echo "[WARN]   gcloud run services get-iam-policy $svc --region $region --project $project" >&2
+        return 0
+    fi
+    if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
+        return 0
+    fi
+    echo "[ERROR] ===========================================================" >&2
+    echo "[ERROR]   DEPLOY FAILED: the service is NOT publicly reachable" >&2
+    echo "[ERROR] ===========================================================" >&2
+    echo "[ERROR] Service '$svc' has no allUsers invoker binding, so" >&2
+    echo "[ERROR] Cloud Run will 403 EVERY request before your app ever sees it." >&2
+    echo "[ERROR]" >&2
+    echo "[ERROR] --allow-unauthenticated was passed, but the binding was refused --" >&2
+    echo "[ERROR] almost always the domain-restricted-sharing org policy." >&2
+    echo "[ERROR]" >&2
+    echo "[ERROR] Fix it with:" >&2
+    echo "[ERROR]   gcloud run services add-iam-policy-binding $svc \\" >&2
+    echo "[ERROR]     --region $region --project $project \\" >&2
+    echo "[ERROR]     --member=allUsers --role=roles/run.invoker" >&2
+    echo "[ERROR]" >&2
+    echo "[ERROR] If that is itself refused, the org policy must be relaxed for this" >&2
+    echo "[ERROR] project first (constraints/iam.allowedPolicyMemberDomains)." >&2
+    echo "[ERROR] See bd polyglot-pdf-pidtg." >&2
+    exit 1
+}
+
 # Default service name
 SERVICE_NAME=${1:-polyglot-backend}
 PROJECT_ID_ARG=$2
@@ -52,6 +131,14 @@ gcloud run deploy $SERVICE_NAME \
     --timeout=3600 \
     --project $POLYGLOT_PROJECT_NAME \
     --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME"
+
+# REACHABILITY GATE (bd polyglot-pdf-6oi9s). This script's whole job is standing
+# up a NEW service, which is the ONLY case where the refused-invoker-binding bug
+# fires -- so it needs the gate at least as much as deploy-all.sh does. Runs
+# BEFORE the success banner: a service that 403s everything must never be
+# reported as "Deployment Complete".
+echo "🔎 Verifying the service is publicly reachable..."
+verify_service_publicly_reachable "$SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME"
 
 echo "✅ Deployment Complete!"
 echo "Service URL: $(gcloud run services describe $SERVICE_NAME --platform managed --region $REGION --project $POLYGLOT_PROJECT_NAME --format 'value(status.url)')"
