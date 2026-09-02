@@ -141,6 +141,14 @@ newest: these messages restate whole current state ("the next unfilled field is
 X"), so an older one is a stale contradiction rather than extra information, and
 replaying a backlog would bill for every one.
 
+The held turn is **cleared only once it has actually reached a live queue.** A
+section switch tears the session down (`_text_queue = None`) and the next connect
+builds a new one; an unmute landing between the two would otherwise drop the
+context silently, since a put on an orphaned queue raises nothing and nobody
+drains it. Deferring instead means the next turn on the fresh session carries it,
+and a newer turn still wins -- an unmute during that gap degrades to "replay a
+moment later" rather than losing the re-orientation.
+
 **A PTT press leaves manual mode**, at both ends: the client flips its own toggle
 in `sendActivityStart`, and the backend unmutes on `vad_activity_start` before
 forwarding it. Pressing to talk is an unambiguous request for the assistant, so

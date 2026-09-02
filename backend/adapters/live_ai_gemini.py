@@ -1471,21 +1471,32 @@ class LiveAIGemini(ILiveAI):
                 self._log.info("VOICE_MUTED")
             return
 
-        held, self._muted_context = self._muted_context, None
         if not was_muted:
             return
+        held = self._muted_context
         self._log.info("VOICE_UNMUTED", had_held_context=bool(held))
         if held is None:
             return
-        # Re-enter through the normal path so the queue-not-started and
-        # session-not-ready guards still apply. _voice_muted is already False,
-        # so this cannot recurse back into the hold.
+
+        # The held turn is CLEARED ONLY ONCE IT IS ACTUALLY HANDED TO A LIVE
+        # QUEUE. A section switch tears the session down (_text_queue = None) and
+        # the next connect builds a NEW queue, so an unmute landing between the
+        # two would otherwise drop the context on the floor -- silently, since a
+        # put on an orphaned queue raises nothing and nobody ever drains it.
+        # Keeping it held instead means the very next send_text_message /
+        # send_client_content on the fresh session carries it (they overwrite
+        # _muted_context with something newer, which is the same
+        # newest-wins rule), and an unmute during the gap degrades to "replay a
+        # moment later" rather than "lose the re-orientation entirely".
         if self._text_queue is None:
+            self._log.info("VOICE_UNMUTE_REPLAY_DEFERRED_NO_QUEUE")
             return
         try:
             self._text_queue.put_nowait(held)
         except Exception as exc:  # pragma: no cover - queue is unbounded
             self._log.warning("VOICE_UNMUTE_REPLAY_FAILED", error=str(exc))
+            return
+        self._muted_context = None
 
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking).

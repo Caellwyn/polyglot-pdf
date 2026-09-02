@@ -201,3 +201,68 @@ async def test_elicitation_flows_again_after_unmute():
     assert _drain(adapter._text_queue) == ["next field is date of birth"]
     assert delivered is True
     assert adapter._current_session.text_turns == ["say hello"]
+
+
+# ---------------------------------------------------------------------------
+# The section-switch replay race (fresh-eyes finding on bd polyglot-pdf-wurj8)
+#
+# A section switch tears the Gemini session down -- _text_queue goes to None and
+# the next connect builds a NEW one. An unmute landing in that window used to
+# clear the held context unconditionally, so the re-orientation turn was dropped
+# on the floor: silently, because a put on an orphaned queue raises nothing and
+# nobody ever drains it. The held turn is now cleared only once it has actually
+# reached a live queue.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unmuting_with_no_live_queue_keeps_the_context_held():
+    """Mid-teardown, the held turn survives instead of being silently dropped."""
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    # The session-switch teardown: the queue the replay would have targeted is
+    # gone, and the replacement does not exist yet.
+    adapter._text_queue = None
+    adapter.set_voice_muted(False)
+
+    assert adapter._muted_context == "next field is date of birth"
+
+
+@pytest.mark.asyncio
+async def test_a_context_held_through_a_teardown_reaches_the_next_session():
+    """...and rides the next turn on the fresh session, so nothing is lost."""
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+    adapter._text_queue = None
+    adapter.set_voice_muted(False)
+
+    # The replacement session brings a new queue; the next unmute delivers.
+    adapter._text_queue = asyncio.Queue(maxsize=100)
+    adapter.set_voice_muted(True)
+    adapter.set_voice_muted(False)
+
+    assert _drain(adapter._text_queue) == ["next field is date of birth"]
+
+
+@pytest.mark.asyncio
+async def test_a_deferred_context_still_loses_to_a_newer_one():
+    """Deferring must not resurrect a stale turn over fresher state.
+
+    These messages restate whole current state, so the newest-wins rule is what
+    keeps the model from being told two contradictory things about where it is.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is first name")
+    adapter._text_queue = None
+    adapter.set_voice_muted(False)
+
+    adapter._text_queue = asyncio.Queue(maxsize=100)
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is last name")
+    adapter.set_voice_muted(False)
+
+    assert _drain(adapter._text_queue) == ["next field is last name"]
