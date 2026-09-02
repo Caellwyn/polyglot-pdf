@@ -416,21 +416,35 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # bug with ordinary startup failures (a crashing container, a cold start, a
     # transient platform blip) and adds cold-start latency to every deploy. The
     # binding is the exact thing that silently fails here, and reading it is
-    # fast and deterministic.
+    # fast and deterministic. (Not hypothetical: the morning after this bug the
+    # demo went down with containers failing their startup probes -- an
+    # unrelated platform issue a health gate would have blamed on the deploy.)
     #
     # Failure is FATAL: a deploy that leaves an unreachable service must not
     # exit 0. Verification failures that are NOT a missing binding (no
     # permission to read the policy, a transient API error) WARN instead -- they
     # do not prove the service is broken, and failing the deploy on an
     # inconclusive check would be its own false alarm.
+    # The query asks gcloud to FILTER to bindings whose members include allUsers
+    # and return only their ROLES, so the role and member are checked TOGETHER.
+    # Grepping the raw policy text for "allUsers" was a FALSE-PASS trap (caught
+    # in review): `roles/run.viewer -> allUsers` would satisfy it while the
+    # INVOKER binding was still missing and the service still 403'd everything --
+    # precisely the bug this gate exists to catch. Failing OPEN in the dangerous
+    # direction is worse than no gate, because it also looks like a green check.
+    #
+    # stderr is NOT merged into the value (no 2>&1): a gcloud component-update
+    # nag or deprecation notice landing in the variable could otherwise satisfy
+    # a text match on its own. stderr goes to the operator's terminal where it
+    # belongs; only the parsed value drives the decision.
     log_info "🔎 Verifying the service is publicly reachable..."
-    INVOKER_POLICY=$(gcloud run services get-iam-policy "$BACKEND_SERVICE_NAME"         --region "$REGION" --project "$POLYGLOT_PROJECT_NAME"         --format='value(bindings.role,bindings.members)' 2>&1) || INVOKER_POLICY="__QUERY_FAILED__"
+    INVOKER_ROLES=$(gcloud run services get-iam-policy "$BACKEND_SERVICE_NAME"         --region "$REGION" --project "$POLYGLOT_PROJECT_NAME"         --filter='bindings.members:allUsers'         --format='value(bindings.role)') || INVOKER_ROLES="__QUERY_FAILED__"
 
-    if [ "$INVOKER_POLICY" = "__QUERY_FAILED__" ]; then
+    if [ "$INVOKER_ROLES" = "__QUERY_FAILED__" ]; then
         log_warn "Could not read the IAM policy for $BACKEND_SERVICE_NAME -- skipping the"
         log_warn "reachability check. If the app cannot reach the backend, verify manually:"
         log_warn "  gcloud run services get-iam-policy $BACKEND_SERVICE_NAME --region $REGION --project $POLYGLOT_PROJECT_NAME"
-    elif ! echo "$INVOKER_POLICY" | grep -q "allUsers"; then
+    elif ! echo "$INVOKER_ROLES" | grep -qx "roles/run.invoker"; then
         log_error "═══════════════════════════════════════════════════════════"
         log_error "  DEPLOY FAILED: the service is NOT publicly reachable"
         log_error "═══════════════════════════════════════════════════════════"

@@ -67,27 +67,57 @@ platform-level issue that a health-probe gate would have blamed on the deploy.
 The binding is the exact thing that silently fails here, and reading it is fast
 and deterministic.
 
+## The review caught a FALSE PASS in the first version of this gate
+
+The first cut grepped the raw IAM policy text for the bare string `allUsers`.
+The pre-PR review showed that a policy like
+
+```
+roles/run.viewer   -> allUsers
+roles/run.invoker  -> serviceAccount:...
+```
+
+**satisfies that check while the service is still completely un-invokable** --
+the exact bug the gate exists to catch, passing cleanly. My own mutation testing
+missed it because every mutation I tried was in the *fail-closed* direction
+(remove the gate, downgrade it, break the branch); I never tried a mutation that
+made it fail OPEN.
+
+That is the worse direction. A gate that fails open does not merely miss the bug
+-- it reports a GREEN check over it, which is more misleading than having no gate
+at all, and this whole bead exists because a green signal over a broken service
+cost an hour of debugging.
+
+The fix asks gcloud to do the pairing rather than doing it in text: filter to
+bindings whose MEMBERS include `allUsers`, return their ROLES, and require
+`roles/run.invoker` with an EXACT line match (`grep -qx`, so a lookalike role
+like `roles/run.invoker.custom` cannot satisfy it either). stderr is no longer
+merged into the captured value, so gcloud nags cannot satisfy a text match on
+their own.
+
 ## Testing
 
-Three tests in `test_deploy_channel_isolation.py`, each mutation-verified
-against the mutation that matters (scar #9):
+Five tests in `test_deploy_channel_isolation.py`, each mutation-verified against
+the mutation that matters (scar #9):
 
-| mutation | caught by |
+| mutation | caught |
 |---|---|
-| remove the gate entirely (the original bug) | all 3 |
-| downgrade the fatal branch to a warning | fatality test |
-| make the inconclusive branch fatal too (false-alarm regression) | warn test |
-| check `run.invoker` instead of `allUsers` (defeats the real check) | 2 of 3 |
+| remove the gate entirely (the original bug) | yes (3 tests) |
+| downgrade the fatal branch to a warning | yes |
+| make the inconclusive branch fatal too (false-alarm regression) | yes |
+| check `run.invoker` instead of `allUsers` | yes (2 tests) |
+| **revert to the loose `allUsers` text grep (the false pass)** | **yes (3 tests)** |
+| loosen `grep -qx` to a substring match (lookalike role) | yes (2 tests) |
+| re-merge stderr into the captured value | yes |
 
-The tests pin the fatality and the warn/fail split as PROPERTIES, not merely the
-presence of a check -- a check that only warned would have let the original bug
-through unchanged.
+The tests pin the fatality, the warn/fail split, and the role-specificity as
+PROPERTIES, not merely the presence of a check.
 
 Also verified against the live services before shipping: the gate PASSES on both
 `polyglot-backend` and `polyglot-backend-staging` as they exist today, so it is
 not a false alarm that would block every future deploy.
 
-Full backend suite: 3094 passed, 76 skipped, exit 0.
+Full backend suite: 3096 passed, 76 skipped, exit 0.
 
 ## Status of the underlying policy
 

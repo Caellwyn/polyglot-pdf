@@ -364,10 +364,10 @@ def test_deploy_verifies_public_reachability_after_deploying():
         "otherwise a refused invoker binding leaves an unreachable service and "
         "the deploy still exits 0."
     )
-    assert 'grep -q "allUsers"' in body, (
-        "the reachability check must look for the allUsers invoker binding "
-        "specifically -- that is the binding --allow-unauthenticated requests "
-        "and the one the org policy refuses."
+    assert "--filter='bindings.members:allUsers'" in body, (
+        "the reachability check must FILTER the policy to bindings whose "
+        "members include allUsers, so the role and member are evaluated "
+        "TOGETHER -- see test_check_requires_the_invoker_role_specifically."
     )
 
 
@@ -379,7 +379,7 @@ def test_unreachable_service_is_a_FATAL_deploy_error():
     """
     body = _read("deploy-all.sh")
     # Isolate the branch that fires when allUsers is absent.
-    marker = 'elif ! echo "$INVOKER_POLICY" | grep -q "allUsers"; then'
+    marker = 'elif ! echo "$INVOKER_ROLES" | grep -qx "roles/run.invoker"; then'
     assert marker in body, "the missing-binding branch is gone"
     branch = body.split(marker)[1].split("\n    fi")[0]
     assert "exit 1" in branch, (
@@ -401,13 +401,70 @@ def test_inconclusive_iam_query_warns_rather_than_failing():
     gets disabled, taking the real check with it.
     """
     body = _read("deploy-all.sh")
-    assert '|| INVOKER_POLICY="__QUERY_FAILED__"' in body, (
+    assert '|| INVOKER_ROLES="__QUERY_FAILED__"' in body, (
         "a failed IAM read must be distinguishable from a genuinely missing "
         "binding"
     )
-    marker = 'if [ "$INVOKER_POLICY" = "__QUERY_FAILED__" ]; then'
+    marker = 'if [ "$INVOKER_ROLES" = "__QUERY_FAILED__" ]; then'
     assert marker in body
     branch = body.split(marker)[1].split("elif")[0]
     assert "log_warn" in branch and "exit 1" not in branch, (
         "an inconclusive IAM query must WARN, never abort the deploy"
+    )
+
+
+def test_check_requires_the_invoker_role_specifically():
+    """allUsers on SOME OTHER role must not satisfy the gate.
+
+    THE FALSE-PASS TRAP (caught by the pre-PR review, not by the author's own
+    mutation testing). The first version of this gate grepped the raw policy
+    text for the bare string "allUsers". A policy like
+
+        roles/run.viewer   -> allUsers
+        roles/run.invoker  -> serviceAccount:...
+
+    satisfied it while the service was still completely un-invokable and 403'd
+    every request -- the exact bug this gate exists to catch, passing cleanly.
+
+    Failing OPEN is the dangerous direction: it does not merely miss the bug, it
+    reports a GREEN check over it, which is worse than having no gate at all.
+    So the query filters to bindings whose MEMBERS include allUsers and returns
+    their ROLES, and the match is exact (grep -qx) -- role and member are
+    evaluated together, and a lookalike role name cannot satisfy it either.
+    """
+    body = _read("deploy-all.sh")
+    assert "--filter='bindings.members:allUsers'" in body, (
+        "the query must filter on the MEMBER so that only roles actually bound "
+        "to allUsers are returned"
+    )
+    assert "--format='value(bindings.role)'" in body, (
+        "the query must return the ROLES of those bindings, so the check can "
+        "require roles/run.invoker specifically"
+    )
+    assert 'grep -qx "roles/run.invoker"' in body, (
+        "the match must be EXACT (grep -qx). A substring match would accept a "
+        "lookalike role such as roles/run.invoker.custom."
+    )
+    # And the loose original must not come back.
+    assert 'grep -q "allUsers"' not in body, (
+        "the loose raw-text grep for allUsers is a FALSE PASS -- allUsers bound "
+        "to any unrelated role would satisfy it while the service stays "
+        "un-invokable."
+    )
+
+
+def test_iam_query_does_not_merge_stderr_into_the_value():
+    """gcloud noise must not be able to satisfy the check.
+
+    With `2>&1` the captured value carries gcloud's stderr -- a component-update
+    nag or deprecation notice mentioning the matched text could satisfy the
+    check on its own. stderr belongs on the operator's terminal; only the parsed
+    value drives the decision.
+    """
+    body = _read("deploy-all.sh")
+    marker = "INVOKER_ROLES=$(gcloud run services get-iam-policy"
+    assert marker in body
+    query = body.split(marker)[1].split("\n\n")[0]
+    assert "2>&1" not in query, (
+        "the reachability query must not merge stderr into the captured value"
     )
