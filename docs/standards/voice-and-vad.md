@@ -186,6 +186,14 @@ in `sendActivityStart`, and the backend unmutes on `vad_activity_start` before
 forwarding it. Pressing to talk is an unambiguous request for the assistant, so
 it must not require finding the toggle first.
 
+Because of that, **the mode changes without any click, and the UI has to be told**
+-- `ConnectionManager.onVoiceModeChange(listener)` fires on every change and both
+overlays subscribe. A UI tracking only its own clicks renders a stale label:
+"quiet" while the assistant is live and about to speak, which is worse than no
+indicator, since the control's whole job is saying at a glance whether the user
+will be spoken to. (A constructor callback would not do: the manager is built in
+`SchemaForm` and reaches the overlays as a prop.)
+
 **The mode is client-owned and re-asserted on every (re)connect.** The backend is
 stateless and each new Gemini session defaults to speaking, so `onSessionReady` /
 `onSessionRestarted` re-send it -- otherwise a GoAway or auto-drop would silently

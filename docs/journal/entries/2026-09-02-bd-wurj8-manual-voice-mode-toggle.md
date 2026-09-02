@@ -197,6 +197,36 @@ teardown" against `send_client_content` -- which never reads `_text_queue`, so t
 line asserted nothing. When simulating a state, check that the code under test
 actually reads the thing you are setting.
 
+## A state that changes without a click has to be published
+
+The PTT auto-unmute is a deliberate feature: pressing to talk leaves manual mode
+so the user need not hunt for the toggle. It also means the mode changes with no
+click, and the overlay read it exactly once, at mount. So after a PTT press the
+session went live while the button went on saying "Quiet Mode" -- telling the
+user the opposite of the truth, which is worse than having no indicator, because
+the control exists precisely to answer "will this thing speak?".
+
+Fixed with `onVoiceModeChange` on the manager; both overlays subscribe and
+re-read on mount. A constructor callback would not have worked: the manager is
+built in `SchemaForm` and reaches the overlays as a prop.
+
+**The mock was doing the production code's job.** My first version looked
+verified -- removing the subscription from the overlays reddened the tests. But
+removing the MANAGER's notification left them green, because the mock notified
+its own listeners rather than routing through real code. A mock that reimplements
+the behaviour under test converts a broken mechanism into a passing suite. The
+fix was tests that drive the REAL manager (`connection.test.ts`), where both
+halves redden independently.
+
+**And writing those tests found a bug six review rounds had not.** The toggle
+called `audioManager?.resetPlaybackClock()`. `?.` guards a missing MANAGER, not a
+manager missing that METHOD -- against a partial audio manager it throws straight
+out of a click handler and blanks the overlay. This is the same slip I had
+already made and fixed earlier in this bead (`getAudioManager`), reintroduced a
+few hundred lines away. Fixing an instance does not inoculate the next site;
+feature-detect every hop into an optional collaborator, especially off an event
+handler.
+
 ## Presence is not translation
 
 Separately from the replay saga, review caught one Tagalog label shipped as bare
@@ -232,7 +262,7 @@ whose whole purpose was catching an omission.
   suite and the probes were running concurrently. Both pass in isolation on the
   clean tree. A source-reading guard cannot run while anything edits the files it
   inspects, so mutation probes and a full suite must not overlap.
-- Frontend: 1894 passed, all 133 files. (`SchemaForm.previewEdit` failed on an
+- Frontend: 1901 passed, all 133 files. (`SchemaForm.previewEdit` failed on an
   earlier run and passed on this one -- the known pre-existing flake proven on
   `origin/dev`, tracked as bd `polyglot-pdf-7y2yk`.)
 - Control copy translated across all 18 shipped languages. The existing

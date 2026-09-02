@@ -14,7 +14,7 @@
 //
 // Both overlays are covered because they are deliberate near-duplicates -- a fix
 // applied to one and not the other is this repo's recurring shape.
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { OVERLAY_TRANSLATIONS } from './overlayTranslations'
@@ -53,6 +53,11 @@ const EN = OVERLAY_TRANSLATIONS['English']
 
 function makeManager(initialMode: 'manual' | 'voice' = 'voice') {
   let mode = initialMode
+  // Mirrors the real manager's listener set: the mode also changes WITHOUT a
+  // click (a PTT press auto-unmutes), and the UI can only learn that by being
+  // told. A mock that silently dropped the notification would hide the very bug
+  // these tests exist to pin.
+  const listeners = new Set<(m: 'manual' | 'voice') => void>()
   const audioManager = {
     flushAudioQueue: vi.fn(),
     resumePlayback: vi.fn(),
@@ -81,9 +86,23 @@ function makeManager(initialMode: 'manual' | 'voice' = 'voice') {
     pause: vi.fn(),
     resume: vi.fn(async () => {}),
     isPaused: vi.fn(() => false),
-    setVoiceMode: vi.fn((m: 'manual' | 'voice') => { mode = m }),
+    setVoiceMode: vi.fn((m: 'manual' | 'voice') => {
+      mode = m
+      for (const l of listeners) l(m)
+    }),
     getVoiceMode: vi.fn(() => mode),
-    sendActivityStart: vi.fn(),
+    onVoiceModeChange: vi.fn((l: (m: 'manual' | 'voice') => void) => {
+      listeners.add(l)
+      return () => { listeners.delete(l) }
+    }),
+    // The real manager auto-unmutes here (connection.ts sendActivityStart); the
+    // mock does the same so a PTT press in a test exercises the real path.
+    sendActivityStart: vi.fn(() => {
+      if (mode !== 'voice') {
+        mode = 'voice'
+        for (const l of listeners) l('voice')
+      }
+    }),
     sendActivityEnd: vi.fn(async () => {}),
     switchToFirstSection: vi.fn(async () => {}),
     sendAudio: vi.fn(),
@@ -250,6 +269,27 @@ describe.each(OVERLAYS)('manual/voice mode toggle (%s overlay)', (_name, renderO
     expect(manager.stopRecording).not.toHaveBeenCalled()
     expect(am.stopRecording.mock.calls.length).toBe(stopBefore)
     expect(am.muteInput.mock.calls.length).toBe(muteBefore)
+  })
+
+  it('a PTT press updates the LABEL, not just the session', async () => {
+    // The mode changes without a click, so the button has to be told. If it is
+    // not, it keeps saying "quiet" while the assistant is live and about to
+    // speak -- which is worse than having no indicator at all, because the user
+    // is actively told the opposite of the truth.
+    const manager = makeManager('voice')
+    const btn = await renderOverlay(manager)
+    fireEvent.click(btn)
+    await screen.findByRole('button', { name: new RegExp(EN.switchToVoice) })
+
+    // The user presses to talk instead of finding the toggle.
+    act(() => {
+      manager.sendActivityStart()
+    })
+
+    expect(manager.getVoiceMode()).toBe('voice')
+    const back = await screen.findByRole('button', { name: new RegExp(EN.switchToManual) })
+    expect(back.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.queryByRole('button', { name: new RegExp(EN.switchToVoice) })).toBeNull()
   })
 
   it('a remount onto a live session restores manual mode rather than resetting it', async () => {

@@ -1002,6 +1002,24 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 	}
 
+
+	// Keep the toggle honest (bd polyglot-pdf-wurj8). The mode changes WITHOUT a
+	// click: a PTT press auto-leaves manual mode. Without this the button would go
+	// on showing "quiet" while the assistant is live and about to speak -- the
+	// control's one job is telling the user at a glance whether they will be
+	// spoken to, and a stale label defeats exactly that.
+	//
+	// Re-reads on subscribe as well, to close the window between the mount-time
+	// initializer and this effect running.
+	useEffect(() => {
+		if (!connectionManager) return
+		if (typeof connectionManager.getVoiceMode === 'function') {
+			setVoiceModeState(connectionManager.getVoiceMode())
+		}
+		if (typeof connectionManager.onVoiceModeChange !== 'function') return
+		return connectionManager.onVoiceModeChange(setVoiceModeState)
+	}, [connectionManager])
+
 	// Manual/voice mode toggle (bd polyglot-pdf-wurj8). REPLACES the old Pause
 	// button. The crucial difference: pause() suspended the session -- it tore the
 	// mic down (user went mute, not merely deaf), discarded Gemini's in-flight

@@ -754,4 +754,77 @@ describe('Connection Manager (connection.ts)', () => {
       expect(webFormConnectionMock.getStatus).toHaveBeenCalled()
     })
   })
+
+  /**
+   * Manual/voice mode notification (bd polyglot-pdf-wurj8).
+   *
+   * The mode changes WITHOUT any UI click -- a PTT press auto-leaves manual mode --
+   * so a UI that only tracks its own clicks renders a stale label: "quiet" while
+   * the assistant is live and about to speak. These drive the REAL manager (the
+   * overlay suite uses a mock, which can only pin the subscriber half).
+   */
+  describe('voice mode change notification', () => {
+    it('notifies subscribers when the mode is set', () => {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const seen: string[] = []
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(seen).toEqual(['manual'])
+    })
+
+    it('notifies on the PTT auto-unmute, which no click produced', () => {
+      // The case a UI cannot observe on its own, and the reason this subscription
+      // exists at all.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      manager.setVoiceMode('manual')
+      const seen: string[] = []
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.sendActivityStart()
+
+      expect(seen).toEqual(['voice'])
+      expect(manager.getVoiceMode()).toBe('voice')
+    })
+
+    it('does not notify when the mode does not actually change', () => {
+      // setVoiceMode is idempotent-guarded; a redundant call must not churn the UI.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      manager.setVoiceMode('manual')
+      const seen: string[] = []
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(seen).toEqual([])
+    })
+
+    it('unsubscribes cleanly, and one listener cannot drop another', () => {
+      // A remounted overlay unsubscribes; a sibling's listener must survive it.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const a: string[] = []
+      const b: string[] = []
+      const offA = manager.onVoiceModeChange((m) => a.push(m))
+      manager.onVoiceModeChange((m) => b.push(m))
+
+      offA()
+      manager.setVoiceMode('manual')
+
+      expect(a).toEqual([])
+      expect(b).toEqual(['manual'])
+    })
+
+    it('a throwing listener does not abort the mode change or starve the others', () => {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const seen: string[] = []
+      manager.onVoiceModeChange(() => { throw new Error('listener blew up') })
+      manager.onVoiceModeChange((m) => seen.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(manager.getVoiceMode()).toBe('manual')
+      expect(seen).toEqual(['manual'])
+    })
+  })
 })

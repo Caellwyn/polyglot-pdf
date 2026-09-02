@@ -117,6 +117,12 @@ export interface ConnectionManager {
 	// pause() survives only as the idle/reconnect machinery's internal state.
 	setVoiceMode: (mode: VoiceMode) => void
 	getVoiceMode: () => VoiceMode
+	// Subscribe to mode changes so a UI can render the CURRENT mode rather than
+	// the one it last set itself. Needed because the mode also changes WITHOUT a
+	// click: a PTT press auto-leaves manual mode (see sendActivityStart). Returns
+	// an unsubscribe function. Both overlays consume the manager as a PROP (it is
+	// built in SchemaForm), so a constructor callback could not reach them.
+	onVoiceModeChange: (listener: (mode: VoiceMode) => void) => () => void
 	// Re-arm mic capture after an overlay remount onto an already-live session
 	// (e.g. a desktop<->mobile resize flip). The WebSocket and Gemini session
 	// survive the flip; only the old overlay's unmount tears down audio capture,
@@ -288,6 +294,20 @@ export function createConnectionManager(
 	// to speaking. Defaults to 'voice': a user who has expressed no preference
 	// gets the assistant, since a silent-by-default app reads as broken.
 	let voiceMode: VoiceMode = 'voice'
+	// Listeners for the above (bd polyglot-pdf-wurj8). A Set so a remounted
+	// overlay's unsubscribe cannot drop a sibling's listener.
+	const voiceModeListeners = new Set<(mode: VoiceMode) => void>()
+	const notifyVoiceMode = (mode: VoiceMode) => {
+		for (const listener of voiceModeListeners) {
+			try {
+				listener(mode)
+			} catch (err) {
+				// A listener is UI code; one throwing must not abort the mode change
+				// or starve the other listeners.
+				console.error('[VFF Connection] voice-mode listener threw:', err)
+			}
+		}
+	}
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
 	// Debounced post-unpause re-prompt (bd polyglot-pdf-yo5t). pause() discards the
 	// AI's in-flight audio CLIENT-side only -- Gemini finished asking its question
@@ -1136,13 +1156,31 @@ export function createConnectionManager(
 			// normally.
 			if (mode === 'manual') {
 				spellback.cancel()
-				audioManager?.resetPlaybackClock()
+				// Feature-detected, not just null-guarded: `?.` protects against a
+				// missing MANAGER, not a manager lacking the method, and this runs
+				// straight off a click handler -- a TypeError here would blank the
+				// overlay rather than merely skip a drain (the same shape as the
+				// getAudioManager slip earlier in this bead).
+				if (typeof audioManager?.resetPlaybackClock === 'function') {
+					audioManager.resetPlaybackClock()
+				}
 			}
 			connection?.setVoiceMode(mode)
+			// Tell the UI. Fires for EVERY change, including the PTT auto-unmute
+			// that no button click produced -- which is the case a UI cannot
+			// observe on its own.
+			notifyVoiceMode(mode)
 		},
 
 		getVoiceMode() {
 			return voiceMode
+		},
+
+		onVoiceModeChange(listener: (mode: VoiceMode) => void) {
+			voiceModeListeners.add(listener)
+			return () => {
+				voiceModeListeners.delete(listener)
+			}
 		},
 
 		isPaused() {
