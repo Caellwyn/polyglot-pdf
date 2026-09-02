@@ -21,8 +21,8 @@ script" paragraph below):
    it was made a numbered item (CLAUDE.md sprint closeout step 5). To
    prevent re-drift: this script also diffs the actual `docs/sprint_*.md`
    files at root against the "Active sprint plans" row in `docs/INDEX.md`
-   and warns on orphans (at root but unlisted â€” closeout missed) or
-   missing files (listed but absent â€” stale INDEX reference).
+   and warns on orphans (at root but unlisted — closeout missed) or
+   missing files (listed but absent — stale INDEX reference).
 
 3. **Doc conventions.** No `Previously:`/`Prior:`/`Earlier:` chronological
    chains and no "history section" headings in tier-1/tier-2 docs -- see
@@ -45,7 +45,7 @@ adding a fifth check here never requires updating this paragraph.
 
 Why parse the stamp instead of using the doc's git commit time? Because the
 sprint-closeout checklist tells the user to "bump its *Last updated:* line"
-to fix staleness â€” the script needs to actually trust that line. Using the
+to fix staleness — the script needs to actually trust that line. Using the
 doc's git commit time has a confusing failure mode: a docs commit that
 includes both a code edit AND a doc bump still flags as stale on the next
 run because both touch the same commit and the comparison is `file_ct >
@@ -80,7 +80,7 @@ Modes:
                    --because is MANDATORY; the tool auto-fills which tracked
                    files were stale, so the review is visible in the diff.
 
-The sprint-archive check runs in BOTH modes â€” it's cheap (two filesystem
+The sprint-archive check runs in BOTH modes — it's cheap (two filesystem
 listings + one regex) and the orphan signal is worth surfacing on every
 commit, not just at closeout.
 
@@ -98,9 +98,9 @@ Usage:
 
 Notes:
 - Tracked-file timestamps come from `git log -1 --format=%ct <path>`, not
-  filesystem mtimes â€” mtimes are unreliable across worktrees, clones, and
+  filesystem mtimes — mtimes are unreliable across worktrees, clones, and
   fresh checkouts.
-- Glob expansion uses pathlib's `Path.rglob` semantics â€” `app/routes/*.py`
+- Glob expansion uses pathlib's `Path.rglob` semantics — `app/routes/*.py`
   matches one level, `app/**/*.py` matches recursively. Both are accepted.
 - A doc with no tracked files (no `**Tracks:**` line) is silently skipped.
 - `**Tracks:**` tokens may be space- OR comma-separated; trailing commas are
@@ -147,7 +147,7 @@ ACK_SUFFIX = ".ack"
 # injective and one doc's ack can clear another's staleness. See ack_path().
 ACK_SEP = "~"
 TRACKS_RE = re.compile(r"\*\*Tracks:\*\*\s*(.+)$", re.MULTILINE)
-# Match *Last updated: YYYY-MM-DD ...* (anything after the date is fine â€”
+# Match *Last updated: YYYY-MM-DD ...* (anything after the date is fine —
 # some docs include a parenthetical sprint annotation).
 LAST_UPDATED_RE = re.compile(
     r"^\*Last updated:\s*(\d{4})-(\d{2})-(\d{2})", re.MULTILINE
@@ -241,7 +241,7 @@ ACTIVE_PLAN_ROW_RE = re.compile(
     re.MULTILINE,
 )
 # Within that row, pull out plan basenames from `](...)` href targets.
-# A href is "active at root" if the path doesn't start with `archive/` â€”
+# A href is "active at root" if the path doesn't start with `archive/` —
 # rows often mention archive/* paths as context ("Completed plans live in
 # archive/...") and those don't count as claims of currently-active plans.
 PLAN_HREF_RE = re.compile(r"\]\(([^)]*)\)")
@@ -427,7 +427,7 @@ def parse_last_updated_ts(doc_path: Path) -> int | None:
       1. A same-day code commit doesn't false-flag the doc as stale
          (day-granularity is the right cadence; we don't ask doc-writers
          to track HH:MM:SS).
-      2. The result is deterministic across developer machines and CI â€”
+      2. The result is deterministic across developer machines and CI —
          using local time would produce different stale/ok verdicts in
          different timezones (Copilot review #100). Git commit timestamps
          from `%ct` are absolute Unix epochs, so the stamp side needs to
@@ -514,7 +514,7 @@ def check_doc(
     --staged mode semantics: the staged change IS the staleness trigger. We
     don't compare to git log (the change isn't committed). We flag any doc
     whose tracked code is staged BUT the doc itself is NOT staged. If the
-    doc is staged too, the author updated it in the same commit â€” silent OK.
+    doc is staged too, the author updated it in the same commit — silent OK.
     """
     tokens = parse_tracks(doc)
     if not tokens:
@@ -560,7 +560,7 @@ def check_doc(
         matches = expand_token(token)
         if not matches:
             warnings.append(
-                f"  warning: tracked path '{token}' matched no files â€” "
+                f"  warning: tracked path '{token}' matched no files — "
                 "fix the **Tracks:** line"
             )
             continue
@@ -588,7 +588,7 @@ def fmt_ts(ts: int, *, utc: bool = False) -> str:
     Pass `utc=True` for parsed *Last updated:* stamps (end-of-day UTC) so
     the displayed date matches the doc's claimed stamp regardless of the
     developer's local timezone. Tracked-file commit times stay in local
-    for human readability â€” those are wall-clock-relative anyway.
+    for human readability — those are wall-clock-relative anyway.
     """
     import datetime
     if utc:
@@ -608,7 +608,7 @@ def parse_active_plans_from_index(index_path: Path = INDEX_MD) -> tuple[set[str]
 
     A plan is "currently active at root" if INDEX.md's row links to it with
     a bare basename href (e.g. `(sprint_51_sms_plan.md)`). References inside
-    the same row that point at `archive/...` are ignored â€” those are usually
+    the same row that point at `archive/...` are ignored — those are usually
     contextual mentions of completed plans for navigation, not claims of
     activity.
     """
@@ -623,7 +623,7 @@ def parse_active_plans_from_index(index_path: Path = INDEX_MD) -> tuple[set[str]
     if not m:
         warnings.append(
             f"  warning: INDEX.md is missing the `sprint_<N>_<slug>_plan.md` row "
-            "in the Architecture & process table â€” sprint-archive check "
+            "in the Architecture & process table — sprint-archive check "
             "cannot determine which plans are currently active"
         )
         return (set(), warnings)
@@ -631,7 +631,7 @@ def parse_active_plans_from_index(index_path: Path = INDEX_MD) -> tuple[set[str]
     active: set[str] = set()
     for href_match in PLAN_HREF_RE.finditer(row):
         href = href_match.group(1).strip()
-        # Skip archive/ refs â€” those are context, not claims of currently-active.
+        # Skip archive/ refs — those are context, not claims of currently-active.
         # Also skip pure-anchor refs like `#section`.
         if href.startswith("archive/") or href.startswith("#"):
             continue
@@ -687,9 +687,9 @@ def check_sprint_archive(
 
     Returns (orphans, missing, warnings).
       orphans: basenames at docs/ root but NOT listed in INDEX active row.
-        These are the closeout-skipped case â€” sprint shipped, plan didn't move.
+        These are the closeout-skipped case — sprint shipped, plan didn't move.
       missing: basenames listed in INDEX active row but NOT at docs/ root.
-        These are stale references â€” plan was archived (or never created)
+        These are stale references — plan was archived (or never created)
         but INDEX still claims it's active.
       warnings: structural issues with INDEX (missing row, unparseable, etc.)
     """
@@ -978,7 +978,7 @@ def report_sprint_archive(
     """Print sprint-archive findings. Returns True if anything was flagged.
 
     The report uses the same warn-only severity as the per-doc freshness
-    pass â€” it prints concrete remediation hints (the exact `git mv` command,
+    pass — it prints concrete remediation hints (the exact `git mv` command,
     the file to add a row to) so the user can act without re-reading
     CLAUDE.md.
     """
@@ -1219,7 +1219,7 @@ def main() -> int:
     only_staged = staged_files() if args.staged else None
     # find_docs() returns tier-1 (TIER1_DOCS) + tier-2 (docs/components,
     # docs/standards, docs/doctrine) docs. The freshness loop below must
-    # cover tier-1 too â€” technical_guide.md's **Tracks:** line was previously
+    # cover tier-1 too — technical_guide.md's **Tracks:** line was previously
     # unenforced because this loop only iterated the (then DOC_DIRS-only)
     # result.
     docs = find_docs()
@@ -1287,7 +1287,7 @@ def main() -> int:
         print("\nStale docs detected. Update the doc and bump its *Last updated:* line, ")
         print("or note the review in the closeout journal entry. Exit 0 (warn only).")
 
-    # Sprint-archive protocol check. Runs in BOTH --all and --staged modes â€”
+    # Sprint-archive protocol check. Runs in BOTH --all and --staged modes —
     # cheap (two FS reads + one regex), and the orphan signal is worth
     # surfacing on every commit, not just at sprint closeout. Output goes
     # below the per-doc freshness summary so it's visually distinct.
@@ -1302,7 +1302,7 @@ def main() -> int:
     # gate.
     report_code_citations(quiet=args.quiet)
 
-    # Always exit 0 â€” this is a warn-only check.
+    # Always exit 0 — this is a warn-only check.
     return 0
 
 
