@@ -19,6 +19,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     takeKitLock: vi.fn(),
     releaseKitLock: vi.fn(),
     setRemoteLabel: vi.fn(),
+    setRemoteHidden: vi.fn(),
     onboardRemoteKit: vi.fn(),
     extractRemoteKit: vi.fn(),
     translateRemoteKitOptions: vi.fn(),
@@ -30,7 +31,8 @@ import {
   AuthError, ForbiddenError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   deleteRemoteKit, DeleteNeedsAcknowledgement,
   releaseKitLock, takeKitLock,
-  onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
+  onboardRemoteKit, setRemoteLabel, setRemoteHidden, setRemoteStatus,
+  translateRemoteKitOptions,
   fetchRetireCandidates,
   type RemoteKitEntry, type KitStatusResult, type RetireCandidate,
 } from '../utils/remoteKitStore';
@@ -1984,5 +1986,358 @@ describe('the submit notice names what happened (bd polyglot-pdf-hqztg)', () => 
     const notice = await screen.findByText(/submitted for review/);
     expect(notice.textContent).not.toMatch(/reverted to draft/);
     expect(notice.textContent).toMatch(/An author checks it/);
+  });
+});
+
+// --- Hiding kits + catalogue filter (bd n5fwd, tx8gi) ----------------------
+//
+// The demo store fills with junk kits that crowd out the real ones. Hiding is
+// the reversible half of clearing them (deletion is bd 6zhaf). These pin the
+// two exit criteria that matter: a hidden kit leaves BOTH surfaces, and it is
+// always retrievable.
+
+describe('hiding kits and filtering the catalogue', () => {
+  // Four kits: above the filter bar's threshold, and one already hidden.
+  const MANY: RemoteKitEntry[] = [
+    { id: 'form-2', label: 'W-7 (ITIN)', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    { id: 'form-3', label: 'I-90', status: 'complete', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    { id: 'form-4', label: 'Junk One', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf', hidden: true },
+    { id: 'form-5', label: 'Junk Two', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+  ];
+
+  async function openMany(role: 'author' | 'editor' = 'author') {
+    vi.mocked(listRemoteKits).mockResolvedValue([...MANY]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role={role} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-filter')).toBeInTheDocument());
+  }
+
+  it('keeps a hidden kit out of BOTH the cards and the selector strip', async () => {
+    // Exit criterion 1. Both surfaces or neither: a strip offering a kit the
+    // cards deny is the disagreement the shared filter exists to prevent.
+    await openMany();
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).queryByText(/Junk One/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Junk One')).not.toBeInTheDocument();
+    // ...while the visible ones are on both.
+    expect(within(strip).getByText(/W-7 \(ITIN\)/)).toBeInTheDocument();
+    expect(screen.getByText('W-7 (ITIN)')).toBeInTheDocument();
+  });
+
+  it('says how many it is holding back, so the list is never silently short',
+    async () => {
+      await openMany();
+      expect(screen.getByTestId('filter-withheld')).toHaveTextContent('1 not shown');
+    });
+
+  it('brings hidden kits back when asked -- nothing is unreachable', async () => {
+    // Exit criterion 2.
+    await openMany();
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(screen.getByText('Junk One')).toBeInTheDocument());
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).getByText(/Junk One/)).toBeInTheDocument();
+  });
+
+  it('searches by label AND by id', async () => {
+    await openMany();
+    const box = screen.getByLabelText('Search forms by name or id');
+
+    fireEvent.change(box, { target: { value: 'itin' } });
+    await waitFor(() => expect(screen.queryByText('I-90')).not.toBeInTheDocument());
+    expect(screen.getByText('W-7 (ITIN)')).toBeInTheDocument();
+
+    // The id matters: server refusals name kits by id, so an operator reading
+    // an error pastes THAT in.
+    fireEvent.change(box, { target: { value: 'form-3' } });
+    await waitFor(() => expect(screen.getByText('I-90')).toBeInTheDocument());
+    expect(screen.queryByText('W-7 (ITIN)')).not.toBeInTheDocument();
+  });
+
+  it('filters by status', async () => {
+    await openMany();
+    fireEvent.change(screen.getByLabelText('Filter by status'),
+      { target: { value: 'complete' } });
+    await waitFor(() => expect(screen.queryByText('W-7 (ITIN)')).not.toBeInTheDocument());
+    expect(screen.getByText('I-90')).toBeInTheDocument();
+  });
+
+  it('hides a kit through the server and refreshes from what it stored', async () => {
+    await openMany();
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() =>
+      expect(setRemoteHidden).toHaveBeenCalledWith('form-2', true));
+    // Re-listed rather than patched in memory: a failed hide must not leave a
+    // kit missing from the only view that shows it.
+    await waitFor(() =>
+      expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('offers Unhide on an already-hidden kit', async () => {
+    await openMany();
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(screen.getByText('Junk One')).toBeInTheDocument());
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByText('Unhide'));
+    await waitFor(() =>
+      expect(setRemoteHidden).toHaveBeenCalledWith('form-4', false));
+  });
+
+  it('does NOT offer Hide to an EDITOR', async () => {
+    // Maintainer decision: author-only, because hiding changes what OTHER
+    // people see. The server enforces it too; this pins the UI half.
+    await openMany('editor');
+    expect(screen.queryByText('Hide')).not.toBeInTheDocument();
+  });
+});
+
+// --- The three gaps review found, pinned (bd n5fwd) ------------------------
+
+describe('hiding never strands a kit', () => {
+  const TWO: RemoteKitEntry[] = [
+    { id: 'form-2', label: 'W-7', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    { id: 'form-3', label: 'Junk', status: 'draft', hasSchema: true,
+      hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf', hidden: true },
+  ];
+
+  it('offers "Show hidden" even in a SMALL store, or the way back is gone',
+    async () => {
+      // THE STRANDING BUG. The filter bar was gated on kits.length > 3 alone,
+      // so with two kits and one hidden, the hidden kit vanished from both
+      // surfaces and the control that would reveal it never rendered. The way
+      // back must not depend on how many kits you happen to have.
+      vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+      render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+      await waitFor(() =>
+        expect(screen.getByTestId('catalogue-filter')).toBeInTheDocument());
+      expect(screen.getByLabelText('Show hidden')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByLabelText('Show hidden'));
+      fireEvent.click(screen.getByText('Show form cards'));
+      await waitFor(() => expect(screen.getByText('Junk')).toBeInTheDocument());
+    });
+
+  it('counts what is SHOWN, so the banner cannot contradict the grid', async () => {
+    // A "2 forms" header above a one-card grid is one screen disagreeing with
+    // itself. The withheld line reports the difference, so nothing is concealed.
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-filter')).toBeInTheDocument());
+    expect(screen.getByTestId('filter-withheld')).toHaveTextContent('1 not shown');
+    // The "N forms in the shared workspace" banner deliberately counts the
+    // STORE, and says so in its own words -- a different claim from the grid's,
+    // not a contradiction of it, and it is how an operator learns the store
+    // holds more than they are looking at. What had to change is the
+    // per-status summary, which described the grid while counting the store.
+    expect(screen.getByText(/2 forms in the shared workspace/)).toBeInTheDocument();
+  });
+
+  it('closes the editor when ANOTHER session hides the open kit', async () => {
+    // Concurrency: an author elsewhere hides the kit I have open, and I learn
+    // of it on my next refresh. Nothing in my session called handleSetHidden.
+    //
+    // It must be driven as a TRANSITION -- visible, then hidden on a later
+    // refresh. Mounting with it already hidden is the DELIBERATE-open case
+    // (see the next test), and a version of this test that did that passed
+    // against both the right fix and the wrong one.
+    const clearOpenKit = vi.fn();
+    const visible = TWO.map((k) => ({ ...k, hidden: false }));
+    vi.mocked(listRemoteKits).mockResolvedValue(visible);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-3"
+      role="author" clearOpenKit={clearOpenKit} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    expect(clearOpenKit).not.toHaveBeenCalled();   // still visible: no unwind
+
+    // Someone else hides it; my next refresh brings it back hidden.
+    vi.mocked(listRemoteKits).mockResolvedValue(
+      visible.map((k) => (k.id === 'form-3' ? { ...k, hidden: true } : k)));
+    fireEvent.click(screen.getByText('Refresh'));
+    await waitFor(() => expect(clearOpenKit).toHaveBeenCalled());
+  });
+
+  it('lets an author OPEN a hidden kit without it closing itself', async () => {
+    // The unwind fires on the TRANSITION, not the state. Keying it on "this
+    // open kit is hidden" would also fire when someone ticks Show hidden and
+    // deliberately opens one -- making a hidden kit unopenable, which breaks
+    // retrievability in a new way while fixing a desync.
+    const clearOpenKit = vi.fn();
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-3"
+      role="author" clearOpenKit={clearOpenKit} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    // form-3 is hidden and open -- a deliberate open. It stays open.
+    expect(clearOpenKit).not.toHaveBeenCalled();
+  });
+
+  it('does NOT close the editor merely because a SEARCH filters the kit out',
+    async () => {
+      // The unwind keys on the kit being HIDDEN, not on being absent from the
+      // view. Typing in the search box must never close the form being edited.
+      const clearOpenKit = vi.fn();
+      vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+      render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-2"
+        role="author" clearOpenKit={clearOpenKit} />);
+      await waitFor(() =>
+        expect(screen.getByTestId('catalogue-filter')).toBeInTheDocument());
+      fireEvent.change(screen.getByLabelText('Search forms by name or id'),
+        { target: { value: 'zzz-matches-nothing' } });
+      await waitFor(() =>
+        expect(screen.getByTestId('filter-withheld')).toBeInTheDocument());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+    });
+
+  it('the strip acts only on kits the strip is OFFERING', async () => {
+    // The dropdown renders `shown`; the action row beside it used to resolve
+    // its target from the raw list. With the selected kit hidden, the select's
+    // value matched no rendered option (so the browser showed a different kit)
+    // while those buttons still acted on the hidden one -- a row naming form A
+    // and operating on form B.
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-3"
+      role="author" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-strip')).toBeInTheDocument());
+    // form-3 is hidden, so the strip offers nothing to act on and the Rename
+    // button must not render pointed at it.
+    const strip = screen.getByTestId('catalogue-strip');
+    expect(within(strip).queryByText('Rename')).not.toBeInTheDocument();
+
+    // Reveal it and the action becomes available again -- the row follows the
+    // dropdown rather than the store.
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() => expect(
+      within(screen.getByTestId('catalogue-strip')).getByText('Rename'),
+    ).toBeInTheDocument());
+  });
+
+  it('opening a hidden kit from an ALREADY-MOUNTED session keeps it open',
+    async () => {
+      // Every other test here mounts fresh. That is the rare path -- the real
+      // one is ticking Show hidden and clicking a hidden card while the
+      // catalogue is already up, which arrives as a selectedKitId PROP CHANGE.
+      //
+      // With the baseline held in a bare ref and reset by a second effect,
+      // effect declaration order meant the unwind ran first against the
+      // PREVIOUS kit's stale 'visible', and closed the kit just opened. A
+      // fresh-mount test cannot see that; only a rerender can.
+      const clearOpenKit = vi.fn();
+      vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+      const view = render(<RemoteCatalogue onOpenKit={() => {}}
+        selectedKitId="form-2" role="author" clearOpenKit={clearOpenKit} />);
+      await waitFor(() =>
+        expect(screen.getByText('Show form cards')).toBeInTheDocument());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+
+      // Now open the HIDDEN kit, the way App does: same mount, new prop.
+      view.rerender(<RemoteCatalogue onOpenKit={() => {}}
+        selectedKitId="form-3" role="author" clearOpenKit={clearOpenKit} />);
+      await waitFor(() =>
+        expect(screen.getByText('Show form cards')).toBeInTheDocument());
+      expect(clearOpenKit).not.toHaveBeenCalled();
+    });
+
+  it('asks before hiding the OPEN kit, because that discards unsaved edits',
+    async () => {
+      // Hiding closes the editor, taking the undo stack with it. Every other
+      // path that can lose that work asks first; hiding needs asking MORE than
+      // most, because its own tooltip promises "nothing is deleted and you can
+      // bring it back" -- true of the FORM, not of the edits on screen.
+      const confirmDiscardOnHide = vi.fn(() => false);   // the human says no
+      vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+      render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-2"
+        role="author" confirmDiscardOnHide={confirmDiscardOnHide} />);
+      await waitFor(() =>
+        expect(screen.getByText('Show form cards')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Show form cards'));
+      await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+      fireEvent.click(screen.getAllByText('Hide')[0]);
+      await waitFor(() => expect(confirmDiscardOnHide).toHaveBeenCalled());
+      // Declined -- nothing was hidden.
+      expect(setRemoteHidden).not.toHaveBeenCalled();
+    });
+
+  it('does NOT ask when hiding a kit that is not the open one', async () => {
+    // The common case stays one click. Hiding some other form costs nothing.
+    const confirmDiscardOnHide = vi.fn(() => true);
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null}
+      role="author" confirmDiscardOnHide={confirmDiscardOnHide} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(setRemoteHidden).toHaveBeenCalled());
+    expect(confirmDiscardOnHide).not.toHaveBeenCalled();
+  });
+
+  it('per-status counts describe the GRID, not the store', async () => {
+    // The store banner counts everything and says so; the per-status line sits
+    // directly above the cards and describes THEM. Summing the raw list put
+    // '2 in progress' over a one-card grid -- one screen disagreeing with
+    // itself. Two DRAFT kits, one hidden: the line must read 1.
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('1 in progress')).toBeInTheDocument());
+    expect(screen.queryByText('2 in progress')).not.toBeInTheDocument();
+
+    // ...and it follows the filter: reveal the hidden one and it reads 2.
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    await waitFor(() =>
+      expect(screen.getByText('2 in progress')).toBeInTheDocument());
+  });
+
+  it('closes the editor when the OPEN kit is hidden', async () => {
+    // Same unwind delete does (bd hbfky): otherwise the card leaves the
+    // catalogue while the editor keeps showing its fields.
+    const clearOpenKit = vi.fn();
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-2"
+      role="author" clearOpenKit={clearOpenKit} />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    await waitFor(() => expect(screen.getAllByText('Hide').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByText('Hide')[0]);
+    await waitFor(() => expect(clearOpenKit).toHaveBeenCalled());
+  });
+
+  it('does NOT close the editor when a VISIBLE open kit is unhidden', async () => {
+    // Unhiding is not a reason to close anything. The kit open here is the
+    // VISIBLE one -- opening an already-hidden kit is itself the concurrent
+    // case, and the effect below correctly closes that on sight, so using it
+    // as the fixture would test the opposite of this test's name.
+    const clearOpenKit = vi.fn();
+    vi.mocked(listRemoteKits).mockResolvedValue([...TWO]);
+    vi.mocked(setRemoteHidden).mockResolvedValueOnce(undefined);
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="form-2"
+      role="author" clearOpenKit={clearOpenKit} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-filter')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('Show hidden'));
+    fireEvent.click(screen.getByText('Show form cards'));
+    await waitFor(() => expect(screen.getByText('Unhide')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Unhide'));
+    await waitFor(() => expect(setRemoteHidden).toHaveBeenCalledWith('form-3', false));
+    expect(clearOpenKit).not.toHaveBeenCalled();
   });
 });

@@ -4034,3 +4034,134 @@ def test_handshake_never_writes_or_deletes(client):
     c.post("/api/editor/store-handshake", json={"nonce": "n1"},
            headers={"X-Editor-Token": "auth-tok"})
     assert marker.exists(), "the backend must not delete the editor's marker"
+
+
+# --- Hiding a kit from the catalogue (bd polyglot-pdf-n5fwd) ----------------
+#
+# A separate metadata key, deliberately NOT a fifth lifecycle status: status
+# answers "where is this in its life?" and drags _WRITE_LOCKED_STATUSES with
+# it, while hiding answers "do I want to look at this?". These tests pin that
+# orthogonality -- hiding must never change what anyone may DO to a kit.
+
+
+def test_hiding_a_kit_preserves_every_other_metadata_key(client):
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA,
+              label="Form 2", extra_meta={"description": "the mystery form"})
+    r = c.post(
+        "/api/editor/kits/form-2/hidden",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"hidden": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "hidden": True}
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["hidden"] is True
+    assert meta["status"] == "draft"                  # untouched
+    assert meta["label"] == "Form 2"                  # untouched
+    assert meta["description"] == "the mystery form"  # untouched
+
+
+def test_hiding_is_reversible(client):
+    """Nothing is destroyed and nothing becomes unreachable (exit criterion 2)."""
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2")
+    hide = lambda v: c.post(  # noqa: E731 - one-line test helper
+        "/api/editor/kits/form-2/hidden",
+        headers={"X-Editor-Token": "auth-tok"}, json={"hidden": v})
+    assert hide(True).json() == {"ok": True, "hidden": True}
+    assert hide(False).json() == {"ok": True, "hidden": False}
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["hidden"] is False
+    # The schema is still there, byte for byte -- hiding is a view, not a delete.
+    assert json.loads((root / "form-2" / "schema.json").read_text()) == VALID_SCHEMA
+
+
+def test_the_listing_reports_hidden_and_defaults_it_false(client):
+    """The flag rides the SAME wire the catalogue already reads, and a kit that
+    never carried the key is visible -- no migration, no backfill."""
+    c, _store, root = client
+    _make_kit(root, "never-touched", status="draft", schema=VALID_SCHEMA)
+    _make_kit(root, "put-away", status="draft", schema=VALID_SCHEMA,
+              extra_meta={"hidden": True})
+    r = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert r.status_code == 200
+    by_id = {k["id"]: k for k in r.json()["kits"]}
+    assert by_id["never-touched"]["hidden"] is False
+    assert by_id["put-away"]["hidden"] is True
+
+
+@pytest.mark.parametrize("stored", [
+    # TRUTHY-BUT-NOT-True is the half that matters. Every falsy value agrees
+    # under both `is True` and `bool(...)`, so a list of only those cannot tell
+    # a fail-safe identity check from a permissive truthiness one -- the
+    # mutation `bool(meta.get(...))` survived a first draft that had no truthy
+    # rows. The string "false" is the sharpest: a human hand-editing metadata
+    # writes it MEANING not-hidden, and truthiness would hide the kit.
+    "true", "True", "false", "no", 1, [0], {"a": 1}, " ",
+    # ...and the falsy/absent rows, which must also stay visible.
+    None, 0, "", [], {}, False,
+])
+def test_only_a_literal_true_hides_a_kit(client, stored):
+    """FAILS VISIBLE. Anything that is not exactly True means "not hidden", so a
+    hand-edited or malformed value can never make a kit vanish from the only
+    list that shows it. Hiding must be something a human chose."""
+    c, _store, root = client
+    extra = {} if stored is None else {"hidden": stored}
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, extra_meta=extra)
+    r = c.get("/api/editor/kits", headers={"X-Editor-Token": "edit-tok"})
+    assert r.status_code == 200
+    entry = next(k for k in r.json()["kits"] if k["id"] == "form-2")
+    assert entry["hidden"] is False
+
+
+def test_hiding_is_author_only(client):
+    """Maintainer decision 2026-09-01. By the tier line this looks editor-ish --
+    reversible, no tokens, creates nothing, exactly where /label sits -- but it
+    changes what OTHER people see, so it is restricted."""
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA)
+    r = c.post(
+        "/api/editor/kits/form-2/hidden",
+        headers={"X-Editor-Token": "edit-tok"},   # editor tier
+        json={"hidden": True},
+    )
+    assert r.status_code in (401, 403), r.text
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert "hidden" not in meta  # the refusal wrote nothing
+
+
+@pytest.mark.parametrize("status", ["complete", "unpublished", "submitted"])
+def test_a_published_kit_can_still_be_hidden(client, status):
+    """NO write-lock gate, matching /label: hiding touches no schema bytes. The
+    revision an audit record names stays published and fillable; only this
+    catalogue view changes. If this ever 409s, hiding has been wrongly coupled
+    to the publish gate."""
+    c, _store, root = client
+    _make_kit(root, "form-2", status=status, schema=VALID_SCHEMA)
+    r = c.post(
+        "/api/editor/kits/form-2/hidden",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"hidden": True},
+    )
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["hidden"] is True
+    assert meta["status"] == status  # lifecycle untouched
+
+
+def test_hiding_an_unknown_kit_is_404(client):
+    c, _store, _root = client
+    r = c.post(
+        "/api/editor/kits/no-such-kit/hidden",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"hidden": True},
+    )
+    assert r.status_code == 404
+
+
+def test_hiding_requires_a_token(client):
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA)
+    r = c.post("/api/editor/kits/form-2/hidden", json={"hidden": True})
+    assert r.status_code in (401, 403)
