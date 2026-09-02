@@ -159,7 +159,7 @@ describe('WebFormConnection thinking indicator (bd polyglot-pdf-wpw.5)', () => {
       const ws = await connect()
       fire(ws, { type: 'agent_processing', processing: true })
       fire(ws, { type: 'agent_processing', processing: false })
-      // The native-VAD START (true) and its CLEAR (false) both reach the harness
+      // The thinking START (true) and its CLEAR (false) both reach the harness
       // observer, so the E2E harness can assert the indicator armed without a mic.
       expect(observed).toEqual([true, false])
     } finally {

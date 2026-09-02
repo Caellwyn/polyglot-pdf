@@ -297,20 +297,20 @@ async def _handle_fill_session(
 		# Removed verbose logging - just track session start below
 	
 	# Idle-watchdog activity timestamp (bd polyglot-pdf-l3a.4). A 1-element list so
-	# the watchdog, the receive loop, AND the native-VAD user-activity callback all
-	# mutate the SAME value without nonlocal threading across the callback boundary.
+	# the watchdog, the receive loop, AND the user-activity callback all mutate the
+	# SAME value without nonlocal threading across the callback boundary.
 	# CRITICAL: this is reset on MEANINGFUL activity only -- control messages and a
-	# real user turn -- NOT on raw inbound audio frames. In native VAD mode the
-	# client streams continuous audio incl. silence, so resetting on audio bytes
-	# would mean a walk-away with the mic open never times out and burns Gemini's
-	# 15-min audio session. Background noise streams as audio but does NOT produce
-	# a native-VAD input transcription, so it does not keep the session alive.
+	# real user turn -- NOT on raw inbound audio frames, so a walk-away with the mic
+	# open still times out instead of burning Gemini's 15-min audio session.
+	# Under push-to-talk (the only input mode, bd polyglot-pdf-v1m8g) the turn
+	# brackets arrive as CONTROL messages, which is what bumps this.
 	last_rx = [time.time()]
 
 	# Register the user-activity callback BEFORE start_session so it is wired into
-	# the adapter during set_callbacks. Fired when Gemini's native VAD transcribes a
-	# real user utterance (see live_ai_gemini on_user_activity). No PHI crosses here
-	# -- it only bumps the liveness clock.
+	# the adapter during set_callbacks. Fired when Gemini transcribes a real user
+	# utterance (see live_ai_gemini on_user_activity) -- a secondary liveness source;
+	# the PTT control brackets are the primary one. No PHI crosses here -- it only
+	# bumps the liveness clock.
 	def _on_user_activity_sync():
 		last_rx[0] = time.time()
 
@@ -535,11 +535,11 @@ async def _handle_fill_session(
 
 			if "bytes" in msg and msg["bytes"] is not None:
 				# NOTE (bd polyglot-pdf-l3a.4): inbound audio frames deliberately do
-				# NOT bump the idle clock. In native VAD mode the client streams
-				# continuous audio incl. silence, so counting audio as activity made
-				# the idle timeout un-fireable on a walk-away. The watchdog now resets
-				# on a real user turn (the native-VAD on_user_activity callback) and on
-				# control messages below -- not on raw mic bytes.
+				# NOT bump the idle clock: counting audio as activity would make the
+				# idle timeout un-fireable on a walk-away with an open mic. The
+				# watchdog resets on a real user turn and on the control messages
+				# below -- which is where push-to-talk's activity brackets arrive --
+				# not on raw mic bytes.
 				# Drop audio frames during section switch to avoid backlog
 				if drop_audio:
 					continue
@@ -1602,10 +1602,11 @@ async def fill_form_from_schema(
 		# single whole-form handshake and stop advancing sections, so the whole form
 		# runs as one compression-bounded session.
 		"continuous_session_enabled": settings.CONTINUOUS_SESSION,
-		# Native-VAD mode toggle (bd polyglot-pdf-333): when True, Gemini's own VAD
-		# drives turns -- the frontend must stop sending manual activity signals and
-		# stream continuous audio. Mirror of the backend DISABLE_GEMINI_VAD flag.
-		"native_vad": not settings.DISABLE_GEMINI_VAD,
+		# NOTE: `native_vad` is GONE from this payload (bd polyglot-pdf-v1m8g).
+		# It told the client whether Gemini's own VAD was driving turns; that mode
+		# no longer exists, so there is nothing to signal -- push-to-talk is the
+		# only input mode and the client always brackets turns with manual
+		# activity signals. The client-side reader was removed in the same change.
 	})
 
 	# Start form filling session with schema and current values

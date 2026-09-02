@@ -209,9 +209,11 @@ every finding with its severity (`[P0]` or `[P1]`) in the comment.
   *section* is the navigation unit. Section-state named `part_id` /
   `current_part_id` / `currentPartId` (or treating part as a synonym for section)
   is a finding.
-- **VAD / barge-in invariants.** Conflicting VAD config (`DISABLE_GEMINI_VAD` set
-  together with sensitivity/padding); manual `activity_start/end` signals emitted
-  in native-VAD mode; or a broken 150ms barge-in grace-period tool-call rejection.
+- **VAD / barge-in invariants.** A re-introduced VAD mode or input-mode toggle
+  (push-to-talk is the ONLY input mode and Gemini's automatic activity detection
+  is unconditionally disabled -- bd polyglot-pdf-v1m8g); a second mechanism
+  deciding turn boundaries alongside PTT; or a broken 150ms barge-in
+  grace-period tool-call rejection.
 - **Gemini model wiring.** Hardcoded model strings; cascading / half-cascading
   model fallbacks; a new model string not verified against the live endpoint; or a
   multi-field `update_form_fields` call (the tool takes exactly ONE field per

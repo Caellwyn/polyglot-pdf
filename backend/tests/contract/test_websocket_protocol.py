@@ -596,7 +596,9 @@ class TestLiveHandshakeFlow:
         assert response["session_id"].startswith("web_")
         assert response["ephemeral"] is True
         assert "jit_mode_enabled" in response
-        assert "native_vad" in response
+        # `native_vad` is GONE from the payload (bd polyglot-pdf-v1m8g): PTT is
+        # the only input mode, so there is no VAD mode to advertise.
+        assert "native_vad" not in response
         assert "dti_mode_enabled" in response  # see the undocumented-key test above
 
     @patch("backend.routes.websocket_routes.verify_token", return_value={"uid": "test_user"})

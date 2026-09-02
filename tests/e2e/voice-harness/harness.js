@@ -129,13 +129,13 @@
   }
 
   /*
-   * Continuous silence streamer (bd polyglot-pdf-95uy). Gemini's NATIVE VAD
-   * needs an UNBROKEN audio stream to detect end-of-utterance: a fixed 500 ms
-   * tail followed by dead air leaves the turn open forever (the model waits
-   * for more audio; 3/3 stalls in the 95uy repro). The real client streams the
-   * mic continuously in native mode, so the harness must too: after each
-   * utterance, stream zero-filled frames at real-time pace until the next
-   * utterance (or an explicit stopSilenceStream()).
+   * Continuous silence streamer (bd polyglot-pdf-95uy). NO LONGER USED BY
+   * injectUtterance: it existed because Gemini's NATIVE VAD needed an UNBROKEN
+   * stream to detect end-of-utterance (a fixed tail then dead air left the turn
+   * open forever, 3/3 stalls in the 95uy repro), and that detector is gone --
+   * turns are now bracketed by explicit activity signals (bd polyglot-pdf-v1m8g).
+   * Kept because it is still exported on the harness API for a driver that wants
+   * to hold the stream open deliberately; nothing in the normal cycle calls it.
    */
   var _silenceStream = null;
 
@@ -170,10 +170,9 @@
 
   /*
    * Stream a PCM16 ArrayBuffer into the WS as ~20 ms chunks, pacing in real time
-   * so Gemini's VAD/turn logic behaves like a live mic. VAD-mode aware, mirroring
-   * the real client: manual VAD brackets the burst with activity_start/end;
-   * native VAD streams continuously -- the utterance, then unbroken real-time
-   * silence (see startSilenceStream above) so Gemini's own VAD can close the turn.
+   * so Gemini's turn logic behaves like a live mic. Mirrors the real client
+   * exactly: the burst is bracketed with activity_start/end, which is now the
+   * only turn signal (bd polyglot-pdf-v1m8g).
    */
   /*
    * Timer-clamp-immune real-time pacer (bd polyglot-pdf-f58l; re-hit + fixed
@@ -213,7 +212,6 @@
     opts = opts || {};
     var chunkMs = opts.chunkMs || CHUNK_MS;
     var h = inject();
-    var native = h.isNativeVad();
 
     var bytesPerChunk = Math.round((SAMPLE_RATE * BYTES_PER_SAMPLE * chunkMs) / 1000);
 
@@ -221,9 +219,12 @@
     // (two writers would double-pace the stream).
     stopSilenceStream();
 
-    if (!native) {
-      h.sendActivityStart();
-    }
+    // PTT is the only input mode (bd polyglot-pdf-v1m8g): the harness always
+    // brackets the utterance with explicit activity signals, exactly as the real
+    // client does on a button press/release. The native-VAD arm -- which sent no
+    // brackets and instead kept a silence stream running so Gemini's own detector
+    // could find the turn edges -- is gone with that detector.
+    h.sendActivityStart();
 
     var next = performance.now();
     for (var pos = 0; pos < pcmBuffer.byteLength; pos += bytesPerChunk) {
@@ -233,11 +234,7 @@
       await paceUntil(next); // real-time, clamp-immune (see above)
     }
 
-    if (native) {
-      startSilenceStream(chunkMs);
-    } else {
-      await h.sendActivityEnd();
-    }
+    await h.sendActivityEnd();
   }
 
   /*
@@ -967,8 +964,7 @@
     // START signal fired during a cycle (report.thinking.sawStart), or drive it
     // manually via reset -> inject -> thinkingObserved().
     resetThinkingObserver: resetThinkingObserver,
-    thinkingObserved: thinkingObserved,
-    isNativeVad: function () { return inject().isNativeVad(); }
+    thinkingObserved: thinkingObserved
   };
 
   // Start recording agent_processing events immediately (bd polyglot-pdf-fa4x), so a

@@ -455,7 +455,7 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     expect((conn as any).switchInFlight).toBe(true)
 
     // session_ready is the terminal success -> releases the guard + watchdog.
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: true })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
     expect((conn as any).switchInFlight).toBe(false)
     expect((conn as any).sectionSwitchWatchdog).toBeNull()
     expect(conn.getStatus()).toBe('connected')
@@ -470,7 +470,7 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     const conn = new WebFormConnection(SCHEMA)
     // Backend signals continuous mode (sets the instance flag + persisted state).
     ;(conn as any).handleSessionReady({
-      session_id: 's', native_vad: true,
+      session_id: 's',
       jit_mode_enabled: true, dti_mode_enabled: true, continuous_session_enabled: true,
     })
 

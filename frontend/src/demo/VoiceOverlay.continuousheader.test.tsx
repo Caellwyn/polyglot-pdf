@@ -55,7 +55,6 @@ function makeManager() {
   return {
     connect: vi.fn(async () => {}),
     disconnect: vi.fn(),
-    isNativeVad: vi.fn(() => true),
     getPushToTalkMode: vi.fn(() => false),
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: vi.fn(),

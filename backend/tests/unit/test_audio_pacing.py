@@ -56,7 +56,7 @@ class _FakeClock:
 _FRAME_BYTES = 640
 
 
-def _make_adapter(monkeypatch, *, max_buffer_ms=200, gapfill=True, native_vad=True):
+def _make_adapter(monkeypatch, *, max_buffer_ms=200, gapfill=True):
     """Bare adapter with pacing ON + an injected fake clock/sleep.
 
     _audio_sender_loop reads get_settings() ONCE at entry, so patching the cached
@@ -70,7 +70,6 @@ def _make_adapter(monkeypatch, *, max_buffer_ms=200, gapfill=True, native_vad=Tr
     monkeypatch.setattr(settings, "AUDIO_MAX_BUFFER_MS", max_buffer_ms, raising=False)
     monkeypatch.setattr(settings, "WS_CHUNK_MS", 20, raising=False)
     monkeypatch.setattr(settings, "AUDIO_IN_RATE", 16000, raising=False)
-    monkeypatch.setattr(settings, "DISABLE_GEMINI_VAD", not native_vad, raising=False)
 
     adapter = LiveAIGemini(api_key="test_key")
     adapter._audio_queue = asyncio.Queue(maxsize=1000)
@@ -176,14 +175,31 @@ async def test_no_silence_before_first_real_chunk(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_underrun_emits_silence_when_gapfill_enabled(monkeypatch):
-    """After real audio, an underrun tick emits a 640-byte silence frame."""
+    """After real audio, an underrun tick emits a 640-byte silence frame.
+
+    Drives _run_paced_sender DIRECTLY with gapfill_enabled=True. Production can no
+    longer reach this branch -- _audio_sender_loop pins _gapfill_enabled=False
+    (bd polyglot-pdf-v1m8g) -- but the pacer's underrun machinery is still there
+    and stays covered until it is removed (bd polyglot-pdf-ggdpn). The sibling
+    `..._even_when_the_setting_is_on` test covers the pin itself.
+    """
     adapter, clock = _make_adapter(monkeypatch, gapfill=True)
     session = _RecordingSession()
 
     # One real 640-byte frame, then a long stall (no more input, no sentinel yet).
     adapter._audio_queue.put_nowait(b"\x55\x66" * 320)
 
-    loop_task = asyncio.create_task(adapter._audio_sender_loop(session))
+    async def _send_frame(data: bytes, *, is_silence: bool):
+        session.audio_frames.append(bytes(data))
+
+    loop_task = asyncio.create_task(adapter._run_paced_sender(
+        _send_frame,
+        frame_bytes=_FRAME_BYTES,
+        frame_interval_s=0.02,
+        max_buffer_bytes=_FRAME_BYTES * 10,
+        silence_frame=bytes(_FRAME_BYTES),
+        gapfill_enabled=True,
+    ))
     # Yield enough times for several paced ticks to elapse on the virtual clock.
     for _ in range(30):
         await asyncio.sleep(0)
@@ -213,9 +229,14 @@ async def test_no_silence_when_gapfill_disabled(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_no_silence_in_manual_vad_mode(monkeypatch):
-    """Manual VAD (DISABLE_GEMINI_VAD=true) gates underrun silence OFF even if enabled."""
-    adapter, clock = _make_adapter(monkeypatch, gapfill=True, native_vad=False)
+async def test_no_underrun_silence_even_when_the_setting_is_on(monkeypatch):
+    """Underrun silence NEVER emits, even with AUDIO_GAPFILL_ENABLED=true.
+
+    Same pin as test_audio_gapfill's sibling: gap-fill served Gemini's own VAD,
+    which is gone (bd polyglot-pdf-v1m8g). Passing gapfill=True proves the
+    production pin stops it, not the setting.
+    """
+    adapter, clock = _make_adapter(monkeypatch, gapfill=True)
     session = _RecordingSession()
 
     adapter._audio_queue.put_nowait(b"\x0c\x0d" * 320)

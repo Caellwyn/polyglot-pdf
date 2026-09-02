@@ -110,7 +110,6 @@ The backend replies with `session_ready` (websocket_routes.py, the
 | `ephemeral` | bool (`true`) | Signals the client the backend is stateless. |
 | `jit_mode_enabled` | bool | Mirrors backend `USE_DTI` (the JIT SI mode was removed, bd polyglot-pdf-en2j); names the manifest-first handshake TRANSPORT the client should build next time -- DTI rides it. |
 | `dti_mode_enabled` | bool | Mirrors backend `USE_DTI`; consumed by the client's `handleSessionReady` destructure (sent-but-undocumented until the ceyt contract tests caught it). |
-| `native_vad` | bool | Mirrors `not DISABLE_GEMINI_VAD`; when true the client streams continuous audio and stops sending manual activity signals (bd polyglot-pdf-333). |
 | `continuous_session_enabled` | bool | Mirrors backend `CONTINUOUS_SESSION`; when true the client builds a single whole-form handshake and stops advancing sections, so the whole form runs as one compression-bounded session (bd polyglot-pdf-x8rt). |
 
 ---
@@ -134,7 +133,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `form_updated` | callback_handler.py's `send_form_update` | A field value changed; carries `data` payload. |
 | `transcript` | callback_handler.py's `on_transcript` | AI/user transcript text. |
 | `turn_complete` | callback_handler.py's `on_transcript` | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
-| `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn (BOTH VAD modes -- manual rides `send_activity_end`, native rides `input_transcription` -> `on_user_activity`, verified firing on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
+| `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn -- it rides `send_activity_end`, the PTT release, which is the only turn signal (bd polyglot-pdf-v1m8g; the `input_transcription` -> `on_user_activity` path served the retired native-VAD mode); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
 | `go_away` | callback_handler.py's `on_go_away` | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
 | `interrupted` | callback_handler.py (`on_interrupted`) | Gemini stopped the current generation because the user barged in (bd polyglot-pdf-s7uf). The client drains BOTH its audio holds (staging queue + scheduled playback via `resetPlaybackClock`) so the dead generation's tail stops playing; without this, barge-in leaves seconds of stale audio playing behind the model's next generation. No payload; the connection stays live. |
 | `gemini_session_dropped` | callback_handler.py (`on_session_dropped`) | Gemini session died SPONTANEOUSLY behind the still-open WS (e.g. a 1011 "Input data processing failed") -- the client is otherwise frozen on "connected" (bd polyglot-pdf-ppfy). Drives the same pre-emptive reconnect as `go_away`, but the client surfaces a `reconnecting` status so the transient recovery modal shows. No payload. |
@@ -287,7 +286,7 @@ verifying:
    citations drifted once already when the builders moved down the file.
 
 3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
-   frontend switches on `case "field_update"` (`webFormConnection.ts:664` ->
+   frontend switches on `case "field_update"` (in `webFormConnection.ts`'s message switch ->
    `handleFieldUpdate`), but no backend `send_json` ever emits that type -- the
    live single-field push the backend actually sends is `form_updated`. So
    `field_update` is a dead/legacy receive path on the client; it is NOT in the

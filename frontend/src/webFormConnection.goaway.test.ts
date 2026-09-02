@@ -164,7 +164,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     const conn = new WebFormConnection(SCHEMA)
     const first = await connectAndOpen(conn)
     // session_ready flips status to "connected".
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
     expect(conn.getStatus()).toBe('connected')
     expect(MockWebSocket.instances.length).toBe(1)
 
@@ -180,7 +180,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
   it('reconnects with resume semantics (handshake carries resume:true) after a go_away', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await connectAndOpen(conn)
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
 
     // Capture the handshake the NEW socket sends when it opens.
     let handshake: any = null
@@ -199,7 +199,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
   it('coalesces a burst of go_away messages into a single reconnect', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await connectAndOpen(conn)
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
 
     // Two GoAways arrive before the reconnect completes (new socket not yet open).
     await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
@@ -212,7 +212,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
   it('re-arms after the reconnect completes: a later go_away drives another reconnect', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await connectAndOpen(conn)
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
 
     await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
     expect(MockWebSocket.instances.length).toBe(2)
@@ -226,7 +226,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
   it('does NOT reconnect on a go_away after an idle timeout (user-gated reconnect wins)', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await connectAndOpen(conn)
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
 
     // Idle timeout closes the connection and suppresses auto-reconnect.
     await (conn as any).handleMessage(msg({ type: 'idle_timeout' }))
@@ -240,7 +240,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
   it('does NOT reconnect on a go_away while a section switch is in flight', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await connectAndOpen(conn)
-    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+    ;(conn as any).handleSessionReady({ session_id: 's' })
 
     // A section switch owns the socket lifecycle; mark it in flight.
     ;(conn as any).switchInFlight = true
@@ -264,7 +264,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       const p = conn.connect('wss://example/ws/fill')
       MockWebSocket.instances[0].open()
       await p
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
       expect(conn.getStatus()).toBe('connected')
 
       // GoAway -> pre-emptive reconnect creates socket #2 (index 1).
@@ -303,7 +303,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       const p = conn.connect('wss://example/ws/fill')
       MockWebSocket.instances[0].open()
       await p
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
       const closed = MockWebSocket.instances[1].errorAsync()
@@ -326,7 +326,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('reconnects on gemini_session_dropped and surfaces "reconnecting" status', async () => {
       const conn = new WebFormConnection(SCHEMA)
       const first = await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
       expect(conn.getStatus()).toBe('connected')
 
       await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
@@ -342,7 +342,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('restores "connected" when the reconnect completes (clears the modal)', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
       expect(conn.getStatus()).toBe('reconnecting')
@@ -351,14 +351,14 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       // what flips the reconnecting modal off in the overlay.
       const reconnected = MockWebSocket.instances[MockWebSocket.instances.length - 1]
       reconnected.open()
-      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's2' })
       expect(conn.getStatus()).toBe('connected')
     })
 
     it('reconnects with resume:true on a spontaneous drop (no re-greeting)', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       let handshake: any = null
       await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
@@ -373,7 +373,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('coalesces with an in-flight GoAway reconnect (no double reconnect)', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       // A GoAway starts a reconnect; a spontaneous-drop message arriving before it
       // completes must coalesce (the shared goAwayReconnectInFlight guard).
@@ -385,7 +385,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('does NOT reconnect on a spontaneous drop after an idle timeout', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       await (conn as any).handleMessage(msg({ type: 'idle_timeout' }))
       const countAfterIdle = MockWebSocket.instances.length
@@ -401,7 +401,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('flags isDroppedReconnect() true only for a gemini_session_dropped reconnect', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
       expect(conn.isDroppedReconnect()).toBe(false)
 
       await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
@@ -412,7 +412,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('does NOT flag isDroppedReconnect() for an ordinary WS-close reconnect (network blip)', async () => {
       const conn = new WebFormConnection(SCHEMA)
       const sock = await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       // An ordinary unexpected close (NOT a gemini_session_dropped) -> handleClose
       // -> attemptReconnect -> status "reconnecting", but this is a network blip,
@@ -429,7 +429,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('does NOT leak isDroppedReconnect() when a drop coalesces into an in-flight GoAway reconnect', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       // GoAway starts a reconnect (status stays "connected" -- silent).
       await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
@@ -442,7 +442,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
 
       // The coalesced reconnect completes (status stays "connected").
       MockWebSocket.instances[1].open()
-      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's2' })
       expect(conn.isDroppedReconnect()).toBe(false)
 
       // A later ORDINARY blip drives status -> "reconnecting"; the modal must stay
@@ -457,14 +457,14 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('clears isDroppedReconnect() when the drop reconnect recovers (connected)', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
 
       await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
       expect(conn.isDroppedReconnect()).toBe(true)
 
       // Reopen + session_ready -> connected -> the marker (and modal) clear.
       MockWebSocket.instances[MockWebSocket.instances.length - 1].open()
-      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's2' })
       expect(conn.getStatus()).toBe('connected')
       expect(conn.isDroppedReconnect()).toBe(false)
     })
@@ -495,7 +495,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
         const p = conn.connect('wss://example/ws/fill')
         MockWebSocket.instances[0].open()
         await p
-        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+        ;(conn as any).handleSessionReady({ session_id: 's' })
 
         // Drop -> pre-emptive reconnect (socket #2), drop marker set.
         await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
@@ -531,7 +531,7 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     it('stands down on the old socket close during the token await, then reconnects once', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
-      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      ;(conn as any).handleSessionReady({ session_id: 's' })
       const first = MockWebSocket.instances[0]
 
       // Register a getToken that we control: the reconnect connect() will suspend

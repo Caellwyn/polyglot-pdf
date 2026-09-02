@@ -115,10 +115,9 @@ def _patch_vad_bug_for_spike() -> None:
 
     def _patched():
         s = _orig_get_settings()
-        s.VAD_START_SENSITIVITY = "UNSPECIFIED"
-        s.VAD_END_SENSITIVITY = "UNSPECIFIED"
-        s.VAD_PREFIX_PADDING_MS = None
-        s.VAD_SILENCE_DURATION_MS = None
+        # (The VAD sensitivity knobs that used to be neutralized here are gone --
+        # bd polyglot-pdf-v1m8g retired native VAD, so automatic detection is
+        # always disabled and there is nothing to override.)
         return s
 
     _config.get_settings = _patched

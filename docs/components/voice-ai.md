@@ -144,16 +144,18 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   callers that need to know whether Gemini actually got the text (e.g. the
   validator-steer hold) check the return instead of assuming success.
 
-## Activity signals (VAD modes)
+## Activity signals
 
-Turn-taking depends on the `DISABLE_GEMINI_VAD` flag (bd polyglot-pdf-333; default
-`False` = **native** Gemini VAD). In **manual** mode (`DISABLE_GEMINI_VAD=True`)
-the adapter sends `send_activity_start()` / `send_activity_end()` →
-`session.send_realtime_input(activity_start=types.ActivityStart())` /
-`ActivityEnd()` (both guard on `self._current_session is None`). In **native**
-mode these methods **no-op early** -- Gemini's own VAD drives turns, so forwarding
-manual signals would create a conflicting turn-taking state. Full rationale, the
-single-toggle revert, and the frontend continuous-audio requirement are in
+There is no VAD mode (bd polyglot-pdf-v1m8g). Push-to-talk owns activation, so
+`send_activity_start()` / `send_activity_end()` are the ONLY turn signal and fire
+unconditionally -> `session.send_realtime_input(activity_start=types.ActivityStart())`
+/ `ActivityEnd()` (both guard on `self._current_session is None`, and nothing
+else). `_build_vad_settings` returns the constant `{'disabled': True}`.
+
+The `DISABLE_GEMINI_VAD` flag, the native/manual split it selected, and the
+early-return guard that dropped manual signals when Gemini's own detector was
+running are all gone -- PTT *knows* when the user is speaking, so a second gate
+inferring it could only disagree. Full rationale in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
 ## Barge-in
@@ -434,11 +436,13 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
 (`output_audio_transcription`) is enabled only when `enable_transcripts` is set.
 **Input** transcription (`input_audio_transcription`) is enabled when EITHER
 `enable_transcripts` is set OR an `on_user_activity` callback is registered (bd
-polyglot-pdf-l3a.4): it is the native-VAD turn-start signal -- a non-empty
-`server_content.input_transcription` fires `on_user_activity`, which drives both the
-idle watchdog and the thinking-indicator START (bd polyglot-pdf-wpw.5 / fa4x). It
-DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH` (the
-production default; verified on the deployed Vertex model). Requesting it never
+polyglot-pdf-l3a.4): a non-empty `server_content.input_transcription` fires
+`on_user_activity`, which drives the idle watchdog (bd polyglot-pdf-wpw.5 / fa4x).
+It was ALSO the turn-start signal for the retired native-VAD mode, and the
+thinking-indicator START rode it there; with push-to-talk owning activation the
+indicator rides the PTT bracket instead (bd polyglot-pdf-v1m8g). Measured firing
+on the 2.5 native-audio model back when Gemini's own detector was enabled at high
+start-sensitivity -- that knob no longer exists. Requesting it never
 forwards the text to the client (PHI stays server-side, bd hjo). VAD config
 (`realtime_input_config`) is covered in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).

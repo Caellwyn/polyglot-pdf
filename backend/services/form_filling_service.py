@@ -115,7 +115,7 @@ class FormFillingService:
         self._on_audio = None
         self._on_tool_call = None
         # Optional liveness callback (bd polyglot-pdf-l3a.4): the WS route sets this
-        # before start_session so a native-VAD user turn (input transcription) bumps
+        # before start_session so a user turn (input transcription) bumps
         # the idle watchdog. Per-connection liveness wiring, not form state -- the
         # stateless invariant holds (nothing about the user's data is persisted).
         # Stored so the section-switch re-registration (set_callbacks) keeps it.
@@ -653,9 +653,9 @@ class FormFillingService:
         """Send activity_end signal. Delegates to AudioHandler.
 
         Also emits the thinking-indicator processing-start (bd polyglot-pdf-wpw.5):
-        in manual / push-to-talk VAD the client sends vad_activity_end when the user
-        stops, which is the RELIABLE turn-end boundary in that mode (native VAD instead
-        rides on_user_activity / input_transcription). The first response audio clears
+        the client sends vad_activity_end when the user releases push-to-talk, which
+        is the turn-end boundary (bd polyglot-pdf-v1m8g -- the retired native-VAD mode
+        rode on_user_activity / input_transcription instead). The first response audio clears
         it. Guarded so a missing handler is a no-op.
 
         ORDER MATTERS (Codex PR #273): emit processing-start BEFORE awaiting the

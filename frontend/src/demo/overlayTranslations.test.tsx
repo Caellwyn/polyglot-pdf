@@ -54,7 +54,6 @@ function makeMockManager() {
     resumePlayback: vi.fn(),
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
-    setNativeVad: vi.fn(),
     setEnergyCallback: vi.fn(),
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
@@ -87,7 +86,6 @@ function makeMockManager() {
     setPushToTalkMode: vi.fn(),
     setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => false),
-    isNativeVad: vi.fn(() => true),
     getFieldManager: vi.fn(() => null),
     startRecording: vi.fn(async () => {}),
     stopRecording: vi.fn(),
@@ -181,7 +179,10 @@ describe('overlay panels render translated copy (Spanish)', () => {
     )
     expect(await screen.findByText(/Reconectar/)).toBeTruthy()
     expect(screen.getByText(/Borrar formulario/)).toBeTruthy()
-    expect(screen.getByText(/Modo de entrada:/)).toBeTruthy()
+    // The "Modo de entrada:" (input-mode) label went with the PTT/Auto toggle
+    // itself -- bd polyglot-pdf-v1m8g made push-to-talk the only input mode, so
+    // there is no mode to label. The two assertions above still pin that this
+    // panel renders Spanish copy, which is what this test is for.
   })
 
   it('mobile (VoiceOverlayMobile): Spanish session shows Spanish panel labels', async () => {

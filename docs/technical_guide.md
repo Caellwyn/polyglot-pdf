@@ -63,16 +63,16 @@ production project is dead and unreachable; reference purge tracked in bd
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
-| `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
 | `FIRMS_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Enables the firms-store READ path (`backend/services/firms.py`, bd lo88): the `firms/{firm_id}` collection holding firm profiles + allowed-kits, consumed by the form-kit routes' firm-scoped visibility filter (bd vccy). Reads FAIL CLOSED to `[]` when off/broken, so an outage hides private kits rather than exposing them. Set in `deploy-all.sh`'s `BACKEND_ENV`; the `deploy-form-kit.sh` drop-list hint enumerates it (pinned by `tests/test_deploy_form_kit_hints.py`). Firm records are created by `scripts/bootstrap_firm.py`; see `components/auth.md` (Firm identity). |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
 `AUDIO_IN_RATE=16000`,
-`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`. The VAD
-sensitivity knobs ARE env-overridable: `VAD_START_SENSITIVITY` (default
-`HIGH`) / `VAD_END_SENSITIVITY` (default `LOW`). The list is not
-exhaustive -- additional WS/VAD tuning constants live in `config.py`. Also there:
+`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`. (The VAD
+sensitivity knobs that used to be env-overridable here are GONE -- Gemini's
+automatic activity detection is unconditionally disabled, so nothing reads them;
+bd polyglot-pdf-v1m8g.) The list is not
+exhaustive -- additional WS tuning constants live in `config.py`. Also there:
 `WS_IDLE_TIMEOUT_SEC` (`120`) -- the idle watchdog closes a WebSocket connection
 after this many seconds with no received message (audio, ping, or control).
 
@@ -161,11 +161,11 @@ insertion point.
   server-side per-session field persistence, and never log field values/PII/PHI
   server-side. (Formalized in `standards/stateless-architecture.md` +
   `standards/hipaa-pii-policy.md`.)
-- **VAD mode.** The default is `DISABLE_GEMINI_VAD=False` -- **native** mode, where
-  Gemini's built-in VAD detects turn boundaries. Setting it `True` switches to
-  **manual** mode, where the frontend drives turn-taking with explicit
-  `activity_start`/`activity_end` messages instead; don't switch modes without
-  revisiting the client signals. (See `standards/voice-and-vad.md`.)
+- **Turn-taking is push-to-talk, and only push-to-talk.** Gemini's automatic
+  activity detection is unconditionally disabled; the frontend brackets every turn
+  with explicit `activity_start`/`activity_end`. There is no mode flag -- PTT knows
+  when the user is speaking, so a second detector inferring it could only disagree
+  (bd polyglot-pdf-v1m8g). (See `standards/voice-and-vad.md`.)
 - **Idle watchdog** closes a form-fill socket after `WS_IDLE_TIMEOUT_SEC` of no
   inbound traffic, sending a graceful `{"type":"idle_timeout"}` first.
 - **"Sections" is canon; "parts" is a distinct level, not a synonym.** The internal
@@ -355,12 +355,11 @@ Known traps (all deliberate, all pinned only by comments):
 - `validation_result` carries `conflicts` only; the Python-side `result_type`
   label is deliberately never serialized (`_run_validation_and_push` in
   websocket_routes.py, contract pinned in `standards/validation-delegation.md`).
-- The `session_ready` message's `native_vad` flag (websocket_routes.py's
-  `session_ready` payload send) must agree with the backend's
-  `DISABLE_GEMINI_VAD` -- the client picks its
-  activity-signal behavior from it (`webFormConnection.ts`'s `native_vad`
-  destructure and its `onNativeVadMode` call ->
-  `onNativeVadMode` at `frontend/src/shared/connection.ts:535`).
+- The `session_ready` message carries NO VAD-mode flag (bd polyglot-pdf-v1m8g).
+  It used to send `native_vad`, which the client destructured to pick its
+  activity-signal behavior; both ends are gone, and the client now always sends
+  manual activity signals. A re-added flag would be a contract change on both
+  sides, not a backend-only toggle.
 
 ### 4. Backend <-> Gemini Live (tools + session config)
 

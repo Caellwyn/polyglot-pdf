@@ -145,10 +145,6 @@ export interface ConnectionCallbacks {
   onError?: (error: Error) => void;
   onAudioData?: (arrayBuffer: ArrayBuffer) => void;
   onNextField?: (fieldId: string | null) => void;
-  // Native-VAD mode toggle from the backend session_ready handshake (bd
-  // polyglot-pdf-333). When enabled, the connection layer must stop sending
-  // manual activity signals and stream continuous audio.
-  onNativeVadMode?: (enabled: boolean) => void;
   // The Gemini Live server sent a GoAway: it is about to terminate this
   // connection (bd polyglot-pdf-c5t). timeLeft is a duration string (may be
   // null). The handler can pre-emptively reconnect before the abrupt close; the
@@ -746,7 +742,7 @@ export class WebFormConnection {
             this.clearThinking('agent_processing:false');
           }
           // TEST-ONLY observability (bd polyglot-pdf-fa4x): let the E2E voice
-          // harness see that the native-VAD START signal fired, without a human
+          // harness see that the thinking START signal fired, without a human
           // mic. Undefined in production; only the harness sets it.
           if (window.vffOnAgentProcessing) {
             window.vffOnAgentProcessing(message.processing === true);
@@ -875,7 +871,7 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad, continuous_session_enabled } = message;
+    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, continuous_session_enabled } = message;
 
     // Captured at ENTRY, before any of this handler's own state writes: the
     // setSessionId/setJitMode/setContinuousSession mutators below PERSIST
@@ -955,14 +951,6 @@ export class WebFormConnection {
     this.dtiModeEnabled = dti_mode_enabled === true;
     if (this.dtiModeEnabled) {
       console.log('[WebFormConnection] [OK] DTI mode enabled by backend');
-    }
-
-    // Native-VAD mode (bd polyglot-pdf-333): tell the connection/audio layer
-    // whether Gemini's own VAD is driving turns. Fire BEFORE onSessionReady so
-    // the audio layer is configured before any connected-state effects run.
-    // Default to false (manual VAD) when the backend doesn't send the field.
-    if (this.callbacks.onNativeVadMode) {
-      this.callbacks.onNativeVadMode(native_vad === true);
     }
 
     // If a reconnect-based section switch was in flight (startSection), THIS is
