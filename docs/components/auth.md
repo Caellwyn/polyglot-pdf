@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-08-20. See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -277,7 +277,8 @@ Entitlement is RE-CHECKED at open rather than trusted from the mint-time
 snapshot, since a firm can be suspended in the 48 hours in between.
 
 **Minting is OFF by default** (`LINK_MINTING_ENABLED`); the spend ceiling it
-waited on (bd `polyglot-pdf-ik7e`) has shipped, and the DEMO now enables it --
+waited on (bd `polyglot-pdf-ik7e`) has shipped, and BOTH deployed channels now
+enable it (demo and staging, bd `polyglot-pdf-hvui4`) --
 see [config-deployment.md](config-deployment.md).
 
 Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind

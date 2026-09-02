@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-9qn64: added the staging channel -- two live channels in one project, separated by Cloud Run service + Hosting site; the production channel is dead and its script refuses to run.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -101,8 +101,12 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   that path (see the Vertex-only rule below). See
   [ai-models.md](../standards/ai-models.md).
 - **`GEMINI_API_KEY`** — required when `VERTEXAI=false` (AI Studio key); unused on
-  the Vertex path. On the demo Cloud Run service it is injected via **Secret
-  Manager** (`--set-secrets`), never as a plaintext env var.
+  the Vertex path, which is what the demo runs. A credential belongs in **Secret
+  Manager**, never in a plaintext env var — but note this key is **not bound by
+  any deploy script today**: `--set-secrets` existed only in comments until bd
+  `polyglot-pdf-hvui4`, and the channel scripts now bind `LINK_TOKEN_SECRET`
+  alone. Add it to `BACKEND_SECRETS_COMMON` if a channel ever needs the AI Studio
+  path.
 - **`backend/.env.DEV` marker file** — this **file's existence** (NOT an env var)
   flips `DEV_LOGGING_ENABLED` in `backend/utils/dev_file_logger.py`, which is the
   **single gate** for *both* dev-logging paths: the `DevFileLogger` itself **and**
@@ -165,8 +169,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
     404s while this is unset, which remains the default anywhere it is not
     explicitly set. What it guarded -- the per-jti/per-firm limits and the
     session cost ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so
-    enabling it is now legitimate: the DEMO sets it in `deploy-demo.sh`
-    (maintainer, 2026-08-28, so testers can reach the deployed app). Enabling
+    enabling it is now legitimate: BOTH deployed channels set it --
+    `deploy-demo.sh` (maintainer, 2026-08-28, so testers can reach the deployed
+    app) and `deploy-staging.sh` (bd `polyglot-pdf-hvui4`, so staging can
+    actually exercise the feature it exists to rehearse). Enabling
     it in any environment where the ceiling is NOT enforced would still mean
     an unauthenticated entry point to a paid session with nothing bounding
     spend. The ceiling actually in force is the global
@@ -240,7 +246,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `scripts/authoring/extract_form.py` as a subprocess — the image is built from
   the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
   `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
-  Cloud Build upload lean. Needs `GEMINI_API_KEY` mounted (Secret Manager).
+  Cloud Build upload lean. Needs `GEMINI_API_KEY` on the AI Studio path — which
+  no deploy script binds today (`--set-secrets` carries `LINK_TOKEN_SECRET`
+  alone); the deployed channels run Vertex, where the key is unused.
 - **`OPTION_TRANSLATION_MODEL`** — the authoring-time option-label translation
   model (bd `polyglot-pdf-2h9j`; default `gemini-2.5-pro`, same one-off-per-form
   rationale). Read by the extraction post-pass (skippable via the extract
@@ -291,7 +299,13 @@ two channel scripts use.
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
-  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`). The
+  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`).
+  **`--set-secrets`** is added when the wrapper sets `BACKEND_SECRETS` (bd
+  `polyglot-pdf-hvui4`); a channel that sets none produces an invocation
+  identical to before the flag existed. It **REPLACES the service's entire
+  secret block** — gcloud's own help says "All existing secrets will be removed
+  first" — so a channel must list every binding it wants to survive, not just
+  the one it is adding. The
   container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
   backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,

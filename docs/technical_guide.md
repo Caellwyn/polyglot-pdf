@@ -1,17 +1,12 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-nyc5j/qn8wv/x6dq1: every drifted
-`config.py`/`form_filling_service.py`/`live_ai_gemini.py`/`ai_context.py`/
-`spellback_tts.py`/`callback_handler.py` citation in contracts 1, 2, 4, and 11
-re-anchored to a symbol name instead of a line number -- including the
-`form_metadata` bullet, the tool coupling table, and the `LIVE_VOICE_NAME`
-two-consumer section. This whole doc keeps drifting the same way, so line
-numbers here are no longer trustworthy without re-verifying against source
--- bd polyglot-pdf-vdcm4 already re-anchored the same class of citation in
-contracts 2, 3, and 6 once, and this pass had to do contract 2 again. The
-editor rows describe per-user Firebase claims, not shared tokens, per bd
-polyglot-pdf-hn0jq; the lock rows are person-scoped, per bd
-polyglot-pdf-5tuas.)*
+*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.)*
+
+> **Line-number citations in this file are not trustworthy without re-verifying
+> against source.** This doc has drifted the same way repeatedly -- bd
+> `polyglot-pdf-vdcm4` re-anchored one class of citation, then bd
+> `polyglot-pdf-nyc5j`/`qn8wv`/`x6dq1` had to re-anchor contract 2 again. Cite
+> a SYMBOL NAME rather than a line number when adding one.
 
 The [Surface contracts](#surface-contracts) section is the code-derived
 cross-surface data-contract map for blast-radius review. Continuous-DTI is the
@@ -131,7 +126,7 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
-| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed, and the demo now enables it). Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed, and both deployed channels -- demo and staging -- now enable it). Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
@@ -776,7 +771,8 @@ choice, the language is the client's.
 **Minting is off by default** -- a live link is an unauthenticated door to a
 paid session, so it stays off wherever `LINK_MINTING_ENABLED` is not explicitly
 set. The spend ceiling it waited on (bd polyglot-pdf-ik7e) has shipped and the
-DEMO now enables it (bd polyglot-pdf-gob8l). The ceiling in force is the global
+demo AND staging now enable it (bd polyglot-pdf-gob8l, bd polyglot-pdf-hvui4).
+The ceiling in force is the global
 one; per-form `link_cost_ceiling_usd` is declared by the shipped kits but not
 yet threaded through the handshake (bd polyglot-pdf-4tjt7).
 
