@@ -580,7 +580,7 @@ export const App: React.FC = () => {
     // hasUnsavedChanges is this render's CLOSED-OVER value, so where this sits
     // among the resets below does not matter -- clearSchema() schedules a state
     // update, it does not rewrite the variable already captured here. Verified
-    // by moving this block below clearSchema(): all seven tests stay green.
+    // by moving this block below clearSchema(): the file stays fully green.
     // What WOULD break it is reading dirtiness from a ref or from freshly-read
     // state instead of the closure.
     //
