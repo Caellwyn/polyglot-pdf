@@ -44,7 +44,7 @@ interface FormCatalogueProps {
    * Run AFTER the picker returns a new directory: drops the open-kit state so a
    * same-named kit in the new folder can't inherit the prior form's live progress.
    */
-  clearOpenKit?: () => void;
+  clearOpenKit?: (reason?: 'hidden-by-other') => void;
   /**
    * Guard run BEFORE hiding the OPEN kit, which closes the editor and so
    * discards unsaved edits and the undo stack (bd polyglot-pdf-n5fwd).
@@ -155,7 +155,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   React.useEffect(() => {
     const prev = lastSeen.current;
     if (openIsHidden === true && prev?.id === selectedKitId && prev.visible) {
-      clearOpenKit?.();
+      // Tell App WHY, so it can say so: this close is not something the person
+      // in front of the screen did, and it may have taken unsaved edits with
+      // it (bd polyglot-pdf-0s2wf). Every other clearOpenKit caller passes no
+      // reason and stays silent, which is right -- those closes are all the
+      // user's own action, already gated by a confirm where work is at stake.
+      clearOpenKit?.('hidden-by-other');
     }
     lastSeen.current = (selectedKitId !== null && openIsHidden !== null)
       ? { id: selectedKitId, visible: !openIsHidden }

@@ -64,7 +64,7 @@ interface RemoteCatalogueProps {
    * that never opens a kit through this catalogue (none exist today, but the
    * contract shouldn't force one) is not required to supply it.
    */
-  clearOpenKit?: () => void;
+  clearOpenKit?: (reason?: 'hidden-by-other') => void;
   /**
    * Guard run BEFORE hiding the OPEN kit, which closes the editor and so
    * discards unsaved edits and the undo stack (bd polyglot-pdf-n5fwd).
@@ -229,7 +229,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     // deliberate open via Show hidden) is left alone, an absent kit teaches
     // the baseline nothing, and a different kit is not evidence about this one.
     if (openIsHidden === true && prev?.id === selectedKitId && prev.visible) {
-      clearOpenKit?.();
+      // Tell App WHY, so it can say so: this close is not something the person
+      // in front of the screen did, and it may have taken unsaved edits with
+      // it (bd polyglot-pdf-0s2wf). Every other clearOpenKit caller passes no
+      // reason and stays silent, which is right -- those closes are all the
+      // user's own action, already gated by a confirm where work is at stake.
+      clearOpenKit?.('hidden-by-other');
     }
     lastSeen.current = (selectedKitId !== null && openIsHidden !== null)
       ? { id: selectedKitId, visible: !openIsHidden }

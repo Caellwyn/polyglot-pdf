@@ -267,6 +267,15 @@ export const App: React.FC = () => {
   // drops the schema -- a failed save must never cost the work being saved
   // (bd 92qe.5).
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  // Someone ELSE hid the form this session had open, and the next refresh
+  // closed it (bd polyglot-pdf-0s2wf). No dialog is possible: that unwind runs
+  // from a background refresh, outside any user gesture, where a synchronous
+  // window.confirm() reads as a hostage prompt and can be popup-blocked. The
+  // work is already gone by the time this renders -- the banner exists to say
+  // SO, because the alternative shipped behaviour was the editor emptying
+  // itself with no explanation at all.
+  const [closedByOther, setClosedByOther] =
+    React.useState<{ lostUnsavedWork: boolean } | null>(null);
   // First-run guide (hosted): shown once per browser, reopenable via Help.
   const [guideOpen, setGuideOpen] = React.useState(false);
   // The File System Access handle the human picked: once set, saves write
@@ -553,7 +562,18 @@ export const App: React.FC = () => {
   // kit in the new folder can't inherit the old form's live progress (Codex PR
   // #224). Clears savedFileName too, else the header keeps showing "Saved to <old
   // schema>" with no schema open (Codex round 4).
-  const clearOpenKit = React.useCallback((): void => {
+  const clearOpenKit = React.useCallback((
+    reason?: 'hidden-by-other',
+  ): void => {
+    // hasUnsavedChanges is this render's CLOSED-OVER value, so where this sits
+    // among the resets below does not matter -- clearSchema() schedules a state
+    // update, it does not rewrite the variable already captured here. Verified
+    // by moving this block below clearSchema(): all seven tests stay green.
+    // What WOULD break it is reading dirtiness from a ref or from freshly-read
+    // state instead of the closure.
+    if (reason === 'hidden-by-other') {
+      setClosedByOther({ lostUnsavedWork: hasUnsavedChanges });
+    }
     setSelectedKitId(null);
     setSelectedForm(null);
     setSavedFileName(null);
@@ -569,7 +589,7 @@ export const App: React.FC = () => {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
     }
-  }, [clearSchema, resetPerFormReviewUi, clearLintMirror]);
+  }, [clearSchema, resetPerFormReviewUi, clearLintMirror, hasUnsavedChanges]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {
@@ -1475,6 +1495,54 @@ export const App: React.FC = () => {
             onClick={() => setSaveError(null)}
             aria-label="Dismiss save error"
             className="text-red-400 hover:text-red-600 shrink-0"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Another author hid this form, so the next refresh closed it here
+          (bd polyglot-pdf-0s2wf). Amber, not red: the FORM is fine and fully
+          retrievable via "Show hidden" -- what may be gone is unsaved editing
+          work, and the wording only claims that when it actually happened. */}
+      {closedByOther && (
+        <div
+          role="alert"
+          className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-3"
+        >
+          <svg
+            className="w-4 h-4 text-amber-600 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+            />
+          </svg>
+          <span className="text-sm text-amber-800 flex-1">
+            {closedByOther.lostUnsavedWork
+              ? 'Someone else hid this form, so it closed here and your unsaved '
+                + 'changes were lost. Tick "Show hidden" in the catalogue to open '
+                + 'it again.'
+              : 'Someone else hid this form, so it closed here. Nothing was lost '
+                + '-- your work was already saved. Tick "Show hidden" in the '
+                + 'catalogue to open it again.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setClosedByOther(null)}
+            aria-label="Dismiss"
+            className="text-amber-400 hover:text-amber-600 shrink-0"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path
