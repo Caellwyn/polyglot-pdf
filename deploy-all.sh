@@ -194,6 +194,12 @@ verify_service_publicly_reachable() {
     if echo "$invoker_roles" | grep -qx "roles/run.invoker"; then
         return 0
     fi
+    # PLAIN ASCII '=' here, deliberately, even though this file uses box-drawing
+    # '=' elsewhere: this line is read back by tests/test_deploy_reachability_gate.py
+    # through a Python subprocess, and on Windows the default cp1252 decode of a
+    # box-drawing glyph raises UnicodeDecodeError -- CLAUDE.md scar #6. Tried the
+    # matching glyph for consistency; it broke 4 tests. Consistency loses to not
+    # crashing.
     _gate_error "==========================================================="
     _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
     _gate_error "==========================================================="

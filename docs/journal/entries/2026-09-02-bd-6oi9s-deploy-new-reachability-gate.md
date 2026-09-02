@@ -112,6 +112,31 @@ docstring that says plainly what it does and does not prove, including that it
 still passes if `2>&1` returns. An honest test that states its limits beats a
 confident one that overstates its coverage.
 
+## The outer review: presence is not enough, the CALL SHAPE matters
+
+The Opus cross-surface pass showed the gate could be silently neutered while all
+38 tests stayed green: appending `| cat` to the call puts the function in a
+SUBSHELL, so its `exit 1` kills only that subshell and the script proceeds to
+"Deployment Complete!" and exits 0. `|| true`, `if ...`, and `$(...)` do the same.
+
+Deleting the call was already caught; *keeping it and defanging it* was not.
+Pinned now by test_gate_is_called_as_a_bare_command, parametrized over both
+scripts, and mutation-verified with the reviewer's own `| cat` plus `|| true`.
+
+That is the third variation of one lesson in this bead: a guard is only as good
+as the narrowest thing it actually asserts. Presence, shape, and behavior are
+three different claims.
+
+## A consistency change that had to be reverted
+
+The reviewer noted the gate's error banner uses plain ASCII `=` while the rest of
+`deploy-all.sh` uses box-drawing `=`. Matching the surrounding style broke four
+tests: the banner is read back through a Python subprocess, and on Windows the
+default cp1252 decode of that glyph raises `UnicodeDecodeError` -- CLAUDE.md
+scar #6, hit from a direction the rule does not literally cover (it names
+`.py`/`.ts`, not shell). Reverted, with the reason recorded at the line so nobody
+"fixes" the inconsistency again.
+
 ## Exit criteria
 
 1. **Met.** `deploy-new.sh` verifies the binding and exits non-zero when it is
@@ -123,11 +148,11 @@ confident one that overstates its coverage.
 
 ## Testing
 
-Eight mutations, each confirmed to apply before trusting the result: remove
+Ten mutations, each confirmed to apply before trusting the result: remove
 `--flatten` (from both copies, so identity could not mask it), `grep -qx` ->
 `grep -q`, `exit 1` -> `return 0`, a third ungated script, drift between the two
 copies, removing `deploy-new.sh`'s call, re-merging stderr, and reverting
 the log-helper delegation. All caught by the intended test except the stderr
 one, which is analysed above.
 
-Full suite: 4388 passed, 126 skipped, exit 0.
+Full suite: 4390 passed, 126 skipped, exit 0.

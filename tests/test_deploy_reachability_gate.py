@@ -347,3 +347,47 @@ def test_gate_falls_back_to_stderr_without_log_helpers(tmp_path):
     assert "DEPLOY FAILED" in err, (
         "without log_error, the gate must still emit its message (on stderr)"
     )
+
+
+# ---------------------------------------------------------------------------
+# The CALL SITES, not just the gate's presence.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rel", GATED_DEPLOY_SCRIPTS)
+def test_gate_is_called_as_a_bare_command(rel):
+    """The call must not sit in a subshell, pipeline, or conditional.
+
+    THE NEUTERING MUTATION (found by the pre-PR cross-surface review): appending
+    `| cat` to the call puts the function in a SUBSHELL, so its `exit 1` kills
+    only that subshell and the script sails on to "Deployment Complete!" and
+    exits 0 -- reintroducing the exact bug this gate exists to prevent, past a
+    fully green suite. The same applies to `if ...`, `... || true`, and
+    `$(...)`: `exit` only terminates the shell it runs in.
+
+    Deleting the call outright was already caught. This pins the SHAPE of the
+    surviving call, which is the part that can be broken while still looking
+    present.
+    """
+    body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    calls = [
+        ln.strip()
+        for ln in body.splitlines()
+        if "verify_service_publicly_reachable" in ln
+        and not ln.strip().startswith("#")
+        and "()" not in ln  # the definition itself
+    ]
+    assert calls, f"{rel} never calls the gate"
+    for call in calls:
+        assert call.startswith("verify_service_publicly_reachable"), (
+            f"{rel}: the gate must be invoked as a BARE command, not inside a "
+            f"conditional or assignment -- `exit 1` would not terminate the "
+            f"script. Found: {call!r}"
+        )
+        for swallower in ("|", "$(", "&&", "||", "&"):
+            assert swallower not in call, (
+                f"{rel}: the gate's call contains {swallower!r}, which runs it "
+                f"in a subshell or guards it -- its `exit 1` would be swallowed "
+                f"and the deploy would report success over an unreachable "
+                f"service. Found: {call!r}"
+            )
