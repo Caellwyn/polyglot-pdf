@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-t7drr: recorded the shared-surface decision for the form-kit editing lock -- shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -74,6 +74,16 @@ kit editing lock) is deliberately shared because sharing is the correct design:
    `link_redemptions_<channel>` elsewhere) so a staging test cannot burn a demo
    link's single use. `LINK_CHANNEL` is what sets this, and both deploy scripts
    set it explicitly.
+
+   **`LINK_TOKEN_SECRET` is deliberately the SAME on both channels.** Each
+   deploy script binds the identical Secret Manager secret
+   (`BACKEND_SECRETS_COMMON`), and that is the intended choice, not an
+   oversight: the signing key is not what separates the channels -- the `aud`
+   claim is, and it is checked on every redemption regardless of who signed the
+   token. Giving each channel its own key would add nothing (a cross-channel
+   link is already refused) while creating a real failure mode, since rotating
+   one key silently invalidates links minted by the other. A shared key with a
+   per-channel audience is the smaller surface.
 
    **What is still shared: the BILLING counter, via the firm.** `record_mint`
    increments `firms/{id}/link_usage/{YYYY-MM}`, which is firm-scoped, not

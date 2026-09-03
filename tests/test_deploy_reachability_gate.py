@@ -571,3 +571,55 @@ def test_channel_wrapper_rejects_an_unknown_argument(rel):
     assert "Unknown argument" in parser and "exit 1" in parser, (
         f"{rel} must FAIL on an unknown argument, not merely note it"
     )
+
+
+def _run_gate_warn_mode(tmp_path: Path):
+    """Execute the gate with VERIFY_FAIL_IS_FATAL=false and an empty policy."""
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        'gcloud() { echo ""; return 0; }\n'
+        + _gate_function(DEPLOY_ALL)
+        + '\nVERIFY_FAIL_IS_FATAL=false verify_service_publicly_reachable '
+        '"svc" "r" "p"\n'
+        + 'echo "REACHED_END"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    proc = subprocess.run(
+        [BASH, "driver.sh"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(tmp_path),
+        timeout=60,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def test_warn_mode_actually_continues_and_says_WARNING(tmp_path):
+    """EXECUTE warn mode, do not merely assert the flag is spelled right.
+
+    The sibling tests for this feature check that the string
+    "VERIFY_FAIL_IS_FATAL=false verify_service_publicly_reachable" appears in the
+    frontend stage -- necessary, but a text assertion would still pass if the
+    branches INSIDE the function were swapped (banner text, or the early
+    return 0). Scar #9: test the tests. This runs the real shell.
+    """
+    rc, out, err = _run_gate_warn_mode(tmp_path)
+    assert rc == 0, "warn mode must not abort the deploy"
+    assert "REACHED_END" in out, "execution must continue past the gate"
+    assert "WARNING" in err, (
+        "warn mode must say WARNING, not DEPLOY FAILED -- the banner is the "
+        "operator's only cue that the deploy was not stopped"
+    )
+    assert "DEPLOY FAILED" not in err
+    assert "add-iam-policy-binding" in err, "the remedy must still be named"
+
+
+def test_fatal_mode_is_unchanged_by_the_severity_switch(tmp_path):
+    """The DEFAULT path must still abort -- the switch must not leak leniency."""
+    rc, out, err = _run_gate(tmp_path, [])
+    assert rc == 1, "the default (backend stage) mode must still abort"
+    assert "REACHED_END" not in out
+    assert "DEPLOY FAILED" in err
+    assert "WARNING" not in err

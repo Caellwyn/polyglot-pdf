@@ -335,8 +335,36 @@ def test_doc_does_not_present_dead_prod_as_runnable(doc):
         # knows to watch it. Demanding a death marker inside a filename list
         # would be a false positive, so skip it. (Caught on this test's first
         # run: config-deployment.md's Tracks line failed the stricter check.)
-        if line.lstrip().startswith("**Tracks:**"):
-            continue
+        #
+        # The exemption REQUIRES THE LINE TO ACTUALLY BE A FILE LIST, not merely
+        # to start with the marker. A bare startswith() was smugglable -- the
+        # review showed "**Tracks:** Run ./deploy-production.sh to go live."
+        # would be waved through, reintroducing exactly the evasion this test
+        # replaced a blacklist to prevent. So every token after the marker must
+        # look like a path, which prose never does.
+        stripped = line.lstrip()
+        if stripped.startswith("**Tracks:**"):
+            # Every token must LOOK LIKE A PATH: contain a "/" or carry a file
+            # extension, or be a known extensionless repo file. Ordinary prose
+            # words ("Run", "to", "go") satisfy none of those, which is what
+            # makes the exemption unsmugglable -- an earlier, looser version
+            # accepted any word made of path CHARACTERS and so waved through
+            # "**Tracks:** Run ./deploy-production.sh to go live."
+            #
+            # Dockerfile is the one extensionless name this repo's Tracks lines
+            # actually use; dotfiles like .gcloudignore and .firebaserc match the
+            # extension branch (leading dot, then a name).
+            tokens = stripped[len("**Tracks:**") :].split()
+
+            def _is_path(tok: str) -> bool:
+                if tok == "Dockerfile":
+                    return True
+                return bool(re.fullmatch(r"[\w.\-/]*[/.][\w\-]+", tok)) and (
+                    "/" in tok or "." in tok
+                )
+
+            if tokens and all(_is_path(t) for t in tokens):
+                continue
         window = "\n".join(lines[max(0, i - 2) : i + 3])
         assert any(m in window for m in DEATH_MARKERS), (
             f"{doc}:{i + 1} mentions deploy-production.sh with no death marker "

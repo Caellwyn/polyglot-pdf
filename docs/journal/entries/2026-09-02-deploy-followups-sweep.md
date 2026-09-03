@@ -106,9 +106,35 @@ does not create a subshell and `exit` still propagates, then narrowed the guard 
 allow exactly that shape. Confirmed it still rejects pipes, command substitution,
 `&&`/`||` guards, backgrounding, and an env prefix COMBINED with a pipe.
 
+## What the review caught in my own fixes
+
+Three findings, all in work done for THIS sweep:
+
+- **The `**Tracks:**` exemption was itself smugglable.** I exempted lines
+  starting with that marker so a filename list would not need a death marker --
+  but a bare `startswith` waves through
+  `**Tracks:** Run ./deploy-production.sh to go live.`, which is the same class
+  of evasion the blacklist had. Now every token after the marker must LOOK LIKE
+  A PATH (contain a `/` or an extension), which prose words never do. My first
+  attempt at tightening was too strict (it rejected `Dockerfile`,
+  `.gcloudignore`, `.firebaserc`) and my second too loose (it re-accepted the
+  smuggled line, because `Run`/`to`/`go` are made of path characters). The
+  third is checked against all four shapes.
+- **`t7drr` exit criterion 1 names `LINK_TOKEN_SECRET` explicitly**, and I had
+  documented the other two surfaces without it. Now recorded: both channels
+  deliberately bind the SAME secret, because the signing key is not what
+  separates them -- the `aud` claim is, checked on every redemption. Per-channel
+  keys would add nothing and create a real failure mode, since rotating one
+  would silently invalidate the other's links.
+- **Warn mode was pinned only by TEXT.** The tests asserted the flag string
+  appeared in the frontend stage, which would still pass if the branches inside
+  the function were swapped. This file already has an execution harness, so
+  there was no excuse: warn mode is now EXECUTED, and deleting its early
+  `return 0` reddens it (verified).
+
 ## Testing
 
-Full suite: 4427 passed, 126 skipped, exit 0. Three behavioural mutations, each confirmed to apply before
+Full suite: 4429 passed, 126 skipped, exit 0. Three behavioural mutations, each confirmed to apply before
 being trusted: removing the frontend gate call, removing the unknown-arg arm, and
 reverting the hint to one service. One mutation silently no-op'd on an escaping
 failure and was redone from a file -- the count assertion caught it, which is why
