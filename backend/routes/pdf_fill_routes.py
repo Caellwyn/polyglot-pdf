@@ -80,10 +80,18 @@ def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id
 	Never logs the value (bd hjo).
 	"""
 	options = field_obj.get("options") or []
-	match = next(
-		(o for o in options if isinstance(o, dict) and o.get("value") == value),
-		None,
-	)
+	# Two live option shapes: the v2 dict, and the legacy PLAIN STRING where the
+	# string IS the value (schema_lint's optionValue() contract). A string option
+	# can never carry pdf_on_value, so matching it here is what keeps a legacy
+	# select's fill warning-free -- fresh-eyes (g2fpr.1) caught the dict-only
+	# match misreporting EVERY fill of such a select as a stale session.
+	match = None
+	for o in options:
+		if isinstance(o, dict) and o.get("value") == value:
+			match = o
+			break
+		if isinstance(o, str) and o == value:
+			return value                                    # legacy: value is the code
 	if match is None:
 		if options:
 			# Options exist and none matches: the shape of a session stored

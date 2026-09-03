@@ -1715,3 +1715,41 @@ def test_the_channel_rules_are_select_only():
     opts = [{"value": "WY", "label": "Wyoming", "pdf_on_value": "WY"},
             {"value": "wyoming", "label": "Wyoming"}]
     assert _select_findings(_combo(opts, ftype="radio")) == []
+
+
+def test_a_junk_value_with_pdf_on_value_gets_ONE_finding_and_the_right_remedy():
+    """Fresh-eyes (g2fpr.1): 'Alabama (AL)' with pdf_on_value 'AL' fired BOTH
+    option-value-slug ('do NOT regenerate from the label') and
+    select-value-not-slug ('regenerate from the label') -- two ERRORs on one
+    option with opposite instructions, at exactly the moment PR 2 and the
+    migration will be producing this transitional shape.
+
+    Now: one finding, and its remedy knows the code lives in pdf_on_value."""
+    opts = [{"value": "Alabama (AL)", "label": "Alabama (AL)", "pdf_on_value": "AL"}]
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+                if f.rule in _SELECT_RULES | {"option-value-slug"}]
+    assert [f.rule for f in findings] == ["option-value-slug"]
+    assert "regenerate it from the label" in findings[0].message
+    assert "do NOT regenerate" not in findings[0].message
+    assert "pdf_on_value" in findings[0].message
+
+
+def test_the_legacy_select_remedy_still_says_do_not_regenerate_WITHOUT_pdf_on_value():
+    """The other side of the same remedy: an option with NO pdf_on_value is in
+    the legacy shape, where regenerating from the label is exactly what
+    breaks the printed form. That sentence must survive."""
+    opts = [{"value": "Alabama (AL)", "label": "Alabama (AL)"}]
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+                if f.rule == "option-value-slug"]
+    assert len(findings) == 1
+    assert "do NOT regenerate" in findings[0].message
+
+
+def test_rule_a_fires_ONLY_on_the_code_in_both_shape():
+    """select-value-not-slug is scoped to value-is-a-legal-code AND
+    pdf_on_value-set. A junk value is option-value-slug's finding (above), so
+    this rule must stay silent on it -- no double report."""
+    junk = [{"value": "Alabama (AL)", "label": "x", "pdf_on_value": "AL"}]
+    assert "select-value-not-slug" not in [f.rule for f in _select_findings(_combo(junk))]
+    both = [{"value": "AL", "label": "x", "pdf_on_value": "AL"}]
+    assert [f.rule for f in _select_findings(_combo(both))] == ["select-value-not-slug"]

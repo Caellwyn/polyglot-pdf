@@ -171,3 +171,24 @@ def test_radio_and_text_paths_are_untouched(kit_root):
     schema["fields"][0]["type"] = "text"
     del schema["fields"][0]["options"]
     assert _rendered(_fill(schema, "AK")) == "AK"
+
+
+def test_legacy_plain_string_options_print_and_do_NOT_warn(kit_root, monkeypatch):
+    """The second live option shape: options: ["AL", "AK", "WY"], where the
+    string IS the value (schema_lint's optionValue() contract). Fresh-eyes
+    (g2fpr.1) caught the dict-only match treating EVERY fill of such a select
+    as a stale session -- a false warning on a working kit. It prints its
+    code and stays silent."""
+    from backend.routes import pdf_fill_routes as mod
+    calls: list = []
+
+    class _Rec:
+        def warning(self, event, **kw):
+            calls.append(event)
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+
+    monkeypatch.setattr(mod, "_log", _Rec())
+    schema = _schema(list(_CODES))          # plain strings, not dicts
+    assert _rendered(_fill(schema, "AK")) == "AK"
+    assert "select_value_not_an_option" not in calls

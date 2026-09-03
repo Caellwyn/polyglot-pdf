@@ -615,7 +615,21 @@ def _check_options(
             # judged at all -- this route may simply have no kit identity to
             # load one from -- so say that instead of prescribing a fix that
             # would silently corrupt the form (bd polyglot-pdf-4we6j).
-            if f.get("type") == "select":
+            has_on_value = (
+                isinstance(o, dict)
+                and isinstance(o.get("pdf_on_value"), str)
+                and o["pdf_on_value"].strip() != ""
+            )
+            if f.get("type") == "select" and has_on_value:
+                # The option already carries its export code in pdf_on_value,
+                # so the value is free to be a slug -- and "do NOT regenerate"
+                # would be the WRONG advice here. Fresh-eyes (g2fpr.1) caught
+                # this remedy contradicting select-value-not-slug on one option.
+                remedy = (
+                    "regenerate it from the label; the PDF export code stays "
+                    "in pdf_on_value, which is what the filler writes"
+                )
+            elif f.get("type") == "select":
                 remedy = (
                     "for a dropdown this value must be the PDF's own export "
                     "code (e.g. 'WY'), which is checked against the form's "
@@ -653,7 +667,12 @@ def _check_options(
             on_value = o.get("pdf_on_value")
             has_on = isinstance(on_value, str) and on_value.strip() != ""
             if has_on:
-                if not vocab.is_valid_option_slug(value_str):
+                # Scoped to the CODE-IN-BOTH shape (value is a legal /Opt code
+                # AND pdf_on_value is set): a value that is neither slug nor
+                # code already tripped option-value-slug above, whose remedy
+                # now says the right thing for an option carrying
+                # pdf_on_value -- one finding, not two contradicting ones.
+                if value_str in pdf_choices and not vocab.is_valid_option_slug(value_str):
                     out.append(LintFinding(
                         SEVERITY_ERROR, "select-value-not-slug", opt_path,
                         f"this choice carries a PDF export code in pdf_on_value, "

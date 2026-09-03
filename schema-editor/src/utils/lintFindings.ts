@@ -112,7 +112,7 @@ export const RULE_REMEDIES: Record<string, string> = {
   // wrong ('Alabama (AL)' -> alabama_al -> prints clipped). The backend message
   // beside this line carries the type-specific detail (bd polyglot-pdf-4we6j).
   'option-value-slug': 'Fix the stored value as the message describes -- for a dropdown it must stay the PDF\'s own export code.',
-  'select-value-not-slug': 'This choice already carries its PDF export code, so regenerate the value from the label; the code stays in the export-code box.',
+  'select-value-not-slug': 'This choice already carries its PDF export code in pdf_on_value, so regenerate the value from the label; the code is what the form prints.',
   'select-on-value-not-in-pdf': 'Set the export code to one that the dropdown list in the PDF accepts -- anything else prints wrong.',
   'select-on-value-missing': 'Enter the PDF export code for this choice so the form prints the code, not the slug.',
   'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
