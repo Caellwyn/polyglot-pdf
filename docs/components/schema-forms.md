@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-a08po: `searchOriginFieldId` -- the next-field search resumes from the user's last-acted field and wraps, and a click moves focus only while NO audio is playing).*
+*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: blankness has ONE definition, `isBlankFieldValue` -- whitespace-only is not an answer at any of the six predicates that decide whether a field is filled).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -64,6 +64,27 @@ instances) operating on a `SchemaFormState` value:
   mis-fill the spoken answer. Typing is unambiguous intent and moves the origin
   either way. Completion is unchanged: an empty search still means every shown
   field is confirmed.
+- **Blankness has ONE definition: `isBlankFieldValue`** (`utils/fieldValue.ts`,
+  bd polyglot-pdf-5ovod). Every predicate answering "is this field answered?"
+  routes through it -- `isSectionValid` (the completion gate), `validateField`'s
+  required check, `SectionRenderer`'s skip affordance, `hasUsableValue` (the
+  confirm gate), and BOTH `hasValue` predicates in `computeNextField`.
+  Whitespace-only counts as BLANK: typing spaces is not a decision, and leaving a
+  field blank on a legal intake draft has to be explicit -- said aloud, or via the
+  skip control.
+
+  Those six sites each hand-wrote the check and every copy tested `=== ''`
+  without trimming, so a space-filled field satisfied the completion gate, passed
+  the required check, hid its own skip button, and was confirmable -- while
+  printing blank on the PDF and never reaching the backend (whose predicates all
+  `.strip()`, so the two sides disagreed about whether the field existed). The
+  sharpest case was `computeNextField`, where BOTH priorities rejected it and the
+  field became invisible to navigation entirely.
+
+  Distinct from a genuine `''`: on an OPTIONAL field a confirmed empty string
+  means "the user said this does not apply" (bd polyglot-pdf-6oe6 / w3ic), which
+  is a real verbal answer and still confirms. Whitespace is NOT normalised to
+  `''` -- doing so would make that path reachable by typing spaces.
 - `formSessionId` — persistent `fss_<base36-ts>_<random>`, survives reconnects
   (the durability boundary; see stateless-architecture).
 - `validationErrors`, `loadedFieldIds`/`jitModeEnabled` (JIT token-reduction),

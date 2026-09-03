@@ -1998,8 +1998,15 @@ export class WebFormConnection {
     // never lands. Therefore, treat '' as usable when the field is not required.
     const fieldSchema = this.state.schema.fields.find(f => f.id === field_id);
     const fieldIsRequired = fieldSchema?.validation?.required === true;
+    // Whitespace-only is BLANK and never usable, on required OR optional fields
+    // (bd polyglot-pdf-5ovod): typing spaces is not the "does not apply" answer.
+    // The '' carve-out above stays as-is -- a genuine empty string on an OPTIONAL
+    // field is a deliberate verbal answer, and isBlankFieldValue treats '' and
+    // '   ' alike, so the carve-out is applied only to the exact-'' case.
+    const isWhitespaceOnly =
+      typeof fieldValue === 'string' && fieldValue !== '' && fieldValue.trim() === '';
     const hasUsableValue =
-      fieldValue !== null && fieldValue !== undefined &&
+      fieldValue !== null && fieldValue !== undefined && !isWhitespaceOnly &&
       (fieldValue !== '' || !fieldIsRequired);
 
     if (!hasUsableValue) {

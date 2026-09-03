@@ -23,7 +23,7 @@
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
-import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue';
+import { readFieldEntryWithAlias, isBlankFieldValue } from './schema-forms/utils/fieldValue';
 import { kitTranslationKeys } from './shared/languages';
 
 // Navigation operates on the canonical schema FormField (it iterates
@@ -260,9 +260,18 @@ export function computeNextField(
     // (matching hasUsableValue), so a required-empty field is untouched by
     // this change and still falls through to Priority 2 for filling.
     const fieldIsRequired = field.validation?.required === true;
-    const hasValue = currentValue?.value !== null
-      && currentValue?.value !== undefined
-      && (currentValue?.value !== '' || !fieldIsRequired);
+    // Whitespace-only is BLANK on either kind of field (bd polyglot-pdf-5ovod),
+    // so a space-filled field falls through to Priority 2 to be FILLED rather
+    // than being offered as a filled-but-unconfirmed field to CONFIRM. Kept
+    // byte-for-byte in step with hasUsableValue above; the exact-'' carve-out
+    // for optional fields is untouched.
+    const rawCurrent = currentValue?.value;
+    const isWhitespaceOnly =
+      typeof rawCurrent === 'string' && rawCurrent !== '' && rawCurrent.trim() === '';
+    const hasValue = rawCurrent !== null
+      && rawCurrent !== undefined
+      && !isWhitespaceOnly
+      && (rawCurrent !== '' || !fieldIsRequired);
 
     // Return first field with value but NOT confirmed
     if (hasValue && !isConfirmed) {
@@ -292,10 +301,13 @@ export function computeNextField(
       continue;
     }
 
-    // Check if field has a value (null, undefined, or empty string means not filled)
-    const hasValue = currentValue?.value !== null
-      && currentValue?.value !== undefined
-      && currentValue?.value !== '';
+    // Check if field has a value. Whitespace-only counts as NOT filled
+    // (bd polyglot-pdf-5ovod) -- this is the second of the two hasValue
+    // predicates in this function, and missing it here made a space-filled field
+    // fall through BOTH priorities: Priority 1 said "not a value to confirm",
+    // this said "not empty either", and computeNextField returned null. The
+    // field became invisible to navigation entirely.
+    const hasValue = !isBlankFieldValue(currentValue?.value);
 
     // Return first empty field
     if (!hasValue) {

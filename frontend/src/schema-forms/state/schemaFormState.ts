@@ -15,6 +15,7 @@
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue, ValidatorFinding } from "../types/schema";
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
+import { isBlankFieldValue } from "../utils/fieldValue";
 import { readFieldEntryWithAlias } from "../utils/fieldValue";
 import { loadOnboardingState } from "../onboardingStorage";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
@@ -904,12 +905,11 @@ export class SchemaFormStateManager {
         const fieldValue = state.fieldValues[field.id];
         if (!fieldValue?.skipped) {
           const actualValue = fieldValue?.value;
-          const isEmpty =
-            actualValue === null ||
-            actualValue === undefined ||
-            actualValue === "" ||
-            (Array.isArray(actualValue) && actualValue.length === 0);
-          if (isEmpty) {
+          // Whitespace-only is BLANK (bd polyglot-pdf-5ovod): typing spaces into
+          // a required field used to satisfy this gate while printing blank on
+          // the PDF -- and the backend never even heard about it, since the
+          // notify path trims.
+          if (isBlankFieldValue(actualValue)) {
             return false;
           }
         }
