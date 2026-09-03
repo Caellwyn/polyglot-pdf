@@ -94,6 +94,87 @@ def test_custom_schema_path_is_propagated(monkeypatch):
     assert form.pdf_path == "/form-kits/i90/i90.pdf"
 
 
+def test_GCS_mode_routes_every_kit_through_the_api(monkeypatch):
+    """A bucket-published PUBLIC kit must not be advertised at a static path.
+
+    THE BUG (bd polyglot-pdf-6p77c): the static path /form-kits/<id>/schema.json
+    resolves only for kits that were in the git tree at frontend BUILD time --
+    generate-form-manifest.ts indexes the local form-kits/ directory. The hosted
+    editor publishes into the BUCKET, so a kit can be `complete`, public, and
+    perfectly serveable while being absent from the bundle. Its static path then
+    falls through firebase.json's SPA catch-all and returns index.html with HTTP
+    200, and the client's JSON.parse dies on "<!DOCTYPE". That is exactly what
+    happened to the i-90_v2 kit on the live demo.
+
+    The rewrite used to be gated on is_private. Privacy was never the real
+    discriminator -- presence in the bundle is, and in GCS mode that is
+    unknowable from here, so every kit routes through /api/.
+    """
+    manifest = {
+        "forms": [
+            {
+                "id": "i-90_v2",
+                "label": "I 90",
+                "description": "bucket-published, public, NOT in the git tree",
+                "schemaFile": "schema.json",
+                "schemaPath": "/form-kits/i-90_v2/schema.json",
+                "pdfFile": "form.pdf",
+                "pdfPath": "/form-kits/i-90_v2/form.pdf",
+            }
+        ]
+    }
+
+    class _GCSLike(fkr.GCSFormKitStore):
+        # Subclass so isinstance() matches the real discriminator, but skip
+        # __init__ (no bucket/credentials in a unit test).
+        def __init__(self):
+            self._manifest = manifest
+            self.allow_convention_fallback = False
+
+        async def load_manifest(self, manifest_file: str = "index.json") -> dict:
+            return self._manifest
+
+        async def load_metadata(self, kit_id: str):
+            return {"status": "complete"}
+
+    monkeypatch.setattr(fkr, "get_form_kit_store", _GCSLike)
+
+    form = _run(fkr.list_form_kits()).forms[0]
+    assert form.schema_path == "/api/form-kits/i-90_v2/schema", (
+        "a bucket-only public kit was advertised at its baked static path, "
+        "which 404s to SPA HTML")
+    assert form.pdf_path == "/api/form-kits/i-90_v2/pdf"
+    # The FILENAMES still ride along -- the client needs them for the fill call.
+    assert form.schema_file == "schema.json"
+    assert form.pdf_file == "form.pdf"
+
+
+def test_LOCAL_mode_keeps_static_paths(monkeypatch):
+    """The mirror of the test above: local mode must NOT be rewritten.
+
+    There the store root IS the git tree, so /form-kits/<id>/... resolves by
+    construction, and the static path avoids an auth round-trip per asset.
+    """
+    manifest = {
+        "forms": [
+            {
+                "id": "w7",
+                "label": "W-7",
+                "description": "committed kit",
+                "schemaFile": "schema.json",
+                "schemaPath": "/form-kits/w7/schema.json",
+                "pdfFile": "form.pdf",
+                "pdfPath": "/form-kits/w7/form.pdf",
+            }
+        ]
+    }
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _FakeStore(manifest))
+
+    form = _run(fkr.list_form_kits()).forms[0]
+    assert form.schema_path == "/form-kits/w7/schema.json"
+    assert form.pdf_path == "/form-kits/w7/form.pdf"
+
+
 def test_missing_paths_fall_back_to_convention(monkeypatch):
     # An older manifest entry without schemaPath/pdfPath -> conventional paths.
     manifest = {"forms": [{"id": "n400", "label": "Form N-400"}]}
