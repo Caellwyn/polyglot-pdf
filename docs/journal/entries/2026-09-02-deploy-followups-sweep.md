@@ -132,9 +132,32 @@ Three findings, all in work done for THIS sweep:
   there was no excuse: warn mode is now EXECUTED, and deleting its early
   `return 0` reddens it (verified).
 
+## The outer review: an env var cannot express "just this call"
+
+Two more, both in this sweep's own work:
+
+- **`.firebaserc`'s alias removal falsified a doc I never touched.**
+  `config-deployment.md` said the dead project was "(still the `.firebaserc`
+  `default`/`prod` alias)" -- true on `dev`, false the moment `xsp5b` deleted
+  them. A tier-2 current-state doc, broken by a change in a different file. The
+  lesson is not "update the doc" but that a `Tracks:` list is a hint about which
+  docs a change can falsify, and I did not consult it.
+- **`VERIFY_FAIL_IS_FATAL` was the wrong mechanism.** An env var cannot
+  distinguish "the frontend stage set this for one call" from "it was ambient in
+  the operator's shell", so an exported `VERIFY_FAIL_IS_FATAL=false` silently
+  disarmed the BACKEND stage's abort -- on the one path where an unreachable
+  service is definitely that run's own doing. Reproduced, then fixed by making
+  severity a positional ARGUMENT (`$4`, default `fatal`), which only a real call
+  site can pass. `test_ambient_env_cannot_disarm_the_fatal_default` exports the
+  old variable and asserts the abort still fires.
+
+The second is the more interesting error: I reached for the cheapest way to add
+a per-call option and picked one whose scope was wrong. A flag that can arrive
+from anywhere is not a per-call flag.
+
 ## Testing
 
-Full suite: 4429 passed, 126 skipped, exit 0. Three behavioural mutations, each confirmed to apply before
+Full suite: 4430 passed, 126 skipped, exit 0. Three behavioural mutations, each confirmed to apply before
 being trusted: removing the frontend gate call, removing the unknown-arg arm, and
 reverting the hint to one service. One mutation silently no-op'd on an escaping
 failure and was redone from a file -- the count assertion caught it, which is why

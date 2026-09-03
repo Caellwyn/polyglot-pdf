@@ -531,18 +531,20 @@ def test_frontend_stage_warns_rather_than_aborting():
     """
     body = DEPLOY_ALL.read_text(encoding="utf-8")
     fe = body.split("DEPLOYING FRONTEND TO FIREBASE HOSTING")[1]
-    assert "VERIFY_FAIL_IS_FATAL=false verify_service_publicly_reachable" in fe, (
-        "the frontend stage must call the gate in WARN mode "
-        "(VERIFY_FAIL_IS_FATAL=false), not the default fatal mode"
+    assert re.search(r"verify_service_publicly_reachable[^\n]*\\?\s*\n?[^\n]*\bwarn\b", fe), (
+        'the frontend stage must call the gate in WARN mode (a trailing "warn" '
+        "argument), not the default fatal mode"
     )
 
 
 def test_the_gate_defaults_to_fatal():
     """Leniency must be opted INTO, never inherited by forgetting the flag."""
     query = _reachability_query_owner()
-    assert '"${VERIFY_FAIL_IS_FATAL:-true}"' in query, (
-        "the severity switch must DEFAULT to true (fatal); a default of false "
-        "would silently downgrade the backend stage's abort to a warning"
+    assert 'severity="${4:-fatal}"' in query, (
+        "severity must be a positional ARGUMENT defaulting to fatal. As an ENV "
+        "VAR it could not tell a deliberate per-call opt-out from an ambient "
+        "exported value, so an exported VERIFY_FAIL_IS_FATAL=false disarmed the "
+        "BACKEND stage's abort -- the exact bug this gate exists to stop."
     )
 
 
@@ -574,13 +576,12 @@ def test_channel_wrapper_rejects_an_unknown_argument(rel):
 
 
 def _run_gate_warn_mode(tmp_path: Path):
-    """Execute the gate with VERIFY_FAIL_IS_FATAL=false and an empty policy."""
+    """Execute the gate with the "warn" severity argument and an empty policy."""
     driver = tmp_path / "driver.sh"
     driver.write_text(
         'gcloud() { echo ""; return 0; }\n'
         + _gate_function(DEPLOY_ALL)
-        + '\nVERIFY_FAIL_IS_FATAL=false verify_service_publicly_reachable '
-        '"svc" "r" "p"\n'
+        + '\nverify_service_publicly_reachable "svc" "r" "p" warn\n'
         + 'echo "REACHED_END"\n',
         encoding="utf-8",
         newline="\n",
@@ -600,7 +601,7 @@ def test_warn_mode_actually_continues_and_says_WARNING(tmp_path):
     """EXECUTE warn mode, do not merely assert the flag is spelled right.
 
     The sibling tests for this feature check that the string
-    "VERIFY_FAIL_IS_FATAL=false verify_service_publicly_reachable" appears in the
+    a "warn" argument appears in the
     frontend stage -- necessary, but a text assertion would still pass if the
     branches INSIDE the function were swapped (banner text, or the early
     return 0). Scar #9: test the tests. This runs the real shell.
@@ -623,3 +624,46 @@ def test_fatal_mode_is_unchanged_by_the_severity_switch(tmp_path):
     assert "REACHED_END" not in out
     assert "DEPLOY FAILED" in err
     assert "WARNING" not in err
+
+
+def test_ambient_env_cannot_disarm_the_fatal_default(tmp_path):
+    """An exported VERIFY_FAIL_IS_FATAL=false must NOT downgrade the abort.
+
+    THE ENV-VAR TRAP (bd polyglot-pdf-xx9kd, found by the pre-PR cross-surface
+    review). Severity was first read from the environment, and an env var cannot
+    distinguish "the frontend stage set this for one call" from "it was ambient
+    in the operator's shell". So an exported VERIFY_FAIL_IS_FATAL=false silently
+    turned the BACKEND stage's abort into a warning -- reproducing the exact bug
+    the gate exists to stop, on the one path where an unreachable service is
+    definitely this run's own doing.
+
+    Severity is a positional argument now, so only a real call site can request
+    leniency. This runs the gate with the old variable exported and asserts it
+    still aborts.
+    """
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        'gcloud() { echo ""; return 0; }\n'
+        + _gate_function(DEPLOY_ALL)
+        + '\nverify_service_publicly_reachable "svc" "r" "p"\n'
+        + 'echo "REACHED_END"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    env = dict(os.environ)
+    env["VERIFY_FAIL_IS_FATAL"] = "false"
+    proc = subprocess.run(
+        [BASH, "driver.sh"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(tmp_path),
+        env=env,
+        timeout=60,
+    )
+    assert proc.returncode == 1, (
+        "an ambient VERIFY_FAIL_IS_FATAL=false disarmed the fatal default -- "
+        "severity must come from the call site, not the environment"
+    )
+    assert "REACHED_END" not in proc.stdout
+    assert "DEPLOY FAILED" in proc.stderr
