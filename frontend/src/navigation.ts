@@ -296,8 +296,23 @@ export function computeNextField(
     const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
     const isConfirmed = currentValue?.confirmed === true;
 
-    // Skip confirmed fields (skipConfirmed=true at this point)
-    if (isConfirmed) {
+    // Skip confirmed fields (skipConfirmed=true at this point) -- UNLESS the
+    // confirmed value is whitespace (bd polyglot-pdf-5ovod). A confirmation of
+    // blankness is not a real confirmation: before this bead a space-filled
+    // field could BE confirmed, and such an entry survives in any session saved
+    // beforehand. Without this arm it is invisible to BOTH loops -- Priority 1
+    // skips it (isConfirmed), this skips it too -- so the field is never asked
+    // about again and prints blank on the PDF. Re-offering it as a question is
+    // the recovery.
+    //
+    // A confirmed '' is NOT whitespace and is untouched: on an optional field
+    // that is the deliberate "does not apply" answer (bd polyglot-pdf-6oe6).
+    const confirmedButBlank =
+      isConfirmed
+      && typeof currentValue?.value === 'string'
+      && currentValue.value !== ''
+      && currentValue.value.trim() === '';
+    if (isConfirmed && !confirmedButBlank) {
       continue;
     }
 

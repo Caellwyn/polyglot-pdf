@@ -64,11 +64,21 @@ instances) operating on a `SchemaFormState` value:
   mis-fill the spoken answer. Typing is unambiguous intent and moves the origin
   either way. Completion is unchanged: an empty search still means every shown
   field is confirmed.
-- **Blankness has ONE definition: `isBlankFieldValue`** (`utils/fieldValue.ts`,
-  bd polyglot-pdf-5ovod). Every predicate answering "is this field answered?"
-  routes through it -- `isSectionValid` (the completion gate), `validateField`'s
-  required check, `SectionRenderer`'s skip affordance, `hasUsableValue` (the
-  confirm gate), and BOTH `hasValue` predicates in `computeNextField`.
+- **Blankness has one definition where it GATES: `isBlankFieldValue`**
+  (`utils/fieldValue.ts`, bd polyglot-pdf-5ovod). The predicates that decide
+  whether a field is answered -- and so whether the form can complete, whether
+  the model may confirm, and what it asks next -- all route through it:
+  `isSectionValid` (the completion gate), `validateField`'s required check,
+  `SectionRenderer`'s skip affordance, `hasUsableValue` (the confirm gate), and
+  BOTH `hasValue` predicates in `computeNextField`.
+
+  **This is NOT yet every value-presence check in the frontend.** Several
+  lower-stakes ones still test `=== ''` untrimmed -- the progress counters, the
+  `skip_field`/`switch_field` acks, the resume-section scan, and the preview
+  painter -- so they can still read whitespace as present. None of them gates
+  completion or confirmation, which is why they were out of this bead's scope;
+  they are tracked as bd polyglot-pdf-qpz11. Do not read the list above as the
+  complete set of emptiness checks.
   Whitespace-only counts as BLANK: typing spaces is not a decision, and leaving a
   field blank on a legal intake draft has to be explicit -- said aloud, or via the
   skip control.

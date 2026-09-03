@@ -103,16 +103,74 @@ describe('whitespace is not an answer, at every predicate', () => {
   });
 
   it('NAVIGATION offers a space-filled field to FILL, not to confirm', () => {
+    // TWO fields, so the two priorities would return DIFFERENT answers and the
+    // assertion can tell them apart. With one field they both return it, and the
+    // test passes whichever loop matched -- which is how an earlier version of
+    // this test let Priority 1's guard be reverted without going red.
+    //
+    // f1 holds whitespace; f2 is genuinely empty. Priority 1 (filled-but-
+    // unconfirmed, to CONFIRM) must NOT claim f1. Priority 2 (empty, to FILL)
+    // scans in order and reaches f1 first. So the field is still f1 -- but now
+    // only via the loop that asks it as a QUESTION.
+    const f1 = textField({ id: 'f1' });
+    const f2 = textField({ id: 'f2', name: 'Given Name' });
+    const state = {
+      schema: {
+        source: 'web',
+        form_metadata: { title: 'T', version: '1', language: 'en' },
+        sections: [{ id: 's1', label: 'S1', order: 1, fields: ['f1', 'f2'] }],
+        fields: [f1, f2],
+      },
+      fieldValues: { f1: { value: '   ' }, f2: { value: '' } },
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    expect(computeNextField(state)?.id).toBe('f1');
+
+    // The discriminator: ask with skipConfirmed=false, which SKIPS Priority 1
+    // entirely (it is the confirm-sweep loop) and runs only the empty-field
+    // scan. If whitespace were still counted as a value by Priority 2, f1 would
+    // be passed over and f2 returned instead.
+    expect(computeNextField(state, { skipConfirmed: false })?.id).toBe('f1');
+  });
+
+  it('P1 does not treat whitespace as a value to CONFIRM (distinguishes the two loops)', () => {
+    // f1 whitespace, f2 a REAL unconfirmed value. If Priority 1 wrongly counted
+    // f1's spaces as a value, it would return f1 (first in order) as something
+    // to confirm. Correct behaviour: P1 skips f1 and returns f2, the genuinely
+    // filled-but-unconfirmed field.
+    const f1 = textField({ id: 'f1' });
+    const f2 = textField({ id: 'f2', name: 'Given Name' });
+    const state = {
+      schema: {
+        source: 'web',
+        form_metadata: { title: 'T', version: '1', language: 'en' },
+        sections: [{ id: 's1', label: 'S1', order: 1, fields: ['f1', 'f2'] }],
+        fields: [f1, f2],
+      },
+      fieldValues: { f1: { value: '   ' }, f2: { value: 'Maria' } },
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    expect(computeNextField(state)?.id).toBe('f2');
+  });
+
+  it('a CONFIRMED whitespace field is re-offered, not lost forever', () => {
+    // The nastiest shape, and the one a session saved BEFORE this fix can hold:
+    // whitespace that was already confirmed. Priority 1 skips it (confirmed),
+    // and Priority 2 used to skip it too (confirmed), so the field was invisible
+    // to navigation entirely -- never asked again, blank on the PDF. A
+    // confirmation of blankness is not a real confirmation, so it is re-offered.
     const field = textField();
     const state = {
       schema: schemaWith(field),
-      fieldValues: { f1: { value: '   ' } },
+      fieldValues: { f1: { value: '   ', confirmed: true } },
       validationErrors: {},
+      currentSectionId: 's1',
     } as any;
 
-    // computeNextField returns the FormField itself. The field must still be
-    // offered -- a whitespace field is unanswered, so navigation must come back
-    // to it rather than treating it as done and moving on.
     expect(computeNextField(state)?.id).toBe('f1');
   });
 
