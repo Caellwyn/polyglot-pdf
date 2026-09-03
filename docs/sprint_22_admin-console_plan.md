@@ -274,9 +274,10 @@ Admin-SDK-only collection.
   `LINK_COST_CEILING_USD` must not see the higher env value come back
   during a Firestore blip. Minting's default is off either way. Module-level
   TTL cache (30 to 60 s) keyed by channel, explicitly NOT `get_settings()`
-  (lru_cached for the process lifetime). Call-site swap at the four
-  `os.getenv` reads; the public backend reads Firestore directly, no HTTP to
-  the admin service. Pinned by a test that lowers the ceiling, breaks the
+  (lru_cached for the process lifetime). Call-site swap at the three existing
+  `os.getenv` reads (`CREDITS_ENFORCED` is new and is read only through this
+  module); the public backend reads Firestore directly, no HTTP to the admin
+  service. Pinned by a test that lowers the ceiling, breaks the
   read, and asserts the lowered value survives.
 
 ### `/version` with the git SHA
@@ -585,8 +586,8 @@ else the global default; `credit_cost` from a REQUIRED
    sweep, lazy path, or both racing; an opened link is never refunded.
 3. A client socket's spend ceiling is the value signed into its own token,
    shown live for a kit whose `burn_cap_usd` differs from the global.
-4. A live firm mints only on the explicit demo channel (all six cases); a
-   revoked link cannot open.
+4. A live firm mints only on the explicit demo channel (all eight cases);
+   a revoked link cannot open.
 5. Every new collection has a deny block; every mutating admin route audits
    in the required form.
 
@@ -657,10 +658,12 @@ Monitoring, not a hand-built tracker.
   text_secretary | text_validator | text_translation | tts_spellback |
   tts_notice | tts_intro. Every wrapper emits the full key set (values may
   be None) so BigQuery sees one column shape.
-- Live path plumbing: `websocket_routes.py` already holds `kit_id`,
-  `firm_id`, `link_jti`, `link_employee_id` as locals in
-  `fill_form_from_schema` but passes only kit_id + firm_id into
-  `FormFillingService.start_session`; widen that call and
+- Live path plumbing: `_handle_fill_session` in `websocket_routes.py`
+  already receives `kit_id`, `firm_id`, `link_jti`, `link_employee_id` as
+  parameters (the claims are decoded in `fill_form_from_schema`, a different
+  function, and the code's own comment warns against reaching across) but
+  passes only kit_id + firm_id into `FormFillingService.start_session`; widen
+  that call and
   `LiveAIGemini.set_session_context(...)` (~line 778) with the five ids,
   channel from `link_tokens.link_channel()`. No contextvar: one adapter per
   socket already IS the session.
@@ -1037,7 +1040,7 @@ Collected from the epics; none blocks starting Epic 1.
    runtime config (bead 1.5, public-backend only); everything on the admin
    service waits for Epic 1.2.
 
-## First concrete steps (done 2026-09-03, recorded here as the plan of record)
+## First concrete steps (1 and 2 done 2026-09-03; 3 and 4 are next)
 
 1. Commit this document as the sprint plan
    (`docs/sprint_22_admin-console_plan.md`, next number per `docs/INDEX.md`,
