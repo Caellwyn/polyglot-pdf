@@ -68,6 +68,19 @@ if [ $# -gt 0 ] && [ "$1" != "--all" ]; then
             --frontend)
                 DEPLOY_FIREBASE=true
                 ;;
+            *)
+                # UNKNOWN ARG IS FATAL (bd polyglot-pdf-7aez9). Without this arm
+                # a typo like --front-end silently matched nothing, every
+                # DEPLOY_* stayed false, the script deployed NOTHING, and still
+                # printed its success banner and exited 0. The operator then
+                # believes they verified a change they never deployed -- and on
+                # the staging channel that is exactly the false confidence the
+                # tier exists to remove. Mirrors deploy-all.sh, which has always
+                # errored on an unknown argument.
+                echo -e "${RED}[ERROR]${NC} Unknown argument: $arg" >&2
+                echo "Usage: $0 [--backend] [--frontend] [--form-kits] [--all]" >&2
+                exit 1
+                ;;
         esac
     done
 fi

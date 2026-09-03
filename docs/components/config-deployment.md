@@ -296,9 +296,13 @@ The two SHARE the project, form-kits bucket, Firestore, and Auth user pool, so
 staging isolates broken CODE, not bad DATA -- see
 [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-**`production` is DEAD.** `deploy-production.sh` targets `polyglot-forms-919f2`
-(still the `.firebaserc` `default`/`prod` alias), which is unreachable -- bd
-`polyglot-pdf-je6iy`. The script now refuses to run.
+**`production` is DEAD.** `deploy-production.sh` targets `polyglot-forms-919f2`,
+which is unreachable -- bd `polyglot-pdf-je6iy`. The script now refuses to run.
+`.firebaserc` no longer carries a `default` or `prod` alias for it (bd
+`polyglot-pdf-xsp5b`): they were REMOVED rather than repointed, so a `firebase`
+command with no `--project` now errors instead of silently resolving to a dead
+project -- and is not quietly aimed at the live demo either. Every scripted
+`firebase` call passes `--project` explicitly, so nothing depends on an alias.
 
 All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping

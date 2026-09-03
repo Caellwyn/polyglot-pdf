@@ -32,6 +32,7 @@ def test_deploy_all_kit_gates_harness_passes():
             ["bash", str(_HARNESS)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
     except OSError as exc:
         pytest.skip(f"bash present but could not launch: {exc}")

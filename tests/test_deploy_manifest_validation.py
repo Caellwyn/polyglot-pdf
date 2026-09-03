@@ -84,6 +84,7 @@ def _run_validator(
         [BASH, "driver.sh", "content.txt", "index.json"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         cwd=str(tmp_path),
         timeout=60,
