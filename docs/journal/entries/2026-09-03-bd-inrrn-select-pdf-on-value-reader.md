@@ -80,6 +80,23 @@ differently depending on element order. A mixed-shape list is already anomalous,
 but a resolver whose answer depends on order is wrong regardless of who produces
 the list. One full pass, dict match preferred; pinned in both orders.
 
+**The cross-surface pass found the surface my matrix did not have a row for.**
+Three read-only explorations enumerated every reader of a select's value, and
+none of them found `/resume-form`: the route that reads a saved PDF back and
+hands the answers to the client. The write side transformed (`alabama` ->
+`AL`); the read side returned the widget's `/V` verbatim -- so a resumed,
+migrated select rendered EMPTY, marked confirmed, never re-asked, and the
+secretary read "AL" aloud. Three fresh-eyes rounds could not see it because
+NO CI-present kit has a select: `test_resume_form_route`'s whole-form
+guarantee iterates w7 / i-90 / f1040, w7 and f1040 have zero selects, and every
+i-90 case skips. A guarantee can be structurally blind to a field type and
+still be green. Fixed with the inverse (`resolve_select_resume_value`),
+round-tripped fill -> PDF -> resume over the whole option set in a temp kit
+that ships with CI, and the matrix now has the rows it was missing. The
+enumeration lesson (scar #8) has a corollary: enumerate the READ paths as a
+separate set from the write paths -- they were not symmetric here, and the
+asymmetry is where the defect lived.
+
 **`structlog.testing.capture_logs` is unreliable under the full suite.** The warn
 test passed alone and failed in-suite because an earlier test configures a
 cached logger the capture processor never sees. Recording by replacing the

@@ -119,6 +119,24 @@ def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id
 	return value
 
 
+def resolve_select_resume_value(options, pdf_value: str) -> str:
+	"""The INVERSE of resolve_select_fill_value, for /resume-form.
+
+	The PDF holds the export code ('AL'); the client stores option.value
+	('alabama'). Handing the code back as the field value leaves a migrated
+	select rendering empty, marked confirmed, never re-asked -- the cross-
+	surface review of g2fpr.1 found the write side transformed and the read
+	side verbatim. Map the code back through the option that carries it as
+	pdf_on_value; a legacy option (code IS the value) needs no mapping.
+	"""
+	for o in options or []:
+		if isinstance(o, dict) and o.get("pdf_on_value") == pdf_value:
+			v = o.get("value")
+			if isinstance(v, str) and v != "":
+				return v
+	return pdf_value
+
+
 # Characters that terminate or escape a raw PDF /Name token. An on-state
 # containing any of these cannot be written via direct xref surgery without
 # escaping, so the filler refuses it (bd h76m.17).
@@ -1040,6 +1058,12 @@ async def resume_form(
 				"kind": "direct",
 				"field_id": field_id,
 				"checkbox": field.get("type") == "checkbox",
+				# A select's widget holds the EXPORT CODE; the client wants
+				# option.value. Carry the options so the read can invert the
+				# fill (bd polyglot-pdf-g2fpr, cross-surface finding).
+				"select_options": (
+					field.get("options") if field.get("type") == "select" else None
+				),
 			}
 		multi = field.get("type") == "checkbox_group"
 		for option in field.get("options") or []:
@@ -1124,6 +1148,11 @@ async def resume_form(
 						# tick vanishes from the printed legal form, while the
 						# preview and the form UI disagree about it.
 						values[mapped["field_id"]] = True
+					elif mapped.get("select_options") is not None:
+						# Invert the fill: export code -> option.value.
+						values[mapped["field_id"]] = resolve_select_resume_value(
+							mapped["select_options"], value
+						)
 					else:
 						values[mapped["field_id"]] = value
 					continue

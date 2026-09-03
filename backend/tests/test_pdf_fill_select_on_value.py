@@ -206,3 +206,70 @@ def test_a_mixed_shape_list_prefers_the_dict_match_whatever_the_order(order):
     d = {"value": "AL", "label": "Alabama (AL)", "pdf_on_value": "ZZ"}
     options = ["AL", d] if order == "string-first" else [d, "AL"]
     assert resolve_select_fill_value({"options": options}, "AL") == "ZZ"
+
+
+# ---------------------------------------------------------------------------
+# The READ side: /resume-form must invert the fill (cross-surface, g2fpr.1)
+# ---------------------------------------------------------------------------
+#
+# The Opus cross-surface pass found the write side transformed and the read
+# side verbatim: resume handed the PDF's export code ('AL') back as the field
+# value, so a migrated select rendered EMPTY, marked confirmed, never re-asked,
+# and the secretary read "AL" aloud. Three fresh-eyes rounds could not see it
+# because no CI-present kit has a select -- test_resume_form_route's whole-form
+# guarantee iterates w7/i-90/f1040, and w7/f1040 have zero selects while i-90
+# skips. This is the CI-present select round-trip that guarantee could not be.
+
+import base64
+
+from backend.routes.pdf_fill_routes import ResumeUploadRequest, resume_form  # noqa: E402
+
+
+def _publish_kit(root: Path, schema: dict) -> None:
+    """resume_form loads the kit's OWN schema and live metadata (it never
+    trusts an uploaded schema), so the temp kit needs both on disk."""
+    kit = root / _KIT
+    (kit / "schema.json").write_text(json.dumps(schema), encoding="utf-8")
+    (kit / "metadata.json").write_text(json.dumps({
+        "kit_id": _KIT, "status": "complete", "pdf": "form.pdf",
+        "schema": "schema.json",
+    }), encoding="utf-8")
+
+
+def _resume(pdf_bytes: bytes) -> dict:
+    from backend.services.form_kits import get_form_kit_store
+    get_form_kit_store.cache_clear()
+    user = {"uid": None, "firm_id": "firm-a", "link_kit_id": _KIT,
+            "is_client_link": True}
+    return asyncio.run(resume_form(ResumeUploadRequest(
+        kit_id=_KIT, pdf_filename="form.pdf",
+        pdf_base64=base64.b64encode(pdf_bytes).decode("ascii")), user=user))
+
+
+@pytest.mark.parametrize("slug", ["alabama", "alaska", "wyoming"])
+def test_resume_hands_back_the_SLUG_not_the_export_code(kit_root, slug):
+    """fill -> PDF -> resume must round-trip option.value, over the whole set."""
+    schema = _schema(NEW_SHAPE)
+    _publish_kit(kit_root, schema)
+    pdf = _fill(schema, slug)
+    assert _rendered(pdf) != slug, "floor: the PDF must hold the CODE, not the slug"
+    resumed = _resume(pdf)
+    assert resumed["field_values"]["state"] == slug
+
+
+def test_resume_of_a_legacy_kit_returns_the_code_because_that_IS_its_value(kit_root):
+    schema = _schema(LEGACY_SHAPE)
+    _publish_kit(kit_root, schema)
+    resumed = _resume(_fill(schema, "AK"))
+    assert resumed["field_values"]["state"] == "AK"
+
+
+def test_resume_inverse_is_pure_and_falls_back_verbatim():
+    """The helper on its own: a code no option claims comes back untouched
+    (the filler will then warn on it -- the stale-session shape)."""
+    from backend.routes.pdf_fill_routes import resolve_select_resume_value
+    opts = [{"value": "alabama", "pdf_on_value": "AL"}, "AK"]
+    assert resolve_select_resume_value(opts, "AL") == "alabama"
+    assert resolve_select_resume_value(opts, "AK") == "AK"      # string option
+    assert resolve_select_resume_value(opts, "ZZ") == "ZZ"      # unclaimed
+    assert resolve_select_resume_value(None, "AL") == "AL"      # no options

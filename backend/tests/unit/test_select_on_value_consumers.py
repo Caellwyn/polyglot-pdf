@@ -70,7 +70,7 @@ REVIEWED: dict[str, str] = {
     "backend/routes/editor_kit_routes.py":
         "widget-picker plumbing for shared-name radio kids; not a select reader",
     "backend/routes/pdf_fill_routes.py":
-        "READS it: radio shared-field kids, and (g2fpr.1) resolve_select_fill_value for selects",
+        "READS it: radio shared-field kids; (g2fpr.1) resolve_select_fill_value on fill and resolve_select_resume_value on /resume-form, the inverse",
     "backend/services/manifest_service.py":
         "STRIPS it before the voice model sees options; the model speaks value only",
     "backend/services/schema_lint.py":
