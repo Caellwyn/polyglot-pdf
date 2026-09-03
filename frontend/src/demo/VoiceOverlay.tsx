@@ -1038,6 +1038,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		if (typeof connectionManager.setVoiceMode === 'function') {
 			connectionManager.setVoiceMode(next)
 		}
+		// Usually redundant -- the manager notifies its subscribers synchronously,
+		// so the effect above has already set this to the same value. KEPT because
+		// it is the only path that works for a manager without onVoiceModeChange
+		// (an older or partial one), where nothing else would ever move the label.
+		// Setting state to the value it already holds does not re-render.
 		setVoiceModeState(next)
 	}
 
