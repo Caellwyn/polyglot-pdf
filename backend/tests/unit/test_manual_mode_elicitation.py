@@ -590,6 +590,16 @@ def test_EVERY_text_sentinel_site_marks_the_pipeline_closing_first():
 
     # EVERY function that queues the text sentinel -- no filtering on whether it
     # already sets the flag, which is what hid the second site.
+    #
+    # ast.walk descends into NESTED functions, so an enclosing function also
+    # matches its inner one's sentinel: today _handle_session is nested in
+    # _run_session_loop and both report the same line. That double-counting is
+    # deliberate here -- it makes the check STRICTER, never laxer, because the
+    # flag-set and the sentinel live in the same inner function, so an enclosing
+    # match can only pass when the real code passes. Requiring the flag at a
+    # LOWER line number is what closes the alternative: an outer function
+    # marking the pipeline closing could not satisfy an inner sentinel appearing
+    # before it.
     teardown_sites = [
         fn
         for fn in ast.walk(tree)
@@ -613,35 +623,6 @@ def test_EVERY_text_sentinel_site_marks_the_pipeline_closing_first():
         "pipeline closing, so a concurrent unmute would lose the held turn and "
         "log it as delivered (bd polyglot-pdf-wurj8): " + ", ".join(unmarked)
     )
-
-
-@pytest.mark.asyncio
-async def test_a_sentinel_already_queued_is_not_a_live_pipeline():
-    """The sharpest teardown state: reader alive, but it will never reach us.
-
-    finalize() queues a None SENTINEL that makes the sender loop exit, THEN
-    cancels the task, THEN nulls the queue. Between the sentinel and the cancel
-    the task is not done() and the queue accepts a put -- yet anything queued
-    behind that sentinel is already unreadable. Neither the queue nor the task
-    can report this, which is why the adapter tracks the teardown explicitly.
-    """
-    adapter = _make_adapter()
-    adapter.set_voice_muted(True)
-    await adapter.send_text_message("next field is date of birth")
-
-    # Exactly the state finalize() creates before it cancels anything.
-    adapter._text_queue.put_nowait(None)
-    adapter._text_pipeline_closing = True
-    adapter.set_voice_muted(False)
-
-    assert adapter._muted_context == "next field is date of birth"
-    assert _drain(adapter._text_queue) == [None]
-
-    # ...and it still reaches the replacement pipeline.
-    _restart_text_pipeline(adapter)
-    assert _drain(adapter._text_queue) == ["next field is date of birth"]
-
-
 def test_the_teardown_marks_the_pipeline_closing_before_it_queues_the_sentinel():
     """The flag must be set before the sentinel, or it is useless.
 
@@ -710,25 +691,88 @@ def test_the_teardown_marks_the_pipeline_closing_before_it_queues_the_sentinel()
 
 @pytest.mark.asyncio
 async def test_a_spontaneous_drop_teardown_does_not_swallow_the_held_turn():
-    """The behavioural twin of the guard above, for the COMMON teardown path.
+    """The behavioural twin, driving the REAL teardown source -- not a fixture.
 
     A spontaneous Gemini drop (1011/1006) tears the text pipeline down from the
     receive loop rather than from finalize(). That path queues the same sentinel,
-    so an unmute racing it would put the held turn behind a reader that is about
-    to exit -- and clear it, having logged VOICE_UNMUTE_REPLAY_SENT. This drives
-    the resulting STATE rather than the code shape, so the two tests fail for
-    different reasons if the fix regresses.
+    so an unmute racing it would put the held turn behind a reader about to exit
+    and clear it, having logged VOICE_UNMUTE_REPLAY_SENT.
+
+    An earlier draft of this test hand-set `_text_pipeline_closing = True` before
+    the sentinel, which made it assert against its own fixture: deleting the
+    production flag-set left it GREEN while only the ast guard reddened, so the
+    "two tests fail for different reasons" claim in its own docstring was false.
+    It now EXECUTES the shipped teardown statements, extracted from the real
+    source, so the production ordering is what is under test.
     """
+    import ast
+    import inspect
+    import textwrap
+
+    from backend.adapters import live_ai_gemini
+
+    # Pull the receive loop's teardown block out of the SHIPPED source and run
+    # it. If production stops marking the pipeline closing before its sentinel,
+    # this replay stops doing it too, and the assertions below fail.
+    src = textwrap.dedent(inspect.getsource(live_ai_gemini.LiveAIGemini))
+    tree = ast.parse(src)
+
+    def _queues_text_sentinel(node):
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "put_nowait"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "_text_queue"
+            and any(isinstance(a, ast.Constant) and a.value is None for a in node.args)
+        )
+
+    def _sets_closing_true(node):
+        return (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(t, ast.Attribute) and t.attr == "_text_pipeline_closing"
+                for t in node.targets
+            )
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is True
+        )
+
+    # The receive-loop site: the sentinel NOT inside finalize().
+    finalize = next(
+        fn for fn in ast.walk(tree)
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name == "finalize"
+    )
+    finalize_lines = {n.lineno for n in ast.walk(finalize) if hasattr(n, "lineno")}
+    sentinel_lines = sorted(
+        {n.lineno for n in ast.walk(tree) if _queues_text_sentinel(n)} - finalize_lines
+    )
+    assert sentinel_lines, "the receive loop no longer queues a text sentinel -- re-check this test"
+    flag_lines = sorted(
+        {n.lineno for n in ast.walk(tree) if _sets_closing_true(n)} - finalize_lines
+    )
+
     adapter = _make_adapter()
     adapter.set_voice_muted(True)
     await adapter.send_text_message("next field is date of birth")
 
-    # The receive loop's teardown, in order: mark closing, then sentinel.
-    adapter._text_pipeline_closing = True
-    adapter._text_queue.put_nowait(None)
+    # Replay the shipped ordering: whatever production does first, we do first.
+    steps = sorted(
+        [(ln, "flag") for ln in flag_lines] + [(ln, "sentinel") for ln in sentinel_lines]
+    )
+    for _, kind in steps:
+        if kind == "flag":
+            adapter._text_pipeline_closing = True
+        else:
+            adapter._text_queue.put_nowait(None)
+
     adapter.set_voice_muted(False)
 
-    assert adapter._muted_context == "next field is date of birth"
+    assert adapter._muted_context == "next field is date of birth", (
+        "the held turn was cleared during a spontaneous-drop teardown -- the "
+        "receive loop queues its sentinel without first marking the pipeline "
+        "closing (bd polyglot-pdf-wurj8)"
+    )
 
     # ...and the replacement pipeline still delivers it.
     _restart_text_pipeline(adapter)
