@@ -85,6 +85,11 @@ vi.mock('../webFormConnection', () => ({
     this.sendPrompt = vi.fn()
     this.sendRecoveryPrompt = vi.fn()
     this.sendManualFieldUpdate = vi.fn()
+    // Present because the REAL WebFormConnection has it and connection.ts calls
+    // it (bd polyglot-pdf-wurj8). Without it every test reaching those call
+    // sites did so with connection === null, so `?.` short-circuited and the
+    // send path was never exercised at all.
+    this.setVoiceMode = vi.fn()
     this.setGetToken = vi.fn()
     this.getState = vi.fn()
     webFormConnectionMock = this
@@ -813,6 +818,58 @@ describe('Connection Manager (connection.ts)', () => {
 
       expect(a).toEqual([])
       expect(b).toEqual(['manual'])
+    })
+
+    it('sends the mode over the wire, not just into local state', async () => {
+      // The wire send had NO test at all: every case that reached
+      // `connection?.setVoiceMode(mode)` did so with connection === null, so the
+      // optional chain short-circuited and the call was never made. A manual
+      // mode the backend is never told about is not manual mode -- the model
+      // keeps talking.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+
+      manager.setVoiceMode('manual')
+
+      expect(webFormConnectionMock.setVoiceMode).toHaveBeenCalledWith('manual')
+    })
+
+    it('re-asserts manual mode to the backend when a session (re)establishes', async () => {
+      // The backend is stateless and every new Gemini session defaults to
+      // SPEAKING, so a GoAway/auto-drop reconnect silently returns the user to a
+      // talking assistant unless the client re-sends the mode. This is the path
+      // exit criterion 1 depends on for anyone whose session drops mid-form.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      manager.setVoiceMode('manual')
+      webFormConnectionMock.setVoiceMode.mockClear()
+
+      capturedCallbacks.onSessionReady('sess_1')
+
+      expect(webFormConnectionMock.setVoiceMode).toHaveBeenCalledWith('manual')
+    })
+
+    it('re-asserts manual mode after a warm session restart too', async () => {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      manager.setVoiceMode('manual')
+      webFormConnectionMock.setVoiceMode.mockClear()
+
+      capturedCallbacks.onSessionRestarted()
+
+      expect(webFormConnectionMock.setVoiceMode).toHaveBeenCalledWith('manual')
+    })
+
+    it('does NOT re-assert voice mode -- it is the backend default', async () => {
+      // Re-sending 'voice' would be pure traffic on every reconnect; a fresh
+      // Gemini session already speaks.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      webFormConnectionMock.setVoiceMode.mockClear()
+
+      capturedCallbacks.onSessionReady('sess_1')
+
+      expect(webFormConnectionMock.setVoiceMode).not.toHaveBeenCalled()
     })
 
     it('does not leak listeners across repeated subscribe/unsubscribe cycles', () => {

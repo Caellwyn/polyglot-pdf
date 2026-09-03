@@ -227,6 +227,38 @@ few hundred lines away. Fixing an instance does not inoculate the next site;
 feature-detect every hop into an optional collaborator, especially off an event
 handler.
 
+## "Provably safe" is not "covered"
+
+Round 7 pointed at two `connection?.setVoiceMode(mode)` calls -- optional chaining
+guarding the object but not the method, the shape of the bug found one round
+earlier. I had ALREADY audited those two sites myself and cleared them, correctly:
+`connection` is a concretely-typed `WebFormConnection` the manager constructs, so
+a missing method is not reachable and `?.` is right there.
+
+The reviewer agreed with that reasoning and then found what it had let me skip
+past: those lines had NO TEST COVERAGE. Every test reaching them did so with
+`connection === null`, so the optional chain short-circuited and the send was
+never exercised. Nor was `WebFormConnection.setVoiceMode` itself -- a grep for
+`voice_mode` across the whole frontend test suite returned nothing. The entire
+client -> backend path for this feature was unverified.
+
+That matters because manual mode is enforced at the BACKEND. A mode that never
+reaches the socket is not manual mode: the UI reads "quiet" while the assistant
+keeps talking and keeps billing, which is indistinguishable to the user from the
+feature not existing.
+
+**The mistake was answering a different question than the one that mattered.** I
+asked "can this break in production?" and stopped at a sound "no". The question
+that needed asking was "if someone breaks this later, does anything fail?" A type
+that makes a bug unreachable today is not a regression test; it is an argument,
+and arguments do not run in CI.
+
+Closed with the mock carrying the method the real class has, four tests driving
+the send path through the manager (including the reconnect re-assertion criterion
+1 depends on for a user whose session drops mid-form), and a new file pinning the
+wire frame itself. Four mutations, all caught -- including deleting the method
+body and renaming the mode value, which the backend rejects rather than coerces.
+
 ## Presence is not translation
 
 Separately from the replay saga, review caught one Tagalog label shipped as bare
@@ -262,7 +294,7 @@ whose whole purpose was catching an omission.
   suite and the probes were running concurrently. Both pass in isolation on the
   clean tree. A source-reading guard cannot run while anything edits the files it
   inspects, so mutation probes and a full suite must not overlap.
-- Frontend: 1901 passed, all 133 files. (`SchemaForm.previewEdit` failed on an
+- Frontend: 1911 passed, all 134 files. (`SchemaForm.previewEdit` failed on an
   earlier run and passed on this one -- the known pre-existing flake proven on
   `origin/dev`, tracked as bd `polyglot-pdf-7y2yk`.)
 - Control copy translated across all 18 shipped languages. The existing
