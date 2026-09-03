@@ -234,3 +234,42 @@ describe('a select paints its VALUE, not its label (bd polyglot-pdf-jpjcv)', () 
     expect(paintedValueFor(state, 'ZZ')).toEqual({ kind: 'text', text: 'ZZ' });
   });
 });
+
+describe('a select paints its pdf_on_value when it has one (bd polyglot-pdf-g2fpr)', () => {
+  // The v2 shape: value is a slug the voice model speaks; pdf_on_value is the
+  // export code the filler writes. The overlay must mirror the FILLER, not the
+  // stored value, or it would show "alabama" where the form will say "AL".
+  const migrated: FormField = {
+    id: 'mail_state', name: 'mail_state', spoken_name: 'state',
+    type: 'select', section_id: 's',
+    options: [
+      { value: 'alabama', label: 'Alabama (AL)', pdf_on_value: 'AL' },
+      { value: 'armed_forces_americas', label: 'Armed Forces Americas (AA)', pdf_on_value: 'AA' },
+    ],
+  } as unknown as FormField;
+
+  it('paints the export code from pdf_on_value, not the slug', () => {
+    expect(paintedValueFor(migrated, 'alabama')).toEqual({ kind: 'text', text: 'AL' });
+    expect(paintedValueFor(migrated, 'armed_forces_americas')).toEqual({ kind: 'text', text: 'AA' });
+  });
+
+  it('a legacy option with no pdf_on_value still paints its value', () => {
+    // A kit not yet migrated: the filler writes the value verbatim, so the
+    // overlay does too. Both arms mirror the filler.
+    const legacy = { ...migrated, options: [{ value: 'AL', label: 'Alabama (AL)' }] } as unknown as FormField;
+    expect(paintedValueFor(legacy, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+  });
+
+  it('an EMPTY pdf_on_value falls back to the value, matching the filler', () => {
+    const blank = { ...migrated, options: [{ value: 'AL', label: 'x', pdf_on_value: '' }] } as unknown as FormField;
+    expect(paintedValueFor(blank, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+  });
+
+  it('a value matching no option paints the raw token (the stale-session shape)', () => {
+    expect(paintedValueFor(migrated, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+  });
+
+  it('never paints the label, in either shape', () => {
+    expect(paintedValueFor(migrated, 'alabama')).not.toEqual({ kind: 'text', text: 'Alabama (AL)' });
+  });
+});

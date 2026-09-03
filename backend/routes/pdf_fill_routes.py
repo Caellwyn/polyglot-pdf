@@ -65,6 +65,44 @@ def _safe_pdf_filename(pdf_filename: str) -> str:
 	return pdf_filename
 
 
+def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id: str = ""):
+	"""What a SELECT writes into its combobox (bd polyglot-pdf-g2fpr).
+
+	The v2 contract: option.value is a semantic slug the client and the voice
+	model speak; the PDF's export code lives in option.pdf_on_value. A combobox
+	is ONE widget with an /Opt list and a plain /V, so the right mechanism is to
+	substitute the STRING and let fill_widget's text branch write it -- NOT the
+	per-kid /AS appearance-state write radios use.
+
+	LEGACY: an option with no pdf_on_value (a kit not yet migrated) still writes
+	its value verbatim, so a working kit never regresses mid-rollout.
+
+	Never logs the value (bd hjo).
+	"""
+	options = field_obj.get("options") or []
+	match = next(
+		(o for o in options if isinstance(o, dict) and o.get("value") == value),
+		None,
+	)
+	if match is None:
+		if options:
+			# Options exist and none matches: the shape of a session stored
+			# under a SUPERSEDED schema (a pre-migration 'AL' resumed against a
+			# migrated 'alabama'). Writing verbatim is right only when the old
+			# value happens to equal the new pdf_on_value -- luck, not design --
+			# so say it loudly. The client-side restore guard (g2fpr.5) is what
+			# prevents this shape reaching here.
+			_log.warning(
+				"select_value_not_an_option",
+				kit=kit, field_id=field_id, option_count=len(options),
+			)
+		return value
+	on_value = match.get("pdf_on_value")
+	if isinstance(on_value, str) and on_value != "":
+		return on_value
+	return value
+
+
 # Characters that terminate or escape a raw PDF /Name token. An on-state
 # containing any of these cannot be written via direct xref surgery without
 # escaping, so the filler refuses it (bd h76m.17).
@@ -754,6 +792,11 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 					# Apply field flag changes if needed (e.g., unlock read-only fields)
 					apply_field_flag_changes(widget, field_obj)
 
+					# A dropdown stores a slug; the PDF wants the export code.
+					if field_type == "select":
+						value = resolve_select_fill_value(
+							field_obj, value, kit=request.kit_id, field_id=field_id,
+						)
 					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
 					# Length only -- never the value itself (bd hjo). Equal to the inner

@@ -1,0 +1,143 @@
+"""Every code site that touches a select option's identity channel, PINNED.
+
+WHY THIS FILE EXISTS. bd polyglot-pdf-g2fpr moves a dropdown's PDF export code
+out of option.value (where it printed verbatim) into option.pdf_on_value, so
+option.value can be a slug like every other choice type. That is a schema-SHAPE
+change, and the maintainer's mandate was: be certain nothing down the chain
+breaks. Three read-only explorations enumerated every consumer; this test keeps
+that enumeration honest.
+
+THE RULE (same shape as test_deployed_iam_envelope.py): DERIVE the set from the
+tree -- every shipped source file that mentions pdf_on_value -- and assert it
+equals the reviewed list below, each entry carrying its verdict. A new file that
+starts reading pdf_on_value without a verdict fails CI instead of a review
+round. An entry that disappears (the file stopped touching the channel) also
+fails, so the list cannot rot into fiction.
+
+Static on purpose: no runtime, runs in CI on every change.
+"""
+
+from __future__ import annotations
+
+import pathlib
+
+_ROOT = pathlib.Path(__file__).resolve().parents[3]
+
+# Shipped source only. Tests, docs, journal, kits and vendored trees are out.
+_SCAN_ROOTS = ("backend", "frontend/src", "schema-editor/src", "scripts")
+_SUFFIXES = {".py", ".ts", ".tsx"}
+_EXCLUDE_PARTS = {"node_modules", ".venv", "__pycache__", "tests", "test",
+                  "dist", "build", ".claude"}
+
+
+def _is_test_file(p: pathlib.Path) -> bool:
+    n = p.name
+    return (n.startswith("test_") or ".test." in n or n.endswith("_test.py")
+            or n == "conftest.py")
+
+
+def derived_readers() -> set[str]:
+    out: set[str] = set()
+    for root in _SCAN_ROOTS:
+        base = _ROOT / root
+        if not base.is_dir():
+            continue
+        for p in base.rglob("*"):
+            if not p.is_file() or p.suffix not in _SUFFIXES:
+                continue
+            # RELATIVE parts: a worktree lives under .claude/worktrees/, so
+            # matching the ABSOLUTE path's parts excluded every file and the
+            # scan came back empty -- the floor below caught it (g2fpr.1).
+            rel_parts = set(p.relative_to(_ROOT).parts)
+            if _EXCLUDE_PARTS & rel_parts or _is_test_file(p):
+                continue
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "pdf_on_value" in text:
+                out.add(p.relative_to(_ROOT).as_posix())
+    return out
+
+
+# path -> verdict. Keep the verdict to one line: what the site does with the
+# channel and which g2fpr bead (if any) changes it. This IS the review record.
+REVIEWED: dict[str, str] = {
+    "backend/models/conditional_vocabulary.py":
+        "the v2 contract statement: value is a slug, identity in pdf_on_value",
+    "backend/models/form_models.py":
+        "FieldOption declares pdf_on_value (type-agnostic); select fillability exemption retired in g2fpr.4",
+    "backend/routes/editor_kit_routes.py":
+        "widget-picker plumbing for shared-name radio kids; not a select reader",
+    "backend/routes/pdf_fill_routes.py":
+        "READS it: radio shared-field kids, and (g2fpr.1) resolve_select_fill_value for selects",
+    "backend/services/manifest_service.py":
+        "STRIPS it before the voice model sees options; the model speaks value only",
+    "backend/services/schema_lint.py":
+        "rules select-value-not-slug / select-on-value-not-in-pdf / select-on-value-missing (g2fpr.1); carve-out retired in g2fpr.4",
+    "backend/services/schema_repair.py":
+        "_mint_slugs preserves a select code in value today; g2fpr.3 moves it, g2fpr.4 retires the branch",
+    "backend/services/widget_picker.py":
+        "radio-kid claim resolution; not a select reader",
+    "frontend/src/pdf-view/valuePainting.ts":
+        "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
+    "frontend/src/schema-forms/types/schema.ts":
+        "FieldOption type declares pdf_on_value",
+    "schema-editor/src/components/FieldEditor.tsx":
+        "displays it on radio kids; g2fpr.2 makes the select export-code input write it",
+    "schema-editor/src/types/schema.ts":
+        "FieldOption type declares pdf_on_value",
+    "schema-editor/src/utils/fieldGrouping.ts":
+        "grouping rules: pdf_on_value alone is not a checkbox_group; not a select reader",
+    "schema-editor/src/utils/remoteKitStore.ts":
+        "WidgetPicker on_value plumbing; not a select reader",
+    "scripts/authoring/backfill_option_positions.py":
+        "disambiguates multi-widget groups by pdf_on_value; not a select reader",
+    "scripts/authoring/eval_extraction.py":
+        "counts options lacking both pdf_field_name and pdf_on_value as unmapped",
+    "scripts/authoring/extract_form.py":
+        "reads it for radio positions; g2fpr.2 makes _backfill_dropdown_options write it for selects",
+    "scripts/bakeoff/group_candidates.py":
+        "grouping heuristic over widget on-states; not a select reader",
+    "scripts/bakeoff/roundtrip_fill.py":
+        "the BAKEOFF filler: reads it for shared-field radios; must learn the select rule in g2fpr.4 or its scores lie",
+    "scripts/bakeoff/schema_contract.py":
+        "the extraction prompt; g2fpr.2 changes the select condition-reference rule to the slug",
+    "scripts/migrate_schema_v2.py":
+        "already writes {value: slug, pdf_on_value: code} for selects built from the dump (c5r8) -- the channel the filler never read",
+}
+
+
+def test_every_pdf_on_value_reader_has_a_verdict():
+    derived = derived_readers()
+    assert derived, "scan found nothing -- the roots or the exclusion set are wrong"
+    missing = sorted(derived - set(REVIEWED))
+    assert not missing, (
+        "these shipped files now touch pdf_on_value but carry no verdict in "
+        "REVIEWED -- read them against the g2fpr consumer matrix and add one: "
+        f"{missing}"
+    )
+
+
+def test_no_verdict_describes_a_file_that_stopped_reading_the_channel():
+    derived = derived_readers()
+    stale = sorted(set(REVIEWED) - derived)
+    assert not stale, (
+        "these REVIEWED entries no longer touch pdf_on_value (moved, renamed, "
+        f"or the read was removed) -- update the list: {stale}"
+    )
+
+
+def test_the_three_sites_this_bead_changed_carry_their_new_symbols():
+    """The set test proves the FILES are accounted for; this proves the three
+    g2fpr.1 changes are actually present in them, so a revert of one file
+    cannot hide behind an unchanged file list."""
+    fill = (_ROOT / "backend/routes/pdf_fill_routes.py").read_text(encoding="utf-8")
+    lint = (_ROOT / "backend/services/schema_lint.py").read_text(encoding="utf-8")
+    paint = (_ROOT / "frontend/src/pdf-view/valuePainting.ts").read_text(encoding="utf-8")
+    assert "def resolve_select_fill_value(" in fill
+    assert 'field_type == "select"' in fill
+    for rule in ("select-value-not-slug", "select-on-value-not-in-pdf",
+                 "select-on-value-missing"):
+        assert rule in lint, rule
+    assert "pdf_on_value" in paint and "case 'select'" in paint
