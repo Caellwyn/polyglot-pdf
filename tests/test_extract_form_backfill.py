@@ -1877,7 +1877,8 @@ def test_dropdown_options_are_backfilled_from_the_dump(tmp_path):
     report = ef._backfill_dropdown_options(schema, dump)
     opts = schema["fields"][0]["options"]
     assert [o["value"] for o in opts] == ["WY", "AL", "AK"]
-    assert report == {"fields_filled": 1, "options_written": 3, "unmatched": []}
+    assert report == {"fields_filled": 1, "options_written": 3, "unmatched": [],
+                      "unspeakable": []}
 
 
 def test_the_blank_placeholder_choice_is_dropped(tmp_path):
@@ -1912,7 +1913,11 @@ def test_a_model_label_for_the_SAME_code_is_preserved(tmp_path):
     ef._backfill_dropdown_options(schema, dump)
     opts = schema["fields"][0]["options"]
     assert opts[0] == {"value": "AA", "label": "Armed Forces Americas (AA)"}
-    assert opts[1] == {"value": "WY", "label": "WY"}  # no prior label -> code
+    # No prior label -> the CODE TABLE now supplies a speakable one. This line
+    # asserted {"WY": "WY"} until bd polyglot-pdf-jpjcv: the test had pinned the
+    # defect as correct behaviour, with a comment ("no prior label -> code")
+    # explaining the bug rather than questioning it.
+    assert opts[1] == {"value": "WY", "label": "Wyoming (WY)"}
 
 
 def test_only_select_fields_are_touched(tmp_path):
@@ -1944,7 +1949,8 @@ def test_an_unreadable_dump_returns_the_full_report_shape(tmp_path):
     must not KeyError on the error path alone."""
     report = ef._backfill_dropdown_options(
         _select_schema(), str(tmp_path / "does_not_exist.json"))
-    assert report == {"fields_filled": 0, "options_written": 0, "unmatched": []}
+    assert report == {"fields_filled": 0, "options_written": 0, "unmatched": [],
+                      "unspeakable": []}
 
 
 @pytest.mark.parametrize("fields_value", [
@@ -1962,7 +1968,8 @@ def test_a_malformed_dump_degrades_instead_of_crashing(tmp_path, fields_value):
     p.write_text(json.dumps({"fields": fields_value}), encoding="utf-8")
     schema = _select_schema()
     report = ef._backfill_dropdown_options(schema, str(p))
-    assert set(report) == {"fields_filled", "options_written", "unmatched"}
+    assert set(report) == {"fields_filled", "options_written", "unmatched",
+                           "unspeakable"}
 
 
 def test_a_duplicate_value_in_one_Opt_list_is_written_once(tmp_path):
@@ -2077,3 +2084,208 @@ def test_the_real_i90_pdf_yields_its_exact_dropdown_option_counts(tmp_path):
 
     states = [f for f in schema["fields"] if f["id"].endswith("state")]
     assert [o["value"] for o in states[0]["options"]][:3] == ["AA", "AE", "AK"]
+
+
+# ---------------------------------------------------------------------------
+# Speakable dropdown labels (bd polyglot-pdf-jpjcv)
+# ---------------------------------------------------------------------------
+
+
+def _one_select(choices, fid="state", tmp=None):
+    """Drive _backfill_dropdown_options over a single select. Returns
+    (report, options)."""
+    import json as _json
+    dump = {"fields": [{"name": "form1.x[0]", "widgets": [{"choices": choices}]}]}
+    schema = {"fields": [{"id": fid, "type": "select", "pdf_field_name": "x[0]"}]}
+    path = tmp / "acroform.json"
+    path.write_text(_json.dumps(dump), encoding="utf-8")
+    report = ef._backfill_dropdown_options(schema, str(path))
+    return report, schema["fields"][0].get("options")
+
+
+def test_a_bare_state_code_becomes_a_name_the_model_can_say(tmp_path):
+    """THE BUG. When the /Opt display string is the code again, the old
+    fallback labelled the option with that code, so the voice guidance read
+    `[AA, AE, AK, AL, ...]` -- the user says "Alabama" and the model has to map
+    it onto `AL` from a list carrying no state names."""
+    report, options = _one_select(
+        [{"value": "", "display": ""},
+         {"value": "AL", "display": "AL"},
+         {"value": "AA", "display": "AA"}], tmp=tmp_path)
+    labels = {o["value"]: o["label"] for o in options}
+    assert labels == {"AL": "Alabama (AL)", "AA": "Armed Forces Americas (AA)"}
+    # The VALUE is untouched -- it is the export code that prints (bd hmkas).
+    assert [o["value"] for o in options] == ["AL", "AA"]
+    assert report["unspeakable"] == []
+
+
+def test_a_NUMERIC_label_equal_to_its_value_is_left_alone(tmp_path):
+    """The predicate is SPEAKABILITY, not `label == value`.
+
+    On the i-90, height_feet options are `5` -> `5`, and that is CORRECT: the
+    label for the number 5 is "5". A naive "no bare labels" rule would flag
+    these and invite an editor to turn a number into prose. This is the guard
+    against fixing the bug in the wrong direction."""
+    report, options = _one_select(
+        [{"value": "5", "display": "5"}, {"value": "11", "display": "11"}],
+        fid="height_feet", tmp=tmp_path)
+    assert [(o["value"], o["label"]) for o in options] == [("5", "5"), ("11", "11")]
+    assert report["unspeakable"] == []          # NOT reported: nothing is wrong
+
+
+def test_a_real_display_string_WINS_over_the_code_table(tmp_path):
+    """The PDF is the better source when it actually carries a name: the table
+    is a fallback for when it does not, never an override."""
+    _report, options = _one_select(
+        [{"value": "AL", "display": "Alabama"}], fid="named", tmp=tmp_path)
+    assert options[0]["label"] == "Alabama"     # not "Alabama (AL)"
+
+
+def test_a_model_written_label_still_wins_over_both(tmp_path):
+    """Unchanged precedence (bd polyglot-pdf-hmkas): a label the model wrote
+    for that exact code is kept."""
+    import json as _json
+    dump = {"fields": [{"name": "form1.x[0]",
+                        "widgets": [{"choices": [{"value": "AL", "display": "AL"}]}]}]}
+    schema = {"fields": [{"id": "s", "type": "select", "pdf_field_name": "x[0]",
+                          "options": [{"value": "AL", "label": "Alabama, USA"}]}]}
+    path = tmp_path / "acroform.json"
+    path.write_text(_json.dumps(dump), encoding="utf-8")
+    ef._backfill_dropdown_options(schema, str(path))
+    assert schema["fields"][0]["options"][0]["label"] == "Alabama, USA"
+
+
+@pytest.mark.parametrize("code", ["XQ", "ABCD", "ZZZZZZ"])
+def test_an_unmappable_code_of_ANY_LENGTH_is_reported(tmp_path, code):
+    """The report must not have a length blind spot.
+
+    An earlier cut gated it at `len(value) <= 3`, restating the speakability
+    rule in the caller with a cutoff the helper did not have -- so a 4-letter
+    code like "ABCD" shipped bare with NO report, which is exactly the failure
+    the report exists to prevent (fresh-eyes). An unmapped 4-letter code is as
+    unsayable as a 2-letter one.
+    """
+    report, options = _one_select(
+        [{"value": code, "display": code}], fid="mystery", tmp=tmp_path)
+    assert options[0]["label"] == code          # value never invented
+    assert report["unspeakable"] == [f"mystery:{code}"]
+
+
+@pytest.mark.parametrize("code", ["5", "11", "A1", "1A"])
+def test_a_code_that_is_SPEAKABLE_as_itself_is_never_reported(tmp_path, code):
+    """The other side of the same predicate: crying wolf on legitimate data is
+    its own failure. A digit is speakable as itself; a mixed token is not the
+    state-code shape this closes."""
+    report, options = _one_select(
+        [{"value": code, "display": code}], fid="f", tmp=tmp_path)
+    assert options[0]["label"] == code
+    assert report["unspeakable"] == []
+
+
+def test_an_UNKNOWN_alphabetic_code_is_reported_for_a_human(tmp_path):
+    """Exit criterion 1's second branch. A table cannot cover every form's
+    codes, so anything it cannot expand keeps the code as its label AND is
+    named in the report -- the author is TOLD rather than a bare code silently
+    shipping into the guidance block."""
+    report, options = _one_select(
+        [{"value": "XQ", "display": "XQ"}], fid="mystery", tmp=tmp_path)
+    assert options[0]["label"] == "XQ"          # value never invented
+    assert report["unspeakable"] == ["mystery:XQ"]
+
+
+def test_a_REAL_pdf_dropdown_gets_speakable_labels_end_to_end(tmp_path):
+    """REAL-PDF REGRESSION, exit criterion 2, adapted.
+
+    The criterion named form-kits/i-90/form.pdf. PR #705 deleted that kit as a
+    deprecated remnant, and NO tracked kit replaces it: f1040, w7 and
+    w9-heldout contain ZERO ComboBox/ListBox widgets between them (measured),
+    and their schemas have zero selects. So a "shipped kits" assertion could
+    only ever be vacuous in CI -- a first draft of this test asserted exactly
+    that and its own non-vacuity floor caught it at `checked == 0`.
+
+    Instead this BUILDS a real PDF carrying a real /Opt list whose display
+    strings are the bare codes -- the exact shape the i-90 has -- and drives
+    the genuine acroform_dump -> _backfill_dropdown_options path, same
+    importorskip convention as the sibling real-PDF tests here.
+    """
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    w = fitz.Widget()
+    w.field_name = "state[0]"
+    w.field_type = fitz.PDF_WIDGET_TYPE_COMBOBOX
+    # Display string == export code: what the i-90 actually ships.
+    w.choice_values = ["AL", "AK", "AA", "WY"]
+    w.rect = fitz.Rect(100, 200, 136, 218)
+    page.add_widget(w)
+    pdf = tmp_path / "form.pdf"
+    doc.save(str(pdf))
+    doc.close()
+
+    dump_path = tmp_path / "acroform.json"
+    dump_path.write_text(
+        json.dumps(acroform_dump.dump_pdf(str(pdf))), encoding="utf-8")
+
+    schema = {"fields": [
+        {"id": "state", "type": "select", "pdf_field_name": "state[0]"}]}
+    report = ef._backfill_dropdown_options(schema, str(dump_path))
+
+    options = schema["fields"][0]["options"]
+    assert report["fields_filled"] == 1
+    # NON-VACUITY FLOOR: a real /Opt list was actually read off the PDF.
+    assert len(options) == 4, options
+    labels = {o["value"]: o["label"] for o in options}
+    assert labels == {
+        "AL": "Alabama (AL)", "AK": "Alaska (AK)",
+        "AA": "Armed Forces Americas (AA)", "WY": "Wyoming (WY)",
+    }
+    # The VALUES stay the export codes -- they are what prints (bd hmkas).
+    assert sorted(labels) == ["AA", "AK", "AL", "WY"]
+    assert report["unspeakable"] == []
+
+
+def test_the_unspeakable_report_ROUND_TRIPS_to_the_saved_schema(tmp_path, monkeypatch):
+    """The report must reach the SAVED FILE, not just stderr.
+
+    Driven through the real extract() rather than the backfill alone: a stderr
+    line is lost on a batch/CI extraction, and the whole point of persisting is
+    that a human opening the schema later is told. Fresh-eyes noted that the
+    existing end-to-end tests all use schemas with NO select fields, so they
+    exercised this read path with an always-empty list -- safe, but never a
+    genuine round-trip of a POPULATED report.
+    """
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    w = fitz.Widget()
+    w.field_name = "region[0]"
+    w.field_type = fitz.PDF_WIDGET_TYPE_COMBOBOX
+    # "AL" the table CAN expand; "ABCD" it cannot -- so exactly one is reported.
+    w.choice_values = ["AL", "ABCD"]
+    w.rect = fitz.Rect(100, 200, 136, 218)
+    page.add_widget(w)
+    pdf = tmp_path / "form.pdf"
+    doc.save(str(pdf))
+    doc.close()
+    out = str(tmp_path / "schema.json")
+
+    def _stub_run(pdf_path, dump_path, model, **kw):
+        return {
+            "form_metadata": {"title": "T", "form_number": "T-1",
+                              "version": "1", "language": "en"},
+            "fields": [{"id": "region", "name": "Region",
+                        "spoken_name": "region", "type": "select",
+                        "pdf_field_name": "region[0]"}],
+        }
+
+    monkeypatch.setattr(ef.arm_llm_native, "run", _stub_run)
+    ef.extract(str(pdf), out, translate_options=False, enrich_guidance=False)
+
+    saved = json.loads(pathlib.Path(out).read_text(encoding="utf-8"))
+    authoring = saved["_bakeoff"]["authoring"]
+    # The POPULATED report survived the save.
+    assert authoring["dropdown_labels_unspeakable"] == ["region:ABCD"]
+    # ...and the mappable code was labelled rather than reported.
+    labels = {o["value"]: o["label"]
+              for o in saved["fields"][0]["options"]}
+    assert labels == {"AL": "Alabama (AL)", "ABCD": "ABCD"}
