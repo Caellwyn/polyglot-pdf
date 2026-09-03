@@ -84,14 +84,14 @@ REVIEWED: dict[str, str] = {
     "frontend/src/schema-forms/types/schema.ts":
         "FieldOption type declares pdf_on_value",
     "schema-editor/src/components/FieldEditor.tsx":
-        "displays it on radio kids; g2fpr.2 makes the select export-code input write it",
+        "displays it on radio kids; the select export-code input WRITES it and the select mint reads it (g2fpr.2)",
     "schema-editor/src/types/schema.ts":
         "FieldOption type declares pdf_on_value",
     "schema-editor/src/utils/lintFindings.ts":
         "RULE_REMEDIES prose names pdf_on_value in the select-value-not-slug remedy; labels only, not a reader "
         "(this file joined the set when the remedy was reworded in g2fpr.1 round 2 -- the pin caught it)",
     "schema-editor/src/utils/fieldGrouping.ts":
-        "grouping rules: pdf_on_value alone is not a checkbox_group; not a select reader",
+        "grouping rules (pdf_on_value alone is not a checkbox_group) and mintSelectSlugs, which reserves codes already slug-shaped (g2fpr.2)",
     "schema-editor/src/utils/remoteKitStore.ts":
         "WidgetPicker on_value plumbing; not a select reader",
     "scripts/authoring/backfill_option_positions.py":
@@ -99,13 +99,13 @@ REVIEWED: dict[str, str] = {
     "scripts/authoring/eval_extraction.py":
         "counts options lacking both pdf_field_name and pdf_on_value as unmapped",
     "scripts/authoring/extract_form.py":
-        "reads it for radio positions; g2fpr.2 makes _backfill_dropdown_options write it for selects",
+        "reads it for radio positions; _backfill_dropdown_options WRITES {value: slug, pdf_on_value: code} for selects (g2fpr.2)",
     "scripts/bakeoff/group_candidates.py":
         "grouping heuristic over widget on-states; not a select reader",
     "scripts/bakeoff/roundtrip_fill.py":
         "the BAKEOFF filler: reads it for shared-field radios; must learn the select rule in g2fpr.4 or its scores lie",
     "scripts/bakeoff/schema_contract.py":
-        "the extraction prompt; g2fpr.2 changes the select condition-reference rule to the slug",
+        "the extraction prompt: a select condition references the SLUG; the code lives in pdf_on_value (g2fpr.2)",
     "scripts/migrate_schema_v2.py":
         "already writes {value: slug, pdf_on_value: code} for selects built from the dump (c5r8) -- the channel the filler never read",
 }

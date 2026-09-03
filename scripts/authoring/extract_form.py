@@ -538,6 +538,7 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
 
     sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
     from backend.services.schema_lint import _match_dump_names  # noqa: E402
+    from backend.models.conditional_vocabulary import mint_select_slugs  # noqa: E402
 
     # isinstance-filtered like the siblings in this file
     # (_complete_grouped_families, _backfill_unclaimed_widgets): a dump whose
@@ -583,8 +584,12 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
             if not isinstance(o, dict):
                 continue
             ov, ol = o.get("value"), o.get("label")
-            if isinstance(ov, str) and isinstance(ol, str) and ol.strip():
-                prior_labels[ov] = ol
+            # Key on the export CODE: a prior option in the v2 shape carries
+            # it in pdf_on_value (value is its slug); a legacy one in value.
+            pov = o.get("pdf_on_value")
+            key = pov if isinstance(pov, str) and pov else ov
+            if isinstance(key, str) and isinstance(ol, str) and ol.strip():
+                prior_labels[key] = ol
         fid = str(field.get("id"))
         options: list[dict] = []
         seen: set[str] = set()
@@ -625,7 +630,18 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
         if not options:
             unmatched.append(str(field.get("id")))
             continue
-        field["options"] = options
+        # v2 shape (bd polyglot-pdf-g2fpr): value is a SLUG the voice model
+        # speaks; the export code the PDF wants lives in pdf_on_value, which
+        # is what the filler now writes. Minted over the WHOLE set so
+        # uniqueness holds across it; a code that is already a slug ('5')
+        # stays the value. Until now this loop wrote {value: code}, and the
+        # docstring above promised this change "at which point".
+        codes = [o["value"] for o in options]
+        slugs = mint_select_slugs([o["label"] for o in options], codes)
+        field["options"] = [
+            {"value": slug, "label": o["label"], "pdf_on_value": code}
+            for o, slug, code in zip(options, slugs, codes)
+        ]
         fields_filled += 1
         options_written += len(options)
 

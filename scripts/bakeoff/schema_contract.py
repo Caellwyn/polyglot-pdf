@@ -257,9 +257,11 @@ FIELD SHAPE (the unit the scorer grades hardest):
                 "pdf_field_name": str(optional), "pdf_on_value": str(optional)}} ],
                              // radio/checkbox_group choices -- see
                              // CHOICE-FIELD RULES; option.value is a SEMANTIC SLUG.
-                             // A SELECT is different: omit options entirely --
-                             // its values are the PDF's own export codes and
-                             // are filled in from the PDF after extraction.
+                             // A SELECT: omit options entirely -- its choice
+                             // list is copied from the PDF after extraction,
+                             // each option getting a SLUG value minted from its
+                             // display name and its PDF export code in
+                             // pdf_on_value.
 
   // RELATIONSHIP / LOGIC keys (recover from printed conditional text like
   // "Yes (Proceed to Item 5)" and form structure):
@@ -323,21 +325,21 @@ CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
   UNIQUE within the field. Do NOT use a widget-leaf identifier or a raw
   on-state as the value -- the widget identity lives in option.pdf_field_name
   (and pdf_on_value for shared-name radio kids).
-- For a SELECT (dropdown) this rule does NOT apply: its option.value is the
-  PDF's own EXPORT CODE (e.g. "WY"), because a dropdown writes its value
-  straight into the PDF box with no separate widget mapping. Do not invent or
-  slugify these. You do not need to emit a dropdown's options at all -- the
-  full choice list is copied from the PDF itself after extraction, and the
-  choices shown to you in the field list are only a SAMPLE. Emit the field with
-  its type, name and help text; leave options[] out.
+- For a SELECT (dropdown) you do not emit options at all: the full choice list
+  is copied from the PDF itself after extraction -- each option's value is a
+  SLUG minted from its display name (e.g. "wyoming") and its PDF export code
+  (e.g. "WY") is stored in option.pdf_on_value, the same split radios use. The
+  choices shown to you in the field list are only a SAMPLE. Emit the field
+  with its type, name and help text; leave options[] out.
 - Any show_if / require_if that references a RADIO or CHECKBOX_GROUP option MUST
   use that option's SLUG as the value, with a membership operator (includes /
   not_includes) for a checkbox_group trigger, or equals / in for a radio one.
-  A condition on a SELECT trigger uses that dropdown's PDF EXPORT CODE (e.g.
-  "WY") with equals / in -- there is no slug to reference, since a select's
-  options are filled in from the PDF after extraction. If you cannot see the
-  exact code in the sampled choice list, omit the condition rather than guess
-  it: a condition naming a value the dropdown does not have is dropped.
+  A condition on a SELECT trigger uses that option's SLUG with equals / in --
+  the lowercase form of its display name with any trailing "(CODE)" dropped
+  (a choice displayed "Wyoming (WY)" or "WY" is referenced as "wyoming"; never
+  the export code "WY"). If you cannot see the exact choice in the sampled
+  list, omit the condition rather than guess it: a condition naming a value
+  the dropdown does not have is dropped.
 
 CANONICAL v2 EXAMPLE (imitate its conventions: slug option values, per-box
 pdf_field_name, and an `includes` membership show_if referencing an option

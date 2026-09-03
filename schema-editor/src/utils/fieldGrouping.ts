@@ -101,6 +101,29 @@ export function mintOptionSlug(label: string, fallback = 'option'): string {
   return slug || fallback;
 }
 
+/** 'Alabama (AL)' -> 'Alabama': the parenthesized export code a dropdown
+ * label carries for proof-reading must not leak into the SLUG
+ * ('alabama_al'); 'alabama' is what reads well in a condition. Mirrors
+ * backend/models/conditional_vocabulary.strip_trailing_code. */
+export function stripTrailingCode(label: string): string {
+  return (label || '').replace(/\s*\([A-Z0-9]{1,4}\)\s*$/, '');
+}
+
+/** Slugs for a SELECT's options (bd polyglot-pdf-g2fpr). A select's value is
+ * a semantic slug; its PDF export code lives in pdf_on_value. A code that is
+ * ALREADY a valid slug ('5') IS the value -- the label for the number five is
+ * "5". Kept codes are reserved first so a minted sibling cannot collide.
+ * Mirrors conditional_vocabulary.mint_select_slugs; keep them in step. */
+export function mintSelectSlugs(labels: string[], codes: (string | undefined)[]): string[] {
+  const isSlug = (c: unknown) => typeof c === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(c);
+  const keep = codes.map(c => (isSlug(c) ? (c as string) : null));
+  const reserved = keep.filter((k): k is string => k !== null);
+  const toMint = labels.filter((_, i) => keep[i] === null).map(stripTrailingCode);
+  const minted = mintUniqueSlugs([...reserved, ...toMint]).slice(reserved.length);
+  let j = 0;
+  return keep.map(k => (k !== null ? k : minted[j++]));
+}
+
 export function mintUniqueSlugs(labels: string[]): string[] {
   const used = new Set<string>();
   return labels.map(label => {

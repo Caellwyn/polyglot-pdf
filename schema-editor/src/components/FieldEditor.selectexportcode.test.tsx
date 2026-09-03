@@ -1,18 +1,18 @@
 /**
- * A dropdown's option.value is the PDF's own EXPORT CODE, not a minted slug
- * (bd polyglot-pdf-alzbr).
+ * A dropdown's option.value is a minted SLUG; its PDF export code lives in
+ * option.pdf_on_value (bd polyglot-pdf-g2fpr, PR 2 -- the writer side).
  *
- * A select has no fill branch of its own: the filler writes str(option.value)
- * verbatim into the combobox and never consults pdf_on_value, and PyMuPDF does
- * not validate that write against the widget's /Opt list. So a label-derived
- * slug is accepted silently and then RENDERS CLIPPED -- measured on the I-90
- * mailing-state box (36x18pt): 'WY' prints "WY", 'wyoming' prints "wyomin".
+ * Until PR 1 the filler wrote str(option.value) verbatim into the combobox,
+ * so a select's value HAD to be the export code and this file pinned that
+ * carve-out (bd polyglot-pdf-alzbr). The filler now resolves value -> option
+ * -> pdf_on_value, so the editor treats a select like every other choice
+ * type: the value is an internal join key minted from the label, and the
+ * export code is authored separately into pdf_on_value.
  *
- * The editor therefore must never derive a select's option value from its
- * label, and must let an author type the code directly -- it is the only place
- * that code can come from. radio / checkbox_group keep the mint-from-label
- * behaviour: they carry widget identity in pdf_field_name / pdf_on_value, so
- * their values really are internal join keys.
+ * Two select-specific rules the generic minter does not know, both pinned:
+ * a trailing "(CODE)" in the label is stripped ('Alabama (AL)' -> 'alabama',
+ * not 'alabama_al'), and a code that is already a valid slug ('5') IS the
+ * value -- the label for the number five is "5".
  */
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -30,9 +30,9 @@ function makeSchema(fields: FormField[]): FormSchema {
   } as unknown as FormSchema;
 }
 
-function selectField(options = [
-  { value: 'WY', label: 'Wyoming (WY)' },
-  { value: 'AL', label: 'Alabama (AL)' },
+function selectField(options: any[] = [
+  { value: 'wyoming', label: 'Wyoming (WY)', pdf_on_value: 'WY' },
+  { value: 'alabama', label: 'Alabama (AL)', pdf_on_value: 'AL' },
 ]): FormField {
   return {
     id: 'mail_state', name: 'State', spoken_name: 'state', type: 'select',
@@ -52,382 +52,161 @@ function radioField(): FormField {
   } as unknown as FormField;
 }
 
-describe('select option values are PDF export codes (bd polyglot-pdf-alzbr)', () => {
-  it('editing a select option LABEL does not change its value', () => {
-    // Asserted on the RESULTING STATE, not on callback shapes. The correct
-    // behaviour here is to commit NOTHING (the value must not change), so any
-    // assertion that only inspects committed calls iterates zero times and
-    // passes against a broken guard -- which is exactly how an earlier cut of
-    // this test shipped vacuous. A real state-holding parent makes the
-    // post-edit value directly observable instead.
-    function Harness() {
-      const [s, setS] = React.useState<FormSchema>(
-        makeSchema([selectField()]),
-      );
-      const f = s.fields.find(x => x.id === 'mail_state')!;
-      return (
-        <>
-          <FieldEditor
-            field={f}
-            schema={s}
-            onUpdateField={(patch: any) => setS(p => ({
-              ...p,
-              fields: p.fields.map(x => (x.id === 'mail_state' ? { ...x, ...patch } : x)),
-            } as FormSchema))}
-            onUpdateFields={(fields: any, sections: any) => setS(p => ({
-              ...p, fields, sections: sections ?? p.sections,
-            } as FormSchema))}
-            authorTier
-          />
-          <pre data-testid="probe">{JSON.stringify(
-            (s.fields.find(x => x.id === 'mail_state') as any).options
-              .map((o: any) => [o.label, o.value]),
-          )}</pre>
-        </>
-      );
-    }
+/** A REAL state-holding parent: a vi.fn() parent never re-renders, so a test
+ * that reads the probe after an edit would assert on stale props. */
+function Harness({ initial, id = 'mail_state' }: { initial: FormSchema; id?: string }) {
+  const [s, setS] = React.useState<FormSchema>(initial);
+  const f = s.fields.find(x => x.id === id)!;
+  return (
+    <>
+      <FieldEditor
+        field={f}
+        schema={s}
+        onUpdateField={(patch: any) => setS(p => ({
+          ...p,
+          fields: p.fields.map(x => (x.id === id ? { ...x, ...patch } : x)),
+        } as FormSchema))}
+        onUpdateFields={(fields: any, sections: any) => setS(p => ({
+          ...p, fields, sections: sections ?? p.sections,
+        } as FormSchema))}
+        authorTier
+      />
+      <pre data-testid="probe">{JSON.stringify(
+        (s.fields.find(x => x.id === id) as any).options
+          .map((o: any) => [o.label, o.value, o.pdf_on_value ?? null]),
+      )}</pre>
+      <pre data-testid="fields">{JSON.stringify(s.fields)}</pre>
+    </>
+  );
+}
 
-    render(<Harness />);
+const probe = () => JSON.parse(screen.getByTestId('probe').textContent!);
+const codeInputs = () =>
+  screen.getAllByTitle(/code this dropdown writes/) as HTMLInputElement[];
+
+describe('select option values are minted slugs; the export code is pdf_on_value (bd polyglot-pdf-g2fpr)', () => {
+  it('editing a select option LABEL re-mints its value from the label, with the (CODE) stripped', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
     const input = screen.getByDisplayValue('Wyoming (WY)') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'Wyoming' } });
+    fireEvent.change(input, { target: { value: 'Wyoming State (WY)' } });
     fireEvent.blur(input);
-
-    const opts = JSON.parse(screen.getByTestId('probe').textContent!);
-    expect(opts[0][0]).toBe('Wyoming');  // the label DID change...
-    expect(opts[0][1]).toBe('WY');       // ...and the export code did NOT
-    expect(opts[1][1]).toBe('AL');
+    const opts = probe();
+    expect(opts[0]).toEqual(['Wyoming State (WY)', 'wyoming_state', 'WY']);
+    expect(opts[1]).toEqual(['Alabama (AL)', 'alabama', 'AL']);  // untouched
   });
 
-  it('a radio option label edit STILL re-mints its value (the carve-out is select-only)', () => {
-    // The blur handler reads the option's label from the CURRENT field prop,
-    // so the parent must re-render with the edited label -- exactly what the
-    // real editor does. Driving change+blur against a static prop would leave
-    // the handler reading the OLD label and prove nothing.
-    const onUpdateField = vi.fn();
-    const edited = radioField();
-    (edited.options as any)[0].label = 'Gentleman';
-    render(
-      <FieldEditor field={edited} schema={makeSchema([edited])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-
-    const input = screen.getByDisplayValue('Gentleman') as HTMLInputElement;
+  it('a label rename never touches the export code', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    const input = screen.getByDisplayValue('Alabama (AL)') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Alabama' } });
     fireEvent.blur(input);
-
-    const remint = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(f => f && Array.isArray(f.options))
-      .some(f => f.options.some((o: any) => o.value === 'gentleman'));
-    expect(remint).toBe(true);
+    expect(probe()[1]).toEqual(['Alabama', 'alabama', 'AL']);
   });
 
-  it('a select option value is EDITABLE, so the export code can be authored', () => {
-    const onUpdateField = vi.fn();
-    const field = selectField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-
-    // Rendered as an input carrying the code -- not a read-only chip.
-    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
-    expect(codeInput.tagName).toBe('INPUT');
-
-    fireEvent.change(codeInput, { target: { value: 'WV' } });
-    const wrote = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(p => p && Array.isArray(p.options))
-      .some(p => p.options[0].value === 'WV');
-    expect(wrote).toBe(true);
-  });
-
-  it('a radio option value stays a read-only chip, not an input', () => {
-    const field = radioField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={vi.fn()} authorTier />,
-    );
-    // present as text...
-    expect(screen.getByText('male')).toBeInTheDocument();
-    // ...and NOT as an editable input
-    expect(screen.queryByDisplayValue('male')).toBeNull();
-  });
-
-  it('+ Add Option on a select adds an EMPTY value for the author to fill', () => {
-    const onUpdateField = vi.fn();
-    const field = selectField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-
-    fireEvent.click(screen.getByText('+ Add Option'));
-    const added = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(p => p && Array.isArray(p.options))
-      .pop();
-    expect(added).toBeTruthy();
-    // A minted slug here would look valid and print WRONG; empty trips the
-    // existing option-value-missing lint ERROR, which is the honest signal.
-    expect(added.options[added.options.length - 1].value).toBe('');
-  });
-
-  it('retargets dependents when driven through a REAL state-holding parent', () => {
-    // The load-bearing test for the retarget (bd polyglot-pdf-alzbr).
-    //
-    // A vi.fn() parent never feeds an updated field prop back, so the row is
-    // never re-rendered between keystrokes and the handler's closed-over
-    // option.value stays pinned at the ORIGINAL code -- which is NOT what
-    // happens in the app. With a real parent, onChange commits every keystroke,
-    // so by blur the option's value is already the newly-typed string; reading
-    // "old" from it found no change and skipped the retarget entirely. Measured
-    // before the fix: code became 'WV' while the dependent still said 'WY'.
-    //
-    // This harness mirrors App.tsx: real useState, both callbacks wired.
-    function Harness() {
-      const [schema, setSchema] = React.useState<FormSchema>({
-        source: 'pdf',
-        form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
-        parts: [],
-        sections: [{ id: 's1', label: 'S1', order: 1, fields: ['mail_state', 'dep'] }],
-        fields: [
-          selectField(),
-          {
-            id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text',
-            section_id: 's1', pdf_field_name: 'form1[0].dep[0]',
-            show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
-          } as unknown as FormField,
-        ],
-      } as unknown as FormSchema);
-      const field = schema.fields.find(f => f.id === 'mail_state')!;
-      return (
-        <>
-          <FieldEditor
-            field={field}
-            schema={schema}
-            onUpdateField={(f: any) => setSchema(s => ({
-              ...s,
-              fields: s.fields.map(x => (x.id === 'mail_state' ? { ...x, ...f } : x)),
-            } as FormSchema))}
-            onUpdateFields={(fields: any, sections: any) => setSchema(s => ({
-              ...s, fields, sections: sections ?? s.sections,
-            } as FormSchema))}
-            authorTier
-          />
-          <pre data-testid="probe">{JSON.stringify({
-            code: (schema.fields.find(f => f.id === 'mail_state') as any).options[0].value,
-            depRef: (schema.fields.find(f => f.id === 'dep') as any).show_if?.value,
-          })}</pre>
-        </>
-      );
-    }
-
-    render(<Harness />);
-    const input = screen.getByDisplayValue('WY') as HTMLInputElement;
-    // Real keystrokes, and a real blur with NO target override -- overriding
-    // e.target.value at blur manufactures a mismatch that cannot occur live.
-    fireEvent.change(input, { target: { value: 'W' } });
-    fireEvent.change(input, { target: { value: 'WV' } });
+  it('a NUMERIC code is already a slug and stays the value through a label edit', () => {
+    // height_feet: label "5", code "5". Re-minting from a reworded label must
+    // not invent a word for a number.
+    const height = selectField([
+      { value: '5', label: '5', pdf_on_value: '5' },
+      { value: '6', label: '6', pdf_on_value: '6' },
+    ]);
+    render(<Harness initial={makeSchema([height])} />);
+    const input = screen.getAllByPlaceholderText('Option label')[0] as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'five feet' } });
     fireEvent.blur(input);
-
-    const state = JSON.parse(screen.getByTestId('probe').textContent!);
-    expect(state.code).toBe('WV');
-    expect(state.depRef).toBe('WV');
+    expect(probe()[0]).toEqual(['five feet', '5', '5']);
   });
 
-  it('editing an export code RETARGETS dependents that reference it', () => {
-    // option.value is an identity a dependent's show_if can reference -- Remove
-    // even BLOCKS deleting a referenced option over it. Changing the code must
-    // therefore move those references too, exactly as the radio label-rename
-    // does, or the dependent silently dangles (or flips from hidden to
-    // shown-for-everyone).
-    const field = selectField();
-    const dependent = {
+  it('a label rename RETARGETS a dependent that references the old slug', () => {
+    // The value is an identity a show_if can reference; renaming must move
+    // the reference atomically, exactly as radio/checkbox_group already do.
+    const dep = {
       id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text', section_id: 's1',
-      pdf_field_name: 'form1[0].dep[0]',
-      show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
+      show_if: { field: 'mail_state', operator: 'equals', value: 'wyoming' },
     } as unknown as FormField;
-    const schema = {
-      source: 'pdf',
-      form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
-      parts: [],
-      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['mail_state', 'dep'] }],
-      fields: [field, dependent],
-    } as unknown as FormSchema;
-
-    const onUpdateFields = vi.fn();
-    render(
-      <FieldEditor field={field} schema={schema}
-        onUpdateField={vi.fn()} onUpdateFields={onUpdateFields} authorTier />,
-    );
-
-    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
-    fireEvent.change(codeInput, { target: { value: 'WV' } });
-    fireEvent.blur(codeInput, { target: { value: 'WV' } });
-
-    expect(onUpdateFields).toHaveBeenCalled();
-    const [fields] = onUpdateFields.mock.calls[onUpdateFields.mock.calls.length - 1];
-    const dep = fields.find((f: any) => f.id === 'dep');
-    expect(dep.show_if.value).toBe('WV');
+    render(<Harness initial={makeSchema([selectField(), dep])} />);
+    const input = screen.getByDisplayValue('Wyoming (WY)') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Wyoming State (WY)' } });
+    fireEvent.blur(input);
+    const fields = JSON.parse(screen.getByTestId('fields').textContent!);
+    expect(fields.find((f: any) => f.id === 'dep').show_if.value).toBe('wyoming_state');
   });
 
-  it('blanking a referenced code does NOT retarget the dependent to empty', () => {
-    // Deliberate: leaving the reference on the old code keeps it VISIBLE.
-    // schema_lint skips its dangling-reference check for "" on purpose (the v1
-    // "field is empty" idiom, used for real on the i-90's unit-type radios), so
-    // rewriting a dependent to "" turns an orphaned reference into a different,
-    // LIVE condition that lint cannot see -- and one that plausibly matches an
-    // unanswered dropdown. Measured against the real linter: old code ->
-    // ref-option-value ERROR; "" -> nothing at all.
-    const field = selectField();
-    const dependent = {
+  it('the export code input is bound to pdf_on_value, and editing it leaves the value alone', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    const code = codeInputs()[0];
+    expect(code.value).toBe('WY');
+    fireEvent.change(code, { target: { value: 'WV' } });
+    fireEvent.blur(code, { target: { value: 'WV' } });
+    expect(probe()[0]).toEqual(['Wyoming (WY)', 'wyoming', 'WV']);
+  });
+
+  it('editing the export code does NOT retarget dependents -- the slug they reference is unchanged', () => {
+    const dep = {
       id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text', section_id: 's1',
-      pdf_field_name: 'form1[0].dep[0]',
-      show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
+      show_if: { field: 'mail_state', operator: 'equals', value: 'wyoming' },
     } as unknown as FormField;
-    const schema = {
-      source: 'pdf',
-      form_metadata: { title: 'T', form_number: 'T-1', version: '1', language: 'en' },
-      parts: [],
-      sections: [{ id: 's1', label: 'S1', order: 1, fields: ['mail_state', 'dep'] }],
-      fields: [field, dependent],
-    } as unknown as FormSchema;
-
-    // Real state-holding parent: a vi.fn() parent never calls onUpdateFields
-    // here, so a loop over its calls would iterate ZERO times and assert
-    // nothing -- the test would pass against a blank-out that DID retarget.
-    function Harness() {
-      const [s, setS] = React.useState<FormSchema>(schema);
-      const f = s.fields.find(x => x.id === 'mail_state')!;
-      return (
-        <>
-          <FieldEditor
-            field={f}
-            schema={s}
-            onUpdateField={(patch: any) => setS(p => ({
-              ...p,
-              fields: p.fields.map(x => (x.id === 'mail_state' ? { ...x, ...patch } : x)),
-            } as FormSchema))}
-            onUpdateFields={(fields: any, sections: any) => setS(p => ({
-              ...p, fields, sections: sections ?? p.sections,
-            } as FormSchema))}
-            authorTier
-          />
-          <pre data-testid="probe">{JSON.stringify({
-            code: (s.fields.find(x => x.id === 'mail_state') as any).options[0].value,
-            depRef: (s.fields.find(x => x.id === 'dep') as any).show_if?.value,
-          })}</pre>
-        </>
-      );
-    }
-
-    render(<Harness />);
-    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
-    fireEvent.focus(codeInput);
-    fireEvent.change(codeInput, { target: { value: '' } });
-    fireEvent.blur(codeInput);
-
-    const state = JSON.parse(screen.getByTestId('probe').textContent!);
-    expect(state.code).toBe('');        // the blank-out did take effect...
-    expect(state.depRef).toBe('WY');    // ...and the reference stayed VISIBLE
+    render(<Harness initial={makeSchema([selectField(), dep])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: 'WV' } });
+    fireEvent.blur(code, { target: { value: 'WV' } });
+    const fields = JSON.parse(screen.getByTestId('fields').textContent!);
+    expect(fields.find((f: any) => f.id === 'dep').show_if.value).toBe('wyoming');
   });
 
   it('an export code is trimmed on blur', () => {
-    // ' WY' is never a legal export code -- it silently fails the /Opt match
-    // and the form prints blank.
-    const onUpdateField = vi.fn();
-    const field = selectField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-    const codeInput = screen.getByDisplayValue('WY') as HTMLInputElement;
-    fireEvent.change(codeInput, { target: { value: '  WV  ' } });
-    fireEvent.blur(codeInput, { target: { value: '  WV  ' } });
+    render(<Harness initial={makeSchema([selectField()])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: ' WV ' } });
+    fireEvent.blur(code, { target: { value: ' WV ' } });
+    expect(probe()[0][2]).toBe('WV');
+  });
 
-    const committed = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(f => f && Array.isArray(f.options))
-      .pop();
-    expect(committed.options[0].value).toBe('WV');
+  it('the slug is shown read-only beside the editable code', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    expect(screen.getByText('wyoming')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('wyoming')).toBeNull();   // not an input
+  });
+
+  it('+ Add Option on a select mints a slug; the code starts empty for the author to fill', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    fireEvent.click(screen.getByText('+ Add Option'));
+    const opts = probe();
+    expect(opts).toHaveLength(3);
+    expect(opts[2]).toEqual(['', 'option', null]);
+  });
+
+  it('a second added option gets a unique slug', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    fireEvent.click(screen.getByText('+ Add Option'));
+    fireEvent.click(screen.getByText('+ Add Option'));
+    const opts = probe();
+    expect(opts.map((o: any) => o[1])).toEqual(['wyoming', 'alabama', 'option', 'option_2']);
+  });
+
+  it('the ZERO-OPTIONS "Add Option" also mints for a select', () => {
+    render(<Harness initial={makeSchema([selectField([])])} />);
+    fireEvent.click(screen.getByText('+ Add Option'));
+    expect(probe()).toEqual([['', 'option', null]]);
   });
 
   it('the export code input is available to the EDITOR tier, not just authors', () => {
-    // "+ Add Option" is enabled for editors on a select, and a new select
-    // option now starts EMPTY -- so an editor who cannot reach this input can
-    // create an option they have no way to complete.
-    // authorTier DEFAULTS TO TRUE, so omitting the prop does not simulate an
-    // editor -- it must be passed false explicitly or this asserts nothing.
-    const field = selectField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={vi.fn()} authorTier={false} />,
-    );
-    expect(screen.getByDisplayValue('WY')).toBeInTheDocument();
+    const s = makeSchema([selectField()]);
+    render(<FieldEditor field={s.fields[0]} schema={s} onUpdateField={vi.fn()} />);
+    expect(codeInputs()).toHaveLength(2);
   });
 
-  it('a radio option value stays author-only (no editor-tier value input)', () => {
-    const field = radioField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={vi.fn()} authorTier={false} />,
-    );
-    expect(screen.queryByDisplayValue('male')).toBeNull();
+  it('a radio option label edit still re-mints its value (unchanged behaviour)', () => {
+    render(<Harness initial={makeSchema([radioField()])} id="sex" />);
+    const input = screen.getByDisplayValue('Male') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Man' } });
+    fireEvent.blur(input);
+    expect(probe()[0]).toEqual(['Man', 'man', '1']);
   });
 
-  it('the ZERO-OPTIONS "Add Option" also starts a select empty', () => {
-    // The third mint site: a structurally separate button rendered when the
-    // field has no options at all. A single mutation that flips BOTH add-sites
-    // reddens only the populated-options test, so without this the zero-options
-    // branch could be reverted to mintUniqueSlugs() and ship green.
-    const onUpdateField = vi.fn();
-    const empty = selectField([]);
-    render(
-      <FieldEditor field={empty} schema={makeSchema([empty])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-
-    fireEvent.click(screen.getByText('+ Add Option'));
-    const added = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(p => p && Array.isArray(p.options))
-      .pop();
-    expect(added).toBeTruthy();
-    expect(added.options).toHaveLength(1);
-    expect(added.options[0].value).toBe('');
-  });
-
-  it('the ZERO-OPTIONS "Add Option" still mints for a radio', () => {
-    const onUpdateField = vi.fn();
-    const empty = { ...radioField(), options: [] } as unknown as FormField;
-    render(
-      <FieldEditor field={empty} schema={makeSchema([empty])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-
-    fireEvent.click(screen.getByText('+ Add Option'));
-    const added = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(p => p && Array.isArray(p.options))
-      .pop();
-    expect(added).toBeTruthy();
-    expect(added.options[0].value).toBeTruthy();
-  });
-
-  it('+ Add Option on a radio still mints a slug', () => {
-    const onUpdateField = vi.fn();
-    const field = radioField();
-    render(
-      <FieldEditor field={field} schema={makeSchema([field])}
-        onUpdateField={onUpdateField} authorTier />,
-    );
-
-    fireEvent.click(screen.getByText('+ Add Option'));
-    const added = onUpdateField.mock.calls
-      .map(c => c[0])
-      .filter(p => p && Array.isArray(p.options))
-      .pop();
-    expect(added).toBeTruthy();
-    expect(added.options[added.options.length - 1].value).toBeTruthy();
+  it('a radio has no export-code input', () => {
+    const s = makeSchema([radioField()]);
+    render(<FieldEditor field={s.fields[0]} schema={s} onUpdateField={vi.fn()} authorTier />);
+    expect(screen.queryAllByTitle(/code this dropdown writes/)).toHaveLength(0);
   });
 });

@@ -100,65 +100,63 @@ def test_a_field_with_no_choices_renders_no_choices_clause(render):
     assert "choices=[" not in text
 
 
-# --- the slug rule must be scoped EVERYWHERE, not just where it is stated --- #
+# --- the select contract must be stated CONSISTENTLY everywhere ------------ #
 
-def test_no_rendered_slug_rule_still_claims_to_cover_select():
+
+def test_no_rendered_passage_puts_a_selects_export_code_in_its_value():
     """Pins the SET, not the one instance (CLAUDE.md scar #8).
 
-    The prompt states the option-value rule in several places: the JSON type
-    skeleton, CHOICE-FIELD RULES, and the condition-reference rule. bd
-    polyglot-pdf-hmkas scopes the slug rule to radio/checkbox_group -- a
-    select's value is the PDF's own export code -- and fixing only ONE
-    statement leaves the model reading a contradiction (the skeleton is what it
-    imitates first).
+    Until bd polyglot-pdf-g2fpr a select's option.value WAS the PDF export
+    code, and this test pinned a carve-out saying so in three places. Now a
+    select's value is a SLUG and its export code lives in pdf_on_value (the
+    filler writes that -- PR 1), so the invariant inverts: any rendered passage
+    that talks about a select's export code must say WHERE it lives. A passage
+    that names the code without pdf_on_value is the old contract leaking back
+    in -- and the skeleton is what the model imitates first, so one stale
+    statement is a contradiction it reads before the rule.
 
-    Scans by SENTENCE, not by line. The skeleton splits one rule across two
-    lines ("radio/select/checkbox_group choices" then "option.value is a
-    SEMANTIC SLUG"), so a line-by-line scan sees neither half naming BOTH and
-    passes while the contradiction stands -- a false negative this test had
-    until mutation caught it.
+    Scans by SENTENCE, not by line, for the same reason as before: the
+    skeleton splits one rule across lines.
     """
     text = schema_contract.SCHEMA_CONTRACT
-    # Blank-line / full-stop windows, so a rule wrapped across lines stays in
-    # one chunk.
     chunks = re.split(r"\n\s*\n|(?<=\.)\s", text)
     offenders = []
     for chunk in chunks:
         low = " ".join(chunk.lower().split())
-        if "slug" not in low:
-            continue
-        # The FIELD TYPE, not the English words "selected" / "selection".
         if not re.search(r"\bselect\b|\bdropdown\b", low):
             continue
-        if any(k in low for k in ("is different", "does not apply", "not apply",
-                                  "no slug", "export code", "omit",
-                                  "leave options", "slugify these")):
+        if "export code" not in low:
+            continue
+        if "pdf_on_value" in low or "never the export code" in low:
             continue
         offenders.append(low[:160])
     assert not offenders, (
-        "these rendered passages apply the slug rule to select:\n  "
-        + "\n  ".join(offenders))
+        "these rendered passages name a select's export code without saying "
+        "it lives in pdf_on_value:\n  " + "\n  ".join(offenders))
 
 
 @pytest.mark.parametrize("what,needle", [
     # The JSON type skeleton -- what the model imitates first.
-    ("skeleton", "its values are the PDF's own export codes"),
+    ("skeleton", "its PDF export code in"),
+    ("skeleton", "SLUG value minted from its"),
     # CHOICE-FIELD RULES -- the rule itself.
-    ("choice-field rule", "For a SELECT (dropdown) this rule does NOT apply"),
+    ("choice-field rule", "each option's value is a"),
+    ("choice-field rule", "is stored in option.pdf_on_value"),
     ("choice-field rule", "leave options[] out"),
-    # The condition-reference rule -- a show_if on a select names the code.
-    ("condition rule", "A condition on a SELECT trigger uses that dropdown's"),
+    # The condition-reference rule -- a show_if on a select names the SLUG.
+    ("condition rule", "A condition on a SELECT trigger uses that option's SLUG"),
+    # Sits on ONE rendered line; the scan normalizes whitespace, this cannot.
+    ("condition rule", 'is referenced as "wyoming"; never'),
 ])
-def test_each_select_carve_out_statement_is_present(what, needle):
+def test_each_select_statement_is_present(what, needle):
     """Non-vacuity floor for the scan above, ONE STATEMENT PER CASE.
 
-    The scan passes when no passage sweeps select into the slug rule -- which is
-    also true if a carve-out is simply deleted. Asserting a shared phrase like
-    "export code" appears SOMEWHERE is too weak: three separate statements
-    contain it, so deleting any one of them left the assertion green (caught by
-    mutation, twice). Each statement therefore gets its own case, keyed on text
-    unique to it.
+    The scan passes when no passage names a select's export code without its
+    home -- which is also true if a statement is simply deleted. Each of the
+    three places the contract is stated gets its own needle, keyed on text
+    unique to it, so deleting any one of them fails here (the shape that was
+    caught by mutation twice on the previous version of this test).
     """
     assert needle in schema_contract.SCHEMA_CONTRACT, (
-        "the %s carve-out is missing; the slug-scope scan cannot see its "
-        "absence, so this is the only thing pinning it" % what)
+        "the %s statement is missing; the scan above cannot see its absence, "
+        "so this is the only thing pinning it" % what)

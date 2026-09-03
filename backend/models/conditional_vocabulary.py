@@ -160,6 +160,38 @@ def mint_option_slug(label: str, fallback: str = "option") -> str:
     return slug or fallback
 
 
+_TRAILING_CODE = re.compile(r"\s*\([A-Z0-9]{1,4}\)\s*$")
+
+
+def strip_trailing_code(label: str) -> str:
+    """'Alabama (AL)' -> 'Alabama'. The parenthesized export code a dropdown
+    label carries for proof-reading (bd polyglot-pdf-jpjcv) must not leak into
+    the SLUG: mint_option_slug('Alabama (AL)') is 'alabama_al', and 'alabama'
+    is what reads well in a condition and what the c5r8 kit used."""
+    return _TRAILING_CODE.sub("", label or "")
+
+
+def mint_select_slugs(labels: List[str], codes: List[str]) -> List[str]:
+    """Slugs for a SELECT's options (bd polyglot-pdf-g2fpr).
+
+    A select's value is a semantic slug and its PDF export code lives in
+    pdf_on_value. Two rules the generic minter does not know:
+      - a code that is ALREADY a valid slug ('5', '11') IS the value: the
+        label for the number five is "5", and re-minting it from a label
+        would invent a word for a number;
+      - a label's trailing "(CODE)" is stripped before minting.
+    Uniqueness is enforced across the WHOLE set (kept codes are reserved
+    first, so a minted sibling cannot collide with one).
+    """
+    assert len(labels) == len(codes)
+    keep = [c if (isinstance(c, str) and is_valid_option_slug(c)) else None
+            for c in codes]
+    reserved = [c for c in keep if c is not None]
+    to_mint = [strip_trailing_code(l) for l, k in zip(labels, keep) if k is None]
+    minted = iter(mint_unique_slugs(reserved + to_mint)[len(reserved):])
+    return [k if k is not None else next(minted) for k in keep]
+
+
 def mint_unique_slugs(labels: List[str]) -> List[str]:
     """Mint slugs for a field's option labels, deduped with _2/_3... suffixes.
 

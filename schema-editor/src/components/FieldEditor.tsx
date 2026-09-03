@@ -9,6 +9,7 @@ import {
   changeGroupKindBlockReason,
   canUngroup,
   mintOptionSlug,
+  mintSelectSlugs,
   mintUniqueSlugs,
   optionValueReferencedBy,
   retargetOptionValueReferences,
@@ -843,16 +844,6 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   // For the header chip's scroll-to-first-finding (sprint-18 C1). Declared
   // unconditionally, before the no-field early return, per the rules of hooks.
   const rootRef = React.useRef<HTMLDivElement | null>(null);
-  // The export-code input's value BEFORE the current edit session (bd
-  // polyglot-pdf-alzbr). Unlike the label-rename path -- whose onChange writes
-  // only .label, leaving .value genuinely stale and safe to read at blur --
-  // this input's onChange writes .value ITSELF on every keystroke. So by blur
-  // time the option's .value is already the newly-typed string, and comparing
-  // against it finds no change and skips the dependent retarget entirely
-  // (measured: the code changed to 'WV' while a dependent still referenced
-  // 'WY'). Captured on focus instead. Declared unconditionally, before the
-  // no-field early return, per the rules of hooks.
-  const codeBeforeEditRef = React.useRef<string | null>(null);
 
   // Auto-populate pickers (bd polyglot-pdf-g33y2). Memoized because each call
   // walks the copy graph per candidate field, so it is O(fields x chain) --
@@ -1769,28 +1760,24 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // label mints nothing -- keep the old value so
                           // dependents' references stay intact.
                           //
-                          // NOT for a select (bd polyglot-pdf-alzbr): a
-                          // dropdown has no fill branch of its own, so the
-                          // filler writes option.value VERBATIM into the
-                          // combobox and never reads pdf_on_value. The value
-                          // is therefore the PDF's own export code ('WY'), not
-                          // an internal join key -- re-minting it from the
-                          // label silently changes what PRINTS ('wyoming'
-                          // renders clipped as 'wyomin' in the 36pt box) and
-                          // makes the kit un-publishable, since the code is no
-                          // longer in the widget's /Opt list. Editing a select
-                          // option's label must leave its value alone; the
-                          // value is edited directly instead (see the Advanced
-                          // block below). Retire this branch when selects gain
-                          // a real pdf_on_value channel (bd polyglot-pdf-g2fpr).
-                          if (field.type === 'select') return;
+                          // A select mints too, now that its export code
+                          // lives in pdf_on_value and the filler writes THAT
+                          // (bd polyglot-pdf-g2fpr): the value is an internal
+                          // join key on every choice type. The select minter
+                          // strips a trailing "(CODE)" from the label and
+                          // keeps a code that is already a slug ('5') as the
+                          // value, so a numeric dropdown is never re-worded.
                           const label = option.label || '';
                           if (!label.trim()) return;
-                          const otherLabels = safeOptions(field)
-                            .filter((_, i) => i !== idx)
-                            .map(o => o.label || '');
+                          const others = safeOptions(field).filter((_, i) => i !== idx);
+                          const otherLabels = others.map(o => o.label || '');
                           const oldValue = option.value;
-                          const value = mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
+                          const value = field.type === 'select'
+                            ? mintSelectSlugs(
+                                [...otherLabels, label],
+                                [...others.map(o => (o as any).pdf_on_value), (option as any).pdf_on_value],
+                              ).slice(-1)[0]
+                            : mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
                           if (!value || value === oldValue) return;
                           const newOptions = [...safeOptions(field)];
                           newOptions[idx] = { ...option, value };
@@ -1893,13 +1880,15 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             it beside the label confused editors (bd
                             polyglot-pdf-0x10.5). Author tier can still inspect
                             it; it re-mints from the label when an edit settles. */}
-                        {/* A SELECT's value is the PDF's own export code, not a
-                            minted slug (bd polyglot-pdf-alzbr): the filler
-                            writes it verbatim into the combobox, so it must
-                            match the widget's /Opt list exactly or the form
-                            prints wrong. It cannot be derived from the label,
-                            so it is EDITABLE here -- the only place to author
-                            it -- rather than shown as a read-only chip. */}
+                        {/* A SELECT's PDF export code lives in pdf_on_value
+                            (bd polyglot-pdf-g2fpr): the filler writes it into
+                            the combobox, so it must match the widget's /Opt
+                            list exactly or the form prints wrong. It cannot be
+                            derived from the label, so it is EDITABLE here --
+                            the only place to author it. The option's VALUE is
+                            a minted slug like every other choice type and is
+                            shown read-only below; editing the code never
+                            touches it, so no dependent needs retargeting. */}
                         {field.type === 'select' ? (
                           <div className="mt-1 text-gray-500">
                             <label className="block">
@@ -1907,96 +1896,25 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               <input
                                 type="text"
                                 className="font-mono border rounded px-1.5 py-0.5 w-28"
-                                value={option.value ?? ''}
+                                value={(option as any).pdf_on_value ?? ''}
                                 title="The code this dropdown writes into the PDF (e.g. 'WY'). It must match the form's own choice list exactly."
-                                onFocus={() => {
-                                  // Capture the TRUE pre-edit code: onChange
-                                  // below overwrites option.value on every
-                                  // keystroke, so by blur it is no longer the
-                                  // value dependents were authored against.
-                                  codeBeforeEditRef.current =
-                                    option.value ? String(option.value) : '';
-                                }}
                                 onChange={e => {
-                                  // Belt and braces: capture the pre-edit code
-                                  // on the FIRST keystroke too, not only on
-                                  // focus. A programmatic edit (or any path
-                                  // that reaches onChange without a focus
-                                  // event) would otherwise leave the ref unset
-                                  // and silently skip the dependent retarget --
-                                  // the exact failure this fix exists to close.
-                                  if (codeBeforeEditRef.current === null) {
-                                    codeBeforeEditRef.current =
-                                      option.value ? String(option.value) : '';
-                                  }
                                   const newOptions = [...safeOptions(field)];
                                   newOptions[idx] = {
                                     ...option,
-                                    value: e.target.value,
-                                  };
+                                    pdf_on_value: e.target.value,
+                                  } as any;
                                   updateField({ options: newOptions });
                                 }}
                                 onBlur={e => {
-                                  // The option value is an IDENTITY a
-                                  // dependent's show_if/require_if can
-                                  // reference -- Remove even BLOCKS deleting a
-                                  // referenced option for exactly this reason.
-                                  // Changing it here must therefore retarget
-                                  // those references, the same way the
-                                  // radio/checkbox_group label-rename does,
-                                  // or a dependent silently dangles (or flips
-                                  // from hidden to shown-for-everyone).
-                                  // Retarget on BLUR, not per keystroke: an
-                                  // intermediate value ('W' on the way to
-                                  // 'WY') would rewrite dependents to a slug
-                                  // that never existed. Whitespace is trimmed
-                                  // -- ' WY' is never a legal export code and
-                                  // silently fails the /Opt match.
+                                  // Whitespace is trimmed: ' WY' is never a
+                                  // legal export code and silently fails the
+                                  // /Opt match.
                                   const next = e.target.value.trim();
-                                  // NOT option.value -- that is already the
-                                  // typed string by now (see the ref's note).
-                                  const old = codeBeforeEditRef.current ?? '';
-                                  codeBeforeEditRef.current = null;
+                                  if (next === ((option as any).pdf_on_value ?? '')) return;
                                   const newOptions = [...safeOptions(field)];
-                                  newOptions[idx] = { ...option, value: next };
-                                  const updatedField = { ...field, options: newOptions };
-                                  // Retarget when the code changed to another
-                                  // REAL code -- but never to empty.
-                                  //
-                                  // Empty looks like the tidy choice (the
-                                  // reference tracks the option) and is in
-                                  // fact the dangerous one: schema_lint SKIPS
-                                  // the ref-option-value dangling check for
-                                  // "" on purpose -- it is the v1 "field is
-                                  // empty" idiom, which the i-90 gold really
-                                  // uses on unit-type radios. So rewriting a
-                                  // dependent to "" converts an orphaned
-                                  // reference into a DIFFERENT, live condition
-                                  // that lint cannot see, and one that plausibly
-                                  // matches an unanswered dropdown. Measured:
-                                  // keeping the old code reports
-                                  // ref-option-value; rewriting to "" reports
-                                  // nothing at all.
-                                  //
-                                  // So on a blank-out the reference is left
-                                  // pointing at the old code, where lint
-                                  // catches it loudly. Clearing a referenced
-                                  // code is really an option removal, and
-                                  // Remove already BLOCKS that -- routing this
-                                  // through the same guard is bd
-                                  // polyglot-pdf-alzbr's follow-up, not a
-                                  // reason to hide the breakage now.
-                                  if (onUpdateFields && old && next && next !== old) {
-                                    const withEdit = schema.fields.map(f =>
-                                      f.id === field.id ? updatedField : f,
-                                    );
-                                    const retargeted = retargetOptionValueReferences(
-                                      withEdit, field.id, old, next, schema.sections,
-                                    );
-                                    onUpdateFields(retargeted.fields, retargeted.sections);
-                                  } else if (next !== option.value) {
-                                    updateField({ options: newOptions });
-                                  }
+                                  newOptions[idx] = { ...option, pdf_on_value: next } as any;
+                                  updateField({ options: newOptions });
                                 }}
                               />
                             </label>
@@ -2005,7 +1923,8 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               <span className="font-mono">WY</span>), not a name.
                             </p>
                           </div>
-                        ) : option.value ? (
+                        ) : null}
+                        {option.value ? (
                           <div className="mt-1 text-gray-500">
                             Internal value:{' '}
                             <span
@@ -2091,16 +2010,17 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     className="btn btn-secondary w-full text-sm"
                     onClick={() => {
                       const opts = safeOptions(field);
-                      // A select's value is the PDF export code, which cannot
-                      // be minted from anything -- only the form knows it. Add
-                      // the option with an EMPTY value so the author fills in
-                      // the code; a minted slug here would look valid and
-                      // print wrong (bd polyglot-pdf-alzbr). Empty trips the
-                      // existing option-value-missing lint ERROR, which is the
-                      // correct "you must supply this" signal.
+                      // A select mints a slug like every other choice type
+                      // (bd polyglot-pdf-g2fpr); its PDF export code is
+                      // authored separately into pdf_on_value, and lint's
+                      // select-on-value-missing ERROR is the "you must supply
+                      // the code" signal for a new option.
                       const value =
                         field.type === 'select'
-                          ? ''
+                          ? mintSelectSlugs(
+                              [...opts.map(o => o.label || ''), 'option'],
+                              [...opts.map(o => (o as any).pdf_on_value), undefined],
+                            ).slice(-1)[0]
                           : mintUniqueSlugs(
                               [...opts.map(o => o.label || ''), 'option'],
                             ).slice(-1)[0];
@@ -2142,15 +2062,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 className="btn btn-secondary w-full"
                 onClick={() =>
                   updateField({
-                    // Empty value for a select: the PDF export code cannot be
-                    // minted, only authored (bd polyglot-pdf-alzbr).
+                    // A select mints a slug too (bd polyglot-pdf-g2fpr); the
+                    // export code is authored into pdf_on_value afterwards.
                     options: [
                       {
                         label: '',
-                        value:
-                          field.type === 'select'
-                            ? ''
-                            : mintUniqueSlugs(['option'])[0],
+                        value: mintUniqueSlugs(['option'])[0],
                       },
                     ],
                   })
