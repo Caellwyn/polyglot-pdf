@@ -480,6 +480,24 @@ export function isFormComplete(state: SchemaFormState): boolean {
     if (currentValue?.confirmed !== true) {
       return false; // Found a shown, unconfirmed field
     }
+    // A confirmation of BLANKNESS does not complete the form (bd
+    // polyglot-pdf-5ovod). computeNextField's Priority-2 recovery arm re-offers
+    // such a field, so without the same rule here the two gates CONTRADICT: this
+    // reports complete while navigation is still asking for that very field.
+    // That is not just untidy -- completion fires the end-of-form pro validator
+    // (~$0.0093, see above), so the disagreement spends money validating a form
+    // with a whitespace field still open.
+    //
+    // Only whitespace, never a bare '': a skipped field carries value:null, and
+    // an optional field's confirmed '' is the deliberate "does not apply"
+    // answer (bd polyglot-pdf-6oe6). Both must still complete the form.
+    const confirmedButBlank =
+      typeof currentValue?.value === 'string'
+      && currentValue.value !== ''
+      && currentValue.value.trim() === '';
+    if (confirmedButBlank) {
+      return false;
+    }
   }
 
   return true; // All shown fields are confirmed

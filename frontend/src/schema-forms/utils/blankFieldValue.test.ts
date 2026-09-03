@@ -27,7 +27,7 @@ import { describe, it, expect } from 'vitest';
 import { isBlankFieldValue } from './fieldValue';
 import { validateField } from './validation';
 import { SchemaFormStateManager } from '../state/schemaFormState';
-import { computeNextField } from '../../navigation';
+import { computeNextField, isFormComplete } from '../../navigation';
 import type { FormField, FormSchema } from '../types/schema';
 
 // ASCII source only (CLAUDE.md scar #6), so the non-breaking space is written as
@@ -217,6 +217,52 @@ describe('whitespace is not an answer, at every predicate', () => {
     } as any;
 
     expect(computeNextField(state)?.id).toBe('f1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The two completion gates must never contradict each other.
+// ---------------------------------------------------------------------------
+
+describe('computeNextField and isFormComplete agree', () => {
+  // Stated as a PROPERTY, not one example: if navigation is still offering a
+  // field, the form is not complete. Adding the confirmed-blank recovery arm to
+  // computeNextField alone made these two disagree -- navigation kept asking for
+  // a field while isFormComplete said done, which also FIRES THE PAID end-of-form
+  // validator over a form that still has a blank field open.
+  const cases: Array<[string, any, boolean]> = [
+    ['confirmed whitespace (legacy pre-fix session)', { value: '   ', confirmed: true }, true],
+    ['unconfirmed whitespace', { value: '   ' }, true],
+    ['confirmed real value', { value: 'Maria', confirmed: true }, false],
+    ['skipped field', { value: null, skipped: true, confirmed: true }, false],
+  ];
+
+  it.each(cases)('%s', (_label, entry, expectStillOffered) => {
+    const state = {
+      schema: schemaWith(textField()),
+      fieldValues: { f1: entry },
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    const offered = computeNextField(state)?.id === 'f1';
+    const complete = isFormComplete(state);
+
+    expect(offered, 'is the field still being offered?').toBe(expectStillOffered);
+    // The invariant: never both at once.
+    expect(offered && complete, 'offered AND complete is a contradiction').toBe(false);
+  });
+
+  it('an OPTIONAL confirmed empty string still completes the form', () => {
+    // The "does not apply" answer must not be caught by the blank rule.
+    const state = {
+      schema: schemaWith(textField({ validation: { required: false } })),
+      fieldValues: { f1: { value: '', confirmed: true } },
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    expect(isFormComplete(state)).toBe(true);
   });
 });
 
