@@ -1305,25 +1305,30 @@ def test_the_guard_reads_the_same_on_state_key_the_dump_writes():
         "should be removed")
 
 
-def test_committed_pdf_on_values_belong_to_DROPDOWNS_not_toggle_groups():
-    """WHY the disambiguation branch is unreachable on committed data -- the
-    fact that makes a synthetic pin the only possible evidence.
+def test_committed_pdf_on_value_options_are_all_POSITIONED():
+    """WHY the disambiguation branch is still unreachable on committed data.
 
-    An earlier draft of this test asserted that widget on-states and the
-    schema's pdf_on_values must OVERLAP. They do not, and correctly so: on
-    i-90 the only two fields carrying pdf_on_value are the height DROPDOWNS
-    (P3_Line8_HeightFeet / HeightInches), whose options are choice values of
-    ONE shared combobox widget -- "0".."11" -- rather than separate printed
-    boxes. _backfill_positions deliberately skips that shape (no widget in the
-    group carries an on_value), which is why those options carry no
-    pdf_position. Toggle widgets' export states ("Y"/"N"/"NA"/...) are a
-    different vocabulary serving a different purpose, and the two were never
-    meant to intersect.
+    HISTORY (bd polyglot-pdf-5f41): this used to assert that pdf_on_value
+    appeared ONLY on dropdowns -- on the pre-v2 i-90 its only two carriers were
+    the height comboboxes, whose options are choice values of ONE shared widget
+    rather than separate printed boxes, so no option had its own widget name and
+    _backfill_positions deliberately skipped the shape. The note read that "the
+    multi-widget toggle-group shape the branch exists for simply does not occur
+    in any committed kit yet."
 
-    Pinning this stops a future reader (or reviewer) from "fixing" the
-    disambiguation to match dropdown values, and records that the multi-widget
-    toggle-group shape the branch exists for simply does not occur in any
-    committed kit yet.
+    THAT IS NO LONGER TRUE, and the reason it is still safe is different.
+    The applicant-only v2 i-90 carries pdf_on_value on 14 fields, and every one
+    IS a toggle family: no field owns the widget name, each option owns its own
+    (name_changed, sex, reason_section_a with 12 options, ...). Measured
+    2026-09-02.
+
+    The branch stays unreachable because every one of those options ALREADY
+    carries a pdf_position -- extraction resolved them, so there is nothing for
+    the disambiguation to derive. THAT is the invariant worth pinning, and it is
+    the one that actually protects the preview: an option that lost its position
+    would both regress the paint AND newly enter the untested branch. A future
+    kit that ships an unpositioned toggle option must fail here and get the
+    branch reviewed on real data first.
     """
     kit = _REPO / "form-kits" / "i-90" / "schema.json"
     if not kit.exists():
@@ -1333,19 +1338,22 @@ def test_committed_pdf_on_values_belong_to_DROPDOWNS_not_toggle_groups():
                 if any(isinstance(o, dict) and o.get("pdf_on_value") is not None
                        for o in (f.get("options") or []))]
     assert carriers, "expected i-90 to carry pdf_on_value somewhere"
+    unpositioned = []
     for f in carriers:
-        # Each is a SHARED-NAME group: the field owns the widget name and no
-        # option has its own, i.e. the dropdown shape, not a toggle family.
-        assert f.get("pdf_field_name"), f"{f['id']} should own the widget name"
         for o in f.get("options") or []:
-            assert not o.get("pdf_field_name"), (
-                f"{f['id']} option {o.get('value')!r} has its own widget name "
-                f"-- that would be a toggle family, not a dropdown")
-            # ...and the extractor correctly leaves these unpositioned.
-            assert not o.get("pdf_position"), (
-                f"{f['id']} option {o.get('value')!r} carries a position; "
-                f"dropdown choice values are not printed boxes")
-
+            if o.get("pdf_on_value") is None:
+                continue
+            # A toggle family: the OPTION owns the widget, not the field.
+            assert o.get("pdf_field_name") or f.get("pdf_field_name"), (
+                f"{f['id']} option {o.get('value')!r} maps to no widget at all")
+            if o.get("pdf_field_name") and not o.get("pdf_position"):
+                unpositioned.append((f["id"], o.get("value")))
+    assert not unpositioned, (
+        "toggle-group options carry pdf_on_value but NO pdf_position: "
+        f"{unpositioned}. These are the first committed data to reach "
+        "_backfill_positions' disambiguation branch, which no shipped kit has "
+        "ever exercised -- review that branch against this data before shipping."
+    )
 
 def test_the_guards_option_resolver_mirrors_both_extractor_branches():
     """THE GUARD'S OWN RESOLVER, exercised directly (bd polyglot-pdf-r5q1 EC2).

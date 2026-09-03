@@ -69,12 +69,12 @@ def test_full_form_plan_counts_and_guards():
     for aa in plan["auto_apply"]:
         assert aa["field_id"] not in spoken
     # the name-change-gated fields are hidden for this persona
-    assert "p1_line5a_familyname" in plan["hidden"]
+    assert "card_name_family" in plan["hidden"]
     # declines expect empty; answered fields expect non-empty
-    assert expected["p1_line6g_province"] == ""
-    assert expected["p1_line9_dateofbirth"] == "04/12/1985"  # MM/DD/YYYY
-    assert expected["p1_line1_aliennumber"] == "123456789"   # A-prefix stripped
-    assert expected["p2_checkbox2[5]"] == (
+    assert expected["mail_province"] == ""
+    assert expected["date_of_birth"] == "04/12/1985"  # MM/DD/YYYY
+    assert expected["a_number"] == "123456789"   # A-prefix stripped
+    assert expected["reason_section_a"] == (
         "my_previous_card_has_been_lost_stolen_or_destroyed")
 
 
@@ -107,7 +107,7 @@ def test_override_must_be_valid_option():
     schema = ffs.load_schema()
     orig = dict(ffs.ANSWER_OVERRIDES)
     try:
-        ffs.ANSWER_OVERRIDES["p2_checkbox2[5]"] = "not_a_real_option"
+        ffs.ANSWER_OVERRIDES["reason_section_a"] = "not_a_real_option"
         with pytest.raises(SystemExit):
             ffs.build_full_form_plan(schema)
     finally:
@@ -154,14 +154,14 @@ def test_es_phrasing_spot_checks():
     field_by_id = {f["id"]: f for f in schema["fields"]}
     answers = ffs.persona_answers()
 
-    a_number_field = field_by_id["p1_line1_aliennumber"]
-    say, wrong = ffs.phrase(a_number_field, answers["p1_line1_aliennumber"],
+    a_number_field = field_by_id["a_number"]
+    say, wrong = ffs.phrase(a_number_field, answers["a_number"],
                             lang="es")
     assert "uno dos tres" in say
     assert say != wrong
 
-    dob_field = field_by_id["p1_line9_dateofbirth"]
-    say, wrong = ffs.phrase(dob_field, answers["p1_line9_dateofbirth"], lang="es")
+    dob_field = field_by_id["date_of_birth"]
+    say, wrong = ffs.phrase(dob_field, answers["date_of_birth"], lang="es")
     assert "abril" in say
     assert "mil novecientos ochenta y cinco" in say
     assert say != wrong
@@ -220,8 +220,8 @@ def _client(plan_fields=None):
     _skip_if_no_i90()
     schema = ffs.load_schema()
     plan = [{"field_id": f, "say": "", "wrong": ""}
-            for f in (plan_fields or ["p1_line1_aliennumber",
-                                      "p1_line3a_familyname"])]
+            for f in (plan_fields or ["a_number",
+                                      "family_name"])]
     c = mfc.FakeClientWebSocket(schema, plan, dti_mode=True)
     c.service = _StubService()
     return c
@@ -238,23 +238,23 @@ def test_skip_field_recorded_and_refusals():
     c = _client()
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "skip_field", "request_id": "r1",
-         "field_id": "p1_line2_acctidentifier"})))
+         "field_id": "uscis_account"})))
     kind, rid, result = c.service.calls[-1]
     assert (kind, rid) == ("skip", "r1")
     assert result["recorded"] is True
-    assert c.state["p1_line2_acctidentifier"]["skipped"] is True
-    assert c.state["p1_line2_acctidentifier"]["confirmed"] is True
-    assert c.state["p1_line2_acctidentifier"]["value"] == ""
+    assert c.state["uscis_account"]["skipped"] is True
+    assert c.state["uscis_account"]["confirmed"] is True
+    assert c.state["uscis_account"]["value"] == ""
 
     # already-filled refusal (the data-loss guard)
-    c.state["p1_line3a_familyname"] = {"value": "Nguyen", "confirmed": False}
+    c.state["family_name"] = {"value": "Nguyen", "confirmed": False}
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "skip_field", "request_id": "r2",
-         "field_id": "p1_line3a_familyname"})))
+         "field_id": "family_name"})))
     _, _, result = c.service.calls[-1]
     assert result == {"recorded": False, "reason": "already_filled",
                       "section_complete": False}
-    assert c.state["p1_line3a_familyname"]["value"] == "Nguyen"
+    assert c.state["family_name"]["value"] == "Nguyen"
 
     # unknown field
     _run(lambda: asyncio.ensure_future(c.send_json(
@@ -265,27 +265,27 @@ def test_skip_field_recorded_and_refusals():
 
 def test_switch_field_pins_and_acks():
     c = _client()
-    c.state["p1_line3a_familyname"] = {"value": "Nguyen", "confirmed": True}
+    c.state["family_name"] = {"value": "Nguyen", "confirmed": True}
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "switch_field", "request_id": "s1",
-         "field": "p1_line3a_familyname"})))
+         "field": "family_name"})))
     kind, rid, ack = c.service.calls[-1]
     assert (kind, ack["found"]) == ("switch", True)
-    assert ack["field_id"] == "p1_line3a_familyname"
+    assert ack["field_id"] == "family_name"
     assert ack["already_confirmed"] is True
     assert ack["has_value"] is True and ack["value"] == "Nguyen"
     assert "next_field_schema" in ack  # DTI mode rides the schema
-    assert c.pinned_field_id == "p1_line3a_familyname"
+    assert c.pinned_field_id == "family_name"
 
     # pin is DORMANT on a confirmed field...
     assert c._pin_active() is None
     # ...until a value update resets confirmed (the correction flow)
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "form_updated",
-         "data": {"form_state": {"p1_line3a_familyname": {"value": "Tran"}}}})))
-    assert c.state["p1_line3a_familyname"]["confirmed"] is False
-    assert c._pin_active() == "p1_line3a_familyname"
-    assert "p1_line3a_familyname" in (c.next_hint() or "")
+         "data": {"form_state": {"family_name": {"value": "Tran"}}}})))
+    assert c.state["family_name"]["confirmed"] is False
+    assert c._pin_active() == "family_name"
+    assert "family_name" in (c.next_hint() or "")
 
     # spoken-name resolution + hidden rejection
     _run(lambda: asyncio.ensure_future(c.send_json(
@@ -305,12 +305,12 @@ def test_validation_result_enqueues_not_steers_directly():
     ONLY at drain_findings_result (test_drain_findings_result_sets_steered_
     and_consumes below)."""
     c = _client()
-    c.state["p1_line6e_state"] = {"value": "texas", "confirmed": True}
+    c.state["mail_state"] = {"value": "TX", "confirmed": True}
 
     async def _inner():
         await c.send_json(
             {"type": "validation_result",
-             "conflicts": [{"field_ids": ["p1_line6e_state", "p1_line6f_zipcode"],
+             "conflicts": [{"field_ids": ["mail_state", "mail_zip"],
                             "reason": "zip/state mismatch"}]})
         await asyncio.sleep(0)  # let the drain task run against the stub
         await asyncio.sleep(0)
@@ -319,7 +319,7 @@ def test_validation_result_enqueues_not_steers_directly():
     assert len(c.validation_results) == 1
     # NOT steered yet -- the drain round-trip (against _StubService, which
     # returns {"conflicts": []} i.e. UNDELIVERED) never marked it.
-    assert c.state["p1_line6e_state"].get("steered") is not True
+    assert c.state["mail_state"].get("steered") is not True
     # The finding stays queued (undelivered -> retry).
     assert len(c.validator_findings_queue) == 1
     assert c.drain_in_flight is False  # cleared once the drain result landed
@@ -329,17 +329,17 @@ def test_drain_findings_result_sets_steered_and_consumes():
     """The steered marker is set + the finding consumed from the queue ONLY
     on drain_findings_result (mirror handleDrainFindingsResult)."""
     c = _client()
-    c.state["p1_line6e_state"] = {"value": "texas", "confirmed": True}
-    c.state["p1_line6f_zipcode"] = {"value": "77027", "confirmed": True}
+    c.state["mail_state"] = {"value": "TX", "confirmed": True}
+    c.state["mail_zip"] = {"value": "77027", "confirmed": True}
     c.validator_findings_queue.append({
-        "field_ids": ["p1_line6e_state", "p1_line6f_zipcode"],
+        "field_ids": ["mail_state", "mail_zip"],
         "reason": "r", "field_names": {}})
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "drain_findings_result",
-         "conflicts": [{"field_ids": ["p1_line6e_state", "p1_line6f_zipcode"],
+         "conflicts": [{"field_ids": ["mail_state", "mail_zip"],
                         "reason": "r"}]})))
-    assert c.state["p1_line6e_state"]["steered"] is True
-    assert c.state["p1_line6f_zipcode"]["steered"] is True
+    assert c.state["mail_state"]["steered"] is True
+    assert c.state["mail_zip"]["steered"] is True
     assert c.validator_findings_queue == []  # consumed
     assert c.drain_in_flight is False
 
@@ -347,11 +347,11 @@ def test_drain_findings_result_sets_steered_and_consumes():
 def test_drain_findings_result_undelivered_keeps_queued():
     c = _client()
     c.validator_findings_queue.append({
-        "field_ids": ["p1_line6e_state"], "reason": "r", "field_names": {}})
+        "field_ids": ["mail_state"], "reason": "r", "field_names": {}})
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "drain_findings_result", "conflicts": []})))
     assert c.validator_findings_queue == [
-        {"field_ids": ["p1_line6e_state"], "reason": "r", "field_names": {}}]
+        {"field_ids": ["mail_state"], "reason": "r", "field_names": {}}]
     assert c.drain_in_flight is False
 
 
@@ -402,40 +402,40 @@ def test_steered_cleared_on_genuine_value_change():
     """Mirror W4 updateField's re-arm rule (schemaFormState.ts:339-365): a
     steered field's marker CLEARS when its value actually changes."""
     c = _client()
-    c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": True,
+    c.state["family_name"] = {"value": "Vasquez", "confirmed": True,
                                        "steered": True}
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "form_updated",
-         "data": {"form_state": {"p1_line3a_familyname": {"value": "Vargas"}}}})))
-    assert c.state["p1_line3a_familyname"]["value"] == "Vargas"
-    assert c.state["p1_line3a_familyname"]["steered"] is False
-    assert c.state["p1_line3a_familyname"]["confirmed"] is False
+         "data": {"form_state": {"family_name": {"value": "Vargas"}}}})))
+    assert c.state["family_name"]["value"] == "Vargas"
+    assert c.state["family_name"]["steered"] is False
+    assert c.state["family_name"]["confirmed"] is False
 
 
 def test_steered_preserved_on_same_value_rewrite():
     """A same-value re-write (the 'both are intentional' confirm path) must
     NOT clear steered -- the no-nagging guarantee (W4 fresh-eyes)."""
     c = _client()
-    c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": True,
+    c.state["family_name"] = {"value": "Vasquez", "confirmed": True,
                                        "steered": True}
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "form_updated",
-         "data": {"form_state": {"p1_line3a_familyname": {"value": "Vasquez"}}}})))
-    assert c.state["p1_line3a_familyname"]["steered"] is True
+         "data": {"form_state": {"family_name": {"value": "Vasquez"}}}})))
+    assert c.state["family_name"]["steered"] is True
     # confirmed is NOT reset either -- no value moved.
-    assert c.state["p1_line3a_familyname"]["confirmed"] is True
+    assert c.state["family_name"]["confirmed"] is True
 
 
 def test_steered_preserved_across_confirm_field():
     """confirm_field (no value write) must never touch the steered marker."""
     c = _client()
-    c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": False,
+    c.state["family_name"] = {"value": "Vasquez", "confirmed": False,
                                        "steered": True}
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "confirm_field", "request_id": "cf1",
-         "field_id": "p1_line3a_familyname"})))
-    assert c.state["p1_line3a_familyname"]["confirmed"] is True
-    assert c.state["p1_line3a_familyname"]["steered"] is True
+         "field_id": "family_name"})))
+    assert c.state["family_name"]["confirmed"] is True
+    assert c.state["family_name"]["steered"] is True
 
 
 def test_same_field_value_checkbox_group_order_insensitive():
@@ -454,34 +454,34 @@ def test_same_field_value_checkbox_group_order_insensitive():
 
 def test_validation_fields_contract2():
     c = _client()
-    c.state["p1_line6e_state"] = {"value": "texas", "confirmed": True,
+    c.state["mail_state"] = {"value": "texas", "confirmed": True,
                                   "steered": True}
-    c.state["p1_line6f_zipcode"] = {"value": "77027", "confirmed": True}
-    c.state["p1_line6g_province"] = {"value": "", "confirmed": True}  # empty
+    c.state["mail_zip"] = {"value": "77027", "confirmed": True}
+    c.state["mail_province"] = {"value": "", "confirmed": True}  # empty
     rows = c.validation_fields()
     by_id = {r["field_id"]: r for r in rows}
-    assert by_id["p1_line6e_state"]["steered"] is True
-    assert by_id["p1_line6f_zipcode"]["steered"] is False
-    assert "p1_line6g_province" not in by_id  # non-empty only
+    assert by_id["mail_state"]["steered"] is True
+    assert by_id["mail_zip"]["steered"] is False
+    assert "mail_province" not in by_id  # non-empty only
     for r in rows:
         assert set(r) == {"field_id", "name", "value", "steered"}
     # up_to bound cuts the list
-    partial = c.validation_fields(up_to_fid="p1_line6e_state")
-    assert all(r["field_id"] != "p1_line6f_zipcode" for r in partial)
+    partial = c.validation_fields(up_to_fid="mail_state")
+    assert all(r["field_id"] != "mail_zip" for r in partial)
 
 
 def test_whole_form_state_snapshot_carries_shown():
     c = _client()
-    c.state["p1_line1_aliennumber"] = {"value": "123456789", "confirmed": True}
+    c.state["a_number"] = {"value": "123456789", "confirmed": True}
     _run(lambda: asyncio.ensure_future(c.send_json(
         {"type": "get_form_state", "request_id": "f1"})))
     kind, rid, snapshot = c.service.calls[-1]
     assert kind == "form_state"
     # EVERY schema field is represented, with a shown flag
     assert len(snapshot) == len(c.schema_field_order)
-    assert snapshot["p1_line1_aliennumber"]["shown"] is True
+    assert snapshot["a_number"]["shown"] is True
     # the name-change-gated previous-name field is hidden (gate unsatisfied)
-    assert snapshot["p1_line5a_familyname"]["shown"] is False
+    assert snapshot["card_name_family"]["shown"] is False
 
 
 # ------------------------------------------------------- pricing + windows
@@ -552,12 +552,12 @@ def test_compute_ready_windows_hidden_counts_as_settled():
     unsatisfied) -- a window covering them must be eligible WITHOUT ever
     confirming those fields, mirroring isSettled's shouldShowField branch."""
     c, field_ids = _window_client()
-    assert field_ids[5:9] == ["p1_checkbox4", "p1_line5a_familyname",
-                              "p1_line5b_givenname", "p1_line5c_middlename"]
+    assert field_ids[5:9] == ["name_changed", "card_name_family",
+                              "card_name_given", "card_name_middle"]
     # Confirm p1_checkbox4 (index 5) -- its "no" answer is what HIDES the
     # previous-name fields at indices 6-8. Use a stride-1 window starting
     # exactly at index 5 so [5, 9) is the ONLY window under test.
-    c.state["p1_checkbox4"] = {"value": "no", "confirmed": True}
+    c.state["name_changed"] = {"value": "no", "confirmed": True}
     ready = {w["index"]: w for w in c.compute_ready_windows(size=4, stride=1)}
     assert ready[5] == {"index": 5, "start": 5, "end": 9}
 
@@ -612,7 +612,7 @@ def test_reconnect_rechecks_windows_and_redrains():
         c, field_ids = _window_client()
         _confirm_all(c, field_ids, 0, 5)
         c.validator_findings_queue.append(
-            {"field_ids": ["p1_line1_aliennumber"], "reason": "r",
+            {"field_ids": ["a_number"], "reason": "r",
              "field_names": {}})
         orig_size = mfc.WEBFORM_VALIDATOR_WINDOW_SIZE
         orig_stride = mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE
@@ -641,19 +641,19 @@ def test_weave_and_scoring_roundtrip():
         plan["questions"], se.STANDARD_EVENTS, plan["expected"],
         mix_unhappy_every=5)
     assert len(planted) == 2
-    assert exp2["p1_line6f_zipcode"] == "77027"
-    assert exp2["p1_line2_acctidentifier"] == ""  # skipped
+    assert exp2["mail_zip"] == "77027"
+    assert exp2["uscis_account"] == ""  # skipped
     assert sum(1 for s in steps if s.get("path") == "unhappy") > 0
     assert sum(1 for s in steps if "event" in s) == 4  # 2 recalls + 2 navs
 
     pr = se.score_validator_pr(
         planted,
-        [{"p1_line6f_zipcode", "p1_line6e_state"},   # covers plant 1
-         {"p1_line6f_zipcode", "p1_line7e_zipcode"},  # knock-on (attributable)
-         {"p3_race", "p3_ethnicity"}])                # false positive
+        [{"mail_zip", "mail_state"},   # covers plant 1
+         {"mail_zip", "phys_zip"},  # knock-on (attributable)
+         {"race", "ethnicity"}])                # false positive
     assert pr["recall"] == 0.5
     assert pr["plant_attributable"] == 2
-    assert pr["false_positive_groups"] == [["p3_ethnicity", "p3_race"]]
+    assert pr["false_positive_groups"] == [["ethnicity", "race"]]
 
 
 def test_classify_fill_failures_modes():
@@ -679,7 +679,7 @@ def test_classify_fill_failures_modes():
 
 def test_build_summary_schema_complete():
     c = _client()
-    c.state["p1_line1_aliennumber"] = {"value": "123456789", "confirmed": True}
+    c.state["a_number"] = {"value": "123456789", "confirmed": True}
     c.state["stray_field"] = {"value": "x"}
     c.switch_events.append({"ts": 1.0, "outcome": "unknown_field"})
     meta = {
@@ -736,7 +736,7 @@ def test_build_summary_schema_complete():
          "fields": {"code": "1011"}},
     ]
     s = mfc.build_summary(meta, rows, log_sink, c,
-                          [{"a", "b"}], {"p1_line1_aliennumber"})
+                          [{"a", "b"}], {"a_number"})
     h = s["headline"]
     assert h["voice_usd"] == 0.03
     assert h["text_usd"] > 0
@@ -856,8 +856,8 @@ class _DryRunTextAIOneConflict(_DryRunTextAI):
     async def validate(self, payload):
         self._calls += 1
         if self._calls == 1:
-            return {"conflicts": [{"field_ids": ["p1_line1_aliennumber",
-                                                  "p1_line2_acctidentifier"],
+            return {"conflicts": [{"field_ids": ["a_number",
+                                                  "uscis_account"],
                                    "reason": "dry-run planted conflict"}]}
         return {"conflicts": []}
 
@@ -954,8 +954,8 @@ def test_dry_run_i90_full_drain_round_trip():
 
         # Settle the first 2 fields (a real conflict-bearing pair) so window
         # 0 becomes eligible.
-        c.state["p1_line1_aliennumber"] = {"value": "123456789", "confirmed": True}
-        c.state["p1_line2_acctidentifier"] = {"value": "123456789012",
+        c.state["a_number"] = {"value": "123456789", "confirmed": True}
+        c.state["uscis_account"] = {"value": "123456789012",
                                               "confirmed": True}
         orig_size = mfc.WEBFORM_VALIDATOR_WINDOW_SIZE
         orig_stride = mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE
@@ -975,8 +975,8 @@ def test_dry_run_i90_full_drain_round_trip():
         # and consumed -- nothing left queued.
         assert c.validator_findings_queue == []
         assert c.drain_in_flight is False
-        assert c.state["p1_line1_aliennumber"]["steered"] is True
-        assert c.state["p1_line2_acctidentifier"]["steered"] is True
+        assert c.state["a_number"]["steered"] is True
+        assert c.state["uscis_account"]["steered"] is True
         assert len(c.drain_results) == 1
         assert c.drain_results[0]["delivered"] == 1
         # The drain record retains ITS OWN delivered field ids (bd 0cyu fix --
@@ -984,12 +984,12 @@ def test_dry_run_i90_full_drain_round_trip():
         # steered field in client.state, which can carry stale markers from
         # an earlier un-cleared "overridden_unplanted" ack).
         assert set(c.drain_results[0]["field_ids"]) == {
-            "p1_line1_aliennumber", "p1_line2_acctidentifier"}
+            "a_number", "uscis_account"}
 
         # A SECOND window check (the stub validator is clean on later calls)
         # must not enqueue anything further.
-        c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": True}
-        c.state["p1_line3b_givenname"] = {"value": "Maria", "confirmed": True}
+        c.state["family_name"] = {"value": "Vasquez", "confirmed": True}
+        c.state["given_name"] = {"value": "Maria", "confirmed": True}
         c.maybe_emit_validate_windows()
         for _ in range(5):
             await asyncio.sleep(0)

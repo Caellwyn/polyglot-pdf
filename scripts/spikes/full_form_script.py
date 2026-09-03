@@ -99,19 +99,19 @@ _ANUMBER_EXPECTED = "123456789"
 ANSWER_OVERRIDES: dict = {
     # The kit's pattern is ^[0-9]{12}$ (min/max_length 12); the key's value is
     # 13 digits and could never validate. 12-digit stand-in, same persona.
-    "p1_line2_acctidentifier": "123456789012",
+    "uscis_account": "123456789012",
     # The key marks the reason-for-new-card radio NA citing a commuter-only
     # show_if; the CURRENT kit gates it `in [lawful_permanent_resident,
     # permanent_resident_in_commuter_status]` -- VISIBLE for the persona, and
     # her documented reason is the lost card (the key's own docstring).
-    "p2_checkbox2[5]": "my_previous_card_has_been_lost_stolen_or_destroyed",
+    "reason_section_a": "my_previous_card_has_been_lost_stolen_or_destroyed",
     # The Part-8 page-header copy of the A-number must hold what the CLIENT
     # copies from the FILLED source field -- the A-stripped digits the model
     # writes -- not the key's raw "A123456789". Seeding the raw form would put
     # two renderings of one number in the validator payload and could
     # manufacture a spurious conflict in the precision measurement
     # (fresh-eyes round 2 on this bead).
-    "p1_line1_aliennumber[1]": _ANUMBER_EXPECTED,
+    "a_number": _ANUMBER_EXPECTED,
 }
 
 # Fields the frontend fills without the voice loop; the harness seeds them
@@ -338,7 +338,7 @@ def _is_date_field(field: dict) -> bool:
 # (long statement options, per-digit comb boxes, street numbers, the A-number).
 # Values are (say, wrong) pairs; None wrong means "reuse the generic mutation".
 _SAY_OVERRIDES_EN: dict = {
-    "p1_line1_aliennumber": (
+    "a_number": (
         "My alien registration number is A one two three four five six seven eight nine.",
         "My alien registration number is A nine eight seven six five four three two one.",
     ),
@@ -348,75 +348,66 @@ _SAY_OVERRIDES_EN: dict = {
     # an uncommon name is exactly what a real user does; the raw
     # no-spelling fragility is recorded as a product finding in the E-series
     # findings doc, not hidden by this phrasing.
-    "p1_line3a_familyname": (
+    "family_name": (
         "My current family name is Nguyen, spelled N G U Y E N.",
         "My current family name is Tran, spelled T R A N.",
     ),
-    "p1_line3b_givenname": (
+    "given_name": (
         "My current given name is Linh, spelled L I N H.",
         "My current given name is Lan, spelled L A N.",
     ),
-    "p1_line3c_middlename": (
+    "middle_name": (
         "My current middle name is Thi, spelled T H I.",
         "My current middle name is Van, spelled V A N.",
     ),
-    "p1_line12_mothergivenname": (
+    "mother_given_name": (
         "My mother's given name is Lan, spelled L A N.",
         "My mother's given name is Mai, spelled M A I.",
     ),
-    "p1_line13_fathergivenname": (
+    "father_given_name": (
         "My father's given name is Minh, spelled M I N H.",
         "My father's given name is Duc, spelled D U C.",
     ),
-    "p1_line6b_streetnumbername": (
+    "mail_street": (
         "My street address is four two zero zero Westheimer Road.",
         "My street address is nine nine zero zero Richmond Avenue.",
     ),
-    "p1_line7a_streetnumbername": (
+    "phys_street": (
         "My physical street address is four two zero zero Westheimer Road.",
         "My physical street address is one one zero zero Main Street.",
     ),
-    "p6_line3a_streetnumbername": (
-        "The interpreter's street address is one zero zero zero Louisiana Street.",
-        "The interpreter's street address is two zero zero zero Texas Avenue.",
-    ),
-    "p1_line6c_aptsteflrnumber": ("Apartment number twelve.", "Apartment number fourteen."),
-    "p1_line7b_aptsteflrnumber": ("Apartment number twelve.", "Apartment number fifteen."),
-    "p6_line3b_aptsteflrnumber": ("Suite two three zero zero.", "Suite two five zero zero."),
-    "p1_line14_classofadmission": (
+    "mail_unit_number": ("Apartment number twelve.", "Apartment number fourteen."),
+    "phys_unit_number": ("Apartment number twelve.", "Apartment number fifteen."),
+    "class_of_admission": (
         "My class of admission is I R one.", "My class of admission is C R one."),
-    "p5_checkbox1a": (
+    "applicant_reads_english": (
         "An interpreter read the form to me in my language.",
         "I can read and understand English myself.",
     ),
-    "p2_checkbox2[5]": (
+    "reason_section_a": (
         "I need a new card because my previous card was lost.",
         "I need a new card because my existing card has been mutilated.",
     ),
-    "p2_checkbox1": ("I am a lawful permanent resident.",
+    "status": ("I am a lawful permanent resident.",
                      "I am a conditional permanent resident."),
-    "p1_checkbox4": ("No, my name has not changed.",
+    "name_changed": ("No, my name has not changed.",
                      "Yes, my name has legally changed."),
-    "p3_checkbox4[1]": ("No, I have never been in removal proceedings.", None),
-    "p3_checkbox5[1]": ("No, I have never filed Form I-407 or abandoned my status.", None),
-    "p4_checkbox1[1]": ("No, I am not requesting any accommodation.", None),
-    "p3_ethnicity": ("I am not Hispanic or Latino.", "I am Hispanic or Latino."),
-    "p3_race": ("Asian.", "White."),
-    "p3_line8_heightfeet": ("Five feet.", "Six feet."),
-    "p3_line8_heightinches": ("Four inches.", "Seven inches."),
-    "p3_line9_heightinches1": ("The first digit of my weight is one.", None),
-    "p3_line9_heightinches2": ("The second digit is three.", None),
-    "p3_line9_heightinches3": ("The last digit is zero.", None),
-    "p5_line5_emailaddress": (
+    "p3_removal_proceedings": ("No, I have never been in removal proceedings.", None),
+    "p3_abandoned_status": ("No, I have never filed Form I-407 or abandoned my status.", None),
+    "accommodation_requested": ("No, I am not requesting any accommodation.", None),
+    "ethnicity": ("I am not Hispanic or Latino.", "I am Hispanic or Latino."),
+    "race": ("Asian.", "White."),
+    "height_feet": ("Five feet.", "Six feet."),
+    "height_inches": ("Four inches.", "Seven inches."),
+    "weight_digit_1": ("The first digit of my weight is one.", None),
+    "weight_digit_2": ("The second digit is three.", None),
+    "weight_digit_3": ("The last digit is zero.", None),
+    "applicant_email": (
         "My email address is linh dot nguyen at example dot com.",
         "My email address is linh dot n at example dot org.",
     ),
-    "p6_line5_interpretersemailaddress": (
-        "The interpreter's email is maria dot garcia at example dot com.",
-        "The interpreter's email is m dot garcia at example dot net.",
-    ),
-    "p3_line3a_destination": ("My destination in the United States is Houston Texas.", None),
-    "p3_line3a1_cityandstate": ("The city and state is Houston Texas.", None),
+    "p3_destination": ("My destination in the United States is Houston Texas.", None),
+    "p3_poe_city_state": ("The city and state is Houston Texas.", None),
     # These seven fall through the generic mutation branches in _wrong_for:
     # the three "_country" fields answer "United States" (13 chars, hits the
     # len>=12 text fallback with no digits to swap); the two visa-location
@@ -427,35 +418,26 @@ _SAY_OVERRIDES_EN: dict = {
     # branch in _wrong_for silently no-ops because it looks for spelled-out
     # digit words that were never in the say string. Explicit wrong phrasings,
     # same style as the other overrides above.
-    "p1_line6i_country": ("My mailing country is United States.",
+    "mail_country": ("My mailing country is United States.",
                           "My mailing country is Canada."),
-    "p1_line7h_country": ("My physical country is United States.",
+    "phys_country": ("My physical country is United States.",
                           "My physical country is Mexico."),
-    "p6_line3h_country": ("My interpreter's country is United States.",
-                          "My interpreter's country is Canada."),
-    "p3_line1_locationappliedvisa": (
+    "p3_location_applied": (
         "My location where you applied for immigrant visa is Ho Chi Minh City, Vietnam.",
         "My location where you applied for immigrant visa is Hanoi, Vietnam."),
-    "p3_line2_locationissuedvisa": (
+    "p3_location_issued": (
         "My location where immigrant visa was issued is Ho Chi Minh City, Vietnam.",
         "My location where immigrant visa was issued is Bangkok, Thailand."),
-    "p6_line2_nameofbusinessor": (
-        "My interpreter's business or organization name is Bayou City Language Services.",
-        "My interpreter's business or organization name is Gulf Coast Translation Group."),
-    "p6_line3e_zipcode": ("My interpreter's zip code is 77002.",
-                         "My interpreter's zip code is 99001."),
 }
 
 # Decline phrasings for visible fields the persona leaves EMPTY. Keyed by
 # field id where a generic decline reads badly; the generic fallback is
 # "I do not have a {spoken_name}." / "That does not apply to me."
 _DECLINE_OVERRIDES_EN: dict = {
-    "p1_line6a_incareofname": "There is no in care of name, my mail comes directly to me.",
-    "p4_checkbox1a": "No accommodation, I am not deaf or hard of hearing.",
-    "p4_checkbox1b": "No accommodation, I am not blind or low vision.",
-    "p4_checkbox1c": "No, I do not need any other accommodation.",
-    "p7_line1b_preparersgivenname": "I did not use a preparer, only the interpreter.",
-    "p7_checkbox7": "That does not apply, I have no preparer.",
+    "mail_in_care_of": "There is no in care of name, my mail comes directly to me.",
+    "accommodation_deaf": "No accommodation, I am not deaf or hard of hearing.",
+    "accommodation_blind": "No accommodation, I am not blind or low vision.",
+    "accommodation_other": "No, I do not need any other accommodation.",
 }
 _GENERIC_DECLINE_EN = "I do not have a {name}."
 _GENERIC_DECLINE_NA_EN = "That does not apply to me."
@@ -496,7 +478,7 @@ _NA_STYLE_FIELDS = re.compile(r"^(p7_|p8_)")
 # accent only, gTTS 'es' pronounces the unaccented forms acceptably).
 # --------------------------------------------------------------------------
 _SAY_OVERRIDES_ES: dict = {
-    "p1_line1_aliennumber": (
+    "a_number": (
         "Mi numero de registro de extranjero es A uno dos tres cuatro cinco "
         "seis siete ocho nueve.",
         "Mi numero de registro de extranjero es A nueve ocho siete seis "
@@ -504,116 +486,94 @@ _SAY_OVERRIDES_ES: dict = {
     ),
     # Personal names are SPELLED OUT, same rationale as English: an uncommon
     # name spoken to an English-tuned recognizer needs spelling to land.
-    "p1_line3a_familyname": (
+    "family_name": (
         "Mi apellido actual es Nguyen, se deletrea N G U Y E N.",
         "Mi apellido actual es Tran, se deletrea T R A N.",
     ),
-    "p1_line3b_givenname": (
+    "given_name": (
         "Mi nombre actual es Linh, se deletrea L I N H.",
         "Mi nombre actual es Lan, se deletrea L A N.",
     ),
-    "p1_line3c_middlename": (
+    "middle_name": (
         "Mi segundo nombre es Thi, se deletrea T H I.",
         "Mi segundo nombre es Van, se deletrea V A N.",
     ),
-    "p1_line12_mothergivenname": (
+    "mother_given_name": (
         "El nombre de mi madre es Lan, se deletrea L A N.",
         "El nombre de mi madre es Mai, se deletrea M A I.",
     ),
-    "p1_line13_fathergivenname": (
+    "father_given_name": (
         "El nombre de mi padre es Minh, se deletrea M I N H.",
         "El nombre de mi padre es Duc, se deletrea D U C.",
     ),
-    "p1_line6b_streetnumbername": (
+    "mail_street": (
         "Mi direccion es cuatro dos cero cero Westheimer Road.",
         "Mi direccion es nueve nueve cero cero Richmond Avenue.",
     ),
-    "p1_line7a_streetnumbername": (
+    "phys_street": (
         "Mi direccion fisica es cuatro dos cero cero Westheimer Road.",
         "Mi direccion fisica es uno uno cero cero Main Street.",
     ),
-    "p6_line3a_streetnumbername": (
-        "La direccion del interprete es uno cero cero cero Louisiana Street.",
-        "La direccion del interprete es dos cero cero cero Texas Avenue.",
-    ),
-    "p1_line6c_aptsteflrnumber": ("Es el apartamento numero doce.",
+    "mail_unit_number": ("Es el apartamento numero doce.",
                                  "Es el apartamento numero catorce."),
-    "p1_line7b_aptsteflrnumber": ("Es el apartamento numero doce.",
+    "phys_unit_number": ("Es el apartamento numero doce.",
                                  "Es el apartamento numero quince."),
-    "p6_line3b_aptsteflrnumber": ("Es la suite dos tres cero cero.",
-                                 "Es la suite dos cinco cero cero."),
-    "p1_line14_classofadmission": (
+    "class_of_admission": (
         "Mi clase de admision es I R uno.", "Mi clase de admision es C R uno."),
-    "p5_checkbox1a": (
+    "applicant_reads_english": (
         "Selecciono: Un interprete me leyo el formulario en mi idioma.",
         "Selecciono: Yo puedo leer y entender ingles por mi mismo.",
     ),
-    "p2_checkbox2[5]": (
+    "reason_section_a": (
         "Selecciono: Necesito una tarjeta nueva porque mi tarjeta anterior "
         "se perdio.",
         "Selecciono: Necesito una tarjeta nueva porque mi tarjeta actual "
         "esta mutilada.",
     ),
-    "p2_checkbox1": ("Selecciono: Soy residente permanente legal.",
+    "status": ("Selecciono: Soy residente permanente legal.",
                      "Selecciono: Soy residente permanente condicional."),
-    "p1_checkbox4": ("No, mi nombre no ha cambiado.",
+    "name_changed": ("No, mi nombre no ha cambiado.",
                      "Si, mi nombre ha cambiado legalmente."),
-    "p3_checkbox4[1]": ("No, nunca he estado en un proceso de deportacion.", None),
-    "p3_checkbox5[1]": (
+    "p3_removal_proceedings": ("No, nunca he estado en un proceso de deportacion.", None),
+    "p3_abandoned_status": (
         "No, nunca he presentado el Formulario I-407 ni he abandonado mi estatus.",
         None),
-    "p4_checkbox1[1]": ("No, no estoy solicitando ninguna adaptacion.", None),
-    "p3_ethnicity": ("No soy hispano ni latino.", "Soy hispano o latino."),
-    "p3_race": ("Asiatico.", "Blanco."),
-    "p3_line8_heightfeet": ("Mido cinco pies.", "Mido seis pies."),
-    "p3_line8_heightinches": ("Y cuatro pulgadas.", "Y siete pulgadas."),
-    "p3_line9_heightinches1": ("El primer digito de mi peso es uno.", None),
-    "p3_line9_heightinches2": ("El segundo digito es tres.", None),
-    "p3_line9_heightinches3": ("El ultimo digito es cero.", None),
-    "p5_line5_emailaddress": (
+    "accommodation_requested": ("No, no estoy solicitando ninguna adaptacion.", None),
+    "ethnicity": ("No soy hispano ni latino.", "Soy hispano o latino."),
+    "race": ("Asiatico.", "Blanco."),
+    "height_feet": ("Mido cinco pies.", "Mido seis pies."),
+    "height_inches": ("Y cuatro pulgadas.", "Y siete pulgadas."),
+    "weight_digit_1": ("El primer digito de mi peso es uno.", None),
+    "weight_digit_2": ("El segundo digito es tres.", None),
+    "weight_digit_3": ("El ultimo digito es cero.", None),
+    "applicant_email": (
         "Mi correo electronico es linh punto nguyen arroba example punto com.",
         "Mi correo electronico es linh punto n arroba example punto org.",
     ),
-    "p6_line5_interpretersemailaddress": (
-        "El correo del interprete es maria punto garcia arroba example punto com.",
-        "El correo del interprete es m punto garcia arroba example punto net.",
-    ),
-    "p3_line3a_destination": ("Mi destino en los Estados Unidos es Houston Texas.", None),
-    "p3_line3a1_cityandstate": ("La ciudad y el estado es Houston Texas.", None),
-    "p1_line6i_country": ("Mi pais de correo es Estados Unidos.",
+    "p3_destination": ("Mi destino en los Estados Unidos es Houston Texas.", None),
+    "p3_poe_city_state": ("La ciudad y el estado es Houston Texas.", None),
+    "mail_country": ("Mi pais de correo es Estados Unidos.",
                           "Mi pais de correo es Canada."),
-    "p1_line7h_country": ("Mi pais fisico es Estados Unidos.",
+    "phys_country": ("Mi pais fisico es Estados Unidos.",
                           "Mi pais fisico es Mexico."),
-    "p6_line3h_country": ("El pais de mi interprete es Estados Unidos.",
-                          "El pais de mi interprete es Canada."),
-    "p3_line1_locationappliedvisa": (
+    "p3_location_applied": (
         "El lugar donde solicite la visa de inmigrante es Ciudad Ho Chi "
         "Minh, Vietnam.",
         "El lugar donde solicite la visa de inmigrante es Hanoi, Vietnam."),
-    "p3_line2_locationissuedvisa": (
+    "p3_location_issued": (
         "El lugar donde se emitio mi visa de inmigrante es Ciudad Ho Chi "
         "Minh, Vietnam.",
         "El lugar donde se emitio mi visa de inmigrante es Bangkok, Tailandia."),
-    "p6_line2_nameofbusinessor": (
-        "El nombre del negocio de mi interprete es Bayou City Language "
-        "Services.",
-        "El nombre del negocio de mi interprete es Gulf Coast Translation "
-        "Group."),
-    "p6_line3e_zipcode": ("El codigo postal de mi interprete es 77002.",
-                         "El codigo postal de mi interprete es 99001."),
 }
 
 # Decline phrasings for visible fields the persona leaves EMPTY, Spanish arm.
 # Mirrors _DECLINE_OVERRIDES_EN field-for-field.
 _DECLINE_OVERRIDES_ES: dict = {
-    "p1_line6a_incareofname": (
+    "mail_in_care_of": (
         "No hay nombre de a cargo de, mi correo llega directamente a mi."),
-    "p4_checkbox1a": "Ninguna adaptacion, no soy sordo ni tengo problemas de audicion.",
-    "p4_checkbox1b": "Ninguna adaptacion, no soy ciego ni tengo baja vision.",
-    "p4_checkbox1c": "No, no necesito ninguna otra adaptacion.",
-    "p7_line1b_preparersgivenname": (
-        "No use un preparador, solo el interprete."),
-    "p7_checkbox7": "Eso no aplica, no tengo preparador.",
+    "accommodation_deaf": "Ninguna adaptacion, no soy sordo ni tengo problemas de audicion.",
+    "accommodation_blind": "Ninguna adaptacion, no soy ciego ni tengo baja vision.",
+    "accommodation_other": "No, no necesito ninguna otra adaptacion.",
 }
 _GENERIC_DECLINE_ES = "No tengo eso."
 _GENERIC_DECLINE_NA_ES = "Eso no aplica en mi caso."
@@ -846,7 +806,7 @@ def expected_canon(field: dict, answer):
     fid = field.get("id", "")
     if answer is None:
         return ""
-    if fid == "p1_line1_aliennumber":
+    if fid == "a_number":
         return _ANUMBER_EXPECTED
     if field.get("options"):
         return str(answer)

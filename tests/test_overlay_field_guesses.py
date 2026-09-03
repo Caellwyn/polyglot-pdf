@@ -416,9 +416,12 @@ def test_annotate_ITSELF_resolves_before_collapsing(tmp_path):
         "a correctly-bound widget was flagged as multiclaimed -- annotate() is "
         "collapsing before it resolves")
     # ...and resolution genuinely happened: without it this kit reports 43
-    # labelled / 152 unclaimed instead.
-    assert result["drawn"] == 188
-    assert result["unclaimed"] == 7
+    # labelled / 152 unclaimed instead. On the applicant-only v2 kit that is
+    # EVERY one of the 195 widgets in form.pdf (verified against the PDF), with
+    # nothing left unclaimed -- so this pins TOTAL coverage, stronger than the
+    # pre-v2 kit's 188 drawn / 7 unclaimed.
+    assert result["drawn"] == 195
+    assert result["unclaimed"] == 0
 
 
 def test_resolution_happens_BEFORE_the_multiclaim_collapse():

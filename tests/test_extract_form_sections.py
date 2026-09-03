@@ -128,7 +128,7 @@ def test_i90_uses_name_convention_with_no_spurious_to_review():
     assert summary["to_review_section_ids"] == []
     by_field = {f["id"]: f["section_id"] for f in schema["fields"]}
     # The consolidated option-bearing fields land in real derived sections.
-    for fid in ("p3_race", "p3_ethnicity", "p1_line8_male", "p5_checkbox1a"):
+    for fid in ("race", "ethnicity", "sex", "applicant_reads_english"):
         assert not by_field[fid].startswith("sec_to_review"), fid
     # Recorded review ids (none here) would have to sit in review sections;
     # the invariant is pinned synthetically in test_derive_sections.py.
@@ -149,15 +149,15 @@ def test_i90_part8_repeat_rows_not_filed_under_name_subheading():
     schema = _load_kit(_I90)
     ds.derive_and_apply(schema, str(_I90 / "form.pdf"))
     by_section = {s["id"]: s for s in schema["sections"]}
-    p8_fields = ("p8_line3a_pagenumber", "p8_line3d_additionalinfo",
-                 "p8_line5d_additionalinfo[1]")
+    p8_fields = ("p8_3_page_number", "p8_3_additional_info",
+                 "p8_5_additional_info")
     for fid in p8_fields:
         sid = next(f["section_id"] for f in schema["fields"] if f["id"] == fid)
         label = by_section[sid]["label"]
         assert "Your Full Name" not in label, (fid, label)
         assert label.startswith("Part 8"), (fid, label)
     # The legitimate page-7 name-reverification fields keep the Name heading.
-    for fid in ("p1_line3a_familyname[1]", "p1_line3c_middlename[1]"):
+    for fid in ("p8_family_name", "p8_middle_name"):
         sid = next(f["section_id"] for f in schema["fields"] if f["id"] == fid)
         assert by_section[sid]["label"] == "Your Full Name", (fid, sid)
 
