@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-t7drr: recorded the shared-surface decision for the form-kit editing lock -- shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -53,9 +53,10 @@ would need its own IAM bootstrap, Firebase Auth user pool, and enrolment run.
 | Firebase Auth users | **shared** | **shared** |
 
 **Staging protects against broken CODE reaching the demo. It does NOT protect
-against bad DATA.** Concretely, items 1-4 below cross the boundary; item 5
-(client links) is listed because it USED to and no longer does -- it is the one
-that has been closed, and it records what is still shared:
+against bad DATA.** Concretely, items 1-4 below cross the boundary; items 5 and
+6 are listed because they were once open questions and are now settled -- 5
+(client links) is CLOSED and records what is still shared with it, and 6 (the
+kit editing lock) is deliberately shared because sharing is the correct design:
 
 1. A kit marked `status:complete` deploys to the one shared bucket and appears
    in the **demo's** form list. `deploy-staging.sh` therefore does **not** deploy
@@ -81,6 +82,20 @@ that has been closed, and it records what is still shared:
    (create one with `scripts/bootstrap_firm.py` and stamp the dev account with
    it), not on code. Never sign into staging with an account carrying a real
    firm's `firm_id`.
+
+6. **The form-kit EDITING LOCK is shared, and that is correct as designed**
+   (bd `polyglot-pdf-t7drr`). The lock lives in each kit's `metadata.json`
+   inside the shared GCS bucket (`editing_lock`,
+   `backend/routes/editor_kit_routes.py`), so it is content in a shared bucket
+   rather than a per-service lock: the demo backend and the staging backend
+   contend for the same one. That is SAFE, not a defect -- the lock is
+   uid-scoped and preemption IS the stale-lock release, so two backends taking
+   and releasing it behaves exactly as two editors on one backend already do.
+   Deliberately left shared: making it per-channel would let the same person
+   hold two locks on one kit and edit it from both, which is worse than the
+   contention it would remove. Relevant because `deploy-staging.sh`'s
+   `CORS_EXTRA_ORIGINS` explicitly contemplates pointing the hosted editor at
+   the staging backend for testing.
 
 Treat kit publishing, rules changes, Firestore writes and client-link minting
 as production actions regardless of which channel you ran them from.

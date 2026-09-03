@@ -1,6 +1,9 @@
 #!/bin/bash
 # Deploy a NEW backend service to Google Cloud Run
-# Usage: ./deploy-new.sh [SERVICE_NAME]
+# Usage: ./deploy-new.sh [SERVICE_NAME] [PROJECT_ID]
+#   SERVICE_NAME defaults to polyglot-backend.
+#   PROJECT_ID   pins the project; without it POLYGLOT_PROJECT_NAME is used,
+#                then the active gcloud config.
 
 set -e
 
@@ -43,15 +46,25 @@ set -e
 # landing in the variable could otherwise satisfy a text match on its own.
 #
 # Args: $1 service name, $2 region, $3 project id.
-# Exits 1 when the service is definitively unreachable. MUST match
-# backend/deploy-new.sh's copy exactly (pinned by
-# tests/test_deploy_reachability_gate.py).
+#
+# SEVERITY. Exits 1 when the service is definitively unreachable -- unless the
+# caller sets VERIFY_FAIL_IS_FATAL=false, which downgrades that to a warning and
+# returns 0. The DEFAULT IS FATAL so a caller must opt in to leniency, never
+# inherit it by forgetting a flag: a deploy that just CREATED an unreachable
+# service must never exit 0 (bd polyglot-pdf-pidtg). The frontend stage opts out
+# because there the backend is pre-existing and possibly someone else's to fix
+# (bd polyglot-pdf-816te).
+#
+# MUST match the sibling copy in the other deploy script EXACTLY -- this
+# block is duplicated in deploy-all.sh and backend/deploy-new.sh, and
+# tests/test_deploy_reachability_gate.py pins the two byte-identical.
+# Any edit here must be made in both.
 verify_service_publicly_reachable() {
     local svc="$1" region="$2" project="$3" invoker_roles
     # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
     # coloured [WARN]/[ERROR] on stdout exactly as before this was extracted
     # (a pre-PR review caught the extraction silently moving them to stderr and
-    # dropping the colour). backend/deploy-new.sh defines no such helpers, so it
+    # dropping the colour). The bootstrap script defines no such helpers, so it
     # falls back to plain stderr -- which is why the function must not simply
     # call log_warn/log_error unconditionally.
     _gate_warn()  { if declare -f log_warn  >/dev/null 2>&1; then log_warn  "$1"; else echo "[WARN] $1"  >&2; fi; }
@@ -75,10 +88,14 @@ verify_service_publicly_reachable() {
     # claimed the shell could not carry a box-drawing glyph because the tests
     # decode it as cp1252 on Windows; that was the TEST's defect (a
     # subprocess.run without encoding=), since fixed, and this function is
-    # byte-identical in backend/deploy-new.sh, which has no box-drawing at all.
+    # byte-identical in the sibling copy, which has no box-drawing at all.
     # ASCII simply travels everywhere without depending on the reader's codec.
     _gate_error "==========================================================="
-    _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    if [ "${VERIFY_FAIL_IS_FATAL:-true}" = "false" ]; then
+        _gate_error "  WARNING: the service is NOT publicly reachable"
+    else
+        _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    fi
     _gate_error "==========================================================="
     _gate_error "Service '$svc' has no allUsers invoker binding, so"
     _gate_error "Cloud Run will 403 EVERY request before your app ever sees it."
@@ -94,6 +111,10 @@ verify_service_publicly_reachable() {
     _gate_error "If that is itself refused, the org policy must be relaxed for this"
     _gate_error "project first (constraints/iam.allowedPolicyMemberDomains)."
     _gate_error "See bd polyglot-pdf-pidtg."
+    if [ "${VERIFY_FAIL_IS_FATAL:-true}" = "false" ]; then
+        _gate_warn "Continuing anyway (this stage treats an unreachable backend as a warning)."
+        return 0
+    fi
     exit 1
 }
 

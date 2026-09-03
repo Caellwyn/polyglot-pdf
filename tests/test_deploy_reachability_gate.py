@@ -23,6 +23,7 @@ The gate was wrong in BOTH directions before it was right, so both are pinned:
     so a service with a SECOND binding was wrongly rejected.
 """
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -400,10 +401,19 @@ def test_gate_is_called_as_a_bare_command(rel):
     ]
     assert calls, f"{rel} never calls the gate"
     for call in calls:
-        assert call.startswith("verify_service_publicly_reachable"), (
-            f"{rel}: the gate must be invoked as a BARE command, not inside a "
-            f"conditional or assignment -- `exit 1` would not terminate the "
-            f"script. Found: {call!r}"
+        # A leading `VAR=value ` prefix is ALLOWED and is not a subshell: bash
+        # applies it to the command's environment for that one invocation, and
+        # an `exit` inside still terminates the script (verified, not assumed).
+        # The frontend stage uses exactly this to select warn mode
+        # (bd polyglot-pdf-816te). Everything the loop below rejects -- pipes,
+        # command substitution, `&&`/`||` guards, backgrounding -- genuinely does
+        # run the function somewhere its `exit 1` cannot reach the script.
+        bare = re.sub(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+", "", call)
+        assert bare.startswith("verify_service_publicly_reachable"), (
+            f"{rel}: the gate must be invoked as a BARE command (optionally with "
+            f"a VAR=value environment prefix), not inside a conditional or "
+            f"assignment -- `exit 1` would not terminate the script. "
+            f"Found: {call!r}"
         )
         for swallower in ("|", "$(", "&&", "||", "&"):
             assert swallower not in call, (
@@ -482,4 +492,82 @@ def test_gate_runs_before_the_success_banner(rel):
         f"{rel}: the reachability gate is called AFTER the success banner "
         f"(line {call_idx + 1} vs {banner_idx + 1}). A service that 403s every "
         f"request would be reported as a successful deploy before the abort."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The FRONTEND stage must check reachability too (bd polyglot-pdf-816te).
+# ---------------------------------------------------------------------------
+
+
+def test_frontend_stage_also_checks_reachability():
+    """A frontend-only deploy must not silently ship against a 403ing backend.
+
+    `gcloud run services describe` returns a URL for a service that EXISTS,
+    whether or not anyone may invoke it -- existence and reachability are
+    independent. So the frontend stage could bake that URL into VITE_WS_URL,
+    publish, and report success over a backend rejecting every request: the exact
+    symptom bd polyglot-pdf-pidtg's gate prevents, via the one path it did not
+    cover (it sits in the BACKEND stage, and both channel wrappers run the
+    frontend as a SEPARATE `deploy-all.sh --frontend` process).
+    """
+    body = DEPLOY_ALL.read_text(encoding="utf-8")
+    # The frontend stage begins at its own banner; scope to it so a backend-stage
+    # call cannot satisfy this.
+    fe = body.split("DEPLOYING FRONTEND TO FIREBASE HOSTING")[1]
+    assert "verify_service_publicly_reachable" in fe, (
+        "the frontend stage never consults the reachability gate, so a "
+        "frontend-only deploy can ship against an unreachable backend"
+    )
+
+
+def test_frontend_stage_warns_rather_than_aborting():
+    """Severity differs from the backend stage, deliberately.
+
+    The backend stage just CREATED the service, so an unreachable one is that
+    run's own doing -> fatal. In the frontend stage the backend is pre-existing,
+    possibly mid-fix by someone else or deliberately private, and refusing to
+    ship a frontend over someone else's IAM state is the gate crying wolf.
+    """
+    body = DEPLOY_ALL.read_text(encoding="utf-8")
+    fe = body.split("DEPLOYING FRONTEND TO FIREBASE HOSTING")[1]
+    assert "VERIFY_FAIL_IS_FATAL=false verify_service_publicly_reachable" in fe, (
+        "the frontend stage must call the gate in WARN mode "
+        "(VERIFY_FAIL_IS_FATAL=false), not the default fatal mode"
+    )
+
+
+def test_the_gate_defaults_to_fatal():
+    """Leniency must be opted INTO, never inherited by forgetting the flag."""
+    query = _reachability_query_owner()
+    assert '"${VERIFY_FAIL_IS_FATAL:-true}"' in query, (
+        "the severity switch must DEFAULT to true (fatal); a default of false "
+        "would silently downgrade the backend stage's abort to a warning"
+    )
+
+
+def _reachability_query_owner() -> str:
+    return _gate_function(DEPLOY_ALL)
+
+
+@pytest.mark.parametrize("rel", ["deploy-demo.sh", "deploy-staging.sh"])
+def test_channel_wrapper_rejects_an_unknown_argument(rel):
+    """A typo must not deploy NOTHING and report success (bd polyglot-pdf-7aez9).
+
+    Both wrappers' arg parsers had no `*)` arm, so `--front-end` matched nothing,
+    every DEPLOY_* stayed false, the script deployed nothing, printed its success
+    banner and exited 0. The operator then believes they verified a change they
+    never deployed -- on staging, precisely the false confidence that tier exists
+    to remove. deploy-all.sh has always errored on an unknown argument; this
+    brings the wrappers in line.
+    """
+    body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    parser = body.split("for arg in")[1].split("esac")[0]
+    assert "*)" in parser, (
+        f"{rel}'s argument parser has no catch-all arm, so an unrecognised "
+        f"argument is silently ignored and the script 'succeeds' having "
+        f"deployed nothing."
+    )
+    assert "Unknown argument" in parser and "exit 1" in parser, (
+        f"{rel} must FAIL on an unknown argument, not merely note it"
     )

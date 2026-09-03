@@ -289,27 +289,61 @@ DOCS_MENTIONING_DEAD_PROD = [
     "docs/technical_guide.md",
 ]
 
-# Phrasings that present the script as a live deploy path. Each must be absent.
-RUNNABLE_CLAIMS = [
-    "`deploy-demo.sh` / `deploy-production.sh` wrappers",
-    "`deploy-demo.sh` and\n> `deploy-production.sh` ship",
-    "stays maintainer-directed",
-]
+# Words that mark the script dead. Checked in the LINE-LOCAL neighbourhood of
+# each mention, never file-wide -- see the docstring below.
+DEATH_MARKERS = (
+    "dead",
+    "DEAD",
+    "refuses to run",
+    "unreachable",
+    "inactive",
+    "no live prod",
+)
 
 
 @pytest.mark.parametrize("doc", DOCS_MENTIONING_DEAD_PROD)
 def test_doc_does_not_present_dead_prod_as_runnable(doc):
-    """Every mention must mark it dead, never offer it as a deploy path."""
+    """EVERY mention must be marked dead in its OWN neighbourhood.
+
+    THE DEFEATABLE-BLACKLIST TRAP this replaces (bd polyglot-pdf-yz244, found by
+    the pre-PR review of bd polyglot-pdf-9qn64). The first version banned three
+    LITERAL phrasings, then searched the WHOLE FILE for a death word as a
+    catch-all. Both halves were weak:
+
+      - a blacklist is one synonym from defeat: any new wording presenting the
+        script as runnable simply was not on the list;
+      - the file-wide fallback was satisfied PERMANENTLY by unrelated prose. In
+        README.md an existing "Production site (inactive)" line hundreds of lines
+        away met it, so the reviewer rewrote the death paragraph into "To deploy
+        production, run ./deploy-production.sh" and every test stayed green.
+
+    So this asserts a PROPERTY per mention rather than banning phrasings, and
+    scopes the evidence to the mention's own line plus two either side. Repo scar
+    tissue, near-verbatim: a checker that infers a claim from text must scope the
+    evidence region to exactly the claim -- widen it and nearby prose becomes
+    evidence.
+    """
     body = _read(doc)
-    for claim in RUNNABLE_CLAIMS:
-        assert claim not in body, (
-            f"{doc} still presents deploy-production.sh as runnable via "
-            f"{claim!r}; it targets an unreachable project and exits 1."
-        )
-    # Wherever it IS named, the death must be stated nearby.
-    if "deploy-production" in body:
-        assert re.search(r"dead|DEAD|refuses to run|unreachable|inactive", body), (
-            f"{doc} names deploy-production.sh without saying it is dead"
+    if "deploy-production" not in body:
+        return
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if "deploy-production" not in line:
+            continue
+        # A doc's `**Tracks:**` header is a FILE LIST, not prose offering a
+        # deploy path -- naming the script there is how the freshness checker
+        # knows to watch it. Demanding a death marker inside a filename list
+        # would be a false positive, so skip it. (Caught on this test's first
+        # run: config-deployment.md's Tracks line failed the stricter check.)
+        if line.lstrip().startswith("**Tracks:**"):
+            continue
+        window = "\n".join(lines[max(0, i - 2) : i + 3])
+        assert any(m in window for m in DEATH_MARKERS), (
+            f"{doc}:{i + 1} mentions deploy-production.sh with no death marker "
+            f"within two lines either side, so it reads as a live deploy path. "
+            f"It targets an unreachable project and exits 1.\n"
+            f"  line: {line.strip()!r}\n"
+            f"  expected one of: {DEATH_MARKERS}"
         )
 
 
