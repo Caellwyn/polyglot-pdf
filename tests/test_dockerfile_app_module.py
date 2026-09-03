@@ -144,10 +144,10 @@ def test_both_packages_are_copied_into_the_image():
 def test_the_admin_app_declares_the_same_default_as_the_dockerfile():
     """The container's fallback and the app's self-report are ONE string.
 
-    admin_backend/main.py reports os.getenv("APP_MODULE", DEFAULT_APP_MODULE)
-    on /health so an operator can confirm which app a service is really
-    serving. If its default and the Dockerfile's diverge, that report lies in
-    exactly the case it exists to catch.
+    admin_backend/main.py reports the active module on /health so an operator
+    can confirm which app a service is really serving. If its default and the
+    Dockerfile's diverge, that report lies in exactly the case it exists to
+    catch.
     """
     from admin_backend.main import DEFAULT_APP_MODULE as app_default
 
@@ -156,6 +156,37 @@ def test_the_admin_app_declares_the_same_default_as_the_dockerfile():
     assert app_default == match.group(1) == DEFAULT_APP_MODULE, (
         "admin_backend.main.DEFAULT_APP_MODULE is {!r} but the Dockerfile "
         "CMD falls back to {!r}".format(app_default, match.group(1)))
+
+
+def test_the_two_app_module_readers_agree_on_every_env_state(monkeypatch):
+    """Agreement on the DEFAULT STRING is not agreement on BEHAVIOR.
+
+    The test above pins one string in two places, which reads as stronger than
+    it is: it says nothing about how each reader treats an EMPTY value. The
+    Dockerfile's `${APP_MODULE:-...}` is the `:-` form (unset OR empty both
+    fall back); a plain os.getenv(name, default) falls back only on unset.
+    Those disagree precisely when an operator's --set-env-vars block passes
+    APP_MODULE= -- so pin all three states against a model of the shell
+    expansion rather than trusting the shared literal.
+    """
+    from admin_backend.main import _active_app_module
+
+    default = re.search(r"\$\{APP_MODULE:-([^}]+)\}", _cmd_line()).group(1)
+
+    def shell_expansion(value):
+        """`${APP_MODULE:-default}` -- ':-' falls back on unset AND empty."""
+        return value if value else default
+
+    for state, value in (("unset", None), ("empty", ""),
+                         ("set", ADMIN_APP_MODULE)):
+        if value is None:
+            monkeypatch.delenv("APP_MODULE", raising=False)
+        else:
+            monkeypatch.setenv("APP_MODULE", value)
+        assert _active_app_module() == shell_expansion(value), (
+            "with APP_MODULE {}, the app reports {!r} but the container would "
+            "launch {!r}".format(state, _active_app_module(),
+                                 shell_expansion(value)))
 
 
 def test_the_admin_module_path_is_importable_as_written():

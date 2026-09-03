@@ -82,9 +82,25 @@ Roles are parsed OUT of `scripts/setup-admin-service.sh` rather than re-typed in
 the test (scar #8, one rule one home): the script is what an operator runs, the
 constant is what a reviewer reads, and they cannot drift.
 
-**`pytest.ini` gains a third testpath.** `admin_backend/tests` is a sibling
-package, so the `backend/tests` path never reaches it. Without the entry the
-whole suite would collect zero tests and report green.
+**`pytest.ini` gains a third testpath — and the GATES had to be taught to read
+it.** `admin_backend/tests` is a sibling package, so the `backend/tests` path
+never reaches it. Without the entry the whole suite would collect zero tests and
+report green.
+
+Adding the entry turned out to be half the job, and the cross-surface review
+found the other half. Both gates named their suite paths by hand and so never
+saw the new root: `.github/workflows/ci.yml` ran `pytest backend/tests tests`
+and `closeout_prep.check_tests()` ran `WT/backend/tests`. Measured on this
+branch, CI's exact command collected **4591 tests and zero** of the 12 in
+`admin_backend/tests` — including the admin SA role pin and the import-direction
+guard, i.e. exactly the two tests criterion 2 exists for. This repo had already
+journaled the same failure once (bd `polyglot-pdf-3ave`: "CI runs `pytest
+backend/tests tests`, so the PR would have merged CI-red").
+
+Both gates now run a **bare** `pytest` and inherit `testpaths`, so a future
+suite is gated the day it is added rather than the day someone remembers to edit
+two files. Pinned as a set by `tests/test_every_suite_root_is_gated.py`, which
+derives the roots from `pytest.ini` and fails if either gate names a suite path.
 
 Deferred, per the plan, each landing with its first consuming call:
 `cloudbuild.builds.editor`, `iam.serviceAccountUser`, `run.admin`,
@@ -110,6 +126,28 @@ same role granted project-wide are different capabilities with identical
 strings, and every test keyed on the name alone passes both. The same shape as
 `docs/standards/testing.md`'s "pin the BEHAVIOR at the gate, not the label".
 
+**A vacuity guard that iterates the same constant as the scan shrinks WITH
+it.** Widening the cwd-independence walk to `_DEPLOYED_PACKAGES = (BACKEND,
+ADMIN)`, I wrote a companion test looping over `_DEPLOYED_PACKAGES` asserting
+each contributes files. It looked like the vacuity guard this entry already
+recommends. Then the mutation — narrow the constant back to `(BACKEND,)` —
+**passed**: deleting an entry removed it from the scan and from its own check
+in one edit. The property is not "every listed package is scanned" (trivially
+true) but "every package that SHIPS is scanned", so the required set has to be
+derived from the repo — a top-level dir whose `main.py` builds a FastAPI app.
+Same trap for `_REPO_TOP_LEVEL_DIRS`: dropping `admin_backend` from that
+hand-listed vocabulary silently disabled bare-literal detection with all 30
+tests green, because nothing pinned the vocabulary against what actually ships.
+This is `bd memories guard-the-property-not-the-code-shape` hit twice in one
+file, and both times the *first* fix was correct and its *guard* was not.
+
+**A `git checkout --` to undo a mutation reverts the real edit too.** Restoring
+a mutated file with `git checkout -- <file>` threw away the whole widening I had
+just written, not the one-line mutation — the file was untracked-clean
+afterward, so nothing looked wrong. `bd memories mutation-restore-can-revert-real-edits`
+warns about exactly this; the working habit is a `cp` backup taken immediately
+before each mutation and restored from that, never from git.
+
 **A sibling package is a security boundary only if some test says which
 direction imports may flow.** `admin_backend/` importing `backend.routes` would
 execute the public app's router construction inside the privileged process —
@@ -134,7 +172,51 @@ expresses the intent; the test enforces it.
 
 ## Review
 
-Review outcomes recorded in the closeout ping.
+**Round 1 — Opus cross-surface review: GAPS-FOUND (7 findings, 1 blocker).**
+Adopted 5, deferred 2 to their own beads.
+
+*Adopted (fixed on this branch):*
+
+1. **BLOCKER — the whole `admin_backend/tests` suite ran in neither gate.**
+   Fixed in `ci.yml` + `closeout_prep.py` (both now inherit `testpaths`), doc
+   updated in `docs/standards/testing.md`, and pinned as a set by the new
+   `tests/test_every_suite_root_is_gated.py`. Details above.
+2. **Nothing pinned that `backend/` never imports `admin_backend`** — the
+   direction that actually defeats the scar-#7 guard, and newly reachable
+   because the package did not exist before this branch. Added
+   `test_the_public_backend_never_imports_the_admin_package` (plus a
+   matching-rule test and a vacuity guard) to
+   `backend/tests/unit/test_deployed_iam_envelope.py`. `docs/technical_guide.md`
+   had asserted this invariant was already pinned when it was not; corrected.
+6. **The cwd-independence guard was anchored on `backend/` only.** Widened
+   `test_runtime_paths_are_cwd_independent.py` to walk every deployed package
+   and added `admin_backend` to the bare-literal vocabulary. Fixed together with
+   finding 2 as one enumerated set (scar #8): both are the same shape — an
+   existing guard whose scan root a *sibling* package silently escapes.
+3. **Two docstrings claimed `deploy-all.sh`'s gate calls `/health`.** It reads
+   the Cloud Run IAM policy and issues no HTTP request at all. Corrected in
+   `admin_backend/main.py` and `test_admin_health.py`, both now stating plainly
+   that `/health` has NO deploy-time behavioral coverage — the test docstring
+   mattered most, since it was justifying the tests' existence and would have
+   told a future session a real probe was unnecessary.
+4. **`APP_MODULE` empty-string divergence.** `os.getenv(name, default)` returns
+   `''` where the Dockerfile's `${APP_MODULE:-...}` falls back. Routed through
+   one `_active_app_module()` helper and pinned across all three env states
+   (unset / empty / set) against a model of the shell expansion.
+
+*Deferred (filed, latent, and they bite in a later bead — not this one):*
+
+- **Finding 5 — the routes-table set pin derives from `backend.main` only**
+  (bd `polyglot-pdf-nn4ei`). Green today by coincidence: the admin app's
+  `/health` and `/version` collide with the public backend's documented paths.
+  It bites at bd `polyglot-pdf-7w17m`, when the admin routers actually land.
+- **Finding 7 — `CORS_EXTRA_ORIGINS` now feeds two services from one var name**
+  (bd `polyglot-pdf-jv5s1`). Nothing is broken while the admin service is
+  undeployed; the risk is `deploy-admin.sh` inheriting the schema-editor origins,
+  so it belongs to the deploy bead that writes that script.
+
+A note on process: verifying these fixes cost three failed mutations before the
+tests were honest. See Lessons.
 
 ## Files touched
 
@@ -150,4 +232,15 @@ Review outcomes recorded in the closeout ping.
 - `Dockerfile` — `COPY admin_backend`, runtime `APP_MODULE` in the CMD.
 - `.gcloudignore` — excludes `admin_backend/tests/`.
 - `pytest.ini` — `admin_backend/tests` added to `testpaths`.
-- `docs/components/config-deployment.md`, `docs/technical_guide.md` — see above.
+- `.github/workflows/ci.yml`, `scripts/closeout_prep.py` — review round 1: both
+  gates now run a bare `pytest` and inherit `testpaths` instead of hardcoding
+  suite paths.
+- `tests/test_every_suite_root_is_gated.py` — new; the set pin for "every
+  collected suite actually runs in both gates".
+- `backend/tests/unit/test_deployed_iam_envelope.py` — review round 1: pins the
+  reverse import direction (`backend/` -/-> `admin_backend`).
+- `backend/tests/unit/test_runtime_paths_are_cwd_independent.py` — review round
+  1: scan widened to every deployed package, vocabulary and coverage both
+  derived from the repo.
+- `docs/components/config-deployment.md`, `docs/technical_guide.md`,
+  `docs/standards/testing.md` — see above.

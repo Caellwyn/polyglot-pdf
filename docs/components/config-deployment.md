@@ -442,11 +442,19 @@ packages in one image is safe because the deployed service account -- not what
 is present on disk -- is what actually gates a privileged call
 (CLAUDE.md scar #7). `admin_backend/` imports `backend.services.*` and `backend.config` but
 **never `backend.routes`**: the services share business logic, not HTTP
-surface, and that direction is pinned by the same test.
+surface, and that direction is pinned by the same test. The **reverse**
+direction -- `backend/` importing `admin_backend` -- is pinned separately by
+`backend/tests/unit/test_deployed_iam_envelope.py`, because that is the one
+that would put a privileged call under the NARROW service account in a file
+the scar-#7 scan never opens.
 
 The admin service's `/health` reports the `app_module` it is actually running,
 because a service pointed at the wrong module otherwise looks perfectly healthy
-while serving the wrong app.
+while serving the wrong app. It resolves an EMPTY `APP_MODULE` to the default,
+matching the `:-` expansion above -- a plain `os.getenv(name, default)` would
+report an empty string in exactly that case. Note the deploy scripts never
+call this route: `verify_service_publicly_reachable()` reads the Cloud Run IAM
+policy, not HTTP, so `/health` has no deploy-time behavioral coverage.
 
 ### Hosted schema editor (second Hosting site)
 

@@ -27,13 +27,15 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 > and reuse them in a later call. **Prepend both lines to every command** that
 > needs them, in the SAME Bash call. So a hand-run script step is
 > `REPO=...; PY=...; "$PY" "$REPO/scripts/X.py"` and the test step is
-> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q`.
-> Target `backend/tests/` EXPLICITLY: since the root `pytest.ini` landed
-> (bd polyglot-pdf-uov.1) a bare `pytest` runs BOTH suites (`backend/tests/`
-> plus the top-level `tests/` harness suite); the closeout step names
-> `backend/tests/` for speed, not to exclude the harness suite. The `!`...``
-> lines that auto-run at skill-load (Step 1, Step 2) already inline the
-> resolution this way.
+> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest -q`.
+> Pass NO suite paths: a bare `pytest` from the repo root collects every root
+> in `pytest.ini`'s `testpaths` (`backend/tests`, `admin_backend/tests`, and
+> the top-level `tests/` harness suite). Naming a suite path here is how a
+> whole suite ships un-run -- `admin_backend/tests` was invisible to both this
+> gate and CI the day it landed (bd polyglot-pdf-pnoik), the same shape as bd
+> polyglot-pdf-3ave. `tests/test_every_suite_root_is_gated.py` pins it. The
+> `!`...`` lines that auto-run at skill-load (Step 1, Step 2) already inline
+> the resolution this way.
 
 ## Hard rules (read before doing anything)
 

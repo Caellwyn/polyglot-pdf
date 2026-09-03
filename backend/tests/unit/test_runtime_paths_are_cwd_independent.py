@@ -1,4 +1,8 @@
-"""Backend runtime file paths must not depend on the process cwd.
+"""Deployed runtime file paths must not depend on the process cwd.
+
+Covers EVERY deployed Python package -- backend/ and its sibling
+admin_backend/ (bd polyglot-pdf-pnoik) -- since both run in one image from one
+working directory, so a cwd-relative literal is the same hazard in either.
 
 The local launchers (scripts/run-schema-editor.sh, scripts/dev-local.ps1) run
 uvicorn with backend/ as its WORKING DIRECTORY -- that is what scopes uvicorn's
@@ -33,6 +37,19 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BACKEND = REPO_ROOT / "backend"
 
+# Every deployed Python package, not just backend/. admin_backend/ is a SIBLING
+# top-level package (bd polyglot-pdf-pnoik) that runs in the SAME image, from
+# the SAME working directory, under the same PYTHONPATH=/app -- so the hazard
+# this file pins is identical there, and a walk anchored on backend/ alone
+# silently under-covers it.
+#
+# This tuple is NOT the source of truth for what must be covered: dropping an
+# entry would otherwise shrink the scan and its own vacuity guard together,
+# leaving the suite green. test_the_scan_covers_every_deployed_package_on_disk
+# derives the required set from the REPO instead, so a package that exists but
+# is missing here fails.
+_DEPLOYED_PACKAGES = (BACKEND, REPO_ROOT / "admin_backend")
+
 # Directories whose cwd assumptions are an operator's problem, not the served
 # app's: tests set their own cwd, and backend/scripts/* are run by hand from
 # the repo root.
@@ -60,7 +77,8 @@ _PATH_BUILDERS = {"Path", "open", "join"}
 # Bare single-segment literals that are nonetheless cwd-relative PATHS, because
 # they name a real top-level directory of this repo. Everything else needs a
 # separator to count (see _is_cwd_relative_path).
-_REPO_TOP_LEVEL_DIRS = {"backend", "frontend", "logs", "form-kits", "shared"}
+_REPO_TOP_LEVEL_DIRS = {"backend", "admin_backend", "frontend", "logs",
+                        "form-kits", "shared"}
 
 # Callables whose LATER argument is a path default rather than a lookup key --
 # os.getenv("CONFIRMATION_LOG_DIR", "logs/confirmations") hides a cwd-relative
@@ -80,11 +98,14 @@ _PATHISH_NAME = re.compile(
 
 
 def _runtime_py_files():
-    for path in sorted(BACKEND.rglob("*.py")):
-        rel = path.relative_to(BACKEND)
-        if rel.parts and rel.parts[0] in _EXCLUDED_DIRS:
+    for package in _DEPLOYED_PACKAGES:
+        if not package.is_dir():
             continue
-        yield path
+        for path in sorted(package.rglob("*.py")):
+            rel = path.relative_to(package)
+            if rel.parts and rel.parts[0] in _EXCLUDED_DIRS:
+                continue
+            yield path
 
 
 def _is_cwd_relative_path(text: str) -> bool:
@@ -323,3 +344,83 @@ def test_token_file_logger_default_log_dir_is_cwd_independent():
     assert logger.log_file == BACKEND / "logs" / "token_usage.jsonl", (
         f"TokenFileLogger.log_file resolved to {logger.log_file}"
     )
+
+
+def test_the_scan_covers_every_deployed_package_on_disk():
+    """The required set is derived from the REPO, not from _DEPLOYED_PACKAGES.
+
+    A guard that iterates the same constant the scan iterates shrinks WITH it:
+    deleting an entry would narrow the walk and its own check together, and the
+    suite would stay green -- the "guard the property, not the code shape"
+    trap this repo has hit before. So identify deployed packages by what they
+    ARE on disk (a top-level dir holding a main.py that builds a FastAPI app,
+    which is what Cloud Run can launch via APP_MODULE) and require the scan to
+    reach each one.
+    """
+    deployed_on_disk = set()
+    for candidate in sorted(REPO_ROOT.iterdir()):
+        if not candidate.is_dir() or candidate.name.startswith("."):
+            continue
+        main_py = candidate / "main.py"
+        if not main_py.is_file():
+            continue
+        if "FastAPI(" not in main_py.read_text(encoding="utf-8"):
+            continue
+        deployed_on_disk.add(candidate.name)
+
+    # Sanity: the derivation itself must find the packages we know ship, or it
+    # is silently finding nothing and blessing any scan at all.
+    assert {"backend", "admin_backend"} <= deployed_on_disk, sorted(
+        deployed_on_disk)
+
+    scanned = list(_runtime_py_files())
+    assert scanned, "the runtime scan found no files at all"
+    covered = {name for name in deployed_on_disk
+               if any((REPO_ROOT / name) in f.parents for f in scanned)}
+
+    missing = sorted(deployed_on_disk - covered)
+    assert not missing, (
+        "these deployed packages ship a FastAPI app but NO file of theirs is "
+        "scanned, so every assertion in this file is vacuous for them:"
+        + chr(10) + "  " + (chr(10) + "  ").join(missing)
+        + chr(10) + chr(10)
+        + "Add the package to _DEPLOYED_PACKAGES. Both apps run from one "
+          "working directory in one image, so a cwd-relative literal is the "
+          "same hazard in either.")
+
+    # And the excluded dirs really are excluded, in every package.
+    assert not [f for f in scanned
+                if any(part in _EXCLUDED_DIRS for part in f.parts)], (
+        "the scan is picking up tests/ or scripts/, whose cwd assumptions are "
+        "deliberately out of scope")
+
+
+def test_every_deployed_package_is_in_the_bare_literal_vocabulary():
+    """_REPO_TOP_LEVEL_DIRS must name every deployed package.
+
+    A BARE single-token literal -- Path("admin_backend") with no separator --
+    is only recognized as a cwd-relative path when the token is in this
+    vocabulary; everything else needs a "/" to count. So a deployed package
+    missing from the set is a real detector hole, and one that no other
+    assertion here notices: deleting an entry left the whole file green
+    (measured), because the vocabulary was hand-listed and pinned by nothing.
+
+    Derived from the same on-disk rule as the scan-coverage test above, so the
+    two cannot drift into disagreeing about what ships.
+    """
+    for candidate in sorted(REPO_ROOT.iterdir()):
+        if not candidate.is_dir() or candidate.name.startswith("."):
+            continue
+        main_py = candidate / "main.py"
+        if not main_py.is_file():
+            continue
+        if "FastAPI(" not in main_py.read_text(encoding="utf-8"):
+            continue
+        assert candidate.name in _REPO_TOP_LEVEL_DIRS, (
+            "{!r} ships a FastAPI app but is not in _REPO_TOP_LEVEL_DIRS, so a "
+            "bare Path({!r}) in runtime code is not detected as a "
+            "cwd-relative path".format(candidate.name, candidate.name))
+        # And the vocabulary must actually make the bare literal register.
+        assert _is_cwd_relative_path(candidate.name), (
+            "bare {!r} is not recognized as a cwd-relative path".format(
+                candidate.name))

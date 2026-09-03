@@ -856,12 +856,21 @@ between their packages is one-directional and partial.
   route module executes the public app's router construction inside the
   PRIVILEGED process, binding handlers written and reviewed against the narrow
   `polyglot-backend-sa` onto the wide `admin-backend-sa`.
-- **Forbidden in the other direction too, by construction:** `backend/` never
-  imports `admin_backend`. `backend/tests/unit/test_deployed_iam_envelope.py`
-  walks `backend/` only (its root is `parents[2]` of that test file), so the
-  public service stays pinned at zero privileged Firebase Auth calls with NO
-  change to that test -- a privileged helper reached from `backend/` via
-  `admin_backend` would be invisible to it.
-- **Pinned by** `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
-  (`test_admin_backend_never_imports_backend_routes`, with a vacuity guard
-  asserting the source walk actually reaches `admin_backend/main.py`).
+- **Forbidden in the other direction too:** `backend/` never imports
+  `admin_backend`. This is the direction that DEFEATS the scar-#7 guard, so it
+  is pinned rather than assumed: `backend/tests/unit/test_deployed_iam_envelope.py`
+  walks `backend/` only (its root is `parents[2]` of that test file), so a
+  privileged helper reached from `backend/` via `admin_backend` would sit in a
+  file that guard never opens -- and would run under the NARROW
+  `polyglot-backend-sa`.
+- **Pinned by**, in each direction:
+  - `admin_backend/` -/-> `backend.routes`:
+    `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+    (`test_admin_backend_never_imports_backend_routes`).
+  - `backend/` -/-> `admin_backend`:
+    `backend/tests/unit/test_deployed_iam_envelope.py`
+    (`test_the_public_backend_never_imports_the_admin_package`).
+
+  Each has a matching-rule test over synthetic sources (both import shapes,
+  plus a same-prefix package that must NOT be flagged) and a vacuity guard
+  asserting its source walk actually reaches the app module.

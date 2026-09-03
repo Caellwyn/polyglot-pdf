@@ -11,9 +11,16 @@ money from real money is the FIRM's kind, never the channel.
 
 Cloud Run runs this service with --allow-unauthenticated plus an app-level
 gate on EVERY route, so nothing is reachable without an app_admin claim once
-the routers land. /health is deliberately the exception: Cloud Run's own
-reachability probe and deploy-all.sh's post-deploy gate call it unauthenticated,
-and it reports no data an unauthenticated caller could not already infer.
+the routers land. /health is deliberately the exception: it is the
+unauthenticated liveness probe, and it reports no data an unauthenticated
+caller could not already infer.
+
+NOTE on the deploy gate: deploy-all.sh's post-deploy
+verify_service_publicly_reachable() does NOT call this route. It reads the
+Cloud Run IAM policy for an allUsers roles/run.invoker binding and issues no
+HTTP request at all, so /health currently has NO deploy-time behavioral
+coverage -- an operator curls it by hand (deploy-all.sh's closing advisory
+echo). Do not assume a deploy would catch this route being broken.
 """
 import os
 
@@ -34,6 +41,20 @@ from backend.utils.logging import configure_logging
 # backend never consults it. The Dockerfile CMD and this default are pinned
 # together by tests/test_dockerfile_app_module.py, so they cannot drift.
 DEFAULT_APP_MODULE = "backend.main:app"
+
+
+def _active_app_module() -> str:
+    """The ASGI target, resolved the way the CONTAINER resolves it.
+
+    Mirrors the Dockerfile's `${APP_MODULE:-backend.main:app}`, which is the
+    `:-` form: it falls back when the variable is UNSET **or EMPTY**. A plain
+    os.getenv("APP_MODULE", DEFAULT_APP_MODULE) agrees only on unset -- it
+    returns '' for an empty value -- so /health would report an empty
+    app_module while answering the one question the field exists to answer.
+    Reading it through one helper keeps the two readers in agreement on both
+    states rather than only on the default string.
+    """
+    return os.getenv("APP_MODULE") or DEFAULT_APP_MODULE
 
 
 configure_logging()
@@ -79,7 +100,7 @@ async def health():
     return {
         "status": "ok",
         "service": "polyglot-admin",
-        "app_module": os.getenv("APP_MODULE", DEFAULT_APP_MODULE),
+        "app_module": _active_app_module(),
     }
 
 

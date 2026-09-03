@@ -413,19 +413,30 @@ def check_docs(py: Path, WT: Path) -> dict:
 
 
 def check_tests(py: Path, WT: Path) -> dict:
-    """Step 4: pytest backend/tests/ from the worktree, excluding flaky externals.
+    """Step 4: run EVERY collected suite from the worktree, minus flaky externals.
 
-    PYTHONPATH and the test path point at the WORKTREE so this branch's code is
-    what runs (the `-m "not external"` matches the project's flaky live-Gemini
+    Deliberately passes NO suite paths: with cwd at the worktree root, a bare
+    pytest collects every root in the worktree's own pytest.ini `testpaths`, so
+    a NEW top-level suite is gated by closeout the day it is added rather than
+    the day someone remembers to edit this function. Hardcoding
+    `WT/backend/tests` here made the pre-PR gate blind to `admin_backend/tests`
+    the moment that package landed (bd polyglot-pdf-pnoik), which is the same
+    shape as the CI miss journaled in bd polyglot-pdf-3ave.
+
+    PYTHONPATH and cwd point at the WORKTREE so this branch's code is what runs
+    (the `-m "not external"` matches the project's flaky live-Gemini
     exclusion). A non-zero pytest exit is ATTENTION (the orchestrator must fix a
     red suite before a PR); a launch failure is FAIL.
     """
+    # Sanity-check that WT really is a checkout before shelling out -- a bare
+    # pytest in an empty dir "passes" with zero tests, which would render this
+    # gate a silent no-op.
     tests_dir = WT / "backend" / "tests"
     if not tests_dir.exists():
         return _result("tests", STATUS_FAIL, "backend/tests/ not found")
     try:
         proc = subprocess.run(
-            [str(py), "-m", "pytest", str(tests_dir), "-q", "-m", "not external"],
+            [str(py), "-m", "pytest", "-q", "-m", "not external"],
             capture_output=True,
             text=True,
             encoding="utf-8",

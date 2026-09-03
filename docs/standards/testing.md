@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-08-24. See [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for closeout details.*
+*Last updated: 2026-09-03 (bd polyglot-pdf-pnoik: a THIRD collected suite, `admin_backend/tests`, and the rule that the gates must inherit `testpaths` rather than re-list suite roots). See [the pnoik journal entry](../journal/entries/2026-09-03-bd-pnoik-admin-backend-skeleton.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -51,12 +51,23 @@ pytest suite — do not let it get collected, and do not park real pytest files
 outside the two `testpaths` roots (they silently never run; bd polyglot-pdf-o0pc
 relocated one such orphan).
 
-There are **two collected suites** under `testpaths`:
+There are **three collected suites** under `testpaths`:
 
 - `backend/tests` — the product backend suite (below).
+- `admin_backend/tests` — the privileged admin service's suite (bd
+  `polyglot-pdf-pnoik`). `admin_backend/` is a **sibling top-level package**, so
+  it is not reached via `backend/tests` and needs its own root.
 - `tests` (repo root) — the **harness-tooling** suite (closeout, `bd_safe`,
   `next_bead`, doc-freshness, `pr_review_watcher`, pricing). It runs from the repo
   root on defaults and is now part of the same `pytest` run.
+
+> **The gates must never re-list these roots by hand.** CI
+> (`.github/workflows/ci.yml`) and the pre-PR gate
+> (`closeout_prep.check_tests`) both run a **bare** `pytest` and inherit
+> `testpaths`, so a new suite is gated the day it is added. Hardcoding suite
+> paths there is what let a whole suite ship un-run twice — CI in bd
+> `polyglot-pdf-3ave`, and `admin_backend/tests` in bd `polyglot-pdf-pnoik`.
+> Pinned as a set by `tests/test_every_suite_root_is_gated.py`.
 
 > **Pre-PR, run BOTH roots — a bare `pytest`, not `pytest backend/tests`.** The
 > closeout recipe names `backend/tests` for speed, which silently skips the root
