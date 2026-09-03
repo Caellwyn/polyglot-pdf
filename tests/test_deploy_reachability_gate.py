@@ -667,3 +667,40 @@ def test_ambient_env_cannot_disarm_the_fatal_default(tmp_path):
     )
     assert "REACHED_END" not in proc.stdout
     assert "DEPLOY FAILED" in proc.stderr
+
+
+def test_the_backend_stage_call_takes_the_fatal_default():
+    """Appending `warn` to the BACKEND call must not be silently possible.
+
+    The frontend call is pinned as warn-mode; nothing pinned the other
+    direction. Adding a 4th argument to the backend-stage call downgrades the
+    abort that bd polyglot-pdf-pidtg exists to enforce -- on the one path where
+    an unreachable service is definitely that run's own doing -- and the whole
+    suite would stay green (found by the round-2 cross-surface review).
+
+    The backend call is identified as the one NOT inside the frontend stage, so
+    this keeps working if either stage moves.
+    """
+    body = DEPLOY_ALL.read_text(encoding="utf-8")
+    head, _, frontend = body.partition("DEPLOYING FRONTEND TO FIREBASE HOSTING")
+    # Join shell line-continuations (a backslash followed by a NEWLINE) so each
+    # call and its arguments form ONE logical line. Written as an explicit
+    # concatenation because a literal "\\n" here is the two-character sequence
+    # backslash-n, which matches nothing -- the exact no-op that made the
+    # sibling ordering guard useless one review round earlier.
+    logical = head.replace("\\" + "\n", " ")
+    backend_calls = [
+        ln.strip()
+        for ln in logical.splitlines()
+        if "verify_service_publicly_reachable" in ln
+        and not ln.strip().startswith("#")
+        and "()" not in ln
+    ]
+    assert backend_calls, "the backend stage no longer calls the gate"
+    for call in backend_calls:
+        args = call.split()[1:]
+        assert len(args) == 3, (
+            f"the backend-stage call passes {len(args)} arguments; it must pass "
+            f"exactly 3 (service, region, project) and take the FATAL default. "
+            f"A 4th argument silently downgrades the abort. Found: {call!r}"
+        )

@@ -155,9 +155,26 @@ The second is the more interesting error: I reached for the cheapest way to add
 a per-call option and picked one whose scope was wrong. A flag that can arrive
 from anywhere is not a per-call flag.
 
+## And the same no-op join, a third time
+
+Round two of the outer review noted the argument form created an opportunity the
+fix had not taken: nothing pinned that the BACKEND call omits `warn`. Appending
+it there silently downgrades the abort, and the suite stayed green.
+
+Writing that guard, I hit the identical `
+`-vs-backslash-newline no-op AGAIN --
+a heredoc collapsed the escape, the join matched nothing, and the test failed
+with a nonsense message. Third occurrence of one bug in this bead's lineage. The
+line is now written as an explicit concatenation with a comment naming the trap,
+which is the only form that survives being pasted through a shell.
+
+The lesson generalises past this bug: when a test transforms text before
+asserting on it, the transformation is code that can be silently wrong, and a
+test whose *setup* is broken fails in ways that look like the subject is broken.
+
 ## Testing
 
-Full suite: 4430 passed, 126 skipped, exit 0. Three behavioural mutations, each confirmed to apply before
+Full suite: 4431 passed, 126 skipped, exit 0. Three behavioural mutations, each confirmed to apply before
 being trusted: removing the frontend gate call, removing the unknown-arg arm, and
 reverting the hint to one service. One mutation silently no-op'd on an escaping
 failure and was redone from a file -- the count assertion caught it, which is why
