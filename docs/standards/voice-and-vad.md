@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect.)*
+*Last updated: 2026-09-03 (bd polyglot-pdf-h7atc: NOTHING is sent between turns -- not even silence; measured on both senders across a 350ms gap. The open question is whether a Live session tolerates the frame-free gap, which is unproven until v1m8g reaches staging.)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -40,6 +40,22 @@ is a trap for the next caller (CLAUDE.md scar #7). Two consequences worth knowin
   activity bracket, so injecting silence between turns would send un-bracketed
   audio and desync the turn state. `_gapfill_enabled` is pinned `False`; removing
   the plumbing it threads through is bd polyglot-pdf-ggdpn.
+
+  **So NOTHING is sent between turns -- not even silence.** The client withholds
+  rather than substituting (`shouldSendAudioChunk` returns false and the caller
+  returns early), and gap-fill cannot fire. Measured by driving both senders
+  across a 350ms gap: 1 real frame, 0 silent frames, on the paced and legacy
+  paths alike (bd polyglot-pdf-h7atc,
+  `scripts/spikes/h7atc_silent_frames_findings.md`). There is no silent-token
+  burn left to remove.
+
+  **The open question is tolerance, not cost.** Whether a Live session survives
+  an arbitrarily long frame-free gap is UNPROVEN: the reasoning that starvation
+  was Gemini-VAD's problem is sound but untested, and v1m8g has not been
+  deployed. The WS idle watchdog is NOT the hazard (`last_rx` is bumped by
+  control messages, and PTT brackets are control messages). Best verified by a
+  staging session -- hold a turn, wait 60-90s, take another -- rather than a
+  synthetic probe.
 - **The client Silero VAD no longer gates audio.** The hook still exists and the
   thresholds below are still its tuning surface, but `shouldRunVAD` requires
   `!pushToTalkMode`, which no longer happens in practice.
