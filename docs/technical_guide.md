@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-01 (bd polyglot-pdf-hvui4: staging mirrors the demo's client-link config, and --set-secrets is passed for real -- it had been documented but never implemented, so LINK_TOKEN_SECRET never bound.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -640,7 +640,8 @@ system that is NOT a Firebase account. Five coupled pieces:
   silently corrected -- a substitution would produce a confirmation record
   naming a form the client never saw. Any future code path that trusts the
   handshake's `kit_id` for a link session reopens this.
-- **One-time use lives in Firestore** (`link_redemptions`), not the token: a
+- **One-time use lives in Firestore** (`link_redemptions` on the demo,
+  `link_redemptions_<channel>` elsewhere -- see `LINK_CHANNEL`), not the token: a
   signed bearer string is replayable by construction. FAILS CLOSED BY
   REFUSING (opposite polarity to the firms allowlist read, which fails closed
   by returning `[]`) -- note the two "fail closed" directions when changing

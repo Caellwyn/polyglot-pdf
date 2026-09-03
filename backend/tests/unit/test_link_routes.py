@@ -414,3 +414,29 @@ def test_a_caller_CANNOT_forge_attribution_through_the_request_body(client):
 
     assert payload["employee_id"] == "u-emp-a", "attribution came from the body"
     assert payload["firm_id"] == "firm-a"
+
+
+def test_a_link_from_ANOTHER_CHANNEL_is_a_404_at_the_route(client, monkeypatch):
+    """Channel isolation, end to end (bd polyglot-pdf-3q9qn).
+
+    Maintainer, 2026-09-01: "staging links only work for staging firms on the
+    staging site, and same with demo." The unit tests pin verify_link_token's
+    refusal; this pins that the REFUSAL REACHES THE ROUTE -- a link minted on
+    staging must not open here, and must be indistinguishable from any other
+    invalid link (the same 404 as a bad signature or an expired window, so the
+    response cannot be used to probe which channel minted a token).
+    """
+    c, _store = client
+
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    url = _mint(c).json()["url"]
+    token = url.split("#t=", 1)[1]
+
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    resp = _open(c, token)
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "This link is not valid."
+    # The channel name must NOT leak into the response -- the diagnosis is
+    # logged for the operator, never returned to the caller.
+    assert "staging" not in resp.text
