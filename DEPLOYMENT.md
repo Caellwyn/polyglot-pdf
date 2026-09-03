@@ -67,12 +67,20 @@ backend, so overriding `BACKEND_SERVICE_NAME` is load-bearing for both stages.
 ## Helper Scripts
 
 ### `backend/deploy-new.sh`
-Standalone backend deployment script. Use when you only need to update the backend service.
+Standalone backend deployment script, and the way a BRAND-NEW Cloud Run service
+gets bootstrapped by name.
 
 ```bash
 cd backend
 ./deploy-new.sh [SERVICE_NAME] [PROJECT_ID]
 ```
+
+Like `deploy-all.sh`, it verifies the new service is **publicly reachable** after
+deploying and **aborts** if the `allUsers` invoker binding was refused (bd
+`polyglot-pdf-6oi9s`). That matters most here: `--allow-unauthenticated` only
+*requests* the binding, the request can be refused while the deploy still exits
+0, and the failure appears **only** on a new service -- which is exactly what
+this script creates.
 
 ### `scripts/deploy-form-kit.sh`
 Standalone form-kits deployment script. Use when you only need to update form schemas/PDFs.

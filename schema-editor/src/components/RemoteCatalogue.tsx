@@ -10,7 +10,7 @@ import {
   type EditorRole, type KitLifecycleStatus, type RemoteKitEntry,
   type RetireCandidate,
 } from '../utils/remoteKitStore';
-import { kitName } from '../utils/kitName';
+import { kitName, kitOptionName } from '../utils/kitName';
 import {
   EMPTY_FILTER, filterKits, hiddenByFilterCount, isFilterActive,
   type CatalogueFilter,
@@ -64,7 +64,7 @@ interface RemoteCatalogueProps {
    * that never opens a kit through this catalogue (none exist today, but the
    * contract shouldn't force one) is not required to supply it.
    */
-  clearOpenKit?: () => void;
+  clearOpenKit?: (reason?: 'hidden-by-other') => void;
   /**
    * Guard run BEFORE hiding the OPEN kit, which closes the editor and so
    * discards unsaved edits and the undo stack (bd polyglot-pdf-n5fwd).
@@ -229,7 +229,12 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     // deliberate open via Show hidden) is left alone, an absent kit teaches
     // the baseline nothing, and a different kit is not evidence about this one.
     if (openIsHidden === true && prev?.id === selectedKitId && prev.visible) {
-      clearOpenKit?.();
+      // Tell App WHY, so it can say so: this close is not something the person
+      // in front of the screen did, and it may have taken unsaved edits with
+      // it (bd polyglot-pdf-0s2wf). Every other clearOpenKit caller passes no
+      // reason and stays silent, which is right -- those closes are all the
+      // user's own action, already gated by a confirm where work is at stake.
+      clearOpenKit?.('hidden-by-other');
     }
     lastSeen.current = (selectedKitId !== null && openIsHidden !== null)
       ? { id: selectedKitId, visible: !openIsHidden }
@@ -1013,7 +1018,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                 && !progress[k.id]?.schemaError;
               return (
                 <option key={k.id} value={k.id}>
-                  {k.label} -- {k.status}
+                  {kitOptionName(k)} -- {k.status}
                   {pct !== null ? `, ${pct}%` : ''}
                   {stripUnmeasured ? STAMP_MARKER_SHORT : ''}
                   {k.hasSchema ? '' : ' (no schema yet)'}
@@ -1336,6 +1341,10 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     : `${kit.label} has no schema yet`}
                 >
                   <div className="flex items-center justify-between gap-2">
+                    {/* kit-label-ok: the card TITLE. Its own subtitle renders {kit.id} two
+                        lines below, so both identities are already on screen together --
+                        the condition kitName() exists to create. Putting the id here too
+                        would print it twice on one card. */}
                     <span className="font-medium text-gray-900 truncate">{kit.label}</span>
                     <span className={`text-xs px-2 py-0.5 rounded ${STATUS_STYLE[kit.status]}`}>
                       {kit.status}

@@ -23,7 +23,9 @@ describe('paintedValueFor', () => {
     expect(paintedValueFor(f, false)).toEqual({ kind: 'none' });
   });
 
-  it('resolves radio/select option values to their labels', () => {
+  it('resolves a RADIO option value to its label', () => {
+    // Titled "radio/select" until bd polyglot-pdf-jpjcv, but it only ever built
+    // a radio -- select is a different rule and now has its own tests below.
     const f: FormField = {
       ...base,
       type: 'radio',
@@ -191,5 +193,44 @@ describe('selectedOptionRects (bd polyglot-pdf-lp5v)', () => {
       options: [{ value: 'a', label: 'Alpha', pdf_position: rect(100) }], // page 3
     };
     expect(selectedOptionRects(f, 'a')).toEqual([]);
+  });
+});
+
+describe('a select paints its VALUE, not its label (bd polyglot-pdf-jpjcv)', () => {
+  const state: FormField = {
+    id: 'mail_state', name: 'mail_state', spoken_name: 'state',
+    type: 'select', section_id: 's',
+    options: [
+      { value: 'AL', label: 'Alabama (AL)' },
+      { value: 'AA', label: 'Armed Forces Americas (AA)' },
+    ],
+  } as unknown as FormField;
+
+  it('paints the export code, which is what actually prints', () => {
+    // For a select the VALUE is what PyMuPDF writes into the combobox, so the
+    // overlay showing it means the author sees exactly what will print.
+    expect(paintedValueFor(state, 'AL')).toEqual({ kind: 'text', text: 'AL' });
+    expect(paintedValueFor(state, 'AA')).toEqual({ kind: 'text', text: 'AA' });
+  });
+
+  it('does NOT paint the speakable label, which would not fit', () => {
+    // THE REGRESSION THIS PREVENTS. jpjcv made labels speakable for the voice
+    // model, so painting the label put "Armed Forces Americas (AA)" -- ~86px at
+    // the 6px font floor -- into an i-90 state box 36px wide. The overlay clips,
+    // so the author read "Armed For" where "AA" used to sit crisp at 11px.
+    const painted = paintedValueFor(state, 'AA');
+    expect(painted).not.toEqual({ kind: 'text', text: 'Armed Forces Americas (AA)' });
+  });
+
+  it('the label really would have overflowed -- the reason, not just the rule', () => {
+    // Pins the GEOMETRY, so this stays honest if the font floor is ever tuned.
+    const W = 36, H = 18;                       // the real i-90 state rect
+    const fits = (t: string) => t.length * 0.55 * fittedFontSize(t, W, H) <= W;
+    expect(fits('AA')).toBe(true);
+    expect(fits('Armed Forces Americas (AA)')).toBe(false);
+  });
+
+  it('falls back to the raw token for an unknown value', () => {
+    expect(paintedValueFor(state, 'ZZ')).toEqual({ kind: 'text', text: 'ZZ' });
   });
 });

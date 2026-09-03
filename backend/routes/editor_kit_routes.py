@@ -1195,6 +1195,53 @@ async def list_editor_kits(
     return EditorKitListResponse(kits=kits)
 
 
+# Whitespace, ENUMERATED rather than borrowed from the language
+# (bd polyglot-pdf-th60w).
+#
+# This class and its twin in schema-editor/src/utils/kitName.ts must agree
+# character for character, and "\s" does NOT. Measured by scanning the whole
+# code space on both runtimes (not read off a spec), Python and JavaScript
+# disagree on SIX characters, in BOTH directions:
+#
+#   Python strips, JS does not:  U+001C U+001D U+001E U+001F U+0085
+#   JS strips, Python does not:  U+FEFF
+#
+# Only U+0085 and U+FEFF are reachable here -- _safe_label already rejects
+# ord < 32, which covers the four separators -- and U+FEFF is an ordinary paste
+# artifact from a spreadsheet or a UTF-8-BOM file, which is exactly how labels
+# get typed. The consequence is not a crash: the server refusal and the client
+# notice would name the SAME kit two different ways, the "message cannot be
+# matched to the card" failure this helper exists to prevent, reintroduced
+# through the mirror rather than through a missed call site.
+#
+# The class is the UNION -- every character either language would have
+# stripped -- so neither side does less than its own language would, and both
+# do the same thing. Enumerating fixes the CLASS: patching the two known
+# characters would leave every future disagreement, and every runtime's
+# Unicode-version drift, open with no way to notice from inside either
+# language.
+#
+# Escapes, never literal glyphs (CLAUDE.md scar #6).
+_KIT_NAME_SPACE = (
+    "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+_KIT_NAME_CLASS = re.escape(_KIT_NAME_SPACE)
+_KIT_NAME_STRIP = re.compile(
+    "^[" + _KIT_NAME_CLASS + "]+|[" + _KIT_NAME_CLASS + "]+$"
+)
+_KIT_NAME_FLAT = re.compile("[-_" + _KIT_NAME_CLASS + "]+")
+
+
+def _kit_name_trim(text: str) -> str:
+    """`.trim()` over the shared class, rather than Python's own."""
+    return _KIT_NAME_STRIP.sub("", text)
+
+
+def _kit_name_flatten(text: str) -> str:
+    """Separator- and case-insensitive form, for judging a restatement."""
+    return _KIT_NAME_FLAT.sub("", text).lower()
+
+
 def _kit_name(kit_id: str, meta: Optional[dict]) -> str:
     """How a refusal names a kit to the human who has to act on it.
 
@@ -1210,14 +1257,11 @@ def _kit_name(kit_id: str, meta: Optional[dict]) -> str:
     one fact twice. Mirrors kitName() in schema-editor/src/utils/kitName.ts.
     """
     label = (meta or {}).get("label")
-    if not isinstance(label, str) or not label.strip():
+    if not isinstance(label, str) or not _kit_name_trim(label):
         return f'"{kit_id}"'
-    label = label.strip()
+    label = _kit_name_trim(label)
 
-    def flat(text: str) -> str:
-        return re.sub(r"[-_\s]+", "", text).lower()
-
-    if flat(label) == flat(kit_id):
+    if _kit_name_flatten(label) == _kit_name_flatten(kit_id):
         return f'"{kit_id}"'
     return f'"{label}" ({kit_id})'
 
@@ -3540,7 +3584,16 @@ async def delete_editor_kit(
     try:
         removed = await store.delete_kit(kit_id)
     except FormKitNotFound as exc:
-        raise HTTPException(status_code=404, detail=f"Kit not found: {kit_id}") from exc
+        # A RACE: the kit was present at the guards above and gone at the write,
+        # so someone else deleted it in between. `label` was computed from the
+        # metadata read at the top and describes what the kit WAS a moment ago
+        # -- which is exactly what this message should say, because the author
+        # is looking at a card that still shows that name. Reading fresh
+        # metadata here is impossible (there is none) and unnecessary
+        # (bd polyglot-pdf-ytd3m).
+        raise HTTPException(
+            status_code=404, detail=f"Kit not found: {label}"
+        ) from exc
     except FormKitStoreError as exc:
         raise HTTPException(
             status_code=502, detail=f"Unable to delete the kit: {exc}"

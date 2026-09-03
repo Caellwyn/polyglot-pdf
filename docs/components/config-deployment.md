@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-pidtg: the backend deploy now verifies the service is publicly reachable and aborts if the invoker binding was refused.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-02 (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -185,6 +185,18 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
     outstanding link on each restart, stranding a client mid-intake).
     **Rotating it invalidates every unopened link**, so rotate only with that
     understood.
+  - **`LINK_CHANNEL`** — which channel this backend is (`demo` / `staging`).
+    Minted into every token as the `aud` claim and checked on open, so a
+    staging-minted link is refused on the demo and vice versa (bd
+    `polyglot-pdf-3q9qn`); it also selects the redemption collection
+    (`link_redemptions` for the demo, `link_redemptions_<channel>` elsewhere),
+    so the two channels cannot burn each other's links. Defaults to `demo` —
+    the safe side, since an unconfigured deploy then behaves exactly as
+    before — but both deploy scripts set it explicitly. **Renaming a channel
+    orphans its redemption ledger and invalidates its outstanding links.**
+    Note the BILLING counter is firm-scoped, not channel-scoped: staging must
+    also use its own mock firm (`scripts/bootstrap_firm.py`) or it bills the
+    real one.
   - **`LINK_BASE_URL`** — origin the minted URL points at (e.g.
     `https://forms.example.com`; the route appends `/f#t=<token>`).
     Configured, never derived from the Host header -- trusting the header
@@ -291,7 +303,12 @@ staging isolates broken CODE, not bad DATA -- see
 All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
 a brand-new Cloud Run service by name -- not part of the regular update flow the
-two channel scripts use.
+two channel scripts use. It carries a **byte-identical copy** of
+`deploy-all.sh`'s `verify_service_publicly_reachable` reachability gate (bd
+`polyglot-pdf-6oi9s`); the two copies are pinned identical by
+`tests/test_deploy_reachability_gate.py`, which also asserts the COMPLETE set of
+scripts passing `--allow-unauthenticated` each carry the gate, so a third such
+script cannot ship ungated.
 
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with

@@ -707,6 +707,62 @@ describe('compact selector strip (bd tynm)', () => {
     expect(labels.some((t) => t.includes('Fresh Form') && t.includes('no schema yet'))).toBe(true);
   });
 
+  it('distinguishes two kits that share a label', async () => {
+    // bd polyglot-pdf-5ivqx, hosted twin. Nothing enforces label uniqueness,
+    // so two kits can both read "W-7" here. value={k.id} settles what the
+    // select SUBMITS, but the human chooses by what they READ -- and picking
+    // the wrong form is how you edit the wrong form.
+    vi.mocked(listRemoteKits).mockResolvedValue([
+      { id: 'form-2', label: 'W-7', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      { id: 'form-9', label: 'W-7', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    ] as never);
+
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const shown = Array.from(select.options).map((o) => o.text)
+      .filter((t) => t.includes(' -- '));   // skip the placeholder
+    // Both still carry the label a human gave them...
+    expect(shown.filter((t) => t.includes('W-7')).length).toBe(2);
+    // ...and the id is what tells them apart.
+    expect(shown.some((t) => t.includes('form-2'))).toBe(true);
+    expect(shown.some((t) => t.includes('form-9'))).toBe(true);
+    // The property that matters, stated directly: no two options read alike.
+    expect(new Set(shown).size).toBe(shown.length);
+  });
+
+  it('appends the id only when the label adds something', async () => {
+    // BOTH kinds in ONE render. A restating label alone proves nothing here:
+    // kitOptionName returns it unchanged, byte-identical to the bare
+    // {k.label} this replaced, so such a test cannot tell the fix from the
+    // bug. The non-restating kit is what makes this about the WIRING.
+    vi.mocked(listRemoteKits).mockResolvedValue([
+      // Label restates the id -- and note the CASE differs, which is the
+      // regression this caught: returning kit.id would downgrade the human's
+      // "I-90" to the lowercase folder name.
+      { id: 'i-90', label: 'I-90', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+      // A label a human chose -- both identities are real, both are shown.
+      { id: 'form-9', label: 'W-7', status: 'draft', hasSchema: true,
+        hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf' },
+    ] as never);
+
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const text = Array.from(select.options).map((o) => o.text).join('|');
+    expect(text).toContain('I-90');       // the human's spelling, not `i-90`
+    expect(text).not.toContain('(i-90)'); // and no parenthesised repeat
+    // ...and the half that reverting the JSX to {k.label} breaks.
+    expect(text).toContain('W-7 (form-9)');
+  });
+
   it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {
     const onOpen = vi.fn();
     render(<RemoteCatalogue onOpenKit={onOpen} selectedKitId={null} role="author" />);

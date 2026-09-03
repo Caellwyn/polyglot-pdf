@@ -7,6 +7,8 @@ exists to provide.
 
 ASCII only.
 """
+import base64
+import json
 import time
 
 import pytest
@@ -16,6 +18,7 @@ from backend.services.link_tokens import (
     DEFAULT_OPEN_WINDOW_S,
     LinkTokenError,
     TOKEN_VERSION,
+    _sign,
     completion_deadline,
     mint_link_token,
     verify_link_token,
@@ -57,8 +60,14 @@ def test_the_token_carries_NO_client_identifier(monkeypatch):
     payload = verify_link_token(token)
 
     assert set(payload) == {
-        "v", "firm_id", "kit_id", "employee_id", "jti", "iat", "exp", "cw",
+        "v", "aud", "firm_id", "kit_id", "employee_id", "jti", "iat", "exp",
+        "cw",
     }, "the token's field set changed -- see the split-key invariant above"
+
+    # `aud` was added deliberately (bd polyglot-pdf-3q9qn) and this tripwire
+    # fired, which is the design working. It names the CHANNEL that may open
+    # the link ("demo" / "staging") -- an environment, never a person -- so it
+    # carries no client identity and the split-key invariant is untouched.
 
     # employee_id names OUR CUSTOMER'S STAFF, not the form's subject. That is
     # the maintainer's telemetry requirement and does not touch the invariant.
@@ -282,3 +291,89 @@ def test_a_freshly_minted_token_verifies_against_real_time():
 
     assert payload["jti"] == jti
     assert payload["iat"] <= int(time.time()) + 1
+
+
+# --- channel isolation (bd polyglot-pdf-3q9qn) ------------------------------
+#
+# Maintainer, 2026-09-01: "staging links only work for staging firms on the
+# staging site, and same with demo." Before this, the payload carried no
+# channel claim, so any validly-signed token opened on EITHER backend: a
+# staging test-drive could burn a real client's link and bill a real firm.
+
+
+def test_a_STAGING_link_is_refused_on_the_demo(monkeypatch):
+    """The isolation, in the direction that costs a client their link."""
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    token, _ = _mint()
+
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    with pytest.raises(LinkTokenError) as exc:
+        verify_link_token(token)
+
+    # The REASON matters as much as the refusal: a cross-channel link is not a
+    # forged one, and an operator debugging it must not be told "bad
+    # signature". A separate secret per channel would give exactly that.
+    assert "staging" in str(exc.value) and "demo" in str(exc.value)
+
+
+def test_a_DEMO_link_is_refused_on_staging(monkeypatch):
+    """Both directions -- asserting only one leaves half the hole open."""
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    token, _ = _mint()
+
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    with pytest.raises(LinkTokenError):
+        verify_link_token(token)
+
+
+def test_a_link_opens_on_its_OWN_channel(monkeypatch):
+    """The guard must not refuse the case it exists to permit."""
+    monkeypatch.setenv("LINK_CHANNEL", "staging")
+    token, jti = _mint()
+
+    payload = verify_link_token(token)
+    assert payload["jti"] == jti
+    assert payload["aud"] == "staging"
+
+
+def test_an_UNSET_channel_defaults_to_demo_and_still_works(monkeypatch):
+    """The default is the SAFE side.
+
+    An unconfigured deploy must keep minting and opening exactly the links it
+    does today. A default of "" or a hard failure would take the demo down on
+    the first deploy after this shipped, to fix a problem the demo does not
+    have.
+    """
+    monkeypatch.delenv("LINK_CHANNEL", raising=False)
+    token, _ = _mint()
+    assert verify_link_token(token)["aud"] == "demo"
+
+    # ...and that default really is the demo's declared name, so an
+    # unconfigured process and the deployed demo agree.
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    assert verify_link_token(token)["aud"] == "demo"
+
+
+def test_a_PRE_CLAIM_token_is_refused_rather_than_silently_accepted(monkeypatch):
+    """A token minted before this shipped carries no `aud`.
+
+    Treating a missing claim as "this channel" would silently re-open the hole
+    for any such token. There are none in flight today, so refusing costs
+    nothing and the honest error beats a silent pass.
+    """
+    monkeypatch.setenv("LINK_CHANNEL", "demo")
+    token, _ = _mint()
+
+    payload_b64, _sig = token.split(".", 1)
+    payload = json.loads(base64.urlsafe_b64decode(
+        payload_b64 + "=" * (-len(payload_b64) % 4)))
+    del payload["aud"]
+
+    stripped = base64.urlsafe_b64encode(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).decode().rstrip("=")
+    # Re-sign it, so this tests the CLAIM check rather than the signature.
+    forged = stripped + "." + _sign(stripped)
+
+    with pytest.raises(LinkTokenError):
+        verify_link_token(forged)
