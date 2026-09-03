@@ -235,10 +235,24 @@ def test_allow_unauthenticated_set_is_complete():
         if "node_modules" in rel or "/.claude/worktrees/" in "/" + rel:
             continue
         try:
-            if "--allow-unauthenticated" in path.read_text(encoding="utf-8"):
-                found.add(rel)
+            text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        # Only a REAL invocation counts, never a mention. The gate's own comment
+        # block and its error text both name the flag, so the moment
+        # deploy-editor.sh gained a copy of the gate (bd polyglot-pdf-dldwb) a
+        # whole-file substring search declared it a public-deploy script -- a
+        # false positive, since it deploys only Hosting. Evidence region scoped
+        # to the claim: the flag must appear on a line that is neither a comment
+        # nor a printed message.
+        if any(
+            "--allow-unauthenticated" in ln
+            and not ln.strip().startswith("#")
+            and "_gate_error" not in ln
+            and "echo" not in ln
+            for ln in text.splitlines()
+        ):
+            found.add(rel)
     assert found == set(GATED_DEPLOY_SCRIPTS), (
         "the set of scripts deploying a PUBLIC Cloud Run service changed.\n"
         f"  unlisted (gate them, then add them): "
@@ -704,3 +718,102 @@ def test_the_backend_stage_call_takes_the_fatal_default():
             f"exactly 3 (service, region, project) and take the FATAL default. "
             f"A 4th argument silently downgrades the abort. Found: {call!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# The OTHER set: scripts that bake a resolved backend URL into a frontend build.
+# ---------------------------------------------------------------------------
+#
+# GATED_DEPLOY_SCRIPTS above is derived from --allow-unauthenticated, i.e. "who
+# DEPLOYS a public Cloud Run service". That is the right set for the abort-on-
+# create gate, and it correctly excludes deploy-editor.sh, which deploys only
+# Hosting.
+#
+# But it is the WRONG set for this failure: baking an unreachable backend's URL
+# into a frontend. That set is "who calls `gcloud run services describe` and
+# exports the result as VITE_*", and it has two members. bd polyglot-pdf-816te
+# fixed one; deploy-editor.sh stayed exposed for a further PR precisely because
+# the guard keyed on the other set (bd polyglot-pdf-dldwb).
+#
+# Two sets, two lists. Deriving both mechanically is what stops a third script
+# slipping between them.
+URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh"]
+
+
+@pytest.mark.parametrize("rel", URL_BAKING_SCRIPTS)
+def test_url_baking_script_consults_the_reachability_gate(rel):
+    """Resolving a URL proves existence, never reachability.
+
+    `gcloud run services describe --format 'value(status.url)'` answers for a
+    service nobody may invoke, so a build can be pinned to a backend that 403s
+    every request while the deploy reports success. In the editor's case every
+    API call -- kit list, draft save, publish, the editing lock -- goes through
+    that URL, and the 403s present as an access-code failure, sending the
+    operator to debug auth.
+    """
+    body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    assert "services describe" in body, (
+        f"{rel} no longer resolves a backend URL; remove it from "
+        f"URL_BAKING_SCRIPTS."
+    )
+    # A CALL, not merely the definition. Carrying the function proves nothing --
+    # the first version of this assertion matched the definition itself, so
+    # deleting the editor's call left all 30 tests green. Join continuations
+    # first (the calls span two lines) and require a line that INVOKES it: not
+    # the `name() {` definition, not a comment, not a printed message.
+    logical = body.replace("\\" + "\n", " ")
+    calls = [
+        ln.strip()
+        for ln in logical.splitlines()
+        if "verify_service_publicly_reachable" in ln
+        and not ln.strip().startswith("#")
+        and "()" not in ln
+        and "_gate_" not in ln
+    ]
+    assert calls, (
+        f"{rel} bakes a resolved backend URL into a frontend build without "
+        f"CALLING the reachability gate, so it can ship pinned to a backend "
+        f"that 403s every request. (Defining the function is not enough.)"
+    )
+
+
+def test_url_baking_set_is_complete():
+    """Pins the SET, so a third such script cannot ship unchecked.
+
+    Membership is derived, not typed: a script belongs if it asks Cloud Run for
+    a service URL AND exports a VITE_* variable (i.e. bakes it into a frontend
+    build). backend/deploy-new.sh resolves a URL but exports no VITE_*, so it is
+    correctly absent -- it deploys a service, it does not build a frontend.
+    """
+    found = set()
+    for path in REPO_ROOT.rglob("*.sh"):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if "node_modules" in rel or "/.claude/worktrees/" in "/" + rel:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if "services describe" in text and "export VITE_" in text:
+            found.add(rel)
+    assert found == set(URL_BAKING_SCRIPTS), (
+        "the set of scripts baking a resolved backend URL into a frontend build "
+        "changed.\n"
+        f"  unlisted (gate them, then add them): "
+        f"{sorted(found - set(URL_BAKING_SCRIPTS))}\n"
+        f"  listed but no longer baking: "
+        f"{sorted(set(URL_BAKING_SCRIPTS) - found)}"
+    )
+
+
+def test_gate_copies_are_identical_across_all_three_scripts():
+    """deploy-editor.sh now carries the gate too -- all copies must match.
+
+    test_gate_copies_are_identical pins deploy-all.sh against deploy-new.sh;
+    this extends that to the third copy, so the editor's gate cannot drift into
+    a subtly weaker check than the one the other two run.
+    """
+    editor = _gate_function(REPO_ROOT / "deploy-editor.sh")
+    assert editor == _gate_function(DEPLOY_ALL) == _gate_function(DEPLOY_NEW), (
+        "the reachability gate has drifted between its three copies"
+    )
