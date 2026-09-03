@@ -773,6 +773,61 @@ describe('FormCatalogue -- compact selector strip (bd tynm)', () => {
     expect(labels.some((t) => t.includes('Raw') && t.includes('no schema yet'))).toBe(true);
   });
 
+  it('the dropdown distinguishes two kits that share a label', async () => {
+    // bd polyglot-pdf-5ivqx. Nothing enforces label uniqueness, so two kits
+    // can both read "W-7" in the strip. The <option>'s value={k.id} settles
+    // what the select SUBMITS, but the human chooses by what they READ -- and
+    // picking the wrong form is how you edit the wrong form. Before the fix
+    // both options rendered the identical text.
+    const root = mockRoot([
+      mockKit('form-2', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+      mockKit('form-9', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByLabelText('Select a form')).toBeTruthy());
+
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const shown = Array.from(select.options).map((o) => o.text);
+    // Both are still named by the label a human gave them...
+    expect(shown.filter((t) => t.includes('W-7')).length).toBe(2);
+    // ...and the id is what tells them apart.
+    expect(shown.some((t) => t.includes('form-2'))).toBe(true);
+    expect(shown.some((t) => t.includes('form-9'))).toBe(true);
+    // The property that matters, stated directly: no two options read alike.
+    expect(new Set(shown).size).toBe(shown.length);
+  });
+
+  it('appends the id only when the label adds something', async () => {
+    // BOTH kinds in ONE render, because a restating label alone proves
+    // nothing: kitOptionName returns it unchanged, byte-identical to the bare
+    // {k.label} this replaced. An earlier draft asserted only that case and
+    // could not tell the fix from the bug -- it re-covered kitOptionName's
+    // unit behaviour, which kitName.test.ts already pins. The non-restating
+    // kit is what makes this test about the WIRING.
+    const root = mockRoot([
+      // No label in metadata -> the catalogue synthesises "Form 2" from the
+      // id, so appending "(form-2)" would print one fact twice.
+      mockKit('form-2', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ status: 'draft' }) }),
+      // A label a human chose -> both identities are real and both are shown.
+      mockKit('form-9', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByLabelText('Select a form')).toBeTruthy());
+
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const text = Array.from(select.options).map((o) => o.text).join('|');
+    expect(text).toContain('Form 2');
+    expect(text).not.toContain('(form-2)');   // no parenthesised repeat
+    // ...and the half that reverting the JSX to {k.label} breaks.
+    expect(text).toContain('W-7 (form-9)');
+  });
+
   it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {
     const root = mockRoot([
       mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),

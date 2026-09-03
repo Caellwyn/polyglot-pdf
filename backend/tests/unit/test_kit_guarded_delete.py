@@ -343,6 +343,46 @@ def test_a_missing_kit_404s_rather_than_reporting_a_guard_result(client, monkeyp
     assert resp.status_code == 404, resp.text
 
 
+def test_a_delete_RACE_404s_by_the_kits_NAME_not_its_folder(client, monkeypatch):
+    """The kit passed every guard and was gone by the write -- someone else
+    deleted it in between (bd polyglot-pdf-ytd3m).
+
+    The author is looking at a card that still shows the kit's LABEL, so a
+    refusal naming only the folder id cannot be matched to anything on screen
+    -- the exact complaint bd kztlr fixed everywhere else in this route. The
+    label computed at the top of the request describes what the kit WAS a
+    moment ago, which is what this message should say.
+
+    NOTE THE FIXTURE. _make_kit writes label == kit_id, and _kit_name treats
+    that as a restatement and returns the bare id -- so a test built on it
+    would produce byte-identical output fixed or broken. The label here differs
+    from the folder deliberately; six tests passed on that coincidence in bd
+    n5fwd.
+    """
+    c, store, root = client
+    kit = _make_kit(root, "form-2")
+    (kit / "metadata.json").write_text(
+        json.dumps({"status": "draft", "label": "W-7"}), encoding="utf-8"
+    )
+    _no_records(monkeypatch)
+
+    # Vanishes between the guards and the write, which is what a race IS.
+    async def _gone(_kit_id):
+        from backend.services.form_kits import FormKitNotFound
+        raise FormKitNotFound("deleted by someone else")
+
+    monkeypatch.setattr(store, "delete_kit", _gone)
+
+    resp = c.delete("/api/editor/kits/form-2", headers=AUTH)
+
+    assert resp.status_code == 404, resp.text
+    detail = resp.json()["detail"]
+    # BOTH identities: the label matches the card, the id is what the delete
+    # dialog made them type. Naming only one leaves the other unresolvable.
+    assert "W-7" in detail
+    assert "form-2" in detail
+
+
 def test_the_guard_runs_even_when_the_kit_is_a_draft(client, monkeypatch):
     """Records are keyed on kit_id, not on status: a kit reverted to draft can
     still have confirmations behind an earlier published revision. Gating the

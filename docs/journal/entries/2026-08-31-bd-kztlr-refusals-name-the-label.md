@@ -72,13 +72,17 @@ reaching a user-facing sink. That found 16 backend refusals and 13 frontend
 sites -- including two nobody would have listed by hand, which name a SECOND,
 DIFFERENT kit (`superseded_kit`) that may not be on screen at all.
 
-Two backend refusals keep a bare id, and both are correct:
+One backend refusal keeps a bare id, and it is correct:
 
 - `_load_meta_or_404` "Unknown kit" -- the kit is not in the store, so there is
   no metadata to read a label from.
-- `delete_editor_kit` "Kit not found" -- a delete race. The kit was there at the
-  guard and gone at the write; naming it from the earlier metadata read would
-  assert a label for something that no longer exists.
+
+`delete_editor_kit`'s "Kit not found" race was allowlisted here too, on the
+reasoning that naming it from the earlier metadata read would assert a label for
+something that no longer exists. bd `polyglot-pdf-ytd3m` overturned that: the
+label describes what the kit WAS a moment ago, which is exactly what a race
+message should say, and the author is looking at a card that still shows it. The
+allowlist now holds one entry.
 
 ## Pinning the set, not the instances
 
