@@ -273,3 +273,47 @@ def test_resume_inverse_is_pure_and_falls_back_verbatim():
     assert resolve_select_resume_value(opts, "AK") == "AK"      # string option
     assert resolve_select_resume_value(opts, "ZZ") == "ZZ"      # unclaimed
     assert resolve_select_resume_value(None, "AL") == "AL"      # no options
+
+
+def test_resume_inverse_refuses_to_guess_between_options_sharing_a_code():
+    """Cross-surface round 2 (bd polyglot-pdf-7dvpp): no gate enforces
+    pdf_on_value uniqueness, and the migration copies /Opt codes verbatim, so
+    two options CAN claim one code. Picking the first would resume the client
+    with a choice they never made -- the radio arm drops on that ambiguity,
+    and so must this."""
+    from backend.routes.pdf_fill_routes import resolve_select_resume_value
+    opts = [{"value": "alabama", "pdf_on_value": "AL"},
+            {"value": "alabama_northern", "pdf_on_value": "AL"}]
+    assert resolve_select_resume_value(opts, "AL") is None
+    # A unique claimant still resolves; the ambiguity is per-code.
+    opts.append({"value": "alaska", "pdf_on_value": "AK"})
+    assert resolve_select_resume_value(opts, "AK") == "alaska"
+
+
+def test_resume_DROPS_a_select_whose_code_is_claimed_twice_and_warns(kit_root, monkeypatch):
+    """End to end: the kit publishes with the collision (nothing stops it
+    today), the client picked the SECOND option, the PDF holds 'AL' -- resume
+    must not hand back the first option marked confirmed. It drops the field
+    and logs resume_conflicting_options, exactly as a several-ticked radio."""
+    from backend.routes import pdf_fill_routes as mod
+    calls: list = []
+
+    class _Rec:
+        def warning(self, event, **kw):
+            calls.append((event, kw))
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+
+    colliding = [{"value": "alabama", "label": "Alabama", "pdf_on_value": "AL"},
+                 {"value": "alabama_northern", "label": "Alabama (Northern)",
+                  "pdf_on_value": "AL"},
+                 {"value": "alaska", "label": "Alaska", "pdf_on_value": "AK"}]
+    schema = _schema(colliding)
+    _publish_kit(kit_root, schema)
+    pdf = _fill(schema, "alabama_northern")
+    assert _rendered(pdf) == "AL"                       # floor: the PDF holds the code
+    monkeypatch.setattr(mod, "_log", _Rec())
+    resumed = _resume(pdf)
+    assert "state" not in resumed["field_values"], resumed["field_values"]
+    events = [e for e, _ in calls]
+    assert "resume_conflicting_options" in events

@@ -119,7 +119,7 @@ def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id
 	return value
 
 
-def resolve_select_resume_value(options, pdf_value: str) -> str:
+def resolve_select_resume_value(options, pdf_value: str) -> Optional[str]:
 	"""The INVERSE of resolve_select_fill_value, for /resume-form.
 
 	The PDF holds the export code ('AL'); the client stores option.value
@@ -128,12 +128,23 @@ def resolve_select_resume_value(options, pdf_value: str) -> str:
 	surface review of g2fpr.1 found the write side transformed and the read
 	side verbatim. Map the code back through the option that carries it as
 	pdf_on_value; a legacy option (code IS the value) needs no mapping.
+
+	Returns None when the code is AMBIGUOUS -- two or more options claim it as
+	pdf_on_value -- so the caller drops the field rather than resume with a
+	choice the client never made. Same policy as the radio arm below for
+	several-ticked options (cross-surface round 2): no gate enforces
+	pdf_on_value uniqueness yet (bd polyglot-pdf-7dvpp), so the inverse must
+	not pick a winner.
 	"""
-	for o in options or []:
-		if isinstance(o, dict) and o.get("pdf_on_value") == pdf_value:
-			v = o.get("value")
-			if isinstance(v, str) and v != "":
-				return v
+	claimants = [
+		o.get("value") for o in options or []
+		if isinstance(o, dict) and o.get("pdf_on_value") == pdf_value
+		and isinstance(o.get("value"), str) and o.get("value") != ""
+	]
+	if len(claimants) > 1:
+		return None
+	if claimants:
+		return claimants[0]
 	return pdf_value
 
 
@@ -1149,10 +1160,15 @@ async def resume_form(
 						# preview and the form UI disagree about it.
 						values[mapped["field_id"]] = True
 					elif mapped.get("select_options") is not None:
-						# Invert the fill: export code -> option.value.
-						values[mapped["field_id"]] = resolve_select_resume_value(
+						# Invert the fill: export code -> option.value. An ambiguous
+						# code (None) is dropped like a several-ticked radio below.
+						resolved = resolve_select_resume_value(
 							mapped["select_options"], value
 						)
+						if resolved is None:
+							conflicted.add(mapped["field_id"])
+						else:
+							values[mapped["field_id"]] = resolved
 					else:
 						values[mapped["field_id"]] = value
 					continue
