@@ -908,3 +908,69 @@ def test_gate_copies_are_identical_across_all_three_scripts():
     assert editor == _gate_function(DEPLOY_ALL) == _gate_function(DEPLOY_NEW), (
         "the reachability gate has drifted between its three copies"
     )
+
+
+@pytest.mark.parametrize("rel", GATED_DEPLOY_SCRIPTS)
+def test_service_creating_script_takes_the_fatal_default(rel, tmp_path):
+    """Every script that CREATES a service must let the gate abort.
+
+    test_the_backend_stage_call_takes_the_fatal_default pins deploy-all.sh's
+    backend call; backend/deploy-new.sh had NO such pin, so appending `warn`
+    there downgraded its abort with all 30 tests green (found by the round-2
+    cross-surface review).
+
+    That is the worst place to lose it: deploy-new.sh's entire job is standing up
+    a NEW service, and the refused-binding bug fires ONLY on new services. It is
+    the highest-value call site of the three and was the only unguarded one.
+
+    Parametrized over GATED_DEPLOY_SCRIPTS -- the scripts that pass
+    --allow-unauthenticated, i.e. exactly those that create a public service --
+    so a fourth such script inherits the pin automatically.
+    """
+    body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    logical = body.replace("\\" + "\n", " ")
+    calls = [
+        ln.strip()
+        for ln in logical.splitlines()
+        if "verify_service_publicly_reachable" in ln
+        and not ln.strip().startswith("#")
+        and "()" not in ln
+        and "_gate_" not in ln
+    ]
+    assert calls, f"{rel} never calls the gate"
+
+    # A service-CREATING script must have at least one fatal call: the one
+    # guarding the service it just made. Execute each, as a text check cannot
+    # tell a 3-arg call from a 4-arg one whose continuation is corrupted.
+    fatal_seen = False
+    for call in calls:
+        driver = tmp_path / f"sc_{abs(hash(call))}.sh"
+        driver.write_text(
+            "BACKEND_SERVICE_NAME=SVC; SERVICE_NAME=SVC; REGION=REG\n"
+            "PROJECT=PRJ; POLYGLOT_PROJECT_NAME=PRJ\n"
+            "verify_service_publicly_reachable() { echo \"SEVERITY=$4\"; }\n"
+            + call
+            + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        proc = subprocess.run(
+            [BASH, driver.name],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(tmp_path),
+            timeout=60,
+        )
+        assert proc.returncode == 0, (
+            f"{rel}: a gate call does not parse/run: {proc.stderr!r}"
+        )
+        if "SEVERITY=" in proc.stdout and "SEVERITY=warn" not in proc.stdout:
+            fatal_seen = True
+
+    assert fatal_seen, (
+        f"{rel} creates a public Cloud Run service but every one of its gate "
+        f"calls passes `warn`, so an unreachable service it just CREATED would "
+        f"only warn. At least one call must take the fatal default. Calls: "
+        f"{calls!r}"
+    )

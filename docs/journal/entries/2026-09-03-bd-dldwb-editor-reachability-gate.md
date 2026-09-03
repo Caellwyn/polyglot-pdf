@@ -147,9 +147,31 @@ Second time in two PRs that a change falsified a tier-2 doc in a file the diff
 did not touch. The `Tracks:` line is the signal for this and I did not consult it
 either time.
 
+## A doc sentence that was false, and the hole behind it
+
+Round two caught that my new sentence "the counts are pinned per script" was
+false for `backend/deploy-new.sh`: appending `warn` to its call downgraded the
+abort with every test green.
+
+The tempting fix was to soften the sentence. The right one was to make it true --
+because that script is the WORST place to lose the abort. Its entire job is
+standing up a NEW service, and the refused-binding bug fires only on new
+services. It was the highest-value of the three call sites and the only
+unguarded one.
+
+`test_service_creating_script_takes_the_fatal_default` now covers every script in
+`GATED_DEPLOY_SCRIPTS` -- i.e. exactly those that create a public service -- so a
+fourth inherits the pin automatically. Mutation-verified against the mutation
+that was green before.
+
+Worth noting the reviewer classed this as pre-existing (it reproduces on `dev`)
+and filed it rather than blocking. That was the correct call on its own terms;
+fixing it here was still right, because leaving it open would have left this
+PR's own doc sentence lying.
+
 ## Testing
 
-Full suite: 4464 passed, 126 skipped, exit 0. Three mutations, each confirmed applied: a new ungated
+Full suite: 4466 passed, 126 skipped, exit 0. Three mutations, each confirmed applied: a new ungated
 URL-baking script (caught by the new set test), a new real public-deploy script
 (caught by the re-scoped old one, proving the narrowing did not weaken it), and
 removing the editor's gate call (caught only after the presence-vs-call fix).
