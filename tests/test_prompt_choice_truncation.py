@@ -109,10 +109,27 @@ def test_a_field_with_no_choices_renders_no_choices_clause(render):
 # code, unlike radio ... which uses pdf_on_value" and the co-occurrence scan
 # passed it. So the wrong claim is matched DIRECTLY, whatever else the sentence
 # says.
+# Two guards fresh-eyes (g2fpr.2 round 2) showed were missing:
+#   - a WORD boundary before "value": `pdf_on_value` ends in "_value", so
+#     "pdf_on_value is the export code" -- a CORRECT sentence -- matched at its
+#     tail. `(?<![a-z_])` refuses a match that starts inside an identifier;
+#   - NEGATION: "select is NOT like radio, where value must be the export
+#     code" states the right thing by contrast. A match preceded within a
+#     short window by not / never / unlike / neither is a contrast, not a claim.
 _VALUE_IS_CODE = re.compile(
-    r"(?:option\.?\s*)?value\s+(?:is|=|must be|should be)\s+(?:the\s+)?(?:pdf'?s?\s+own\s+)?"
-    r"(?:pdf\s+)?export\s+code"
+    r"(?<![a-z_])(?:option\.?\s*)?value\s+(?:is|=|must be|should be)\s+(?:the\s+)?"
+    r"(?:pdf'?s?\s+own\s+)?(?:pdf\s+)?export\s+code"
 )
+_NEGATED = re.compile(r"\b(?:not|never|unlike|neither|no longer)\b")
+
+
+def _states_value_is_code(low: str) -> bool:
+    """True when the sentence CLAIMS a select's value is its export code --
+    not when it names that claim to contrast against it."""
+    for m in _VALUE_IS_CODE.finditer(low):
+        if not _NEGATED.search(low[max(0, m.start() - 40):m.start()]):
+            return True
+    return False
 
 
 def select_contract_offenders(text: str) -> list:
@@ -124,7 +141,7 @@ def select_contract_offenders(text: str) -> list:
         low = " ".join(chunk.lower().split())
         if not re.search(r"\bselect\b|\bdropdown\b", low):
             continue
-        if _VALUE_IS_CODE.search(low):
+        if _states_value_is_code(low):
             offenders.append(low[:160])          # the claim itself, verbatim
             continue
         if "export code" not in low:
@@ -170,9 +187,18 @@ def test_the_scan_catches_a_wrong_passage_that_also_mentions_pdf_on_value(passag
     assert select_contract_offenders(passage), passage
 
 
-def test_the_scan_accepts_the_right_claim():
-    ok = ("For a SELECT each option's value is a SLUG minted from its display "
-          "name and its PDF export code is stored in option.pdf_on_value.")
+@pytest.mark.parametrize("ok", [
+    "For a SELECT each option's value is a SLUG minted from its display name "
+    "and its PDF export code is stored in option.pdf_on_value.",
+    # Fresh-eyes' two FALSE-POSITIVE sentences: both state the right thing.
+    "pdf_on_value is the export code for a select option.",
+    "a select is NOT like radio, where value must be the export code -- here "
+    "value is a slug and pdf_on_value carries the code.",
+])
+def test_the_scan_accepts_the_right_claim(ok):
+    """The other side of the floor: a correct sentence must not be flagged --
+    including one where "value" is the tail of pdf_on_value, and one that
+    names the wrong claim only to contrast against it."""
     assert select_contract_offenders(ok) == []
 
 

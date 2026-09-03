@@ -829,8 +829,15 @@ const RegenerateGuidanceButton: React.FC<{
  * polyglot-pdf-g2fpr). undefined for a v2 option or any non-select. */
 function legacySelectCode(field: FormField, option: any): string | undefined {
   if (field.type !== 'select') return undefined;
-  const on = option?.pdf_on_value;
-  if (typeof on === 'string' && on !== '') return undefined;
+  // Legacy means the key is ABSENT (or not a string), never that it is
+  // EMPTY: an author who has just cleared a v2 option's export-code box
+  // leaves pdf_on_value === '' with a SLUG in value. Treating that as legacy
+  // fabricated a code from the slug on the very next touch ('wyoming' into
+  // the combobox -- fresh-eyes round 2). A cleared code is a v2 option with
+  // no code, which lint reports as select-on-value-missing; it is not a
+  // legacy option whose code lives in value.
+  if (option && typeof option === 'object' && 'pdf_on_value' in option
+      && typeof option.pdf_on_value === 'string') return undefined;
   const v = option?.value;
   return typeof v === 'string' && v !== '' ? v : undefined;
 }

@@ -84,6 +84,22 @@ prior option with a slug value and no `pdf_on_value` cannot be joined to a
 dump code; its label is lost to the table. Pinned as a decision rather than
 left as a surprise.
 
+**"Legacy" means the key is ABSENT, not empty -- and the fix for the fix had
+that wrong.** `legacySelectCode` treated `pdf_on_value === ''` as "no code",
+so after an author CLEARED a v2 option's code, the next touch misclassified
+it as legacy and stamped the slug in as the code: `'wyoming'` into the
+combobox, the c5r8 defect through a different door -- and worse, it LOOKED
+converted. A cleared code is a v2 option with no code (lint's
+`select-on-value-missing`); a legacy option has no key at all. Pinned by a
+two-step test: clear, then edit the label; the code stays empty.
+
+**A regex that names "value" must refuse to match inside `pdf_on_value`.** The
+wrong-claim matcher fired on "pdf_on_value is the export code" -- a correct
+sentence -- at the identifier's tail, and on "NOT like radio, where value must
+be the export code" -- a contrast. An identifier boundary and a short negation
+window fix both; the reviewer's two sentences are now acceptance fixtures, and
+each guard has its own reddening mutation.
+
 **A non-parsing mutant proves nothing -- again.** MUT C's first anchor matched
 twice, the fallback mangled the file, and vitest reported "1 failed, 15
 passed" -- the FILE failed to compile and the number looked like a result.

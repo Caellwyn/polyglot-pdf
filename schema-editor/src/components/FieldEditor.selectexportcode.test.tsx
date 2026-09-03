@@ -185,6 +185,10 @@ describe('select option values are minted slugs; the export code is pdf_on_value
   });
 
   it('the ZERO-OPTIONS "Add Option" also mints for a select', () => {
+    // Honest limit: from zero options the select minter and the generic one
+    // both mint 'option', so this test cannot tell the two code paths apart.
+    // The site is kept on the select minter so it cannot drift from its
+    // sibling; the parity is verified by reading, not by this assertion.
     render(<Harness initial={makeSchema([selectField([])])} />);
     fireEvent.click(screen.getByText('+ Add Option'));
     expect(probe()).toEqual([['', 'option', null]]);
@@ -266,5 +270,34 @@ describe('a LEGACY select option (code in value, no pdf_on_value) is CONVERTED O
     const [, value, code] = probe()[1];
     expect(value).toMatch(/^[a-z0-9][a-z0-9_-]*$/);
     expect(code).toBe('AL');
+  });
+});
+
+describe('a CLEARED export code is a v2 option with no code, not a legacy option', () => {
+  // Fresh-eyes round 2: legacySelectCode treated '' as absent, so after an
+  // author cleared a real v2 option's code the NEXT touch misclassified it
+  // as legacy and stamped the SLUG in as the code -- 'wyoming' into the
+  // combobox, the c5r8 defect through a different door. Legacy means the
+  // key is ABSENT.
+  it('clear the code, then edit the label: the code stays empty, never becomes the slug', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: '' } });
+    fireEvent.blur(code, { target: { value: '' } });
+    expect(probe()[0]).toEqual(['Wyoming (WY)', 'wyoming', '']);
+    const label = screen.getByDisplayValue('Wyoming (WY)') as HTMLInputElement;
+    fireEvent.change(label, { target: { value: 'Wyoming State (WY)' } });
+    fireEvent.blur(label);
+    expect(probe()[0]).toEqual(['Wyoming State (WY)', 'wyoming_state', '']);
+  });
+
+  it('clear the code, then type a new one: the second edit is a plain code edit', () => {
+    render(<Harness initial={makeSchema([selectField()])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: '' } });
+    fireEvent.blur(code, { target: { value: '' } });
+    fireEvent.change(codeInputs()[0], { target: { value: 'WV' } });
+    fireEvent.blur(codeInputs()[0], { target: { value: 'WV' } });
+    expect(probe()[0]).toEqual(['Wyoming (WY)', 'wyoming', 'WV']);
   });
 });
