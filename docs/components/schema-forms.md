@@ -68,17 +68,28 @@ instances) operating on a `SchemaFormState` value:
   (`utils/fieldValue.ts`, bd polyglot-pdf-5ovod). The predicates that decide
   whether a field is answered -- and so whether the form can complete, whether
   the model may confirm, and what it asks next -- all route through it:
-  `isSectionValid` (the completion gate), `validateField`'s required check,
-  `SectionRenderer`'s skip affordance, `hasUsableValue` (the confirm gate), and
-  BOTH `hasValue` predicates in `computeNextField`.
+  `isSectionValid` (the section gate), `isFormComplete` (the form gate, which
+  fires the paid end-of-form validator), `getProgressCounts` (the progress bar
+  and the overlay's field counter), `validateField`'s required check,
+  `SectionRenderer`'s skip affordance, `hasUsableValue` (the confirm gate),
+  `SchemaForm`'s manual-edit write, and BOTH `hasValue` predicates in
+  `computeNextField`.
 
-  **This is NOT yet every value-presence check in the frontend.** Several
-  lower-stakes ones still test `=== ''` untrimmed -- the progress counters, the
-  `skip_field`/`switch_field` acks, the resume-section scan, and the preview
-  painter -- so they can still read whitespace as present. None of them gates
-  completion or confirmation, which is why they were out of this bead's scope;
-  they are tracked as bd polyglot-pdf-qpz11. Do not read the list above as the
-  complete set of emptiness checks.
+  **They must agree with each other, and a test pins that they do.** Each fix
+  here was found in the PREVIOUS fix's sibling: adding the confirmed-blank
+  recovery arm to `computeNextField` alone made it contradict `isFormComplete`
+  (navigation asking for a field the form called done -- and spending the
+  validator fee), and fixing those two left the progress bar reading 100% on the
+  same form. The invariant test is parametrized over entry shapes and asserts all
+  four consumers give the SAME answer, so a fifth consumer added later fails
+  there rather than drifting quietly.
+
+  **This is NOT yet every value-presence check in the frontend.** Some remain
+  untrimmed -- the `skip_field`/`switch_field` acks, the resume-section scan
+  (`applyResume`, bd polyglot-pdf-dctry), and the preview painter -- so they can
+  still read whitespace as present. None gates completion, confirmation or
+  progress, which is why they stayed out of scope; tracked as bd
+  polyglot-pdf-qpz11. Do not read the list above as the complete set.
   Whitespace-only counts as BLANK: typing spaces is not a decision, and leaving a
   field blank on a legal intake draft has to be explicit -- said aloud, or via the
   skip control.

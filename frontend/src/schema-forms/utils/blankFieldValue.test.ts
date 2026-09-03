@@ -247,10 +247,20 @@ describe('computeNextField and isFormComplete agree', () => {
 
     const offered = computeNextField(state)?.id === 'f1';
     const complete = isFormComplete(state);
+    const sectionValid = SchemaFormStateManager.isSectionValid(state, 's1');
+    const { filled, total } = SchemaFormStateManager.getProgressCounts(state);
 
     expect(offered, 'is the field still being offered?').toBe(expectStillOffered);
     // The invariant: never both at once.
     expect(offered && complete, 'offered AND complete is a contradiction').toBe(false);
+
+    // EVERY consumer of "is this field done?" must give the same answer, not
+    // just the two gates. The progress bar counted whitespace as done while the
+    // gate said otherwise, so the UI showed 100% on an unfinished form.
+    expect(
+      { sectionValid, progressDone: filled === total },
+      'section validity and the progress bar must agree with the gates',
+    ).toEqual({ sectionValid: !offered, progressDone: !offered });
   });
 
   it('an OPTIONAL confirmed empty string still completes the form', () => {

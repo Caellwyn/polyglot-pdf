@@ -857,13 +857,13 @@ export class SchemaFormStateManager {
     const doneFields = visibleFields.filter((f) => {
       const fieldValue = state.fieldValues[f.id];
       if (fieldValue?.skipped) return true;
-      const actualValue = fieldValue?.value;
-      return (
-        actualValue !== null &&
-        actualValue !== undefined &&
-        actualValue !== "" &&
-        !(Array.isArray(actualValue) && actualValue.length === 0)
-      );
+      // Shares the blankness definition with isSectionValid, isFormComplete and
+      // computeNextField (bd polyglot-pdf-5ovod). It used to hand-write the same
+      // check untrimmed, so a whitespace field counted as DONE: the progress bar
+      // and the overlay's field counter read 100% while the completion gate --
+      // correctly -- said the form was not finished. A progress bar that
+      // disagrees with the gate it is reporting on is worse than no bar.
+      return !isBlankFieldValue(fieldValue?.value);
     }).length;
 
     return { filled: doneFields, total: visibleFields.length };
