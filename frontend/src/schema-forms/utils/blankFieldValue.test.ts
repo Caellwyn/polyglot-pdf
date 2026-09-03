@@ -221,6 +221,44 @@ describe('whitespace is not an answer, at every predicate', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Overwriting a REAL answer with whitespace (the regression path).
+// ---------------------------------------------------------------------------
+
+describe('erasing a confirmed answer with whitespace', () => {
+  it('drops the confirmation, blocks completion, and re-queues the field', () => {
+    // The end-to-end shape of this bead, and the one a user actually produces:
+    // a field the AI filled and confirmed, which the user then selects and
+    // types over with spaces. Dropping the confirmation is correct -- the answer
+    // is gone -- and the field must come back as a question rather than sitting
+    // confirmed-but-blank, which is the state the whole bead exists to prevent.
+    const field = textField();
+    let state = {
+      schema: schemaWith(field),
+      fieldValues: {},
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    state = SchemaFormStateManager.updateField(state, 'f1', 'Maria', {
+      confirmed: true,
+      confirmationMethod: 'ai_voice',
+    });
+    expect(SchemaFormStateManager.isSectionValid(state, 's1')).toBe(true);
+    expect(computeNextField(state)).toBeNull();
+
+    // The user types over it with spaces (SchemaForm passes confirmed:false for
+    // a blank -- see handleFieldChange).
+    state = SchemaFormStateManager.updateField(state, 'f1', '   ', {
+      confirmed: false,
+    });
+
+    expect(state.fieldValues.f1.confirmed).not.toBe(true);
+    expect(SchemaFormStateManager.isSectionValid(state, 's1')).toBe(false);
+    expect(computeNextField(state)?.id).toBe('f1');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The path that must KEEP working (bd polyglot-pdf-6oe6 / w3ic).
 // ---------------------------------------------------------------------------
 
