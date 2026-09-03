@@ -58,6 +58,21 @@ class ILiveAI(ABC):
         """Send a text message to the live AI session (e.g., context hints, next field info)."""
         raise NotImplementedError()
 
+    def set_voice_muted(self, muted: bool) -> None:
+        """Suppress (or restore) the model's PROACTIVE speech for this session.
+
+        Manual mode (bd polyglot-pdf-wurj8). While muted, text turns that exist
+        only to make the model TALK are not sent -- the session stays live, the
+        context stays current, and the user keeps a warm, correctly-oriented
+        assistant they can reach with one PTT press. It is NOT a client-side
+        audio mute: suppressing at the point a turn would reach the model is what
+        makes manual mode actually silent AND free, instead of billing for
+        speech nobody hears (the defect in the pause() this replaces).
+
+        A user-initiated turn (PTT) is never suppressed -- see send_activity_start.
+        """
+        raise NotImplementedError()
+
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking)."""
         raise NotImplementedError()

@@ -17,7 +17,7 @@ declare global {
 }
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
-import type { ConnectionManager } from '../shared/connection'
+import type { ConnectionManager, VoiceMode } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
@@ -102,6 +102,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// Kept as state rather than inlined `true` because the PTT press/release
 	// handlers and the audio gate still read it as the "is PTT active" predicate.
 	const [pushToTalkMode] = useState(true)
+	// Manual/voice mode (bd polyglot-pdf-wurj8) -- the sticky half of the two-control
+	// voice UI. Seeded from the connection manager so a remount (e.g. a
+	// desktop<->mobile breakpoint flip onto a LIVE session) restores the user's real
+	// choice instead of silently putting them back into voice mode. Feature-detected:
+	// tests and older mocks supply a partial manager.
+	const [voiceMode, setVoiceModeState] = useState<VoiceMode>(() =>
+		typeof connectionManager?.getVoiceMode === 'function' ? connectionManager.getVoiceMode() : 'voice'
+	)
 	const [continuousSession, setContinuousSession] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
@@ -994,15 +1002,48 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 	}
 
-	// Handle disconnect button (now "pause")
-	const handleDisconnect = () => {
+
+	// Keep the toggle honest (bd polyglot-pdf-wurj8). The mode changes WITHOUT a
+	// click: a PTT press auto-leaves manual mode. Without this the button would go
+	// on showing "quiet" while the assistant is live and about to speak -- the
+	// control's one job is telling the user at a glance whether they will be
+	// spoken to, and a stale label defeats exactly that.
+	//
+	// Re-reads on subscribe as well, to close the window between the mount-time
+	// initializer and this effect running.
+	useEffect(() => {
 		if (!connectionManager) return
+		if (typeof connectionManager.getVoiceMode === 'function') {
+			setVoiceModeState(connectionManager.getVoiceMode())
+		}
+		if (typeof connectionManager.onVoiceModeChange !== 'function') return
+		return connectionManager.onVoiceModeChange(setVoiceModeState)
+	}, [connectionManager])
 
-		// Pause instead of disconnect (keeps connection warm)
-		connectionManager.pause()
-
-		// Pause VAD
-		vad.pause()
+	// Manual/voice mode toggle (bd polyglot-pdf-wurj8). REPLACES the old Pause
+	// button. The crucial difference: pause() suspended the session -- it tore the
+	// mic down (user went mute, not merely deaf), discarded Gemini's in-flight
+	// question client-side, and made coming back cost a paid re-ask. Manual mode
+	// leaves the session live and the mic usable, and suppresses the model's
+	// proactive speech AT THE BACKEND, so nothing is billed for speech nobody hears
+	// and nothing has to be re-asked on the way back.
+	//
+	// The manager owns the authoritative mode (it survives a remount and is
+	// re-asserted on every reconnect); this component mirrors it for rendering.
+	const handleToggleVoiceMode = () => {
+		if (!connectionManager) return
+		const next: VoiceMode = voiceMode === 'voice' ? 'manual' : 'voice'
+		// Feature-detect: a partial mock lacking the setter must not throw out of a
+		// click handler and blank the overlay.
+		if (typeof connectionManager.setVoiceMode === 'function') {
+			connectionManager.setVoiceMode(next)
+		}
+		// Usually redundant -- the manager notifies its subscribers synchronously,
+		// so the effect above has already set this to the same value. KEPT because
+		// it is the only path that works for a manager without onVoiceModeChange
+		// (an older or partial one), where nothing else would ever move the label.
+		// Setting state to the value it already holds does not re-render.
+		setVoiceModeState(next)
 	}
 
 	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
@@ -1967,11 +2008,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								▶️ {overlayText.resume}
 							</button>
 						) : isConnected ? (
+							/* Manual/voice mode toggle (bd polyglot-pdf-wurj8), replacing
+							   the old Pause button. Action-labelled like its neighbours:
+							   the label is what the click switches TO. aria-pressed marks
+							   it as the toggle it is, so a screen reader announces the
+							   state rather than just a changing label. */
 							<button
-								className="vff-button vff-pause"
-								onClick={handleDisconnect}
+								className={'vff-button vff-mode-toggle' + (voiceMode === 'manual' ? ' vff-mode-manual' : '')}
+								onClick={handleToggleVoiceMode}
+								aria-pressed={voiceMode === 'manual'}
 							>
-								⏸️ {overlayText.pause}
+								{voiceMode === 'voice'
+									? '🤫 ' + overlayText.switchToManual
+									: '🗣️ ' + overlayText.switchToVoice}
 							</button>
 						) : null}
 						<button className="vff-button vff-clear-form" onClick={handleClearForm}>
@@ -2457,12 +2506,24 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 				}
 
-				.vff-pause {
+				.vff-mode-toggle {
 					background: #f59e0b;
 					color: white;
 				}
 
-				.vff-pause:hover {
+				/* Manual mode is a STATE the user sits in, and a silent assistant
+				   is indistinguishable from a broken one unless the control says
+				   so. Slate reads as "off/quiet" against the amber voice state,
+				   and the label changes too -- colour is never the only cue. */
+				.vff-mode-toggle.vff-mode-manual {
+					background: #475569;
+				}
+
+				.vff-mode-toggle.vff-mode-manual:hover {
+					background: #334155;
+				}
+
+				.vff-mode-toggle:hover {
 					background: #d97706;
 					transform: translateY(-1px);
 				}

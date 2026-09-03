@@ -2,26 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-vdcm4: every remaining
-`websocket_routes.py:<line>` citation re-anchored to a symbol/arm name
-instead of a line number -- a prior line-number fix (bd polyglot-pdf-x82ii,
-2026-08-17) had re-drifted by 60-140 lines after further code motion in
-`websocket_routes.py`, the second time this exact doc has drifted this way.
-Line numbers elsewhere in this doc (schemaFormState.ts, webFormConnection.ts,
-etc.) were left as-is -- only the specific citations verified drifted were
-touched. The `spellback_response` row covers the guard-refusal arms --
-`delivered`/`interrupted` acks that carry no timing fields because nothing
-played (bd polyglot-pdf-kvrfq, 2026-08-27; see the
-[journal entry](../journal/entries/2026-08-27-bd-kvrfq-spellback-stale-arrival-guards.md)).
-The `initial_field_hint` row does not claim both handshake builders send it --
-only the JIT builder does, the same asymmetry documented for `section_id` and
-`kit_id` (bd polyglot-pdf-e3t7); the `spellback` / `spellback_response`
-round-trip pair is the flag-gated deterministic spell-back tool's wire
-messages (bd polyglot-pdf-22h1f). `kit_id` is sent by BOTH handshake builders,
-not just the JIT one -- the legacy builder's omission silently dropped it from
-the audit trail once the intro path made Agree's connect the session's only
-handshake (bd polyglot-pdf-s1iex.6). This doc's message-type union is pinned
-by backend/tests/contract/test_websocket_protocol.py, bd polyglot-pdf-ceyt.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: added the `voice_mode` / `voice_mode_ack` pair -- the manual/voice mode toggle that replaced the Pause button; `vad_activity_start` re-described as the PTT press that is now the only turn signal AND the thing that leaves manual mode.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -152,6 +133,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `hint_ack` | websocket_routes.py (next_field_hint arm) | Ack of a client `next_field_hint`. |
 | `completion_ack` | websocket_routes.py (completion_message arm) | Ack of a client `completion_message`. |
 | `recovery_prompt_ack` | websocket_routes.py (recovery_prompt arm) | Ack of a client `recovery_prompt`. |
+| `voice_mode_ack` | websocket_routes.py (voice_mode arm) | Ack of a client `voice_mode`, echoing the mode now in force. |
 | `section_completed_ack` | websocket_routes.py (section_completed arm) | Ack of a client `section_completed` (legacy reactive). |
 | `section_complete_ack` | websocket_routes.py (section_complete arm) | B / jnjj.16 (B4). Ack of the proactive `section_complete` event. |
 | `form_complete_ack` | websocket_routes.py (form_complete arm) | B / jnjj.16 (B4). Ack of the proactive `form_complete` event. |
@@ -197,7 +179,8 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `recovery_prompt` | webFormConnection.ts:3953 | Escalating recovery prompt (level 1-3). |
 | `change_fill_language` | webFormConnection.ts:3988 | Change the AI fill language. |
 | `change_spoken_language` | webFormConnection.ts (session_ready opener) | MISNOMER -- does NOT switch language. The spoken language is PINNED per session; this RE-ASSERTS the same pinned language on a fresh Gemini session after a socket teardown (reconnect / section switch), so the backend re-sends the initiating message. See [voice-and-vad.md](voice-and-vad.md) ("the spoken language is pinned per session"); bd polyglot-pdf-87a9. |
-| `vad_activity_start` / `vad_activity_end` | webFormConnection.ts:3889 / :3916 | Manual activity signals (non-native-VAD mode). |
+| `vad_activity_start` / `vad_activity_end` | webFormConnection.ts `sendActivityStart` / `sendActivityEnd` | PTT press/release. The ONLY turn signal -- Gemini's own detection is disabled (bd polyglot-pdf-v1m8g). `vad_activity_start` also leaves manual mode (bd polyglot-pdf-wurj8). |
+| `voice_mode` | webFormConnection.ts `setVoiceMode` | Manual/voice mode toggle (bd polyglot-pdf-wurj8). `mode` is `manual` or `voice`; `manual` suppresses the model's proactive speech while the session stays live. Re-sent on every (re)connect -- the backend is stateless. An unrecognised `mode` is rejected rather than defaulted to manual. |
 | `clear_thinking` | webFormConnection.ts:3435 / :4220 | Thinking-indicator desync guard (bd polyglot-pdf-wpw.5, Codex PR #273): sent when the client's max-duration safety timer fires or on a server error, so the backend resets its `_processing_active` state too (else it stays stuck True and dedups the next turn's `agent_processing:true`). Backend handler `clear_processing_state` (the `clear_thinking` arm calls `service.clear_processing_state()`); fire-and-forget, no ack. |
 | `end_gemini_session` | webFormConnection.ts:3971 | Ask the backend to end the Gemini session. |
 | `ping` | -- | Liveness; backend replies `pong` (echoing `ts`). |

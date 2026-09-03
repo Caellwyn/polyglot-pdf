@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -356,6 +356,17 @@ Known traps (all deliberate, all pinned only by comments):
 - `validation_result` carries `conflicts` only; the Python-side `result_type`
   label is deliberately never serialized (`_run_validation_and_push` in
   websocket_routes.py, contract pinned in `standards/validation-delegation.md`).
+- `voice_mode` is CLIENT-OWNED and must be RE-SENT on every (re)connect
+  (bd polyglot-pdf-wurj8). Producer: `webFormConnection.ts`'s `setVoiceMode`,
+  called from the manager's `setVoiceMode` and from `reassertVoiceMode` in the
+  `onSessionReady` / `onSessionRestarted` callbacks. Consumer: the `voice_mode`
+  arm in `websocket_routes.py` -> `FormFillingService.set_voice_muted` ->
+  `LiveAIGemini.set_voice_muted`. The backend holds NO per-session mode across a
+  reconnect (it is stateless, and each new Gemini session defaults to speaking),
+  so a client that sends the mode only once silently drops the user back into a
+  talking session on the next GoAway or auto-drop. `vad_activity_start` also
+  clears the mute on BOTH ends, so a PTT press never lands in silence -- removing
+  either half leaves the other looking correct in isolation.
 - The `session_ready` message carries NO VAD-mode flag (bd polyglot-pdf-v1m8g).
   It used to send `native_vad`, which the client destructured to pick its
   activity-signal behavior; both ends are gone, and the client now always sends

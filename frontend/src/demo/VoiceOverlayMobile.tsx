@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react'
-import type { ConnectionManager } from '../shared/connection'
+import type { ConnectionManager, VoiceMode } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
@@ -103,6 +103,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Kept as state rather than inlined `true` because the PTT press/release
 	// handlers and the audio gate still read it as the "is PTT active" predicate.
 	const [pushToTalkMode] = useState(true)
+	// Manual/voice mode (bd polyglot-pdf-wurj8) -- the sticky half of the two-control
+	// voice UI. Seeded from the connection manager so a remount (e.g. a
+	// desktop<->mobile breakpoint flip onto a LIVE session) restores the user's real
+	// choice instead of silently putting them back into voice mode. Feature-detected:
+	// tests and older mocks supply a partial manager.
+	const [voiceMode, setVoiceModeState] = useState<VoiceMode>(() =>
+		typeof connectionManager?.getVoiceMode === 'function' ? connectionManager.getVoiceMode() : 'voice'
+	)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	// Live mic-energy meter (bd polyglot-pdf-s3zv): mirrors the desktop overlay.
 	// `micEnergy` is the worklet's smoothed RMS (0-100); `micSending` is whether the
@@ -1054,14 +1062,48 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}
 
-	const handleDisconnect = () => {
+
+	// Keep the toggle honest (bd polyglot-pdf-wurj8). The mode changes WITHOUT a
+	// click: a PTT press auto-leaves manual mode. Without this the button would go
+	// on showing "quiet" while the assistant is live and about to speak -- the
+	// control's one job is telling the user at a glance whether they will be
+	// spoken to, and a stale label defeats exactly that.
+	//
+	// Re-reads on subscribe as well, to close the window between the mount-time
+	// initializer and this effect running.
+	useEffect(() => {
 		if (!connectionManager) return
+		if (typeof connectionManager.getVoiceMode === 'function') {
+			setVoiceModeState(connectionManager.getVoiceMode())
+		}
+		if (typeof connectionManager.onVoiceModeChange !== 'function') return
+		return connectionManager.onVoiceModeChange(setVoiceModeState)
+	}, [connectionManager])
 
-		// Pause instead of disconnect (keeps connection warm)
-		connectionManager.pause()
-
-		// Pause VAD
-		vad.pause()
+	// Manual/voice mode toggle (bd polyglot-pdf-wurj8). REPLACES the old Pause
+	// button. The crucial difference: pause() suspended the session -- it tore the
+	// mic down (user went mute, not merely deaf), discarded Gemini's in-flight
+	// question client-side, and made coming back cost a paid re-ask. Manual mode
+	// leaves the session live and the mic usable, and suppresses the model's
+	// proactive speech AT THE BACKEND, so nothing is billed for speech nobody hears
+	// and nothing has to be re-asked on the way back.
+	//
+	// The manager owns the authoritative mode (it survives a remount and is
+	// re-asserted on every reconnect); this component mirrors it for rendering.
+	const handleToggleVoiceMode = () => {
+		if (!connectionManager) return
+		const next: VoiceMode = voiceMode === 'voice' ? 'manual' : 'voice'
+		// Feature-detect: a partial mock lacking the setter must not throw out of a
+		// click handler and blank the overlay.
+		if (typeof connectionManager.setVoiceMode === 'function') {
+			connectionManager.setVoiceMode(next)
+		}
+		// Usually redundant -- the manager notifies its subscribers synchronously,
+		// so the effect above has already set this to the same value. KEPT because
+		// it is the only path that works for a manager without onVoiceModeChange
+		// (an older or partial one), where nothing else would ever move the label.
+		// Setting state to the value it already holds does not re-render.
+		setVoiceModeState(next)
 	}
 
 	const handleClearForm = () => {
@@ -1535,8 +1577,16 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 							▶️ {overlayText.resume}
 						</button>
 					) : isConnected ? (
-						<button className="vff-action-btn vff-pause-btn" onClick={handleDisconnect}>
-							⏸️ {overlayText.pause}
+						/* Manual/voice mode toggle (bd polyglot-pdf-wurj8), replacing the
+						   old Pause button -- mirrors the desktop overlay. */
+						<button
+							className={'vff-action-btn vff-mode-toggle-btn' + (voiceMode === 'manual' ? ' vff-mode-manual' : '')}
+							onClick={handleToggleVoiceMode}
+							aria-pressed={voiceMode === 'manual'}
+						>
+							{voiceMode === 'voice'
+								? '🤫 ' + overlayText.switchToManual
+								: '🗣️ ' + overlayText.switchToVoice}
 						</button>
 					) : null}
 
@@ -1955,9 +2005,9 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 					-webkit-touch-callout: none;
 				}
 
-				/* Connect/Pause/Resume/Reconnect button - row 2, columns 4-6 (50% width), 50% taller */
+				/* Connect/Mode-toggle/Resume/Reconnect button - row 2, columns 4-6 (50% width), 50% taller */
 				.vff-connect-btn,
-				.vff-pause-btn,
+				.vff-mode-toggle-btn,
 				.vff-resume-btn,
 				.vff-reconnect-btn {
 					grid-column: 4 / 7;
@@ -1991,12 +2041,20 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 					transform: scale(0.98);
 				}
 
-				.vff-pause-btn {
+				.vff-mode-toggle-btn {
 					background: #f59e0b;
 					color: white;
 				}
 
-				.vff-pause-btn:active {
+				/* Manual mode is a STATE the user sits in, and a silent assistant is
+				   indistinguishable from a broken one unless the control says so.
+				   Slate reads as "off/quiet" against the amber voice state -- and the
+				   label changes too, so colour is never the only cue. Mirrors desktop. */
+				.vff-mode-toggle-btn.vff-mode-manual {
+					background: #475569;
+				}
+
+				.vff-mode-toggle-btn:active {
 					transform: scale(0.98);
 				}
 

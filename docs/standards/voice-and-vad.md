@@ -2,17 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-09-01 (bd polyglot-pdf-v1m8g: the VAD-mode toggle is GONE --
-push-to-talk owns activation and Gemini's automatic activity detection is
-unconditionally disabled, so the NATIVE/MANUAL mode sections, the `VAD_*`
-sensitivity knobs, the `native_vad` handshake field and the mutual-exclusion spec
-they required are all removed. Still current: the spell-back mic hold in the Mic
-send gate section (bd polyglot-pdf-22h1f) and its client-side stale-arrival guards
-(bd polyglot-pdf-kvrfq); the Barge-in section's FORWARDED `interrupted` WS message
-+ two-hold client drain via `resetPlaybackClock` (bd polyglot-pdf-s7uf); and the
-spoken language being PINNED per session, with `change_spoken_language` a misnomer
-whose only live sender is the reconnect opener re-asserting the same pinned
-language (bd polyglot-pdf-87a9).)*
+*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect.)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -117,23 +107,115 @@ There's a barge-in **grace period**: tool calls arriving within
 the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; see
 `connection.ts onFieldUpdate`).
 
-## Pause / unpause (the re-prompt debounce)
+## Manual / voice mode (the sticky control)
 
-`pause()` keeps the WebSocket warm but stops the mic and flushes queued AI audio
-CLIENT-side only -- Gemini is never told, so it finishes its in-flight question
-into a discarded buffer and then waits for an answer the user never heard. The
-warm-resume path in `resume()` therefore arms a **1.5s debounced re-prompt**
-(bd polyglot-pdf-yo5t): when it fires, the client sends `recovery_prompt` level 1
-("re-ask, in the session language, for the same field; do not fill or change any
-field until the user answers") so Gemini re-initiates the turn. Flutter-safe:
-`pause()`, `disconnect()`, `connect()` (the reconnect route already re-prompts
-via `RESUME_INITIATING_MESSAGE`), a PTT press, and a VAD speech-start all cancel
-the pending timer, and the fire-time guards (still unpaused, socket open, no AI
-audio currently playing, no PTT hold) keep it silent when the moment has passed
--- a short pause whose interrupted turn resumes audibly does NOT get a
-double-prompt. This is the first (and only) production caller of the
-`recovery_prompt` channel; the old activity-watchdog design that channel was
-built for was replaced by the connection-timeout modal (bd jf6w).
+The voice UI is exactly TWO controls, and that limit is a design constraint
+rather than an aesthetic one: many users touch this app once, so anything needing
+explanation has to fit in about a sentence of the spoken introduction.
+
+| Control | Sticky? | What it does |
+|---|---|---|
+| **Push-to-talk** | No | Press to talk. Also the only barge-in gesture. |
+| **Manual / voice mode** | Yes | Whether the model speaks on its own. |
+
+**Manual mode suppresses the model's PROACTIVE speech; it does not suspend the
+session.** The WebSocket stays up, the Gemini session stays warm, the mic stays
+usable, and field/focus tracking keeps running underneath -- so the assistant is
+correctly oriented the instant the user wants it. This is the operating mode for
+the "mostly manual" profile: present but quiet.
+
+**The gate is at the backend adapter, and that placement is the whole design.**
+Every text turn this app sends carries `turn_complete=True` -- it ASKS the model
+to respond. So muting the speaker client-side would leave the model talking into
+a discarded buffer: billed, unheard, and then waiting on an answer to a question
+the user never received. `LiveAIGemini.set_voice_muted(True)` instead drops the
+turn before it reaches Gemini, across both elicitation paths
+(`send_text_message`, the queued hints; and `send_client_content`, the direct
+"speak now"). A held `send_client_content` returns **False** -- not-delivered --
+which callers already handle; the validator steer in particular must not HOLD a
+section on speech nobody heard.
+
+**Context is held, not lost.** The newest suppressed turn is kept and replayed
+onto the ordinary text queue on unmute, so the model resumes oriented. Only the
+newest: these messages restate whole current state ("the next unfilled field is
+X"), so an older one is a stale contradiction rather than extra information, and
+replaying a backlog would bill for every one.
+
+> **The set of teardown sites is pinned by a test, not by memory.** A guard that
+> checked only the site we knew about is how the second one shipped unmarked;
+> `test_EVERY_text_sentinel_site_marks_the_pipeline_closing_first` now enumerates
+> every function queuing the text sentinel and requires each to mark the pipeline
+> closing first, so a third site fails CI instead of repeating the defect.
+
+**Delivery is keyed on a CONDITION, not on an event.** A section switch tears the
+text pipeline down and the next connect builds a new one, so the two things a
+held turn needs -- the user no longer muted, and a pipeline that can carry it --
+become true in either order:
+
+| Order | Who delivers |
+|---|---|
+| Unmute arrives while the pipeline is up | `set_voice_muted` |
+| Unmute arrives mid-teardown, pipeline comes later | the text sender's start site |
+
+Both call the one shared `_flush_muted_context`, which delivers only when BOTH
+hold and clears the turn only once a live pipeline has accepted it. Keying the
+flush on the unmute EVENT instead is what made this defect keep reappearing in new
+shapes: an unmute that raced the teardown stranded the turn forever, because the
+only flush path then required a further mute/unmute cycle that a user with no
+reason to touch the toggle never performs.
+
+**Neither the queue nor the sender task can tell you the pipeline is usable.**
+Teardown happens in stages, and each stage defeats a different naive check:
+
+| Stage | What still looks healthy |
+|---|---|
+| A `None` sentinel is queued (the sender loop will exit on it) | the queue accepts puts; the task is not `done()` |
+| The sender is cancelled | the queue accepts puts |
+| The queue is nulled -- several awaits later | -- |
+
+So a put can succeed onto a pipe that will never be read, and the turn is then
+cleared as "sent" and lost. `_text_pipeline_closing` is set **before the sentinel
+at EVERY teardown site** -- there are two, `finalize()` (a section switch) and the
+receive loop (a spontaneous Gemini drop, so the commoner one) -- and cleared only
+when a new sender is actually running -- it states the fact instead of inferring it from a
+proxy. The queue and task checks remain as cheap backstops for what the flag does
+not cover (no session yet, sender already exited). The second flush site sits at
+the sender's START, not at queue creation: a queue with no reader is not a
+pipeline.
+
+For the same reason **both** elicitation paths check the mute flag BEFORE their
+queue/session guards. A hint arriving while muted and mid-teardown must still be
+recorded, or the replay voices an OLDER hint as if it were current -- the model
+naming the wrong field confidently, which is worse than saying nothing.
+
+**A PTT press leaves manual mode**, at both ends: the client flips its own toggle
+in `sendActivityStart`, and the backend unmutes on `vad_activity_start` before
+forwarding it. Pressing to talk is an unambiguous request for the assistant, so
+it must not require finding the toggle first.
+
+Because of that, **the mode changes without any click, and the UI has to be told**
+-- `ConnectionManager.onVoiceModeChange(listener)` fires on every change and both
+overlays subscribe. A UI tracking only its own clicks renders a stale label:
+"quiet" while the assistant is live and about to speak, which is worse than no
+indicator, since the control's whole job is saying at a glance whether the user
+will be spoken to. (A constructor callback would not do: the manager is built in
+`SchemaForm` and reaches the overlays as a prop.)
+
+**The mode is client-owned and re-asserted on every (re)connect.** The backend is
+stateless and each new Gemini session defaults to speaking, so `onSessionReady` /
+`onSessionRestarted` re-send it -- otherwise a GoAway or auto-drop would silently
+put a user back into a talking session. Wire format: `voice_mode` /
+`voice_mode_ack` (see `docs/standards/ws-protocol.md`); an unrecognised `mode` is
+rejected rather than coerced, because the failure mode of a wrongly-silenced
+session is a user who concludes the app is broken.
+
+> **`pause()` / `resume()` are DEAD PATH.** They suspended the session -- mic torn
+> down (the user went mute, not merely deaf), Gemini's in-flight question
+> discarded client-side, and a paid 1.5s debounced `recovery_prompt` re-ask
+> (bd polyglot-pdf-yo5t) needed just to come back. The mode toggle replaced the
+> only UI caller (bd polyglot-pdf-wurj8), so nothing now sets status `'paused'`;
+> removing the machinery is bd polyglot-pdf-oaidu. `recovery_prompt` has no
+> remaining production caller.
 
 ## Mic send gate (audio-up path)
 
