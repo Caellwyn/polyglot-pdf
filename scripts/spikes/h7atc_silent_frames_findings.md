@@ -1,5 +1,12 @@
 # h7atc -- can we stop sending silent frames once auto-VAD is off?
 
+> **RESOLVED 2026-09-03.** The open risk this doc identified (section 3) was
+> subsequently MEASURED and is safe: a deploy-shaped session survives at least
+> 180s with zero frames sent, 6/6 arms, no close. See
+> `idle_gap_5j3im_findings.md` (bd polyglot-pdf-5j3im). The recommendation below
+> to defer to a staging deploy was overtaken -- the maintainer authorised the
+> probe, and it cost ~$0.04. The rest of this document stands as written.
+
 **Status:** exit criterion 1 ANSWERED without spend. The premise the bead was
 built on is **already false**: no silent frames are sent, from either side.
 Criterion 2's "stop sending them" work is therefore **already done** (shipped by

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-h7atc: NOTHING is sent between turns -- not even silence; measured on both senders across a 350ms gap. The open question is whether a Live session tolerates the frame-free gap, which is unproven until v1m8g reaches staging.)*
+*Last updated: 2026-09-03 (bd polyglot-pdf-h7atc: NOTHING is sent between turns -- not even silence. bd polyglot-pdf-5j3im: and a session SURVIVES that gap -- measured to 180s, 6/6 arms, no close, so gap-fill's removal was correct.)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -49,13 +49,19 @@ is a trap for the next caller (CLAUDE.md scar #7). Two consequences worth knowin
   `scripts/spikes/h7atc_silent_frames_findings.md`). There is no silent-token
   burn left to remove.
 
-  **The open question is tolerance, not cost.** Whether a Live session survives
-  an arbitrarily long frame-free gap is UNPROVEN: the reasoning that starvation
-  was Gemini-VAD's problem is sound but untested, and v1m8g has not been
-  deployed. The WS idle watchdog is NOT the hazard (`last_rx` is bumped by
-  control messages, and PTT brackets are control messages). Best verified by a
-  staging session -- hold a turn, wait 60-90s, take another -- rather than a
-  synthetic probe.
+  **The session tolerates the gap -- MEASURED, not assumed.** A deploy-shaped
+  session (real SI, real tool declarations, real adapter) survives at least
+  **180s with zero frames sent** and answers the turn after it: 6/6 arms across
+  30s/90s/180s, no close of any kind (bd polyglot-pdf-5j3im,
+  `scripts/spikes/idle_gap_5j3im_findings.md`, ~$0.04 on Vertex 2026-09-03).
+  Gap-fill's removal was correct.
+
+  Two limits worth keeping in mind: measured to 180s, so a much longer idle is
+  untested; and measured on `gemini-live-2.5-flash-native-audio` only. The
+  GoAway/auto-drop reconnect machinery is unaffected either way -- this shows it
+  is not NEEDED for an idle gap, not that it is redundant. The WS idle watchdog
+  was never the hazard (`last_rx` is bumped by control messages, and PTT brackets
+  are control messages).
 - **The client Silero VAD no longer gates audio.** The hook still exists and the
   thresholds below are still its tuning surface, but `shouldRunVAD` requires
   `!pushToTalkMode`, which no longer happens in practice.
