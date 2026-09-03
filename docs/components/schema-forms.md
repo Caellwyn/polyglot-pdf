@@ -72,8 +72,13 @@ instances) operating on a `SchemaFormState` value:
   fires the paid end-of-form validator), `getProgressCounts` (the progress bar
   and the overlay's field counter), `validateField`'s required check,
   `SectionRenderer`'s skip affordance, `hasUsableValue` (the confirm gate),
-  `SchemaForm`'s manual-edit write, and BOTH `hasValue` predicates in
-  `computeNextField`.
+  `SchemaForm`'s manual-edit write, `computeReadyWindows`' settled test, and BOTH
+  `hasValue` predicates in `computeNextField`.
+
+  `computeReadyWindows` carries the highest stakes of the set: a window it calls
+  ready is recorded in `validatedWindowIndices`, which PERSISTS, so settling on a
+  blank retires that field from validation permanently -- even after a real
+  answer arrives.
 
   **They must agree with each other, and a test pins that they do.** Each fix
   here was found in the PREVIOUS fix's sibling: adding the confirmed-blank

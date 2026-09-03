@@ -1821,7 +1821,24 @@ export class SchemaFormStateManager {
       const field = fields[index];
       if (!shouldShowField(field, state.fieldValues, fields)) return true; // N/A
       const fv = readFieldEntryWithAlias(state.fieldValues, field.id);
-      return fv?.confirmed === true || fv?.skipped === true;
+      if (fv?.skipped === true) return true;
+      // A confirmation of BLANKNESS does not settle a field (bd
+      // polyglot-pdf-5ovod), and the cost here is higher than at the other
+      // gates: a window marked ready is added to validatedWindowIndices, which
+      // PERSISTS to sessionStorage -- so retiring it on a whitespace field means
+      // that field is never validated again, even after a real answer arrives.
+      // That is a silent, permanent loss rather than a cosmetic disagreement,
+      // and it defeats this function's own "no field is ever permanently
+      // starved of validation" promise.
+      //
+      // A skipped field (handled above, value:null) and an optional field's
+      // confirmed '' (the deliberate "does not apply" answer, bd
+      // polyglot-pdf-6oe6) both remain settled.
+      const confirmedButBlank =
+        typeof fv?.value === 'string'
+        && fv.value !== ''
+        && fv.value.trim() === '';
+      return fv?.confirmed === true && !confirmedButBlank;
     };
 
     const sent = state.validatedWindowIndices;

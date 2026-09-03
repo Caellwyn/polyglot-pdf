@@ -277,6 +277,55 @@ describe('computeNextField and isFormComplete agree', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The validator windows: settling on a blank RETIRES a field permanently.
+// ---------------------------------------------------------------------------
+
+describe('computeReadyWindows does not settle on a blank', () => {
+  function windowState(f1: any) {
+    const fields = [
+      textField({ id: 'f1', validation: { required: false } }),
+      textField({ id: 'f2', name: 'Given Name' }),
+    ];
+    return {
+      schema: {
+        source: 'web',
+        form_metadata: { title: 'T', version: '1', language: 'en' },
+        sections: [{ id: 's1', label: 'S1', order: 1, fields: ['f1', 'f2'] }],
+        fields,
+      },
+      fieldValues: { f1, f2: { value: 'Maria', confirmed: true } },
+      validationErrors: {},
+      currentSectionId: 's1',
+      validatedWindowIndices: new Set<number>(),
+    } as any;
+  }
+
+  const ready = (st: any) =>
+    (SchemaFormStateManager as any).computeReadyWindows(st, 2, 2).length;
+
+  it('a confirmed WHITESPACE field holds its window open', () => {
+    // The stakes here are higher than at the other gates: a window reported
+    // ready is added to validatedWindowIndices, which PERSISTS to
+    // sessionStorage. Retiring a window on a whitespace field means that field
+    // is never validated again even after a real answer arrives -- a silent,
+    // permanent loss, and a direct breach of this function's own promise that
+    // "no field is ever permanently starved of validation".
+    expect(ready(windowState({ value: '   ', confirmed: true }))).toBe(0);
+  });
+
+  it('a confirmed OPTIONAL empty string still settles', () => {
+    // The "does not apply" answer. Must NOT be caught by the rule above --
+    // isBlankFieldValue treats '' and whitespace alike, so this site needs the
+    // narrower whitespace-only test, same as the other confirmedButBlank sites.
+    expect(ready(windowState({ value: '', confirmed: true }))).toBe(1);
+  });
+
+  it('a SKIPPED field still settles', () => {
+    expect(ready(windowState({ value: null, skipped: true, confirmed: true }))).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Overwriting a REAL answer with whitespace (the regression path).
 // ---------------------------------------------------------------------------
 
