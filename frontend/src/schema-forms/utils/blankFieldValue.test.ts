@@ -174,6 +174,38 @@ describe('whitespace is not an answer, at every predicate', () => {
     expect(computeNextField(state)?.id).toBe('f1');
   });
 
+  it('the re-offered field is ESCAPABLE -- skipping it ends the loop', () => {
+    // Re-offering a confirmed-blank field is only safe if there is a way OUT.
+    // markFieldSkipped writes value:null + skipped:true, which clears the
+    // whitespace, so the field stops being re-offered. Without an escape this
+    // arm would be an infinite re-ask, which is worse than the bug it fixes.
+    let state = {
+      schema: schemaWith(textField()),
+      fieldValues: { f1: { value: '   ', confirmed: true } },
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    expect(computeNextField(state)?.id).toBe('f1');
+
+    state = SchemaFormStateManager.markFieldSkipped(state, 'f1');
+
+    expect(computeNextField(state)).toBeNull();
+  });
+
+  it('the re-offered field is ESCAPABLE -- a real answer ends the loop', () => {
+    let state = {
+      schema: schemaWith(textField()),
+      fieldValues: { f1: { value: '   ', confirmed: true } },
+      validationErrors: {},
+      currentSectionId: 's1',
+    } as any;
+
+    state = SchemaFormStateManager.updateField(state, 'f1', 'Maria', { confirmed: true });
+
+    expect(computeNextField(state)).toBeNull();
+  });
+
   it('an OPTIONAL field holding only spaces is still not answered', () => {
     // The optional-field carve-out is for a genuine '' meaning "does not
     // apply". Spaces must not inherit it.
