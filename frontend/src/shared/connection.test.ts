@@ -815,6 +815,26 @@ describe('Connection Manager (connection.ts)', () => {
       expect(b).toEqual(['manual'])
     })
 
+    it('does not leak listeners across repeated subscribe/unsubscribe cycles', () => {
+      // A breakpoint flip remounts the overlay onto the SAME manager, so the
+      // subscribe/unsubscribe pair runs again and again over a session. If
+      // unsubscribe did not really remove the listener, each remount would add
+      // another and every mode change would fan out to a growing set of dead
+      // React setters.
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      const live: string[] = []
+
+      for (let i = 0; i < 5; i++) {
+        const off = manager.onVoiceModeChange(() => live.push('stale'))
+        off()
+      }
+      manager.onVoiceModeChange((m) => live.push(m))
+
+      manager.setVoiceMode('manual')
+
+      expect(live).toEqual(['manual'])
+    })
+
     it('a throwing listener does not abort the mode change or starve the others', () => {
       const manager = createConnectionManager(testSchema, vi.fn(), 'English')
       const seen: string[] = []
