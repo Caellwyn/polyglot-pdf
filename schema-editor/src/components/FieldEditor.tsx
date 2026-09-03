@@ -824,6 +824,35 @@ const RegenerateGuidanceButton: React.FC<{
   );
 };
 
+/** The export code of a LEGACY select option -- one whose code still lives
+ * in `value` because it carries no pdf_on_value (a kit not yet migrated, bd
+ * polyglot-pdf-g2fpr). undefined for a v2 option or any non-select. */
+function legacySelectCode(field: FormField, option: any): string | undefined {
+  if (field.type !== 'select') return undefined;
+  const on = option?.pdf_on_value;
+  if (typeof on === 'string' && on !== '') return undefined;
+  const v = option?.value;
+  return typeof v === 'string' && v !== '' ? v : undefined;
+}
+
+/** CONVERT ON TOUCH. Any edit to a legacy select option moves its code into
+ * pdf_on_value and mints its value from the label, so the option leaves the
+ * editor in the v2 shape and the filler writes the CODE, never a slug the
+ * legacy fallback would print verbatim. A v2 option gets the patch as-is. */
+function convertLegacySelectOption(
+  field: FormField, option: any, idx: number, patch: Record<string, unknown>,
+): any {
+  const legacy = legacySelectCode(field, option);
+  if (legacy === undefined) return { ...option, ...patch };
+  const opts = safeOptions(field);
+  const others = opts.filter((_, i) => i !== idx);
+  const value = mintSelectSlugs(
+    [...others.map(o => o.label || ''), option.label || legacy],
+    [...others.map(o => legacySelectCode(field, o) ?? (o as any).pdf_on_value), legacy],
+  ).slice(-1)[0];
+  return { ...option, value, pdf_on_value: legacy, ...patch };
+}
+
 export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
@@ -1772,15 +1801,28 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           const others = safeOptions(field).filter((_, i) => i !== idx);
                           const otherLabels = others.map(o => o.label || '');
                           const oldValue = option.value;
+                          // CONVERT ON TOUCH (fresh-eyes, g2fpr.2): a LEGACY
+                          // select option carries its export code in VALUE
+                          // and has no pdf_on_value -- the maintainer's own
+                          // un-migrated kit, opened in the editor. Minting
+                          // its value without first moving the code would
+                          // leave the filler's legacy fallback writing the
+                          // slug verbatim: the c5r8 defect, reintroduced by
+                          // the fix. So the code moves to pdf_on_value first,
+                          // and only then is the value minted.
+                          const legacyCode = legacySelectCode(field, option);
+                          const optionCode = legacyCode ?? (option as any).pdf_on_value;
                           const value = field.type === 'select'
                             ? mintSelectSlugs(
                                 [...otherLabels, label],
-                                [...others.map(o => (o as any).pdf_on_value), (option as any).pdf_on_value],
+                                [...others.map(o => legacySelectCode(field, o) ?? (o as any).pdf_on_value), optionCode],
                               ).slice(-1)[0]
                             : mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
-                          if (!value || value === oldValue) return;
+                          if (!value || (value === oldValue && legacyCode === undefined)) return;
                           const newOptions = [...safeOptions(field)];
-                          newOptions[idx] = { ...option, value };
+                          newOptions[idx] = legacyCode !== undefined
+                            ? ({ ...option, value, pdf_on_value: legacyCode } as any)
+                            : { ...option, value };
                           const updatedField = { ...field, options: newOptions };
                           // A dependent's show_if/require_if can reference this
                           // option by its OLD slug. Unlike Remove (which BLOCKS
@@ -1896,14 +1938,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               <input
                                 type="text"
                                 className="font-mono border rounded px-1.5 py-0.5 w-28"
-                                value={(option as any).pdf_on_value ?? ''}
+                                value={(option as any).pdf_on_value ?? legacySelectCode(field, option) ?? ''}
                                 title="The code this dropdown writes into the PDF (e.g. 'WY'). It must match the form's own choice list exactly."
                                 onChange={e => {
                                   const newOptions = [...safeOptions(field)];
-                                  newOptions[idx] = {
-                                    ...option,
-                                    pdf_on_value: e.target.value,
-                                  } as any;
+                                  newOptions[idx] = convertLegacySelectOption(
+                                    field, option, idx, { pdf_on_value: e.target.value },
+                                  );
                                   updateField({ options: newOptions });
                                 }}
                                 onBlur={e => {
@@ -1911,9 +1952,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                   // legal export code and silently fails the
                                   // /Opt match.
                                   const next = e.target.value.trim();
-                                  if (next === ((option as any).pdf_on_value ?? '')) return;
+                                  const shown = (option as any).pdf_on_value ?? legacySelectCode(field, option) ?? '';
+                                  if (next === shown) return;
                                   const newOptions = [...safeOptions(field)];
-                                  newOptions[idx] = { ...option, pdf_on_value: next } as any;
+                                  newOptions[idx] = convertLegacySelectOption(
+                                    field, option, idx, { pdf_on_value: next },
+                                  );
                                   updateField({ options: newOptions });
                                 }}
                               />
@@ -2064,10 +2108,15 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   updateField({
                     // A select mints a slug too (bd polyglot-pdf-g2fpr); the
                     // export code is authored into pdf_on_value afterwards.
+                    // Same minter as the sibling site above, so the two
+                    // cannot drift (fresh-eyes: the comment said this and
+                    // the code did not).
                     options: [
                       {
                         label: '',
-                        value: mintUniqueSlugs(['option'])[0],
+                        value: field.type === 'select'
+                          ? mintSelectSlugs(['option'], [undefined])[0]
+                          : mintUniqueSlugs(['option'])[0],
                       },
                     ],
                   })

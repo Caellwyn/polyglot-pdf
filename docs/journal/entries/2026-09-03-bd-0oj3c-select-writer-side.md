@@ -61,6 +61,29 @@ They were not wrong when written; they were the contract. Flipping them was
 mostly `o["value"]` -> `o["pdf_on_value"]` where the property was "which PDF
 codes were written", plus new-shape assertions for the slug side.
 
+**Fresh-eyes found the fix reintroducing the bug for the one kit that matters.**
+Un-skipping the select mint meant a label edit on a LEGACY option (code in
+`value`, no `pdf_on_value` -- the maintainer's own un-migrated `i-90_v2`)
+re-minted its value to a slug while the filler's legacy fallback still wrote
+`value` verbatim: the c5r8 defect, produced by the fix for it. The bead body
+had said "PR 1's lint rule catches the half-migrated shape" -- true only with a
+dump; the editor's local mode has none. Fix: CONVERT ON TOUCH. Any edit to a
+legacy select option first moves its code into `pdf_on_value`, then mints the
+value, so the option leaves the editor in the v2 shape and the filler writes
+the code. The export-code input shows the legacy code wherever it lives.
+
+**A co-occurrence scan can be satisfied by the wrong claim.** The rewritten
+prompt test accepted any sentence naming a select's export code as long as
+`pdf_on_value` appeared somewhere in it. Fresh-eyes wrote "the option value IS
+the PDF export code, unlike radio which uses pdf_on_value" and it passed. The
+scan now matches the wrong claim directly, is factored into a helper, and
+carries three adversarial fixtures as its own non-vacuity floor.
+
+**The illegal third shape has no join key, and that is now written down.** A
+prior option with a slug value and no `pdf_on_value` cannot be joined to a
+dump code; its label is lost to the table. Pinned as a decision rather than
+left as a surprise.
+
 **A non-parsing mutant proves nothing -- again.** MUT C's first anchor matched
 twice, the fallback mangled the file, and vitest reported "1 failed, 15
 passed" -- the FILE failed to compile and the number looked like a result.

@@ -2352,3 +2352,23 @@ def test_a_prior_option_in_the_v2_shape_keeps_its_label(tmp_path):
     ef._backfill_dropdown_options(schema, str(path))
     assert schema["fields"][0]["options"] == [
         {"value": "alabama_usa", "label": "Alabama, USA", "pdf_on_value": "AL"}]
+
+
+def test_an_ILLEGAL_prior_shape_cannot_keep_its_label_and_says_so(tmp_path):
+    """A prior option with a slug value and NO pdf_on_value is the shape PR 1's
+    select-on-value-missing lint rule rejects. It has no export code to join
+    on, so its hand-written label is NOT preserved -- the code table wins.
+    Pinned so the behaviour is a documented decision, not a surprise: a kit in
+    this shape cannot publish, and re-extracting over it is unsupported.
+    (A slug-of-display join would not help the kits this matters for: the
+    i-90's display strings ARE the codes.)"""
+    import json as _json
+    dump = {"fields": [{"name": "form1.x[0]",
+                        "widgets": [{"choices": [{"value": "AL", "display": "AL"}]}]}]}
+    schema = {"fields": [{"id": "s", "type": "select", "pdf_field_name": "x[0]",
+                          "options": [{"value": "alabama", "label": "Alabama, USA"}]}]}
+    path = tmp_path / "acroform.json"
+    path.write_text(_json.dumps(dump), encoding="utf-8")
+    ef._backfill_dropdown_options(schema, str(path))
+    assert schema["fields"][0]["options"] == [
+        {"value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"}]

@@ -210,3 +210,61 @@ describe('select option values are minted slugs; the export code is pdf_on_value
     expect(screen.queryAllByTitle(/code this dropdown writes/)).toHaveLength(0);
   });
 });
+
+describe('a LEGACY select option (code in value, no pdf_on_value) is CONVERTED ON TOUCH', () => {
+  // Fresh-eyes (g2fpr.2): the maintainer's own un-migrated kit opened in the
+  // editor. Minting the value on a label edit without first moving the code
+  // would leave the filler's legacy fallback writing the SLUG verbatim into
+  // the combobox -- the c5r8 defect, reintroduced by the fix.
+  const legacy = () => selectField([
+    { value: 'WY', label: 'Wyoming' },
+    { value: 'AL', label: 'Alabama' },
+  ]);
+
+  it('the export-code input SHOWS the legacy code even though it lives in value', () => {
+    render(<Harness initial={makeSchema([legacy()])} />);
+    expect(codeInputs()[0].value).toBe('WY');
+  });
+
+  it('a label edit moves the code into pdf_on_value and THEN mints the value', () => {
+    render(<Harness initial={makeSchema([legacy()])} />);
+    const input = screen.getByDisplayValue('Wyoming') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Wyoming State' } });
+    fireEvent.blur(input);
+    expect(probe()[0]).toEqual(['Wyoming State', 'wyoming_state', 'WY']);
+    expect(probe()[1]).toEqual(['Alabama', 'AL', null]);   // untouched sibling stays legacy
+  });
+
+  it('a label edit that mints the SAME slug still converts (the code must move)', () => {
+    // 'Wyoming' -> slug 'wyoming' != legacy value 'WY', so this converts on
+    // any edit; pin that an edit whose minted slug equals the old value would
+    // also convert rather than early-return. Build that case: value already
+    // 'wyoming' would be the v2 shape, so use a numeric legacy option instead.
+    const numeric = selectField([{ value: '5', label: '5' }]);
+    render(<Harness initial={makeSchema([numeric])} />);
+    // NOT getByDisplayValue('5'): the export-code input also shows '5' (the
+    // legacy code), so that selector is ambiguous -- target the label input.
+    const input = screen.getAllByPlaceholderText('Option label')[0] as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'five' } });
+    fireEvent.blur(input);
+    expect(probe()[0]).toEqual(['five', '5', '5']);   // code kept as value AND moved
+  });
+
+  it('a code edit on a legacy option converts it and stores the new code', () => {
+    render(<Harness initial={makeSchema([legacy()])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: 'WV' } });
+    fireEvent.blur(code, { target: { value: 'WV' } });
+    expect(probe()[0]).toEqual(['Wyoming', 'wyoming', 'WV']);
+  });
+
+  it('the filler contract holds after conversion: the value is a slug and the code is the code', () => {
+    render(<Harness initial={makeSchema([legacy()])} />);
+    const input = screen.getByDisplayValue('Alabama') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Alabama (AL)' } });
+    fireEvent.blur(input);
+    const [, value, code] = probe()[1];
+    expect(value).toMatch(/^[a-z0-9][a-z0-9_-]*$/);
+    expect(code).toBe('AL');
+  });
+});

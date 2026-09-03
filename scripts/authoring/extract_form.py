@@ -586,6 +586,13 @@ def _backfill_dropdown_options(schema: dict, dump_path: str) -> dict:
             ov, ol = o.get("value"), o.get("label")
             # Key on the export CODE: a prior option in the v2 shape carries
             # it in pdf_on_value (value is its slug); a legacy one in value.
+            # The ILLEGAL third shape -- a slug value with NO pdf_on_value,
+            # which PR 1's select-on-value-missing rule rejects -- has no
+            # code to key on: its label cannot be joined to a dump code and
+            # the table label wins. Deliberate: re-extracting over a kit that
+            # cannot publish is not a supported path, and inventing a join
+            # (slug-of-display) would not work for the very kits this exists
+            # for, where the display IS the code (fresh-eyes, g2fpr.2).
             pov = o.get("pdf_on_value")
             key = pov if isinstance(pov, str) and pov else ov
             if isinstance(key, str) and isinstance(ol, str) and ol.strip():

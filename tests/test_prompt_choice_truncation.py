@@ -103,36 +103,77 @@ def test_a_field_with_no_choices_renders_no_choices_clause(render):
 # --- the select contract must be stated CONSISTENTLY everywhere ------------ #
 
 
-def test_no_rendered_passage_puts_a_selects_export_code_in_its_value():
-    """Pins the SET, not the one instance (CLAUDE.md scar #8).
+# A passage that puts a select's export code IN ITS VALUE, in so many words.
+# Co-occurrence with "pdf_on_value" elsewhere in the sentence is not enough:
+# fresh-eyes (g2fpr.2) wrote "For a SELECT the option value IS the PDF export
+# code, unlike radio ... which uses pdf_on_value" and the co-occurrence scan
+# passed it. So the wrong claim is matched DIRECTLY, whatever else the sentence
+# says.
+_VALUE_IS_CODE = re.compile(
+    r"(?:option\.?\s*)?value\s+(?:is|=|must be|should be)\s+(?:the\s+)?(?:pdf'?s?\s+own\s+)?"
+    r"(?:pdf\s+)?export\s+code"
+)
 
-    Until bd polyglot-pdf-g2fpr a select's option.value WAS the PDF export
-    code, and this test pinned a carve-out saying so in three places. Now a
-    select's value is a SLUG and its export code lives in pdf_on_value (the
-    filler writes that -- PR 1), so the invariant inverts: any rendered passage
-    that talks about a select's export code must say WHERE it lives. A passage
-    that names the code without pdf_on_value is the old contract leaking back
-    in -- and the skeleton is what the model imitates first, so one stale
-    statement is a contradiction it reads before the rule.
 
-    Scans by SENTENCE, not by line, for the same reason as before: the
-    skeleton splits one rule across lines.
-    """
-    text = schema_contract.SCHEMA_CONTRACT
+def select_contract_offenders(text: str) -> list:
+    """Rendered passages that state the OLD select contract. Factored out so the
+    scan itself can be tested against an adversarial passage."""
     chunks = re.split(r"\n\s*\n|(?<=\.)\s", text)
     offenders = []
     for chunk in chunks:
         low = " ".join(chunk.lower().split())
         if not re.search(r"\bselect\b|\bdropdown\b", low):
             continue
+        if _VALUE_IS_CODE.search(low):
+            offenders.append(low[:160])          # the claim itself, verbatim
+            continue
         if "export code" not in low:
             continue
         if "pdf_on_value" in low or "never the export code" in low:
             continue
-        offenders.append(low[:160])
+        offenders.append(low[:160])              # names the code, not its home
+    return offenders
+
+
+def test_no_rendered_passage_puts_a_selects_export_code_in_its_value():
+    """Pins the SET, not the one instance (CLAUDE.md scar #8).
+
+    Until bd polyglot-pdf-g2fpr a select's option.value WAS the PDF export
+    code, and this test pinned a carve-out saying so in three places. Now a
+    select's value is a SLUG and its export code lives in pdf_on_value (the
+    filler writes that -- PR 1), so the invariant inverts: no rendered passage
+    may put a select's export code in its value, and any passage naming the
+    code must say where it lives. The skeleton is what the model imitates
+    first, so one stale statement is a contradiction it reads before the rule.
+
+    Scans by SENTENCE, not by line: the skeleton splits one rule across lines.
+    """
+    offenders = select_contract_offenders(schema_contract.SCHEMA_CONTRACT)
     assert not offenders, (
-        "these rendered passages name a select's export code without saying "
-        "it lives in pdf_on_value:\n  " + "\n  ".join(offenders))
+        "these rendered passages state the old select contract:\n  "
+        + "\n  ".join(offenders))
+
+
+@pytest.mark.parametrize("passage", [
+    # The adversarial sentence fresh-eyes built: co-occurrence let it through.
+    "For a SELECT the option value IS the PDF export code (e.g. WY), unlike "
+    "radio/checkbox_group which uses pdf_on_value for shared-name kids.",
+    "A dropdown's option.value must be the PDF's own export code; pdf_on_value "
+    "is for radios.",
+    "select: value = export code. pdf_on_value carries the widget state.",
+])
+def test_the_scan_catches_a_wrong_passage_that_also_mentions_pdf_on_value(passage):
+    """The scan's own non-vacuity floor: a passage that states the OLD contract
+    while name-dropping pdf_on_value elsewhere in the sentence must be an
+    offender. Without this, the scan is a co-occurrence check that the wrong
+    claim can satisfy."""
+    assert select_contract_offenders(passage), passage
+
+
+def test_the_scan_accepts_the_right_claim():
+    ok = ("For a SELECT each option's value is a SLUG minted from its display "
+          "name and its PDF export code is stored in option.pdf_on_value.")
+    assert select_contract_offenders(ok) == []
 
 
 @pytest.mark.parametrize("what,needle", [
