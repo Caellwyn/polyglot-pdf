@@ -66,6 +66,20 @@ the legacy PLAIN-STRING option shape fired the stale-session warning on every
 fill while printing correctly -- a regression invisible to any fill assertion.
 Both fixed, each pinned by a test that reddens under the reverting mutation.
 
+**The consumer-set pin caught its own author, one commit later.** Round 1's fix
+reworded an editor remedy to say the code "lives in `pdf_on_value`" -- prose,
+not a read. The scanner does not know the difference: the file now mentioned
+the token, had no verdict, and the pin went red on the full suite. I had run the
+editor's own `lintFindings` test after the reword and read that as coverage; the
+Python pin is the one that governs the set. That is the guard doing exactly its
+job -- against me. The verdict entry says how the file got there.
+
+**A fix can introduce an order dependency the original bug did not have.** The
+string-option match returned on the first string hit, so a mixed list resolved
+differently depending on element order. A mixed-shape list is already anomalous,
+but a resolver whose answer depends on order is wrong regardless of who produces
+the list. One full pass, dict match preferred; pinned in both orders.
+
 **`structlog.testing.capture_logs` is unreliable under the full suite.** The warn
 test passed alone and failed in-suite because an earlier test configures a
 cached logger the capture processor never sees. Recording by replacing the
