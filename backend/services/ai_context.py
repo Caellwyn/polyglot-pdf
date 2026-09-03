@@ -71,7 +71,7 @@ MULTI_SELECT_OPTION_TYPES = {
 #
 # 20 sits in the gap this corpus actually shows. Measured over every 2-option
 # field in the three shipped kits, the longest label of each pair runs
-# 1,1,1,1,1,2,2,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
+# 1,1,1,1,1,1,1,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
 # 'previously_received_itin_or_irsn' -- a genuine yes/no whose labels are padded
 # with the printed-form navigation the SI already tells the model not to speak
 # ("Yes. Complete line 6f. ...") -- and then 27 for the I-90 declaration. The

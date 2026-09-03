@@ -130,8 +130,9 @@ def assert_v2_error(doc: dict, *needles: str):
 # ---------------------------------------------------------------------------
 
 # Post the P6.2 strictness flip (bd h76m.16), EVERY shipped kit is v2: w7/f1040
-# (migrated at P6.2; i-90 was also v2 from P6.1b but is now deprecated/removed,
-# bd polyglot-pdf-hydb0). There is no v1-acceptance path left -- the model
+# (migrated at P6.2) and i-90 (v2 from P6.1b; bd polyglot-pdf-hydb0 removed that
+# kit, but the id is back carrying the applicant-only v2 schema, so it is
+# parametrized here again). There is no v1-acceptance path left -- the model
 # applies v2 rules to every schema.
 @pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
 def test_shipped_kit_is_v2_and_validates(kit):

@@ -104,7 +104,7 @@ ANSWER_OVERRIDES: dict = {
     # show_if; the CURRENT kit gates it `in [lawful_permanent_resident,
     # permanent_resident_in_commuter_status]` -- VISIBLE for the persona, and
     # her documented reason is the lost card (the key's own docstring).
-    "reason_section_a": "my_previous_card_has_been_lost_stolen_or_destroyed",
+    "reason_section_a": "lost_stolen_destroyed",
     # The Part-8 page-header copy of the A-number must hold what the CLIENT
     # copies from the FILLED source field -- the A-stripped digits the model
     # writes -- not the key's raw "A123456789". Seeding the raw form would put
