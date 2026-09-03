@@ -97,6 +97,23 @@ enumeration lesson (scar #8) has a corollary: enumerate the READ paths as a
 separate set from the write paths -- they were not symmetric here, and the
 asymmetry is where the defect lived.
 
+**The inverse must refuse to guess.** No gate enforces `pdf_on_value`
+uniqueness (the model gate checks `option.value` only; `migrate_schema_v2`
+copies `/Opt` codes verbatim), so two options can claim one code -- and the
+first cut of the inverse picked the first, resuming the client with a choice
+they never made. The radio arm of the same function already drops on that
+ambiguity, with the rationale written out. Mirrored: `None` on ambiguity, the
+shared `conflicted` set, one log. Verified composing with the radio path
+(`field_count=2`). The uniqueness gate itself is the epic-shaped half, bd
+`polyglot-pdf-7dvpp`.
+
+**A mutant that fails to parse proves nothing, and prints nothing.** My first
+"never ambiguous" mutation put the comment before the colon, collection
+errored, and my summary grep matched no line at all -- which I read past. The
+tell is an EMPTY result where a count should be. Redone with `ast.parse` on the
+mutant before running; the reviewer reproduced it independently. Add to the
+CRLF and no-op-anchor traps: check the mutant is a program.
+
 **`structlog.testing.capture_logs` is unreliable under the full suite.** The warn
 test passed alone and failed in-suite because an earlier test configures a
 cached logger the capture processor never sees. Recording by replacing the
