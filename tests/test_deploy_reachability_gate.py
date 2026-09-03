@@ -745,6 +745,19 @@ def test_the_backend_stage_call_takes_the_fatal_default():
 # slipping between them.
 URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh"]
 
+# How many of a script's gate calls must pass "warn", and how many take the fatal
+# default. deploy-all.sh has TWO call sites and they DIFFER -- the backend stage
+# just created the service (fatal) while the frontend stage binds a pre-existing
+# one (warn) -- so a single expected severity per script cannot express it. That
+# is what a first draft of this map got wrong: it asserted "warn" for every call
+# in deploy-all.sh and reddened on the backend stage's correct fatal call.
+#
+# {script: (n_warn, n_fatal)}
+URL_BAKING_SEVERITY = {
+    "deploy-all.sh": (1, 1),
+    "deploy-editor.sh": (1, 0),
+}
+
 
 @pytest.mark.parametrize("rel", URL_BAKING_SCRIPTS)
 def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
@@ -790,6 +803,7 @@ def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
     #
     # So EXECUTE each call site against a probe that reports its arguments. Only
     # running the shell can distinguish a working call from a well-spelled one.
+    severities: list[str] = []
     for call in calls:
         driver = tmp_path / f"call_{abs(hash(call))}.sh"
         driver.write_text(
@@ -818,10 +832,40 @@ def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
             f"corrupted line continuation shifts them all. Got: {out!r} from "
             f"{call!r}"
         )
+        # SEVERITY, pinned per script. Dropping the trailing `warn` left every
+        # test green while flipping the editor's gate from WARN to FATAL: with
+        # severity="${4:-fatal}", a 3-arg call aborts, and under `set -e` that
+        # blocks EVERY editor deploy over a pre-existing backend's IAM state --
+        # the exact "gate crying wolf" outcome warn mode exists to prevent.
+        # Checking that arguments merely BIND could not see it (found by the
+        # outer cross-surface review).
         assert "SVC=SVC" in out and "REGION=REG" in out and "PROJECT=PRJ" in out, (
             f"{rel}: the gate call's arguments do not bind to the script's own "
             f"service/region/project variables. Got: {out!r} from {call!r}"
         )
+        severities.append("warn" if "SEVERITY=warn" in out else "fatal")
+        # ...and the call must be a BARE command. The sibling guard
+        # test_gate_is_called_as_a_bare_command is parametrized on
+        # GATED_DEPLOY_SCRIPTS, so deploy-editor.sh escapes it entirely; a
+        # `| cat` here would run the gate in a subshell where its `exit` cannot
+        # reach the script. Latent while severity is `warn`, live the moment it
+        # is not.
+        for swallower in ("|", "$(", "&&", "||", "&"):
+            assert swallower not in call, (
+                f"{rel}: the gate call contains {swallower!r}, which runs it in "
+                f"a subshell or guards it. Found: {call!r}"
+            )
+
+    want_warn, want_fatal = URL_BAKING_SEVERITY[rel]
+    got_warn = severities.count("warn")
+    got_fatal = severities.count("fatal")
+    assert (got_warn, got_fatal) == (want_warn, want_fatal), (
+        f"{rel}: expected {want_warn} warn-mode and {want_fatal} fatal-mode gate "
+        f"call(s), got {got_warn} and {got_fatal} ({severities}). Dropping a "
+        f"trailing `warn` flips a stage to FATAL, which under `set -e` blocks "
+        f"every deploy over a PRE-EXISTING backend's IAM state -- the exact "
+        f"'gate crying wolf' outcome warn mode exists to prevent."
+    )
 
 
 def test_url_baking_set_is_complete():

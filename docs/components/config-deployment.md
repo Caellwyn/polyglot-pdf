@@ -307,12 +307,30 @@ project -- and is not quietly aimed at the live demo either. Every scripted
 All delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages). `backend/deploy-new.sh` is a separate, one-off script for bootstrapping
 a brand-new Cloud Run service by name -- not part of the regular update flow the
-two channel scripts use. It carries a **byte-identical copy** of
-`deploy-all.sh`'s `verify_service_publicly_reachable` reachability gate (bd
-`polyglot-pdf-6oi9s`); the two copies are pinned identical by
-`tests/test_deploy_reachability_gate.py`, which also asserts the COMPLETE set of
-scripts passing `--allow-unauthenticated` each carry the gate, so a third such
-script cannot ship ungated.
+two channel scripts use.
+
+**The reachability gate lives in THREE byte-identical copies** --
+`deploy-all.sh`, `backend/deploy-new.sh` (bd `polyglot-pdf-6oi9s`) and
+`deploy-editor.sh` (bd `polyglot-pdf-dldwb`) -- pinned identical by
+`tests/test_deploy_reachability_gate.py`. Edit one and you must edit all three.
+
+That file pins **TWO different completeness sets**, and confusing them is what
+let the editor ship ungated for a round:
+
+| set | membership rule | members |
+|---|---|---|
+| `GATED_DEPLOY_SCRIPTS` | passes `--allow-unauthenticated` (deploys a public service) | `deploy-all.sh`, `backend/deploy-new.sh` |
+| `URL_BAKING_SCRIPTS` | calls `services describe` AND exports a `VITE_*` (bakes a backend URL into a frontend build) | `deploy-all.sh`, `deploy-editor.sh` |
+
+`deploy-editor.sh` deploys only Hosting, so it is correctly absent from the
+first; `backend/deploy-new.sh` builds no frontend, so it is correctly absent from
+the second. Both sets are derived mechanically, so a new script joining either
+one fails CI rather than slipping between them.
+
+The gate's SEVERITY differs by call site: a stage that just CREATED the service
+aborts, while a stage binding a PRE-EXISTING backend (the frontend stage, the
+editor) passes `warn` -- refusing to ship over someone else's IAM state would be
+the gate crying wolf. The counts are pinned per script.
 
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with

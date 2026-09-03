@@ -109,6 +109,44 @@ genuine public deploy. Removed: the comment and `_gate_error` filters already
 cover the real false positive, and verified a real invocation with `echo` on the
 line is now caught.
 
+## The outer review: presence, then binding, then SEVERITY
+
+Fixing the corrupted call made the test assert that arguments BIND. The outer
+review showed that still was not enough: dropping the trailing `warn` left every
+test green while flipping the editor's gate from WARN to FATAL. With
+`severity="${4:-fatal}"`, a 3-arg call aborts -- and under `set -e` that blocks
+EVERY editor deploy over a pre-existing backend's IAM state, the exact
+"gate crying wolf" outcome warn mode exists to prevent.
+
+Three rounds on one assertion, each a strictly larger claim:
+
+1. the function NAME appears -> matched the definition;
+2. a CALL exists -> matched a corrupted call;
+3. the arguments BIND -> missed the severity;
+4. and now the severity COUNT per script.
+
+My first severity map was itself wrong -- it asserted `warn` for every call in
+`deploy-all.sh`, which reddened on the backend stage's correctly-fatal call. The
+map is now `{script: (n_warn, n_fatal)}`, because `deploy-all.sh` legitimately has
+one of each and a single expected value cannot express that.
+
+Also pinned: the editor's call must be a BARE command. The sibling subshell guard
+is parametrized on `GATED_DEPLOY_SCRIPTS`, so `deploy-editor.sh` escaped it
+entirely -- latent while severity is `warn`, live the moment it is not.
+
+## A doc falsified by a file the diff never opened
+
+`config-deployment.md` said "the two copies are pinned identical" and described
+one completeness set. There are now three copies and two sets. Its reassurance
+that "a third such script cannot ship ungated" was precisely the belief that let
+`deploy-editor.sh` through, so it now spells out both sets in a table, why each
+script is absent from the one it is absent from, and that severity differs by
+call site.
+
+Second time in two PRs that a change falsified a tier-2 doc in a file the diff
+did not touch. The `Tracks:` line is the signal for this and I did not consult it
+either time.
+
 ## Testing
 
 Full suite: 4464 passed, 126 skipped, exit 0. Three mutations, each confirmed applied: a new ungated
