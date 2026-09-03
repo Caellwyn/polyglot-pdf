@@ -210,6 +210,30 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    actually applied (a no-op edit that "passes" proves nothing) and re-verify per
    parametrization, not once per file. Full rules + the recurring traps:
    [`docs/standards/testing.md`](docs/standards/testing.md#test-the-tests).
+10. **FORM KITS LIVE IN THE BUCKET, NOT IN GIT -- and NOTHING is tested against a
+   SPECIFIC form.** The GCS bucket is the CANONICAL collection: authors publish to
+   it from the hosted schema editor, and the deployed backend serves kit bytes
+   straight out of it (`GET /api/form-kits/{id}/schema|pdf`). The local
+   `form-kits/` tree is a SCRATCH SPACE for rapid work before publishing -- not a
+   second store. Committing a kit FORKS the canonical copy, and that divergence
+   is exactly what broke the deployed I-90 (bd `polyglot-pdf-6p77c`): the app
+   asked for a static path the frontend build did not contain, Hosting's SPA
+   catch-all answered `index.html` with a **200**, and the client died on
+   `Unexpected token '<', "<!DOCTYPE"`.
+   **The corollary is a TESTING rule**, and it is the expensive half. This is
+   heading for hundreds-to-thousands of kits, authored and republished
+   constantly, so **a test must never assert a named field id, a per-form count,
+   or a hardcoded kit list.** Measured on ONE kit swap: the **22** test files
+   that read a real kit ALL broke; the **16** that hardcode the same ids as
+   SYNTHETIC fixtures needed nothing -- the coupling costs, not the specificity
+   (bd `polyglot-pdf-o9zwe`). So: assert PROPERTIES over DISCOVERED kits (scan
+   `form-kits/`, filter `status: complete`); use a synthetic field for anything
+   about generic behavior; and where a real-data regression pin is genuinely
+   needed, FREEZE the artifact as a fixture rather than pointing at a live kit
+   (`backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json`). Kit-coupled
+   tests are legitimate ONLY when the shipped artifact IS the subject ("every
+   shipped kit lints clean"), and those stay cheap because they name no field.
+   `w7`/`f1040` remain tracked as a documented exception -- do not add a third.
 
 ---
 

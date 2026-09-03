@@ -375,8 +375,20 @@ def test_lint_kits_sweeps_real_repo_kits():
                     if line.count("/") >= 2}
     glossary = load_glossary()
     results = lint_kits(kits_root, glossary)
-    assert {"f1040", "i-90", "w7"} <= set(results)
-    assert {"f1040", "i-90", "w7"} <= tracked_kits
+    # Assert the RELATIONSHIP, not a literal kit list: kits are authored and
+    # retired continuously and the canonical collection is the GCS bucket, so a
+    # hardcoded set here is wrong the moment an author changes one
+    # (bd polyglot-pdf-o9zwe). Every kit git tracks must be swept.
+    # Only real kits: "_"-prefixed dirs are shared authoring data (the
+    # _translation glossary), and a dir without a schema.json is not a kit
+    # (w9-heldout is a deliberately held-out PDF, see its NOTE.md).
+    tracked_kits = {
+        k for k in tracked_kits
+        if not k.startswith("_") and (kits_root / k / "schema.json").is_file()
+    }
+    assert tracked_kits, "no tracked kits found -- the git ls-files parse broke"
+    assert tracked_kits <= set(results), (
+        f"tracked kits not swept: {sorted(tracked_kits - set(results))}")
     assert "_translation" not in results
     for kit_id, findings in results.items():
         if kit_id not in tracked_kits:

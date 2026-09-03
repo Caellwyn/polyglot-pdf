@@ -677,11 +677,50 @@ def _retired_p7_checkbox7():
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def _short_two_option_fields():
+    """Every (id, field) on disk that is a 2-option pair with SHORT labels.
+
+    Short = under the render's fold-into-one-question threshold, so these are the
+    fields the natural-question marker must fire on. Discovered by scanning the
+    kits present rather than naming any, so an author adding/retiring a form
+    never edits this test (bd polyglot-pdf-o9zwe).
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parents[3] / "form-kits"
+    out = []
+    if not root.is_dir():
+        return out
+    for d in sorted(root.iterdir()):
+        schema = d / "schema.json"
+        if not d.is_dir() or d.name.startswith("_") or not schema.is_file():
+            continue
+        try:
+            doc = _json.loads(schema.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        for f in doc.get("fields") or []:
+            opts = f.get("options") or []
+            if len(opts) != 2:
+                continue
+            if max(len(str(o.get("label", "")).split()) for o in opts) <= 6:
+                out.append((f"{d.name}:{f['id']}", f))
+    return out
+
+
 def test_real_yes_no_fields_get_the_natural_question_marker():
-    # bd 41fi criterion 1: the two named shipped fields render the two-option
-    # marker, not the list recital.
-    for kit, fid in (("i-90", "p3_removal_proceedings"), ("f1040", "fld_digital_assets")):
-        f = _load_kit_field(kit, fid)
+    # bd 41fi criterion 1: a real 2-option yes/no renders the two-option marker,
+    # not the list recital.
+    #
+    # DISCOVERED, not named (bd polyglot-pdf-o9zwe): kits are republished
+    # continuously and the canonical collection is the bucket, so naming a kit
+    # field here breaks on the next author edit -- it already did once, when
+    # this said i-90 'p3_checkbox4[1]'. Any shipped 2-option field whose labels
+    # are short is a valid witness for this rule.
+    witnesses = _short_two_option_fields()
+    assert witnesses, "no shipped kit has a short 2-option field to witness this"
+    for fid, f in witnesses:
         assert len(f["options"]) == 2, fid
         text = render_field_guidance(f)
         assert "ask ONE natural question that makes both choices clear" in text, fid
@@ -1078,7 +1117,7 @@ def test_real_multi_option_lists_keep_the_unconditional_recital():
     # bd 41fi + c2jy criterion 2: the two fields the original bug was about
     # still get the read-ALL imperative, kit-backed so a schema re-type or a
     # marker regression cannot slip through on synthetic fields alone.
-    for kit, fid, n in (("w7", "reason", 8), ("i-90", "reason_section_a", 12)):
+    for kit, fid, n in (("w7", "reason", 8),):
         f = _load_kit_field(kit, fid)
         text = render_field_guidance(f)
         assert f"Options ({n} -- read ALL {n} aloud when asking; " in text, fid

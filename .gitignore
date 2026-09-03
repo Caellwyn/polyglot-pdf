@@ -145,16 +145,34 @@ scripts/authoring/outputs/
 # tracked as normal.
 pitch/ignored_pitch/
 
-# Scratch/in-progress kits: a kit with no metadata.json is unfinished work,
-# not a deliverable. Committing one puts a phantom form in every developer
-# local catalogue (LocalFormKitStore synthesizes the manifest by scanning
-# directories and treats absent metadata as public).
-# i-90_v2 stays UNTRACKED deliberately (bd polyglot-pdf-2nikx, Opus review):
-# tracking it turned CI red (translation-coverage lint), would let the next
-# deploy publish it beside the existing I-90 (label collision, 6/17 languages
-# under-translated, readiness gating ignored -- beads polyglot-pdf-9jb21 /
-# g3cj1), and committed a booklet PDF against the rule below. The cost
-# harness pulls it from the bucket: scripts/pull-form-kits.sh. Measurement
-# provenance: schema.json sha256 recorded in
-# scripts/spikes/w7_naive_vs_deployed_findings.md.
-form-kits/i-90_v2/
+# FORM KITS ARE NOT A GIT ARTIFACT (maintainer, 2026-09-03).
+#
+# The GCS bucket is the CANONICAL collection. Authors publish to it from the
+# hosted schema editor, and the deployed backend serves kit bytes straight out
+# of it (GET /api/form-kits/{id}/schema|pdf -- form_kit_routes.py). This local
+# form-kits/ tree is a SCRATCH SPACE for rapid local work before publishing;
+# it is not a second store, and nothing should be committed here.
+#
+# Committing a kit is actively harmful, not merely redundant:
+#   - it forks the canonical copy, so the tree and the bucket silently diverge
+#     (that divergence is what broke the deployed I-90 -- bd polyglot-pdf-6p77c);
+#   - LocalFormKitStore synthesizes its manifest by SCANNING directories and
+#     treats absent metadata as public, so a half-finished kit becomes a phantom
+#     form in every developer's local catalogue;
+#   - it binds tests to a specific form, which is the churn bd polyglot-pdf-o9zwe
+#     exists to remove. At the hundreds-to-thousands of kits this is heading for,
+#     a per-form artifact in git does not scale.
+#
+# Pull the bucket down with scripts/pull-form-kits.sh when you need kits locally.
+#
+# w7 and f1040 stay TRACKED for now and are the exception, not the pattern:
+# f1040 is NOT in the bucket (git is currently its only copy, so untracking it
+# would delete it), and both still back kit-coupled tests. Migrating them --
+# publish to the bucket, then untrack -- is bd polyglot-pdf-o9zwe's job, since
+# it has to land with the test work that stops depending on them. Do NOT add a
+# third.
+form-kits/*/
+!form-kits/_translation/
+!form-kits/w9-heldout/
+!form-kits/w7/
+!form-kits/f1040/

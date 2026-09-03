@@ -80,13 +80,23 @@ def test_w7_date_of_birth_rejects_iso_and_names_the_right_format():
     assert "YYYY-MM-DD" not in errors[0].message
 
 
-def test_i90_date_of_birth_resolves_layout_from_validation_hint():
-    """i-90 carries the layout in validation.hint as well as help.format_hint."""
-    # The i-90 kit is back (this branch republishes it under the same id with
-    # the applicant-only v2 schema), so bd polyglot-pdf-hydb0's kit-absent skip
-    # no longer applies. The field id is the v2 one.
-    field = _kit_field("i-90", "date_of_birth")
+def test_layout_resolves_from_validation_hint_not_just_help():
+    """The layout may live in validation.hint as well as help.format_hint.
+
+    SYNTHETIC on purpose (bd polyglot-pdf-o9zwe): this is a fact about the
+    RESOLVER's precedence, not about any one form. It used to read the i-90's
+    date_of_birth, which coupled a generic rule to a kit that authors republish
+    continuously -- and duly broke when that kit's field ids changed.
+    """
+    field = {
+        "id": "dob",
+        "name": "Date of birth",
+        "type": "date",
+        "validation": {"hint": "MM/DD/YYYY"},
+    }
     assert _validate_date(field, "03/15/1985", "dob", "Date of birth") == []
+    # ...and the hint is genuinely load-bearing: a mismatched value is rejected.
+    assert _validate_date(field, "1985-03-15", "dob", "Date of birth") != []
 
 
 def test_prose_format_hint_still_resolves_a_layout():

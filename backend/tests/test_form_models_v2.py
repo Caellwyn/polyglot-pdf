@@ -38,6 +38,49 @@ def load_kit(kit: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def discovered_kits() -> list:
+    """Every kit present on disk, discovered -- never a hardcoded list.
+
+    Kits are authored and republished continuously and the canonical collection
+    lives in the GCS bucket, not git (see .gitignore's form-kits note), so any
+    literal list here is wrong the moment an author adds, renames or retires a
+    form. Scanning means these guards cover whatever is actually present --
+    including a kit someone pulled down locally -- and need no edit when the
+    set changes (bd polyglot-pdf-o9zwe).
+
+    Scoped to status:complete -- the same gate the app, both deploy scripts and
+    kitPublishFilter.isPubliclyServable use. A DRAFT is work in progress and must
+    not fail CI: a maintainer with a half-finished kit pulled into their scratch
+    tree would otherwise break the suite for everyone.
+
+    KNOWN LIMIT: this sees only what is ON DISK, and the CANONICAL collection is
+    the GCS bucket (.gitignore's form-kits note). In a clean checkout that is w7
+    alone, so this guard is real but THIN -- it proves the invariant holds for
+    whatever is present, not for every published kit. Closing that means running
+    it against a pulled or synthetic corpus, which is bd polyglot-pdf-o9zwe's
+    job. Do NOT "fix" the thinness by hardcoding kit names back in; that is the
+    coupling o9zwe exists to remove.
+    """
+    root = REPO_ROOT / "form-kits"
+    if not root.is_dir():
+        return []
+    out = []
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d.name.startswith("_"):
+            continue
+        if not (d / "schema.json").is_file():
+            continue
+        meta = d / "metadata.json"
+        if not meta.is_file():
+            continue
+        try:
+            if json.loads(meta.read_text(encoding="utf-8")).get("status") == "complete":
+                out.append(d.name)
+        except (ValueError, OSError):
+            continue  # unreadable metadata -> withhold, same as the publish gate
+    return out
+
+
 def v2_schema(fields: list, source: str = "pdf") -> dict:
     """Minimal valid v2 schema scaffold around the given fields."""
     doc = {
@@ -129,18 +172,16 @@ def assert_v2_error(doc: dict, *needles: str):
 # Exit criterion 1: shipped v1 kits validate UNCHANGED
 # ---------------------------------------------------------------------------
 
-# Post the P6.2 strictness flip (bd h76m.16), EVERY shipped kit is v2: w7/f1040
-# (migrated at P6.2) and i-90 (v2 from P6.1b; bd polyglot-pdf-hydb0 removed that
-# kit, but the id is back carrying the applicant-only v2 schema, so it is
-# parametrized here again). There is no v1-acceptance path left -- the model
-# applies v2 rules to every schema.
-@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
+# Post the P6.2 strictness flip (bd h76m.16), EVERY kit is v2 -- there is no
+# v1-acceptance path left, the model applies v2 rules to every schema. The kit
+# set is DISCOVERED, not listed: see discovered_kits().
+@pytest.mark.parametrize("kit", discovered_kits())
 def test_shipped_kit_is_v2_and_validates(kit):
     schema = validate(load_kit(kit))
     assert schema.schema_version == "2"
 
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
+@pytest.mark.parametrize("kit", discovered_kits())
 def test_shipped_kit_has_no_dangling_references(kit):
     # Every id a section's fields[] (or a show_if/require_if) names must exist.
     # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4] as
@@ -152,7 +193,7 @@ def test_shipped_kit_has_no_dangling_references(kit):
     assert result["errors"] == [], result["errors"]
 
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
+@pytest.mark.parametrize("kit", discovered_kits())
 def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
     # A field that is read_only AND carries a show_if is only editable once shown
     # if it ALSO declares an unlock_method -- FieldRenderer's isDisabled falls back
