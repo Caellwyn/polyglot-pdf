@@ -85,13 +85,21 @@ def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id
 	# can never carry pdf_on_value, so matching it here is what keeps a legacy
 	# select's fill warning-free -- fresh-eyes (g2fpr.1) caught the dict-only
 	# match misreporting EVERY fill of such a select as a stale session.
+	# ONE full pass, dict match preferred over string match whatever the order:
+	# an early return on the first string hit skipped a later dict entry with
+	# the same value and a real pdf_on_value (fresh-eyes, g2fpr.1 round 2). A
+	# mixed-shape list is already anomalous, but the resolver must not make
+	# its answer depend on element order.
 	match = None
+	string_hit = False
 	for o in options:
 		if isinstance(o, dict) and o.get("value") == value:
 			match = o
 			break
 		if isinstance(o, str) and o == value:
-			return value                                    # legacy: value is the code
+			string_hit = True                               # legacy: value is the code
+	if match is None and string_hit:
+		return value
 	if match is None:
 		if options:
 			# Options exist and none matches: the shape of a session stored

@@ -192,3 +192,17 @@ def test_legacy_plain_string_options_print_and_do_NOT_warn(kit_root, monkeypatch
     schema = _schema(list(_CODES))          # plain strings, not dicts
     assert _rendered(_fill(schema, "AK")) == "AK"
     assert "select_value_not_an_option" not in calls
+
+
+@pytest.mark.parametrize("order", ["string-first", "dict-first"])
+def test_a_mixed_shape_list_prefers_the_dict_match_whatever_the_order(order):
+    """Fresh-eyes (g2fpr.1 round 2): the first string-option fix RETURNED on the
+    first string hit, so ["AL", {"value": "AL", "pdf_on_value": "ZZ"}] resolved
+    to "AL" while the reversed list resolved to "ZZ" -- an answer that depended
+    on element order. A mixed-shape list is already anomalous (both models type
+    options as homogeneous), but the resolver must not be order-sensitive.
+    Pure-function check, both orders."""
+    from backend.routes.pdf_fill_routes import resolve_select_fill_value
+    d = {"value": "AL", "label": "Alabama (AL)", "pdf_on_value": "ZZ"}
+    options = ["AL", d] if order == "string-first" else [d, "AL"]
+    assert resolve_select_fill_value({"options": options}, "AL") == "ZZ"

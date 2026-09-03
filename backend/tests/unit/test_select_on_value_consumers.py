@@ -87,6 +87,9 @@ REVIEWED: dict[str, str] = {
         "displays it on radio kids; g2fpr.2 makes the select export-code input write it",
     "schema-editor/src/types/schema.ts":
         "FieldOption type declares pdf_on_value",
+    "schema-editor/src/utils/lintFindings.ts":
+        "RULE_REMEDIES prose names pdf_on_value in the select-value-not-slug remedy; labels only, not a reader "
+        "(this file joined the set when the remedy was reworded in g2fpr.1 round 2 -- the pin caught it)",
     "schema-editor/src/utils/fieldGrouping.ts":
         "grouping rules: pdf_on_value alone is not a checkbox_group; not a select reader",
     "schema-editor/src/utils/remoteKitStore.ts":
