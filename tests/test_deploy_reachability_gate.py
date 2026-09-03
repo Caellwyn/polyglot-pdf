@@ -244,12 +244,18 @@ def test_allow_unauthenticated_set_is_complete():
         # whole-file substring search declared it a public-deploy script -- a
         # false positive, since it deploys only Hosting. Evidence region scoped
         # to the claim: the flag must appear on a line that is neither a comment
-        # nor a printed message.
+        # nor the gate's own error text.
+        #
+        # NOT filtered on "echo": an earlier draft excluded any line containing
+        # it, which is redundant (the two real mentions are a comment and a
+        # _gate_error line) and would have let a genuine invocation escape --
+        # `gcloud run deploy ... --allow-unauthenticated || { echo fail; }` is a
+        # real public deploy. A filter wide enough to hide the false positive was
+        # also wide enough to hide a true one.
         if any(
             "--allow-unauthenticated" in ln
             and not ln.strip().startswith("#")
             and "_gate_error" not in ln
-            and "echo" not in ln
             for ln in text.splitlines()
         ):
             found.add(rel)
@@ -741,7 +747,7 @@ URL_BAKING_SCRIPTS = ["deploy-all.sh", "deploy-editor.sh"]
 
 
 @pytest.mark.parametrize("rel", URL_BAKING_SCRIPTS)
-def test_url_baking_script_consults_the_reachability_gate(rel):
+def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
     """Resolving a URL proves existence, never reachability.
 
     `gcloud run services describe --format 'value(status.url)'` answers for a
@@ -775,6 +781,47 @@ def test_url_baking_script_consults_the_reachability_gate(rel):
         f"CALLING the reachability gate, so it can ship pinned to a backend "
         f"that 403s every request. (Defining the function is not enough.)"
     )
+    # ...and the call must actually WORK. Presence proved too little TWICE: the
+    # first assertion matched the definition, and this one then passed over a
+    # call whose line continuation had been corrupted into a literal "\\n", so
+    # bash bound svc="n" and severity=$PROJECT. The gate queried a nonexistent
+    # service, the query failed, and the __QUERY_FAILED__ path warn-and-skipped
+    # -- a gate that could never fire, with every test green.
+    #
+    # So EXECUTE each call site against a probe that reports its arguments. Only
+    # running the shell can distinguish a working call from a well-spelled one.
+    for call in calls:
+        driver = tmp_path / f"call_{abs(hash(call))}.sh"
+        driver.write_text(
+            "BACKEND_SERVICE_NAME=SVC; REGION=REG; PROJECT=PRJ\n"
+            "POLYGLOT_PROJECT_NAME=PRJ; SERVICE_NAME=SVC\n"
+            "verify_service_publicly_reachable() {\n"
+            '  echo "ARGC=$# SVC=$1 REGION=$2 PROJECT=$3 SEVERITY=$4"\n'
+            "}\n" + call + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        proc = subprocess.run(
+            [BASH, driver.name],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(tmp_path),
+            timeout=60,
+        )
+        assert proc.returncode == 0, (
+            f"{rel}: the gate call does not even parse/run: {proc.stderr!r}"
+        )
+        out = proc.stdout.strip()
+        assert "ARGC=3" in out or "ARGC=4" in out, (
+            f"{rel}: the gate call passes the wrong number of arguments -- a "
+            f"corrupted line continuation shifts them all. Got: {out!r} from "
+            f"{call!r}"
+        )
+        assert "SVC=SVC" in out and "REGION=REG" in out and "PROJECT=PRJ" in out, (
+            f"{rel}: the gate call's arguments do not bind to the script's own "
+            f"service/region/project variables. Got: {out!r} from {call!r}"
+        )
 
 
 def test_url_baking_set_is_complete():

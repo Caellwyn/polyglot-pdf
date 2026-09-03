@@ -66,6 +66,49 @@ reason as `deploy-all.sh`'s frontend stage: that backend is PRE-EXISTING and
 possibly mid-fix by someone else, whereas the backend stage aborts because the
 deploy had just created the service itself.
 
+## The escaping bug reached SHIPPED CODE this time
+
+The review found the gate call I had just added was corrupted:
+
+```
+verify_service_publicly_reachable 
+            "$BACKEND..."
+```
+
+`
+` is two literal characters, not a line continuation. So bash bound
+`svc="n"`, `region=$BACKEND_SERVICE_NAME`, `project=$REGION`,
+`severity=$PROJECT`. The gate queried a service named `n`, that query failed, and
+the `__QUERY_FAILED__` fallback warned-and-skipped. **A gate that could never
+fire, with every test green.**
+
+Fourth occurrence of this escaping bug in this arc, and the first to reach
+shipped code rather than a test. The cause each time is the same: writing shell
+through a heredoc, where `\
+` collapses.
+
+**And my test passed over it.** The assertion checked the function name appeared
+on a non-comment, non-definition line -- which a corrupted call satisfies
+perfectly. Presence had already proved too little once here (it first matched the
+DEFINITION); this was the same lesson one level deeper.
+
+The fix is to stop asserting on text: the test now EXECUTES each call site
+against a probe function that reports its arguments, and asserts they bind to the
+script's own service/region/project variables. Re-applying the exact corruption
+now reddens it. Only running the shell can tell a working call from a
+well-spelled one.
+
+## A filter wide enough to hide a false positive hid a true one
+
+Adding the gate to `deploy-editor.sh` tripped
+`test_allow_unauthenticated_set_is_complete`, because the gate's own comment and
+error text contain `--allow-unauthenticated` and the detector was a whole-file
+substring search. My first fix excluded any line containing `echo` -- which also
+excludes `gcloud run deploy ... --allow-unauthenticated || { echo fail; }`, a
+genuine public deploy. Removed: the comment and `_gate_error` filters already
+cover the real false positive, and verified a real invocation with `echo` on the
+line is now caught.
+
 ## Testing
 
 Full suite: 4464 passed, 126 skipped, exit 0. Three mutations, each confirmed applied: a new ungated

@@ -218,7 +218,8 @@ if [ -z "$VITE_API_BASE_URL" ]; then
         # someone else, so refusing to ship the editor over its IAM state
         # would be the gate crying wolf. The backend stage aborts because
         # there the deploy had just created the service itself.
-        verify_service_publicly_reachable \n            "$BACKEND_SERVICE_NAME" "$REGION" "$PROJECT" warn
+        verify_service_publicly_reachable \
+            "$BACKEND_SERVICE_NAME" "$REGION" "$PROJECT" warn
     else
         echo "WARN: could not resolve live backend URL; build falls back to VITE_API_BASE_URL in .env.hosted (may be stale -- bd polyglot-pdf-emm7)" >&2
     fi
