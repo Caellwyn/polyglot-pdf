@@ -185,8 +185,8 @@ the channel.
   `require_app_admin`; `require_firm_manager` (firm_role == manager,
   firm_id from the verified token only), which lives in
   `backend/services/auth.py` and REPLACES the inline manager check in the
-  retire route (`backend/routes/form_kit_routes.py:490`) so the rule has one
-  home (scar #8); `require_app_admin_or_owning_manager` (the composite for
+  retire route's helper `_require_firm_owns_private_kit`
+  (`backend/routes/form_kit_routes.py:494`) so the rule has one home (scar #8); `require_app_admin_or_owning_manager` (the composite for
   revoke and link listing: an app admin names the firm, a manager's firm
   comes from the token); and `require_google_oidc(audience,
   allowed_caller_emails)` for Cloud Scheduler / Pub/Sub push callers. Each
@@ -333,15 +333,16 @@ reachability gate, 1.4 audit log (in-transaction + pending forms) +
 coverage test + rules block, 1.5 runtime config (incl. `CREDITS_ENFORCED`) +
 call-site swap + parity test, 1.6 `/version` SHA on both services} in
 parallel -> 1.7 console skeleton + sign-in gate + live and candidate
-Hosting sites + bash bridge. Docs: add the two new contracts (app_config
-producer/consumer; audit log) to `docs/technical_guide.md`'s Surface
-contracts map in the bead that lands each.
+Hosting sites + bash bridge -> 1.8 docs (the admin tier as current state:
+the two new Surface contracts in `docs/technical_guide.md`, the
+config-deployment, auth, and promotion-tiers docs, and a new
+`docs/components/admin-service.md`).
 
 ### Planner decisions (reversible)
 
 One Dockerfile with a runtime `APP_MODULE`; boolean `app_admin` claim;
 `admin_backend` and `admin-console` names; site `polyglot-admin-demo`;
-tagged-revision + preview-channel staging for the admin tier;
+tagged-revision + candidate-site staging for the admin tier;
 `check_revoked` stays off on the admin verifier until someone measures the
 latency cost of turning it on.
 
@@ -997,7 +998,7 @@ Each epic's exit criteria above are the gates; the program-level checks are:
   rollups, alerts, and the Cloud Build pipeline are each proven on staging
   against a `kind: mock` firm before any demo deploy; the admin service and
   console, which have no channel, are proven on a tagged no-traffic revision
-  and a Hosting preview channel before traffic shifts. Each deploy is its
+  and the candidate Hosting site before traffic shifts. Each deploy is its
   own per-instance ask under the existing gates until Epic 4 changes the
   doctrine.
 - Live checks: `/version` on every channel, `/health` with the firms-store
@@ -1036,14 +1037,14 @@ Collected from the epics; none blocks starting Epic 1.
    runtime config (bead 1.5, public-backend only); everything on the admin
    service waits for Epic 1.2.
 
-## First concrete steps on approval
+## First concrete steps (done 2026-09-03, recorded here as the plan of record)
 
 1. Commit this document as the sprint plan
    (`docs/sprint_22_admin-console_plan.md`, next number per `docs/INDEX.md`,
    with an INDEX row), through `/closeout` as a docs-only PR.
 2. Create the program epic and the five epic beads with `plan:` pointers at
-   that doc; file Epic 1 children 1.1 to 1.7 and Epic 2 Track A beads A1 to
-   A6 (which can start now) and P0 (bd `polyglot-pdf-6p77c` already exists),
+   that doc; file Epic 1 children 1.1 to 1.8 and Epic 2 Track A beads A1 to
+   A6 (which can start once 1.4/1.5 land) and P0 (bd `polyglot-pdf-6p77c` already exists),
    each with `## Exit criteria`, wiring dependencies with `bd dep add` and
    verifying with `bd ready` / `bd blocked`.
 3. Claim 1.1 in a fresh worktree off `dev` via `/next-bead`.
