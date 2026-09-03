@@ -169,6 +169,30 @@ and filed it rather than blocking. That was the correct call on its own terms;
 fixing it here was still right, because leaving it open would have left this
 PR's own doc sentence lying.
 
+## "At least one" was not what the sentence promised
+
+Round three caught that my fix asserted a LOWER BOUND (at least one fatal call)
+while the doc said "counts" -- exact. The reviewer defeated the lower bound with
+an opt-in-strict shape:
+
+```sh
+if [ "$STRICT" = "1" ]; then verify_... "$S" "$R" "$P"
+else                         verify_... "$S" "$R" "$P" warn; fi
+```
+
+The DEFAULT path warns, a decoy fatal call satisfies "at least one", suite green.
+Only reachable once a script gains a second call site -- but the sentence claimed
+a property the test did not hold, which is the same over-claim in miniature that
+this whole bead has been about.
+
+Two fixes were on offer: soften the doc, or strengthen the test. Took the second.
+`GATED_DEPLOY_SEVERITY = {script: (n_warn, n_fatal)}` now mirrors
+`URL_BAKING_SEVERITY`, and both the decoy shape and a plain `warn` append redden.
+
+Three rounds, three strictly larger claims about the same assertion: it exists ->
+it is called correctly -> its severity is exactly right. Each round the weaker
+version had looked sufficient.
+
 ## Testing
 
 Full suite: 4466 passed, 126 skipped, exit 0. Three mutations, each confirmed applied: a new ungated

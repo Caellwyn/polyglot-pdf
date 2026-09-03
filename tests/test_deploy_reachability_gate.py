@@ -910,6 +910,24 @@ def test_gate_copies_are_identical_across_all_three_scripts():
     )
 
 
+# Exact (n_warn, n_fatal) for each service-CREATING script, mirroring
+# URL_BAKING_SEVERITY. An "at least one fatal" lower bound was not enough: with
+# only that, adding a SECOND call site lets the real one be downgraded while a
+# decoy keeps the assertion satisfied. The round-3 review demonstrated it with an
+# opt-in-strict shape --
+#
+#     if [ "$STRICT" = "1" ]; then verify_... "$S" "$R" "$P"
+#     else                          verify_... "$S" "$R" "$P" warn; fi
+#
+# -- which leaves the DEFAULT path warning while the suite stays green. Exact
+# counts also make config-deployment.md's "the counts are pinned per script"
+# literally true rather than true-of-today's-tree.
+GATED_DEPLOY_SEVERITY = {
+    "deploy-all.sh": (1, 1),        # frontend stage warns, backend stage aborts
+    "backend/deploy-new.sh": (0, 1),  # only ever creates; always fatal
+}
+
+
 @pytest.mark.parametrize("rel", GATED_DEPLOY_SCRIPTS)
 def test_service_creating_script_takes_the_fatal_default(rel, tmp_path):
     """Every script that CREATES a service must let the gate abort.
@@ -942,7 +960,7 @@ def test_service_creating_script_takes_the_fatal_default(rel, tmp_path):
     # A service-CREATING script must have at least one fatal call: the one
     # guarding the service it just made. Execute each, as a text check cannot
     # tell a 3-arg call from a 4-arg one whose continuation is corrupted.
-    fatal_seen = False
+    severities: list[str] = []
     for call in calls:
         driver = tmp_path / f"sc_{abs(hash(call))}.sh"
         driver.write_text(
@@ -965,12 +983,20 @@ def test_service_creating_script_takes_the_fatal_default(rel, tmp_path):
         assert proc.returncode == 0, (
             f"{rel}: a gate call does not parse/run: {proc.stderr!r}"
         )
-        if "SEVERITY=" in proc.stdout and "SEVERITY=warn" not in proc.stdout:
-            fatal_seen = True
+        assert "SEVERITY=" in proc.stdout, (
+            f"{rel}: a gate call produced no severity output, so it cannot be "
+            f"classified: {proc.stdout!r} from {call!r}"
+        )
+        severities.append(
+            "warn" if "SEVERITY=warn" in proc.stdout else "fatal"
+        )
 
-    assert fatal_seen, (
-        f"{rel} creates a public Cloud Run service but every one of its gate "
-        f"calls passes `warn`, so an unreachable service it just CREATED would "
-        f"only warn. At least one call must take the fatal default. Calls: "
-        f"{calls!r}"
+    want_warn, want_fatal = GATED_DEPLOY_SEVERITY[rel]
+    got_warn = severities.count("warn")
+    got_fatal = severities.count("fatal")
+    assert (got_warn, got_fatal) == (want_warn, want_fatal), (
+        f"{rel} creates a public Cloud Run service; expected {want_warn} "
+        f"warn-mode and {want_fatal} fatal-mode gate call(s), got {got_warn} and "
+        f"{got_fatal} ({severities}). An unreachable service this script just "
+        f"CREATED must ABORT the deploy, not warn."
     )
