@@ -543,6 +543,105 @@ async def test_a_sentinel_already_queued_is_not_a_live_pipeline():
     assert _drain(adapter._text_queue) == ["next field is date of birth"]
 
 
+def test_EVERY_text_sentinel_site_marks_the_pipeline_closing_first():
+    """Pin the SET of teardown sites, not the one we happened to know about.
+
+    An earlier version of this guard collected functions that BOTH set the flag
+    AND queued the sentinel -- which structurally excluded any site that did only
+    the latter, i.e. exactly the site that was broken. It passed while the
+    receive loop's own teardown (the one that fires on a spontaneous Gemini drop,
+    so the COMMON path) queued a sentinel without marking the pipeline closing:
+    a concurrent unmute put the held turn behind that sentinel and cleared it as
+    delivered, silently.
+
+    So this enumerates every function that queues the TEXT sentinel and requires
+    each to mark the pipeline closing BEFORE it. A new teardown site added later
+    fails here instead of shipping the same hole a third time.
+    (CLAUDE.md scar #8: pin the set, not the instance.)
+    """
+    import ast
+    import inspect
+
+    from backend.adapters import live_ai_gemini
+
+    src = textwrap.dedent(inspect.getsource(live_ai_gemini.LiveAIGemini))
+    tree = ast.parse(src)
+
+    def _sets_closing_true(node):
+        return (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(t, ast.Attribute) and t.attr == "_text_pipeline_closing"
+                for t in node.targets
+            )
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is True
+        )
+
+    def _queues_text_sentinel(node):
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "put_nowait"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "_text_queue"
+            and any(isinstance(a, ast.Constant) and a.value is None for a in node.args)
+        )
+
+    # EVERY function that queues the text sentinel -- no filtering on whether it
+    # already sets the flag, which is what hid the second site.
+    teardown_sites = [
+        fn
+        for fn in ast.walk(tree)
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(_queues_text_sentinel(n) for n in ast.walk(fn))
+    ]
+    assert teardown_sites, (
+        "no function queues the text sentinel any more -- the teardown moved; "
+        "re-check this guard rather than deleting it"
+    )
+
+    unmarked = []
+    for fn in teardown_sites:
+        sentinel_line = min(n.lineno for n in ast.walk(fn) if _queues_text_sentinel(n))
+        flag_lines = [n.lineno for n in ast.walk(fn) if _sets_closing_true(n)]
+        if not flag_lines or min(flag_lines) > sentinel_line:
+            unmarked.append(fn.name)
+
+    assert unmarked == [], (
+        "these teardown sites queue the text sentinel without first marking the "
+        "pipeline closing, so a concurrent unmute would lose the held turn and "
+        "log it as delivered (bd polyglot-pdf-wurj8): " + ", ".join(unmarked)
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_sentinel_already_queued_is_not_a_live_pipeline():
+    """The sharpest teardown state: reader alive, but it will never reach us.
+
+    finalize() queues a None SENTINEL that makes the sender loop exit, THEN
+    cancels the task, THEN nulls the queue. Between the sentinel and the cancel
+    the task is not done() and the queue accepts a put -- yet anything queued
+    behind that sentinel is already unreadable. Neither the queue nor the task
+    can report this, which is why the adapter tracks the teardown explicitly.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    # Exactly the state finalize() creates before it cancels anything.
+    adapter._text_queue.put_nowait(None)
+    adapter._text_pipeline_closing = True
+    adapter.set_voice_muted(False)
+
+    assert adapter._muted_context == "next field is date of birth"
+    assert _drain(adapter._text_queue) == [None]
+
+    # ...and it still reaches the replacement pipeline.
+    _restart_text_pipeline(adapter)
+    assert _drain(adapter._text_queue) == ["next field is date of birth"]
+
+
 def test_the_teardown_marks_the_pipeline_closing_before_it_queues_the_sentinel():
     """The flag must be set before the sentinel, or it is useless.
 
@@ -607,3 +706,30 @@ def test_the_teardown_marks_the_pipeline_closing_before_it_queues_the_sentinel()
             + "; a concurrent unmute in between would put a turn behind the "
             "sentinel and lose it (bd polyglot-pdf-wurj8)"
         )
+
+
+@pytest.mark.asyncio
+async def test_a_spontaneous_drop_teardown_does_not_swallow_the_held_turn():
+    """The behavioural twin of the guard above, for the COMMON teardown path.
+
+    A spontaneous Gemini drop (1011/1006) tears the text pipeline down from the
+    receive loop rather than from finalize(). That path queues the same sentinel,
+    so an unmute racing it would put the held turn behind a reader that is about
+    to exit -- and clear it, having logged VOICE_UNMUTE_REPLAY_SENT. This drives
+    the resulting STATE rather than the code shape, so the two tests fail for
+    different reasons if the fix regresses.
+    """
+    adapter = _make_adapter()
+    adapter.set_voice_muted(True)
+    await adapter.send_text_message("next field is date of birth")
+
+    # The receive loop's teardown, in order: mark closing, then sentinel.
+    adapter._text_pipeline_closing = True
+    adapter._text_queue.put_nowait(None)
+    adapter.set_voice_muted(False)
+
+    assert adapter._muted_context == "next field is date of birth"
+
+    # ...and the replacement pipeline still delivers it.
+    _restart_text_pipeline(adapter)
+    assert _drain(adapter._text_queue) == ["next field is date of birth"]

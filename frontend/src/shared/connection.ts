@@ -1142,11 +1142,20 @@ export function createConnectionManager(
 			if (voiceMode === mode) return
 			voiceMode = mode
 			console.log('[VFF Connection] Voice mode ->', mode)
-			// Entering manual mode: stop what is ALREADY in the air. The backend
-			// gate stops future proactive turns, but a reply that is mid-flight was
-			// authorised before the toggle and would keep talking over a user who
-			// just asked for silence. The spell-back clip is a separate audio path
-			// with its own player, so it needs its own cancel (bd 22h1f).
+			// Entering manual mode: drop what is ALREADY QUEUED. The backend gate
+			// stops future proactive turns, but audio authorised before the toggle
+			// is already on its way, and would keep talking over a user who just
+			// asked for silence. The spell-back clip is a separate audio path with
+			// its own player, so it needs its own cancel (bd 22h1f).
+			//
+			// This is a ONE-SHOT DRAIN, not a mute: chunks of the in-flight turn
+			// that arrive AFTER this still play, so a user who toggles mid-sentence
+			// hears the rest of that sentence. Bounded to one turn and no worse
+			// than the pause() this replaces -- silencing it properly needs a
+			// server-side interrupt we do not have. Tracked as bd
+			// polyglot-pdf-cdyyl. NOT closed by latching playbackBlocked: that is
+			// the unpaired-flush trap (bd nm7z) that silently killed ALL later
+			// audio.
 			//
 			// The mic is deliberately NOT touched in either direction -- manual mode
 			// keeps it usable, which is the whole difference from the pause() this

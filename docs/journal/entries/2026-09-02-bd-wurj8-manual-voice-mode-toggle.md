@@ -227,6 +227,48 @@ few hundred lines away. Fixing an instance does not inoculate the next site;
 feature-detect every hop into an optional collaborator, especially off an event
 handler.
 
+## The guard that could not see the site it was meant to guard
+
+Eight fresh-eyes rounds cleared this bead. The Opus CROSS-SURFACE pass then found
+a SECOND text-pipeline teardown site -- in the receive loop, firing on every
+spontaneous Gemini drop, so the commoner path -- that queued the sentinel without
+marking the pipeline closing. Exactly the defect `_text_pipeline_closing` was
+introduced to close, left open on the path I did not know existed.
+
+**Why eight rounds could not see it.** My AST guard collected functions that BOTH
+set the flag AND queued the sentinel. That filter structurally excludes any site
+doing only the latter -- i.e. precisely the broken one. Measured rather than
+assumed: the old guard examined 1 of 3 sentinel sites (`finalize` only) and was
+blind to `_run_session_loop` and `_handle_session`.
+
+That is CLAUDE.md scar #8 at full strength, and it is worth being precise about
+how it got past me. I DID enumerate -- I just enumerated the wrong set. I listed
+"places that mark the pipeline closing" and checked each queued a sentinel, when
+the invariant runs the other way: every place that queues a sentinel must mark
+the pipeline closing first. A guard derived from the sites you already know about
+can only ever confirm what you already know.
+
+The inverted guard enumerates every text-sentinel site and requires each to mark
+closing before it, so a third site fails CI. Mutation-verified by restoring the
+exact bug; a behavioural twin covers the same property from the state side, so
+the two fail for different reasons.
+
+**Two claims of mine were also overstated**, both caught by the same pass:
+`setVoiceMode`'s comment said it stops audio "already in the air" when
+`resetPlaybackClock` is a one-shot drain (a chunk arriving after still plays --
+bounded to one turn, tracked as bd `polyglot-pdf-cdyyl`); and the "newest only"
+rationale is right for next-field hints, which restate whole state, but wrong for
+manual-edit notices, which are EVENTS -- so edits 1..N-1 are dropped (bd
+`polyglot-pdf-54tb5`). Both behaviours are defensible and bounded; the comments
+claimed more than the code delivered, which is its own kind of defect.
+
+**Process note, learned twice.** Both times I reported backend failures in guards
+I had not touched, the cause was my own backgrounded suite overlapping a
+foreground edit to a file those guards read from disk. They look like real
+breakage -- named tests, real assertions, untouched files -- and the instinct that
+dismisses them is the reasoning this repo warns against. Never overlap a suite
+with an edit; re-run a suspect guard alone before believing it.
+
 ## "Provably safe" is not "covered"
 
 Round 7 pointed at two `connection?.setVoiceMode(mode)` calls -- optional chaining
@@ -285,7 +327,7 @@ whose whole purpose was catching an omission.
 
 ## Verification
 
-- Backend: 4430 passed, 0 failed on the full CI scope (`backend/tests tests`).
+- Backend: 4432 passed, 0 failed on the full CI scope (`backend/tests tests`).
 
   A caveat worth recording, because it cost a re-run: an EARLIER full run of this
   same tree reported 2 failures, both in guards that read
@@ -294,7 +336,7 @@ whose whole purpose was catching an omission.
   suite and the probes were running concurrently. Both pass in isolation on the
   clean tree. A source-reading guard cannot run while anything edits the files it
   inspects, so mutation probes and a full suite must not overlap.
-- Frontend: 1911 passed, all 134 files. (`SchemaForm.previewEdit` failed on an
+- Frontend: 1910 of 1911 across 134 files; the one failure is `SchemaForm.previewEdit`, the known pre-existing flake (bd `polyglot-pdf-7y2yk`, proven on `origin/dev`), which passes in isolation and passed on the two preceding full runs. (`SchemaForm.previewEdit` failed on an
   earlier run and passed on this one -- the known pre-existing flake proven on
   `origin/dev`, tracked as bd `polyglot-pdf-7y2yk`.)
 - Control copy translated across all 18 shipped languages. The existing

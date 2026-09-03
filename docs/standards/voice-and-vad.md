@@ -141,6 +141,12 @@ newest: these messages restate whole current state ("the next unfilled field is
 X"), so an older one is a stale contradiction rather than extra information, and
 replaying a backlog would bill for every one.
 
+> **The set of teardown sites is pinned by a test, not by memory.** A guard that
+> checked only the site we knew about is how the second one shipped unmarked;
+> `test_EVERY_text_sentinel_site_marks_the_pipeline_closing_first` now enumerates
+> every function queuing the text sentinel and requires each to mark the pipeline
+> closing first, so a third site fails CI instead of repeating the defect.
+
 **Delivery is keyed on a CONDITION, not on an event.** A section switch tears the
 text pipeline down and the next connect builds a new one, so the two things a
 held turn needs -- the user no longer muted, and a pipeline that can carry it --
@@ -168,9 +174,10 @@ Teardown happens in stages, and each stage defeats a different naive check:
 | The queue is nulled -- several awaits later | -- |
 
 So a put can succeed onto a pipe that will never be read, and the turn is then
-cleared as "sent" and lost. `_text_pipeline_closing` is set at the top of the
-drain, **before any await and before the sentinel**, and cleared only when a new
-sender is actually running -- it states the fact instead of inferring it from a
+cleared as "sent" and lost. `_text_pipeline_closing` is set **before the sentinel
+at EVERY teardown site** -- there are two, `finalize()` (a section switch) and the
+receive loop (a spontaneous Gemini drop, so the commoner one) -- and cleared only
+when a new sender is actually running -- it states the fact instead of inferring it from a
 proxy. The queue and task checks remain as cheap backstops for what the flag does
 not cover (no session yet, sender already exited). The second flush site sits at
 the sender's START, not at queue creation: a queue with no reader is not a

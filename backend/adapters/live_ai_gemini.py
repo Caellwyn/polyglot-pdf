@@ -527,10 +527,22 @@ class LiveAIGemini(ILiveAI):
         # is correctly ORIENTED the instant it is wanted, so context must not be
         # lost -- but it cannot be delivered live either, because delivering it
         # is what makes the model speak. So the LATEST context turn is held and
-        # replayed on unmute. Only the latest: these messages restate whole
-        # current state ("next unfilled field is X"), so an older one is not
-        # additional information, it is a stale contradiction -- and replaying a
-        # backlog would both confuse the model and bill for every one.
+        # replayed on unmute.
+        #
+        # ONLY the latest, and that is exactly right for the dominant producer:
+        # next-field hints restate whole current state ("next unfilled field is
+        # X"), so an older one is not extra information, it is a stale
+        # contradiction, and replaying a backlog would both confuse the model and
+        # bill for every one.
+        #
+        # It is a REAL, ACCEPTED LOSS for the other producer. A manual-edit
+        # notice ("user set <field> to <value>") is an EVENT, not a restatement,
+        # and manual mode is precisely when the user types -- so edits 1..N-1 are
+        # dropped and only the last survives. Tolerable because the CLIENT owns
+        # field state and the SI forbids the model asserting field values without
+        # calling get_form_status, so the form itself is unaffected; the model
+        # merely has a thinner picture until it next asks. Tracked as bd
+        # polyglot-pdf-54tb5.
         self._voice_muted: bool = False
         self._muted_context: Optional[str] = None
         # True from the moment the text pipeline starts closing until a new sender
@@ -3572,7 +3584,15 @@ class LiveAIGemini(ILiveAI):
                 except Exception:
                     pass
 
-                # Also signal text sender to exit
+                # Also signal text sender to exit. Mark the pipeline closing
+                # FIRST, before the sentinel: from here on a put is unreadable
+                # (the sender exits on the sentinel), and a concurrent unmute
+                # would otherwise queue the held turn behind it and clear it as
+                # delivered (bd polyglot-pdf-wurj8). This is the SECOND teardown
+                # site -- finalize() is the other -- and it is the one that fires
+                # on a spontaneous Gemini drop, so it runs far more often than a
+                # deliberate section switch.
+                self._text_pipeline_closing = True
                 try:
                     if self._text_queue is not None:
                         try:
