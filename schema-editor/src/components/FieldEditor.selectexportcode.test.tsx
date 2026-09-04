@@ -301,3 +301,37 @@ describe('a CLEARED export code is a v2 option with no code, not a legacy option
     expect(probe()[0]).toEqual(['Wyoming (WY)', 'wyoming', 'WV']);
   });
 });
+
+describe('a CONVERTING code edit retargets dependents (cross-surface, g2fpr.2)', () => {
+  // Convert-on-touch changes a legacy option's VALUE ('WY' -> 'wyoming'), and
+  // the cross-surface pass found the code-input path doing that WITHOUT
+  // retargeting the show_if that referenced 'WY' -- leaving it dangling on
+  // exactly the un-migrated kit the conversion exists for.
+  it('editing the code of a legacy option moves a dependent show_if to the new slug', () => {
+    const legacy = selectField([{ value: 'WY', label: 'Wyoming' }, { value: 'AL', label: 'Alabama' }]);
+    const dep = {
+      id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text', section_id: 's1',
+      show_if: { field: 'mail_state', operator: 'equals', value: 'WY' },
+    } as unknown as FormField;
+    render(<Harness initial={makeSchema([legacy, dep])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: 'WV' } });
+    fireEvent.blur(code, { target: { value: 'WV' } });
+    expect(probe()[0]).toEqual(['Wyoming', 'wyoming', 'WV']);
+    const fields = JSON.parse(screen.getByTestId('fields').textContent!);
+    expect(fields.find((f: any) => f.id === 'dep').show_if.value).toBe('wyoming');
+  });
+
+  it('a v2 option\'s code edit still leaves dependents alone (no value change, no retarget)', () => {
+    const dep = {
+      id: 'dep', name: 'Dep', spoken_name: 'dep', type: 'text', section_id: 's1',
+      show_if: { field: 'mail_state', operator: 'equals', value: 'wyoming' },
+    } as unknown as FormField;
+    render(<Harness initial={makeSchema([selectField(), dep])} />);
+    const code = codeInputs()[0];
+    fireEvent.change(code, { target: { value: 'WV' } });
+    fireEvent.blur(code, { target: { value: 'WV' } });
+    const fields = JSON.parse(screen.getByTestId('fields').textContent!);
+    expect(fields.find((f: any) => f.id === 'dep').show_if.value).toBe('wyoming');
+  });
+});

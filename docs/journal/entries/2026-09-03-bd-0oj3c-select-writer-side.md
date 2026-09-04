@@ -108,6 +108,29 @@ boundary, because the legitimate contrast reads "NOT like radio, where value
 must be...". Round 3's sentence is fixture #4; dropping the boundary reddens
 exactly it.
 
+**The cross-surface pass found the two edges the diff could not see.**
+(1) Convert-on-touch changes a legacy option's VALUE, and the code-input path
+did that WITHOUT retargeting dependents -- `origin/dev` had two retarget call
+sites, my rewrite had one, and the comment above the input asserted no
+retarget was ever needed. True for a v2 option, false for exactly the legacy
+kit conversion exists for. Fixed with `commitSelectCodeEdit`: a converting
+edit retargets atomically through `onUpdateFields`, as the label path does.
+(2) The prompt told the model to reference a select's SLUG -- which it cannot
+derive from the bare "WY" it is shown -- and `schema_repair`'s alias table had
+no entry for `pdf_on_value`, so a condition naming the code was DROPPED; the
+reviewer reproduced that through `repair()` on both shapes. Two fixes: the
+prompt now says name the code you can see, and `pdf_on_value` is an alias
+that resolves it to the slug (the existing collision guard drops an ambiguous
+code, matching /resume-form's policy). The honest instruction is the one the
+model can follow from its evidence.
+
+**A stale verdict is invisible to a set-pin.** `widget_picker._claimed_widgets`
+reads every option's `pdf_on_value` type-agnostically, so a select's claim key
+measurably changed from `(name, None)` to `(name, code)`; the pin's verdict
+still said "not a select reader". The pin derives on the token, not on
+meaning -- a verdict can rot while CI stays green. Corrected, with the reason
+it is harmless written into the verdict.
+
 **A non-parsing mutant proves nothing -- again.** MUT C's first anchor matched
 twice, the fallback mangled the file, and vitest reported "1 failed, 15
 passed" -- the FILE failed to compile and the number looked like a result.

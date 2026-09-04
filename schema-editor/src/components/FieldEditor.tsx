@@ -847,6 +847,39 @@ function legacySelectCode(field: FormField, option: any): string | undefined {
   return typeof v === 'string' && v !== '' ? v : undefined;
 }
 
+/** Commit an export-code edit. A CONVERTING edit (legacy option) changes
+ * option.value -- 'WY' -> 'wyoming' -- so every dependent show_if/require_if
+ * that referenced the old value must be retargeted in the SAME commit, as the
+ * label-blur path does; the cross-surface review of g2fpr.2 found this path
+ * dropping that retarget and leaving dependents dangling on the maintainer's
+ * un-migrated kit. A v2 option's code edit never touches value and takes the
+ * plain single-field patch. */
+function commitSelectCodeEdit(
+  ctx: {
+    field: FormField; option: any; idx: number; schema: FormSchema;
+    onUpdateFields?: (fields: FormField[], sections?: any) => void;
+    updateField: (patch: Partial<FormField>) => void;
+  },
+  rawCode: string,
+): void {
+  const { field, option, idx, schema, onUpdateFields, updateField } = ctx;
+  const converting = legacySelectCode(field, option) !== undefined;
+  const newOptions = [...safeOptions(field)];
+  newOptions[idx] = convertLegacySelectOption(field, option, idx, { pdf_on_value: rawCode });
+  const oldValue = option?.value;
+  const newValue = newOptions[idx].value;
+  if (converting && onUpdateFields && oldValue && newValue !== oldValue) {
+    const updatedField = { ...field, options: newOptions };
+    const withEdit = schema.fields.map(f => (f.id === field.id ? updatedField : f));
+    const retargeted = retargetOptionValueReferences(
+      withEdit, field.id, String(oldValue), String(newValue), schema.sections,
+    );
+    onUpdateFields(retargeted.fields, retargeted.sections);
+    return;
+  }
+  updateField({ options: newOptions });
+}
+
 /** CONVERT ON TOUCH. Any edit to a legacy select option moves its code into
  * pdf_on_value and mints its value from the label, so the option leaves the
  * editor in the v2 shape and the filler writes the CODE, never a slug the
@@ -1941,8 +1974,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             derived from the label, so it is EDITABLE here --
                             the only place to author it. The option's VALUE is
                             a minted slug like every other choice type and is
-                            shown read-only below; editing the code never
-                            touches it, so no dependent needs retargeting. */}
+                            shown read-only below. Editing the code touches
+                            the value ONLY when it converts a legacy option,
+                            and that commit retargets dependents
+                            (commitSelectCodeEdit). */}
                         {field.type === 'select' ? (
                           <div className="mt-1 text-gray-500">
                             <label className="block">
@@ -1953,11 +1988,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                 value={(option as any).pdf_on_value ?? legacySelectCode(field, option) ?? ''}
                                 title="The code this dropdown writes into the PDF (e.g. 'WY'). It must match the form's own choice list exactly."
                                 onChange={e => {
-                                  const newOptions = [...safeOptions(field)];
-                                  newOptions[idx] = convertLegacySelectOption(
-                                    field, option, idx, { pdf_on_value: e.target.value },
+                                  commitSelectCodeEdit(
+                                    { field, option, idx, schema, onUpdateFields, updateField },
+                                    e.target.value,
                                   );
-                                  updateField({ options: newOptions });
                                 }}
                                 onBlur={e => {
                                   // Whitespace is trimmed: ' WY' is never a
@@ -1966,11 +2000,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                   const next = e.target.value.trim();
                                   const shown = (option as any).pdf_on_value ?? legacySelectCode(field, option) ?? '';
                                   if (next === shown) return;
-                                  const newOptions = [...safeOptions(field)];
-                                  newOptions[idx] = convertLegacySelectOption(
-                                    field, option, idx, { pdf_on_value: next },
+                                  commitSelectCodeEdit(
+                                    { field, option, idx, schema, onUpdateFields, updateField },
+                                    next,
                                   );
-                                  updateField({ options: newOptions });
                                 }}
                               />
                             </label>

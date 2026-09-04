@@ -334,12 +334,14 @@ CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
 - Any show_if / require_if that references a RADIO or CHECKBOX_GROUP option MUST
   use that option's SLUG as the value, with a membership operator (includes /
   not_includes) for a checkbox_group trigger, or equals / in for a radio one.
-  A condition on a SELECT trigger uses that option's SLUG with equals / in --
-  the lowercase form of its display name with any trailing "(CODE)" dropped
-  (a choice displayed "Wyoming (WY)" or "WY" is referenced as "wyoming"; never
-  the export code "WY"). If you cannot see the exact choice in the sampled
-  list, omit the condition rather than guess it: a condition naming a value
-  the dropdown does not have is dropped.
+  A condition on a SELECT trigger names the choice EXACTLY as it appears in
+  the sampled list -- the PDF export code, for example "WY", which lives in
+  that option's pdf_on_value -- with equals / in. You
+  do not mint the slug: after extraction that code is resolved to the
+  option's slug through its pdf_on_value, so "WY" becomes "wyoming". If you
+  cannot see the exact choice in the sampled list, omit the condition rather
+  than guess it: a condition naming a value the dropdown does not have is
+  dropped.
 
 CANONICAL v2 EXAMPLE (imitate its conventions: slug option values, per-box
 pdf_field_name, and an `includes` membership show_if referencing an option

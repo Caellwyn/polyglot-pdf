@@ -78,7 +78,7 @@ REVIEWED: dict[str, str] = {
     "backend/services/schema_repair.py":
         "_mint_slugs preserves a select code in value today; g2fpr.3 moves it, g2fpr.4 retires the branch",
     "backend/services/widget_picker.py":
-        "radio-kid claim resolution; not a select reader",
+        "_claimed_widgets reads EVERY option's pdf_on_value type-agnostically, so since g2fpr.2 a select option enters the claimed set keyed (name, code) instead of (name, None); harmless because unclaimed_button_widgets filters candidates to _BUTTON_TYPES (comboboxes excluded) -- cross-surface, g2fpr.2",
     "frontend/src/pdf-view/valuePainting.ts":
         "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
     "frontend/src/schema-forms/types/schema.ts":

@@ -225,9 +225,12 @@ def test_the_scan_accepts_the_right_claim(ok):
     ("choice-field rule", "is stored in option.pdf_on_value"),
     ("choice-field rule", "leave options[] out"),
     # The condition-reference rule -- a show_if on a select names the SLUG.
-    ("condition rule", "A condition on a SELECT trigger uses that option's SLUG"),
+    # The model names the CODE it can see; repair resolves it to the slug
+    # through pdf_on_value (cross-surface, g2fpr.2 -- the earlier wording
+    # asked for a slug the model cannot derive from a bare "WY").
+    ("condition rule", "names the choice EXACTLY as it appears in"),
     # Sits on ONE rendered line; the scan normalizes whitespace, this cannot.
-    ("condition rule", 'is referenced as "wyoming"; never'),
+    ("condition rule", "resolved to the"),
 ])
 def test_each_select_statement_is_present(what, needle):
     """Non-vacuity floor for the scan above, ONE STATEMENT PER CASE.
