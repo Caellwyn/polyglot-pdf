@@ -29,8 +29,9 @@ instances) operating on a `SchemaFormState` value:
   `searchOriginFieldId` / `currentSectionId` when they name something the fresh
   schema no longer has. The vanilla-JS path (`shared/connection.ts`), which skips
   `init()` when a session exists, reconciles too and persists ONLY when a value
-  actually changed -- a bare schema swap stays in memory, so that path's lazy
-  key migrations stay lazy (bd `polyglot-pdf-g2fpr`, PR 3c).
+  or one of those three ids actually changed -- a bare schema swap stays in
+  memory, so that path's lazy key migrations stay lazy (bd `polyglot-pdf-g2fpr`,
+  PR 3c).
 - `currentSectionId` + `completedSections: Set<string>` — **section**-based
   navigation state (not parts; see terminology). In production continuous mode
   `completedSections` never grows and manual prev/next is suppressed, but

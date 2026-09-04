@@ -177,10 +177,15 @@ export class SchemaFormStateManager {
     // validatedWindowIndices) tolerate extras and are left alone.
     const fieldIds = new Set(fields.map((f) => f.id));
     const sectionIds = new Set((freshSchema.sections || []).map((s) => s.id));
-    const pinned = state.pinnedFieldId && fieldIds.has(state.pinnedFieldId)
-      ? state.pinnedFieldId : null;
-    const origin = state.searchOriginFieldId && fieldIds.has(state.searchOriginFieldId)
-      ? state.searchOriginFieldId : null;
+    // Leave an id UNTOUCHED unless it dangles, so a caller comparing before
+    // and after sees a change only when one really happened. (load() already
+    // normalizes a missing id to null, so this is the cleaner contract rather
+    // than something the persist gate depends on -- a mutant that rewrote
+    // undefined to null reddened nothing.)
+    const pinned = state.pinnedFieldId && !fieldIds.has(state.pinnedFieldId)
+      ? null : state.pinnedFieldId;
+    const origin = state.searchOriginFieldId && !fieldIds.has(state.searchOriginFieldId)
+      ? null : state.searchOriginFieldId;
     const section = sectionIds.has(state.currentSectionId)
       ? state.currentSectionId
       : (this.getFirstSection(freshSchema)?.id ?? state.currentSectionId);

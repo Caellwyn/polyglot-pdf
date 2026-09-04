@@ -405,7 +405,15 @@ export function createConnectionManager(
 	let state: SchemaFormState = stored
 		? SchemaFormStateManager.reconcileSelectValues(stored, schema)
 		: SchemaFormStateManager.init(schema)
-	if (stored && state.fieldValues !== stored.fieldValues) SchemaFormStateManager.save(state)
+	// ...and a dangling-id reset (pinnedFieldId / searchOriginFieldId /
+	// currentSectionId) is persisted for the same reason: fresh-eyes round 2
+	// found it clobbered by a pre-connect manual edit through the same door.
+	const reconciledSomething = stored && (
+		state.fieldValues !== stored.fieldValues
+		|| state.pinnedFieldId !== stored.pinnedFieldId
+		|| state.searchOriginFieldId !== stored.searchOriginFieldId
+		|| state.currentSectionId !== stored.currentSectionId)
+	if (reconciledSomething) SchemaFormStateManager.save(state)
 
 	// Restore DOM fields from sessionStorage (if any values exist from previous session)
 	restoreDOMFromSessionStorage(state, schema)

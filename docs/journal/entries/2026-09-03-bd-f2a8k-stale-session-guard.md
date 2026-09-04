@@ -69,6 +69,21 @@ exposure, created by this change: `pinnedFieldId`, `searchOriginFieldId` and
 they name something it no longer has. The id Sets tolerate extras and are left
 alone; that judgement is handed to the cross-surface pass.
 
+**The same door, one more time.** Round 2 found the dangling-id reset going
+through the exact hole round 1 had closed for values: the persist gate was
+`fieldValues`-only, so the reset lived in the closure and a pre-connect manual
+edit re-saved the stale ids. The gate now fires when a value OR one of the
+three ids changed. The lesson is scar #8 in miniature: when a fix is "persist
+X when X changed", enumerate every X the reconcile produces before writing the
+gate -- I fixed the instance, not the set.
+
+**A mutant that reddens nothing is a claim to retract, not a test to add.**
+I wrote "leave undefined as undefined, or the gate reads a change on every
+schema swap" -- and the mutant that rewrote undefined to null reddened
+nothing, because `load()` already normalizes those ids to null. The code
+stays (it is the cleaner contract); the comment now says what is actually
+true.
+
 **The vanilla path's load migration is lazy by contract, and a test pins it.**
 My first cut re-persisted the reconciled state in `connection.ts`;
 `connection.test.ts` failed with "expected undefined to be 'section-2a'" --

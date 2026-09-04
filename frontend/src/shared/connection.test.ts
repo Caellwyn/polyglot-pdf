@@ -953,6 +953,23 @@ describe('Connection Manager (connection.ts)', () => {
       expect(SchemaFormStateManager.load()?.fieldValues.state).toBeUndefined()
     })
   
+    it('a dangling pinned id / section reset is PERSISTED, so a pre-connect manual edit cannot restore it', () => {
+      // Fresh-eyes round 2: the fieldValues-only persist gate left the id
+      // reset in memory, and onManualEdit (which reads load()) re-saved the
+      // stale ids through the same door as the value bug.
+      const blob = JSON.parse(legacyBlob('alabama'))
+      blob.schema = migrated()
+      blob.pinnedFieldId = 'gone-field'
+      blob.currentSectionId = 'gone-section'
+      sessionStorageMock['schema_form_state'] = JSON.stringify(blob)
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      const fm = (createFieldManager as any).mock.calls.at(-1)[0]
+      fm.onManualEdit('field-1', 'typed')
+      const after = SchemaFormStateManager.load()!
+      expect(after.pinnedFieldId).toBeNull()
+      expect(after.currentSectionId).toBe(testSchema.sections[0].id)
+    })
+
     it('a session whose values already match is NOT re-persisted (the lazy contract holds)', () => {
       const blob = JSON.stringify({
         ...JSON.parse(legacyBlob('alabama')), schema: migrated(),
