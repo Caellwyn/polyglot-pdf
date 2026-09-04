@@ -93,7 +93,55 @@ Python re-import-by-value behavior, not a project-specific rule.
   reports are pre-existing drift from unrelated files this bead did not
   touch).
 
-Review outcomes recorded in the closeout ping.
+## Review round 1 (Opus cross-surface)
+
+**Adopted (blocker, fixed in the worktree):** `link_routes.py`'s `mint_link`
+called the new `_minting_enabled()` synchronously on the event loop.
+Pre-swap this was a free `os.getenv`; post-swap a TTL-expiry cache miss makes
+it a sync Admin-SDK Firestore read, which -- unwrapped -- blocks the shared
+Cloud Run loop for every concurrent request on that instance, in-flight
+client audio included. This is exactly the hazard `services/auth.py`'s
+`require_auth` already documents in a comment, and the same file's other two
+Firestore touches (`get_allowed_kits`, `enforce_link_redemption`) already
+wrap in `asyncio.to_thread`. Fixed: `if not await asyncio.to_thread(_minting_enabled):`.
+Added `test_the_minting_flag_check_runs_OFF_the_event_loop`
+(`backend/tests/unit/test_link_routes.py`), which spies on `asyncio.to_thread`
+rather than comparing thread identities -- `TestClient` runs the whole ASGI
+app in its own worker thread regardless of what the route does internally,
+so an identity comparison against the pytest thread is not a reliable
+signal; asserting the resolver was actually dispatched through `to_thread`
+is. Mutation-verified: reverting to a direct `_minting_enabled()` call turns
+the new test red (`AssertionError: _minting_enabled was not dispatched via
+asyncio.to_thread`); restoring the fix turns it green, and the full
+`test_link_routes.py` + `test_runtime_config.py` suites (54 tests) still pass.
+
+**Deferred (bead already filed by the reviewer, not fixed here):**
+- `polyglot-pdf-b42qp` -- `record_mint()` at `link_routes.py:196` is the SAME
+  hazard on the mint path, but it PRE-EXISTS on `origin/dev` (unchanged by
+  this bead beyond making it marginally worse: `record_mint` now also calls
+  `firm_link_cap()`, a second TTL-cached Firestore read). Out of this bead's
+  scope; fix tracked separately.
+- `polyglot-pdf-43eup` (nit) -- `MintLinkPage.tsx`'s "minting is off" operator
+  message still names `LINK_MINTING_ENABLED` as something to set on the
+  backend (i.e. via env/redeploy), which is now inert guidance post-swap. The
+  key name is still correct; only the mechanism described is stale.
+- `polyglot-pdf-uidpu` (nit) -- `link_budget.py`'s `_positive_int` helper is
+  dead code: its only caller, `firm_link_cap()`, was rewritten in this bead to
+  delegate to `runtime_config.link_firm_cap()`. `_positive_float` is still
+  live (used by `cost_ceiling_usd_for_kit`).
+
+**Refuted / no action (reviewer's own non-findings, restated for the
+record):** the missing explicit `firestore.rules` deny block for
+`app_config/**` is deferred by design to `polyglot-pdf-li9x0` per the plan
+(`docs/sprint_22_admin-console_plan.md:359-360`); the demo/staging minting
+turn-off on next deploy is a real, intended, already-documented operational
+trap (see "A consequence worth flagging" above), not a gap; `_last_known_good`
+cannot leak (at most 4 entries, one channel per process); the module-global
+cache is safe under the GIL for this access pattern.
+
+STATUS after round 1: the blocker is fixed; both nits and the pre-existing
+finding are tracked as separate beads per the reviewer's filing. No further
+gaps outstanding for this bead.
 
 ## Files touched
 

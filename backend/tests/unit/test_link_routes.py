@@ -181,6 +181,50 @@ def test_minting_is_OFF_unless_explicitly_enabled(client, monkeypatch):
     assert _mint(c).status_code == 404
 
 
+def test_the_minting_flag_check_runs_OFF_the_event_loop(client, monkeypatch):
+    """bd polyglot-pdf-bg313, Opus cross-surface r1 (blocker).
+
+    _minting_enabled() now resolves runtime_config, which on a cache miss is
+    a SYNC Admin-SDK Firestore read -- exactly the hazard services/auth.py's
+    require_auth already documents: a sync read inside an async route blocks
+    the SHARED Cloud Run loop, stalling every concurrent request (in-flight
+    audio included). Every other test here stubs the resolver to return
+    instantly, which makes a missing to_thread wrapper invisible -- this one
+    pins that the route dispatches the check through asyncio.to_thread (the
+    same mechanism the sibling get_allowed_kits/enforce_link_redemption calls
+    in this file already use) instead of calling it directly.
+
+    TestClient runs the whole ASGI app in its own worker thread regardless of
+    what mint_link does internally, so comparing thread identities against
+    the pytest test-function thread is not a reliable signal here -- spying
+    on asyncio.to_thread itself is.
+
+    Mutation: replace `await asyncio.to_thread(_minting_enabled)` in
+    link_routes.mint_link with a direct `_minting_enabled()` call -- red,
+    because to_thread is then never invoked for this check.
+    """
+    import asyncio as _asyncio
+
+    c, _store = client
+    calls = []
+    real_to_thread = _asyncio.to_thread
+
+    async def spy_to_thread(func, *a, **kw):
+        calls.append(func)
+        return await real_to_thread(func, *a, **kw)
+
+    monkeypatch.setattr(_asyncio, "to_thread", spy_to_thread)
+
+    resp = _mint(c)
+
+    assert resp.status_code == 200
+    assert lr._minting_enabled in calls, (
+        "_minting_enabled was not dispatched via asyncio.to_thread -- a "
+        "Firestore cache miss on the mint route now blocks the shared "
+        "Cloud Run event loop for every concurrent request"
+    )
+
+
 def test_minting_refuses_when_no_base_url_is_configured(client, monkeypatch):
     """Deriving it from the Host header would let a caller mint links
     pointing at a domain THEY control, carrying our valid signature."""

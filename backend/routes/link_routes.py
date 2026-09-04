@@ -138,7 +138,14 @@ async def mint_link(
     in "the firm exists and is active" and fails closed to [], so a suspended
     firm mints nothing without a second status read.
     """
-    if not _minting_enabled():
+    # Off the event loop: _minting_enabled() now resolves runtime_config,
+    # which on a cache miss is a sync Admin-SDK Firestore read (bd
+    # polyglot-pdf-bg313, Opus cross-surface r1). A sync read inside an async
+    # route blocks the SHARED Cloud Run loop, so a slow Firestore would stall
+    # every concurrent request, in-flight audio included -- the same hazard
+    # services/auth.py:291 documents and the other Firestore reads in this
+    # file already avoid.
+    if not await asyncio.to_thread(_minting_enabled):
         # 404, not 503: an endpoint that is not turned on should not advertise
         # that it exists.
         raise HTTPException(status_code=404, detail="Not found")
