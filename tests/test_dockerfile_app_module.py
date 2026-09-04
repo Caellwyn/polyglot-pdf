@@ -6,12 +6,14 @@ time without building a second image per service. Instead the CMD reads
 `${APP_MODULE:-backend.main:app}`, which a `gcloud run deploy --set-env-vars`
 block can override per service.
 
-NOTHING SETS IT YET. No deploy script on this branch passes APP_MODULE, so
-every service built from this image serves the default today. The admin deploy
-script lands with sprint-22 plan bead 1.3; the consumer side ships first so
-that deploy is a config change, not a code change. That "no producer yet" state
-is itself pinned below, so the docs describing it cannot quietly go stale the
-day the producer appears.
+deploy-all.sh now sets APP_MODULE at runtime for every backend deploy
+(defaulting to the public backend.main:app), and deploy-admin.sh (bd
+polyglot-pdf-3l2vp) overrides it to admin_backend.main:app for the admin
+service. The admin Cloud Run service itself has not been deployed yet -- that
+is a separate, maintainer-gated step -- but the producer side is real code on
+this branch, not a future plan. The AGREEMENT between the scripts and the
+docs describing them is pinned below, in both directions, so neither can
+quietly go stale relative to the other.
 
 Three properties this pins, each of which breaks a deploy if it drifts:
 
@@ -270,18 +272,35 @@ def test_docs_do_not_claim_a_live_app_module_producer_while_none_exists():
             if present_tense.search(line):
                 offenders.append("{}:{}: {}".format(rel, lineno, line.strip()))
 
+    # Claim-shaped, not wording-shaped: matches the MEANING "no producer sets
+    # this yet" regardless of which of several ways a doc phrases it. A
+    # detector keyed on exact literals ("NONE YET", "NOTHING SETS IT YET")
+    # only catches sites that happen to reuse those words -- the Dockerfile
+    # phrased the same claim as "not deployed yet and no ... sets APP_MODULE"
+    # and sailed through untouched while three sibling sites were updated
+    # (the exact gap this test exists to prevent; see bd polyglot-pdf-3l2vp
+    # review round 2). Anchored on "sets/set/setting/passes APP_MODULE"
+    # preceded by a negation, plus the two original literals as a safety net.
+    no_producer_claim = re.compile(
+        r"no\b[^.\n]{0,80}\b(?:sets?|setting|passes?)\s+APP_MODULE"
+        r"|APP_MODULE\b[^.\n]{0,40}\bnothing\s+sets\s+it"
+        r"|not\s+deployed\s+yet",
+        re.IGNORECASE)
+
     if producers:
         # A producer exists now -- the docs SHOULD describe it, and the
-        # "NONE YET" wording this branch shipped is what is now stale.
+        # "no producer yet" claim this branch shipped is what is now stale,
+        # however each site happened to phrase it.
         stale = []
         for rel in _PRODUCER_CLAIM_SITES:
             text = (REPO_ROOT / rel).read_text(encoding="utf-8",
                                                errors="replace")
-            if "NONE YET" in text or "NOTHING SETS IT YET" in text:
+            if ("NONE YET" in text or "NOTHING SETS IT YET" in text
+                    or no_producer_claim.search(text)):
                 stale.append(rel)
         assert not stale, (
             "a deploy script now SETS APP_MODULE ({}), but these docs still "
-            "say no producer exists:\n  {}\n\nUpdate them to name the real "
+            "claim no producer exists:\n  {}\n\nUpdate them to name the real "
             "producer.".format(", ".join(producers), "\n  ".join(stale)))
         return
 

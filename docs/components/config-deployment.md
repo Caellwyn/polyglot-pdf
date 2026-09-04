@@ -452,9 +452,13 @@ The admin service's `/health` reports the `app_module` it is actually running,
 because a service pointed at the wrong module otherwise looks perfectly healthy
 while serving the wrong app. It resolves an EMPTY `APP_MODULE` to the default,
 matching the `:-` expansion above -- a plain `os.getenv(name, default)` would
-report an empty string in exactly that case. Note the deploy scripts never
-call this route: `verify_service_publicly_reachable()` reads the Cloud Run IAM
-policy, not HTTP, so `/health` has no deploy-time behavioral coverage.
+report an empty string in exactly that case. `verify_service_publicly_reachable()`
+itself still never calls this route -- it reads the Cloud Run IAM policy, not
+HTTP -- but `deploy-admin.sh`'s tagged flow (below) now DOES issue a real
+`GET .../health` against this exact route and gates traffic on its response,
+so it is no longer true that this route has no deploy-time behavioral
+coverage; that coverage exists only for the admin service's own deploy path,
+not for a bare `deploy-all.sh --backend` run.
 
 Cloud Run runs `polyglot-admin` with `--allow-unauthenticated`, so the
 app-level gate on every OTHER route is the whole access control.

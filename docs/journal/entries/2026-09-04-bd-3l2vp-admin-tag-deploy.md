@@ -76,6 +76,50 @@ region hardcoded rather than reading `deploy-all.sh`'s `$REGION`) were
 explicitly not findings (PENDING-DEPLOY carve-out; matches an existing
 duplicated literal, out of scope for this bead) and needed no action.
 
+**Cross-surface fix round 2 (Dockerfile/`/health` staleness).** A second Opus
+outer review found two GAPS on the same underlying shape -- a claim going
+stale because the fact it described moved, not because the claim's own text
+changed. **Adopted (F1)**: `Dockerfile`'s admin-package comment still said
+"the admin service is not deployed yet and no deploy script sets APP_MODULE",
+which this bead's `deploy-all.sh`/`deploy-admin.sh` changes made false; three
+of the four `_PRODUCER_CLAIM_SITES` pinned by `tests/test_dockerfile_app_module.py`
+had been updated to name the real producer but the Dockerfile's own comment
+(phrased differently from the test's two exact-literal staleness strings,
+"NONE YET"/"NOTHING SETS IT YET") slipped through. Corrected the comment to
+name `deploy-all.sh`/`deploy-admin.sh` as the producers while still stating
+plainly that the admin Cloud Run service itself has not been deployed
+(maintainer-gated, separate step) -- and broadened the test's staleness
+detector from the two exact literals to a claim-shaped regex (matches "no ...
+sets/passes APP_MODULE" and "not deployed yet" however phrased) so a future
+site describing the same "no producer yet" fact in yet another wording cannot
+repeat the same escape. Mutation-verified: reverting the Dockerfile comment to
+its stale wording reddens `test_docs_do_not_claim_a_live_app_module_producer_while_none_exists`
+naming `Dockerfile` as the offending site. **Adopted (F2)**: four sites
+(`docs/technical_guide.md`, `docs/components/config-deployment.md`,
+`admin_backend/main.py`, `admin_backend/tests/unit/test_admin_health.py`)
+asserted `/health` has "no deploy-time behavioral coverage" / "issues no HTTP
+request" -- true of `verify_service_publicly_reachable()`'s IAM check, but
+this bead's tagged no-traffic flow (`deploy-all.sh` curling the tag URL's
+`/health` before `update-traffic --to-latest`) made the broader claim false
+for the admin service's own deploy path specifically. Corrected all four to
+state the narrower, still-true fact (the IAM check alone issues no HTTP
+request) alongside the now-true one (the tagged flow does, and gates traffic
+on it) -- `config-deployment.md` was the sharpest case, contradicting itself
+seventeen lines apart against a paragraph this same bead had already added.
+**Filed, not fixed (F3, F4)**: `polyglot-pdf-okfjn` (`deploy-admin.sh` has no
+argument parser, so a typo like `--frontend` silently runs the full privileged
+deploy instead of erroring -- the existing guard test is parametrized on a
+hand-listed script set that should be derived, per scar #8) and
+`polyglot-pdf-gdpku` (the "never serves a single request" comments on the
+tagged no-traffic flow don't hold on a service's FIRST deploy, which is the
+deploy `deploy-admin.sh` exists to perform -- `--no-traffic` has nothing to
+reassign traffic FROM when there is no prior revision, so the first revision
+takes 100% regardless; harmless in practice since verification still runs,
+just after the revision is live rather than before). Both are documentation/
+robustness nits with no correctness impact on this bead's exit criteria;
+reasoned from `gcloud run deploy --help`'s documented behavior rather than
+verified against live Cloud Run (a maintainer-gated deploy).
+
 ## Lessons
 
 `tests/test_dockerfile_app_module.py` (shipped in bead 1.1) already had a

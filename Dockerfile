@@ -21,11 +21,13 @@ COPY backend /app/backend
 
 # The privileged ADMIN package (bd polyglot-pdf-pnoik). ONE image is built to
 # serve TWO Cloud Run services -- polyglot-backend runs backend.main:app and
-# polyglot-admin will run admin_backend.main:app -- selected at RUNTIME by
-# APP_MODULE (see CMD). NOTE the admin service is not deployed yet and no
-# deploy script sets APP_MODULE, so every image built today serves the
-# backend.main:app default; the admin deploy lands with sprint-22 plan bead
-# 1.3 and only has to pass the env var.
+# polyglot-admin runs admin_backend.main:app -- selected at RUNTIME by
+# APP_MODULE (see CMD). deploy-all.sh sets APP_MODULE for every backend
+# deploy (defaulting to the public backend.main:app) and deploy-admin.sh
+# overrides it to admin_backend.main:app for the admin service -- but the
+# admin Cloud Run service itself has not been deployed yet (sprint-22 plan
+# bead 1.3 shipped the scripts; running the first deploy is a separate,
+# maintainer-gated step).
 # Both packages ship in every image; the deployed service account is what
 # actually gates the privileged calls, not what is present on disk.
 COPY admin_backend /app/admin_backend
