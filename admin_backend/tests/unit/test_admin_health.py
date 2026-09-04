@@ -65,10 +65,15 @@ def test_health_resolves_an_empty_app_module_the_way_the_container_does(
 
 
 def test_version_answers():
+    """Superseded by the git_sha cases in test_version_route.py (bd
+    polyglot-pdf-9hzod) -- narrowed here to the version field alone so this
+    file's existing coverage of /version's status code and app.version value
+    survives that bead untouched.
+    """
     with TestClient(app) as client:
         response = client.get("/version")
     assert response.status_code == 200
-    assert response.json() == {"version": app.version}
+    assert response.json()["version"] == app.version
 
 
 def test_the_admin_app_is_a_distinct_asgi_app_from_the_public_backend():
