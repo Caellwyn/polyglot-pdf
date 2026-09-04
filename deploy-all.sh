@@ -7,6 +7,22 @@
 #   ./deploy-all.sh --frontend   # Deploy frontend only
 #   ./deploy-all.sh --form-kits  # Deploy form-kits only
 #   ./deploy-all.sh --all        # Deploy everything (explicit)
+#
+# BACKEND_NO_TRAFFIC_TAG (bd polyglot-pdf-3l2vp, sprint-22 plan bead 1.3): when
+# a channel deploy script sets this, the backend stage deploys a NO-TRAFFIC
+# tagged revision instead of shifting traffic immediately -- `gcloud run
+# deploy ... --no-traffic --tag "$BACKEND_NO_TRAFFIC_TAG"` -- verifies /health
+# at the STABLE tag URL (https://<tag>---<service>-<hash>.a.run.app, which
+# `gcloud run services describe --format value(status.address.url)` cannot
+# give you; it is built from the base URL), and only THEN shifts 100% of
+# traffic to the new revision with `gcloud run services update-traffic
+# --to-latest`. There is ONE admin service and ONE console site backing BOTH
+# channels (the plan's "Staging tier for the admin service"), so a bad admin
+# deploy would take the control plane down for staging and the demo at once --
+# this is that service's staging tier. Empty (every existing channel) ->
+# unchanged behavior: --no-traffic and --tag are omitted entirely, so a plain
+# `deploy-all.sh --backend` run and the public/staging/demo channels produce
+# the exact gcloud invocation they always have.
 
 set -e
 
@@ -449,7 +465,25 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # CLOSED ([]), so the flag can only ever narrow what an outage shows.
     # (deploy-production.sh also sources this block, but that channel is dead
     # -- the former prod project is unreachable, purge bd polyglot-pdf-je6iy.)
-    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true"
+    #
+    # APP_MODULE + GIT_SHA (bd polyglot-pdf-3l2vp, sprint-22 plan bead 1.3):
+    # RUNTIME env, not build args -- `gcloud builds submit --tag` above cannot
+    # pass a --build-arg, so the ONE shared image (Dockerfile's
+    # `CMD uvicorn ${APP_MODULE:-backend.main:app} ...`) picks its ASGI target
+    # per Cloud Run service instead. APP_MODULE default is
+    # backend.main:app -- the public backend's Dockerfile fallback -- so a
+    # channel that sets nothing (every existing one) keeps serving exactly
+    # what it served before this existed. GIT_SHA feeds the eventual
+    # `GET /version` (bead 1.6, not this one): computed HERE, once, from the
+    # actual tree being built, rather than trusted from a caller-supplied env
+    # var that could name a different commit than the one Cloud Build just
+    # uploaded. `git rev-parse HEAD` reads the worktree at $SCRIPT_DIR
+    # (-C, not a bare cd, so this stays correct regardless of the caller's
+    # cwd); a detached/dirty tree still resolves to the checked-out commit,
+    # which is what actually got built.
+    APP_MODULE="${APP_MODULE:-backend.main:app}"
+    GIT_SHA=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true,FIRMS_FIRESTORE_ENABLED=true,APP_MODULE=$APP_MODULE,GIT_SHA=$GIT_SHA"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the
@@ -495,6 +529,21 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # optional instructions PDF in route memory AND as tmpfs copies (/tmp is
     # memory-backed on Cloud Run) while the pipeline child runs -- the 512Mi
     # default risks an opaque OOM kill mid-extraction.
+    #
+    # TAG_FLAG / NO_TRAFFIC_FLAG (bd polyglot-pdf-3l2vp): optional-array shape,
+    # same pattern as SA_FLAG/SECRETS_FLAG above -- BACKEND_NO_TRAFFIC_TAG unset
+    # (every existing channel) produces the exact invocation this had before
+    # tagged deploys existed. Set, it makes this revision receive ZERO traffic
+    # until verify_service_publicly_reachable AND a live /health check both
+    # pass at the TAG's own stable URL (below), so a broken admin revision
+    # never serves a single request before someone confirms it works.
+    TAG_FLAG=()
+    NO_TRAFFIC_FLAG=()
+    if [ -n "$BACKEND_NO_TRAFFIC_TAG" ]; then
+        TAG_FLAG=(--tag "$BACKEND_NO_TRAFFIC_TAG")
+        NO_TRAFFIC_FLAG=(--no-traffic)
+    fi
+
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
         --region "$REGION" \
@@ -505,23 +554,75 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="$BACKEND_ENV" \
         "${SA_FLAG[@]}" \
-        "${SECRETS_FLAG[@]}"
-    
+        "${SECRETS_FLAG[@]}" \
+        "${TAG_FLAG[@]}" \
+        "${NO_TRAFFIC_FLAG[@]}"
+
     # REACHABILITY GATE (bd polyglot-pdf-pidtg). --allow-unauthenticated above
     # only REQUESTS the public invoker binding; the request can be refused while
     # the deploy still exits 0, leaving a service that 403s everything at Cloud
     # Run's gate. Aborts on a definitively-missing binding, warns if the IAM read
     # itself fails. Full rationale on the function (which backend/deploy-new.sh
     # carries a byte-identical copy of).
+    #
+    # This IAM read is unaffected by --no-traffic: the binding is on the
+    # SERVICE, not the revision, so it already reflects the tagged revision's
+    # eventual reachability once traffic shifts. It does NOT, by itself, prove
+    # the NEW revision's application code actually starts and answers --
+    # that is what the tag-URL /health probe below is for.
     log_info "🔎 Verifying the service is publicly reachable..."
     verify_service_publicly_reachable \
         "$BACKEND_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME"
+
+    if [ -n "$BACKEND_NO_TRAFFIC_TAG" ]; then
+        # TAGGED NO-TRAFFIC FLOW (bd polyglot-pdf-3l2vp, sprint-22 plan
+        # "Staging tier for the admin service"). There is ONE admin service
+        # backing BOTH channels' data, so a bad admin deploy would take the
+        # control plane down for staging and the demo at once -- this
+        # verify-before-traffic sequence is that service's own staging tier.
+        #
+        # The TAG URL is STABLE (unlike the auto-generated revision URL,
+        # which changes every revision) and reachable the moment --tag is
+        # applied, before any traffic shift: gcloud composes it as
+        # https://<tag>---<service>-<hash>.a.run.app, so build it from the
+        # service's own base URL by inserting "<tag>---" ahead of the host,
+        # rather than trusting a second `describe` call to report a
+        # revision-scoped address `gcloud run services describe` does not
+        # expose.
+        BASE_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" \
+            --platform managed --region "$REGION" \
+            --project "$POLYGLOT_PROJECT_NAME" \
+            --format 'value(status.url)')
+        TAG_URL=$(echo "$BASE_URL" | sed -E "s#https://#https://${BACKEND_NO_TRAFFIC_TAG}---#")
+
+        log_info "🏷️  Verifying the tagged candidate revision at $TAG_URL/health ..."
+        HEALTH_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            --max-time 30 "$TAG_URL/health" || echo "000")
+        if [ "$HEALTH_STATUS" != "200" ]; then
+            log_error "==========================================================="
+            log_error "  ABORT: the tagged candidate revision did not answer /health"
+            log_error "==========================================================="
+            log_error "GET $TAG_URL/health returned HTTP $HEALTH_STATUS (expected 200)."
+            log_error "Traffic was NOT shifted -- the previous revision is still live."
+            log_error "Inspect the candidate revision's logs before retrying:"
+            log_error "  gcloud run services logs read $BACKEND_SERVICE_NAME \\"
+            log_error "    --region $REGION --project $POLYGLOT_PROJECT_NAME"
+            exit 1
+        fi
+        log_success "✅ Tagged candidate is healthy at $TAG_URL"
+
+        log_info "🚦 Shifting 100% of traffic to the verified revision..."
+        gcloud run services update-traffic "$BACKEND_SERVICE_NAME" \
+            --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" \
+            --to-latest
+        log_success "✅ Traffic shifted to the new revision."
+    fi
 
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
     log_success "✅ Backend deployed successfully (and publicly reachable)!"
     echo "   URL: $BACKEND_URL"
     echo ""
-    
+
     cd "$SCRIPT_DIR"
 fi
 
