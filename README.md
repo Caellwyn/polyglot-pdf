@@ -273,10 +273,11 @@ See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`d
 
 ## 🧪 Testing
 
-### Backend Tests
+### Python Tests
 ```bash
-# All tests
-python -m pytest backend/tests -v
+# All tests -- pass NO suite paths, so every root in pytest.ini's
+# testpaths runs (backend/tests, admin_backend/tests, tests)
+python -m pytest -v
 
 # Unit tests only
 python -m pytest backend/tests/unit -q
@@ -403,7 +404,7 @@ sessionStorage.clear()
 2. Check the issue tracker (beads: `bd ready`) for the next unit of work
 3. Create feature branch from current development branch
 4. Make changes with tests
-5. Run test suite: `pytest backend/tests -v`
+5. Run test suite: `pytest -v` (no suite paths -- runs every root)
 6. Run frontend tests: `npm test -C frontend`
 7. Update documentation if needed
 8. Submit pull request

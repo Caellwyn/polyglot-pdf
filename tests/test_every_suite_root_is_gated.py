@@ -147,3 +147,138 @@ def test_check_tests_runs_from_the_worktree_root():
     assert "cwd=str(WT)" in body, (
         "check_tests() must run pytest with cwd at the worktree root so the "
         "worktree's own pytest.ini testpaths is the one that applies")
+
+
+# --- The PROSE half of the set -------------------------------------------
+#
+# The gates above are code. But an agent does not read ci.yml before re-running
+# the suite after a review fix -- it copies the recipe out of a doc. bd
+# polyglot-pdf-pnoik fixed the code gates and ONE of four prose recipes, and the
+# outer review found the other three: the operative re-run command in
+# closeout/SKILL.md was still scoped to `backend/tests/`, i.e. scoped to skip the
+# very suite that bead added. That is CLAUDE.md scar #8 (fix the SET, not the
+# instance), so the prose recipes are pinned here as a set too.
+#
+# The rule pinned: in these files, a `pytest` invocation that is presented as
+# running THE SUITE must not name a suite root. Deliberately NARROW runs (one
+# directory or one file, while iterating) are legitimate and are allowed by
+# requiring a path DEEPER than the root itself.
+
+PROSE_GATE_FILES = (
+    ".claude/skills/closeout/SKILL.md",
+    "AGENTS.md",
+    "docs/standards/testing.md",
+    "README.md",
+    ".coveragerc",
+)
+
+
+CITATION_MARKER = "suite-path-citation"
+
+
+def _whole_root_pattern(root):
+    r"""Match a suite root used as a WHOLE pytest argument, nothing deeper.
+
+    The prefix group is load-bearing: the closeout re-run recipe writes the
+    root as `"$WT/backend/tests/"`, and an earlier version of this pattern used
+    a `(?<![\w/-])` lookbehind that the `$WT/` prefix defeated -- so the pin
+    went green on the exact line the outer review had just flagged (a vacuous
+    guard; CLAUDE.md scar #9). Allow a shell-variable / `./` / `/` prefix, but
+    require the root to END the argument: a DEEPER path (`backend/tests/unit`,
+    a single file) is a deliberately narrow run and stays legal.
+    """
+    return (r"(?:^|[\s\"'`=])(?:\$\{?\w+\}?/|\./|/)?"
+            + re.escape(root) + r"/?(?=[\s\"'`]|$)")
+
+
+def _pytest_invocations(text):
+    """Every `pytest <args>` fragment in a doc, to end of line."""
+    return [m.group(1) for m in re.finditer(r"pytest((?:(?!`)[^\n])*)", text)]
+
+
+def test_prose_recipes_never_scope_a_whole_suite_run_to_one_root():
+    """A doc recipe naming a suite root is how a new suite ships un-run.
+
+    The code gates (CI, closeout_prep) are pinned above; this pins the recipes
+    a human or agent actually copies. Naming a root EXACTLY (`backend/tests`,
+    `backend/tests/`) claims to be a full run while silently excluding the other
+    roots. Naming something DEEPER (`backend/tests/unit`, a single file) is an
+    explicitly narrow run and is fine.
+    """
+    roots = [p.rstrip("/") for p in _testpaths()]
+    offenders = []
+    for rel in PROSE_GATE_FILES:
+        path = REPO_ROOT / rel
+        assert path.exists(), "pinned prose gate file is missing: " + rel
+        text = io.open(path, encoding="utf-8").read()
+        lines = text.splitlines()
+        for lineno, line in enumerate(lines, 1):
+            # A line may CITE the anti-pattern ("a bare pytest, NOT pytest
+            # backend/tests") rather than prescribe it. Those carry an explicit
+            # marker on the preceding line, so the pin stays an allowlist of
+            # sanctioned exceptions rather than a keyword ban it cannot tell
+            # apart from the real thing.
+            if lineno >= 2 and CITATION_MARKER in lines[lineno - 2]:
+                continue
+            for frag in _pytest_invocations(line):
+                for root in roots:
+                    if re.search(_whole_root_pattern(root), frag):
+                        offenders.append(
+                            "{}:{}: pytest invocation scopes a full-suite run "
+                            "to {!r}: {}".format(rel, lineno, root, line.strip()))
+
+    assert not offenders, (
+        "these docs tell a reader to run the suite with an explicit suite root, "
+        "so a new pytest.ini testpaths root silently never runs for them:\n  "
+        + "\n  ".join(offenders)
+        + "\n\nUse a bare `pytest` and let testpaths decide. A DEEPER path "
+          "(backend/tests/unit, one file) is a narrow run and is allowed.")
+
+
+def test_prose_gate_vocabulary_covers_every_doc_that_prescribes_a_suite_run():
+    """PROSE_GATE_FILES is hand-listed, so it needs its own pin.
+
+    Dropping an entry silently disables detection for that file while leaving
+    every test above green -- the same hand-listed-vocabulary trap this bead
+    already hit twice (`_DEPLOYED_PACKAGES`, `_REPO_TOP_LEVEL_DIRS`). So the
+    required set is DERIVED from the repo: any doc an agent is routed through
+    that tells a reader to RUN pytest must be under the pin.
+
+    Scope is deliberately the agent-facing docs plus the coverage config, not
+    every file mentioning pytest: `docs/journal/` is an immutable historical
+    record, `docs/archive/` and `planning_documents/` are frozen, and inline
+    `# Run with:` comments in a test file are narrow by construction.
+    """
+    searched = [
+        REPO_ROOT / ".claude" / "skills",
+        REPO_ROOT / "docs" / "standards",
+        REPO_ROOT / "docs" / "doctrine",
+    ]
+    candidates = set()
+    for base in searched:
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.md"):
+            text = io.open(path, encoding="utf-8").read()
+            # "prescribes a run" = an invocation with pytest's own flags, which
+            # is what distinguishes a recipe from a passing mention.
+            if re.search(r"pytest[^\n`]*\s-(?:q|v|m|k)\b", text):
+                candidates.add(path.relative_to(REPO_ROOT).as_posix())
+    for rel in ("AGENTS.md", "README.md"):
+        path = REPO_ROOT / rel
+        if path.exists() and re.search(
+                r"pytest[^\n`]*\s-(?:q|v|m|k)\b",
+                io.open(path, encoding="utf-8").read()):
+            candidates.add(rel)
+
+    missing = sorted(candidates - set(PROSE_GATE_FILES))
+    assert not missing, (
+        "these docs prescribe a pytest run but are NOT in PROSE_GATE_FILES, so "
+        "the suite-path pin above never inspects them:\n  " + "\n  ".join(missing)
+        + "\n\nAdd them to PROSE_GATE_FILES.")
+
+
+def test_prose_gate_vocabulary_has_no_dead_entries():
+    """A stale entry would make the pin silently skip a renamed file."""
+    gone = [rel for rel in PROSE_GATE_FILES if not (REPO_ROOT / rel).exists()]
+    assert not gone, "PROSE_GATE_FILES names files that do not exist: " + repr(gone)

@@ -108,6 +108,65 @@ Deferred, per the plan, each landing with its first consuming call:
 `errorreporting.viewer`, `monitoring.viewer` (Epic 3). Their absence is itself
 asserted, so granting one early is a decision made in the open.
 
+### Outer-review round: the same miss, one layer up
+
+The Opus cross-surface review returned GAPS-FOUND (1) on the section above, and
+the finding was the section's own lesson applied to itself. Fixing `ci.yml` and
+`closeout_prep.py` fixed the *code* gates. It did not fix the **prose** gates --
+and prose is what an agent actually copies when it re-runs the suite after a
+review fix. `.claude/skills/closeout/SKILL.md` had FOUR statements of the
+recipe; the diff updated one. The operative one, at line 246, still read
+`pytest "$WT/backend/tests/"` -- the command an agent runs after an outer-review
+or fresh-eyes code fix, scoped to skip the very suite this bead added.
+
+**Adopt (1):** the blocker. Fixed all three remaining SKILL.md instances, then
+enumerated the rest of the set rather than stopping at the three the reviewer
+named (scar #8 -- the reviewer finding instances one per round IS the trap). The
+full set turned out to be nine statements across five files: three more in
+`docs/standards/testing.md` (including a "run BOTH roots" that was numerically
+wrong once a third root existed), a stale "All tests" recipe and a contributor-
+workflow step in `README.md`, a coverage recipe in `.coveragerc`, and a "two
+REAL suites" comment in `pytest.ini` itself.
+
+**Reject (0).** **Defer (2):** the `check_tests` 600s timeout, already measured
+and filed by the reviewer as bd `polyglot-pdf-c411r` (pre-existing on
+`origin/dev`, and it fails loudly rather than silently); and two tier-2 docs
+describing the admin deploy in the present tense before any deploy path exists,
+filed as bd `polyglot-pdf-2qw3o` (the reviewer's report cited an id that was not
+in the tracker).
+
+**The set-pin had the same blind spot as the fix.**
+`tests/test_every_suite_root_is_gated.py` scanned only `ci.yml` and
+`closeout_prep.py`, which is why the SKILL.md instances shipped past it. It now
+scans the prose files too -- and writing that extension reproduced the trap a
+third time. The first version used the existing `(?<![\w/-])` lookbehind, and
+its mutation test **passed on the reviewer's exact blocker line**: the recipe
+writes `"$WT/backend/tests/"`, and the `$WT/` prefix defeated the lookbehind. A
+guard that goes green on the one line you wrote it for is worse than none (scar
+#9). The pattern now allows a shell-variable prefix while still requiring the
+root to END the argument, so a deliberately narrow run (`backend/tests/unit`, a
+single file) stays legal. Mutation-verified per root, not once: reverting the
+recipe reddens it for `backend/tests`, `admin_backend/tests`, AND `tests`, with
+two negative controls (a narrow run stays green; removing a citation marker goes
+red).
+
+The two lines that legitimately NAME the anti-pattern in order to warn against
+it carry an explicit `suite-path-citation` marker, so the pin stays an allowlist
+of sanctioned exceptions rather than a keyword ban that cannot tell a warning
+from the thing it warns about.
+
+And the trap fired a FOURTH time, in the fix for the third. The prose pin reads
+a hand-listed `PROSE_GATE_FILES` tuple -- the same hand-listed-vocabulary shape
+this entry's Lessons already name twice (`_DEPLOYED_PACKAGES`,
+`_REPO_TOP_LEVEL_DIRS`). Mutating it confirmed the defect: deleting the
+`SKILL.md` entry AND reintroducing the reviewer's exact blocker line left all
+six tests **green**, because the entry that would have caught it was removed in
+the same edit. The required set is now DERIVED from the repo -- any agent-facing
+doc under `.claude/skills/`, `docs/standards/`, or `docs/doctrine/` (plus
+`AGENTS.md` and `README.md`) whose text contains a pytest invocation carrying
+pytest's own flags must be under the pin -- with a companion test rejecting dead
+entries. Mutation-verified per entry: dropping any one of the four goes red.
+
 ## Lessons
 
 **A guard that scans nothing passes every assertion it makes.** The import guard
