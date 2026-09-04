@@ -1,19 +1,9 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-6p77c: the kit path rewrite is
-keyed on the STORE being authoritative, not on privacy -- see "The API-path
-rewrite" below; earlier note follows -- bd polyglot-pdf-nyc5j/qn8wv/x6dq1: every drifted
-`config.py`/`form_filling_service.py`/`live_ai_gemini.py`/`ai_context.py`/
-`spellback_tts.py`/`callback_handler.py` citation in contracts 1, 2, 4, and 11
-re-anchored to a symbol name instead of a line number -- including the
-`form_metadata` bullet, the tool coupling table, and the `LIVE_VOICE_NAME`
-two-consumer section. This whole doc keeps drifting the same way, so line
-numbers here are no longer trustworthy without re-verifying against source
--- bd polyglot-pdf-vdcm4 already re-anchored the same class of citation in
-contracts 2, 3, and 6 once, and this pass had to do contract 2 again. The
-editor rows describe per-user Firebase claims, not shared tokens, per bd
-polyglot-pdf-hn0jq; the lock rows are person-scoped, per bd
-polyglot-pdf-5tuas.)*
+*Last updated: 2026-09-03 (bd polyglot-pdf-6p77c: the kit path rewrite is keyed
+on the STORE being authoritative, not on privacy -- see "The API-path rewrite"
+below. Line-number citations in this doc have drifted repeatedly; prefer the
+symbol names and re-verify against source.)*
 
 The [Surface contracts](#surface-contracts) section is the code-derived
 cross-surface data-contract map for blast-radius review. Continuous-DTI is the

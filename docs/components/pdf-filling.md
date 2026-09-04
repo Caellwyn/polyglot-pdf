@@ -2,14 +2,11 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/routes/editor_kit_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-09-02 (the i-90 kit id now serves the applicant-only v2
-schema, so NO shipped kit exercises the widget-name suffix fallback any more;
-the earlier note follows -- bd polyglot-pdf-6zhaf: kit deletion is
-GRADUATED, not a permanent refusal -- the old three-state guard turned an
-unrunnable confirmation check into a 409 with no override, and
-un-attributable legacy records make it permanently unrunnable, so every kit
-became undeletable forever. Risk now decides how firmly the author is asked,
-never whether the door exists.)*
+*Last updated: 2026-09-03 (no kit measured to date exercises the widget-name
+suffix fallback -- the git-tracked w7 47/47 and f1040 167/167, and the bucket's
+I-90 79/79, all resolve EXACTLY; the fallback stays because a kit MAY map the
+bare leaf. Kit deletion remains GRADUATED, not a permanent refusal: risk decides
+how firmly the author is asked, never whether the door exists.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
