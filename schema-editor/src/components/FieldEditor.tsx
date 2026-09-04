@@ -836,6 +836,11 @@ function legacySelectCode(field: FormField, option: any): string | undefined {
   // the combobox -- fresh-eyes round 2). A cleared code is a v2 option with
   // no code, which lint reports as select-on-value-missing; it is not a
   // legacy option whose code lives in value.
+  // A present-but-non-string value (null from hand-edited JSON, a number)
+  // classifies as legacy. No producer emits that shape today -- the editor's
+  // load/save is raw JSON passthrough and every writer sets a string or no
+  // key -- so this is the conservative default, not a tested path. If a
+  // producer ever emits null for a CLEARED code, treat it as '' instead.
   if (option && typeof option === 'object' && 'pdf_on_value' in option
       && typeof option.pdf_on_value === 'string') return undefined;
   const v = option?.value;

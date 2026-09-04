@@ -100,6 +100,14 @@ be the export code" -- a contrast. An identifier boundary and a short negation
 window fix both; the reviewer's two sentences are now acceptance fixtures, and
 each guard has its own reddening mutation.
 
+**A negation window needs a clause boundary.** A fixed 40-char lookback let
+"do not omit options; a select value must be the export code" pass: the
+"not" belonged to the previous clause. The window now starts at the last
+`;` / `.` / ` -- ` before the match -- and a COMMA is deliberately not a
+boundary, because the legitimate contrast reads "NOT like radio, where value
+must be...". Round 3's sentence is fixture #4; dropping the boundary reddens
+exactly it.
+
 **A non-parsing mutant proves nothing -- again.** MUT C's first anchor matched
 twice, the fallback mangled the file, and vitest reported "1 failed, 15
 passed" -- the FILE failed to compile and the number looked like a result.

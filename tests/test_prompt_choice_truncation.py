@@ -121,13 +121,23 @@ _VALUE_IS_CODE = re.compile(
     r"(?:pdf'?s?\s+own\s+)?(?:pdf\s+)?export\s+code"
 )
 _NEGATED = re.compile(r"\b(?:not|never|unlike|neither|no longer)\b")
+# A contrast only counts inside the SAME clause. Fresh-eyes (round 3) showed
+# a fixed 40-char window swallowing the real claim in "do not omit options;
+# a select value must be the export code" -- the "not" belongs to the previous
+# clause. The lookback therefore starts at the last clause boundary before
+# the match: ";", ".", or a " -- " dash. A COMMA is not a boundary, because
+# the legitimate contrast reads "NOT like radio, where value must be ...".
+_CLAUSE_BREAK = re.compile(r"[;.]|\s--\s")
 
 
 def _states_value_is_code(low: str) -> bool:
     """True when the sentence CLAIMS a select's value is its export code --
-    not when it names that claim to contrast against it."""
+    not when it names that claim to contrast against it, within the clause."""
     for m in _VALUE_IS_CODE.finditer(low):
-        if not _NEGATED.search(low[max(0, m.start() - 40):m.start()]):
+        before = low[:m.start()]
+        breaks = list(_CLAUSE_BREAK.finditer(before))
+        clause_start = breaks[-1].end() if breaks else 0
+        if not _NEGATED.search(before[clause_start:]):
             return True
     return False
 
@@ -178,6 +188,10 @@ def test_no_rendered_passage_puts_a_selects_export_code_in_its_value():
     "A dropdown's option.value must be the PDF's own export code; pdf_on_value "
     "is for radios.",
     "select: value = export code. pdf_on_value carries the widget state.",
+    # Fresh-eyes round 3: an UNRELATED "not" in the previous clause, plus an
+    # innocuous pdf_on_value mention, defeated both layers at once.
+    "do not omit options for radio; a select value must be the export code, "
+    "unlike checkbox_group which uses pdf_on_value for shared-name kids.",
 ])
 def test_the_scan_catches_a_wrong_passage_that_also_mentions_pdf_on_value(passage):
     """The scan's own non-vacuity floor: a passage that states the OLD contract
