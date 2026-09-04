@@ -354,6 +354,44 @@ describe('switch_field has_value ignores whitespace (bd polyglot-pdf-5ovod)', ()
     expect(ack?.already_confirmed, 'a confirmation of blankness is not a confirmed answer').toBe(false)
   })
 
+  it('a SKIPPED field is still announced as confirmed', async () => {
+    // The guard here MUST use the narrow helper. A skipped field carries
+    // value:null, which the BROAD helper (isBlankFieldValue) calls blank -- so
+    // substituting it would re-announce every skipped field as unanswered and
+    // the model would re-ask a question the user explicitly declined.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] =
+      { value: null, skipped: true, confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-sk' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed, 'a skip is a settled decision, not an open question').toBe(true)
+  })
+
+  it('an OPTIONAL confirmed empty string is still announced as confirmed', async () => {
+    // Same reason, the other shape: '' on an optional field is the deliberate
+    // "does not apply" answer (bd polyglot-pdf-6oe6). The broad helper calls it
+    // blank; the narrow one does not, and that difference is the whole point of
+    // there being two helpers.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.schema.fields[0].validation = { required: false }
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value: '', confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-oe' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed, 'the does-not-apply answer is settled').toBe(true)
+  })
+
   it('a genuinely confirmed answer IS still announced as confirmed', async () => {
     // The other half: the guard must not erase a real confirmation, or the model
     // would re-ask questions the user has already answered.
