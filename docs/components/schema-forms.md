@@ -106,7 +106,7 @@ instances) operating on a `SchemaFormState` value:
   field blank on a legal intake draft has to be explicit -- said aloud, or via the
   skip control.
 
-  Those six sites each hand-wrote the check and every copy tested `=== ''`
+  Every one of those sites once hand-wrote the check, and every copy tested `=== ''`
   without trimming, so a space-filled field satisfied the completion gate, passed
   the required check, hid its own skip button, and was confirmable -- while
   printing blank on the PDF and never reaching the backend at all -- the notify
