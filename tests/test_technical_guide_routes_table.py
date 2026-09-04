@@ -11,23 +11,37 @@ gate is, why a 409 fires), and a generator would either discard that or need
 the prose stored somewhere else -- moving the conflict rather than removing it.
 
 So the table stays hand-written and this test pins the SET instead. It derives
-the shipped set of (path, METHOD) pairs from the LIVE FastAPI app and asserts
-the doc documents every one, so a new route -- or a new method on an
-already-listed path -- fails HERE (naming itself) instead of silently drifting
-out of the doc for weeks. That drift was real: when this test was written the
-table was missing NINE shipped routes.
+the shipped set of (path, METHOD) pairs from EVERY LIVE FastAPI app the image
+ships and asserts the doc documents every one, so a new route -- or a new
+method on an already-listed path -- fails HERE (naming itself) instead of
+silently drifting out of the doc for weeks. That drift was real: when this test
+was written the table was missing NINE shipped routes, and it recurred the day
+a SECOND app landed (bd polyglot-pdf-pnoik) because the gate derived its set
+from `backend.main` alone -- so the admin service's routes were not
+under-covered but invisible, with this file green.
+
+Each app therefore owns its own table section and every check below is
+parametrized over `_APPS`. That per-app key is load-bearing, not tidiness: both
+apps declare `/health` and `/version`, so a single (path, method) key would let
+each app's rows satisfy the other's pin. And because `_APPS` is itself
+hand-listed -- the exact shape that caused the recurrence -- the REQUIRED set
+is derived from the Dockerfile's `COPY <pkg> /app/<pkg>` lines.
 
 Mutations that must turn this red:
   - add a route to any router without adding its doc row
   - add a new METHOD on an already-documented path without its own row
   - delete a documented row while its route still ships
   - typo a path in the doc table
+  - ship a second ASGI app without adding it to _APPS with a table
 """
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GUIDE = REPO_ROOT / "docs" / "technical_guide.md"
+DOCKERFILE = REPO_ROOT / "Dockerfile"
 
 # Routes deliberately ABSENT from the doc table, each with the reason it is
 # exempt. Anything not shipped by us, or not a product surface, lives here --
@@ -48,8 +62,31 @@ EXEMPT = {
 WS_MIRROR_PREFIX = "/api/ws/"
 
 
-def _shipped_routes() -> set[tuple[str, str]]:
-    """Every (path, method) pair the live app actually serves, normalized.
+# The DEPLOYED ASGI apps, each with the guide section documenting it. The repo
+# ships ONE image serving either app depending on the runtime APP_MODULE env
+# var (bd polyglot-pdf-pnoik), so "the routes this repo ships" is no longer
+# backend.main's routes alone.
+#
+# Deriving from `backend.main` alone was the bug this vocabulary fixes: the
+# admin service's /health and /version were invisible to the whole gate below,
+# which is the same hand-scoped-vocabulary trap that _DEPLOYED_PACKAGES in
+# test_runtime_paths_are_cwd_independent.py exists to close (CLAUDE.md scar
+# #8). Both apps declare /health and /version with DIFFERENT bodies, so the
+# key must carry the app -- a (path, method) key alone would let the admin
+# rows be "documented" by the public backend's rows and vice versa.
+#
+# Each entry is (import path of the app module, the guide's `##` heading that
+# holds that app's table). test_every_deployed_app_has_its_own_routes_table
+# below derives the required set from the Dockerfile so a THIRD app cannot ship
+# without being added here, with a table of its own.
+_APPS = (
+    ("backend.main", "## Routes / endpoints"),
+    ("admin_backend.main", "## Admin service routes"),
+)
+
+
+def _shipped_routes(app_module: str = "backend.main") -> set[tuple[str, str]]:
+    """Every (path, method) pair the named app actually serves, normalized.
 
     Keyed on the METHOD too, not the path alone. Three paths in this table
     already ship two methods each (`/api/editor/kits` GET+POST,
@@ -58,7 +95,9 @@ def _shipped_routes() -> set[tuple[str, str]]:
     method on an already-documented path ship undocumented with the suite
     green, which is the exact drift this gate exists to stop.
     """
-    from backend.main import app
+    import importlib
+
+    app = importlib.import_module(app_module).app
 
     shipped = set()
     for route in app.routes:
@@ -85,15 +124,20 @@ def _shipped_routes() -> set[tuple[str, str]]:
     return shipped
 
 
-def _table_rows() -> list[str]:
-    """The routes table's body rows, in file order.
+def _table_rows(heading: str = "## Routes / endpoints") -> list[str]:
+    """One app's routes-table body rows, in file order.
 
     The single place the table's location is decided; every check below reads
     the table through this, so none of them can disagree about which lines
-    are rows.
+    are rows. Parameterized by the section heading because each deployed app
+    owns its OWN table -- both apps serve /health and /version, so a single
+    merged table could not say which service a row describes.
     """
     text = GUIDE.read_text(encoding="utf-8")
-    start = text.index("## Routes / endpoints")
+    assert heading in text, (
+        "docs/technical_guide.md has no {!r} section, so the app it documents "
+        "has no routes table at all".format(heading))
+    start = text.index(heading)
     end = text.index("\n## ", start + 1)
     lines = text[start:end].split("\n")
 
@@ -153,23 +197,26 @@ def _parse_row(line: str) -> tuple[str, str]:
     return method, path_cell
 
 
-def _documented_routes() -> set[tuple[str, str]]:
-    """Every (path, method) pair documented by the guide's routes table.
+def _documented_routes(
+        heading: str = "## Routes / endpoints") -> set[tuple[str, str]]:
+    """Every (path, method) pair documented by ONE app's routes table.
 
     Keyed on the method too, matching _shipped_routes -- a row documents its
     own verb, not every verb on that path.
 
-    Parses only the `## Routes / endpoints` section so a path mentioned in
-    prose elsewhere (Gotchas, Surface contracts) cannot satisfy the pin, and
-    only the Path COLUMN of each row, so a path name-dropped in a description
-    ("the `/status` promotion gate", "no `/api` prefix") cannot either.
+    Parses only the named section so a path mentioned in prose elsewhere
+    (Gotchas, Surface contracts) cannot satisfy the pin, and only the Path
+    COLUMN of each row, so a path name-dropped in a description ("the
+    `/status` promotion gate", "no `/api` prefix") cannot either. Scoping to
+    ONE section is also what keeps the two apps' identically-named /health and
+    /version rows from cross-satisfying each other's pin.
 
     Shorthand is resolved PER ROW, never across the table. The table
     abbreviates a repeated prefix within one row ("`/api/editor/kits/{kit_id}/
     schema`, `.../pdf`"), so `...` means "the sibling path in THIS row".
     """
     documented = set()
-    for line in _table_rows():
+    for line in _table_rows(heading):
         method, path_cell = _parse_row(line)
 
         # A row may carry several path tokens ("`/api/x/{id}/schema`,
@@ -201,7 +248,8 @@ def _documented_routes() -> set[tuple[str, str]]:
     return documented
 
 
-def test_every_routes_table_row_parses_unambiguously():
+@pytest.mark.parametrize("app_module,heading", _APPS)
+def test_every_routes_table_row_parses_unambiguously(app_module, heading):
     """PINS THE CLASS, not another instance.
 
     Three rounds of review found three versions of one bug: the parser drew a
@@ -218,7 +266,7 @@ def test_every_routes_table_row_parses_unambiguously():
 
     Mutation: put an escaped `\\|` in any row's Method cell -- red.
     """
-    rows = _table_rows()
+    rows = _table_rows(heading)
     assert rows, "routes table body not found -- has the table shape changed?"
 
     for row in rows:
@@ -231,10 +279,11 @@ def test_every_routes_table_row_parses_unambiguously():
     )
 
 
-def test_every_shipped_route_is_in_the_guide_routes_table():
+@pytest.mark.parametrize("app_module,heading", _APPS)
+def test_every_shipped_route_is_in_the_guide_routes_table(app_module, heading):
     """A shipped route missing from the doc table fails HERE, naming itself."""
-    shipped = _shipped_routes()
-    documented = _documented_routes()
+    shipped = _shipped_routes(app_module)
+    documented = _documented_routes(heading)
 
     undocumented = sorted(
         f"{method} {path}" for path, method in shipped - documented
@@ -246,6 +295,56 @@ def test_every_shipped_route_is_in_the_guide_routes_table():
         "with the reason it is not a documented product surface. NOTE a new "
         "METHOD on an already-documented path needs its OWN row."
     )
+
+
+def test_every_deployed_app_has_its_own_routes_table():
+    """_APPS is hand-listed, so it needs its own derived pin.
+
+    Every check above is parametrized over _APPS, which means a deployed app
+    MISSING from that tuple is not under-tested -- it is untested, silently,
+    with the whole file green. That is precisely how the admin service's
+    /health and /version shipped undocumented: the gate derived its route set
+    from `backend.main` alone and had no way to notice a second app existed.
+    Fixing that by adding one more hand-written entry would leave the same
+    trap armed for the third app, so the REQUIRED set is derived from the
+    Dockerfile -- the file that decides which packages are in the image at all
+    (CLAUDE.md scar #8).
+
+    The Dockerfile's `COPY <pkg> /app/<pkg>` lines are the ground truth: a
+    package it does not copy cannot serve anything, and one it does copy is a
+    candidate ASGI target for the runtime APP_MODULE env var.
+
+    Mutation: drop the admin_backend entry from _APPS -- red.
+    """
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    copied = set(re.findall(r"^COPY\s+(\w+)\s+/app/\1\s*$", text, re.MULTILINE))
+    assert copied, "no `COPY <pkg> /app/<pkg>` lines found in the Dockerfile"
+
+    # Only packages that actually expose an ASGI `app` are servable; a package
+    # copied purely as a library (none today) is not a routes-table candidate.
+    import importlib
+
+    servable = set()
+    for pkg in copied:
+        module = pkg + ".main"
+        try:
+            servable.add(module) if hasattr(
+                importlib.import_module(module), "app") else None
+        except ModuleNotFoundError:
+            continue
+
+    covered = {app_module for app_module, _ in _APPS}
+    missing = sorted(servable - covered)
+    assert not missing, (
+        "these ASGI apps ship in the image but are NOT in _APPS, so none of "
+        "the checks in this file inspect them and their routes can ship "
+        "undocumented:\n  " + "\n  ".join(missing))
+
+    # And no dead entries: a stale _APPS row would parametrize every check
+    # against an app that no longer ships, failing confusingly.
+    dead = sorted(covered - servable)
+    assert not dead, (
+        "_APPS names apps that the Dockerfile does not ship: " + repr(dead))
 
 
 def _row_sort_key(row: str) -> tuple[str, str]:
@@ -261,7 +360,8 @@ def _row_sort_key(row: str) -> tuple[str, str]:
     return (path, method)
 
 
-def test_guide_routes_table_is_sorted_by_path_then_method():
+@pytest.mark.parametrize("app_module,heading", _APPS)
+def test_guide_routes_table_is_sorted_by_path_then_method(app_module, heading):
     """THE COLLISION FIX. Drift is only half the problem this table has -- the
     other half is that 7 of the 12 commits touching the guide in the week to
     2026-08-20 edited this ~20-line region, and parallel PRs collided there.
@@ -274,7 +374,7 @@ def test_guide_routes_table_is_sorted_by_path_then_method():
 
     Mutation: swap any two adjacent rows -- red.
     """
-    rows = _table_rows()
+    rows = _table_rows(heading)
     assert rows, "routes table body not found -- has the table shape changed?"
 
     actual = [_row_sort_key(r) for r in rows]
@@ -285,14 +385,15 @@ def test_guide_routes_table_is_sorted_by_path_then_method():
     )
 
 
-def test_guide_routes_table_documents_no_phantom_routes():
+@pytest.mark.parametrize("app_module,heading", _APPS)
+def test_guide_routes_table_documents_no_phantom_routes(app_module, heading):
     """A documented row whose route no longer ships fails HERE.
 
     Guards the other direction: a deleted route leaving a stale doc row that
     tells the next reader a surface exists when it does not.
     """
-    shipped = _shipped_routes()
-    documented = _documented_routes()
+    shipped = _shipped_routes(app_module)
+    documented = _documented_routes(heading)
 
     phantom = sorted(
         f"{method} {path}"

@@ -409,3 +409,126 @@ def test_privileged_call_guard_is_bound_to_the_firebase_auth_receiver():
         "fb.get_user(uid)\n",
         privileged,
     ) == []
+
+
+# --------------------------------------------------------------------------- #
+# The scan root's own boundary (bd polyglot-pdf-pnoik)
+#
+# Everything above walks backend/ and derives scope by EXCLUSION, which covers a
+# new package UNDER backend/ the day it appears. It does NOT cover a SIBLING
+# top-level package: admin_backend/ holds all the privileged code and runs under
+# the WIDE admin-backend-sa, and it is outside this file's root entirely.
+#
+# So the exclusion-derived scope silently rests on a second, unstated premise --
+# that nothing under backend/ reaches privileged code by IMPORTING the sibling.
+# A single `from admin_backend.services.user_admin import create_user` inside
+# backend/ would put the privileged call site in a file this guard never opens,
+# and the public service would make an Identity Toolkit call under the narrow
+# polyglot-backend-sa: exactly the 2026-08-26 outage this file exists to prevent.
+# Pin the premise rather than trusting it.
+# --------------------------------------------------------------------------- #
+_ADMIN_PACKAGE = "admin_backend"
+
+
+def _reaches_admin_backend(module: str) -> bool:
+    """One matching rule, shared by the guard and its precision test below.
+
+    The dot is load-bearing: a hypothetical `admin_backend_shared` is a
+    DIFFERENT package and must not be flagged.
+    """
+    return module == _ADMIN_PACKAGE or module.startswith(_ADMIN_PACKAGE + ".")
+
+
+def _imported_modules(tree):
+    """Every absolute module path this AST imports, in both statement shapes."""
+    seen = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                seen.add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            # level > 0 is a RELATIVE import: it resolves inside backend/ and
+            # can never name the sibling package.
+            if node.level:
+                continue
+            if node.module:
+                seen.add(node.module)
+                for alias in node.names:
+                    if alias.name != "*":
+                        seen.add("{}.{}".format(node.module, alias.name))
+    return seen
+
+
+def test_the_public_backend_never_imports_the_admin_package():
+    """backend/ must not reach admin_backend/, in any import shape.
+
+    This is the direction that DEFEATS the guard above: privileged code
+    imported into the public service is privileged code running under the
+    narrow service account, in a file no scan in this file ever reads.
+
+    Shared logic flows the other way only -- admin_backend/ imports
+    backend.services.* and backend.config (pinned from that side by
+    admin_backend/tests/unit/test_admin_sa_iam_envelope.py).
+    """
+    offenders = []
+    for f, root in _deployed_sources():
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for module in sorted(_imported_modules(tree)):
+            if _reaches_admin_backend(module):
+                offenders.append("{} imports {}".format(
+                    f.relative_to(root).as_posix(), module))
+
+    assert not offenders, (
+        "backend/ imports the PRIVILEGED admin package:" + chr(10) + "  "
+        + (chr(10) + "  ").join(sorted(offenders)) + chr(10) + chr(10)
+        + "admin_backend/ runs under the WIDE admin-backend-sa and holds the "
+          "privileged Firebase Auth calls. Importing it into the public "
+          "service puts those calls under the NARROW polyglot-backend-sa, "
+          "where they fail with INSUFFICIENT_PERMISSION on the first request "
+          "-- and in a file this file's scan never opens. Move the shared part "
+          "into backend/services/ and import THAT from both.")
+
+
+def test_the_admin_import_guard_matches_both_import_statement_shapes():
+    """The matching rule itself, against synthetic sources.
+
+    Without this, a guard narrowed to one statement shape passes the test
+    above purely because no backend file uses the other shape yet -- and the
+    day one does, the guard is silently absent.
+    """
+    def hits(src):
+        return {m for m in _imported_modules(ast.parse(src))
+                if _reaches_admin_backend(m)}
+
+    # Every shape that DOES reach the privileged package must be caught.
+    assert hits("import admin_backend\n")
+    assert hits("import admin_backend.services.user_admin\n")
+    assert hits("from admin_backend import services\n")
+    assert hits("from admin_backend.services.user_admin import create_user\n")
+
+    # A package whose name merely STARTS with the same letters is a different
+    # package -- a prefix test written without the dot would wrongly flag it.
+    assert hits("import admin_backend_shared\n") == set()
+    assert hits("from admin_backend_shared import x\n") == set()
+
+    # The SANCTIONED direction and backend's own imports stay clean.
+    assert hits("from backend.services import firms\n") == set()
+    assert hits("from backend.config import get_settings\n") == set()
+
+    # A RELATIVE import inside backend/ resolves within that package.
+    assert hits("from . import services\n") == set()
+    assert hits("from .services import auth\n") == set()
+
+
+def test_the_admin_guard_actually_scans_the_public_backend():
+    """The guard above is vacuous if _deployed_sources() yields nothing.
+
+    A scan that finds no files passes every "no offenders" assertion. Pin that
+    it reaches the public app module and skips the test tree, so a broken
+    parents[] index or an over-eager exclusion fails HERE rather than turning
+    the import guard into a no-op nobody notices.
+    """
+    scanned = {f.relative_to(root).as_posix() for f, root in _deployed_sources()}
+    assert "main.py" in scanned, sorted(scanned)[:20]
+    assert not any(part == "tests" for s in scanned for part in s.split("/")), (
+        "the walk is picking up backend/tests/, which does not ship")

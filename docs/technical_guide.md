@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+*Last updated: 2026-09-03 (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -16,7 +16,7 @@ fallback). This guide lists the deploy flow + env vars; per-channel model/auth
 config detail lives in [standards/ai-models.md](standards/ai-models.md) and
 [components/config-deployment.md](components/config-deployment.md).
 
-**Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
+**Tracks:** `backend/main.py`, `admin_backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `backend/models/form_models.py`, `backend/services/form_kits.py`, `backend/services/callback_handler.py`, `backend/services/request_coordinator.py`, `backend/adapters/live_ai_gemini.py`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/state/schemaFormState.ts`, `firebase.json`, `deploy-*.sh`
 
 System-wide reference: routes/endpoints, cross-surface gotchas, environment
 differences. CURRENT STATE ONLY -- chronological history goes in the journal
@@ -84,13 +84,18 @@ again under `/api` -- so both `/ws/fill` and `/api/ws/fill` resolve (see Gotchas
 Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 **not** part of that double-mount and have no `/api` mirror.
 
+This table covers the **public backend** (`backend.main:app`) only. The
+privileged admin service runs the SAME image with a different runtime
+`APP_MODULE` and has its own table below -- both apps declare `/health` and
+`/version`, so one merged table could not say which service a row describes.
+
 Rows are sorted by **path, then method**, and the set is pinned against the
 live app by `tests/test_technical_guide_routes_table.py`, keyed on
-`(path, method)`: a shipped route with no row -- including a NEW METHOD on an
-already-listed path, which needs its own row -- a row for a route that no
-longer ships, and an out-of-order row each fail that test. The sort is not
-cosmetic: it gives every row exactly one correct position, so two PRs adding
-different routes edit different lines instead of colliding over the same
+`(path, method)` **per app**: a shipped route with no row -- including a NEW
+METHOD on an already-listed path, which needs its own row -- a row for a route
+that no longer ships, and an out-of-order row each fail that test. The sort is
+not cosmetic: it gives every row exactly one correct position, so two PRs
+adding different routes edit different lines instead of colliding over the same
 insertion point.
 
 | Method | Path | Surface doc |
@@ -134,10 +139,29 @@ insertion point.
 | POST | `/api/tts/notice` | Speak one of the app's OWN safety notices (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and deliberately NOT `require_paid_client_work`: the paid dependency redeems the link, which would answer a budget-exhausted client with silence and burn a live client's link to deliver a warning we chose to give. Caller sends a KEY, never text, so being free does not make it an open text-to-speech service. In-process cache per `(language, notice_key)`; `Cache-Control: private` + ETag with If-None-Match 304 (bd polyglot-pdf-see5j). `backend/services/notice_tts.py` |
 | POST | `/api/tts/spellback` | Deterministic spell-back verification clip (Cloud TTS, session language + persona voice; the value is PII -- never logged, lengths only; 60-char input cap). **Auth-gated**; 503 unless `SPELLBACK_TOOL_ENABLED` (default ON since bd polyglot-pdf-apkdl; bd 22h1f/44ywm). `backend/routes/tts_routes.py`, `backend/services/spellback_tts.py` |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
-| GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
-| GET | `/version` | App version string. |
+| GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. The ADMIN service serves a different `/health` at its own hostname -- see "Admin service routes" below. |
+| GET | `/version` | App version string. The admin service serves its own `/version` at its own hostname. |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
+
+## Admin service routes
+
+The privileged admin service (`admin_backend.main:app`, Cloud Run service
+`polyglot-admin`) is a **separate deployment on its own hostname**, running the
+same image with `APP_MODULE=admin_backend.main:app`. Its paths therefore do not
+collide with the public backend's despite sharing names -- `/health` on the
+admin host is the row below, not the one above.
+
+Same rules as the table above: sorted by **path, then method**, and pinned
+against `admin_backend.main:app` by the same
+`tests/test_technical_guide_routes_table.py` (the checks are parametrized over
+every ASGI app the `Dockerfile` copies, so a third service cannot ship without
+its own table).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/health` | Liveness + identity. Deliberately THIN next to the public backend's: this service proxies no model and owns no confirmation sink. Reports `app_module` -- the ASGI target the container actually launched -- because `APP_MODULE` is a runtime env var, so a service pointed at the wrong module would otherwise look healthy while serving the wrong app. **Unauthenticated by design** (the liveness probe; it reports nothing an unauthenticated caller could not infer) and the ONLY route that stays so once the `require_app_admin` gate lands in bd `polyglot-pdf-7w17m`. NOT exercised by any deploy gate -- `deploy-all.sh`'s reachability check reads the Cloud Run IAM policy and issues no HTTP request, so an operator curls this by hand. `admin_backend/main.py` |
+| GET | `/version` | App version string (the admin app's own, not the public backend's). `admin_backend/main.py` |
 
 ## Gotchas
 
@@ -818,3 +842,65 @@ once:
 
 Full detail: [`components/voice-ai.md`](components/voice-ai.md), which has
 its own "`LIVE_VOICE_NAME` has a SECOND consumer" section.
+
+### 12. `APP_MODULE`: one image, two Cloud Run services (bd polyglot-pdf-pnoik)
+
+The root `Dockerfile` copies BOTH top-level Python packages and chooses which
+ASGI app to serve at RUNTIME. There is no build arg -- `deploy-all.sh` builds
+with `gcloud builds submit --tag`, which cannot pass one.
+
+- **Producer:** NONE YET. No deploy script sets `APP_MODULE` on this branch --
+  `grep APP_MODULE deploy-*.sh backend/deploy-new.sh` returns nothing -- so
+  every service currently built from this image falls back to the
+  `backend.main:app` default, which is the correct behavior for the public
+  channels (they predate the variable and want the default). The producer is
+  the admin service's own deploy script, which lands with the sprint-22 plan's
+  bead 1.3 and will pass `APP_MODULE=admin_backend.main:app` in its `gcloud run
+  deploy --set-env-vars` block. The CONSUMER side below ships now so that
+  deploy is a config change rather than a code change.
+- **Consumer:** the root `Dockerfile`'s
+  `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}`,
+  plus `admin_backend/main.py`'s `DEFAULT_APP_MODULE` constant, which must
+  carry the SAME default string so the admin `/health`'s `app_module` field
+  does not lie about which app is live.
+- *Breaks if disagreed:* a service pointed at the wrong module starts cleanly
+  and serves the WRONG app -- the public voice API on the wide admin service
+  account, or an admin URL with none of the admin routes -- and every probe
+  short of reading `/health`'s `app_module` reports it healthy. An `ENV
+  APP_MODULE=` default, or `-` in place of `:-`, additionally hides a deploy
+  that passes an empty value, which crash-loops the container instead.
+- **Pinned by** `tests/test_dockerfile_app_module.py` (CMD shape, default,
+  no `ARG`, no `ENV` default, both `COPY` lines, and the constant/Dockerfile
+  agreement) and `admin_backend/tests/unit/test_admin_health.py`.
+
+### 13. `admin_backend/` -> `backend/` shared-code direction (bd polyglot-pdf-pnoik)
+
+The privileged admin service and the public backend are separate Cloud Run
+services with separate service accounts, built from one image. The dependency
+between their packages is one-directional and partial.
+
+- **Allowed:** `admin_backend/` imports `backend.services.*` and
+  `backend.config` (firms, link tokens, kit gates, the Firestore client,
+  `parse_extra_origins`).
+- **Forbidden:** `admin_backend/` importing `backend.routes.*`. Importing a
+  route module executes the public app's router construction inside the
+  PRIVILEGED process, binding handlers written and reviewed against the narrow
+  `polyglot-backend-sa` onto the wide `admin-backend-sa`.
+- **Forbidden in the other direction too:** `backend/` never imports
+  `admin_backend`. This is the direction that DEFEATS the scar-#7 guard, so it
+  is pinned rather than assumed: `backend/tests/unit/test_deployed_iam_envelope.py`
+  walks `backend/` only (its root is `parents[2]` of that test file), so a
+  privileged helper reached from `backend/` via `admin_backend` would sit in a
+  file that guard never opens -- and would run under the NARROW
+  `polyglot-backend-sa`.
+- **Pinned by**, in each direction:
+  - `admin_backend/` -/-> `backend.routes`:
+    `admin_backend/tests/unit/test_admin_sa_iam_envelope.py`
+    (`test_admin_backend_never_imports_backend_routes`).
+  - `backend/` -/-> `admin_backend`:
+    `backend/tests/unit/test_deployed_iam_envelope.py`
+    (`test_the_public_backend_never_imports_the_admin_package`).
+
+  Each has a matching-rule test over synthetic sources (both import shapes,
+  plus a same-prefix package that must NOT be flagged) and a vacuity guard
+  asserting its source walk actually reaches the app module.
