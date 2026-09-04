@@ -21,6 +21,10 @@ pinned by test.
 
 ONE IMAGE, TWO SERVICES. The root Dockerfile copies both packages and reads
 the ASGI target from the runtime env var APP_MODULE (default
-backend.main:app); the admin service is deployed with
-APP_MODULE=admin_backend.main:app.
+backend.main:app). NOTHING SETS THAT VARIABLE YET: no deploy script on this
+branch passes APP_MODULE, so every service built from this image serves
+backend.main:app today. The admin service will be deployed with
+APP_MODULE=admin_backend.main:app by its own deploy script (sprint-22 plan
+bead 1.3); the consumer side ships first so that deploy is a config change
+rather than a code change.
 """

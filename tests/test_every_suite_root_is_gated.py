@@ -27,6 +27,7 @@ import configparser
 import io
 import pathlib
 import re
+import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTEST_INI = REPO_ROOT / "pytest.ini"
@@ -132,6 +133,110 @@ def test_closeout_prep_runs_pytest_without_naming_suite_paths():
     for root in (p.rstrip("/") for p in _testpaths()):
         assert '"{}"'.format(root) not in args, (
             "check_tests() hardcodes suite path {!r}".format(root))
+
+
+def test_every_suite_root_strips_k_service_at_import_time():
+    """Each suite root must close the ambient-K_SERVICE hole for ITSELF.
+
+    backend/config.py fails closed when K_SERVICE (a deployed-service
+    identity) is set alongside VFF_DISABLE_AUTH=true. Several test modules
+    reach that constructor at IMPORT time -- backend/tests via
+    backend.main, admin_backend/tests via admin_backend.main's module-scope
+    CORS block -- so an operator with K_SERVICE exported aborts COLLECTION
+    with a pydantic ValidationError before any fixture could run. Only a
+    module-level pop in that root's own conftest.py is early enough.
+
+    The trap this pins is that the hole CLOSES ITSELF BY ACCIDENT under a bare
+    `pytest`: whichever root is collected first pops the variable for every
+    root after it, so a suite with no conftest of its own still passes the
+    gates while being broken under the narrow per-suite invocation
+    docs/standards/testing.md prescribes. admin_backend/tests shipped in
+    exactly that state. So this asserts the property for the whole SET
+    (CLAUDE.md scar #8), derived from testpaths -- a fourth root added without
+    its own guard fails here rather than the next time someone runs one suite
+    alone.
+
+    Mutation: delete the os.environ.pop line from any root's conftest.py --
+    red, naming that root.
+    """
+    offenders = []
+    for root in _testpaths():
+        conftest = REPO_ROOT / root.rstrip("/") / "conftest.py"
+        if not conftest.exists():
+            offenders.append(
+                "{}: no conftest.py, so this root has no import-time guard "
+                "and only collects cleanly when a sibling root happens to be "
+                "collected first".format(root))
+            continue
+        text = io.open(conftest, encoding="utf-8").read()
+        # Must be at MODULE level (column 0): the same call indented inside a
+        # fixture runs after collection and does not close the hole.
+        if not re.search(r'^os\.environ\.pop\(\s*"K_SERVICE"', text,
+                         re.MULTILINE):
+            offenders.append(
+                "{}/conftest.py has no module-level "
+                'os.environ.pop("K_SERVICE", ...), so an ambient K_SERVICE '
+                "aborts this suite at collection".format(root.rstrip("/")))
+
+    assert not offenders, (
+        "these pytest.ini testpaths roots do not strip K_SERVICE at import "
+        "time:\n  " + "\n  ".join(offenders))
+
+
+def test_check_tests_timeout_has_headroom_over_the_widened_run():
+    """Widening the gate without widening its timeout un-gates it silently.
+
+    check_tests() used to run `backend/tests` alone (measured 590s) under a
+    600s ceiling. Widening it to every testpaths root took the same run to
+    706s -- over the ceiling -- so the gate would be KILLED on every closeout
+    instead of returning a verdict. The scope and the ceiling are one decision;
+    this pins the ceiling to the wider scope so the next root added cannot
+    quietly re-open the hole.
+    """
+    text = io.open(CLOSEOUT_PREP, encoding="utf-8").read()
+    match = re.search(r"^_TESTS_TIMEOUT_S\s*=\s*(\d+)", text, re.MULTILINE)
+    assert match, "check_tests' timeout must be a NAMED constant so it is pinnable"
+    assert int(match.group(1)) >= 1200, (
+        "the full-suite run measured 706s across all testpaths roots; a ceiling "
+        "of {}s leaves no headroom for a slower machine or a few hundred new "
+        "tests, and an exceeded ceiling yields NO verdict at all".format(
+            match.group(1)))
+
+    body = text[text.index("def check_tests("):]
+    body = body[:body.index("\ndef ")]
+    assert "timeout=_TESTS_TIMEOUT_S" in body, (
+        "check_tests() does not use the pinned constant, so the assertion "
+        "above guards a number the gate never reads")
+
+
+def test_check_tests_reports_a_timeout_as_its_own_outcome():
+    """A killed suite must not masquerade as a tooling error.
+
+    subprocess.TimeoutExpired subclasses SubprocessError, so a single
+    `except (OSError, subprocess.SubprocessError)` arm renders an over-long run
+    as "could not run pytest" -- which reads as a broken harness, not as a gate
+    that produced no verdict. The distinction is what tells the orchestrator
+    the suite still needs running.
+    """
+    assert issubclass(subprocess.TimeoutExpired, subprocess.SubprocessError), (
+        "this test exists because TimeoutExpired IS a SubprocessError; if that "
+        "changed upstream, revisit the ordering requirement below")
+
+    text = io.open(CLOSEOUT_PREP, encoding="utf-8").read()
+    body = text[text.index("def check_tests("):]
+    body = body[:body.index("\ndef ")]
+
+    timeout_arm = body.find("except subprocess.TimeoutExpired")
+    assert timeout_arm != -1, (
+        "check_tests() has no dedicated TimeoutExpired handler, so a killed "
+        "suite is reported as a tooling error and the gate silently verifies "
+        "nothing")
+    broad_arm = body.find("subprocess.SubprocessError")
+    assert broad_arm != -1, "check_tests() lost its launch-failure handler"
+    assert timeout_arm < broad_arm, (
+        "the TimeoutExpired arm must come BEFORE the SubprocessError arm; "
+        "Python matches except-clauses in order, so a later specific arm is "
+        "dead code")
 
 
 def test_check_tests_runs_from_the_worktree_root():

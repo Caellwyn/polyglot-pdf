@@ -3,8 +3,15 @@
 The root Dockerfile is built by deploy-all.sh with `gcloud builds submit --tag`,
 which CANNOT pass `--build-arg`. So the ASGI target cannot be baked in at build
 time without building a second image per service. Instead the CMD reads
-`${APP_MODULE:-backend.main:app}`, and each `gcloud run deploy` sets APP_MODULE
-through `--set-env-vars`.
+`${APP_MODULE:-backend.main:app}`, which a `gcloud run deploy --set-env-vars`
+block can override per service.
+
+NOTHING SETS IT YET. No deploy script on this branch passes APP_MODULE, so
+every service built from this image serves the default today. The admin deploy
+script lands with sprint-22 plan bead 1.3; the consumer side ships first so
+that deploy is a config change, not a code change. That "no producer yet" state
+is itself pinned below, so the docs describing it cannot quietly go stale the
+day the producer appears.
 
 Three properties this pins, each of which breaks a deploy if it drifts:
 
@@ -187,6 +194,103 @@ def test_the_two_app_module_readers_agree_on_every_env_state(monkeypatch):
             "with APP_MODULE {}, the app reports {!r} but the container would "
             "launch {!r}".format(state, _active_app_module(),
                                  shell_expansion(value)))
+
+
+# The docs that describe WHO sets APP_MODULE. Each is a tier-1/tier-2 doc or a
+# module docstring that a reader (or a cross-surface reviewer tracing the
+# contract) treats as current state, so each must agree with the deploy scripts
+# about whether a producer exists at all.
+_PRODUCER_CLAIM_SITES = (
+    "docs/technical_guide.md",
+    "docs/components/config-deployment.md",
+    "admin_backend/__init__.py",
+    "Dockerfile",
+)
+
+
+def _deploy_scripts() -> list:
+    """Every deploy script that could set APP_MODULE, derived from the repo.
+
+    Globbed, not hand-listed: a NEW deploy script is exactly the event that
+    turns "no producer" into "a producer", and a hand-written list would miss
+    the one file that matters.
+    """
+    scripts = sorted(REPO_ROOT.glob("deploy-*.sh"))
+    scripts += sorted(REPO_ROOT.glob("backend/deploy-*.sh"))
+    scripts += sorted(REPO_ROOT.glob("scripts/deploy-*.sh"))
+    assert scripts, "no deploy-*.sh scripts found -- has the layout changed?"
+    return scripts
+
+
+def test_docs_do_not_claim_a_live_app_module_producer_while_none_exists():
+    """The Surface-contracts map must not name a PRODUCER that sets nothing.
+
+    docs/technical_guide.md's Surface contracts section declares itself derived
+    from code, with the producer and consumer code site for each contract -- it
+    is the blast-radius map a cross-surface reviewer is told to trace from. A
+    row naming `deploy-all.sh` as the APP_MODULE producer sends that reviewer
+    to a file containing no such assignment.
+
+    This pins the AGREEMENT rather than the current answer, so it stays correct
+    in both directions: while no deploy script assigns APP_MODULE, no doc may
+    assert one does; the day bead 1.3's deploy script lands, this test flips
+    and REQUIRES the docs to be updated to match. Either way the docs cannot
+    silently disagree with the scripts.
+
+    Mutation: write "the admin service is deployed with APP_MODULE=..." into
+    any listed doc while no script sets it -- red.
+    """
+    producers = []
+    for script in _deploy_scripts():
+        text = script.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if re.search(r"\bAPP_MODULE\s*=", stripped):
+                producers.append("{}:{}".format(
+                    script.relative_to(REPO_ROOT).as_posix(), lineno))
+
+    # A doc claims a live producer when it says the admin service IS deployed
+    # with the variable, in the present tense. The hedged forward-looking forms
+    # ("will run", "lands with", "NONE YET") are what correctness looks like
+    # while the producer is absent, so they must not match.
+    present_tense = re.compile(
+        r"(?:is|are)\s+deployed\s+with\s+`?APP_MODULE"
+        r"|APP_MODULE\s+rides\s+in\s+through[^.]*\bso\s+one\s+image\s+backs\b"
+        r"|admin\s+service\s+is\s+deployed\s+with",
+        re.IGNORECASE)
+
+    offenders = []
+    for rel in _PRODUCER_CLAIM_SITES:
+        path = REPO_ROOT / rel
+        assert path.exists(), "pinned producer-claim site is missing: " + rel
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if present_tense.search(line):
+                offenders.append("{}:{}: {}".format(rel, lineno, line.strip()))
+
+    if producers:
+        # A producer exists now -- the docs SHOULD describe it, and the
+        # "NONE YET" wording this branch shipped is what is now stale.
+        stale = []
+        for rel in _PRODUCER_CLAIM_SITES:
+            text = (REPO_ROOT / rel).read_text(encoding="utf-8",
+                                               errors="replace")
+            if "NONE YET" in text or "NOTHING SETS IT YET" in text:
+                stale.append(rel)
+        assert not stale, (
+            "a deploy script now SETS APP_MODULE ({}), but these docs still "
+            "say no producer exists:\n  {}\n\nUpdate them to name the real "
+            "producer.".format(", ".join(producers), "\n  ".join(stale)))
+        return
+
+    assert not offenders, (
+        "no deploy script assigns APP_MODULE (checked {} scripts), but these "
+        "docs claim a live producer:\n  ".format(len(_deploy_scripts()))
+        + "\n  ".join(offenders)
+        + "\n\nDescribe the producer in the FUTURE tense until the deploy "
+          "script that sets it actually lands.")
 
 
 def test_the_admin_module_path_is_importable_as_written():

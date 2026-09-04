@@ -167,6 +167,66 @@ doc under `.claude/skills/`, `docs/standards/`, or `docs/doctrine/` (plus
 pytest's own flags must be under the pin -- with a companion test rejecting dead
 entries. Mutation-verified per entry: dropping any one of the four goes red.
 
+### Review round 2 (cross-surface, Opus): 4 findings, 4 adopted, 0 rejected, 0 deferred
+
+Round 1 widened both test gates to inherit `testpaths`. Round 2 found that
+widening the SCOPE of a gate without widening its TIMEOUT un-gates it, plus
+three cases of a claim outrunning the code. All four adopted.
+
+**1 (blocker) — the pre-PR test gate died on its own timeout.** `check_tests`
+went from `backend/tests` (measured 590s) to every `testpaths` root (measured
+706s) while keeping `timeout=600`. Worse than a slow gate: `TimeoutExpired`
+subclasses `SubprocessError`, so the existing `except` arm rendered the kill as
+`PREP-ERROR — a check could not run`, a tooling error an orchestrator reads
+past. The gate would have reported *nothing* on every closeout while looking
+like it ran. Fixed both halves — the ceiling is now a named `_TESTS_TIMEOUT_S`
+(1800s, real headroom rather than a number sitting just above today's
+measurement), and a dedicated `TimeoutExpired` arm ordered *before* the broad
+one reports "no verdict" as its own outcome. Both pinned, including the
+except-ordering (a later specific arm is dead code).
+
+**2 — the routes-table set pin was blind to the second app.** It derived
+shipped routes from `backend.main` alone, so the admin service's `/health` and
+`/version` were invisible to it and shipped undocumented with the suite green.
+This is the same hand-scoped-vocabulary trap this bead already fixed twice in
+round 1 (`_DEPLOYED_PACKAGES`, `_REPO_TOP_LEVEL_DIRS`) — the routes-table pin
+was simply not enumerated as a member of that set (scar #8). The complication:
+both apps declare `/health` and `/version`, so a single `(path, method)` key
+would let each app's rows "document" the other's. Fixed by giving each app its
+own table section and parametrizing all four checks over an `_APPS` tuple —
+and, because that tuple is itself hand-listed, deriving the *required* set from
+the `Dockerfile`'s `COPY <pkg> /app/<pkg>` lines, so a third service cannot
+ship without a table.
+
+**3 — the Surface-contracts map named a producer that sets nothing.** The
+`APP_MODULE` entry cited `deploy-all.sh`'s `--set-env-vars` block as the
+producer; `grep APP_MODULE deploy-*.sh backend/deploy-new.sh` returns nothing.
+The producer legitimately belongs to plan bead 1.3 — only the present tense was
+wrong, in a section that declares itself derived from code and is the
+blast-radius map a reviewer is told to trace from. Enumerated every site making
+the claim rather than fixing the one cited: `docs/technical_guide.md`,
+`admin_backend/__init__.py`, `Dockerfile`, and this bead's own
+`tests/test_dockerfile_app_module.py` docstring all asserted it;
+`docs/components/config-deployment.md` was already correctly hedged. Pinned as
+an AGREEMENT, not an answer: while no deploy script assigns `APP_MODULE` no doc
+may claim one does, and the day bead 1.3's script lands the test flips and
+requires the docs to name the real producer. Mutation-verified in both
+directions.
+
+**4 — the new suite was protected only by a sibling's conftest.**
+`admin_backend/main.py` calls `get_settings()` at module scope, and
+`backend/config.py` fails closed on `K_SERVICE` + `VFF_DISABLE_AUTH=true`, so
+`K_SERVICE=x pytest admin_backend/tests/unit --co` aborted at COLLECTION —
+reproduced. It looked green in the gates only incidentally: a bare `pytest`
+imports `backend/tests/conftest.py` first, and that sibling's module-level pop
+cleaned the environment for everyone. So the suite broke under exactly the
+narrow per-suite recipe `docs/standards/testing.md` prescribes. Added
+`admin_backend/tests/conftest.py` with the same import-time guard the other two
+roots carry, and pinned it as a SET derived from `testpaths` — a fourth root
+added without its own guard fails immediately rather than the next time someone
+runs one suite alone. Mutation-verified three ways: pop deleted, conftest
+deleted, and pop demoted out of module scope into a function.
+
 ## Lessons
 
 **A guard that scans nothing passes every assertion it makes.** The import guard
@@ -303,3 +363,9 @@ tests were honest. See Lessons.
   derived from the repo.
 - `docs/components/config-deployment.md`, `docs/technical_guide.md`,
   `docs/standards/testing.md` — see above.
+- `admin_backend/tests/conftest.py` — new; review round 2: the import-time
+  `K_SERVICE` guard the other two suite roots already carry.
+- `tests/test_technical_guide_routes_table.py` — review round 2: checks
+  parametrized over every ASGI app the `Dockerfile` ships, with the app set
+  derived from its `COPY` lines.
+- `tests/conftest.py` — review round 2: stale "two testpaths" comment.

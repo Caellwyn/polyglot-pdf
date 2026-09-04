@@ -19,9 +19,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # The backend package (importable as `backend` via PYTHONPATH=/app).
 COPY backend /app/backend
 
-# The privileged ADMIN package (bd polyglot-pdf-pnoik). ONE image serves TWO
-# Cloud Run services -- polyglot-backend runs backend.main:app, polyglot-admin
-# runs admin_backend.main:app -- selected at RUNTIME by APP_MODULE (see CMD).
+# The privileged ADMIN package (bd polyglot-pdf-pnoik). ONE image is built to
+# serve TWO Cloud Run services -- polyglot-backend runs backend.main:app and
+# polyglot-admin will run admin_backend.main:app -- selected at RUNTIME by
+# APP_MODULE (see CMD). NOTE the admin service is not deployed yet and no
+# deploy script sets APP_MODULE, so every image built today serves the
+# backend.main:app default; the admin deploy lands with sprint-22 plan bead
+# 1.3 and only has to pass the env var.
 # Both packages ship in every image; the deployed service account is what
 # actually gates the privileged calls, not what is present on disk.
 COPY admin_backend /app/admin_backend
