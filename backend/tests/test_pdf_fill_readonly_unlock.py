@@ -30,6 +30,14 @@ import pytest
 
 from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf
 
+# UNVERIFIABLE IN CI (bd polyglot-pdf-2r1ku): kits are bucket-canonical
+# (CLAUDE.md scar #10) and no i-90 is git-tracked, so BOTH tests in this file
+# skip everywhere except a machine that pulled that kit. The field id below was
+# repointed to the v2 schema and the unlock descriptor is measured and correct
+# as of 2026-09-03, but neither is exercised by any CI run -- do not read a
+# green suite as evidence that this guard holds. Reviving it means a pulled or
+# synthetic corpus, not another repoint.
+#
 # A field whose widget is read-only in form.pdf. The unlock descriptor is
 # INJECTED by the test rather than read from the kit (see _unlocking_schema):
 # the shipped applicant-only i-90 kit carries no field with an unlock, so

@@ -485,29 +485,40 @@ def test_render_field_guidance_long_radio_group_marks_long_standard_list():
 
 
 def test_real_long_selects_are_never_force_recited():
-    # bd polyglot-pdf-e5a7: a REAL shipped long select (the I-90's height
-    # fields were the original case) must never carry the read-ALL imperative
-    # -- a synthetic-only pin would stay green if someone re-typed such a field
-    # to radio in a kit, silently restoring the "zero, one, two, ... eleven"
-    # recital. That is why this reads real kits rather than a fixture.
-    #
-    # DISCOVERED, not named (bd polyglot-pdf-o9zwe): this used to open
-    # form-kits/i-90/ by name, which stopped existing when kits became
-    # bucket-canonical -- so the test skipped unconditionally and the one thing
-    # it exists to catch became the one thing it could not catch. It now takes
-    # every long select in every kit on disk.
-    witnesses = [
-        (f"{kit}:{f['id']}", f)
-        for kit, f in _shipped_fields()
-        if f.get("type") == "select" and len(f.get("options") or []) >= 7
-    ]
-    if not witnesses:
-        pytest.skip("no kit on disk carries a long select to witness this")
-    for fid, f in witnesses:
-        text = render_field_guidance(f)
-        assert "read ALL" not in text, fid
-        assert "standard list; ask directly" in text, fid
+    """A long select must never carry the read-ALL imperative (bd e5a7).
 
+    REAL data, FROZEN -- not a synthetic field and not the live tree.
+    The original case was the I-90's height selects, and the point of using real
+    data is that a synthetic pin would stay green if someone re-typed such a
+    field to radio in a kit, silently restoring the "zero, one, two, ...
+    eleven" recital.
+
+    Why frozen rather than discovered: kits are bucket-canonical, and NEITHER
+    git-tracked kit (w7, f1040) contains a single `select` field -- so any
+    version of this test that reads the working tree passes only on a machine
+    that happens to have pulled the right kit, and skips in CI. Two earlier
+    attempts did exactly that: first a skipif naming form-kits/i-90/, then
+    discovery over every on-disk dir whose only witnesses lived in UNTRACKED
+    i-90_v2. Both were reported as passing on evidence that existed only
+    locally. Freezing the artifact is what CLAUDE.md scar #10 prescribes for a
+    real-data pin, and it is the only shape that actually runs.
+
+    Refresh the fixture from a live kit if the render's threshold changes.
+    """
+    import json
+    from pathlib import Path
+
+    frozen = (Path(__file__).resolve().parent / "fixtures"
+              / "long_selects_frozen.json")
+    fields = json.loads(frozen.read_text(encoding="utf-8"))["fields"]
+    # Guard the premise: if the fixture stops holding long selects this test is
+    # vacuous and must say so rather than passing.
+    assert len(fields) >= 3, "fixture lost its long selects"
+    for f in fields:
+        assert f["type"] == "select", f["id"]
+        assert len(f["options"]) >= 7, f["id"]
+        text = render_field_guidance(f)
+        assert "read ALL" not in text, f["id"]
 
 def test_render_field_guidance_checkbox_group_gets_recital():
     field = {
@@ -691,52 +702,57 @@ def _shipped_fields():
     import json as _json
     from pathlib import Path as _Path
 
+    import subprocess as _sp
+
     root = _Path(__file__).resolve().parents[3] / "form-kits"
     if not root.is_dir():
         return
-    for d in sorted(root.iterdir()):
-        schema = d / "schema.json"
-        if not d.is_dir() or d.name.startswith("_") or not schema.is_file():
+    # GIT-TRACKED only, matching test_form_models_v2.discovered_kits(). Scanning
+    # the whole directory instead would assert against a maintainer's UNTRACKED
+    # scratch kits -- which CI never sees (so a guard can look alive locally and
+    # be dead in CI) and which can go red on a colleague's machine for a kit
+    # that is not a deliverable. Both failure directions are real; this one
+    # bit twice on the long-select guard above.
+    try:
+        tracked = _sp.run(
+            ["git", "-C", str(root.parent), "ls-files", "form-kits/"],
+            capture_output=True, text=True, timeout=30, check=True,
+        ).stdout
+    except (OSError, _sp.SubprocessError):
+        return
+    names = sorted({
+        line.split("/")[1] for line in tracked.splitlines()
+        if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
+    })
+    for name in names:
+        schema = root / name / "schema.json"
+        if not schema.is_file():
             continue
         try:
             doc = _json.loads(schema.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             continue
         for f in doc.get("fields") or []:
-            yield d.name, f
+            yield name, f
 
 
 def _short_two_option_fields():
-    """Every (id, field) on disk that is a 2-option pair with SHORT labels.
+    """Every (id, field) in a TRACKED kit that is a 2-option pair with SHORT labels.
 
     Short = under the render's fold-into-one-question threshold, so these are the
-    fields the natural-question marker must fire on. Discovered by scanning the
-    kits present rather than naming any, so an author adding/retiring a form
-    never edits this test (bd polyglot-pdf-o9zwe).
+    fields the natural-question marker must fire on. Discovered rather than
+    named, so an author adding or retiring a form never edits this test
+    (bd polyglot-pdf-o9zwe), and sourced from _shipped_fields() so it uses the
+    SAME git-tracked scope as every other discovery helper here.
     """
-    import json as _json
-    from pathlib import Path as _Path
-
-    root = _Path(__file__).resolve().parents[3] / "form-kits"
     out = []
-    if not root.is_dir():
-        return out
-    for d in sorted(root.iterdir()):
-        schema = d / "schema.json"
-        if not d.is_dir() or d.name.startswith("_") or not schema.is_file():
+    for kit, f in _shipped_fields():
+        opts = f.get("options") or []
+        if len(opts) != 2:
             continue
-        try:
-            doc = _json.loads(schema.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            continue
-        for f in doc.get("fields") or []:
-            opts = f.get("options") or []
-            if len(opts) != 2:
-                continue
-            if max(len(str(o.get("label", "")).split()) for o in opts) <= 6:
-                out.append((f"{d.name}:{f['id']}", f))
+        if max(len(str(o.get("label", "")).split()) for o in opts) <= 6:
+            out.append((f"{kit}:{f['id']}", f))
     return out
-
 
 def test_real_yes_no_fields_get_the_natural_question_marker():
     # bd 41fi criterion 1: a real 2-option yes/no renders the two-option marker,

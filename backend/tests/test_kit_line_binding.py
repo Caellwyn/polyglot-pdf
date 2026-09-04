@@ -197,12 +197,15 @@ def test_f1040_write_in_boxes_bind_by_geometry_not_by_row():
 # (`form1[0].#subform[0].P1_Line1_AlienNumber[0]`), so an exact-match-only
 # lookup skipped all 132 of its fields and passed green even with every
 # position corrupted (Opus fresh-eyes on this PR).
-# i-90's floor moved 114 -> 79 with the applicant-only v2 kit. This is NOT a
-# weakening: 79 is the count of fields carrying a pdf_field_name in that kit,
-# i.e. EVERY resolvable field still resolves and none are being skipped. The
-# drop is the deliberate removal of the preparer/interpreter blocks (Parts 6/7),
-# not a regression in resolution. Kept at the exact live count so any claim that
-# stops resolving drops below the floor immediately -- which is the whole point.
+# i-90's floor moved 114 -> 79 for the applicant-only v2 kit: 79 is the count of
+# fields carrying a pdf_field_name there, so every resolvable field still
+# resolves and the drop is the deliberate removal of Parts 6/7, not a regression.
+#
+# UNVERIFIABLE IN CI, and say so rather than let the number look load-bearing:
+# kits are bucket-canonical (CLAUDE.md scar #10) and no i-90 is tracked, so this
+# parametrization SKIPS everywhere except a machine that pulled that kit. The
+# value is measured and correct as of 2026-09-03; it pins nothing until this
+# guard runs against a pulled or synthetic corpus (bd polyglot-pdf-2r1ku).
 _MIN_POSITIONS_CHECKED = {"f1040": 167, "i-90": 79, "w7": 47}
 
 
