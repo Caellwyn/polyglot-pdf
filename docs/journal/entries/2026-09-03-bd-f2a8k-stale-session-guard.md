@@ -84,6 +84,23 @@ nothing, because `load()` already normalizes those ids to null. The code
 stays (it is the cleaner contract); the comment now says what is actually
 true.
 
+**A promise is only as wide as the test that can see it.** The cross-surface
+pass showed my "lazy stays lazy" sentence false one call later: `connect()`
+builds a `WebFormConnection`, whose constructor calls `init()`, whose reuse
+branch persists on every reuse (`deduplicateSections` always returns a fresh
+object, so "the reconcile returned a new object" is always true). My laziness
+test could not see that because that class is mocked and `connect()` is never
+called -- the pre-existing `currentPartId` pin has the same blind spot (bd
+`polyglot-pdf-20mw6`). The doc now says exactly what holds and where it stops;
+the test's name says "AT CONSTRUCTION". Harmless in substance (the re-persist
+writes the correct values), wrong in what it asserted.
+
+Filed by the reviewer, left open: `polyglot-pdf-3juld` (radio / checkbox_group
+have the same desync when the editor re-mints a label; `pdf_on_value` is not
+an inverse key there, so the fix is clear-not-map), `polyglot-pdf-95nj1`
+(/resume-form keeps a zero-claimant code verbatim where the frontend clears
+it), `polyglot-pdf-20mw6`.
+
 **The vanilla path's load migration is lazy by contract, and a test pins it.**
 My first cut re-persisted the reconciled state in `connection.ts`;
 `connection.test.ts` failed with "expected undefined to be 'section-2a'" --

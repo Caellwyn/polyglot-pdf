@@ -399,8 +399,11 @@ export function createConnectionManager(
 	// PERSIST ONLY WHEN A VALUE CHANGED. The onManualEdit handlers below read
 	// SchemaFormStateManager.load() -- the raw bytes -- so an in-memory-only
 	// reconcile was undone by the first manual edit (fresh-eyes). A value
-	// change is a real migration and is saved; a bare schema swap is not, so
-	// this path's lazy key migrations stay lazy (connection.test.ts pins that).
+	// change is a real migration and is saved; a bare schema swap is not
+	// saved HERE (connection.test.ts pins that at construction). Note the
+	// limit of that promise: connect() builds a WebFormConnection whose
+	// constructor calls init(), and init()'s reuse branch re-persists on
+	// every reuse (cross-surface, g2fpr.5) -- with the correct values.
 	const stored = SchemaFormStateManager.load()
 	let state: SchemaFormState = stored
 		? SchemaFormStateManager.reconcileSelectValues(stored, schema)

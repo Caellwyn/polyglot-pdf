@@ -970,7 +970,12 @@ describe('Connection Manager (connection.ts)', () => {
       expect(after.currentSectionId).toBe(testSchema.sections[0].id)
     })
 
-    it('a session whose values already match is NOT re-persisted (the lazy contract holds)', () => {
+    it('AT CONSTRUCTION, a session whose values already match is NOT re-persisted', () => {
+      // Only the factory's own gate is pinned here: WebFormConnection is
+      // mocked in this file and connect() is never called, so the later
+      // re-persist by init() inside its constructor is invisible to this
+      // test (cross-surface, g2fpr.5; bd polyglot-pdf-20mw6 tracks the same
+      // blind spot in the pre-existing currentPartId laziness pin).
       const blob = JSON.stringify({
         ...JSON.parse(legacyBlob('alabama')), schema: migrated(),
       })
