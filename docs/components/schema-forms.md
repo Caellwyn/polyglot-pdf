@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: blankness has ONE definition, `isBlankFieldValue` -- whitespace-only is not an answer at any of the six predicates that decide whether a field is filled).*
+*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: blankness has ONE definition for "answered" (`isBlankFieldValue`) and a NARROWER one for "settled" (`isConfirmedButBlank`, which keeps a confirmed optional `''` settled); every gating consumer shares them, and whitespace no longer deadlocks the voice path).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -102,8 +102,11 @@ instances) operating on a `SchemaFormState` value:
   Those six sites each hand-wrote the check and every copy tested `=== ''`
   without trimming, so a space-filled field satisfied the completion gate, passed
   the required check, hid its own skip button, and was confirmable -- while
-  printing blank on the PDF and never reaching the backend (whose predicates all
-  `.strip()`, so the two sides disagreed about whether the field existed). The
+  printing blank on the PDF and never reaching the backend at all -- the notify
+  path (`fieldManager`) trims, so the two sides disagreed about whether the field
+  even existed. (The backend's own predicates mostly `.strip()`, but not
+  universally: `field_validator.py`'s early-out tests a bare `value == ""`. Do
+  not rely on the backend to normalise blankness for you.) The
   sharpest case was `computeNextField`, where BOTH priorities rejected it and the
   field became invisible to navigation entirely.
 
