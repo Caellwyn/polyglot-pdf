@@ -119,6 +119,54 @@ export class SchemaFormStateManager {
   }
 
   /**
+   * Reconcile a STORED session against a FRESH schema (bd polyglot-pdf-g2fpr,
+   * PR 3c -- the stale-session guard).
+   *
+   * A session persisted under one shape of the kit can be resumed under
+   * another: the select migration turns option values from export codes
+   * ('AL') into slugs ('alabama') while a browser still holds 'AL' in
+   * sessionStorage. Left alone, that value matches no option: the <select>
+   * renders EMPTY, the field stays confirmed so it is never re-asked, and the
+   * filler writes 'AL' verbatim -- right only because the old value happens
+   * to equal the new pdf_on_value. So, for every select whose stored value is
+   * not one of the fresh schema's option values:
+   *   - if it equals some option's pdf_on_value, map it to that option's
+   *     value (the migration case, lossless, confirmation kept);
+   *   - otherwise clear the field and drop its confirmation, so it is asked
+   *     again rather than silently kept.
+   * Non-select fields and values that already match are untouched. Pure:
+   * returns a new state; the caller saves.
+   *
+   * Also ADOPTS the fresh schema. init() reused the stored schema wholesale
+   * for an hour after any kit edit, so a migrated kit's new options never met
+   * the stored values until fill time.
+   */
+  static reconcileSelectValues(state: SchemaFormState, freshSchema: FormSchema): SchemaFormState {
+    const fields = freshSchema.fields || [];
+    const next: Record<string, FieldValue> = { ...state.fieldValues };
+    let changed = false;
+    for (const field of fields) {
+      if (field.type !== 'select' || !Array.isArray(field.options)) continue;
+      const entry = next[field.id];
+      if (!entry || typeof entry.value !== 'string' || entry.value === '') continue;
+      const opts = field.options.filter((o): o is any => !!o && typeof o === 'object');
+      if (opts.some((o) => o.value === entry.value)) continue;       // already current
+      const byCode = opts.filter((o) => (o as any).pdf_on_value === entry.value);
+      if (byCode.length === 1 && typeof byCode[0].value === 'string') {
+        next[field.id] = { ...entry, value: byCode[0].value };      // lossless map
+      } else {
+        // Unmappable (or ambiguous -- never guess between two claimants):
+        // clear it and let the session ask again.
+        delete next[field.id];
+      }
+      changed = true;
+    }
+    const schemaChanged = state.schema !== freshSchema;
+    if (!changed && !schemaChanged) return state;
+    return { ...state, schema: freshSchema, fieldValues: next };
+  }
+
+  /**
    * Initialize or load existing form state
    */
   static init(schema: FormSchema): SchemaFormState {
@@ -148,6 +196,15 @@ export class SchemaFormStateManager {
           existing.selectedLanguage = onboardingLanguage;
           this.save(existing);
         }
+      }
+      // The stored session meets the FRESH schema here and nowhere else
+      // (bd polyglot-pdf-g2fpr, PR 3c): adopt it and map every select value
+      // through it, so a session saved under the pre-migration shape does
+      // not resume with values no option carries.
+      const reconciled = this.reconcileSelectValues(existing, cleanedSchema);
+      if (reconciled !== existing) {
+        this.save(reconciled);
+        return reconciled;
       }
       return existing;
     }

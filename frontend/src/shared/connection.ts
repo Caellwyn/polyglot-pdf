@@ -391,7 +391,17 @@ export function createConnectionManager(
 		}
 
 	// Initialize state
-	let state: SchemaFormState = SchemaFormStateManager.load() || SchemaFormStateManager.init(schema)
+	// A stored session skips init(), so reconcile it against the FRESH schema
+	// here: restoreDOMFromSessionStorage below sets <select>.value from the
+	// stored value, and a pre-migration code ('AL') selects nothing once the
+	// options are slugs (bd polyglot-pdf-g2fpr, PR 3c). In MEMORY only, like
+	// load()'s own key migrations: this path's contract is lazy -- nothing is
+	// re-persisted until the next field write -- and connection.test.ts pins
+	// that ("a future change that starts persisting the migration fails here").
+	const stored = SchemaFormStateManager.load()
+	let state: SchemaFormState = stored
+		? SchemaFormStateManager.reconcileSelectValues(stored, schema)
+		: SchemaFormStateManager.init(schema)
 
 	// Restore DOM fields from sessionStorage (if any values exist from previous session)
 	restoreDOMFromSessionStorage(state, schema)

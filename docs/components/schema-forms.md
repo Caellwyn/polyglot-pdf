@@ -19,6 +19,15 @@ single sessionStorage key **`schema_form_state`**. It's a static class (no
 instances) operating on a `SchemaFormState` value:
 
 - `fieldValues: Record<string, FieldValue>` — the answers (see FieldValue below).
+- **Session reuse and the stale-session guard.** `init(schema)` reuses a stored
+  session under an hour old with the same form number + version, and now ADOPTS
+  the fresh schema and runs `reconcileSelectValues` over it: a select value that
+  matches no fresh option is mapped through the option whose `pdf_on_value` it
+  equals (the migration case, lossless, confirmation kept) or cleared and
+  un-confirmed so it is re-asked; a code two options claim is cleared, never
+  guessed. The vanilla-JS path (`shared/connection.ts`), which skips `init()`
+  when a session exists, reconciles in memory only -- its load migrations are
+  lazy by contract (bd `polyglot-pdf-g2fpr`, PR 3c).
 - `currentSectionId` + `completedSections: Set<string>` — **section**-based
   navigation state (not parts; see terminology). In production continuous mode
   `completedSections` never grows and manual prev/next is suppressed, but
