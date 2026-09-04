@@ -726,6 +726,48 @@ def test_the_backend_stage_call_takes_the_fatal_default():
         )
 
 
+def _severity_of(rel: str, call: str) -> str:
+    """Classify a gate call's severity from its SOURCE TOKEN, not from output.
+
+    Reading the probe's stdout was defeatable: the driver stubs only the
+    variables the real scripts use, so ANY other variable in the severity
+    position expands to empty and was classified "fatal". Routing severity
+    through a variable --
+
+        SEV=warn verify_service_publicly_reachable "$S" "$R" "$P" "$SEV"
+
+    -- therefore flipped backend/deploy-new.sh to warn mode with the whole suite
+    green (found by the round-4 cross-surface review, on the same script and the
+    same test the round-3 review had just hardened).
+
+    So the severity must be a LITERAL: either absent (fatal, the default) or the
+    exact token `warn`. A `$` anywhere in that position is refused outright --
+    an indirected severity is unreviewable by inspection, which is the whole
+    problem.
+    """
+    args = call.split()[1:]
+    # Strip a leading VAR=value environment prefix, which bash applies to the
+    # command rather than passing as an argument.
+    while args and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", args[0]):
+        args = args[1:]
+    if len(args) <= 3:
+        return "fatal"
+    token = args[3]
+    assert "$" not in token, (
+        f"{rel}: the gate call's severity is a variable expansion ({token!r}), "
+        f"so its effective value cannot be read from the source. Pass the "
+        f"literal `warn`, or omit the argument for the fatal default. "
+        f"Call: {call!r}"
+    )
+    stripped = token.strip('"').strip("'")
+    assert stripped in ("warn", "fatal"), (
+        f"{rel}: unrecognised severity {token!r} -- only `warn` or an omitted "
+        f"argument (fatal) are valid. A typo falls through to fatal at runtime, "
+        f"but must not pass unnoticed here. Call: {call!r}"
+    )
+    return stripped
+
+
 # ---------------------------------------------------------------------------
 # The OTHER set: scripts that bake a resolved backend URL into a frontend build.
 # ---------------------------------------------------------------------------
@@ -787,7 +829,6 @@ def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
         if "verify_service_publicly_reachable" in ln
         and not ln.strip().startswith("#")
         and "()" not in ln
-        and "_gate_" not in ln
     ]
     assert calls, (
         f"{rel} bakes a resolved backend URL into a frontend build without "
@@ -843,7 +884,7 @@ def test_url_baking_script_consults_the_reachability_gate(rel, tmp_path):
             f"{rel}: the gate call's arguments do not bind to the script's own "
             f"service/region/project variables. Got: {out!r} from {call!r}"
         )
-        severities.append("warn" if "SEVERITY=warn" in out else "fatal")
+        severities.append(_severity_of(rel, call))
         # ...and the call must be a BARE command. The sibling guard
         # test_gate_is_called_as_a_bare_command is parametrized on
         # GATED_DEPLOY_SCRIPTS, so deploy-editor.sh escapes it entirely; a
@@ -953,7 +994,6 @@ def test_service_creating_script_takes_the_fatal_default(rel, tmp_path):
         if "verify_service_publicly_reachable" in ln
         and not ln.strip().startswith("#")
         and "()" not in ln
-        and "_gate_" not in ln
     ]
     assert calls, f"{rel} never calls the gate"
 
@@ -987,9 +1027,7 @@ def test_service_creating_script_takes_the_fatal_default(rel, tmp_path):
             f"{rel}: a gate call produced no severity output, so it cannot be "
             f"classified: {proc.stdout!r} from {call!r}"
         )
-        severities.append(
-            "warn" if "SEVERITY=warn" in proc.stdout else "fatal"
-        )
+        severities.append(_severity_of(rel, call))
 
     want_warn, want_fatal = GATED_DEPLOY_SEVERITY[rel]
     got_warn = severities.count("warn")

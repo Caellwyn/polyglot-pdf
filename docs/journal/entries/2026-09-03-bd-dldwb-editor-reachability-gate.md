@@ -193,6 +193,53 @@ Three rounds, three strictly larger claims about the same assertion: it exists -
 it is called correctly -> its severity is exactly right. Each round the weaker
 version had looked sufficient.
 
+## Round four: the classifier read the wrong thing entirely
+
+Two more evasions, both in tests written in round three.
+
+**Severity read from OUTPUT, not source.** The probe driver stubs only the
+variables the real scripts use, so any OTHER variable in the severity position
+expanded to empty and was classified "fatal". Routing severity through one --
+
+```sh
+SEV=warn verify_service_publicly_reachable "$S" "$R" "$P" "$SEV"
+```
+
+-- flipped `deploy-new.sh` to warn mode with all 32 tests green. Now classified
+from the SOURCE TOKEN, and a `$` in that position is refused outright: an
+indirected severity cannot be read by inspection, which is exactly the problem.
+
+**A dead filter that widened the attack surface.** My `"_gate_" not in ln` clause
+matched zero real lines (the helpers live inside the function body, already
+excluded) but let a trailing `# _gate_` comment hide a live call -- which, paired
+with a decoy in an `if false` branch, satisfied the exact counts. Removed; the
+remaining filters do the job.
+
+Both were found on the same script and the same test the previous round had just
+hardened.
+
+## What this bead actually cost, and what it bought
+
+Four review rounds on one call site. The trajectory:
+
+| round | finding |
+|---|---|
+| 1 | the gate call was CORRUPTED -- a literal `
+` -- so it queried a service named `n` and could never fire |
+| 2 | severity unpinned; dropping `warn` flipped the editor to FATAL, green |
+| 3 | the pin was a LOWER BOUND while the doc claimed exact counts |
+| 4 | the classifier read stdout, so an indirected severity read as fatal, green |
+
+Every round found something the previous round's fix had left open, and every
+round I believed the work was finished. The one constant: **each assertion was
+weaker than the sentence I had written about it.** Presence, then invocation,
+then binding, then exact severity, then severity that cannot be indirected.
+
+The gate itself was correct from round one. What took four rounds was proving it
+would stay correct -- and the reason is that a guard is not verified by writing
+it, only by trying to defeat it. Three of the four rounds were caught by a
+reviewer trying mutations I had not thought of, not by my own testing.
+
 ## Testing
 
 Full suite: 4466 passed, 126 skipped, exit 0. Three mutations, each confirmed applied: a new ungated
