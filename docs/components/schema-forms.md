@@ -25,9 +25,12 @@ instances) operating on a `SchemaFormState` value:
   matches no fresh option is mapped through the option whose `pdf_on_value` it
   equals (the migration case, lossless, confirmation kept) or cleared and
   un-confirmed so it is re-asked; a code two options claim is cleared, never
-  guessed. The vanilla-JS path (`shared/connection.ts`), which skips `init()`
-  when a session exists, reconciles in memory only -- its load migrations are
-  lazy by contract (bd `polyglot-pdf-g2fpr`, PR 3c).
+  guessed. Adopting the fresh schema also resets `pinnedFieldId` /
+  `searchOriginFieldId` / `currentSectionId` when they name something the fresh
+  schema no longer has. The vanilla-JS path (`shared/connection.ts`), which skips
+  `init()` when a session exists, reconciles too and persists ONLY when a value
+  actually changed -- a bare schema swap stays in memory, so that path's lazy
+  key migrations stay lazy (bd `polyglot-pdf-g2fpr`, PR 3c).
 - `currentSectionId` + `completedSections: Set<string>` — **section**-based
   navigation state (not parts; see terminology). In production continuous mode
   `completedSections` never grows and manual prev/next is suppressed, but

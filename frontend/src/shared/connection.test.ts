@@ -19,6 +19,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createConnectionManager } from './connection'
+import { createFieldManager } from './fieldManager'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import type { FormSchema } from '../schema-forms/types/schema'
 
@@ -904,4 +905,62 @@ describe('Connection Manager (connection.ts)', () => {
       expect(seen).toEqual(['manual'])
     })
   })
+  describe('stale-session guard on the vanilla path (bd polyglot-pdf-g2fpr PR 3c)', () => {
+    // A session persisted under the PRE-migration shape (select value = export
+    // code 'AL') resumed against a MIGRATED schema (value 'alabama',
+    // pdf_on_value 'AL'). The factory reconciles the loaded state; fresh-eyes
+    // found the first cut keeping that in memory only, so the FIRST manual edit
+    // -- whose handler reads SchemaFormStateManager.load(), the raw bytes --
+    // re-persisted the un-reconciled value and undid the guard.
+    const migrated = () => ({
+      ...JSON.parse(JSON.stringify(testSchema)),
+      fields: [
+        ...JSON.parse(JSON.stringify(testSchema)).fields,
+        { id: 'state', name: 'State', spoken_name: 'state', type: 'select', section_id: 'section-1a',
+          options: [
+            { value: 'alabama', label: 'Alabama (AL)', pdf_on_value: 'AL' },
+            { value: 'alaska', label: 'Alaska (AK)', pdf_on_value: 'AK' },
+          ] },
+      ],
+    })
+    const legacyBlob = (stateValue: string) => JSON.stringify({
+      schema: { ...testSchema, fields: [...testSchema.fields,
+        { id: 'state', name: 'State', spoken_name: 'state', type: 'select', section_id: 'section-1a',
+          options: [{ value: 'AL', label: 'AL' }, { value: 'AK', label: 'AK' }] }] },
+      fieldValues: { state: { value: stateValue, confirmed: true, confirmationMethod: 'ai_voice', lastModified: 1 } },
+      currentSectionId: 'section-1a', completedSections: [], validationErrors: {},
+      lastUpdated: Date.now(), formSessionId: 'fss_legacy', loadedFieldIds: [],
+      jitModeEnabled: false, disclaimerAccepted: false,
+    })
+  
+    it('a migrated value is PERSISTED, so the first manual edit cannot undo it', () => {
+      sessionStorageMock['schema_form_state'] = legacyBlob('AL')
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      // Persisted at reconcile time (a real value change is a real migration).
+      expect(SchemaFormStateManager.load()?.fieldValues.state.value).toBe('alabama')
+      // The reviewer's repro: a manual edit on ANOTHER field re-reads load()
+      // and re-saves -- the select must still be the slug afterwards.
+      const fm = (createFieldManager as any).mock.calls.at(-1)[0]
+      fm.onManualEdit('field-1', 'typed')
+      const after = SchemaFormStateManager.load()!
+      expect(after.fieldValues.state.value).toBe('alabama')
+      expect(after.fieldValues.state.confirmed).toBe(true)
+    })
+  
+    it('an unmappable stored value is cleared and stays cleared across a manual edit', () => {
+      sessionStorageMock['schema_form_state'] = legacyBlob('ZZ')
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      expect(SchemaFormStateManager.load()?.fieldValues.state).toBeUndefined()
+    })
+  
+    it('a session whose values already match is NOT re-persisted (the lazy contract holds)', () => {
+      const blob = JSON.stringify({
+        ...JSON.parse(legacyBlob('alabama')), schema: migrated(),
+      })
+      sessionStorageMock['schema_form_state'] = blob
+      createConnectionManager(migrated() as any, vi.fn(), 'English')
+      expect(sessionStorageMock['schema_form_state']).toBe(blob)   // bytes untouched
+    })
+  })
+  
 })

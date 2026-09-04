@@ -151,8 +151,16 @@ export class SchemaFormStateManager {
       if (!entry || typeof entry.value !== 'string' || entry.value === '') continue;
       const opts = field.options.filter((o): o is any => !!o && typeof o === 'object');
       if (opts.some((o) => o.value === entry.value)) continue;       // already current
-      const byCode = opts.filter((o) => (o as any).pdf_on_value === entry.value);
-      if (byCode.length === 1 && typeof byCode[0].value === 'string') {
+      // A CLAIMANT is an option carrying this code in pdf_on_value AND a real
+      // (non-empty string) value -- the same filter /resume-form applies
+      // (pdf_fill_routes.resolve_select_resume_value). Fresh-eyes found the
+      // first cut accepting an empty-valued option and mapping the field to
+      // '' while keeping it confirmed.
+      const byCode = opts.filter(
+        (o) => (o as any).pdf_on_value === entry.value
+          && typeof o.value === 'string' && o.value !== '',
+      );
+      if (byCode.length === 1) {
         next[field.id] = { ...entry, value: byCode[0].value };      // lossless map
       } else {
         // Unmappable (or ambiguous -- never guess between two claimants):
@@ -163,7 +171,30 @@ export class SchemaFormStateManager {
     }
     const schemaChanged = state.schema !== freshSchema;
     if (!changed && !schemaChanged) return state;
-    return { ...state, schema: freshSchema, fieldValues: next };
+    // Adopting a fresh schema can strand ids the stored session computed
+    // against the old one. Reset the three that name a single field/section
+    // and would otherwise dangle; the id Sets (loadedFieldIds,
+    // validatedWindowIndices) tolerate extras and are left alone.
+    const fieldIds = new Set(fields.map((f) => f.id));
+    const sectionIds = new Set((freshSchema.sections || []).map((s) => s.id));
+    const pinned = state.pinnedFieldId && fieldIds.has(state.pinnedFieldId)
+      ? state.pinnedFieldId : null;
+    const origin = state.searchOriginFieldId && fieldIds.has(state.searchOriginFieldId)
+      ? state.searchOriginFieldId : null;
+    const section = sectionIds.has(state.currentSectionId)
+      ? state.currentSectionId
+      : (this.getFirstSection(freshSchema)?.id ?? state.currentSectionId);
+    return {
+      ...state,
+      schema: freshSchema,
+      // Identity is the contract: a caller persists only when VALUES changed,
+      // never for a bare schema swap (the vanilla path's load migrations are
+      // lazy by contract; a value change is a real migration worth persisting).
+      fieldValues: changed ? next : state.fieldValues,
+      pinnedFieldId: pinned,
+      searchOriginFieldId: origin,
+      currentSectionId: section,
+    };
   }
 
   /**

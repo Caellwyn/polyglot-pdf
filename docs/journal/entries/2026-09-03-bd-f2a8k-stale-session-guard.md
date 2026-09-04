@@ -46,6 +46,29 @@ when nothing changes" test compared against a schema that `init()` had already
 cloned. The property is still worth pinning; it just has to be pinned against
 the state's own schema.
 
+**"In memory only" was undone by the first keystroke.** Fresh-eyes traced it:
+the vanilla path's `onManualEdit` handlers read `SchemaFormStateManager.load()`
+-- the raw bytes -- and `updateField` saves unconditionally, so the first
+manual edit on ANY field re-persisted the un-reconciled select and the stale
+schema, undoing the guard for every other field. The lazy contract and the fix
+are reconcilable: persist when a VALUE changed (a real migration), never for a
+bare schema swap. `reconcileSelectValues` keeps `fieldValues` identity when
+nothing changed so the caller can tell the two apart; the laziness pin's
+fixture has no select values and still holds. Pinned with the reviewer's own
+repro: legacy select, migrated schema, manual edit on another field, `load()`
+still shows the slug.
+
+**"The same policy as /resume-form" has to mean the same filter.** The
+backend's claimant filter excludes an option with an empty value; my first cut
+did not, and would have mapped a field to `''` while keeping it confirmed. A
+claim of parity is a claim about the predicate, not the outcome.
+
+**Adopting a fresh schema can strand ids computed against the old one.** New
+exposure, created by this change: `pinnedFieldId`, `searchOriginFieldId` and
+`currentSectionId` are now validated against the fresh schema and reset when
+they name something it no longer has. The id Sets tolerate extras and are left
+alone; that judgement is handed to the cross-surface pass.
+
 **The vanilla path's load migration is lazy by contract, and a test pins it.**
 My first cut re-persisted the reconciled state in `connection.ts`;
 `connection.test.ts` failed with "expected undefined to be 'section-2a'" --

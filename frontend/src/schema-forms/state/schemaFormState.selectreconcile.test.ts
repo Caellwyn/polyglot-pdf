@@ -145,3 +145,55 @@ describe('reconcileSelectValues (bd polyglot-pdf-g2fpr PR 3c)', () => {
     expect(resumed.fieldValues.state).toBeUndefined()
   })
 })
+
+describe('round-1 refinements (fresh-eyes on g2fpr.5)', () => {
+  beforeEach(() => {
+    const store: Record<string, string> = {}
+    const stub = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null, length: 0,
+    } as unknown as Storage
+    global.sessionStorage = stub
+    if (typeof window !== 'undefined') {
+      Object.defineProperty(window, 'sessionStorage', { value: stub, writable: true, configurable: true })
+    }
+  })
+  const stateWith = (sch: FormSchema, fieldValues: Record<string, any>, extra: Record<string, any> = {}) =>
+    ({ ...SchemaFormStateManager.init(sch), fieldValues, ...extra }) as any
+
+  it('an option with an EMPTY value is not a claimant -- parity with /resume-form', () => {
+    // The first cut accepted { value: "", pdf_on_value: "AL" } as the unique
+    // claimant and mapped the field to "" while keeping it confirmed.
+    const fresh = schema([{ value: '', label: '(none)', pdf_on_value: 'AL' }])
+    const old = stateWith(schema(LEGACY), { state: stamp('AL') })
+    const out = SchemaFormStateManager.reconcileSelectValues(old, fresh)
+    expect(out.fieldValues.state).toBeUndefined()
+  })
+
+  it('a bare schema swap keeps fieldValues IDENTITY, so a caller can tell "values changed" apart', () => {
+    const cur = stateWith(schema(MIGRATED), { state: stamp('alabama') })
+    const out = SchemaFormStateManager.reconcileSelectValues(cur, schema(MIGRATED))
+    expect(out).not.toBe(cur)                             // schema adopted
+    expect(out.fieldValues).toBe(cur.fieldValues)         // values untouched, same object
+  })
+
+  it('adopting a fresh schema resets a pinned / origin field id it no longer has', () => {
+    const cur = stateWith(schema(MIGRATED), {}, { pinnedFieldId: 'gone', searchOriginFieldId: 'gone' })
+    const out = SchemaFormStateManager.reconcileSelectValues(cur, schema(MIGRATED))
+    expect(out.pinnedFieldId).toBeNull()
+    expect(out.searchOriginFieldId).toBeNull()
+    const kept = stateWith(schema(MIGRATED), {}, { pinnedFieldId: 'name', searchOriginFieldId: 'state' })
+    const out2 = SchemaFormStateManager.reconcileSelectValues(kept, schema(MIGRATED))
+    expect(out2.pinnedFieldId).toBe('name')
+    expect(out2.searchOriginFieldId).toBe('state')
+  })
+
+  it('adopting a fresh schema falls back to its first section when the current one is gone', () => {
+    const cur = stateWith(schema(MIGRATED), {}, { currentSectionId: 'removed-section' })
+    const out = SchemaFormStateManager.reconcileSelectValues(cur, schema(MIGRATED))
+    expect(out.currentSectionId).toBe('sec')
+  })
+})
