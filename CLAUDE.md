@@ -226,10 +226,14 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    or a hardcoded kit list.** Measured on ONE kit swap: the **22** test files
    that read a real kit ALL broke; the **16** that hardcode the same ids as
    SYNTHETIC fixtures needed nothing -- the coupling costs, not the specificity
-   (bd `polyglot-pdf-o9zwe`). So: assert PROPERTIES over DISCOVERED kits (scan
-   `form-kits/`, filter `status: complete`); use a synthetic field for anything
-   about generic behavior; and where a real-data regression pin is genuinely
-   needed, FREEZE the artifact as a fixture rather than pointing at a live kit
+   (bd `polyglot-pdf-o9zwe`). So: assert PROPERTIES over DISCOVERED kits --
+   discover them from **`git ls-files form-kits/`**, NOT by scanning the
+   directory and NOT by publish status. Tracked is what CI actually sees; an
+   untracked dir is someone's scratch work, and a helper that scans the tree
+   looks alive locally while being dead in CI (that mistake shipped twice on
+   this branch before it was caught). Use a synthetic field for anything about
+   generic behavior; and where a real-data regression pin is genuinely needed,
+   FREEZE the artifact as a fixture rather than pointing at a live kit
    (`backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json`). Kit-coupled
    tests are legitimate ONLY when the shipped artifact IS the subject ("every
    shipped kit lints clean"), and those stay cheap because they name no field.

@@ -165,7 +165,10 @@ pitch/ignored_pitch/
 #
 # Pull the bucket down with scripts/pull-form-kits.sh when you need kits locally.
 #
-# w7 and f1040 stay TRACKED for now and are the exception, not the pattern:
+# w7 and f1040 stay TRACKED for now and are the exception, not the pattern
+# (w9-heldout is also tracked but is NOT a kit -- it is a deliberately held-out
+# PDF with no schema.json, see its NOTE.md, and _translation is shared glossary
+# data rather than a form):
 # f1040 is NOT in the bucket (git is currently its only copy, so untracking it
 # would delete it), and both still back kit-coupled tests. Migrating them --
 # publish to the bucket, then untrack -- is bd polyglot-pdf-o9zwe's job, since
