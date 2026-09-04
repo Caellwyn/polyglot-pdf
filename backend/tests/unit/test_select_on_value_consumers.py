@@ -80,7 +80,9 @@ REVIEWED: dict[str, str] = {
     "backend/services/widget_picker.py":
         "radio-kid claim resolution; not a select reader",
     "frontend/src/pdf-view/valuePainting.ts":
-        "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
+        "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
+    "frontend/src/schema-forms/state/schemaFormState.ts":
+        "READER (session restore): reconcileSelectValues maps a stored select value that matches no fresh option through the option whose pdf_on_value it equals (claimant = non-empty string value, the /resume-form predicate) or clears it; the stale-session guard, bd polyglot-pdf-f2a8k (g2fpr PR 3c)",
     "frontend/src/schema-forms/types/schema.ts":
         "FieldOption type declares pdf_on_value",
     "schema-editor/src/components/FieldEditor.tsx":

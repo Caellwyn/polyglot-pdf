@@ -101,6 +101,15 @@ an inverse key there, so the fix is clear-not-map), `polyglot-pdf-95nj1`
 (/resume-form keeps a zero-claimant code verbatim where the frontend clears
 it), `polyglot-pdf-20mw6`.
 
+**"No backend change" does not mean "no backend test can fail".** I skipped
+the backend suite for a frontend-only diff, and CI failed it: the consumer-set
+pin from PR 1 (`test_select_on_value_consumers.py`) scans the whole repo for
+files that touch `pdf_on_value` and demands a verdict for each -- and this
+diff added one. That is the pin working exactly as designed (scar #8: the next
+omission fails CI, not a review round), and it caught its own author. The rule
+that survives: a repo-scanning test lives in the backend suite, so the backend
+suite runs on every PR, whatever the diff touches.
+
 **The vanilla path's load migration is lazy by contract, and a test pins it.**
 My first cut re-persisted the reconciled state in `connection.ts`;
 `connection.test.ts` failed with "expected undefined to be 'section-2a'" --
