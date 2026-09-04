@@ -57,9 +57,12 @@ class _Redemptions:
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("LINK_TOKEN_SECRET", _SECRET)
-    monkeypatch.setenv("LINK_MINTING_ENABLED", "true")
     monkeypatch.setenv("LINK_BASE_URL", "https://forms.example.com")
     monkeypatch.setenv("VFF_DISABLE_AUTH", "false")
+    # LINK_MINTING_ENABLED moved off os.getenv to runtime_config (bd
+    # polyglot-pdf-bg313): patch the resolver these tests actually exercise
+    # rather than an env var the route no longer reads.
+    monkeypatch.setattr(lr, "_rc_minting_enabled", lambda: True)
 
     def _verify(token):
         claims = _TOKENS.get(token)
@@ -173,7 +176,7 @@ def test_minting_is_OFF_unless_explicitly_enabled(client, monkeypatch):
     Mutation: default the flag to "true" -- red.
     """
     c, _store = client
-    monkeypatch.delenv("LINK_MINTING_ENABLED", raising=False)
+    monkeypatch.setattr(lr, "_rc_minting_enabled", lambda: False)
 
     assert _mint(c).status_code == 404
 

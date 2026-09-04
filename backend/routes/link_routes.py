@@ -19,6 +19,12 @@ The default stays false, and must stay false in any environment where the
 spend ceiling is not enforced -- the flag is what keeps "a mintable link
 exists" and "nothing bounds its spend" from ever being true at once.
 
+LINK_MINTING_ENABLED is now a RUNTIME setting (bd polyglot-pdf-bg313):
+_minting_enabled() reads backend.services.runtime_config, which resolves
+app_config/{channel} in Firestore (TTL-cached, with an env-default fallback
+matching the value above) instead of os.getenv directly. This lets an
+operator flip the flag from the admin console with no redeploy.
+
 ASCII only.
 """
 import asyncio
@@ -47,6 +53,7 @@ from backend.services.link_tokens import (
     mint_link_token,
     verify_link_token,
 )
+from backend.services.runtime_config import minting_enabled as _rc_minting_enabled
 
 _log = structlog.get_logger().bind(module="link_routes")
 
@@ -63,7 +70,7 @@ _MAX_COMPLETE_WINDOW_S = 30 * 24 * 3600
 
 
 def _minting_enabled() -> bool:
-    return os.getenv("LINK_MINTING_ENABLED", "false").lower() == "true"
+    return _rc_minting_enabled()
 
 
 class MintLinkRequest(BaseModel):
