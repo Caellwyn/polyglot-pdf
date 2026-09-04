@@ -75,8 +75,13 @@ export POLYGLOT_PROJECT_NAME="$PROJECT"
 # every known caller explicitly here -- semicolon-separated, matching
 # parse_extra_origins -- rather than relying on the admin sites existing yet:
 # an operator can run this script before bead 1.7 lands, and a 403-by-CORS on
-# a route that otherwise works is a confusing failure to debug blind.
-ADMIN_CORS_ORIGINS="https://polyglot-admin-demo.web.app;https://polyglot-admin-demo.firebaseapp.com;https://polyglot-admin-candidate.web.app;https://polyglot-admin-candidate.firebaseapp.com;https://polyglot-app-staging.web.app;https://$PROJECT.web.app"
+# a route that otherwise works is a confusing failure to debug blind. EVERY
+# origin below is listed on BOTH its .web.app and .firebaseapp.com domains --
+# every Firebase Hosting site is reachable at both simultaneously by default
+# (platform behavior, matching deploy-demo.sh's / deploy-staging.sh's own
+# CORS_EXTRA_ORIGINS convention for the schema-editor sites) -- missing either
+# alias here means a page served from that domain gets CORS-rejected.
+ADMIN_CORS_ORIGINS="https://polyglot-admin-demo.web.app;https://polyglot-admin-demo.firebaseapp.com;https://polyglot-admin-candidate.web.app;https://polyglot-admin-candidate.firebaseapp.com;https://polyglot-app-staging.web.app;https://polyglot-app-staging.firebaseapp.com;https://$PROJECT.web.app;https://$PROJECT.firebaseapp.com"
 
 BACKEND_NO_TRAFFIC_TAG="candidate" \
     BACKEND_EXTRA_ENV="CORS_EXTRA_ORIGINS=$ADMIN_CORS_ORIGINS" \

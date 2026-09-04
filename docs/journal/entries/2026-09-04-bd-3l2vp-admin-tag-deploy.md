@@ -54,6 +54,28 @@ plus both channels' app origins, since the main app's firm-manager
 It deploys the admin BACKEND only; the console's own Vite app and its two
 Hosting sites are bead 1.7's `deploy-admin-console.sh`.
 
+**Fresh-eyes fix round (post cross-surface review).** The Opus outer review
+found one blocker: `ADMIN_CORS_ORIGINS` listed the `.firebaseapp.com` alias
+for both admin-console origins but NOT for the two app-channel origins
+(`polyglot-app-staging` and `$PROJECT`) -- inconsistent within the same
+variable, and a real CORS-rejection risk for any `/console/*` page served
+from the `.firebaseapp.com` domain (every Firebase Hosting site answers on
+both domains by default; `deploy-demo.sh`/`deploy-staging.sh` already list
+both for their own `CORS_EXTRA_ORIGINS`). **Adopted**: added the two missing
+`.firebaseapp.com` aliases to `deploy-admin.sh`, tightened the comment to
+state the dual-domain convention explicitly, and added
+`tests/test_deploy_admin_cors_origins.py` -- derives every origin's host from
+the live `ADMIN_CORS_ORIGINS` string and asserts each has BOTH domains
+present, so it pins the *property* (per CLAUDE.md's "enumerate the set"
+doctrine) rather than re-asserting today's two missing entries. Mutation-
+verified: reverting the fix on a scratch copy reddened exactly
+`test_every_origin_has_both_firebase_hosting_domains` naming the two
+regressed hosts. **Rejected/deferred**: none -- the review's other two notes
+(the tag-URL naming convention being unverified against a real deploy; the
+region hardcoded rather than reading `deploy-all.sh`'s `$REGION`) were
+explicitly not findings (PENDING-DEPLOY carve-out; matches an existing
+duplicated literal, out of scope for this bead) and needed no action.
+
 ## Lessons
 
 `tests/test_dockerfile_app_module.py` (shipped in bead 1.1) already had a
@@ -105,6 +127,9 @@ script that pins an explicit `GIT_SHA` must not be flagged as drift.
 - `tests/test_deploy_admin_tag_flow.py` (new) -- executes the extracted
   backend-stage block against stubbed gcloud/curl/git; pins both the
   untagged (unchanged) and tagged (gated traffic shift) paths.
+- `tests/test_deploy_admin_cors_origins.py` (new, fresh-eyes fix round) --
+  pins that every `ADMIN_CORS_ORIGINS` host is listed on both
+  `.web.app`/`.firebaseapp.com`.
 - `tests/test_deploy_channel_parity.py` -- `CHANNEL_SPECIFIC` gains `GIT_SHA`.
 - `docs/technical_guide.md`, `docs/components/config-deployment.md`,
   `admin_backend/__init__.py` -- doc updates above.
