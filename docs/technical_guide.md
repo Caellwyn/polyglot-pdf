@@ -850,15 +850,25 @@ The root `Dockerfile` copies BOTH top-level Python packages and chooses which
 ASGI app to serve at RUNTIME. There is no build arg -- `deploy-all.sh` builds
 with `gcloud builds submit --tag`, which cannot pass one.
 
-- **Producer:** NONE YET. No deploy script sets `APP_MODULE` on this branch --
-  `grep APP_MODULE deploy-*.sh backend/deploy-new.sh` returns nothing -- so
-  every service currently built from this image falls back to the
-  `backend.main:app` default, which is the correct behavior for the public
-  channels (they predate the variable and want the default). The producer is
-  the admin service's own deploy script, which lands with the sprint-22 plan's
-  bead 1.3 and will pass `APP_MODULE=admin_backend.main:app` in its `gcloud run
-  deploy --set-env-vars` block. The CONSUMER side below ships now so that
-  deploy is a config change rather than a code change.
+- **Producer:** `deploy-all.sh`'s backend stage (bd polyglot-pdf-3l2vp, sprint-
+  22 plan bead 1.3) computes `APP_MODULE="${APP_MODULE:-backend.main:app}"`
+  and passes it (plus `GIT_SHA=$(git rev-parse HEAD)`) as RUNTIME env in
+  `--set-env-vars` on EVERY backend deploy. A caller that sets nothing (every
+  existing channel: `deploy-staging.sh`, `deploy-demo.sh`, `backend/deploy-
+  new.sh`) still resolves to `backend.main:app`, so this is a config addition
+  with no behavior change for the public channels. `deploy-admin.sh` is the
+  one caller that overrides it, exporting `APP_MODULE=admin_backend.main:app`
+  ahead of the same `deploy-all.sh --backend` invocation.
+- **Staging tier (bd polyglot-pdf-3l2vp):** `deploy-admin.sh` also sets
+  `BACKEND_NO_TRAFFIC_TAG=candidate`, which makes `deploy-all.sh` deploy
+  `--no-traffic --tag candidate`, curl the TAGGED revision's own stable URL's
+  `/health` (built by inserting `<tag>---` ahead of the service's base host,
+  since `gcloud run services describe` reports no revision-scoped address),
+  and only on a 200 run `gcloud run services update-traffic --to-latest`. A
+  failing health check aborts the script WITHOUT shifting traffic, leaving the
+  previously-live revision serving. There is ONE admin service backing BOTH
+  channels' data, so this is that service's own staging tier -- it has no
+  second Cloud Run service to rehearse against first.
 - **Consumer:** the root `Dockerfile`'s
   `CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}`,
   plus `admin_backend/main.py`'s `DEFAULT_APP_MODULE` constant, which must
@@ -872,7 +882,11 @@ with `gcloud builds submit --tag`, which cannot pass one.
   that passes an empty value, which crash-loops the container instead.
 - **Pinned by** `tests/test_dockerfile_app_module.py` (CMD shape, default,
   no `ARG`, no `ENV` default, both `COPY` lines, and the constant/Dockerfile
-  agreement) and `admin_backend/tests/unit/test_admin_health.py`.
+  agreement), `admin_backend/tests/unit/test_admin_health.py`, and
+  `tests/test_deploy_admin_tag_flow.py` (the untagged-vs-tagged `deploy-
+  all.sh` invocation: `APP_MODULE`/`GIT_SHA` always set; `--tag`/`--no-
+  traffic` only with `BACKEND_NO_TRAFFIC_TAG`; a failing tag-URL `/health`
+  aborts before `update-traffic` runs).
 
 ### 13. `admin_backend/` -> `backend/` shared-code direction (bd polyglot-pdf-pnoik)
 

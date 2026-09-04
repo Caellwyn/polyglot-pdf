@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-04 (bd polyglot-pdf-3l2vp: deploy-all.sh's backend stage sets APP_MODULE + GIT_SHA as runtime env on every backend deploy and, when BACKEND_NO_TRAFFIC_TAG is set, deploys a no-traffic tagged revision verified at its own health endpoint before shifting traffic -- new deploy-admin.sh bridge is the one caller that sets both.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -473,6 +473,35 @@ admin account is stamped by `scripts/bootstrap_admin_user.py`
 (`--email`/`--revoke`/`--list`, `--project` required with the same
 deterministic-project-pin + dead-project-refusal machinery as
 `scripts/bootstrap_firm.py`) -- there is no other way to create one.
+
+**`deploy-admin.sh` (bd `polyglot-pdf-3l2vp`, sprint-22 plan bead 1.3)** is the
+admin backend's own deploy bridge. It sets `BACKEND_SERVICE_NAME=polyglot-admin`,
+`BACKEND_SERVICE_ACCOUNT=admin-backend-sa@...`,
+`APP_MODULE=admin_backend.main:app`, and `CORS_EXTRA_ORIGINS` (both admin
+Hosting sites plus both channels' app origins, since the admin console -- and
+the main app's firm-manager `/console/*` pages -- always call this service
+cross-origin), then calls `deploy-all.sh --backend` with
+`BACKEND_NO_TRAFFIC_TAG=candidate` set. That variable is what makes
+`deploy-all.sh`'s backend stage deploy a **no-traffic tagged revision**
+(`--no-traffic --tag candidate`) instead of shifting traffic immediately: it
+verifies the tag's own stable URL's `/health` first (that URL is built by
+inserting `candidate---` ahead of the service's base host -- `gcloud run
+services describe` reports no revision-scoped address of its own), and only on
+a 200 response runs `gcloud run services update-traffic --to-latest`. A failed
+health check aborts WITHOUT shifting traffic, leaving the previous revision
+live. Unset (every other channel), the flag is a no-op: the same `--backend`
+call it wraps produces the identical `gcloud run deploy` invocation it always
+has. This exists because there is ONE admin service backing BOTH channels'
+data -- a bad admin deploy would otherwise take the control plane down for
+staging and the demo at once, and this sequence is that service's own staging
+tier. `deploy-all.sh` also computes `GIT_SHA=$(git rev-parse HEAD)` and passes
+it alongside `APP_MODULE` as runtime env on every backend deploy (feeding the
+eventual `GET /version` git-sha field, bead 1.6 -- not read by any route yet).
+Pinned by `tests/test_deploy_admin_tag_flow.py`. **What this script does NOT
+do:** deploy the admin-console Vite app -- its candidate + live Hosting sites
+are bead 1.7's `deploy-admin-console.sh`; running `deploy-admin.sh` alone
+stands the API up with no UI in front of it, which is a legitimate
+intermediate state.
 
 ### Hosted schema editor (second Hosting site)
 
