@@ -63,10 +63,10 @@ set -e
 # cross-surface review). A positional argument can only come from a real call
 # site.
 #
-# MUST match the sibling copy in the other deploy script EXACTLY -- this
-# block is duplicated in deploy-all.sh and backend/deploy-new.sh, and
-# tests/test_deploy_reachability_gate.py pins the two byte-identical.
-# Any edit here must be made in both.
+# MUST match the sibling copies EXACTLY. This block is duplicated in THREE
+# scripts -- deploy-all.sh, backend/deploy-new.sh and deploy-editor.sh -- and
+# tests/test_deploy_reachability_gate.py pins all three byte-identical.
+# Any edit here must be made in all three.
 verify_service_publicly_reachable() {
     local svc="$1" region="$2" project="$3" severity="${4:-fatal}" invoker_roles
     # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
