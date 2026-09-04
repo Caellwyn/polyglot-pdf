@@ -119,7 +119,17 @@ async def health():
 
 @app.get("/version")
 async def version():
-    return {"version": app.version}
+    """App version plus the deployed commit SHA.
+
+    Same GIT_SHA runtime env var and "unknown" fallback (including the
+    empty-string case; see backend/main.py's version route) as the public
+    backend's /version (bd polyglot-pdf-9hzod) -- the admin console's "what
+    is live per channel" view (bead 1.7) reads this route on both services.
+    Set by the deploy bridge (bead 1.3) via `--set-env-vars
+    GIT_SHA=$(git rev-parse HEAD)` until Cloud Build's $COMMIT_SHA takes
+    over (Epic 4).
+    """
+    return {"version": app.version, "git_sha": os.getenv("GIT_SHA") or "unknown"}
 
 
 app.include_router(whoami_routes.router)

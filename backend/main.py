@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from typing import Annotated
 from fastapi import Depends, FastAPI
@@ -140,5 +141,18 @@ async def health(settings: Annotated[Settings, Depends(get_settings)]):
 
 @app.get("/version")
 async def version():
-    return {"version": app.version}
+    """App version plus the deployed commit SHA.
+
+    GIT_SHA is a runtime env var (bd polyglot-pdf-9hzod), set by the deploy
+    bridge via `--set-env-vars GIT_SHA=$(git rev-parse HEAD)` (bead 1.3) until
+    Cloud Build's $COMMIT_SHA takes over (Epic 4). Unset locally and on any
+    service deployed before that wiring lands -- "unknown" rather than a
+    KeyError or a blank string, since the admin console's "what is live"
+    view (bead 1.7) needs a value to render either way. `or` (not a plain
+    getenv default) so an EMPTY GIT_SHA -- a real shape inside a
+    `--set-env-vars` block, per the APP_MODULE precedent in
+    docs/components/config-deployment.md -- also falls back, rather than
+    reporting a blank string in exactly the case this field exists to guard.
+    """
+    return {"version": app.version, "git_sha": os.getenv("GIT_SHA") or "unknown"}
 

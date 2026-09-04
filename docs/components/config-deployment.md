@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-3l2vp: deploy-all.sh's backend stage sets APP_MODULE + GIT_SHA as runtime env on every backend deploy and, when BACKEND_NO_TRAFFIC_TAG is set, deploys a no-traffic tagged revision verified at its own health endpoint before shifting traffic -- new deploy-admin.sh bridge is the one caller that sets both.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-04 (bd polyglot-pdf-3l2vp: deploy-all.sh's backend stage sets APP_MODULE + GIT_SHA as runtime env on every backend deploy and, when BACKEND_NO_TRAFFIC_TAG is set, deploys a no-traffic tagged revision verified at its own health endpoint before shifting traffic -- new deploy-admin.sh bridge is the one caller that sets both.) (bd polyglot-pdf-9hzod: `GET /version` on both services now returns `{version, git_sha}` -- `git_sha` reads the `GIT_SHA` runtime env var, falling back to `"unknown"` when unset OR empty, the same `${VAR:-default}`-shaped guard as `APP_MODULE` below. The deploy-side env wiring that actually sets `GIT_SHA` is bead 1.3, not yet landed.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -459,6 +459,19 @@ HTTP -- but `deploy-admin.sh`'s tagged flow (below) now DOES issue a real
 so it is no longer true that this route has no deploy-time behavioral
 coverage; that coverage exists only for the admin service's own deploy path,
 not for a bare `deploy-all.sh --backend` run.
+
+**`GET /version` on both services** (bd `polyglot-pdf-9hzod`) returns
+`{"version": app.version, "git_sha": ...}`. `git_sha` reads the `GIT_SHA`
+runtime env var, falling back to `"unknown"` on the SAME two shapes
+`APP_MODULE` guards above -- unset, and set-but-empty (`os.getenv("GIT_SHA")
+or "unknown"`, not a plain getenv default, for the same `--set-env-vars`
+reason). Nothing sets `GIT_SHA` on a deployed service yet -- that wiring
+(`--set-env-vars GIT_SHA=$(git rev-parse HEAD)` in the deploy bridge) is bead
+1.3; until it lands, every deployed `/version` reports `"unknown"`. Cloud
+Build's `$COMMIT_SHA` supersedes the bash-computed value in Epic 4. The admin
+console's "what is live per channel" view (bead 1.7) reads this field on
+both services via a Vite define carrying the same value at console build
+time.
 
 Cloud Run runs `polyglot-admin` with `--allow-unauthenticated`, so the
 app-level gate on every OTHER route is the whole access control.
