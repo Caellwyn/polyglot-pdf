@@ -484,23 +484,26 @@ def test_render_field_guidance_long_radio_group_marks_long_standard_list():
         assert f"s{i}" in text
 
 
-def test_i90_height_selects_are_never_force_recited():
-    # bd polyglot-pdf-e5a7 (closed by this PR): the REAL shipped I-90 height
-    # fields are selects and must never carry the read-ALL imperative -- a
-    # synthetic-only pin would stay green if someone re-typed them to radio in
-    # the kit, silently restoring the "zero, one, two, ... eleven" recital.
-    import json
-    from pathlib import Path
-
-    kit = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
-    if not kit.exists():
-        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
-                     "bd polyglot-pdf-hydb0)")
-    schema = json.loads(kit.read_text(encoding="utf-8"))
-    fields = {f["id"]: f for f in schema["fields"]}
-    for fid in ("height_feet", "height_inches"):
-        f = fields[fid]
-        assert f["type"] == "select", fid
+def test_real_long_selects_are_never_force_recited():
+    # bd polyglot-pdf-e5a7: a REAL shipped long select (the I-90's height
+    # fields were the original case) must never carry the read-ALL imperative
+    # -- a synthetic-only pin would stay green if someone re-typed such a field
+    # to radio in a kit, silently restoring the "zero, one, two, ... eleven"
+    # recital. That is why this reads real kits rather than a fixture.
+    #
+    # DISCOVERED, not named (bd polyglot-pdf-o9zwe): this used to open
+    # form-kits/i-90/ by name, which stopped existing when kits became
+    # bucket-canonical -- so the test skipped unconditionally and the one thing
+    # it exists to catch became the one thing it could not catch. It now takes
+    # every long select in every kit on disk.
+    witnesses = [
+        (f"{kit}:{f['id']}", f)
+        for kit, f in _shipped_fields()
+        if f.get("type") == "select" and len(f.get("options") or []) >= 7
+    ]
+    if not witnesses:
+        pytest.skip("no kit on disk carries a long select to witness this")
+    for fid, f in witnesses:
         text = render_field_guidance(f)
         assert "read ALL" not in text, fid
         assert "standard list; ask directly" in text, fid
@@ -675,6 +678,32 @@ def _retired_p7_checkbox7():
 
     p = Path(__file__).resolve().parent / "fixtures" / "i90_p7_checkbox7_retired.json"
     return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _shipped_fields():
+    """(kit_id, field) for every field of every kit on disk.
+
+    One walker for all the discovery helpers here, so none of them names a form
+    (bd polyglot-pdf-o9zwe). Kits are bucket-canonical and republished
+    constantly; what is on disk is whatever the developer pulled, which is
+    exactly the right scope for "does this rule hold on real data".
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parents[3] / "form-kits"
+    if not root.is_dir():
+        return
+    for d in sorted(root.iterdir()):
+        schema = d / "schema.json"
+        if not d.is_dir() or d.name.startswith("_") or not schema.is_file():
+            continue
+        try:
+            doc = _json.loads(schema.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        for f in doc.get("fields") or []:
+            yield d.name, f
 
 
 def _short_two_option_fields():

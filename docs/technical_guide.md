@@ -1,6 +1,8 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-27 (bd polyglot-pdf-nyc5j/qn8wv/x6dq1: every drifted
+*Last updated: 2026-09-03 (bd polyglot-pdf-6p77c: the kit path rewrite is
+keyed on the STORE being authoritative, not on privacy -- see "The API-path
+rewrite" below; earlier note follows -- bd polyglot-pdf-nyc5j/qn8wv/x6dq1: every drifted
 `config.py`/`form_filling_service.py`/`live_ai_gemini.py`/`ai_context.py`/
 `spellback_tts.py`/`callback_handler.py` citation in contracts 1, 2, 4, and 11
 re-anchored to a symbol name instead of a line number -- including the
@@ -541,10 +543,19 @@ tokens, not the client tier):
   parses its bearer token OPTIONALLY (`form_kit_routes.py`'s
   `get_form_kit_pdf`); an invalid token degrades to anonymous rather
   than 401.
-- **The private-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
-  rewrites a private kit's `schema_path`/`pdf_path` to the authenticated
-  backend routes (`/api/form-kits/<id>/schema|pdf`) because the static
-  Hosting bundle excludes private kits (bd kkos:
+- **The API-path rewrite**: `form_kit_routes.py`'s `list_form_kits`
+  rewrites a kit's `schema_path`/`pdf_path` to the authenticated backend
+  routes (`/api/form-kits/<id>/schema|pdf`) whenever the STORE, not the static
+  bundle, is the source of truth. That is **any kit in GCS mode**, plus a
+  private kit in either mode. The discriminator is presence in the static
+  bundle, NOT privacy: the bundle contains only kits that were in the git tree
+  at frontend BUILD time, and kits are bucket-canonical (CLAUDE.md scar #10),
+  so a `complete`, PUBLIC kit published from the hosted editor is absent from
+  it too -- its baked static path then falls through the SPA catch-all and
+  returns `index.html` with HTTP 200, which is the `Unexpected token '<'`
+  failure of bd `polyglot-pdf-6p77c`. LOCAL mode keeps static paths (there the
+  store root IS the git tree). The private half of the rule remains true and
+  is why the rewrite existed at all (bd kkos:
   `kitPublishFilter.isPubliclyServable` ships only complete AND
   demonstrably-public -- absence or the exact string `"public"`;
   deliberately stricter than the routes' anything-but-"private" coercion,

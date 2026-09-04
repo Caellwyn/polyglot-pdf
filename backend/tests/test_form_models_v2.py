@@ -48,37 +48,44 @@ def discovered_kits() -> list:
     including a kit someone pulled down locally -- and need no edit when the
     set changes (bd polyglot-pdf-o9zwe).
 
-    Scoped to status:complete -- the same gate the app, both deploy scripts and
-    kitPublishFilter.isPubliclyServable use. A DRAFT is work in progress and must
-    not fail CI: a maintainer with a half-finished kit pulled into their scratch
-    tree would otherwise break the suite for everyone.
+    EVERY kit on disk, draft included. These guards are about STRUCTURAL
+    validity -- valid v2 shape, no dangling references, an unlockable read_only
+    field -- and those must hold for a draft exactly as much as for a published
+    kit. An earlier version filtered to status:complete and thereby dropped
+    f1040 (draft), silently halving this file's coverage from 6 parametrizations
+    to 3 while .gitignore still justified tracking f1040 on the grounds that it
+    "backs kit-coupled tests" (caught by the Opus cross-surface review). The
+    publish gate belongs on tests about PUBLISHABILITY, not about schema shape.
 
-    KNOWN LIMIT: this sees only what is ON DISK, and the CANONICAL collection is
-    the GCS bucket (.gitignore's form-kits note). In a clean checkout that is w7
-    alone, so this guard is real but THIN -- it proves the invariant holds for
-    whatever is present, not for every published kit. Closing that means running
-    it against a pulled or synthetic corpus, which is bd polyglot-pdf-o9zwe's
-    job. Do NOT "fix" the thinness by hardcoding kit names back in; that is the
-    coupling o9zwe exists to remove.
+    The cost of including drafts is that a maintainer with a genuinely broken
+    kit in their scratch tree sees these fail -- which is the correct signal:
+    the schema IS malformed. CI only ever sees what git tracks.
+
+    KNOWN LIMIT: git tracks only w7 and f1040, while the CANONICAL collection is
+    the GCS bucket (.gitignore's form-kits note). So this guard is real but
+    NARROW -- it proves the invariant holds for the two kits CI can see, not for
+    every published kit. Closing that means running against a pulled or
+    synthetic corpus, which is bd polyglot-pdf-o9zwe's job. Do NOT "fix" the
+    narrowness by hardcoding kit names back in; that is the coupling o9zwe
+    exists to remove.
     """
+    import subprocess
+
     root = REPO_ROOT / "form-kits"
     if not root.is_dir():
         return []
-    out = []
-    for d in sorted(root.iterdir()):
-        if not d.is_dir() or d.name.startswith("_"):
-            continue
-        if not (d / "schema.json").is_file():
-            continue
-        meta = d / "metadata.json"
-        if not meta.is_file():
-            continue
-        try:
-            if json.loads(meta.read_text(encoding="utf-8")).get("status") == "complete":
-                out.append(d.name)
-        except (ValueError, OSError):
-            continue  # unreadable metadata -> withhold, same as the publish gate
-    return out
+    try:
+        tracked = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files", "form-kits/"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    names = {
+        line.split("/")[1] for line in tracked.splitlines()
+        if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
+    }
+    return sorted(n for n in names if (root / n / "schema.json").is_file())
 
 
 def v2_schema(fields: list, source: str = "pdf") -> dict:
