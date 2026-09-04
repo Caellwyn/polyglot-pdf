@@ -85,13 +85,18 @@ def test_the_admin_app_is_a_distinct_asgi_app_from_the_public_backend():
     assert public_app.title != app.title
 
 
-def test_the_admin_app_registers_no_unauthenticated_business_route():
-    """At the skeleton stage the ONLY app routes are /health and /version.
+def test_health_and_version_are_the_only_UNGATED_routes():
+    """/health and /version stay the only routes reachable with no gate.
 
-    Routers land in bd polyglot-pdf-7w17m together with require_app_admin, and
-    admin_backend/tests/unit/test_admin_route_auth.py takes over from there.
-    Until then this pins that nothing privileged slipped onto a public service
-    ahead of its gate.
+    Superseded the skeleton-stage
+    test_the_admin_app_registers_no_unauthenticated_business_route (bd
+    polyglot-pdf-pnoik), which pinned "the only routes at all" -- true only
+    until the first business route landed. bd polyglot-pdf-7w17m adds GET
+    /admin/whoami behind require_app_admin, so the complete route SET is now
+    pinned in admin_backend/tests/unit/test_admin_route_auth.py (every
+    registered route carries exactly one of the four gate names); this test
+    keeps the narrower, still-true claim that these two specific paths carry
+    no gate at all.
     """
     paths = {
         route.path for route in app.routes
@@ -99,4 +104,12 @@ def test_the_admin_app_registers_no_unauthenticated_business_route():
         and route.path not in {
             "/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
     }
-    assert paths == {"/health", "/version"}, sorted(paths)
+    assert {"/health", "/version"} <= paths, sorted(paths)
+
+    for path in ("/health", "/version"):
+        route = next(r for r in app.routes if getattr(r, "path", None) == path)
+        dependant = getattr(route, "dependant", None)
+        assert dependant is not None and not dependant.dependencies, (
+            f"{path} must stay gate-free -- it is the unauthenticated "
+            "liveness/identity probe"
+        )
