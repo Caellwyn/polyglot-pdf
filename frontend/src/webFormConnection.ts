@@ -2495,12 +2495,18 @@ export class WebFormConnection {
     const currentValue = entry?.value;
     // An EMPTY checkbox-group ([]) is not a value -- treat it as unanswered so the
     // ack does not tell the model "it already holds an unconfirmed value" and ride
-    // value:[] (the model would read back nothing). Mirrors the skip path's guard
+    // value:[] (the model would read back nothing). Shares the skip path's guard
     // (handleSkipFieldRequest, bd polyglot-pdf-7yra) so the two agree (bd
-    // polyglot-pdf-luju nit 1).
-    const hasValue =
-      currentValue !== null && currentValue !== undefined && currentValue !== '' &&
-      !(Array.isArray(currentValue) && currentValue.length === 0);
+    // polyglot-pdf-luju nit 1) -- via the same predicate now, not a restatement
+    // of it: they had already drifted once on whitespace, and the comment went on
+    // claiming parity that no longer held (bd polyglot-pdf-5ovod).
+    //
+    // WHITESPACE IS NOT A VALUE HERE EITHER. Saying it is makes the ack tell the
+    // model "it already holds an unconfirmed value -- read it back and verify it"
+    // about a field containing only spaces: there is nothing to read back, and
+    // confirm_field now refuses that very field, so the guidance would steer the
+    // model at a closed exit.
+    const hasValue = !isBlankFieldValue(currentValue);
     this.sendSwitchFieldResponse(request_id, true, {
       field_id: fieldId,
       spoken_name: field.spoken_name || field.name,

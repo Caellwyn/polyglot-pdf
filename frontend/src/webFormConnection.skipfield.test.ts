@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue'
+import { SchemaFormStateManager } from './schema-forms/state/schemaFormState'
 
 class MockWebSocket {
   static instances: MockWebSocket[] = []
@@ -272,5 +273,65 @@ describe('skip_field is not blocked by whitespace (bd polyglot-pdf-5ovod)', () =
     const ack = skipAcks(ws)[0]
     expect(ack?.recorded).toBe(false)
     expect(ack?.reason).toBe('already_filled')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// switch_field must not claim a whitespace field "already holds a value".
+//
+// Sibling of the skip guard above (bd polyglot-pdf-5ovod). The ack's has_value
+// drives the backend's guidance to the model: on true it says "it already holds
+// an unconfirmed value -- read it back and verify it" (callback_handler.py). For
+// a field containing only spaces there is nothing to read back, and confirm_field
+// now refuses that very field -- so a true here steers the model at a closed
+// exit. Found by the cross-surface review, which noticed the two predicates had
+// drifted while a comment still claimed they matched.
+// ---------------------------------------------------------------------------
+describe('switch_field has_value ignores whitespace (bd polyglot-pdf-5ovod)', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  async function switchAckFor(value: any): Promise<any> {
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    // The handler RELOADS from the persisted snapshot before reading the value
+    // (the staleness rule it shares with sendManualFieldUpdate), so seeding the
+    // in-memory state alone is discarded -- persist it the way the app does.
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    // NOTE the key is `field`, not `field_id` -- switch_field takes a free-text
+    // identifier the handler resolves (resolveFieldForNavigation).
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'switch_field',
+        field: 'p1_uscis_number',
+        request_id: 'req-sf',
+      }),
+    })
+    return sentMessages(ws).find(m => m.type === 'switch_field_response')
+  }
+
+  it('a whitespace field is reported as having NO value', async () => {
+    const ack = await switchAckFor('   ')
+    expect(ack?.has_value, 'whitespace must not read as an existing answer').toBe(false)
+  })
+
+  it('a real value is still reported as having one', async () => {
+    const ack = await switchAckFor('A123456789')
+    expect(ack?.has_value).toBe(true)
   })
 })

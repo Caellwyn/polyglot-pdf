@@ -89,12 +89,19 @@ instances) operating on a `SchemaFormState` value:
   four consumers give the SAME answer, so a fifth consumer added later fails
   there rather than drifting quietly.
 
-  **This is NOT yet every value-presence check in the frontend.** Some remain
-  untrimmed -- the `skip_field`/`switch_field` acks, the resume-section scan
-  (`applyResume`, bd polyglot-pdf-dctry), and the preview painter -- so they can
-  still read whitespace as present. None gates completion, confirmation or
-  progress, which is why they stayed out of scope; tracked as bd
-  polyglot-pdf-qpz11. Do not read the list above as the complete set.
+  The two VOICE-TOOL acks (`skip_field`, `switch_field`) share it too, and had
+  to: leaving `skip_field` untrimmed while the confirm gate tightened removed the
+  last exit from a whitespace field -- the model could not confirm it, skip it or
+  clear it, and the backend marks that skip refusal non-retryable. `switch_field`
+  is the same class: telling the model a whitespace field "already holds a value,
+  read it back" points it at a closed exit.
+
+  **This is still NOT every value-presence check in the frontend.** The
+  resume-section scan (`applyResume`, bd polyglot-pdf-dctry), the preview
+  painter, and the DOM pre-fill capture (bd polyglot-pdf-rm9x8) remain untrimmed.
+  None gates completion, confirmation, progress or a voice exit, which is why
+  they stayed out of scope; tracked as bd polyglot-pdf-qpz11. Do not read the
+  list above as the complete set.
   Whitespace-only counts as BLANK: typing spaces is not a decision, and leaving a
   field blank on a legal intake draft has to be explicit -- said aloud, or via the
   skip control.
