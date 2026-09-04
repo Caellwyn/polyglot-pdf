@@ -15,7 +15,7 @@
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue, ValidatorFinding } from "../types/schema";
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
-import { isBlankFieldValue } from "../utils/fieldValue";
+import { isBlankFieldValue, isConfirmedButBlank } from "../utils/fieldValue";
 import { readFieldEntryWithAlias } from "../utils/fieldValue";
 import { loadOnboardingState } from "../onboardingStorage";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
@@ -1834,11 +1834,7 @@ export class SchemaFormStateManager {
       // A skipped field (handled above, value:null) and an optional field's
       // confirmed '' (the deliberate "does not apply" answer, bd
       // polyglot-pdf-6oe6) both remain settled.
-      const confirmedButBlank =
-        typeof fv?.value === 'string'
-        && fv.value !== ''
-        && fv.value.trim() === '';
-      return fv?.confirmed === true && !confirmedButBlank;
+      return fv?.confirmed === true && !isConfirmedButBlank(fv?.value);
     };
 
     const sent = state.validatedWindowIndices;

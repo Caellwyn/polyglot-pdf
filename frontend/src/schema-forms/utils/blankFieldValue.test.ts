@@ -24,7 +24,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isBlankFieldValue } from './fieldValue';
+import { isBlankFieldValue, isConfirmedButBlank } from './fieldValue';
 import { validateField } from './validation';
 import { SchemaFormStateManager } from '../state/schemaFormState';
 import { computeNextField, isFormComplete } from '../../navigation';
@@ -60,6 +60,42 @@ describe('isBlankFieldValue', () => {
     expect(isBlankFieldValue('a')).toBe(false);
     expect(isBlankFieldValue(' x ')).toBe(false);
     expect(isBlankFieldValue(['a'])).toBe(false);
+  });
+});
+
+describe('isConfirmedButBlank -- the NARROWER sibling', () => {
+  // The distinction between the two helpers is load-bearing and easy to
+  // conflate. "Is it answered?" (isBlankFieldValue) and "has it been SETTLED?"
+  // (isConfirmedButBlank) differ on exactly one input: a bare ''. On an OPTIONAL
+  // field a confirmed '' is the deliberate "does not apply" answer, so it must
+  // still settle -- reaching for the broader helper at a settle-site breaks that
+  // path, which is a mistake I made on the first attempt at the validator-window
+  // fix.
+  it('whitespace is blank under BOTH', () => {
+    for (const w of WHITESPACE_FORMS) {
+      expect(isBlankFieldValue(w), `isBlankFieldValue(${JSON.stringify(w)})`).toBe(true);
+      expect(isConfirmedButBlank(w), `isConfirmedButBlank(${JSON.stringify(w)})`).toBe(true);
+    }
+  });
+
+  it("they DISAGREE on a bare '' -- and that is the whole point", () => {
+    expect(isBlankFieldValue('')).toBe(true);      // not an answer...
+    expect(isConfirmedButBlank('')).toBe(false);   // ...but it IS a settled one
+  });
+
+  it('neither treats a real answer as blank', () => {
+    for (const v of ['a', ' x ', '0']) {
+      expect(isBlankFieldValue(v)).toBe(false);
+      expect(isConfirmedButBlank(v)).toBe(false);
+    }
+  });
+
+  it('non-strings are never "confirmed but blank"', () => {
+    // A skipped field carries value:null and an empty checkbox group [] -- both
+    // are settled by their own rules, not by this predicate.
+    for (const v of [null, undefined, [], false, 0]) {
+      expect(isConfirmedButBlank(v as unknown)).toBe(false);
+    }
   });
 });
 

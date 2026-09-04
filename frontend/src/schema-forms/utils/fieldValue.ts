@@ -40,6 +40,29 @@ export function isBlankFieldValue(value: unknown): boolean {
 }
 
 /**
+ * Whether a value is whitespace-only -- blank, but NOT a bare empty string.
+ *
+ * The NARROWER sibling of `isBlankFieldValue`, and the distinction is
+ * load-bearing (bd polyglot-pdf-5ovod). Three predicates ask "has this field
+ * been SETTLED?" rather than "is it answered?" -- computeNextField's Priority-2
+ * confirmed-skip, isFormComplete, and computeReadyWindows' isSettled -- and for
+ * them a confirmed `''` on an OPTIONAL field IS a settled answer: it is the
+ * deliberate "the user said this does not apply" value (bd polyglot-pdf-6oe6).
+ * Only TYPED WHITESPACE is the un-settled case.
+ *
+ * Using `isBlankFieldValue` at those three sites would treat `''` and `'   '`
+ * alike and break that path -- I did exactly that on the first attempt at the
+ * validator-window fix, and it stopped a legitimately-confirmed optional field
+ * from ever settling.
+ *
+ * Factored out because it was hand-written three times, and every gap in this
+ * bead was a sibling copy left un-updated (CLAUDE.md scar #8).
+ */
+export function isConfirmedButBlank(value: unknown): boolean {
+  return typeof value === 'string' && value !== '' && value.trim() === '';
+}
+
+/**
  * Whether a FieldValue entry actually carries an answer (not a hollow
  * placeholder). Empty string, null/undefined value, and an empty array all count
  * as "no answer".

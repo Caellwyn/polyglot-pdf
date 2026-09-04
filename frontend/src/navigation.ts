@@ -23,7 +23,7 @@
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
-import { readFieldEntryWithAlias, isBlankFieldValue } from './schema-forms/utils/fieldValue';
+import { readFieldEntryWithAlias, isBlankFieldValue, isConfirmedButBlank } from './schema-forms/utils/fieldValue';
 import { kitTranslationKeys } from './shared/languages';
 
 // Navigation operates on the canonical schema FormField (it iterates
@@ -307,11 +307,7 @@ export function computeNextField(
     //
     // A confirmed '' is NOT whitespace and is untouched: on an optional field
     // that is the deliberate "does not apply" answer (bd polyglot-pdf-6oe6).
-    const confirmedButBlank =
-      isConfirmed
-      && typeof currentValue?.value === 'string'
-      && currentValue.value !== ''
-      && currentValue.value.trim() === '';
+    const confirmedButBlank = isConfirmed && isConfirmedButBlank(currentValue?.value);
     if (isConfirmed && !confirmedButBlank) {
       continue;
     }
@@ -491,10 +487,7 @@ export function isFormComplete(state: SchemaFormState): boolean {
     // Only whitespace, never a bare '': a skipped field carries value:null, and
     // an optional field's confirmed '' is the deliberate "does not apply"
     // answer (bd polyglot-pdf-6oe6). Both must still complete the form.
-    const confirmedButBlank =
-      typeof currentValue?.value === 'string'
-      && currentValue.value !== ''
-      && currentValue.value.trim() === '';
+    const confirmedButBlank = isConfirmedButBlank(currentValue?.value);
     if (confirmedButBlank) {
       return false;
     }
