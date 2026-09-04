@@ -1,7 +1,13 @@
 """FastAPI app for the privileged admin service (Cloud Run: polyglot-admin).
 
-Skeleton stage (bd polyglot-pdf-pnoik): the app, CORS, /health and /version
-only. Routers and the require_app_admin gate land in bd polyglot-pdf-7w17m.
+The app, CORS, /health and /version were the skeleton stage (bd
+polyglot-pdf-pnoik). bd polyglot-pdf-7w17m adds the first gate
+(require_app_admin, admin_backend/services/admin_auth.py) and the first
+route (GET /admin/whoami) -- every OTHER route added to this service from
+here on must carry one of the four gates named in the plan
+(require_app_admin; require_firm_manager; require_app_admin_or_owning_
+manager; require_google_oidc), which admin_backend/tests/unit/
+test_admin_route_auth.py enforces by deriving the registered route set.
 
 THE ADMIN SERVICE HAS NO CHANNEL. It serves BOTH staging's and the demo's
 data, so nothing here may derive a Firestore collection name from
@@ -33,6 +39,8 @@ load_dotenv()
 
 from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
+
+from admin_backend.routes import whoami as whoami_routes
 
 # The ASGI target the container actually launched, and the default the
 # Dockerfile falls back to when APP_MODULE is unset. Kept as a module constant
@@ -107,3 +115,6 @@ async def health():
 @app.get("/version")
 async def version():
     return {"version": app.version}
+
+
+app.include_router(whoami_routes.router)
