@@ -9,8 +9,13 @@ The properties that matter, in order:
      env default -- there is no last-known-good to fall back to yet.
   3. The three call sites this bead swaps (link_routes.py's minting flag,
      link_budget.py's ceiling + firm cap) no longer read os.getenv for these
-     names anywhere in the shipped sources, and CREDITS_ENFORCED -- brand
-     new -- is never read from env at all.
+     names anywhere in the shipped sources OUTSIDE this module -- but the
+     "env default" in criteria 1+2 above is a LIVE os.getenv read INSIDE
+     runtime_config.py itself, not a compiled constant: the deploy scripts'
+     LINK_MINTING_ENABLED=true (BACKEND_EXTRA_ENV) must keep working as the
+     fallback until an operator seeds app_config/{channel}, or minting
+     silently goes dark on the next deploy. CREDITS_ENFORCED -- brand new --
+     is never read from env at all, anywhere, including this module.
   4. Unknown keys in a channel doc are ignored, not applied.
   5. The TTL cache bounds how often Firestore is actually read.
 """
@@ -133,6 +138,80 @@ def test_a_fresh_process_with_an_unreachable_store_uses_the_env_default():
         auth_module.get_db = orig
 
 
+def test_store_unreachable_with_env_true_minting_is_enabled(monkeypatch):
+    """The deploy-scripts regression this bead fixes: with the store
+    unreachable and LINK_MINTING_ENABLED=true in the environment (exactly
+    what deploy-staging.sh / deploy-demo.sh set in BACKEND_EXTRA_ENV), a
+    fresh process must resolve minting ON -- not fall to the compiled `False`
+    constant. A compiled-constant fallback here is precisely what would make
+    the deploy scripts' env line inert and silently turn minting off on the
+    next deploy of either channel.
+
+    Mutation: replace `_legacy_env_default`'s os.getenv read with the
+    compiled `_ENV_DEFAULTS[key]` constant -- red (would read back False
+    instead of True).
+    """
+    import backend.services.auth as auth_module
+
+    monkeypatch.setenv("LINK_MINTING_ENABLED", "true")
+
+    def _broken_get_db():
+        raise RuntimeError("no firestore client configured")
+
+    orig = auth_module.get_db
+    auth_module.get_db = _broken_get_db
+    try:
+        assert runtime_config.minting_enabled("brand-new-channel-2") is True
+    finally:
+        auth_module.get_db = orig
+
+
+def test_store_unreachable_with_no_env_minting_is_disabled(monkeypatch):
+    """Same unreachable-store scenario, but with LINK_MINTING_ENABLED unset --
+    the historical fail-safe default (off) must still hold.
+
+    Mutation: hardcode _legacy_env_default to return True for this key --
+    red (would read back True instead of False).
+    """
+    import backend.services.auth as auth_module
+
+    monkeypatch.delenv("LINK_MINTING_ENABLED", raising=False)
+
+    def _broken_get_db():
+        raise RuntimeError("no firestore client configured")
+
+    orig = auth_module.get_db
+    auth_module.get_db = _broken_get_db
+    try:
+        assert runtime_config.minting_enabled("brand-new-channel-3") is False
+    finally:
+        auth_module.get_db = orig
+
+
+def test_a_lowered_ceiling_survives_a_broken_read_even_with_a_higher_env(
+    monkeypatch,
+):
+    """Exit criterion 1's claim, sharpened: last-known-good must beat the
+    LIVE env var too, not just the compiled constant -- a console that
+    lowered the ceiling to 2.0 must not see a higher LINK_COST_CEILING_USD
+    from the environment reappear during a Firestore blip.
+
+    Mutation: make _resolve fall to _legacy_env_default before
+    last-known-good -- red (would read back 20.0, the env value, instead of
+    2.0).
+    """
+    monkeypatch.setenv("LINK_COST_CEILING_USD", "20.0")
+    db = _FakeDb({"staging": {"LINK_COST_CEILING_USD": 2.0}})
+    _patch_db(monkeypatch, db)
+
+    assert runtime_config.link_cost_ceiling_usd("staging") == 2.0
+
+    db.read_error = RuntimeError("firestore unreachable")
+    runtime_config._cache.pop("staging", None)
+
+    assert runtime_config.link_cost_ceiling_usd("staging") == 2.0
+
+
 def test_a_missing_doc_falls_back_the_same_way(monkeypatch):
     """The channel doc does not exist at all (get_db works, but no doc)."""
     db = _FakeDb({})  # no "staging" key -> snap.exists is False
@@ -224,6 +303,36 @@ def test_no_shipped_source_reads_this_key_from_env_outside_runtime_config(key):
         f"{key} is read from the environment outside runtime_config.py in: "
         f"{offenders} -- bd polyglot-pdf-bg313 moved this key to "
         "app_config/{channel}; no other call site may read it from env."
+    )
+
+
+_LEGACY_ENV_KEYS = sorted(
+    runtime_config.RUNTIME_CONFIG_KEYS - {runtime_config.KEY_CREDITS_ENFORCED}
+)
+
+
+@pytest.mark.parametrize("key", _LEGACY_ENV_KEYS)
+def test_runtime_config_itself_still_reads_the_legacy_env_var(key):
+    """The counterpart to the test above: the three legacy keys must NOT
+    merely be absent from every OTHER file -- they must be PRESENT as a live
+    os.getenv read inside runtime_config.py itself, or the deploy scripts'
+    LINK_MINTING_ENABLED=true (and the ceiling/cap env lines) become inert
+    the moment Firestore has never been read on this process, silently
+    turning link minting off on the next deploy of either channel.
+
+    Mutation: delete the `os.getenv("LINK_MINTING_ENABLED")` line (or its
+    ceiling/cap siblings) from _legacy_env_default in runtime_config.py --
+    red, because the name would then appear nowhere in the source at all.
+    """
+    path = REPO_ROOT / "backend" / "services" / "runtime_config.py"
+    text = path.read_text(encoding="utf-8")
+    found_keys = {
+        next(g for g in m.groups() if g) for m in _ENV_READ_RE.finditer(text)
+    }
+    assert key in found_keys, (
+        f"runtime_config.py no longer reads {key} from the environment -- "
+        "this is the fallback that keeps the deploy scripts' env line live; "
+        "see _legacy_env_default."
     )
 
 

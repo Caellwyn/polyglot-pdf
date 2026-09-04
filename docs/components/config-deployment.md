@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off deploy-time env to the runtime-config Firestore doc `app_config/{channel}` -- the `deploy-demo.sh`/`deploy-staging.sh` env lines for them are now inert; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-04 (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -169,17 +169,22 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
     set. What it guarded -- the per-jti/per-firm limits and the session cost
     ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so enabling it is
     legitimate wherever the ceiling is enforced.
-    **This env line is now INERT (bd `polyglot-pdf-bg313`).**
-    `LINK_MINTING_ENABLED` -- along with `LINK_COST_CEILING_USD` and
-    `LINK_FIRM_CAP` -- moved off deploy-time env to a RUNTIME setting read
-    from `app_config/{channel}` in Firestore
-    (`backend/services/runtime_config.py`, TTL-cached). `deploy-demo.sh` and
+    **This is now a RUNTIME setting (bd `polyglot-pdf-bg313`), read at CALL
+    TIME.** `LINK_MINTING_ENABLED` -- along with `LINK_COST_CEILING_USD` and
+    `LINK_FIRM_CAP` -- resolves through `app_config/{channel}` in Firestore
+    (`backend/services/runtime_config.py`, TTL-cached), with the deploy-time
+    environment variable of the SAME name as the fallback for a channel that
+    has never had a value written to Firestore (or is mid-blip): if the
+    Firestore doc has no value and nothing was ever read successfully on this
+    process, `runtime_config.py` reads `os.getenv("LINK_MINTING_ENABLED")`
+    itself, parsed the same way the pre-bg313 call site parsed it, before
+    falling back further to the compiled `false`. `deploy-demo.sh` and
     `deploy-staging.sh` still carry `LINK_MINTING_ENABLED=true` in
-    `BACKEND_EXTRA_ENV` (predating bg313) but the deployed process never
-    reads it any more for this key -- it falls back to the compiled-in env
-    default (`false`) until an operator seeds `app_config/{channel}` with
+    `BACKEND_EXTRA_ENV` (predating bg313) and that line is exactly what keeps
+    a freshly deployed process minting-enabled with no `app_config/{channel}`
+    doc seeded yet -- an operator can override it per channel with
     `scripts/set_runtime_config.py`, or the admin console's own config route
-    lands (bd `polyglot-pdf-li9x0`). See
+    once it lands (bd `polyglot-pdf-li9x0`). See
     [`technical_guide.md`](../technical_guide.md) contract 14 for the full
     fallback order and call-site details. The ceiling actually in force is
     the global `LINK_COST_CEILING_USD` (also runtime-config-backed now): a

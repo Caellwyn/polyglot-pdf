@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off deploy-time env to the runtime-config Firestore doc `app_config/{channel}` -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-04 (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -280,9 +280,11 @@ snapshot, since a firm can be suspended in the 48 hours in between.
 **Minting is OFF by default** (`LINK_MINTING_ENABLED`); the spend ceiling it
 waited on (bd `polyglot-pdf-ik7e`) has shipped. `LINK_MINTING_ENABLED` is now
 a RUNTIME setting resolved from `app_config/{channel}` in Firestore (bd
-`polyglot-pdf-bg313`), not a deploy-time env flag -- see
+`polyglot-pdf-bg313`), read at call time rather than compiled in -- with the
+deploy-time `LINK_MINTING_ENABLED` env var still live as the fallback for a
+channel with no value seeded in Firestore yet -- see
 [config-deployment.md](config-deployment.md) for the current mechanism and
-why the deploy scripts' env line for it no longer does anything.
+fallback order.
 
 Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind
 `ProtectedRoute`. The page is only the door: `firm_id` and `employee_id` come

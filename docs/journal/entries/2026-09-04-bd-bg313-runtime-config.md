@@ -45,17 +45,13 @@ wrapper) before writing with `merge=True`. It exists so exit criterion 3
 the TTL with no redeploy) is verifiable before the admin console's own
 `PUT /admin/config/{channel}` route ships (bd `polyglot-pdf-li9x0`).
 
-**A consequence worth flagging rather than silently fixing:** `deploy-demo.sh`
-and `deploy-staging.sh` still set `LINK_MINTING_ENABLED=true` in
-`BACKEND_EXTRA_ENV` (predating this bead). That line is now INERT for this
-key -- the deployed backend falls back to the compiled-in env default
-(`false`) until an operator seeds `app_config/{channel}` via the new CLI or
-the console route. This is exactly the intended migration (moving the
-setting off env), but it means minting silently goes dark on the next deploy
-of either channel unless someone runs the seed step first. `deploy-demo.sh`
-and `deploy-staging.sh` are outside this bead's declared surfaces, so they
-were not edited; both docs updated below flag the inertness explicitly so it
-is not discovered live.
+**A consequence flagged in round 1, then corrected in round 2 below:**
+`deploy-demo.sh` and `deploy-staging.sh` still set
+`LINK_MINTING_ENABLED=true` in `BACKEND_EXTRA_ENV` (predating this bead).
+Round 1 shipped `_ENV_DEFAULTS` as compiled-in Python constants, which made
+that env line dead text the moment `runtime_config.py` existed -- see
+"Review round 2" below for why that was wrong and how it was fixed before
+merge.
 
 ## Lessons
 
@@ -133,15 +129,72 @@ asyncio.to_thread`); restoring the fix turns it green, and the full
 **Refuted / no action (reviewer's own non-findings, restated for the
 record):** the missing explicit `firestore.rules` deny block for
 `app_config/**` is deferred by design to `polyglot-pdf-li9x0` per the plan
-(`docs/sprint_22_admin-console_plan.md:359-360`); the demo/staging minting
-turn-off on next deploy is a real, intended, already-documented operational
-trap (see "A consequence worth flagging" above), not a gap; `_last_known_good`
+(`docs/sprint_22_admin-console_plan.md:359-360`); `_last_known_good`
 cannot leak (at most 4 entries, one channel per process); the module-global
 cache is safe under the GIL for this access pattern.
 
+**Missed in round 1, caught by the finisher after review (see "Review round
+2" below):** round 1 treated the demo/staging minting turn-off on the next
+deploy as an intended, already-documented operational trap rather than a
+gap. It was actually a real defect -- see round 2.
+
 STATUS after round 1: the blocker is fixed; both nits and the pre-existing
-finding are tracked as separate beads per the reviewer's filing. No further
-gaps outstanding for this bead.
+finding are tracked as separate beads per the reviewer's filing. Round 1
+believed no further gaps were outstanding; round 2 (below) found one.
+
+## Review round 2 (finisher, post-review)
+
+**Adopted (blocker, fixed before merge):** round 1's `_ENV_DEFAULTS` for the
+three legacy keys (`LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD`,
+`LINK_FIRM_CAP`) were compiled-in Python constants, not the deploy-time
+environment variable the plan's "env default" language meant
+(`docs/sprint_22_admin-console_plan.md`, "Runtime config": "the env default
+only when nothing was ever read"). That made `deploy-staging.sh` /
+`deploy-demo.sh`'s `LINK_MINTING_ENABLED=true` (`BACKEND_EXTRA_ENV`) dead
+text the moment this bead shipped: a fresh process on either channel, before
+anyone seeded `app_config/{channel}`, would silently mint OFF instead of ON
+-- exactly the "minting silently goes dark on the next deploy" consequence
+round 1 flagged as intended and by-design, when it was in fact an
+unauthorized behavior change the plan never called for.
+
+Fixed: `runtime_config.py` now reads `os.getenv` for the three legacy keys
+ITSELF, inside a new `_legacy_env_default()`, parsed exactly as the pre-bg313
+call sites parsed them (`LINK_MINTING_ENABLED`: case-insensitive `"true"`;
+`LINK_COST_CEILING_USD`: positive float; `LINK_FIRM_CAP`: positive int),
+falling back to the compiled constant only when the variable is unset or
+fails to parse. `CREDITS_ENFORCED` is unchanged -- brand new, no pre-bg313
+call site, stays compiled `false` with no env read at all (still pinned by
+`test_credits_enforced_has_no_env_read_anywhere`). Fallback order is
+unchanged: last-known-good still beats the env var, which still beats the
+compiled constant -- a console that lowers the ceiling must not see a higher
+value from EITHER source reappear during a blip.
+
+`test_no_shipped_source_reads_this_key_from_env_outside_runtime_config`
+(exit criterion 2) still passes unmodified -- it already excluded
+`runtime_config.py` from the search. Added its mirror,
+`test_runtime_config_itself_still_reads_the_legacy_env_var`, asserting the
+three legacy names DO appear as an `os.getenv` read inside
+`runtime_config.py`, so this fallback cannot be silently deleted again
+without CI catching it. Added three behavioral tests: store unreachable +
+`LINK_MINTING_ENABLED=true` in env -> minting on; store unreachable + no env
+-> minting off (the historical fail-safe default still holds); a lowered
+ceiling read once survives a later broken read even when the environment
+holds a higher value (last-known-good still wins over env, not just over the
+compiled constant). All four mutation-verified: reverting each corresponding
+line in `_legacy_env_default` / `_resolve` turned its test red, restoring it
+turned the suite green again.
+
+Corrected every prose claim this bead had made that the env line was inert
+or that minting falls to off after this change: this module's own docstring,
+`docs/components/config-deployment.md`, `docs/components/auth.md`, this
+journal entry (see the corrected "A consequence" note above and the
+"Refuted" section), and `docs/technical_guide.md`'s route-table entry,
+narrative section, and Surface contract 14. The deploy scripts themselves
+needed no edit -- their env lines were already correct; only the module that
+was supposed to read them was wrong.
+
+STATUS after round 2: the deploy-time env fallback is restored and pinned by
+CI; no further gaps outstanding for this bead.
 
 ## Files touched
 
