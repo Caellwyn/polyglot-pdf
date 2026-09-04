@@ -334,4 +334,39 @@ describe('switch_field has_value ignores whitespace (bd polyglot-pdf-5ovod)', ()
     const ack = await switchAckFor('A123456789')
     expect(ack?.has_value).toBe(true)
   })
+
+  it('a CONFIRMED whitespace field is not announced as having a confirmed answer', async () => {
+    // already_confirmed is checked BEFORE has_value in the backend's guidance
+    // (callback_handler.py), so a legacy confirmed-whitespace entry would be
+    // announced as "it already has a confirmed answer -- read the current value
+    // back" -- with nothing to read back, and confirm_field refusing that field.
+    // Fixing has_value alone would have left that branch lying.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value: '   ', confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-ac' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed, 'a confirmation of blankness is not a confirmed answer').toBe(false)
+  })
+
+  it('a genuinely confirmed answer IS still announced as confirmed', async () => {
+    // The other half: the guard must not erase a real confirmation, or the model
+    // would re-ask questions the user has already answered.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value: 'A123456789', confirmed: true }
+    SchemaFormStateManager.save((conn as any).state)
+    const ws = lastWs()
+    ws.send.mockClear()
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'switch_field', field: 'p1_uscis_number', request_id: 'req-ok' }),
+    })
+    const ack = sentMessages(ws).find(m => m.type === 'switch_field_response')
+    expect(ack?.already_confirmed).toBe(true)
+  })
 })

@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues, isBlankFieldValue } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues, isBlankFieldValue, isConfirmedButBlank } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -2511,7 +2511,14 @@ export class WebFormConnection {
       field_id: fieldId,
       spoken_name: field.spoken_name || field.name,
       next_field_hint: hint,
-      already_confirmed: !!entry?.confirmed,
+      // A confirmation of BLANKNESS is not a confirmed answer (bd
+      // polyglot-pdf-5ovod). The backend checks already_confirmed BEFORE
+      // has_value, so leaving this raw would announce a legacy
+      // confirmed-whitespace field as "it already has a confirmed answer -- read
+      // the current value back", with nothing to read back and confirm_field
+      // refusing that very field. Fixing has_value alone would have left this
+      // branch lying, one line above the one I had just corrected.
+      already_confirmed: !!entry?.confirmed && !isConfirmedButBlank(currentValue),
       has_value: hasValue,
       // The current value rides the ack so the model can read it back to the
       // user (same Gemini trust boundary as ask_secretary; never logged).
