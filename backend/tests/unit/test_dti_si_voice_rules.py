@@ -516,9 +516,26 @@ def test_real_long_selects_are_never_force_recited():
     assert len(fields) >= 3, "fixture lost its long selects"
     for f in fields:
         assert f["type"] == "select", f["id"]
-        assert len(f["options"]) >= 7, f["id"]
+        n = len(f["options"])
+        assert n >= 7, f["id"]
         text = render_field_guidance(f)
         assert "read ALL" not in text, f["id"]
+        # ...and land on the SELECT-EXEMPTION branch specifically. The absence
+        # assertion alone is not enough: ai_context has TWO consecutive branches
+        # that both omit "read ALL" -- the select exemption (line ~273) and the
+        # n > LONG_OPTION_LIST_THRESHOLD long-list branch -- so a select could
+        # silently re-route between them with the negative assertion still
+        # green. Reverting the exemption would send the 62-option state dropdown
+        # to the long-list branch, and the field whose recital is worst to read
+        # aloud would be pinned by nothing.
+        #
+        # Note ALL three land here, mail_state included, even though 62 > 20:
+        # the exemption is checked FIRST, so for a select it wins over the
+        # threshold entirely. Pinning the one string is therefore stronger than
+        # a per-branch conditional -- it asserts that precedence. (Byte-exact on
+        # purpose; this file's header names the ai_context render strings as a
+        # deliberate exception to "assert the rule, not its wording".)
+        assert f"Options ({n} -- standard list; ask directly and offer to " in text, f["id"]
 
 def test_render_field_guidance_checkbox_group_gets_recital():
     field = {
@@ -692,12 +709,22 @@ def _retired_p7_checkbox7():
 
 
 def _shipped_fields():
-    """(kit_id, field) for every field of every kit on disk.
+    """(kit_id, field) for every field of every GIT-TRACKED kit.
 
     One walker for all the discovery helpers here, so none of them names a form
-    (bd polyglot-pdf-o9zwe). Kits are bucket-canonical and republished
-    constantly; what is on disk is whatever the developer pulled, which is
-    exactly the right scope for "does this rule hold on real data".
+    (bd polyglot-pdf-o9zwe).
+
+    TRACKED, not on-disk. An earlier version walked every directory and said
+    "what is on disk is whatever the developer pulled, which is exactly the
+    right scope" -- that is wrong, and it is how a guard here came to look alive
+    locally while being dead in CI: its only witnesses lived in an UNTRACKED
+    scratch kit. Tracked is what CI actually sees, and it also stops these
+    assertions running against a colleague's half-built scratch kit that is not
+    a deliverable. Matches test_form_models_v2.discovered_kits().
+
+    Consequence worth knowing: no tracked kit contains a `select` field at all,
+    so a rule about selects cannot be witnessed from here -- it needs a frozen
+    fixture (see test_real_long_selects_are_never_force_recited).
     """
     import json as _json
     from pathlib import Path as _Path

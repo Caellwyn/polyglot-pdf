@@ -1,5 +1,5 @@
 {
-  "_source": "form-kits/i-90_v2/schema.json @ 2026-09-03",
+  "_source": "Lifted verbatim from the canonical I-90 kit (bucket kit id 'i-90_v2') on 2026-09-03. Kits are bucket-canonical and NOT in git (CLAUDE.md scar #10), so re-lift from the bucket via scripts/pull-form-kits.sh, not from a path in this repo.",
   "fields": [
     {
       "id": "mail_state",
@@ -2015,5 +2015,7 @@
         "afrikaans": "lengte in duim"
       }
     }
-  ]
+  ],
+  "_why_frozen": "No git-tracked kit contains a single 'select' field, so a working-tree read of this rule skips in CI. These three are every long select the I-90 had; phys_state is omitted only because it is byte-identical to mail_state and would add 25KB for no extra coverage.",
+  "_coupling": "Assumes ai_context.ASK_DIRECTLY_OPTION_TYPES exempts 'select' BEFORE the n > LONG_OPTION_LIST_THRESHOLD branch. The test asserts that precedence explicitly, so a threshold change cannot silently void it."
 }
