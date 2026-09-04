@@ -209,3 +209,68 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
     expect(fv?.skipped).toBeFalsy()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Whitespace must not block a skip (bd polyglot-pdf-5ovod).
+//
+// The `alreadyFilled` guard exists to stop a skip ERASING a real answer. It was
+// untrimmed, and once 5ovod tightened the other exits that became a DEADLOCK for
+// a required field holding only spaces:
+//   - confirm_field refuses  (hasUsableValue rejects whitespace)
+//   - skip_field refused     (this guard: "already_filled")
+//   - update_form_fields ''  is rejected by the required check
+// ...while the backend marks the skip refusal NON-RETRYABLE ("Do NOT retry
+// skip_field", callback_handler.py) and computeNextField keeps re-offering the
+// field. The model would be handed a field it could not answer, skip or clear,
+// and told not to try again.
+//
+// Found by the cross-surface review, which traced this diff's contracts OUT into
+// the untouched handler. 5ovod's own escapability test called markFieldSkipped
+// DIRECTLY, so it structurally could not see this -- these drive the real
+// skip_field message instead.
+// ---------------------------------------------------------------------------
+describe('skip_field is not blocked by whitespace (bd polyglot-pdf-5ovod)', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  async function connectedWith(value: any): Promise<MockWebSocket> {
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    ;(conn as any).state.fieldValues['p1_uscis_number'] = { value }
+    const ws = lastWs()
+    ws.send.mockClear()
+    return ws
+  }
+
+  it('a whitespace-only field CAN be skipped -- the voice path has an exit', async () => {
+    const ws = await connectedWith('   ')
+
+    fireSkip(ws, 'p1_uscis_number')
+
+    const ack = skipAcks(ws)[0]
+    expect(ack?.recorded, 'skip must be recorded, not refused as already_filled').toBe(true)
+  })
+
+  it('a REAL answer still blocks the skip -- the guard keeps its job', async () => {
+    // The guard exists so a skip cannot erase an answer. That must survive.
+    const ws = await connectedWith('A123456789')
+
+    fireSkip(ws, 'p1_uscis_number')
+
+    const ack = skipAcks(ws)[0]
+    expect(ack?.recorded).toBe(false)
+    expect(ack?.reason).toBe('already_filled')
+  })
+})

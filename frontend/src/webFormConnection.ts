@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias, reconcileFieldValues, isBlankFieldValue } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -2324,9 +2324,17 @@ export class WebFormConnection {
         field_id.endsWith('[]') ? field_id.slice(0, -2) : field_id + '[]'
       ]
     )?.value;
-    const alreadyFilled =
-      existing !== null && existing !== undefined && existing !== '' &&
-      !(Array.isArray(existing) && existing.length === 0);
+    // Whitespace is NOT a value, so it must not block a skip (bd
+    // polyglot-pdf-5ovod). This guard exists to stop a skip ERASING a real
+    // answer; there is no answer to protect here.
+    //
+    // Leaving it untrimmed created a DEADLOCK once the other exits tightened:
+    // confirm_field refuses (hasUsableValue rejects whitespace), skip_field
+    // refused here, and update_form_fields '' is rejected by the required
+    // check -- while the backend marks the skip refusal NON-RETRYABLE and
+    // computeNextField keeps re-offering the field. The model would be handed a
+    // field it could not answer, skip, or clear, and told not to try again.
+    const alreadyFilled = !isBlankFieldValue(existing);
     if (alreadyFilled) {
       console.warn('[WebFormConnection] skip_field refused -- field already has a value:', field_id);
       this.sendSkipFieldResponse(request_id, false, 'already_filled');
