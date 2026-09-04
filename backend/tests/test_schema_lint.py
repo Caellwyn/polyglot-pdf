@@ -1629,3 +1629,127 @@ def test_hidden_with_show_if_stays_quiet_on_every_legitimate_shape(kw):
         {"id": "trigger", "type": "text"},
     ]))
     assert "hidden-with-show-if" not in _rules(findings), _rules(findings)
+
+
+# ---------------------------------------------------------------------------
+# The select's SECOND channel: pdf_on_value (bd polyglot-pdf-g2fpr)
+# ---------------------------------------------------------------------------
+
+_SELECT_RULES = {"select-value-not-slug", "select-on-value-not-in-pdf",
+                 "select-on-value-missing"}
+
+
+def _select_findings(fields, dump=_COMBO_DUMP):
+    return [f for f in _lint_structural(_schema(fields, version="2"), dump)
+            if f.rule in _SELECT_RULES]
+
+
+def test_the_v2_select_shape_lints_clean():
+    """value is a slug, pdf_on_value is a code the PDF declares: no finding
+    from EITHER the slug rule or the new channel rules."""
+    opts = [{"value": "wyoming", "label": "Wyoming (WY)", "pdf_on_value": "WY"},
+            {"value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"}]
+    findings = _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+    assert [f.rule for f in findings
+            if f.rule in _SELECT_RULES | {"option-value-slug"}] == []
+
+
+def test_rule_a_a_code_valued_option_with_pdf_on_value_must_become_a_slug():
+    opts = [{"value": "WY", "label": "Wyoming", "pdf_on_value": "WY"}]
+    assert [f.rule for f in _select_findings(_combo(opts))] == ["select-value-not-slug"]
+
+
+def test_rule_a_numeric_values_are_already_slugs():
+    """height_feet on the i-90: '5' with pdf_on_value '5' is the correct shape
+    and must NOT be told to regenerate anything."""
+    dump = {"fields": [{"name": _COMBO_DUMP["fields"][0]["name"],
+                        "widgets": [{"choices": [{"value": "5"}, {"value": "6"}]}]}]}
+    opts = [{"value": "5", "label": "5", "pdf_on_value": "5"}]
+    assert _select_findings(_combo(opts), dump) == []
+
+
+def test_rule_a_pdf_on_value_must_be_a_code_the_widget_accepts():
+    """The filler now WRITES pdf_on_value, so a code /Opt does not declare
+    prints wrong exactly as a slug used to."""
+    opts = [{"value": "wyoming", "label": "Wyoming", "pdf_on_value": "XX"}]
+    assert [f.rule for f in _select_findings(_combo(opts))] == ["select-on-value-not-in-pdf"]
+
+
+def test_rule_b_a_slug_with_no_pdf_on_value_is_THE_HOLE_and_now_errors():
+    """The c5r8 defect, open until this rule. Pin the PREMISE first: the slug
+    rule does not fire (it is a slug) and the code check does not fire (no
+    code) -- so before rule (b) this shape lint clean, published clean, and
+    printed 'wyomin'."""
+    opts = [{"value": "wyoming", "label": "Wyoming"}]
+    all_findings = _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+    assert "option-value-slug" not in [f.rule for f in all_findings]   # premise
+    assert [f.rule for f in _select_findings(_combo(opts))] == ["select-on-value-missing"]
+
+
+def test_rule_b_does_not_double_report_a_non_slug_junk_value():
+    """Junk ('Bad Slug') already trips option-value-slug; rule (b) is scoped to
+    the SLUG case so the author gets one finding, not two."""
+    opts = [{"value": "Bad Slug", "label": "x"}]
+    assert _select_findings(_combo(opts)) == []
+
+
+def test_rule_b_leaves_the_legacy_code_shape_alone():
+    """A not-yet-migrated kit (code in value, no pdf_on_value) is the carve-out
+    case and stays clean under the new rules -- it is retired in a later bead,
+    not this one."""
+    opts = [{"value": "WY", "label": "Wyoming"}]
+    assert _select_findings(_combo(opts)) == []
+
+
+def test_the_channel_rules_are_evidence_based_no_dump_no_finding():
+    """Same convention as the carve-out: pdf_choice_values returns 'no
+    evidence' without a dump, and that must never read as 'nothing is legal'."""
+    opts = [{"value": "wyoming", "label": "Wyoming"},
+            {"value": "alabama", "label": "Alabama", "pdf_on_value": "ZZ"}]
+    assert _select_findings(_combo(opts), dump=None) == []
+
+
+def test_the_channel_rules_are_select_only():
+    """A radio carrying the identical option shape is governed by its own
+    rules; nothing here may fire on it."""
+    opts = [{"value": "WY", "label": "Wyoming", "pdf_on_value": "WY"},
+            {"value": "wyoming", "label": "Wyoming"}]
+    assert _select_findings(_combo(opts, ftype="radio")) == []
+
+
+def test_a_junk_value_with_pdf_on_value_gets_ONE_finding_and_the_right_remedy():
+    """Fresh-eyes (g2fpr.1): 'Alabama (AL)' with pdf_on_value 'AL' fired BOTH
+    option-value-slug ('do NOT regenerate from the label') and
+    select-value-not-slug ('regenerate from the label') -- two ERRORs on one
+    option with opposite instructions, at exactly the moment PR 2 and the
+    migration will be producing this transitional shape.
+
+    Now: one finding, and its remedy knows the code lives in pdf_on_value."""
+    opts = [{"value": "Alabama (AL)", "label": "Alabama (AL)", "pdf_on_value": "AL"}]
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+                if f.rule in _SELECT_RULES | {"option-value-slug"}]
+    assert [f.rule for f in findings] == ["option-value-slug"]
+    assert "regenerate it from the label" in findings[0].message
+    assert "do NOT regenerate" not in findings[0].message
+    assert "pdf_on_value" in findings[0].message
+
+
+def test_the_legacy_select_remedy_still_says_do_not_regenerate_WITHOUT_pdf_on_value():
+    """The other side of the same remedy: an option with NO pdf_on_value is in
+    the legacy shape, where regenerating from the label is exactly what
+    breaks the printed form. That sentence must survive."""
+    opts = [{"value": "Alabama (AL)", "label": "Alabama (AL)"}]
+    findings = [f for f in _lint_structural(_schema(_combo(opts), version="2"), _COMBO_DUMP)
+                if f.rule == "option-value-slug"]
+    assert len(findings) == 1
+    assert "do NOT regenerate" in findings[0].message
+
+
+def test_rule_a_fires_ONLY_on_the_code_in_both_shape():
+    """select-value-not-slug is scoped to value-is-a-legal-code AND
+    pdf_on_value-set. A junk value is option-value-slug's finding (above), so
+    this rule must stay silent on it -- no double report."""
+    junk = [{"value": "Alabama (AL)", "label": "x", "pdf_on_value": "AL"}]
+    assert "select-value-not-slug" not in [f.rule for f in _select_findings(_combo(junk))]
+    both = [{"value": "AL", "label": "x", "pdf_on_value": "AL"}]
+    assert [f.rule for f in _select_findings(_combo(both))] == ["select-value-not-slug"]

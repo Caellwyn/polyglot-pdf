@@ -35,6 +35,9 @@ export const RULE_LABELS: Record<string, string> = {
   'option-value-duplicate': 'Duplicate answer value',
   'option-value-comma': 'Comma in answer value',
   'option-value-slug': 'Answer value in wrong format',
+  'select-value-not-slug': 'Dropdown value must be a plain slug',
+  'select-on-value-not-in-pdf': 'Dropdown export code not in the PDF',
+  'select-on-value-missing': 'Dropdown choice has no PDF export code',
   'ref-unresolved-field': 'Points at a missing field',
   'operator-trigger': 'Comparison not valid here',
   'ref-option-value': 'Not a real answer choice',
@@ -109,6 +112,9 @@ export const RULE_REMEDIES: Record<string, string> = {
   // wrong ('Alabama (AL)' -> alabama_al -> prints clipped). The backend message
   // beside this line carries the type-specific detail (bd polyglot-pdf-4we6j).
   'option-value-slug': 'Fix the stored value as the message describes -- for a dropdown it must stay the PDF\'s own export code.',
+  'select-value-not-slug': 'This choice already carries its PDF export code in pdf_on_value, so regenerate the value from the label; the code is what the form prints.',
+  'select-on-value-not-in-pdf': 'Set the export code to one that the dropdown list in the PDF accepts -- anything else prints wrong.',
+  'select-on-value-missing': 'Enter the PDF export code for this choice so the form prints the code, not the slug.',
   'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
   'operator-trigger': 'Pick a comparison type that is valid for this field.',
   'ref-option-value': 'Pick one of the trigger field\'s real answer choices.',

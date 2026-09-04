@@ -82,3 +82,35 @@ def test_the_verify_hint_does_not_suggest_a_tokenless_curl():
     # request, not just gesture at "add a token somewhere".
     assert "Authorization: Bearer" in text
     assert "AUTH-GATED" in text or "auth-gated" in text.lower()
+
+
+def test_the_env_var_hint_names_every_service_that_serves_the_bucket():
+    """The hint must cover BOTH backends, not just the demo.
+
+    Before bd polyglot-pdf-9qn64 there was one Cloud Run service, so a hint
+    naming `polyglot-backend` was complete. There are now two running the same
+    image against the same shared form-kits bucket, and an operator following a
+    one-service hint updates only the demo's env, silently leaving staging's
+    FORM_KITS_* untouched (bd polyglot-pdf-20940).
+
+    Pinned as the SET, matching tests/test_deploy_reachability_gate.py's
+    GATED_DEPLOY_SCRIPTS: a THIRD service added later must be added here too,
+    rather than quietly dropping out of the advice.
+    """
+    text = _hint_text()
+    services = {"polyglot-backend", "polyglot-backend-staging"}
+    printed = {
+        m.group(1)
+        for line in _gcloud_env_flag_invocation_lines(text)
+        for m in [re.search(r"gcloud run services update (\S+)", line)]
+        if m
+    }
+    # The invocation and its flag are on separate printed lines, so recover the
+    # service from the `gcloud run services update` line just above each.
+    if not printed:
+        printed = set(re.findall(r"gcloud run services update (\S+)", text))
+    assert printed == services, (
+        f"the env-var hint names {sorted(printed)}, expected {sorted(services)}. "
+        f"Every service serving the shared form-kits bucket needs its env "
+        f"updated; a hint that names only some teaches 'there is one backend'."
+    )

@@ -165,16 +165,34 @@ collect_publishable_kit_files() {
 # stderr is NOT merged into the value (no 2>&1): a gcloud component-update nag
 # landing in the variable could otherwise satisfy a text match on its own.
 #
-# Args: $1 service name, $2 region, $3 project id.
-# Exits 1 when the service is definitively unreachable. MUST match
-# backend/deploy-new.sh's copy exactly (pinned by
-# tests/test_deploy_reachability_gate.py).
+# Args: $1 service name, $2 region, $3 project id, $4 severity ("fatal"
+# default, or "warn").
+#
+# SEVERITY. Exits 1 when the service is definitively unreachable; pass "warn" to
+# downgrade that to a warning and return 0. The frontend stage passes "warn"
+# because there the backend is pre-existing and possibly someone else's to fix
+# (bd polyglot-pdf-816te); the backend stage takes the default, because a deploy
+# that just CREATED an unreachable service must never exit 0
+# (bd polyglot-pdf-pidtg).
+#
+# AN ARGUMENT, NOT AN ENV VAR, and that distinction is the point. The first cut
+# read VERIFY_FAIL_IS_FATAL from the environment, which cannot tell "the frontend
+# stage set this for one call" from "it was ambient in the operator's shell" --
+# so an exported VERIFY_FAIL_IS_FATAL=false silently disarmed the BACKEND abort,
+# reproducing the exact bug this gate exists to stop (caught by the pre-PR
+# cross-surface review). A positional argument can only come from a real call
+# site.
+#
+# MUST match the sibling copies EXACTLY. This block is duplicated in THREE
+# scripts -- deploy-all.sh, backend/deploy-new.sh and deploy-editor.sh -- and
+# tests/test_deploy_reachability_gate.py pins all three byte-identical.
+# Any edit here must be made in all three.
 verify_service_publicly_reachable() {
-    local svc="$1" region="$2" project="$3" invoker_roles
+    local svc="$1" region="$2" project="$3" severity="${4:-fatal}" invoker_roles
     # Reuse the caller's log helpers WHEN THEY EXIST, so deploy-all.sh keeps its
     # coloured [WARN]/[ERROR] on stdout exactly as before this was extracted
     # (a pre-PR review caught the extraction silently moving them to stderr and
-    # dropping the colour). backend/deploy-new.sh defines no such helpers, so it
+    # dropping the colour). The bootstrap script defines no such helpers, so it
     # falls back to plain stderr -- which is why the function must not simply
     # call log_warn/log_error unconditionally.
     _gate_warn()  { if declare -f log_warn  >/dev/null 2>&1; then log_warn  "$1"; else echo "[WARN] $1"  >&2; fi; }
@@ -198,10 +216,14 @@ verify_service_publicly_reachable() {
     # claimed the shell could not carry a box-drawing glyph because the tests
     # decode it as cp1252 on Windows; that was the TEST's defect (a
     # subprocess.run without encoding=), since fixed, and this function is
-    # byte-identical in backend/deploy-new.sh, which has no box-drawing at all.
+    # byte-identical in the sibling copy, which has no box-drawing at all.
     # ASCII simply travels everywhere without depending on the reader's codec.
     _gate_error "==========================================================="
-    _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    if [ "$severity" = "warn" ]; then
+        _gate_error "  WARNING: the service is NOT publicly reachable"
+    else
+        _gate_error "  DEPLOY FAILED: the service is NOT publicly reachable"
+    fi
     _gate_error "==========================================================="
     _gate_error "Service '$svc' has no allUsers invoker binding, so"
     _gate_error "Cloud Run will 403 EVERY request before your app ever sees it."
@@ -217,6 +239,10 @@ verify_service_publicly_reachable() {
     _gate_error "If that is itself refused, the org policy must be relaxed for this"
     _gate_error "project first (constraints/iam.allowedPolicyMemberDomains)."
     _gate_error "See bd polyglot-pdf-pidtg."
+    if [ "$severity" = "warn" ]; then
+        _gate_warn "Continuing anyway (this stage treats an unreachable backend as a warning)."
+        return 0
+    fi
     exit 1
 }
 
@@ -669,6 +695,24 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         # https://host -> wss://host/ws/fill (the app's WS endpoint).
         export VITE_WS_URL="${BACKEND_URL/https:/wss:}/ws/fill"
         log_info "🔌 Injecting live backend URL into build: VITE_WS_URL=$VITE_WS_URL"
+
+        # REACHABILITY WARNING (bd polyglot-pdf-816te). Resolving a URL proves
+        # the service EXISTS, not that anyone may call it: `describe` returns a
+        # URL whether or not an allUsers invoker binding was ever granted. So a
+        # frontend-only deploy could bake in the URL of a service that 403s every
+        # request and publish reporting success -- the exact symptom bd
+        # polyglot-pdf-pidtg's gate prevents, reached by the one path that gate
+        # does not cover (it sits in the BACKEND stage, and both channel wrappers
+        # run the frontend as a SEPARATE `deploy-all.sh --frontend` process).
+        #
+        # WARNS rather than aborting, unlike the backend stage. There the deploy
+        # had just created the service, so an unreachable one is that run's own
+        # doing. Here the backend is pre-existing -- possibly mid-fix by someone
+        # else, or deliberately private -- and refusing to ship a frontend over
+        # someone else's IAM state is the gate crying wolf. Same remedy text
+        # either way; only the severity differs.
+        verify_service_publicly_reachable \
+            "$BACKEND_SERVICE_NAME" "$REGION" "$POLYGLOT_PROJECT_NAME" warn
     elif [ -n "$BACKEND_SERVICE_NAME_EXPLICIT" ]; then
         # A CHANNEL was explicitly selected and its service could not be
         # resolved -- fail hard instead of warning (bd polyglot-pdf-9qn64,

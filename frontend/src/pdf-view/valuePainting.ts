@@ -52,18 +52,23 @@ export function paintedValueFor(field: FormField, raw: unknown): PaintedValue {
     case 'checkbox_group':
       return paintSelectedLabels(field, raw);
     case 'select': {
-      // A select paints its VALUE, not its label -- because for a select the
-      // value IS what PyMuPDF writes into the combobox (bd polyglot-pdf-hmkas),
-      // so painting it makes the overlay show exactly what will print.
+      // A select paints WHAT PRINTS, never its label. What prints is the
+      // option's pdf_on_value -- the PDF export code the filler now writes
+      // (pdf_fill_routes.resolve_select_fill_value, bd polyglot-pdf-g2fpr) --
+      // falling back to the raw value for a legacy option that carries no
+      // pdf_on_value, where the filler writes the value verbatim. Both arms
+      // mirror the filler exactly, so the overlay shows what the form will say.
       //
-      // It is also the only thing that FITS. Labels became speakable names for
-      // the voice model (bd polyglot-pdf-jpjcv): "Armed Forces Americas (AA)"
-      // needs ~86px at the 6px font floor, in an i-90 state box 36px wide, and
-      // .pdf-field-overlay clips -- so the author would read "Armed For" where
-      // "AA" used to sit crisp at 11px. Same class as the jq17 checkbox bug
-      // above: a label sized for reading aloud overflowing a widget rect.
+      // Never the label: labels became speakable names for the voice model
+      // (bd polyglot-pdf-jpjcv): "Armed Forces Americas (AA)" needs ~86px at
+      // the 6px font floor, in an i-90 state box 36px wide, and
+      // .pdf-field-overlay clips -- the author would read "Armed For" where
+      // "AA" sits crisp at 11px. Same class as the jq17 checkbox bug above.
       if (typeof raw !== 'string' || raw === '') return { kind: 'none' };
-      return { kind: 'text', text: raw };
+      const opt = field.options?.find((o) => o.value === raw);
+      const onValue = (opt as { pdf_on_value?: unknown } | undefined)?.pdf_on_value;
+      const prints = typeof onValue === 'string' && onValue !== '' ? onValue : raw;
+      return { kind: 'text', text: prints };
     }
     case 'radio': {
       // A radio keeps painting its LABEL: its value is an internal slug

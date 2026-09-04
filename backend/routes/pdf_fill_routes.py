@@ -65,6 +65,89 @@ def _safe_pdf_filename(pdf_filename: str) -> str:
 	return pdf_filename
 
 
+def resolve_select_fill_value(field_obj: dict, value, *, kit: str = "", field_id: str = ""):
+	"""What a SELECT writes into its combobox (bd polyglot-pdf-g2fpr).
+
+	The v2 contract: option.value is a semantic slug the client and the voice
+	model speak; the PDF's export code lives in option.pdf_on_value. A combobox
+	is ONE widget with an /Opt list and a plain /V, so the right mechanism is to
+	substitute the STRING and let fill_widget's text branch write it -- NOT the
+	per-kid /AS appearance-state write radios use.
+
+	LEGACY: an option with no pdf_on_value (a kit not yet migrated) still writes
+	its value verbatim, so a working kit never regresses mid-rollout.
+
+	Never logs the value (bd hjo).
+	"""
+	options = field_obj.get("options") or []
+	# Two live option shapes: the v2 dict, and the legacy PLAIN STRING where the
+	# string IS the value (schema_lint's optionValue() contract). A string option
+	# can never carry pdf_on_value, so matching it here is what keeps a legacy
+	# select's fill warning-free -- fresh-eyes (g2fpr.1) caught the dict-only
+	# match misreporting EVERY fill of such a select as a stale session.
+	# ONE full pass, dict match preferred over string match whatever the order:
+	# an early return on the first string hit skipped a later dict entry with
+	# the same value and a real pdf_on_value (fresh-eyes, g2fpr.1 round 2). A
+	# mixed-shape list is already anomalous, but the resolver must not make
+	# its answer depend on element order.
+	match = None
+	string_hit = False
+	for o in options:
+		if isinstance(o, dict) and o.get("value") == value:
+			match = o
+			break
+		if isinstance(o, str) and o == value:
+			string_hit = True                               # legacy: value is the code
+	if match is None and string_hit:
+		return value
+	if match is None:
+		if options:
+			# Options exist and none matches: the shape of a session stored
+			# under a SUPERSEDED schema (a pre-migration 'AL' resumed against a
+			# migrated 'alabama'). Writing verbatim is right only when the old
+			# value happens to equal the new pdf_on_value -- luck, not design --
+			# so say it loudly. The client-side restore guard (g2fpr.5) is what
+			# prevents this shape reaching here.
+			_log.warning(
+				"select_value_not_an_option",
+				kit=kit, field_id=field_id, option_count=len(options),
+			)
+		return value
+	on_value = match.get("pdf_on_value")
+	if isinstance(on_value, str) and on_value != "":
+		return on_value
+	return value
+
+
+def resolve_select_resume_value(options, pdf_value: str) -> Optional[str]:
+	"""The INVERSE of resolve_select_fill_value, for /resume-form.
+
+	The PDF holds the export code ('AL'); the client stores option.value
+	('alabama'). Handing the code back as the field value leaves a migrated
+	select rendering empty, marked confirmed, never re-asked -- the cross-
+	surface review of g2fpr.1 found the write side transformed and the read
+	side verbatim. Map the code back through the option that carries it as
+	pdf_on_value; a legacy option (code IS the value) needs no mapping.
+
+	Returns None when the code is AMBIGUOUS -- two or more options claim it as
+	pdf_on_value -- so the caller drops the field rather than resume with a
+	choice the client never made. Same policy as the radio arm below for
+	several-ticked options (cross-surface round 2): no gate enforces
+	pdf_on_value uniqueness yet (bd polyglot-pdf-7dvpp), so the inverse must
+	not pick a winner.
+	"""
+	claimants = [
+		o.get("value") for o in options or []
+		if isinstance(o, dict) and o.get("pdf_on_value") == pdf_value
+		and isinstance(o.get("value"), str) and o.get("value") != ""
+	]
+	if len(claimants) > 1:
+		return None
+	if claimants:
+		return claimants[0]
+	return pdf_value
+
+
 # Characters that terminate or escape a raw PDF /Name token. An on-state
 # containing any of these cannot be written via direct xref surgery without
 # escaping, so the filler refuses it (bd h76m.17).
@@ -754,6 +837,11 @@ async def fill_pdf(request: PDFFillRequest, user: dict = Depends(require_auth)) 
 					# Apply field flag changes if needed (e.g., unlock read-only fields)
 					apply_field_flag_changes(widget, field_obj)
 
+					# A dropdown stores a slug; the PDF wants the export code.
+					if field_type == "select":
+						value = resolve_select_fill_value(
+							field_obj, value, kit=request.kit_id, field_id=field_id,
+						)
 					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
 					# Length only -- never the value itself (bd hjo). Equal to the inner
@@ -981,6 +1069,12 @@ async def resume_form(
 				"kind": "direct",
 				"field_id": field_id,
 				"checkbox": field.get("type") == "checkbox",
+				# A select's widget holds the EXPORT CODE; the client wants
+				# option.value. Carry the options so the read can invert the
+				# fill (bd polyglot-pdf-g2fpr, cross-surface finding).
+				"select_options": (
+					field.get("options") if field.get("type") == "select" else None
+				),
 			}
 		multi = field.get("type") == "checkbox_group"
 		for option in field.get("options") or []:
@@ -1065,6 +1159,16 @@ async def resume_form(
 						# tick vanishes from the printed legal form, while the
 						# preview and the form UI disagree about it.
 						values[mapped["field_id"]] = True
+					elif mapped.get("select_options") is not None:
+						# Invert the fill: export code -> option.value. An ambiguous
+						# code (None) is dropped like a several-ticked radio below.
+						resolved = resolve_select_resume_value(
+							mapped["select_options"], value
+						)
+						if resolved is None:
+							conflicted.add(mapped["field_id"])
+						else:
+							values[mapped["field_id"]] = resolved
 					else:
 						values[mapped["field_id"]] = value
 					continue

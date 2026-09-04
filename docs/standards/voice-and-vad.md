@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-h7atc: NOTHING is sent between turns -- not even silence. bd polyglot-pdf-5j3im: and a session SURVIVES that gap -- measured to 180s, 6/6 arms, no close, so gap-fill's removal was correct.)*
+*Last updated: 2026-09-03 (bd polyglot-pdf-h7atc: NOTHING is sent between turns -- not even silence. bd polyglot-pdf-5j3im: and a session SURVIVES that gap -- measured to 180s, 6/6 arms, no close, so gap-fill's removal was correct. bd polyglot-pdf-wurj8: the Pause button is a sticky manual/voice mode toggle, suppressed at the ADAPTER, re-asserted on every reconnect.)*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live

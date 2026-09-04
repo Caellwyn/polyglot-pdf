@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: `switch_field_response`'s `has_value` and `already_confirmed` no longer report a whitespace-only field as holding an answer -- the backend's guidance keyed on them, so the model was told to read back a blank; the row's citation is re-anchored to the symbol, its line number having drifted twice).*
+*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: `switch_field_response`'s `has_value` and `already_confirmed` no longer report a whitespace-only field as holding an answer -- the backend's guidance keyed on them, so the model was told to read back a blank; the row's citation is re-anchored to the symbol. bd polyglot-pdf-wurj8: added the `voice_mode` / `voice_mode_ack` pair.)*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`

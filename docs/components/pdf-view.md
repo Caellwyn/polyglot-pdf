@@ -90,11 +90,12 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   per selection: if any selected value lacks a usable same-page rect, the
   whole selection falls back to selected LABELS at the field-level rect
   (partial marks would silently hide the uncovered selections; a cross-page
-  rect would paint in the wrong page container). Selects paint their VALUE at
-  the field rect, not their label (a dropdown's options have no printed boxes
-  of their own): a select has no fill branch, so the filler writes
-  `option.value` verbatim into the combobox -- painting it shows exactly what
-  will print, and a speakable label like "Armed Forces Americas (AA)" would
+  rect would paint in the wrong page container). Selects paint WHAT PRINTS at
+  the field rect, never their label (a dropdown's options have no printed boxes
+  of their own): the option's `pdf_on_value` -- the export code the filler
+  writes (`resolve_select_fill_value`, bd `polyglot-pdf-g2fpr`) -- falling back
+  to the raw value for a legacy option that carries none. Both arms mirror the
+  filler, and a speakable label like "Armed Forces Americas (AA)" would
   clip in a 36pt state box (bd `polyglot-pdf-jpjcv`). A RADIO still paints its
   label, because its value is an internal slug that never prints.
   A single-box checkbox paints
