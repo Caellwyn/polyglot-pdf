@@ -4,9 +4,10 @@
 
 *Last updated: 2026-09-03 (no kit measured to date exercises the widget-name
 suffix fallback -- the git-tracked w7 47/47 and f1040 167/167, and the bucket's
-I-90 79/79, all resolve EXACTLY; the fallback stays because a kit MAY map the
-bare leaf. Kit deletion remains GRADUATED, not a permanent refusal: risk decides
-how firmly the author is asked, never whether the door exists.)*
+I-90 79/79, all resolve EXACTLY as measured 2026-09-02; the fallback stays
+because a kit MAY map the bare leaf. Kit deletion remains GRADUATED, not a
+permanent refusal: risk decides how firmly the author is asked, never whether
+the door exists.)*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -405,12 +406,13 @@ attacker which check caught them tells them what to fix.
 Values come back keyed by SCHEMA FIELD ID, never by PDF widget name; the two
 namespaces are disjoint (zero of the W-7's 53 ids equal their
 `pdf_field_name`). Widget lookup tries exact then `endswith`, mirroring
-`find_widget` in the fill path. No shipped kit currently needs the `endswith`
-leg -- measured 2026-09-02, i-90 79/79, w7 47/47 and f1040 167/167 resolve
-EXACTLY (the applicant-only v2 i-90 stores fully-qualified widget names; its
-132-field predecessor was the inverse, 0 exact / 114 suffix-only). The fallback
-stays because a kit MAY map the bare leaf, but it is unexercised by committed
-data.
+`find_widget` in the fill path. No kit measured to date needs the `endswith`
+leg -- measured 2026-09-02: the git-tracked w7 47/47 and f1040 167/167, and the
+bucket's canonical I-90 79/79, all resolve EXACTLY (the applicant-only v2 I-90
+stores fully-qualified widget names; its 132-field predecessor was the inverse,
+0 exact / 114 suffix-only). The fallback stays because a kit MAY map the bare
+leaf -- and since kits are bucket-canonical (CLAUDE.md scar #10), a kit that
+does is a pull away and would not show up in a checkout.
 
 Three shapes carry answers, and missing any one loses a client's work:
 
