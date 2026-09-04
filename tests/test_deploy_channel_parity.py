@@ -39,6 +39,17 @@ CHANNEL_SPECIFIC = {
     # open (bd polyglot-pdf-3q9qn). Identical values would defeat the isolation
     # completely, so this MUST differ -- asserted below, not merely permitted.
     "LINK_CHANNEL",
+    # bd polyglot-pdf-3l2vp: the deployed commit. deploy-all.sh computes this
+    # itself (`git rev-parse HEAD` at deploy time, into BACKEND_ENV -- not
+    # BACKEND_EXTRA_ENV), so it never actually reaches _backend_extra_env's
+    # parser for either channel script today and this entry is a no-op
+    # against the CURRENT scripts. Listed anyway because a deployed commit is,
+    # by its nature, never supposed to be equal across two channels deployed
+    # at different times -- exactly the shape CHANNEL_SPECIFIC exists to
+    # allow -- so if a future channel script ever pins an explicit GIT_SHA
+    # into its own BACKEND_EXTRA_ENV (e.g. to hold staging on an older
+    # verified SHA), the equality check must not reject that as drift.
+    "GIT_SHA",
 }
 
 
