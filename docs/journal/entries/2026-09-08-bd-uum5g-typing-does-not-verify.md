@@ -57,6 +57,28 @@ prep flagged are the maintainer's own work from other sessions, unrelated to thi
 branch -- annotated rather than transitioned, since guessing at their real state
 would overwrite someone else's work-in-progress on the strength of a timestamp.
 
+### The review found the half I forgot: the model's own instructions
+
+The client-side rule was right and both criteria passed -- but the **live system
+instruction still told the model "Only the user's own manual edits are
+auto-confirmed."** I changed what the client does and left the sentence that tells
+the model what the client does.
+
+That is worse than a stale comment: it is the one place the model is told anything
+about manual edits, and it instructed the model to treat a typed field as done and
+move on. The a08po re-offer path is a real safety net, but the fix is not to rely
+on the model ignoring an explicit instruction.
+
+The cross-surface pass found ONE such site; enumerating turned up **two** -- the
+DTI instruction that ships by default, and the legacy full-SI path still reachable
+via `USE_DTI=false`. Both corrected, ~9 tokens on the shipping one (measured, not
+guessed -- this SI has a whole reduction epic behind it).
+
+Note what this bead did NOT change: the model is still not told, per-field, that a
+typed value is unverified. That wire change is bd `polyglot-pdf-96um6`'s. The SI
+correction is different in kind -- a rule that was true and stopped being true, not
+deferred work.
+
 ## Lessons
 
 **The duplicate closure I nearly shipped.** Sweeping for other consumers of "a
@@ -105,11 +127,22 @@ nothing, which is precisely why the assert is there (scar #9).
 - `docs/standards/confirmation-and-audit.md` -- `manual` clarified to mean typed
   **and** explicitly verified, plus a note that this backend enum is distinct
   from the client's `confirmationMethod`.
+- `docs/components/pdf-view.md` -- claimed click-to-edit "stamps `confirmed` +
+  `manual_edit`". Found by the cross-surface pass, NOT by the freshness checker:
+  the checker keys on tracked-file globs, and this doc tracks only `pdf-view/*`,
+  none of which this branch touched. A doc can be wrong about a file it does not
+  track.
 - Left stale deliberately: `auth`, `context-compression`, `jit-schema`,
-  `pdf-filling`, `pdf-view`, `tool-call-flow` -- none tracks a file this branch
-  touched. `voice-ai.md` does track `connection.ts`, but carries no claim about
-  the manual-edit write path (checked, not assumed); its only related line is a
+  `pdf-filling`, `tool-call-flow` -- none tracks a file this branch touched.
+  `voice-ai.md` does track `connection.ts`, but carries no claim about the
+  manual-edit write path (checked, not assumed); its only related line is a
   pointer to the standard already corrected here.
+- Repaired a stamp I had truncated in `confirmation-and-audit.md`: my helper
+  replaced the LINE starting `*Last updated:`, but that stamp was a four-line
+  sentence, so lines 2-4 survived as an orphan ending in a stray `.)*`. The
+  freshness checker validates the DATE, never that the sentence closes. Recorded
+  as bd memory `doc-stamps-can-span-multiple-lines`; the pdf-view stamp above was
+  then written multi-line-aware.
 
 ## Files touched
 
@@ -119,4 +152,10 @@ nothing, which is precisely why the assert is there (scar #9).
 - `frontend/src/schema-forms/components/SchemaForm.test.tsx` -- two tests that
   asserted the old contract, rewritten
 - `frontend/src/schema-forms/components/SchemaForm.previewEdit.test.tsx` -- same
-- `docs/components/schema-forms.md`, `docs/standards/confirmation-and-audit.md`
+- `backend/config.py` -- BOTH system instructions (the shipping DTI one and the
+  legacy `USE_DTI=false` path) still told the model manual edits are auto-confirmed
+- `backend/services/form_filling_service.py`, `frontend/src/webFormConnection.ts`
+  -- comments whose stated RATIONALE was the old rule; both behaviours unchanged
+- `backend/tests/unit/test_dti.py` -- a docstring asserting the old rule as fact
+- `docs/components/schema-forms.md`, `docs/components/pdf-view.md`,
+  `docs/standards/confirmation-and-audit.md`

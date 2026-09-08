@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-08-31 (i-90 kit removed, bd polyglot-pdf-hydb0 -- two shipped kits (f1040, w7) now carry option-position backfill; the preview UI remains CUT OVER per bd polyglot-pdf-v437). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for cutover closeout details.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: click-to-edit stores the typed value UNVERIFIED -- it shares SchemaForm's handleFieldChange, so the PDF view gets the same rule as the schema form.)*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -122,8 +122,10 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   positioned in page coordinate space (scrolls with the page, no scroll
   listeners): below the rect, flipped above near the page bottom, clamped
   horizontally, internal scroll for long option lists. Write-through on
-  change via SchemaForm's `handleFieldChange` (which stamps `confirmed` +
-  `manual_edit`; the `copy_to` fan-out itself lives one level down, at the
+  change via SchemaForm's `handleFieldChange` (which stores the value UNVERIFIED --
+  typing is not an assertion, bd polyglot-pdf-uum5g -- so the click-to-edit path
+  gets the same rule as the schema form, being the same handler; the `copy_to`
+  fan-out itself lives one level down, at the
   `SchemaFormStateManager.updateField` chokepoint, so every write path gets it
   -- bd polyglot-pdf-gpaed) -- overlays repaint
   live while typing. **Known gap (bd `polyglot-pdf-1utg`, open):** the popover's
