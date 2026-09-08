@@ -788,11 +788,16 @@ export function createConnectionManager(
 							// Load latest persisted state so this edit lands on top of any
 							// AI fills saved since the closure's `state` was last refreshed.
 							const currentState = SchemaFormStateManager.load() || state
+							// Typing does NOT verify (bd polyglot-pdf-uum5g) -- same rule
+							// as the primary onManualEdit above. These two closures are
+							// duplicates and must stay in step; this is the RECONNECT
+							// one, so missing it would mean typing silently verified
+							// again after any reconnection.
 							const edited = SchemaFormStateManager.updateField(
 								currentState,
 								fieldId,
 								value,
-								{ confirmed: true, confirmationMethod: 'manual_edit' }
+								{ confirmed: false }
 							)
 							// Same search-origin move as the primary onManualEdit above
 							// (bd polyglot-pdf-a08po) -- these two closures are duplicates

@@ -123,17 +123,30 @@ describe('the mirror above cannot drift from the real write site', () => {
     const path = require('path') as typeof import('path')
     const src = fs.readFileSync(path.join(__dirname, 'connection.ts'), 'utf8')
 
-    const handler = src.slice(src.indexOf('onManualEdit:'))
-    const firstUpdate = handler.slice(0, handler.indexOf('setSearchOrigin'))
+    // EVERY onManualEdit closure, not just the first. connection.ts has TWO --
+    // the initial one and a duplicate on the RECONNECT path whose own comment
+    // says they "must stay in step". Checking only the first would have let the
+    // reconnect path keep verifying silently, which is exactly the omission
+    // this guard exists to catch (scar #8: pin the SET, not the instance).
+    const starts: number[] = []
+    for (let i = src.indexOf('onManualEdit:'); i !== -1; i = src.indexOf('onManualEdit:', i + 1)) {
+      starts.push(i)
+    }
+    expect(starts.length, 'expected both onManualEdit closures to still exist').toBe(2)
 
-    expect(
-      firstUpdate.includes('confirmed: false'),
-      'connection.ts onManualEdit must write confirmed:false -- typing does not verify'
-    ).toBe(true)
-    expect(
-      /confirmationMethod:\s*'manual_edit'/.test(firstUpdate),
-      'and must not stamp an audit record for a keystroke'
-    ).toBe(false)
+    for (const start of starts) {
+      const handler = src.slice(start)
+      const write = handler.slice(0, handler.indexOf('setSearchOrigin'))
+
+      expect(
+        write.includes('confirmed: false'),
+        'every connection.ts onManualEdit must write confirmed:false -- typing does not verify'
+      ).toBe(true)
+      expect(
+        /confirmationMethod:\s*'manual_edit'/.test(write),
+        'and must not stamp an audit record for a keystroke'
+      ).toBe(false)
+    }
   })
 })
 
