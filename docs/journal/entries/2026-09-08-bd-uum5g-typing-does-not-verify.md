@@ -69,15 +69,30 @@ about manual edits, and it instructed the model to treat a typed field as done a
 move on. The a08po re-offer path is a real safety net, but the fix is not to rely
 on the model ignoring an explicit instruction.
 
-The cross-surface pass found ONE such site; enumerating turned up **two** -- the
-DTI instruction that ships by default, and the legacy full-SI path still reachable
-via `USE_DTI=false`. Both corrected, ~9 tokens on the shipping one (measured, not
-guessed -- this SI has a whole reduction epic behind it).
+The cross-surface pass found ONE such site. Enumerating found **four**:
 
-Note what this bead did NOT change: the model is still not told, per-field, that a
-typed value is unverified. That wire change is bd `polyglot-pdf-96um6`'s. The SI
-correction is different in kind -- a rule that was true and stopped being true, not
-deferred work.
+| Site | Ships? |
+|---|---|
+| `DTI_SYSTEM_INSTRUCTION` | yes, the production default |
+| `SYSTEM_INSTRUCTION` | only via `USE_DTI=false` (legacy path) |
+| the `confirm_field` **tool schema** | yes, every session |
+| the per-edit notify message | yes -- deliberately NOT changed |
+
+The tool schema is the one I would most easily have missed and the one that
+mattered most: its `confirmation_method` description said `manual: user edited
+field` -- editing IS confirming, stated in the schema of the very tool that
+records confirmations. Its ENUM is untouched (a wire contract); only the
+human-readable description moved.
+
+Measured rather than asserted, since this SI has a size-reduction epic behind it:
+~24 tokens per session across the shipping sites, sent once at session start. And
+nothing pins SI size -- `test_dti.py`'s size test asserts a SCALING PROPERTY (DTI
+does not grow with section field count), not a budget, so wording cannot break it.
+
+Note what this bead did NOT change: the notify message still does not tell the
+model, per-field, that a typed value is unverified. That is a wire change and
+belongs to bd `polyglot-pdf-96um6`. The other three are different in kind -- rules
+that were true and stopped being true, not deferred work.
 
 ## Lessons
 
@@ -117,6 +132,17 @@ Same family as the three occurrences in bd `polyglot-pdf-wurj8`.
 **And a mutation that did not apply.** My first attempt to break `confirmField`
 missed its target; the assert caught it. The green run it produced proved
 nothing, which is precisely why the assert is there (scar #9).
+
+**The shape of this bead, worth naming.** The code change was small and correct.
+Nearly every finding after it was **prose that outlived the code it described** --
+two comments, two docstrings, two system instructions, a tool-schema description,
+two docs. Those are exactly the artifacts nothing tests, and the reason each round
+kept surfacing one more is that I fixed instances rather than sweeping for the set
+until late.
+
+The reusable rule: **when a behavioural rule changes, the code is the small part.
+Grep for every statement of the OLD rule -- in comments, docstrings, model-facing
+instructions, tool descriptions and docs -- and fix them as one set.**
 
 ## Doc freshness
 
