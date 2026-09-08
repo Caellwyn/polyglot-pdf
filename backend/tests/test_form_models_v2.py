@@ -245,6 +245,96 @@ def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
     )
 
 
+# Known-outstanding violations of the rule below, pinned as an EQUALITY so the
+# set can only SHRINK. Empty is the goal; an entry here is a live defect with a
+# bead, not an exemption.
+#
+# w7 countries_of_citizenship: required, read_only, nothing writes it, no
+# unlock, and its PDF widget is NOT locked -- pure schema drift on a shipped
+# kit, so a W-7 cannot be completed by voice for that field. The fix is KIT DATA
+# and must go through the schema editor (bd polyglot-pdf-nck2q, which also
+# enumerates the 8 non-required siblings with the same drift).
+_KNOWN_REQUIRED_READONLY = {"w7": ["countries_of_citizenship"]}
+
+
+@pytest.mark.parametrize("kit", discovered_kits())
+def test_shipped_kit_required_fields_are_not_read_only(kit):
+    """A REQUIRED field may be read_only ONLY if something else writes it.
+
+    THE RULE (maintainer, 2026-09-08): "if something has a require_if or a
+    required flag, the only time it should be read-only is if it's being written
+    to from somewhere else, such as the a-number on the last section of the
+    i-90. It's required, but it's filled from a previous field automatically."
+
+    WHY IT IS A DEAD END OTHERWISE. isFieldReadOnly (frontend/src/schema-forms/
+    utils/validation.ts) returns true whenever field.read_only is set -- it does
+    NOT consult unlock_method -- so webFormConnection refuses the model's write
+    and tells it the field is "system-managed, never fillable". The model stops
+    trying. Meanwhile the renderer unlocks the UI and the PDF filler unlocks the
+    widget, so three surfaces disagree and the user is asked for a value nothing
+    can supply. Required makes it terminal rather than merely awkward: the form
+    cannot be completed.
+
+    THE CARVE-OUT is copy_to, and it is the whole of it: a field listed as some
+    other field's copy_to target IS written from elsewhere, which is exactly the
+    case the rule allows (the I-90's Part-8 continuation-sheet copies of the
+    A-Number and name -- required on the printed form, filled automatically from
+    page 1). Note copy_to is checked, NOT unlock_method: an unlock lets the PDF
+    FILLER clear the bit, but isFieldReadOnly still blocks the AI write, so an
+    unlock alone does not make a required field fillable.
+
+    Caught two live instances when first written: the i-90's
+    accommodation_other_detail (fixed in the kit) and the W-7's
+    countries_of_citizenship -- the latter required, read_only, NOT a copy_to
+    target, with no unlock at all and an unlocked PDF widget, i.e. pure schema
+    drift on a shipped kit (bd polyglot-pdf-38p0y).
+    """
+    raw = load_kit(kit)
+    validate(raw)  # the schema must still be valid v2; we read copy_to from raw
+
+    # copy_to is read from the RAW dict, NOT the parsed model. FormField does
+    # not DECLARE copy_to and the model is extra="ignore", so pydantic silently
+    # drops it -- `getattr(field, "copy_to", None)` is unconditionally None, and
+    # an earlier version of this guard used exactly that, making the carve-out
+    # dead code. It passed only because no git-tracked kit uses copy_to; the
+    # I-90 that does is bucket-only. The failure mode was the bad one: the guard
+    # would have flagged the very case the rule sanctions (Opus cross-surface).
+    # isinstance(list) on copy_to, matching the two real consumers
+    # (schemaFormState's `Array.isArray(field?.copy_to) ? ... : []` and
+    # copyLinks' `if (!Array.isArray(raw)) return []`). Without it a copy_to
+    # authored as a bare STRING iterates character-by-character, so a single
+    # character matching a field id would silently excuse that field -- the
+    # wrong direction for a guard, since at runtime a string copy_to fans out
+    # to nothing and the target really is unfillable. FormField does not
+    # declare copy_to and the model is extra="ignore", so validate() accepts
+    # the malformed shape without complaint (Opus cross-surface).
+    written_from_elsewhere = {
+        target
+        for field in raw.get("fields", [])
+        if isinstance(field, dict) and isinstance(field.get("copy_to"), list)
+        for target in field["copy_to"]
+    }
+    offenders = []
+    for field in raw.get("fields", []):
+        if not isinstance(field, dict) or not field.get("read_only"):
+            continue
+        validation = field.get("validation")
+        required = bool(
+            isinstance(validation, dict) and validation.get("required")
+        ) or (field.get("require_if") is not None)
+        if required and field.get("id") not in written_from_elsewhere:
+            offenders.append(field.get("id"))
+    assert sorted(offenders) == sorted(_KNOWN_REQUIRED_READONLY.get(kit, [])), (
+        f"{kit}: REQUIRED fields marked read_only with nothing writing them "
+        f"(the voice model is told they are system-managed and never fillable, "
+        f"so the form cannot be completed): {offenders}. Either clear read_only, "
+        f"or make the field a copy_to target of whatever supplies it. "
+        f"(Known-outstanding for this kit: "
+        f"{_KNOWN_REQUIRED_READONLY.get(kit, [])} -- shrink that list as they "
+        f"are fixed; never grow it.)"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Exit criterion 2: v2 fixtures validate; violations -> field-path errors
 # ---------------------------------------------------------------------------
