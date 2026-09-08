@@ -225,3 +225,45 @@ describe('the EXPLICIT verification paths still verify (bd polyglot-pdf-uum5g)',
     expect(computeNextField(st, { skipConfirmed: true })?.id).not.toBe('f1')
   })
 })
+
+describe('CHANGING a verified field drops its verification (bd polyglot-pdf-96um6)', () => {
+  beforeEach(() => { sessionStorage.clear() })
+
+  it('a verified field that is edited becomes unverified again', () => {
+    // Maintainer rule (2026-09-08): "if a verified field is changed, it should
+    // lose the verified status. Then the modal pops up to re-verify it after
+    // enter."
+    //
+    // This ALREADY holds as a consequence of bd polyglot-pdf-uum5g -- typing
+    // writes confirmed:false unconditionally, so an edit cannot leave a stale
+    // verification behind. Pinned here because it is now load-bearing for the
+    // verify-modal gesture and nothing asserted it: the old verification
+    // describes the OLD value, and letting it survive would put a verified
+    // stamp on an answer nobody checked.
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = applyManualEditLikeProduction(st, 'f1', 'Maria')
+    st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
+    expect((st.fieldValues['f1'] as any).confirmed).toBe(true)
+
+    st = applyManualEditLikeProduction(st, 'f1', 'Mariana')
+
+    const entry = st.fieldValues['f1'] as any
+    expect(entry.value).toBe('Mariana')
+    expect(entry.confirmed, 'a changed answer is not the one that was verified').not.toBe(true)
+    expect(entry.confirmationMethod, 'and carries no stale audit record').toBeUndefined()
+    expect(entry.confirmedAt, 'nor a stale timestamp').toBeUndefined()
+  })
+
+  it('the re-edited field is offered again, so it can be re-verified', () => {
+    // The other half of the rule: losing verification must put the field back in
+    // the next-field search, or "re-verify it after enter" has nothing to act on.
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = SchemaFormStateManager.updateField(st, 'f1', 'Maria', { confirmed: false })
+    st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
+    expect(computeNextField(st, { skipConfirmed: true })?.id).not.toBe('f1')
+
+    st = SchemaFormStateManager.updateField(st, 'f1', 'Mariana', { confirmed: false })
+
+    expect(computeNextField(st, { skipConfirmed: true })?.id).toBe('f1')
+  })
+})
