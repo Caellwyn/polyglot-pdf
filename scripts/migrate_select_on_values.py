@@ -14,8 +14,12 @@ EXISTING kit across:
   on fields AND sections, scalar and list values alike.
 
 Idempotent: an option that already carries ``pdf_on_value`` is never touched,
-so a second run is a no-op and the report is empty. Options already in v2
-shape reserve their slugs, so a newly minted legacy sibling cannot collide.
+so a second run migrates nothing and retargets nothing. What a second run
+DOES still report is the outstanding human work -- ``no_code`` (a cleared
+code the tool cannot supply) and ``duplicate_codes`` -- and the CLI warns on
+both every time, so "nothing to do" is printed only when there truly is
+nothing. Options already in v2 shape reserve their slugs, so a newly minted
+legacy sibling cannot collide.
 
 Deliberately NOT done here:
   * metadata.json is never opened. The schema's SHA changes, so a readiness
@@ -251,11 +255,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"  options migrated: {report['options_migrated']}; "
           f"conditions retargeted: {report['conditions_retargeted']}; "
           f"fields touched: {len(report['fields'])}")
+    # BOTH kinds of outstanding human work are surfaced on stderr, every run
+    # (fresh-eyes round 4: no_code had no CLI signal, so a kit with cleared
+    # codes printed "nothing to do" while a field still needed a human).
     if report["fields_with_duplicate_codes"]:
         print(f"  WARNING: duplicate export codes inside "
               f"{report['fields_with_duplicate_codes']} -- their conditions were NOT "
               f"retargeted; resolve by hand", file=sys.stderr)
-    if report["options_migrated"] == 0:
+    no_code = [(e["field"], e["no_code"]) for e in report["fields"] if e["no_code"]]
+    if no_code:
+        print(f"  WARNING: {sum(len(v) for _, v in no_code)} option(s) have a CLEARED "
+              f"export code and were left alone -- supply the /Opt entry by hand: "
+              f"{no_code}", file=sys.stderr)
+    if report["options_migrated"] == 0 and not no_code and not report["fields_with_duplicate_codes"]:
         print("  nothing to do (already migrated)")
     return 0
 

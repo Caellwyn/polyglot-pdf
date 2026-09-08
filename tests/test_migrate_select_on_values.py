@@ -209,6 +209,48 @@ def test_an_EMPTY_pdf_on_value_is_a_CLEARED_v2_code_left_alone_and_reported():
     assert entry["migrated"] == 1 and entry["already_v2"] == 2
 
 
+def test_a_second_run_still_reports_outstanding_human_work_and_nothing_else():
+    """Round 4: idempotence means migrate NOTHING twice, not report nothing.
+    A cleared code the tool cannot supply is reported on every run, the same
+    way each time; a migrated option is reported once."""
+    kit = {"schema_version": "2", "fields": [{
+        "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+        "options": [
+            {"value": "alabama", "label": "Alabama", "pdf_on_value": ""},   # cleared
+            {"value": "AK", "label": "Alaska (AK)"},                        # legacy
+        ]}], "sections": []}
+    once, r1 = migrate_selects(kit)
+    twice, r2 = migrate_selects(once)
+    assert twice == once
+    assert r1["options_migrated"] == 1 and r2["options_migrated"] == 0
+    assert r1["fields"][0]["no_code"] == ["alabama"]
+    assert r2["fields"][0]["no_code"] == ["alabama"]           # same list, every run
+    assert r2["fields"][0]["migrated"] == 0 and r2["conditions_retargeted"] == 0
+
+
+def test_cli_warns_about_cleared_codes_and_never_says_nothing_to_do_while_work_remains(tmp_path):
+    kit = {"schema_version": "2", "fields": [{
+        "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+        "options": [{"value": "alabama", "label": "Alabama", "pdf_on_value": ""}]}],
+        "sections": []}
+    src = tmp_path / "a.json"
+    src.write_text(json.dumps(kit), encoding="utf-8")
+    r = subprocess.run([PY, str(SCRIPT), "--in", str(src), "--out", str(tmp_path / "b.json")],
+                       capture_output=True, text=True, cwd=str(REPO))
+    assert r.returncode == 0, r.stderr
+    assert "WARNING" in r.stderr and "CLEARED" in r.stderr and "alabama" in r.stderr
+    assert "nothing to do" not in r.stdout
+    # ...whereas a fully migrated kit with no outstanding work does say so.
+    clean = {"schema_version": "2", "fields": [{
+        "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+        "options": [{"value": "alabama", "label": "Alabama", "pdf_on_value": "AL"}]}],
+        "sections": []}
+    src.write_text(json.dumps(clean), encoding="utf-8")
+    r2 = subprocess.run([PY, str(SCRIPT), "--in", str(src), "--out", str(tmp_path / "c.json")],
+                        capture_output=True, text=True, cwd=str(REPO))
+    assert r2.returncode == 0 and "nothing to do" in r2.stdout and "WARNING" not in r2.stderr
+
+
 def test_a_legacy_code_equal_to_a_v2_siblings_CODE_is_reported_as_ambiguous():
     """Two options writing one widget state (round 3). Reported; the options
     still migrate (the code moves verbatim), but no condition is retargeted."""

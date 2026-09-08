@@ -98,6 +98,20 @@ the first occurrence is kept now, in the Python minter and in the editor's
 TypeScript mirror, with the fixture shared. When a reviewer's "pre-existing"
 commit hash is inside the diff under review, the finding is in scope.
 
+**Idempotent means "migrates nothing twice", not "reports nothing twice".**
+The docstring promised an empty report on a second run; a kit with a cleared
+code reports that human work item every run, the same way each time -- and
+should. The false promise was one round-4 finding; the other was its
+consequence: the CLI printed "nothing to do" while a field still needed a
+human, because only `duplicate_codes` had a stderr warning. Two kinds of
+outstanding work, one warning -- scar #8 again; both warn now, and "nothing
+to do" prints only when it is true.
+
+**Count the real thing.** The plan said "4 state dropdowns x 62"; the kit has
+two (`mail_state`, `phys_state`) plus the two height dropdowns: 143 options.
+The reviewer caught it by running the tool on a read-only copy. The PR body
+now tells the maintainer the number they will actually see.
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)
