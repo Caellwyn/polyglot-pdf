@@ -189,7 +189,10 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
         if not isinstance(f, dict) or f.get("type") != "select":
             continue
         old_to_new, entry = _migrate_field(f)
-        if entry["migrated"] or entry["duplicate_codes"] or entry["no_code"]:
+        # Every kind of outstanding human work reaches the report: a string
+        # option (not a dict) is one the tool cannot migrate at all.
+        if (entry["migrated"] or entry["duplicate_codes"] or entry["no_code"]
+                or entry["non_dict_options"]):
             report["fields"].append(entry)
         report["options_migrated"] += entry["migrated"]
         if entry["duplicate_codes"]:
@@ -262,12 +265,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"  WARNING: duplicate export codes inside "
               f"{report['fields_with_duplicate_codes']} -- their conditions were NOT "
               f"retargeted; resolve by hand", file=sys.stderr)
+    # One line per field, capped like migrate_schema_v2's warnings, so a run
+    # on a real kit stays readable.
     no_code = [(e["field"], e["no_code"]) for e in report["fields"] if e["no_code"]]
     if no_code:
         print(f"  WARNING: {sum(len(v) for _, v in no_code)} option(s) have a CLEARED "
-              f"export code and were left alone -- supply the /Opt entry by hand: "
-              f"{no_code}", file=sys.stderr)
-    if report["options_migrated"] == 0 and not no_code and not report["fields_with_duplicate_codes"]:
+              f"export code and were left alone -- supply the /Opt entry by hand:",
+              file=sys.stderr)
+        for fid, values in no_code[:10]:
+            print(f"    {fid}: {', '.join(values)}", file=sys.stderr)
+        if len(no_code) > 10:
+            print(f"    ... and {len(no_code) - 10} more field(s); see the report",
+                  file=sys.stderr)
+    non_dict = [(e["field"], e["non_dict_options"]) for e in report["fields"]
+                if e["non_dict_options"]]
+    if non_dict:
+        print(f"  WARNING: {len(non_dict)} field(s) carry plain-string options the tool "
+              f"cannot migrate -- rewrite them as {{value, label}} objects first:",
+              file=sys.stderr)
+        for fid, n in non_dict[:10]:
+            print(f"    {fid}: {n} string option(s)", file=sys.stderr)
+    if (report["options_migrated"] == 0 and not no_code and not non_dict
+            and not report["fields_with_duplicate_codes"]):
         print("  nothing to do (already migrated)")
     return 0
 

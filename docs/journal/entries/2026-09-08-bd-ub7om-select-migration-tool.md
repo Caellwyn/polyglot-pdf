@@ -112,6 +112,14 @@ two (`mail_state`, `phys_state`) plus the two height dropdowns: 143 options.
 The reviewer caught it by running the tool on a read-only copy. The PR body
 now tells the maintainer the number they will actually see.
 
+**A counter nothing reads is a finding nobody sees.** `non_dict_options` was
+tallied per field and then dropped: a select whose options are plain strings
+never reached the report and never warned. Round 5 caught it -- the third
+kind of outstanding human work, after cleared codes and duplicates, and the
+third time this PR surfaced one kind and forgot a sibling. All three now
+reach the report and the CLI; the warnings print one line per field, capped,
+like `migrate_schema_v2`'s.
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)

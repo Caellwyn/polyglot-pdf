@@ -287,7 +287,7 @@ def test_a_duplicate_code_is_reported_and_its_conditions_are_NOT_retargeted():
     assert [o["pdf_on_value"] for o in out["fields"][0]["options"]] == ["AL", "AL"]
 
 
-def test_non_select_fields_and_string_options_are_left_alone():
+def test_non_select_fields_and_string_options_are_left_alone_and_string_options_are_REPORTED():
     kit = {"schema_version": "2", "fields": [
         {"id": "r", "type": "radio", "pdf_field_name": "r[0]", "section_id": "s",
          "options": [{"value": "yes", "label": "Yes", "pdf_on_value": "Y"}]},
@@ -297,6 +297,31 @@ def test_non_select_fields_and_string_options_are_left_alone():
     out, report = migrate_selects(kit)
     assert out["fields"] == kit["fields"]
     assert report["options_migrated"] == 0
+    # Round 5: a string option is work the tool cannot do; it is named, not
+    # silently counted into nothing.
+    assert [(e["field"], e["non_dict_options"]) for e in report["fields"]] == [("s", 2)]
+
+
+def test_cli_warns_about_string_options_one_line_per_field(tmp_path):
+    kit = {"schema_version": "2", "fields": [
+        {"id": "s", "type": "select", "pdf_field_name": "s[0]", "section_id": "x",
+         "options": ["AL", "AK"]},
+        {"id": "f0", "type": "select", "pdf_field_name": "f0[0]", "section_id": "x",
+         "options": [{"value": "alabama", "label": "Alabama", "pdf_on_value": ""},
+                     {"value": "alaska", "label": "Alaska", "pdf_on_value": ""}]},
+        {"id": "f1", "type": "select", "pdf_field_name": "f1[0]", "section_id": "x",
+         "options": [{"value": "wyoming", "label": "Wyoming", "pdf_on_value": ""}]},
+    ], "sections": []}
+    src = tmp_path / "a.json"
+    src.write_text(json.dumps(kit), encoding="utf-8")
+    r = subprocess.run([PY, str(SCRIPT), "--in", str(src), "--out", str(tmp_path / "b.json")],
+                       capture_output=True, text=True, cwd=str(REPO))
+    assert r.returncode == 0, r.stderr            # warnings never fail the run
+    lines = [l.strip() for l in r.stderr.splitlines()]
+    assert "f0: alabama, alaska" in lines         # one line per field, values joined
+    assert "f1: wyoming" in lines
+    assert "s: 2 string option(s)" in lines
+    assert "nothing to do" not in r.stdout
 
 
 def test_a_condition_on_another_field_with_the_same_literal_is_not_touched():
