@@ -132,7 +132,7 @@ insertion point.
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Public for PUBLIC kits** (their blank-template bytes ship in the static bundle regardless -- bd z2is); a PRIVATE kit needs a bearer token whose firm allowlist contains it, else 404 (bd vccy; invalid token degrades to anonymous -- existence is the secret). |
 | POST | `/api/form-kits/{kit_id}/retire` | Retire a form THIS FIRM owns (status -> `unpublished`), archiving the revision first. **Auth-gated + firm-scoped**, and authorization is three further checks (bd `polyglot-pdf-z6bk9`): `firm_role=manager` AND `owner_firm_id` == the caller's firm AND `visibility=private` -- so a firm can never retire a shared/government kit, nor one it merely licenses. EVERY refusal is 404, never 403 (existence is the secret). Not a delete: hard delete stays staff-only and guarded. No UI ships yet -- the button belongs to the firm console (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is) + **firm-scoped** (bd vccy: a private kit 404s for non-members). |
-| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, NOT the deploy-time env var it used to be -- an operator flips it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
+| POST | `/api/links/mint` | Mint a ONE-TIME client link for a form the firm may use. **Auth-gated** (per-user Firebase; the employee's `uid` becomes the link's `employee_id`, so every session traces to who sent it) + firm-scoped (the kit must be in the firm's allowlist, else 404). Returns the URL and the `jti` -- the firm's JOIN KEY for matching their client to our pseudonymous record. **404 unless `LINK_MINTING_ENABLED`** (default false; the spend ceiling it waited on, bd `polyglot-pdf-ik7e`, has landed). `LINK_MINTING_ENABLED` is now a RUNTIME setting read from `app_config/{channel}` in Firestore via `backend/services/runtime_config.py` (bd `polyglot-pdf-bg313`), TTL-cached, with the deploy-time `LINK_MINTING_ENABLED` env var still read as the fallback until a channel has a Firestore value -- an operator can override it per channel with `scripts/set_runtime_config.py` (or the admin console once bd `polyglot-pdf-li9x0` ships its route) with no redeploy. Consumed by the staff mint page at `/console/links` (bd `polyglot-pdf-gob8l`). `components/auth.md` |
 | POST | `/api/links/open` | Redeem a client link. **UNAUTHENTICATED BY DESIGN** -- a client has no account, so the signed token IS the credential (bd `polyglot-pdf-ugm6`). Enforces one-time use, the open/complete windows, and re-checks firm entitlement at open rather than trusting the mint-time snapshot. EVERY failure returns the same 404 so the response cannot be used as an oracle. `components/auth.md` |
 | POST | `/api/resume-form` | Verify a client's SAVED PDF and return the answers inside it (bd `polyglot-pdf-dft1`). **Auth-gated** (`require_auth`) and **firm-scoped** by the same gate chain as `/api/fill-pdf`, so a client link resolves to the one kit it was minted for. The upload is attacker-controlled: it must be STRUCTURALLY identical to that kit's own form.pdf (`services/pdf_structure.py`) before a single value is read out of it. `components/pdf-filling.md` |
 | POST | `/api/tts/intro` | Sol's scripted intro+disclaimer clip (sprint 20, bd s1iex.3). KEYED route: `{form_number, language}` resolve against server-side tables only (`intro_tts.KNOWN_FORMS` + `intro_script.json` + `intro_agree_labels.json`) so caller text never enters synthesis; unknown form -> 400, unknown language -> English fallback. In-process cache per `(language, form, script_hash)`; `Cache-Control: private` + ETag with If-None-Match 304, plus `X-Intro-Script-Version` (the script hash the acceptance record echoes, bd s1iex.7 -- both headers need CORS `expose_headers` to be readable cross-origin); 0 dB gain (the spell-back +4 dB clips ~90s clips). **Auth-gated**; 503 unless `INTRO_TTS_ENABLED`. `backend/services/intro_tts.py` |
@@ -815,13 +815,16 @@ paid session, so it stays off wherever `LINK_MINTING_ENABLED` resolves false.
 The spend ceiling it waited on (bd polyglot-pdf-ik7e) has shipped.
 `LINK_MINTING_ENABLED` is a RUNTIME setting now (bd polyglot-pdf-bg313):
 `backend/services/runtime_config.py` resolves it from `app_config/{channel}`
-in Firestore, not the `deploy-demo.sh` / `deploy-staging.sh`
-`LINK_MINTING_ENABLED=true` env line (still present in both scripts, but
-INERT for this key since bg313 shipped -- the deploy-time value now silently
-falls back to the env default (`false`) until an operator seeds
-`app_config/{channel}` with `scripts/set_runtime_config.py`, or the admin
-console's own config route lands, bd polyglot-pdf-li9x0). The ceiling in
-force is the global one (also runtime-config-backed now); per-form
+in Firestore first, but the `deploy-demo.sh` / `deploy-staging.sh`
+`LINK_MINTING_ENABLED=true` env line is still LIVE as the fallback -- when a
+channel's Firestore doc has never had a value written (or a read fails with
+no last-known-good yet), `runtime_config.py` reads that same env var itself
+and parses it the same way the pre-bg313 call site did, before falling back
+further to the compiled default (`false`). An operator overrides it per
+channel by seeding `app_config/{channel}` with `scripts/set_runtime_config.py`,
+or the admin console's own config route once it lands (bd polyglot-pdf-li9x0).
+The ceiling in force is the global one (also runtime-config-backed now, with
+the same env-var fallback); per-form
 `link_cost_ceiling_usd` is declared by the shipped kits but not yet threaded
 through the handshake (bd polyglot-pdf-4tjt7).
 
@@ -954,11 +957,18 @@ doc, so an operator retunes them with no redeploy.
 - **Fallback order** on a Firestore miss (unreachable store, missing doc, or
   a key absent/malformed in it): the LAST-KNOWN-GOOD value from this
   process's previous successful read of that key, then -- only when nothing
-  was EVER read successfully -- the env-shaped default (matching the old
-  `os.getenv` defaults exactly, so a fresh process with no Firestore access
-  behaves as it did before this bead). Env-first would be wrong: a console
-  that just LOWERED the ceiling must not see a higher value reappear during a
-  blip.
+  was EVER read successfully -- the env default. For the three legacy keys
+  (`LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD`, `LINK_FIRM_CAP`) that env
+  default is a LIVE `os.getenv` read INSIDE `runtime_config.py` itself
+  (`_legacy_env_default`), parsed exactly as the pre-bg313 call sites parsed
+  it, falling further back to the compiled constant only when the variable is
+  unset or unparsable -- this is what keeps `deploy-demo.sh` /
+  `deploy-staging.sh`'s `LINK_MINTING_ENABLED=true` a real fallback rather
+  than dead text. `CREDITS_ENFORCED` has no env var at all and always falls
+  straight to its compiled `false`. Env-first (ahead of last-known-good)
+  would be wrong regardless: a console that just LOWERED the ceiling must not
+  see a higher value -- from Firestore's old value OR the env var -- reappear
+  during a blip; both are pinned by `test_runtime_config.py`.
 - **Call sites swapped:** `backend/routes/link_routes.py`'s
   `_minting_enabled()` and `backend/services/link_budget.py`'s
   `firm_link_cap()` / `default_cost_ceiling_usd()` now call into
@@ -970,15 +980,17 @@ doc, so an operator retunes them with no redeploy.
   secret has no business in a plain Firestore doc), `LINK_BASE_URL`,
   `LINK_CHANNEL` (topology; moving either would reopen the channel-isolation
   bead polyglot-pdf-3q9qn).
-- **Deploy-script env lines are now INERT for these four keys.**
+- **Deploy-script env lines are the fallback, not dead text.**
   `deploy-demo.sh` and `deploy-staging.sh` still set
   `LINK_MINTING_ENABLED=true` in `BACKEND_EXTRA_ENV` (pre-dates this bead);
-  since bg313 shipped, that value is never read -- the deployed backend falls
-  back to the env-shaped default (`false`) until an operator seeds
+  `runtime_config.py` reads that SAME env var as its own fallback (see
+  above), so a freshly deployed channel with no `app_config/{channel}` doc
+  yet still mints exactly as before this bead. Seeding
   `app_config/{channel}` via `scripts/set_runtime_config.py` or the console
-  route. Reconciling the deploy scripts (removing the dead line, or wiring a
-  one-time seed step) is left to the console/deploy beads that touch those
-  files; this bead's surface list does not include them.
+  route lets an operator override the deploy-time value per channel with no
+  redeploy; it is not required just to keep the deploy scripts' setting
+  working. `CREDITS_ENFORCED` is the one key with no env fallback (it is
+  brand new); it stays compiled `false` until a channel's doc sets it.
 - **`firestore.rules` deny block for `app_config/**`** ships with bd
   polyglot-pdf-li9x0, alongside `admin_audit_log`, as part of that bead's
   set-derived rules test -- not here, since this bead never writes rules.

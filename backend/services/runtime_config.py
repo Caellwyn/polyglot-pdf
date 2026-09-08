@@ -31,6 +31,21 @@ during a Firestore blip, which would silently restore a higher spend limit
 than the operator intended. Minting's default is `false` either way, so the
 ordering does not change its fail-safe direction.
 
+THE "ENV DEFAULT" IS A LIVE os.getenv READ, NOT A COMPILED CONSTANT -- for
+the three legacy keys (LINK_MINTING_ENABLED, LINK_COST_CEILING_USD,
+LINK_FIRM_CAP). This is deliberate and load-bearing: deploy-staging.sh and
+deploy-demo.sh set LINK_MINTING_ENABLED=true in BACKEND_EXTRA_ENV, and that
+line must keep working as the fallback until an operator seeds
+app_config/{channel}. A compiled-in constant here would make the deploy
+scripts' env line silently inert and turn link minting OFF on the next
+deploy of either channel until someone ran the seed step -- exactly the
+regression this module exists to avoid reintroducing. Each of the three env
+reads is parsed with the SAME rules the pre-bg313 call sites used (see
+_legacy_env_default below); an unset or unparsable env var falls through to
+the historical compiled constant. CREDITS_ENFORCED is the one exception: it
+is brand new, never had an env var, and its default stays the compiled
+`False` with no os.getenv call at all (see credits_enforced()).
+
 CACHING. A per-process, per-channel TTL cache (30-60s): frequent enough that
 flipping a flag from the console is visible within the TTL with no redeploy
 (criterion 3), infrequent enough that this is not a Firestore read on every
@@ -79,16 +94,65 @@ RUNTIME_CONFIG_KEYS = frozenset({
     KEY_CREDITS_ENFORCED,
 })
 
-# Env defaults -- used ONLY when a key has never been successfully read from
-# Firestore on this process (see _resolve). Mirrors the pre-bg313 defaults so
-# a fresh process with no Firestore access behaves exactly as it did before
-# this module existed.
+# Compiled fallback constants -- used ONLY when a key has never been
+# successfully read from Firestore on this process AND (for the three legacy
+# keys) the environment variable of the same name is unset or unparsable.
+# Mirrors the pre-bg313 defaults so a fresh process with no Firestore access
+# and no env override behaves exactly as it did before this module existed.
 _ENV_DEFAULTS: dict[str, Any] = {
     KEY_LINK_MINTING_ENABLED: False,
     KEY_LINK_COST_CEILING_USD: 10.0,
     KEY_LINK_FIRM_CAP: 30,
     KEY_CREDITS_ENFORCED: False,
 }
+
+
+def _legacy_env_default(key: str) -> Any:
+    """The env-shaped default for one key: a live os.getenv read for the
+    three legacy keys, parsed exactly as the pre-bg313 call sites parsed
+    them, falling back to the compiled constant in _ENV_DEFAULTS when the
+    variable is unset or fails to parse. CREDITS_ENFORCED never reads env --
+    it is brand new and has no pre-bg313 call site to match -- so it always
+    returns its compiled constant (False).
+
+    This is what keeps deploy-staging.sh's and deploy-demo.sh's
+    LINK_MINTING_ENABLED=true (BACKEND_EXTRA_ENV) a real fallback rather than
+    a dead line: a compiled constant here would silently turn minting off on
+    the next deploy of either channel until an operator seeded
+    app_config/{channel}.
+    """
+    if key == KEY_LINK_MINTING_ENABLED:
+        # Pre-bg313: link_routes.py's _minting_enabled() --
+        # os.getenv("LINK_MINTING_ENABLED", "false").lower() == "true"
+        raw = os.getenv("LINK_MINTING_ENABLED")
+        if raw is None:
+            return _ENV_DEFAULTS[key]
+        return raw.strip().lower() == "true"
+    if key == KEY_LINK_COST_CEILING_USD:
+        # Pre-bg313: link_budget.py's _positive_float(os.getenv(..., ""), ...)
+        raw = os.getenv("LINK_COST_CEILING_USD")
+        if raw is None:
+            return _ENV_DEFAULTS[key]
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return _ENV_DEFAULTS[key]
+        if value <= 0 or value != value or value == float("inf"):
+            return _ENV_DEFAULTS[key]
+        return value
+    if key == KEY_LINK_FIRM_CAP:
+        # Pre-bg313: link_budget.py's _positive_int(os.getenv(..., ""), ...)
+        raw = os.getenv("LINK_FIRM_CAP")
+        if raw is None:
+            return _ENV_DEFAULTS[key]
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return _ENV_DEFAULTS[key]
+        return value if value > 0 else _ENV_DEFAULTS[key]
+    # KEY_CREDITS_ENFORCED (and anything else): compiled constant only.
+    return _ENV_DEFAULTS[key]
+
 
 # 30-60s TTL cache, keyed by channel. A module-level dict is fine here: this
 # process is the only reader/writer of its own cache, and the value is a
@@ -216,14 +280,15 @@ def _cached_doc(channel: str) -> dict[str, Any]:
 def _resolve(channel: str, key: str) -> Any:
     """One key's value for one channel, per the fallback order documented
     at module level: fresh/cached Firestore value, then last-known-good,
-    then the env default.
+    then the env default (a live os.getenv read for the three legacy keys;
+    see _legacy_env_default).
     """
     doc = _cached_doc(channel)
     if key in doc:
         return doc[key]
     if (channel, key) in _last_known_good:
         return _last_known_good[(channel, key)]
-    return _ENV_DEFAULTS[key]
+    return _legacy_env_default(key)
 
 
 def _current_channel() -> str:
