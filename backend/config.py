@@ -703,7 +703,7 @@ class Settings(BaseModel):
 					"confirmation_method": {
 						"type": "string",
 						"enum": ["verbal", "manual"],
-						"description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)"
+						"description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited AND verified it in the UI). Typing alone is not a confirmation."
 					}
 				},
 				"required": ["field_id", "confirmation_method"]

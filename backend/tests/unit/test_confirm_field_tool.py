@@ -84,7 +84,12 @@ class TestConfirmFieldTool:
 
     @pytest.mark.asyncio
     async def test_manual_confirmation_success(self, callback_handler, mock_websocket, mock_coordinator):
-        """Manual confirmation (user edited field) should mark field as confirmed."""
+        """Manual confirmation should mark the field confirmed.
+
+        "manual" means the user edited AND verified it in the UI -- typing alone
+        stopped being a confirmation in bd polyglot-pdf-uum5g. The TOOL contract
+        here is unchanged: whatever the client asserts via confirm_field is
+        recorded; what changed is which gestures cause the client to assert it."""
         response = await callback_handler.on_tool_call(
             tool_name="confirm_field",
             arguments={
