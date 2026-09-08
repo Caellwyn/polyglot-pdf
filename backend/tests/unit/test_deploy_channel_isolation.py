@@ -353,12 +353,21 @@ def test_doc_does_not_present_dead_prod_as_runnable(doc):
             #
             # Dockerfile is the one extensionless name this repo's Tracks lines
             # actually use; dotfiles like .gcloudignore and .firebaserc match the
-            # extension branch (leading dot, then a name).
+            # extension branch (leading dot, then a name). A bare directory
+            # reference (e.g. "admin-console/") is likewise a legitimate Tracks
+            # entry -- an entire tree, not one file -- so a trailing "/" with no
+            # filename after it counts too, PROVIDED it is a real directory in
+            # this repo: a regex alone would wave through prose like "and/" (a
+            # short common word plus a slash), reintroducing exactly the
+            # smuggling this per-token check exists to close. Checking the
+            # filesystem is the only thing that rules that out.
             tokens = stripped[len("**Tracks:**") :].split()
 
             def _is_path(tok: str) -> bool:
                 if tok == "Dockerfile":
                     return True
+                if tok.endswith("/"):
+                    return (REPO_ROOT / tok).is_dir()
                 return bool(re.fullmatch(r"[\w.\-/]*[/.][\w\-]+", tok)) and (
                     "/" in tok or "." in tok
                 )

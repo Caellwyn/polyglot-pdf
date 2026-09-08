@@ -572,7 +572,9 @@ def _reachability_query_owner() -> str:
     return _gate_function(DEPLOY_ALL)
 
 
-@pytest.mark.parametrize("rel", ["deploy-demo.sh", "deploy-staging.sh"])
+@pytest.mark.parametrize(
+    "rel", ["deploy-demo.sh", "deploy-staging.sh", "deploy-admin-console.sh"]
+)
 def test_channel_wrapper_rejects_an_unknown_argument(rel):
     """A typo must not deploy NOTHING and report success (bd polyglot-pdf-7aez9).
 
@@ -581,7 +583,10 @@ def test_channel_wrapper_rejects_an_unknown_argument(rel):
     banner and exited 0. The operator then believes they verified a change they
     never deployed -- on staging, precisely the false confidence that tier exists
     to remove. deploy-all.sh has always errored on an unknown argument; this
-    brings the wrappers in line.
+    brings the wrappers in line. deploy-admin-console.sh (bd polyglot-pdf-b6943)
+    added the identical arg-validation fix in the same commit -- fresh-eyes
+    round-2 finding: enumerate the set, don't pin one member of it (CLAUDE.md
+    scar #8).
     """
     body = (REPO_ROOT / rel).read_text(encoding="utf-8")
     parser = body.split("for arg in")[1].split("esac")[0]

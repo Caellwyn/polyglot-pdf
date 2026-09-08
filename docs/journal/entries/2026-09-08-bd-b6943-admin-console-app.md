@@ -116,6 +116,65 @@ Both findings were fixed inside this diff's own newly-added code (not
 pre-existing, not out of scope), so neither needed a separate bead -- both
 are closed out by this same bead/PR per CLAUDE.md's escalation rules.
 
+### Fresh-eyes round 2 (2026-09-08)
+
+Second GAPS-FOUND pass, both findings adopted and fixed inline; one nit
+deferred to a filed bead.
+
+- **Adopted -- `AuditLogPage.tsx` had zero test coverage.** Round 1 wired the
+  identical dead-`refusedReason` fix into both `AuditLogPage.tsx` and
+  `ConfigEditorPage.tsx` (same commit, same pattern) but only pinned it in
+  `ConfigEditorPage.test.tsx` -- a partial instance of CLAUDE.md scar #8
+  (enumerate the set, don't fix one member). Added
+  `admin-console/src/components/AuditLogPage.test.tsx` (8 tests): initial-load
+  rendering, cursor-based "Load more" pagination (button visibility, cursor
+  passed through, rows APPEND), "Apply" resetting the list rather than
+  appending, the empty-state placeholder, the non-auth generic error banner,
+  and the two `onAuthExpired` routing cases (a 403 on initial load, a 401 on
+  "Load more"). Mutation-verified: reverting both `if (onAuthExpired(err))
+  return;` guards reproduced the failure in exactly the two tests written to
+  catch it, while the other six stayed green.
+- **Adopted -- `test_channel_wrapper_rejects_an_unknown_argument` not
+  parametrized over `deploy-admin-console.sh`.** Round 1's journal entry
+  argued the test's `for arg in ... esac` slice-matching "assumes the two-arg
+  wrapper shape" and left it as a defer -- the reviewer mechanically disproved
+  that: the same slicing logic matches `deploy-admin-console.sh`'s parser
+  text unmodified (confirmed via direct Python execution before editing).
+  Added `"deploy-admin-console.sh"` to the parametrize list (3 cases now).
+  Mutation-verified: reverting the script's `*)` catch-all arm failed exactly
+  the new `[deploy-admin-console.sh]` case while the other two stayed green.
+- **Deferred, not fixed here (nit) -- `SignInGate`'s extra round-trip on a
+  mid-session 401.** A 401 (`AuthError`) sets `refusedReason=null`, which
+  `SignInGate` reads as falsy and so re-probes once (another `GET
+  /admin/whoami`, which 401s again) before its own internal handler signs the
+  user out, instead of going straight to the sign-in form. Reviewer confirmed
+  this is a byte-for-byte mirror of `schema-editor`'s own pre-existing
+  `App.tsx`/`SignInGate.tsx` pattern -- not a defect this diff introduced, and
+  the end state (signed out, sign-in form shown) is still correct, just one
+  redundant network call slower. Filed as `polyglot-pdf-h5bsz`
+  ("chore(nits): deferred review nits from polyglot-pdf-b6943") rather than
+  fixed in place, since fixing it here without also fixing the identical
+  schema-editor pattern would be inconsistent, and touching schema-editor is
+  outside this bead's scope.
+
+Also found and fixed while re-running the full backend suite after the two
+findings above (not a reviewer finding; the mandated re-run per this round's
+instructions surfaced it): `test_doc_does_not_present_dead_prod_as_runnable`
+was failing on `docs/components/config-deployment.md`. This bead's own doc
+update added `admin-console/` (a bare directory reference, no filename) to
+the file's `**Tracks:**` line, and the checker's per-token "is this a path"
+regex required a filename after the final `/`, so it rejected the one token
+that is a directory rather than a file and treated the whole line as
+non-exempt prose. Fixed by widening `_is_path` to accept a trailing-`/`
+token when it names a REAL directory in the repo (`(REPO_ROOT /
+tok).is_dir()`) rather than by regex shape alone -- a regex like
+`[\w.\-]+/` would have waved through prose such as "and/" (a common short
+word plus a slash), reopening the exact smuggling hole this checker was
+rewritten to close (see the test's own docstring on the "and/or"-shaped
+evasion). Mutation-verified: reverting the filesystem check reproduced the
+original failure line-for-line; the existing evasion-string test in the same
+file continued to fail correctly with the fix in place.
+
 ## Lessons
 
 `ConfigEditorPage`'s round-trip test caught a real bug during development:
@@ -161,8 +220,8 @@ admin tier as a whole once the console exists to describe.
   `vite-env.d.ts`, `test/setup.ts`
 - `admin-console/src/utils/adminAuth.ts`, `adminApi.ts`
 - `admin-console/src/components/SignInGate.tsx` (+ `.test.tsx`),
-  `WhoAmIPage.tsx`, `AuditLogPage.tsx`, `ConfigEditorPage.tsx` (+
-  `.test.tsx`)
+  `WhoAmIPage.tsx`, `AuditLogPage.tsx` (+ `.test.tsx`), `ConfigEditorPage.tsx`
+  (+ `.test.tsx`)
 - `firebase.json`, `.firebaserc` (two new `admin`/`admin-candidate` Hosting
   targets)
 - `deploy-admin-console.sh` (new)
