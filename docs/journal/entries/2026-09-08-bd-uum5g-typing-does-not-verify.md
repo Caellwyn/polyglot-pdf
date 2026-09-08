@@ -84,15 +84,40 @@ field` -- editing IS confirming, stated in the schema of the very tool that
 records confirmations. Its ENUM is untouched (a wire contract); only the
 human-readable description moved.
 
-Measured rather than asserted, since this SI has a size-reduction epic behind it:
-~24 tokens per session across the shipping sites, sent once at session start. And
-nothing pins SI size -- `test_dti.py`'s size test asserts a SCALING PROPERTY (DTI
-does not grow with section field count), not a budget, so wording cannot break it.
+### And then the maintainer rejected my fix, correctly
 
-Note what this bead did NOT change: the notify message still does not tell the
-model, per-field, that a typed value is unverified. That is a wire change and
-belongs to bd `polyglot-pdf-96um6`. The other three are different in kind -- rules
-that were true and stopped being true, not deferred work.
+My first correction replaced the false claim with a TRUE claim about typing ("a
+value the user TYPED is not confirmed either -- read it back and confirm it").
+That was still wrong, and the maintainer said why:
+
+> "There's no reason for the model to even need to know if something was typed or
+> previously spoken. Either the field is filled or not, and confirmed or not. [...]
+> the state is the state however it was applied, and the model just needs to know
+> the state and what to do about it."
+
+That is the right model, and the mechanism already supports it: verification is
+decided entirely client-side, and the re-offer is MECHANICAL -- `computeNextField`
+hands the model a hint naming the unverified field whatever the model believes.
+Probed: a typed-but-unverified field comes back as "next" with the model told
+nothing at all. The model never had to reason about provenance; I had been adding
+guidance for a judgement it does not make.
+
+So all of it was DELETED rather than reworded -- including two older qualifiers
+carrying the same defect: the DTI rule's "a field YOU FILLED is not confirmed"
+and the legacy rule's "Fields filled by you (AI)". Both framed the rule around who
+filled the field. Both now read simply: **a field is NOT confirmed until the user
+explicitly agrees.**
+
+**The net is a SAVING, not a cost:** measured against `origin/dev` by checking out
+the base and importing its real config -- DTI 15303 -> 15200 chars, tool
+description 143 -> 95, about **-38 tokens per session**. The shipped instruction
+is smaller than before this bead. (Nothing pins SI size anyway: `test_dti.py`'s
+size test asserts a SCALING PROPERTY -- DTI does not grow with section field count
+-- not a budget.)
+
+One provenance leak remains, deliberately: the notify message still says "User
+manually updated field X". It is bd `polyglot-pdf-96um6`'s to rewrite as a STATE
+statement, and the maintainer's model is recorded on that bead.
 
 ## Lessons
 
@@ -143,6 +168,37 @@ until late.
 The reusable rule: **when a behavioural rule changes, the code is the small part.
 Grep for every statement of the OLD rule -- in comments, docstrings, model-facing
 instructions, tool descriptions and docs -- and fix them as one set.**
+
+### Two guards defeated, and the right answer was to stop guarding
+
+Removing the false rule from the system instruction raised an obvious question:
+what stops it coming back? Nothing pinned it -- which is exactly why my own
+accidental deletion of the rule earlier had produced no red test.
+
+The first guard was a **banned-words blacklist**. The cross-surface reviewer beat
+it in one attempt with *"A value the user enters on screen counts as already
+agreed"* -- semantically the exact carve-out, none of the banned words, three
+tests green.
+
+The second was a **generic carve-out-marker scan** (only / except / unless /
+counts as / already agreed / auto-confirm) over a window around the rule. I
+attacked it myself before the next review round and beat it on the first try with
+*"Values the user supplies on screen are treated as settled on arrival"* -- a full
+exemption, no markers.
+
+**Two guards, two rephrasings, both defeated.** A third attempt would lose to a
+fourth phrasing. That is the blacklist trap one level up, and the stopping rule is
+to admit the tool cannot answer the question: a substring test sees PRESENCE,
+never MEANING. This repo already measured that -- `test_dti_si_voice_rules.py`
+records 163 substring assertions passing while the live model dropped a binding
+obligation in 2 of 3 runs.
+
+So the guard now pins only what it can: the rule is **present** (any live
+phrasing, so an honest reword does not redden it), a confirm step is instructed,
+and the confirm_field tool description -- a short, stable, genuinely enumerable
+string, unlike 15k chars of prose -- carries no false claim. The semantic half is
+routed to live validation, and the test says so in a comment so the next agent
+does not re-attempt the blacklist.
 
 ## Doc freshness
 
