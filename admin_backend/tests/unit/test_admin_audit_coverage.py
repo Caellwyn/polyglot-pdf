@@ -317,7 +317,7 @@ def _external_verdict(source: str) -> bool:
     (_FIRESTORE_ROUTE_NO_AUDIT, False, "no audit call at all"),
     (_FIRESTORE_ROUTE_AUDIT_OUTSIDE_TX, False,
      "audits, but OUTSIDE the mutation's transaction"),
-])
+], ids=["correct-form", "no-audit-call", "audits-outside-the-transaction"])
 def test_the_firestore_check_goes_red_on_a_dropped_in_transaction_call(
         source, expected, why):
     """EXIT CRITERION 2, direction one. Runs the real derivation against
@@ -332,7 +332,7 @@ def test_the_firestore_check_goes_red_on_a_dropped_in_transaction_call(
     (_EXTERNAL_ROUTE_NO_PENDING, False, "no pending row at all"),
     (_EXTERNAL_ROUTE_NEVER_CLOSED, False,
      "a pending row nothing ever closes out"),
-])
+], ids=["correct-form", "no-pending-row", "pending-row-never-closed"])
 def test_the_external_check_goes_red_on_a_skipped_pending_row(
         source, expected, why):
     """EXIT CRITERION 2, direction two. The external form has no consuming
