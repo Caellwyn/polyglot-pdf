@@ -120,6 +120,18 @@ third time this PR surfaced one kind and forgot a sibling. All three now
 reach the report and the CLI; the warnings print one line per field, capped,
 like `migrate_schema_v2`'s.
 
+**Four rounds, one trap: fix the SET, not the instance.** Rounds 4, 5 and
+6 each surfaced one kind of outstanding human work and forgot a sibling --
+`no_code` got a warning while `duplicate_codes` had one; `non_dict_options`
+got one while `duplicate_codes` kept its raw list dump; the per-field cap got
+a trailer on one of three. Round 6's reviewer named it exactly ("the third
+time this PR surfaced one kind and forgot a sibling"). The fix is scar #8
+verbatim: the three kinds are now ENUMERATED in one tuple (`_HUMAN_WORK`),
+printed by one helper, and pinned by one test parametrized over the tuple --
+a fourth kind cannot be added without deciding how it prints, and dropping a
+kind from the tuple reddens exactly its case. I should have enumerated at
+round 4 the moment the second sibling appeared.
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)

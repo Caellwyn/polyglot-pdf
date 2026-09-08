@@ -110,7 +110,8 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
             if o.get("pdf_on_value") == "":
                 # A cleared code: left alone, named for the human who must
                 # supply it (the tool cannot know the /Opt entry).
-                entry["no_code"].append(str(o.get("value")))
+                v = o.get("value")
+                entry["no_code"].append(v if isinstance(v, str) else "<no value>")
             else:
                 v2_codes.append(o["pdf_on_value"])
             continue
@@ -215,6 +216,46 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
     return migrated, report
 
 
+# The three kinds of outstanding human work, ENUMERATED in one place so a
+# new kind cannot be added to the report without deciding how it prints:
+# (report key, header, how one field's entry renders).
+_HUMAN_WORK = (
+    ("no_code",
+     "option(s) have a CLEARED export code and were left alone -- supply the /Opt entry by hand",
+     lambda v: ", ".join(v)),
+    ("duplicate_codes",
+     "export code(s) are claimed by more than one option -- their conditions were NOT "
+     "retargeted; resolve by hand",
+     lambda v: ", ".join(v)),
+    ("non_dict_options",
+     "field(s) carry plain-string options the tool cannot migrate -- rewrite them as "
+     "{value, label} objects first",
+     lambda v: f"{v} string option(s)"),
+)
+_WARN_CAP = 10
+
+
+def _warn_outstanding_work(report: Dict[str, Any]) -> bool:
+    """Print every kind of outstanding human work to stderr, one line per
+    field, capped like migrate_schema_v2's warnings. Returns True when there
+    was any -- the caller must then NOT print "nothing to do"."""
+    any_work = False
+    for key, header, render in _HUMAN_WORK:
+        rows = [(e["field"] if isinstance(e["field"], str) else "<no id>", e[key])
+                for e in report["fields"] if e[key]]
+        if not rows:
+            continue
+        any_work = True
+        count = sum(len(v) if isinstance(v, list) else 1 for _, v in rows)
+        print(f"  WARNING: {count} {header}:", file=sys.stderr)
+        for fid, v in rows[:_WARN_CAP]:
+            print(f"    {fid}: {render(v)}", file=sys.stderr)
+        if len(rows) > _WARN_CAP:
+            print(f"    ... and {len(rows) - _WARN_CAP} more field(s); see the report",
+                  file=sys.stderr)
+    return any_work
+
+
 def _write_json(path: str, obj: Any) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(obj, fh, indent=2, ensure_ascii=False)
@@ -258,35 +299,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"  options migrated: {report['options_migrated']}; "
           f"conditions retargeted: {report['conditions_retargeted']}; "
           f"fields touched: {len(report['fields'])}")
-    # BOTH kinds of outstanding human work are surfaced on stderr, every run
-    # (fresh-eyes round 4: no_code had no CLI signal, so a kit with cleared
-    # codes printed "nothing to do" while a field still needed a human).
-    if report["fields_with_duplicate_codes"]:
-        print(f"  WARNING: duplicate export codes inside "
-              f"{report['fields_with_duplicate_codes']} -- their conditions were NOT "
-              f"retargeted; resolve by hand", file=sys.stderr)
-    # One line per field, capped like migrate_schema_v2's warnings, so a run
-    # on a real kit stays readable.
-    no_code = [(e["field"], e["no_code"]) for e in report["fields"] if e["no_code"]]
-    if no_code:
-        print(f"  WARNING: {sum(len(v) for _, v in no_code)} option(s) have a CLEARED "
-              f"export code and were left alone -- supply the /Opt entry by hand:",
-              file=sys.stderr)
-        for fid, values in no_code[:10]:
-            print(f"    {fid}: {', '.join(values)}", file=sys.stderr)
-        if len(no_code) > 10:
-            print(f"    ... and {len(no_code) - 10} more field(s); see the report",
-                  file=sys.stderr)
-    non_dict = [(e["field"], e["non_dict_options"]) for e in report["fields"]
-                if e["non_dict_options"]]
-    if non_dict:
-        print(f"  WARNING: {len(non_dict)} field(s) carry plain-string options the tool "
-              f"cannot migrate -- rewrite them as {{value, label}} objects first:",
-              file=sys.stderr)
-        for fid, n in non_dict[:10]:
-            print(f"    {fid}: {n} string option(s)", file=sys.stderr)
-    if (report["options_migrated"] == 0 and not no_code and not non_dict
-            and not report["fields_with_duplicate_codes"]):
+    # EVERY kind of outstanding human work is surfaced on stderr, every run,
+    # through one helper (rounds 4, 5 and 6 each surfaced one kind and forgot
+    # a sibling); "nothing to do" only when there is none and nothing moved.
+    any_work = _warn_outstanding_work(report)
+    if report["options_migrated"] == 0 and not any_work:
         print("  nothing to do (already migrated)")
     return 0
 

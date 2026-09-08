@@ -302,6 +302,42 @@ def test_non_select_fields_and_string_options_are_left_alone_and_string_options_
     assert [(e["field"], e["non_dict_options"]) for e in report["fields"]] == [("s", 2)]
 
 
+@pytest.mark.parametrize("kind,option,expect_line", [
+    ("no_code",
+     {"value": "alabama", "label": "Alabama", "pdf_on_value": ""},
+     "alabama"),
+    ("duplicate_codes",
+     None,  # two legacy options sharing a code -- built below
+     "AL"),
+    ("non_dict_options",
+     "AL",  # a plain-string option
+     "1 string option(s)"),
+])
+def test_cli_prints_EVERY_kind_of_outstanding_work_one_line_per_field_capped(tmp_path, kind, option, expect_line):
+    """Round 6 (scar #8): the three kinds must print the SAME shape -- a
+    header, one line per field, and a "... more" trailer past the cap. Twelve
+    fields of one kind: ten lines, then the trailer naming two more."""
+    def field(i):
+        if kind == "duplicate_codes":
+            opts = [{"value": "AL", "label": "Alabama"}, {"value": "AL", "label": "Alabama North"}]
+        else:
+            opts = [option]
+        return {"id": f"f{i:02d}", "type": "select", "pdf_field_name": f"f{i}[0]",
+                "section_id": "x", "options": opts}
+    kit = {"schema_version": "2", "fields": [field(i) for i in range(12)], "sections": []}
+    src = tmp_path / "a.json"
+    src.write_text(json.dumps(kit), encoding="utf-8")
+    r = subprocess.run([PY, str(SCRIPT), "--in", str(src), "--out", str(tmp_path / "b.json")],
+                       capture_output=True, text=True, cwd=str(REPO))
+    assert r.returncode == 0, r.stderr            # warnings never fail the run
+    lines = [l.strip() for l in r.stderr.splitlines()]
+    assert sum(1 for l in lines if l.startswith("WARNING:")) == 1
+    per_field = [l for l in lines if l.startswith("f") and ": " in l]
+    assert per_field == [f"f{i:02d}: {expect_line}" for i in range(10)]   # capped at 10
+    assert "... and 2 more field(s); see the report" in lines
+    assert "nothing to do" not in r.stdout
+
+
 def test_cli_warns_about_string_options_one_line_per_field(tmp_path):
     kit = {"schema_version": "2", "fields": [
         {"id": "s", "type": "select", "pdf_field_name": "s[0]", "section_id": "x",
