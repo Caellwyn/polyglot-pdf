@@ -15,10 +15,12 @@ EXISTING kit across:
 
 Idempotent: an option that already carries ``pdf_on_value`` is never touched,
 so a second run migrates nothing and retargets nothing. What a second run
-DOES still report is the outstanding human work -- ``no_code`` (a cleared
-code the tool cannot supply) and ``duplicate_codes`` -- and the CLI warns on
-both every time, so "nothing to do" is printed only when there truly is
-nothing. Options already in v2 shape reserve their slugs, so a newly minted
+DOES still report is the outstanding human work -- every kind in
+``_HUMAN_WORK``: ``no_code`` (a cleared code the tool cannot supply),
+``duplicate_codes`` (a code more than one option claims) and
+``non_dict_options`` (plain-string options it cannot migrate) -- and the CLI
+warns on each every time, so "nothing to do" is printed only when there truly
+is nothing. Options already in v2 shape reserve their slugs, so a newly minted
 legacy sibling cannot collide.
 
 Deliberately NOT done here:
@@ -72,6 +74,40 @@ def _is_v2_option(o: Any) -> bool:
     ({value: 'alabama', pdf_on_value: ''} -> pdf_on_value 'alabama', not in
     /Opt) -- fresh-eyes round 3. Such options are left alone and REPORTED."""
     return isinstance(o, dict) and isinstance(o.get("pdf_on_value"), str)
+
+
+# THE kinds of outstanding human work, ENUMERATED in one place (scar #8:
+# rounds 4-7 each surfaced one kind and forgot a sibling). Every per-field
+# report key that is not a migration OUTCOME must appear here -- the pin in
+# tests/test_migrate_select_on_values.py asserts exactly that -- and this
+# tuple drives BOTH gates: whether a field entry reaches the report at all,
+# and how it prints. Each row: (report key, header noun phrase, count of one
+# field's entry, render of one field's entry).
+_HUMAN_WORK = (
+    ("no_code",
+     "option(s) have a CLEARED export code and were left alone -- supply the /Opt entry by hand",
+     len, lambda v: ", ".join(v)),
+    ("duplicate_codes",
+     "export code(s) are claimed by more than one option -- their conditions were NOT "
+     "retargeted; resolve by hand",
+     len, lambda v: ", ".join(v)),
+    ("non_dict_options",
+     "field(s) carry plain-string options the tool cannot migrate -- rewrite them as "
+     "{value, label} objects first",
+     lambda v: 1, lambda v: f"{v} string option(s)"),
+)
+_HUMAN_WORK_KEYS = tuple(k for k, _, _, _ in _HUMAN_WORK)
+# Per-field report keys that describe what the tool DID, not what a human
+# still must do. The pin asserts entry keys == these + _HUMAN_WORK_KEYS. What
+# the pin cannot judge is CLASSIFICATION: a fact that really needs a human,
+# filed here as an "outcome", would never warn. Ask, before adding a key
+# here: can the maintainer act on it? If yes, it belongs in _HUMAN_WORK.
+_OUTCOME_KEYS = ("field", "migrated", "already_v2", "kept_as_slug", "kept_codes", "slug_map")
+_WARN_CAP = 10
+
+
+def _has_human_work(entry: Dict[str, Any]) -> bool:
+    return any(entry[k] for k in _HUMAN_WORK_KEYS)
 
 
 def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any]]:
@@ -190,14 +226,11 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
         if not isinstance(f, dict) or f.get("type") != "select":
             continue
         old_to_new, entry = _migrate_field(f)
-        # Every kind of outstanding human work reaches the report: a string
-        # option (not a dict) is one the tool cannot migrate at all.
-        if (entry["migrated"] or entry["duplicate_codes"] or entry["no_code"]
-                or entry["non_dict_options"]):
+        # A field reaches the report when the tool did something OR a human
+        # still must -- the second half derived from _HUMAN_WORK, not restated.
+        if entry["migrated"] or _has_human_work(entry):
             report["fields"].append(entry)
         report["options_migrated"] += entry["migrated"]
-        if entry["duplicate_codes"]:
-            report["fields_with_duplicate_codes"].append(entry["field"])
         fid = f.get("id")
         if old_to_new and isinstance(fid, str) and fid:
             # An id-less field cannot be a condition trigger; keying it as the
@@ -213,26 +246,11 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
                     continue
                 for trigger, old_to_new in maps.items():
                     report["conditions_retargeted"] += _retarget(cond, trigger, old_to_new)
+    # A top-level index for report readers, DERIVED from the per-field entries
+    # (one source; a second accumulator drifted -- fresh-eyes round 7).
+    report["fields_with_duplicate_codes"] = [
+        e["field"] for e in report["fields"] if e["duplicate_codes"]]
     return migrated, report
-
-
-# The three kinds of outstanding human work, ENUMERATED in one place so a
-# new kind cannot be added to the report without deciding how it prints:
-# (report key, header, how one field's entry renders).
-_HUMAN_WORK = (
-    ("no_code",
-     "option(s) have a CLEARED export code and were left alone -- supply the /Opt entry by hand",
-     lambda v: ", ".join(v)),
-    ("duplicate_codes",
-     "export code(s) are claimed by more than one option -- their conditions were NOT "
-     "retargeted; resolve by hand",
-     lambda v: ", ".join(v)),
-    ("non_dict_options",
-     "field(s) carry plain-string options the tool cannot migrate -- rewrite them as "
-     "{value, label} objects first",
-     lambda v: f"{v} string option(s)"),
-)
-_WARN_CAP = 10
 
 
 def _warn_outstanding_work(report: Dict[str, Any]) -> bool:
@@ -240,13 +258,13 @@ def _warn_outstanding_work(report: Dict[str, Any]) -> bool:
     field, capped like migrate_schema_v2's warnings. Returns True when there
     was any -- the caller must then NOT print "nothing to do"."""
     any_work = False
-    for key, header, render in _HUMAN_WORK:
+    for key, header, count_one, render in _HUMAN_WORK:
         rows = [(e["field"] if isinstance(e["field"], str) else "<no id>", e[key])
                 for e in report["fields"] if e[key]]
         if not rows:
             continue
         any_work = True
-        count = sum(len(v) if isinstance(v, list) else 1 for _, v in rows)
+        count = sum(count_one(v) for _, v in rows)   # explicit per kind, not by type
         print(f"  WARNING: {count} {header}:", file=sys.stderr)
         for fid, v in rows[:_WARN_CAP]:
             print(f"    {fid}: {render(v)}", file=sys.stderr)

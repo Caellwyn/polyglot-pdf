@@ -120,6 +120,17 @@ third time this PR surfaced one kind and forgot a sibling. All three now
 reach the report and the CLI; the warnings print one line per field, capped,
 like `migrate_schema_v2`'s.
 
+**An enumeration that gates only one of two doors is half an enumeration.**
+Round 7 showed round 6's tuple drove the CLI print but not report INCLUSION:
+the `if entry[...] or ...` gate was a second hand-kept list, the top-level
+`fields_with_duplicate_codes` a second accumulator, and the header count an
+implicit type dispatch. Now `_HUMAN_WORK` drives both gates, carries an
+explicit per-kind counter, the top-level index is derived from the entries,
+and one test pins the SET: every per-field report key is an outcome key or a
+`_HUMAN_WORK` key -- a fourth key added anywhere else reddens it. The tell
+that an enumeration is incomplete: you can add a member and something still
+silently ignores it.
+
 **Four rounds, one trap: fix the SET, not the instance.** Rounds 4, 5 and
 6 each surfaced one kind of outstanding human work and forgot a sibling --
 `no_code` got a warning while `duplicate_codes` had one; `non_dict_options`

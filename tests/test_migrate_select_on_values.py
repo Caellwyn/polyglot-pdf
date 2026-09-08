@@ -302,18 +302,80 @@ def test_non_select_fields_and_string_options_are_left_alone_and_string_options_
     assert [(e["field"], e["non_dict_options"]) for e in report["fields"]] == [("s", 2)]
 
 
-@pytest.mark.parametrize("kind,option,expect_line", [
+def test_every_per_field_report_key_is_an_outcome_or_an_enumerated_kind_of_human_work():
+    """THE PIN for scar #8 (rounds 4-7). A per-field report key is either a
+    migration outcome or a kind of outstanding human work in _HUMAN_WORK --
+    there is no third category, so a new key cannot be added to the report
+    without deciding how it prints."""
+    _, report = migrate_selects(_kit_like_i90())
+    entry_keys = set(report["fields"][0].keys())
+    assert entry_keys == set(mod._OUTCOME_KEYS) | set(mod._HUMAN_WORK_KEYS)
+    # ...and the top-level duplicate index is DERIVED from the entries -- on a
+    # kit that HAS a duplicate, or the assertion compares [] with [].
+    kit = _kit_like_i90()
+    kit["fields"][0]["options"].append({"value": "AL", "label": "Alabama again"})
+    _, report = migrate_selects(kit)
+    assert report["fields_with_duplicate_codes"] == ["state_0"]
+    assert report["fields_with_duplicate_codes"] == [
+        e["field"] for e in report["fields"] if e["duplicate_codes"]]
+
+
+def test_a_field_with_ONLY_human_work_of_any_kind_reaches_the_report():
+    """The inclusion gate is driven by _HUMAN_WORK too, per kind."""
+    shapes = {
+        "no_code": [{"value": "alabama", "label": "Alabama", "pdf_on_value": ""}],
+        "duplicate_codes": [{"value": "alabama", "label": "Alabama", "pdf_on_value": "AL"},
+                            {"value": "AL", "label": "Assembly Line"}],
+        "non_dict_options": ["AL"],
+    }
+    for kind, opts in shapes.items():
+        kit = {"schema_version": "2", "fields": [{
+            "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+            "options": opts}], "sections": []}
+        _, report = migrate_selects(kit)
+        assert [e["field"] for e in report["fields"]] == ["f"], kind
+        assert report["fields"][0][kind], kind
+
+
+def test_cli_mixed_kinds_each_warning_names_only_its_own_fields(tmp_path):
+    kit = {"schema_version": "2", "fields": [
+        {"id": "cleared", "type": "select", "pdf_field_name": "a[0]", "section_id": "x",
+         "options": [{"value": "alabama", "label": "Alabama", "pdf_on_value": ""}]},
+        {"id": "dup", "type": "select", "pdf_field_name": "b[0]", "section_id": "x",
+         "options": [{"value": "AL", "label": "Alabama"}, {"value": "AL", "label": "Alabama North"}]},
+        {"id": "strings", "type": "select", "pdf_field_name": "c[0]", "section_id": "x",
+         "options": ["AL", "AK"]},
+        {"id": "clean", "type": "select", "pdf_field_name": "d[0]", "section_id": "x",
+         "options": [{"value": "alaska", "label": "Alaska", "pdf_on_value": "AK"}]},
+    ], "sections": []}
+    src = tmp_path / "a.json"
+    src.write_text(json.dumps(kit), encoding="utf-8")
+    r = subprocess.run([PY, str(SCRIPT), "--in", str(src), "--out", str(tmp_path / "b.json")],
+                       capture_output=True, text=True, cwd=str(REPO))
+    assert r.returncode == 0, r.stderr
+    blocks = [b for b in r.stderr.split("  WARNING: ") if b.strip()]
+    assert len(blocks) == 3
+    by_header = {b.split(":")[0].split(" ", 1)[1]: b for b in blocks}   # noun phrase -> block
+    assert "cleared: alabama" in by_header["option(s) have a CLEARED export code and were left alone -- supply the /Opt entry by hand"]
+    assert "dup: AL" in by_header["export code(s) are claimed by more than one option -- their conditions were NOT retargeted; resolve by hand"]
+    assert "strings: 2 string option(s)" in by_header["field(s) carry plain-string options the tool cannot migrate -- rewrite them as {value, label} objects first"]
+    for b in blocks:
+        assert "clean" not in b
+        assert sum(1 for fid in ("cleared", "dup", "strings") if f"{fid}:" in b) == 1
+
+
+@pytest.mark.parametrize("kind,option,expect_line,expect_header", [
     ("no_code",
      {"value": "alabama", "label": "Alabama", "pdf_on_value": ""},
-     "alabama"),
+     "alabama", "WARNING: 12 option(s) have a CLEARED"),
     ("duplicate_codes",
      None,  # two legacy options sharing a code -- built below
-     "AL"),
+     "AL", "WARNING: 12 export code(s) are claimed"),
     ("non_dict_options",
      "AL",  # a plain-string option
-     "1 string option(s)"),
+     "1 string option(s)", "WARNING: 12 field(s) carry"),
 ])
-def test_cli_prints_EVERY_kind_of_outstanding_work_one_line_per_field_capped(tmp_path, kind, option, expect_line):
+def test_cli_prints_EVERY_kind_of_outstanding_work_one_line_per_field_capped(tmp_path, kind, option, expect_line, expect_header):
     """Round 6 (scar #8): the three kinds must print the SAME shape -- a
     header, one line per field, and a "... more" trailer past the cap. Twelve
     fields of one kind: ten lines, then the trailer naming two more."""
@@ -332,6 +394,9 @@ def test_cli_prints_EVERY_kind_of_outstanding_work_one_line_per_field_capped(tmp
     assert r.returncode == 0, r.stderr            # warnings never fail the run
     lines = [l.strip() for l in r.stderr.splitlines()]
     assert sum(1 for l in lines if l.startswith("WARNING:")) == 1
+    # The header COUNT is the per-kind counter, pinned so it cannot silently
+    # flip semantics (fields vs options) -- fresh-eyes round 8.
+    assert any(l.startswith(expect_header) for l in lines), lines[:2]
     per_field = [l for l in lines if l.startswith("f") and ": " in l]
     assert per_field == [f"f{i:02d}: {expect_line}" for i in range(10)]   # capped at 10
     assert "... and 2 more field(s); see the report" in lines
