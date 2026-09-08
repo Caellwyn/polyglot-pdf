@@ -114,7 +114,7 @@ STANDARD_EVENTS: list = [
     # than two unrelated answers.
     {"field_id": "p8_a_number",
      "event": "plant",
-     "planted_say": "On the extra pages my A number is A zero eight seven six five four three two.",
+     "planted_say": "On the extra pages my A number is A nine eight seven six five four three two one.",
      "conflict_group": ["a_number", "p8_a_number"],
      "correct_say": "Sorry, it is the same as before, one two three four five six seven eight nine.",
      "expected_after": "123456789"},
