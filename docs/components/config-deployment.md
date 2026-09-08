@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-admin-console.sh deploy-editor.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc admin-console/ frontend/src/shared/config.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-b6943: the admin console app -- `admin-console/`, mirroring `schema-editor/`'s sign-in gate and delivery-mode split; two new Hosting sites `polyglot-admin-demo`/`polyglot-admin-candidate` with NO `/api` rewrite; `deploy-admin-console.sh` deploys candidate first, then `--live`, resolving the admin service's URL into `VITE_ADMIN_API_BASE_URL` the same way `deploy-editor.sh` resolves the public backend's -- see `technical_guide.md`'s Surface contracts.) (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -543,17 +543,21 @@ intermediate state.
 
 ### Hosted schema editor (second Hosting site)
 
-`firebase.json` `hosting` is an ARRAY of three named targets (bd `92qe.4`,
-extended by `stgenv`): `app` (the voice app, `frontend/dist`, `/api` rewrite ->
-`polyglot-backend`), `app-staging` (same build dir, `/api` rewrite ->
-`polyglot-backend-staging`), and `editor`
+`firebase.json` `hosting` is an ARRAY of FIVE named targets (bd `92qe.4`,
+extended by `stgenv`, extended by `b6943`): `app` (the voice app,
+`frontend/dist`, `/api` rewrite -> `polyglot-backend`), `app-staging` (same
+build dir, `/api` rewrite -> `polyglot-backend-staging`), `editor`
 (`schema-editor/dist`, SPA catch-all, **no** `/api` rewrite -- the editor calls
 Cloud Run directly via `VITE_API_BASE_URL`; the Hosting rewrite's 60s cap would
-kill minutes-long extraction). `.firebaserc` maps `editor` ->
-`polyglot-editor-demo` on the demo project, and `app-staging` ->
-`polyglot-app-staging`. **Because targets are named, a bare
-`firebase deploy --only hosting` deploys ALL THREE sites** -- `deploy-all.sh` is
-pinned to the parameterized `--only hosting:$FRONTEND_HOSTING_TARGET`, the `frontend/package.json` `deploy` /
+kill minutes-long extraction), and `admin` + `admin-candidate` (both
+`admin-console/dist`, both SPA catch-all with **no** `/api` rewrite for the same
+reason -- see "Admin console (two more Hosting sites)" below). `.firebaserc`
+maps `editor` -> `polyglot-editor-demo`, `app-staging` -> `polyglot-app-staging`,
+`admin` -> `polyglot-admin-demo`, and `admin-candidate` ->
+`polyglot-admin-candidate`, all on the demo project. **Because targets are
+named, a bare `firebase deploy --only hosting` deploys ALL FIVE sites** --
+`deploy-all.sh` is pinned to the parameterized
+`--only hosting:$FRONTEND_HOSTING_TARGET`, the `frontend/package.json` `deploy` /
 `deploy:demo` shortcuts are pinned too (the unscoped prod one would
 otherwise THROW -- prod maps no `editor` target -- and the demo one would
 silently ship a stale editor build), and the editor ships only via
@@ -575,6 +579,45 @@ holds PDFs in memory + tmpfs). **Contractor round trip:**
 (index.json excluded; local-only kits preserved) so contractor work is
 git-reviewable before the normal deploy republishes -- without it, a
 bucket-only kit silently drops from the manifest on the next deploy.
+
+### Admin console (two more Hosting sites, bd `b6943`)
+
+`admin-console/` mirrors `schema-editor/` closely -- same Vite + React +
+Tailwind skeleton, same `fsAllowList` worktree fix and `.claude/worktrees`
+watch exclusion in `vite.config.ts`, same two-gate `SignInGate.tsx` (Firebase
+sign-in, then a server-side probe -- here of `GET /admin/whoami` rather than
+the editor's `/api/editor/session`), same `.env.hosted` / build:hosted split,
+and the same "grant access, never self-serve signup" posture
+(`scripts/bootstrap_admin_user.py` in place of
+`scripts/bootstrap_editor_user.py`). `admin-console/vite.config.ts` also bakes
+the CONSOLE's own build-commit SHA into the bundle via a Vite `define`
+(`__ADMIN_CONSOLE_GIT_SHA__`, read at `git rev-parse HEAD` build time, falling
+back to `'unknown'`) -- distinct from `GET /version`'s `git_sha`, which reports
+the ADMIN SERVICE's commit, a separate deploy this app calls over HTTP.
+
+UNLIKE the editor (one Hosting site), the console ships to **two**: `admin`
+(`polyglot-admin-demo`, the live site every admin actually uses) and
+`admin-candidate` (`polyglot-admin-candidate`, deployed FIRST on every run).
+The reason is architectural, not caution for its own sake: the admin service
+has NO channel of its own (`admin_backend/main.py` -- it serves BOTH staging's
+and the demo's data), so there is no cheap staging channel in front of it the
+way `deploy-staging.sh` protects the voice app. The candidate site is the
+console's substitute -- `./deploy-admin-console.sh` (no flag) ships ONLY
+`admin-candidate`; `./deploy-admin-console.sh --live` ships the SAME build to
+`admin` second, after a human checks the candidate. Both share the identical
+Cloud Run-URL-resolution + reachability-gate pattern `deploy-editor.sh` uses
+(`VITE_ADMIN_API_BASE_URL` resolved from the live `polyglot-admin` service at
+build time, `verify_service_publicly_reachable(...)` called in WARN mode since
+the admin service is pre-existing from this script's point of view -- see
+Surface contracts in `technical_guide.md` and
+`tests/test_deploy_reachability_gate.py`, which pins all four now-existing
+copies of that gate byte-identical). A preview channel
+(`firebase hosting:channel:deploy`) is DELIBERATELY NOT used for either site --
+its random-hash URLs would have to be re-added to Firebase Auth's authorized
+domains and the admin service's `CORS_EXTRA_ORIGINS` on every single deploy; a
+fixed candidate site is authorized once, like `polyglot-admin-demo`.
+`deploy-admin.sh`'s `ADMIN_CORS_ORIGINS` already lists both sites' `.web.app`
+and `.firebaseapp.com` domains.
 
 ### Frontend → backend wiring
 
