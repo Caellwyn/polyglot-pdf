@@ -174,6 +174,17 @@ pitch/ignored_pitch/
 # publish to the bucket, then untrack -- is bd polyglot-pdf-1mgkq's job, since
 # it has to land with the test work that stops depending on them. Do NOT add a
 # third.
+#
+# HAZARD THIS RULE DOES NOT COVER (bd polyglot-pdf-xyfu8): `git` ignoring a kit
+# does NOT stop a deploy publishing it. deploy-all.sh's --form-kits stage
+# enumerates form-kits/ from the FILESYSTEM and gates only on
+# metadata.status == "complete" -- it has no git-awareness at all. So an
+# UNTRACKED scratch kit left at status:complete uploads to the shared bucket and
+# lands in the demo's form list, which is the label-collision failure the old
+# narrow i-90_v2 rule warned about. The blanket rule widens the untracked set,
+# so it widens that exposure: before running a --form-kits deploy, check what is
+# actually about to publish (a kit dir with status:complete that `git ls-files`
+# does not list is the shape to look for). Staging and demo share the bucket.
 form-kits/*/
 !form-kits/_translation/
 !form-kits/w9-heldout/
