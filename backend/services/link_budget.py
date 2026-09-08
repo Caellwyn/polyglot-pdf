@@ -7,17 +7,19 @@ deliberately TUNABLE without a code change (maintainer, 2026-08-27):
   2. per-LINK cost ceiling -- USD of AI spend one link may buy (default $10)
 
 WHY A SEPARATE MODULE. These are policy numbers, not mechanism. They are read
-at CALL TIME from the environment (never captured at import), so an operator
-retunes a live deployment by setting an env var and restarting -- no code edit,
-no redeploy of a new image. That is the same shape LINK_MINTING_ENABLED already
-uses in routes/link_routes.py, kept deliberately consistent.
+at CALL TIME (never captured at import), so an operator retunes a live
+deployment with no redeploy of a new image. That is the same shape
+LINK_MINTING_ENABLED already uses in routes/link_routes.py, kept deliberately
+consistent.
 
-THE ADMIN CONSOLE IS THE PLANNED HOME. These are still ENV-ONLY: the console's
-first slice (bd polyglot-pdf-gob8l) ships link minting and leaves both
-resolvers reading os.getenv at call time. Everything here is nonetheless
-written as "resolve a number for THIS firm / THIS kit", not as a global
-constant -- so a later console slice writes a stored value and the resolver
-reads it, without the call sites changing.
+THE ADMIN CONSOLE IS THE HOME NOW (bd polyglot-pdf-bg313). firm_link_cap()
+and default_cost_ceiling_usd() resolve through backend.services.runtime_config,
+which reads app_config/{channel} in Firestore (TTL-cached, falling back to
+the DEFAULT_* constants below when nothing has ever been read successfully)
+instead of os.getenv. Everything here is nonetheless written as "resolve a
+number for THIS firm / THIS kit", not as a global constant -- so a later
+console slice can add a per-firm or per-kit override without the call sites
+changing.
 
 PER-FORM CAPS ARE SUPPORTED HERE, BUT ARE NOT YET IN FORCE. The maintainer
 flagged possible per-form pricing (a $5 form and a $15 form under one firm).
@@ -42,8 +44,12 @@ console retune them later without touching the enforcement path.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Optional
+
+from backend.services.runtime_config import (
+    link_cost_ceiling_usd as _rc_link_cost_ceiling_usd,
+    link_firm_cap as _rc_link_firm_cap,
+)
 
 # ---------------------------------------------------------------------------
 # Defaults (maintainer, 2026-08-27). MVP protection caps, not a pricing model.
@@ -98,16 +104,18 @@ def _positive_int(raw: str, fallback: int) -> int:
 def firm_link_cap() -> int:
     """How many links one firm may mint.
 
-    Read at call time so an operator can retune without a redeploy.
+    Resolved via runtime_config (app_config/{channel} in Firestore, TTL-
+    cached) so an operator can retune without a redeploy.
     """
-    return _positive_int(os.getenv("LINK_FIRM_CAP", ""), DEFAULT_FIRM_LINK_CAP)
+    return _rc_link_firm_cap()
 
 
 def default_cost_ceiling_usd() -> float:
-    """The global per-link spend ceiling, in USD."""
-    return _positive_float(
-        os.getenv("LINK_COST_CEILING_USD", ""), DEFAULT_LINK_COST_CEILING_USD
-    )
+    """The global per-link spend ceiling, in USD.
+
+    Resolved via runtime_config -- see firm_link_cap() above.
+    """
+    return _rc_link_cost_ceiling_usd()
 
 
 def cost_ceiling_usd_for_kit(kit_metadata: Optional[dict[str, Any]]) -> float:

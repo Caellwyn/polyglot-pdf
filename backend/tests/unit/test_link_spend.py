@@ -12,7 +12,7 @@ The properties that matter, in order:
 
 import pytest
 
-from backend.services import link_spend
+from backend.services import link_budget, link_spend, runtime_config
 from backend.services.link_redemptions import RedemptionUnavailable
 
 
@@ -70,7 +70,10 @@ def store(monkeypatch):
     s = _Store()
     monkeypatch.setattr(link_spend, "_enabled", lambda: True)
     monkeypatch.setattr(link_spend, "_collection", lambda: s)
-    monkeypatch.delenv("LINK_COST_CEILING_USD", raising=False)
+    # LINK_COST_CEILING_USD moved off os.getenv to runtime_config (bd
+    # polyglot-pdf-bg313); clear its cache so a value another test patched
+    # cannot leak into this one via the module-level TTL cache.
+    runtime_config.clear_cache()
     return s
 
 
@@ -134,9 +137,17 @@ def test_a_PER_FORM_ceiling_is_honoured(store):
         link_spend.check_budget("jti-a", {"link_cost_ceiling_usd": 5})
 
 
-def test_a_retuned_env_ceiling_takes_effect(store, monkeypatch):
+def test_a_retuned_ceiling_takes_effect(store, monkeypatch):
+    """Retuning now goes through runtime_config, not os.getenv directly.
+
+    check_budget -> link_budget.cost_ceiling_usd_for_kit ->
+    link_budget.default_cost_ceiling_usd() -- that last call happens INSIDE
+    link_budget.py itself, so patching link_budget's own bound
+    `_rc_link_cost_ceiling_usd` (not runtime_config's module attribute, which
+    link_budget already imported by value) is what actually takes effect.
+    """
     link_spend.record_spend("jti-a", 6.0)
-    monkeypatch.setenv("LINK_COST_CEILING_USD", "5")
+    monkeypatch.setattr(link_budget, "_rc_link_cost_ceiling_usd", lambda: 5.0)
     with pytest.raises(link_spend.LinkBudgetExhausted):
         link_spend.check_budget("jti-a")
 

@@ -2,7 +2,8 @@
 
 **Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-3l2vp: deploy-all.sh's backend stage sets APP_MODULE + GIT_SHA as runtime env on every backend deploy and, when BACKEND_NO_TRAFFIC_TAG is set, deploys a no-traffic tagged revision verified at its own health endpoint before shifting traffic -- new deploy-admin.sh bridge is the one caller that sets both.) (bd polyglot-pdf-9hzod: `GET /version` on both services now returns `{version, git_sha}` -- `git_sha` reads the `GIT_SHA` runtime env var, falling back to `"unknown"` when unset OR empty, the same `${VAR:-default}`-shaped guard as `APP_MODULE` below. The deploy-side env wiring that actually sets `GIT_SHA` is bead 1.3, not yet landed.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-04 (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off deploy-time env to the runtime-config Firestore doc `app_config/{channel}` -- the `deploy-demo.sh`/`deploy-staging.sh` env lines for them are now inert; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -163,21 +164,28 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **CLIENT MAGIC LINKS (bd `polyglot-pdf-ugm6`) -- FOUR variables, and a
   partial configuration is the hazard.** A live link is an unauthenticated
   door to a paid Gemini session, so read all four together:
-  - **`LINK_MINTING_ENABLED=true`** — THE INTERLOCK. `POST /api/links/mint`
-    404s while this is unset, which remains the default anywhere it is not
-    explicitly set. What it guarded -- the per-jti/per-firm limits and the
-    session cost ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so
-    enabling it is now legitimate: BOTH deployed channels set it --
-    `deploy-demo.sh` (maintainer, 2026-08-28, so testers can reach the deployed
-    app) and `deploy-staging.sh` (bd `polyglot-pdf-hvui4`, so staging can
-    actually exercise the feature it exists to rehearse). Enabling
-    it in any environment where the ceiling is NOT enforced would still mean
-    an unauthenticated entry point to a paid session with nothing bounding
-    spend. The ceiling actually in force is the global
-    `LINK_COST_CEILING_USD`: a kit's own `link_cost_ceiling_usd` is read by
-    `cost_ceiling_usd_for_kit`, but the WS handshake does not yet pass kit
-    metadata to `check_budget`, so per-form caps are declared-but-inert (bd
-    `polyglot-pdf-4tjt7`).
+  - **`LINK_MINTING_ENABLED`** — THE INTERLOCK. `POST /api/links/mint` 404s
+    while it resolves false, which is the default anywhere it has never been
+    set. What it guarded -- the per-jti/per-firm limits and the session cost
+    ceiling (bd `polyglot-pdf-ik7e`) -- **has shipped**, so enabling it is
+    legitimate wherever the ceiling is enforced.
+    **This env line is now INERT (bd `polyglot-pdf-bg313`).**
+    `LINK_MINTING_ENABLED` -- along with `LINK_COST_CEILING_USD` and
+    `LINK_FIRM_CAP` -- moved off deploy-time env to a RUNTIME setting read
+    from `app_config/{channel}` in Firestore
+    (`backend/services/runtime_config.py`, TTL-cached). `deploy-demo.sh` and
+    `deploy-staging.sh` still carry `LINK_MINTING_ENABLED=true` in
+    `BACKEND_EXTRA_ENV` (predating bg313) but the deployed process never
+    reads it any more for this key -- it falls back to the compiled-in env
+    default (`false`) until an operator seeds `app_config/{channel}` with
+    `scripts/set_runtime_config.py`, or the admin console's own config route
+    lands (bd `polyglot-pdf-li9x0`). See
+    [`technical_guide.md`](../technical_guide.md) contract 14 for the full
+    fallback order and call-site details. The ceiling actually in force is
+    the global `LINK_COST_CEILING_USD` (also runtime-config-backed now): a
+    kit's own `link_cost_ceiling_usd` is read by `cost_ceiling_usd_for_kit`,
+    but the WS handshake does not yet pass kit metadata to `check_budget`, so
+    per-form caps are declared-but-inert (bd `polyglot-pdf-4tjt7`).
   - **`LINK_TOKEN_SECRET`** — the HMAC signing key (>=32 chars). Fails CLOSED
     and loudly: minting and verification both refuse without it, deliberately
     rather than defaulting (a default key would be forgeable by anyone

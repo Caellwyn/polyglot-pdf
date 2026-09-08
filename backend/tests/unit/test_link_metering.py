@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from backend.services import link_metering
+from backend.services import link_metering, runtime_config
 
 
 class _Snap:
@@ -53,7 +53,10 @@ def store(monkeypatch):
     monkeypatch.setattr(
         link_metering, "_usage_doc", lambda firm, period: _Ref(s, f"{firm}/{period}")
     )
-    monkeypatch.delenv("LINK_FIRM_CAP", raising=False)
+    # LINK_FIRM_CAP moved off os.getenv to runtime_config (bd
+    # polyglot-pdf-bg313); clear its cache so a value another test patched
+    # cannot leak into this one via the module-level TTL cache.
+    runtime_config.clear_cache()
     return s
 
 
@@ -153,8 +156,13 @@ def test_a_NEW_month_starts_a_fresh_count(store, monkeypatch):
 
 
 def test_the_allowance_is_tunable(store, monkeypatch):
-    """Tiers are provisional -- the number must move without a code change."""
-    monkeypatch.setenv("LINK_FIRM_CAP", "100")
+    """Tiers are provisional -- the number must move without a code change.
+
+    link_metering imports firm_link_cap BY VALUE (`from ... import
+    firm_link_cap`), so it holds its own reference -- patch it there, not on
+    link_budget or runtime_config, or this would silently miss.
+    """
+    monkeypatch.setattr(link_metering, "firm_link_cap", lambda: 100)
     for _ in range(31):
         usage = link_metering.record_mint("firm-a")
     assert usage["allowance"] == 100
