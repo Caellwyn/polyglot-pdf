@@ -1,6 +1,17 @@
 import React from 'react';
 import { listAuditRows, type AuditRow } from '../utils/adminApi';
 
+interface AuditLogPageProps {
+  /** Called first on every catch. Returns true when `err` was an
+   * AuthError/ForbiddenError that App has already routed back to the
+   * sign-in gate -- in that case this page must NOT also set its own
+   * generic error banner (the gate is about to replace this page entirely).
+   * Returns false for anything else, so this page's normal error handling
+   * still applies. See App.tsx's handleAuthExpired docstring for why this
+   * is the console's single mid-session-eviction predicate. */
+  onAuthExpired: (err: unknown) => boolean;
+}
+
 /**
  * Audit log list page (bd polyglot-pdf-b6943): the first reader of GET
  * /admin/audit (admin_backend/routes/audit_routes.py), which the maintainer's
@@ -18,7 +29,7 @@ import { listAuditRows, type AuditRow } from '../utils/adminApi';
  * refetches from the top -- an old page's rows under new filters would be a
  * different query's results silently mixed into this one.
  */
-export const AuditLogPage: React.FC = () => {
+export const AuditLogPage: React.FC<AuditLogPageProps> = ({ onAuthExpired }) => {
   const [rows, setRows] = React.useState<AuditRow[]>([]);
   const [cursor, setCursor] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -43,11 +54,12 @@ export const AuditLogPage: React.FC = () => {
       setRows(page.rows);
       setCursor(page.next_cursor);
     } catch (err) {
+      if (onAuthExpired(err)) return;
       setError(err instanceof Error ? err.message : 'Could not load the audit log');
     } finally {
       setLoading(false);
     }
-  }, [currentFilters]);
+  }, [currentFilters, onAuthExpired]);
 
   const loadNextPage = React.useCallback(async () => {
     if (!cursor) return;
@@ -58,11 +70,12 @@ export const AuditLogPage: React.FC = () => {
       setRows((prev) => [...prev, ...page.rows]);
       setCursor(page.next_cursor);
     } catch (err) {
+      if (onAuthExpired(err)) return;
       setError(err instanceof Error ? err.message : 'Could not load more rows');
     } finally {
       setLoading(false);
     }
-  }, [cursor, currentFilters]);
+  }, [cursor, currentFilters, onAuthExpired]);
 
   // Initial load on mount only; filter changes are applied via the Apply
   // button (loadFirstPage), not on every keystroke -- an audit log filter is

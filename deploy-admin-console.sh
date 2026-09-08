@@ -69,9 +69,27 @@ ADMIN_SERVICE_NAME="${ADMIN_SERVICE_NAME:-polyglot-admin}"
 REGION="${REGION:-us-central1}"
 
 DEPLOY_LIVE=false
-if [ "$1" = "--live" ]; then
-    DEPLOY_LIVE=true
-fi
+for arg in "$@"; do
+    case "$arg" in
+        --live)
+            DEPLOY_LIVE=true
+            ;;
+        *)
+            # UNKNOWN ARG IS FATAL (mirrors deploy-staging.sh/deploy-demo.sh,
+            # bd polyglot-pdf-7aez9). Without a catch-all arm a typo like
+            # --Live or -live matches nothing, DEPLOY_LIVE stays false, and
+            # the script silently falls through to the CANDIDATE deploy while
+            # printing a normal success banner. The operator then believes
+            # they promoted the live site when they only redeployed the
+            # candidate -- the exact false-confidence bug 7aez9 exists to
+            # stop, just with a milder consequence here (candidate, not
+            # nothing).
+            echo "[ERROR] Unknown argument: $arg" >&2
+            echo "Usage: $0 [--live]" >&2
+            exit 1
+            ;;
+    esac
+done
 
 if [ "$DEPLOY_LIVE" = true ]; then
     HOSTING_TARGET="admin"

@@ -10,6 +10,17 @@ import {
 // "the tab 404s", not a silent wrong write.
 const KNOWN_CHANNELS = ['demo', 'staging'] as const;
 
+interface ConfigEditorPageProps {
+  /** Called first on every catch. Returns true when `err` was an
+   * AuthError/ForbiddenError that App has already routed back to the
+   * sign-in gate -- in that case this page must NOT also set its own
+   * generic error banner (the gate is about to replace this page entirely).
+   * Returns false for anything else, so this page's normal error handling
+   * still applies. See App.tsx's handleAuthExpired docstring for why this
+   * is the console's single mid-session-eviction predicate. */
+  onAuthExpired: (err: unknown) => boolean;
+}
+
 /**
  * app_config editor page, per channel (bd polyglot-pdf-b6943): the console's
  * first MUTATING page, driving admin_backend/routes/config_routes.py's
@@ -27,7 +38,7 @@ const KNOWN_CHANNELS = ['demo', 'staging'] as const;
  * section -- editing them here would let an operator "fix" a typo'd key by
  * writing a THIRD key next to the two that already do nothing.
  */
-export const ConfigEditorPage: React.FC = () => {
+export const ConfigEditorPage: React.FC<ConfigEditorPageProps> = ({ onAuthExpired }) => {
   const [channel, setChannel] = React.useState<(typeof KNOWN_CHANNELS)[number]>('staging');
   const [config, setConfig] = React.useState<ChannelConfig | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, string>>({});
@@ -56,11 +67,12 @@ export const ConfigEditorPage: React.FC = () => {
       }
       setDrafts(nextDrafts);
     } catch (err) {
+      if (onAuthExpired(err)) return;
       setError(err instanceof Error ? err.message : 'Could not load the channel config');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onAuthExpired]);
 
   React.useEffect(() => {
     void load(channel);
@@ -84,11 +96,12 @@ export const ConfigEditorPage: React.FC = () => {
       // confirmation message this re-read would otherwise wipe.
       await load(channel, { clearSavedMessage: false });
     } catch (err) {
+      if (onAuthExpired(err)) return;
       setError(err instanceof Error ? err.message : `Could not save ${key}`);
     } finally {
       setSavingKey(null);
     }
-  }, [channel, drafts, load]);
+  }, [channel, drafts, load, onAuthExpired]);
 
   return (
     <div data-testid="config-editor-page" className="max-w-2xl">

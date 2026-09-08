@@ -7,17 +7,21 @@
  * a stale value in the form clobber a key someone else just set); after a
  * successful save the page RE-READS the channel (GET) so the screen reflects
  * what the server actually stored, not merely the form's draft; unknown_keys
- * render read-only, never as an editable row a save could target.
+ * render read-only, never as an editable row a save could target; a
+ * mid-session AuthError/ForbiddenError routes to onAuthExpired instead of
+ * this page's own generic error banner (fresh-eyes finding: the gate's
+ * refused-screen machinery existed but nothing ever called it).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ConfigEditorPage } from './ConfigEditorPage';
-import { getChannelConfig, setChannelConfigKey } from '../utils/adminApi';
+import { AuthError, ForbiddenError, getChannelConfig, setChannelConfigKey } from '../utils/adminApi';
 
-vi.mock('../utils/adminApi', () => ({
-  getChannelConfig: vi.fn(),
-  setChannelConfigKey: vi.fn(),
-}));
+vi.mock('../utils/adminApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/adminApi')>();
+  // Keep the REAL error classes -- onAuthExpired branches on instanceof.
+  return { ...actual, getChannelConfig: vi.fn(), setChannelConfigKey: vi.fn() };
+});
 
 const STAGING_CONFIG = {
   channel: 'staging',
@@ -26,6 +30,8 @@ const STAGING_CONFIG = {
   unknown_keys: ['STALE_KEY'],
 };
 
+const noAuthExpired = () => false;
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getChannelConfig).mockResolvedValue(STAGING_CONFIG);
@@ -33,7 +39,7 @@ beforeEach(() => {
 
 describe('ConfigEditorPage', () => {
   it('loads the default channel and renders its known + unknown keys', async () => {
-    render(<ConfigEditorPage />);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
 
     await waitFor(() => expect(getChannelConfig).toHaveBeenCalledWith('staging'));
     expect(await screen.findByLabelText('LINK_MINTING_ENABLED')).toHaveValue('false');
@@ -44,7 +50,7 @@ describe('ConfigEditorPage', () => {
   });
 
   it('switching channel re-fetches that channel\'s config', async () => {
-    render(<ConfigEditorPage />);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
     await screen.findByLabelText('LINK_MINTING_ENABLED');
 
     vi.mocked(getChannelConfig).mockResolvedValue({
@@ -68,7 +74,7 @@ describe('ConfigEditorPage', () => {
       after: true,
       request_id: 'req-1',
     });
-    render(<ConfigEditorPage />);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
 
     const input = await screen.findByLabelText('LINK_MINTING_ENABLED');
     fireEvent.change(input, { target: { value: 'true' } });
@@ -96,7 +102,7 @@ describe('ConfigEditorPage', () => {
   it('shows the server error and does not re-read on a failed save', async () => {
     vi.mocked(setChannelConfigKey).mockRejectedValue(
       new Error("'nope' is not a valid value for LINK_MINTING_ENABLED"));
-    render(<ConfigEditorPage />);
+    render(<ConfigEditorPage onAuthExpired={noAuthExpired} />);
 
     const input = await screen.findByLabelText('LINK_MINTING_ENABLED');
     fireEvent.change(input, { target: { value: 'nope' } });
@@ -106,5 +112,38 @@ describe('ConfigEditorPage', () => {
     // Only the initial load read the channel -- a failed write must not
     // trigger the success re-read.
     expect(getChannelConfig).toHaveBeenCalledTimes(1);
+  });
+
+  // Fresh-eyes finding on bd polyglot-pdf-b6943: SignInGate's refusedReason
+  // prop and its dedicated test existed, but nothing in the app ever
+  // constructed it -- a mid-session 401/403 surfaced as this page's generic
+  // red error string with no path back to sign-in. Pin the fix: this page
+  // routes an AuthError/ForbiddenError to onAuthExpired FIRST, and shows no
+  // generic banner of its own when onAuthExpired reports it handled the
+  // failure.
+  it('routes a 403 on load to onAuthExpired instead of the generic error banner', async () => {
+    vi.mocked(getChannelConfig).mockRejectedValueOnce(new ForbiddenError('Access was revoked'));
+    const onAuthExpired = vi.fn((_err: unknown) => true);
+    render(<ConfigEditorPage onAuthExpired={onAuthExpired} />);
+
+    await waitFor(() => expect(onAuthExpired).toHaveBeenCalledTimes(1));
+    const [[passedErr]] = onAuthExpired.mock.calls;
+    expect(passedErr).toBeInstanceOf(ForbiddenError);
+    expect(screen.queryByText('Access was revoked')).not.toBeInTheDocument();
+  });
+
+  it('routes a 401 on save to onAuthExpired instead of the generic error banner', async () => {
+    vi.mocked(setChannelConfigKey).mockRejectedValueOnce(new AuthError('Sign-in required'));
+    const onAuthExpired = vi.fn((_err: unknown) => true);
+    render(<ConfigEditorPage onAuthExpired={onAuthExpired} />);
+
+    const input = await screen.findByLabelText('LINK_MINTING_ENABLED');
+    fireEvent.change(input, { target: { value: 'true' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onAuthExpired).toHaveBeenCalledTimes(1));
+    const [[passedErr]] = onAuthExpired.mock.calls;
+    expect(passedErr).toBeInstanceOf(AuthError);
+    expect(screen.queryByText(/Could not save/)).not.toBeInTheDocument();
   });
 });

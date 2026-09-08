@@ -4,7 +4,7 @@ import { WhoAmIPage } from './components/WhoAmIPage';
 import { AuditLogPage } from './components/AuditLogPage';
 import { ConfigEditorPage } from './components/ConfigEditorPage';
 import { signOutAdmin } from './utils/adminAuth';
-import type { WhoAmI } from './utils/adminApi';
+import { AuthError, ForbiddenError, type WhoAmI } from './utils/adminApi';
 
 type Tab = 'whoami' | 'audit' | 'config';
 
@@ -21,13 +21,40 @@ type Tab = 'whoami' | 'audit' | 'config';
 export const App: React.FC = () => {
   const [who, setWho] = React.useState<WhoAmI | null>(null);
   const [tab, setTab] = React.useState<Tab>('whoami');
+  // Set when a call from AuditLogPage/ConfigEditorPage fails with a 401 or
+  // 403 MID-SESSION (an operator revoked this person's app_admin claim, or
+  // their ID token simply expired, while the tab stayed open). Routes back
+  // to SignInGate's explicit refused/sign-in-again screen instead of the
+  // generic in-page error string those pages show for every other failure
+  // -- see handleAuthExpired below. Mirrors schema-editor/src/App.tsx's
+  // refusedMidSession + handleAuthExpired.
+  const [refusedMidSession, setRefusedMidSession] = React.useState<string | null>(null);
+
+  // Every route this console calls gates on the SAME single check
+  // (admin_backend/services/admin_auth.py's require_app_admin) -- unlike the
+  // schema editor, there is no "author-only" partial-permission 403 to
+  // distinguish from a full eviction, so ANY AuthError/ForbiddenError caught
+  // here means "this person no longer has a working session" and must drop
+  // back to the gate. Passed down to each page so their catch blocks can
+  // route auth failures here instead of stringifying them into the page's
+  // own generic error banner (bd polyglot-pdf-b6943 fresh-eyes finding: this
+  // routing did not exist, leaving refusedReason permanently unreachable).
+  const handleAuthExpired = React.useCallback((err: unknown) => {
+    if (err instanceof AuthError || err instanceof ForbiddenError) {
+      setRefusedMidSession(err instanceof ForbiddenError ? err.message : null);
+      setWho(null);
+      return true;
+    }
+    return false;
+  }, []);
 
   if (!who) {
-    return <SignInGate onReady={setWho} />;
+    return <SignInGate onReady={setWho} refusedReason={refusedMidSession} />;
   }
 
   const handleSignOut = () => {
     void signOutAdmin();
+    setRefusedMidSession(null);
     setWho(null);
   };
 
@@ -69,8 +96,8 @@ export const App: React.FC = () => {
 
       <main className="p-6">
         {tab === 'whoami' && <WhoAmIPage who={who} />}
-        {tab === 'audit' && <AuditLogPage />}
-        {tab === 'config' && <ConfigEditorPage />}
+        {tab === 'audit' && <AuditLogPage onAuthExpired={handleAuthExpired} />}
+        {tab === 'config' && <ConfigEditorPage onAuthExpired={handleAuthExpired} />}
       </main>
     </div>
   );

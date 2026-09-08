@@ -68,6 +68,54 @@ fatal) severity signature, a new
 `ADMIN_SERVICE_NAME` bound in the call-site execution driver so the
 existing argument-binding assertions still exercise the real call.
 
+### Fresh-eyes fixup round (2026-09-08)
+
+Two GAPS-FOUND findings, both fixed inline in this diff's own new code:
+
+- **Adopted -- wired the dead `refusedReason` mid-session-revocation path.**
+  `SignInGate`'s `refusedReason` prop and its own pinning test existed from
+  the first pass, but nothing in the app ever constructed the prop: a 401 or
+  403 from `AuditLogPage`/`ConfigEditorPage` (an operator's `app_admin`
+  claim revoked mid-session, or a token that simply expired) surfaced as
+  each page's own generic red error string, with no path back to the gate's
+  explicit "ask an operator to grant access" / "sign in again" screens this
+  bead built specifically for that case. Fixed by mirroring
+  `schema-editor/src/App.tsx`'s `handleAuthExpired` pattern: `App.tsx` now
+  owns a `refusedMidSession` state and a `handleAuthExpired` callback passed
+  to both pages as `onAuthExpired`; each page's catch blocks call it FIRST
+  and skip their own generic banner when it reports the failure as handled.
+  Simpler than the editor's version -- every admin route gates on the SAME
+  single `require_app_admin` check (no "author-only" partial-permission 403
+  to carve out), so any `AuthError`/`ForbiddenError` here means a full
+  eviction. Pinned with two new tests in `ConfigEditorPage.test.tsx`
+  (a 403 on load and a 401 on save both route to `onAuthExpired` instead of
+  the page's own error banner) and mutation-verified: reverting the load
+  path's `onAuthExpired` guard reproduced the failure in exactly the test
+  written to catch it.
+- **Adopted -- `deploy-admin-console.sh`'s `--live` flag now rejects an
+  unrecognized argument.** The flag was matched by a single `if [ "$1" =
+  "--live" ]` with no catch-all, so a typo (`--Live`, `-live`) silently fell
+  through to the CANDIDATE deploy while still printing a normal success
+  banner -- the same operational risk `tests/test_deploy_reachability_gate.py`
+  already documents for `deploy-demo.sh`/`deploy-staging.sh` (bd
+  `polyglot-pdf-7aez9`), just never extended to this new script. Fixed by
+  switching to the same `for arg in "$@"; do case "$arg" in ... *) ... exit
+  1 ;; esac; done` shape those two scripts use, with an `Unknown argument`
+  message and `exit 1` on anything but `--live`. Verified behaviorally (not
+  just `bash -n`): an isolated copy of the parser exits 0/`DEPLOY_LIVE=true`
+  on `--live`, exits 0/`false` with no args, and now exits 1 with an error
+  on a typo`'d flag (previously exit 0, silently deploying to candidate).
+  Not added to `test_channel_wrapper_rejects_an_unknown_argument`'s
+  parametrize list -- that test's `for arg in ... esac` slice-matching
+  assumes the two-arg (`--backend`/`--frontend`/`--form-kits`) wrapper shape;
+  extending it to a single-flag script is a decidable follow-up, not a
+  behavioral gap, so it is left as a defer rather than bundled into this
+  fixup.
+
+Both findings were fixed inside this diff's own newly-added code (not
+pre-existing, not out of scope), so neither needed a separate bead -- both
+are closed out by this same bead/PR per CLAUDE.md's escalation rules.
+
 ## Lessons
 
 `ConfigEditorPage`'s round-trip test caught a real bug during development:
