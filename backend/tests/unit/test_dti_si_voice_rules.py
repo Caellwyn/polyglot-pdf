@@ -484,27 +484,58 @@ def test_render_field_guidance_long_radio_group_marks_long_standard_list():
         assert f"s{i}" in text
 
 
-def test_i90_height_selects_are_never_force_recited():
-    # bd polyglot-pdf-e5a7 (closed by this PR): the REAL shipped I-90 height
-    # fields are selects and must never carry the read-ALL imperative -- a
-    # synthetic-only pin would stay green if someone re-typed them to radio in
-    # the kit, silently restoring the "zero, one, two, ... eleven" recital.
+def test_real_long_selects_are_never_force_recited():
+    """A long select must never carry the read-ALL imperative (bd e5a7).
+
+    REAL data, FROZEN -- not a synthetic field and not the live tree.
+    The original case was the I-90's height selects, and the point of using real
+    data is that a synthetic pin would stay green if someone re-typed such a
+    field to radio in a kit, silently restoring the "zero, one, two, ...
+    eleven" recital.
+
+    Why frozen rather than discovered: kits are bucket-canonical, and NEITHER
+    git-tracked kit (w7, f1040) contains a single `select` field -- so any
+    version of this test that reads the working tree passes only on a machine
+    that happens to have pulled the right kit, and skips in CI. Two earlier
+    attempts did exactly that: first a skipif naming form-kits/i-90/, then
+    discovery over every on-disk dir whose only witnesses lived in UNTRACKED
+    i-90_v2. Both were reported as passing on evidence that existed only
+    locally. Freezing the artifact is what CLAUDE.md scar #10 prescribes for a
+    real-data pin, and it is the only shape that actually runs.
+
+    Refresh the fixture from a live kit if the render's threshold changes.
+    """
     import json
     from pathlib import Path
 
-    kit = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
-    if not kit.exists():
-        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
-                     "bd polyglot-pdf-hydb0)")
-    schema = json.loads(kit.read_text(encoding="utf-8"))
-    fields = {f["id"]: f for f in schema["fields"]}
-    for fid in ("p3_line8_heightfeet", "p3_line8_heightinches"):
-        f = fields[fid]
-        assert f["type"] == "select", fid
+    frozen = (Path(__file__).resolve().parent / "fixtures"
+              / "long_selects_frozen.json")
+    fields = json.loads(frozen.read_text(encoding="utf-8"))["fields"]
+    # Guard the premise: if the fixture stops holding long selects this test is
+    # vacuous and must say so rather than passing.
+    assert len(fields) >= 3, "fixture lost its long selects"
+    for f in fields:
+        assert f["type"] == "select", f["id"]
+        n = len(f["options"])
+        assert n >= 7, f["id"]
         text = render_field_guidance(f)
-        assert "read ALL" not in text, fid
-        assert "standard list; ask directly" in text, fid
-
+        assert "read ALL" not in text, f["id"]
+        # ...and land on the SELECT-EXEMPTION branch specifically. The absence
+        # assertion alone is not enough: ai_context has TWO consecutive branches
+        # that both omit "read ALL" -- the select exemption (line ~273) and the
+        # n > LONG_OPTION_LIST_THRESHOLD long-list branch -- so a select could
+        # silently re-route between them with the negative assertion still
+        # green. Reverting the exemption would send the 62-option state dropdown
+        # to the long-list branch, and the field whose recital is worst to read
+        # aloud would be pinned by nothing.
+        #
+        # Note ALL three land here, mail_state included, even though 62 > 20:
+        # the exemption is checked FIRST, so for a select it wins over the
+        # threshold entirely. Pinning the one string is therefore stronger than
+        # a per-branch conditional -- it asserts that precedence. (Byte-exact on
+        # purpose; this file's header names the ai_context render strings as a
+        # deliberate exception to "assert the rule, not its wording".)
+        assert f"Options ({n} -- standard list; ask directly and offer to " in text, f["id"]
 
 def test_render_field_guidance_checkbox_group_gets_recital():
     field = {
@@ -655,18 +686,113 @@ def _load_kit_field(kit, field_id):
     return next(f for f in schema["fields"] if f["id"] == field_id)
 
 
-def test_real_yes_no_fields_get_the_natural_question_marker():
-    # bd 41fi criterion 1: the two named shipped fields render the two-option
-    # marker, not the list recital. i-90's case is skipped (not dropped) once
-    # its kit is absent (deprecated, bd polyglot-pdf-hydb0), so f1040's pin
-    # still holds even when i-90 is gone.
+def _retired_p7_checkbox7():
+    """The I-90 preparer attorney declaration, frozen as a fixture.
+
+    This field is GONE from the shipped kit and is not coming back: the app is
+    filled by the APPLICANT, so the v2 kit models only applicant-completed
+    fields and drops the whole preparer/interpreter block (maintainer,
+    2026-08-31). It is preserved here because it remains the calibration data
+    for the bd 575i / 41fi two-option threshold -- a 2-option radio whose labels
+    are ~23- and ~27-word legal declarations, i.e. the ONLY known real field on
+    the "too substantive to collapse" side of the boundary. No shipped kit still
+    has one (checked across i-90/w7/f1040), so sourcing it live would silently
+    reduce these guards to testing a single side of the rule.
+
+    Frozen verbatim from the pre-v2 kit, all 17 baked languages intact.
+    """
+    import json
     from pathlib import Path
 
-    _kits_root = Path(__file__).resolve().parents[3] / "form-kits"
-    for kit, fid in (("i-90", "p3_checkbox4[1]"), ("f1040", "fld_digital_assets")):
-        if not (_kits_root / kit / "schema.json").exists():
+    p = Path(__file__).resolve().parent / "fixtures" / "i90_p7_checkbox7_retired.json"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _shipped_fields():
+    """(kit_id, field) for every field of every GIT-TRACKED kit.
+
+    One walker for all the discovery helpers here, so none of them names a form
+    (bd polyglot-pdf-1mgkq).
+
+    TRACKED, not on-disk. An earlier version walked every directory and said
+    "what is on disk is whatever the developer pulled, which is exactly the
+    right scope" -- that is wrong, and it is how a guard here came to look alive
+    locally while being dead in CI: its only witnesses lived in an UNTRACKED
+    scratch kit. Tracked is what CI actually sees, and it also stops these
+    assertions running against a colleague's half-built scratch kit that is not
+    a deliverable. Matches test_form_models_v2.discovered_kits().
+
+    Consequence worth knowing: no tracked kit contains a `select` field at all,
+    so a rule about selects cannot be witnessed from here -- it needs a frozen
+    fixture (see test_real_long_selects_are_never_force_recited).
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    import subprocess as _sp
+
+    root = _Path(__file__).resolve().parents[3] / "form-kits"
+    if not root.is_dir():
+        return
+    # GIT-TRACKED only, matching test_form_models_v2.discovered_kits(). Scanning
+    # the whole directory instead would assert against a maintainer's UNTRACKED
+    # scratch kits -- which CI never sees (so a guard can look alive locally and
+    # be dead in CI) and which can go red on a colleague's machine for a kit
+    # that is not a deliverable. Both failure directions are real; this one
+    # bit twice on the long-select guard above.
+    try:
+        tracked = _sp.run(
+            ["git", "-C", str(root.parent), "ls-files", "form-kits/"],
+            capture_output=True, text=True, timeout=30, check=True,
+        ).stdout
+    except (OSError, _sp.SubprocessError):
+        return
+    names = sorted({
+        line.split("/")[1] for line in tracked.splitlines()
+        if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
+    })
+    for name in names:
+        schema = root / name / "schema.json"
+        if not schema.is_file():
             continue
-        f = _load_kit_field(kit, fid)
+        try:
+            doc = _json.loads(schema.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        for f in doc.get("fields") or []:
+            yield name, f
+
+
+def _short_two_option_fields():
+    """Every (id, field) in a TRACKED kit that is a 2-option pair with SHORT labels.
+
+    Short = under the render's fold-into-one-question threshold, so these are the
+    fields the natural-question marker must fire on. Discovered rather than
+    named, so an author adding or retiring a form never edits this test
+    (bd polyglot-pdf-1mgkq), and sourced from _shipped_fields() so it uses the
+    SAME git-tracked scope as every other discovery helper here.
+    """
+    out = []
+    for kit, f in _shipped_fields():
+        opts = f.get("options") or []
+        if len(opts) != 2:
+            continue
+        if max(len(str(o.get("label", "")).split()) for o in opts) <= 6:
+            out.append((f"{kit}:{f['id']}", f))
+    return out
+
+def test_real_yes_no_fields_get_the_natural_question_marker():
+    # bd 41fi criterion 1: a real 2-option yes/no renders the two-option marker,
+    # not the list recital.
+    #
+    # DISCOVERED, not named (bd polyglot-pdf-1mgkq): kits are republished
+    # continuously and the canonical collection is the bucket, so naming a kit
+    # field here breaks on the next author edit -- it already did once, when
+    # this said i-90 'p3_checkbox4[1]'. Any shipped 2-option field whose labels
+    # are short is a valid witness for this rule.
+    witnesses = _short_two_option_fields()
+    assert witnesses, "no shipped kit has a short 2-option field to witness this"
+    for fid, f in witnesses:
         assert len(f["options"]) == 2, fid
         text = render_field_guidance(f)
         assert "ask ONE natural question that makes both choices clear" in text, fid
@@ -682,13 +808,7 @@ def test_substantive_two_option_pair_keeps_the_full_recital():
     # so ONE natural question drops the representation-scope clause -- load-
     # bearing legal text the user never hears. Too long to fold into one
     # question => the normal recital stands.
-    from pathlib import Path
-
-    if not (Path(__file__).resolve().parents[3] / "form-kits" / "i-90" /
-            "schema.json").exists():
-        pytest.skip("form-kits/i-90/schema.json not present (kit deprecated, "
-                     "bd polyglot-pdf-hydb0)")
-    f = _load_kit_field("i-90", "p7_checkbox7")
+    f = _retired_p7_checkbox7()
     assert len(f["options"]) == 2
     text = render_field_guidance(f)
     assert "Options (2 -- read ALL 2 aloud when asking; " in text
@@ -738,7 +858,11 @@ def test_two_option_word_threshold_boundary_is_inclusive():
 @pytest.mark.parametrize("kit,fid,expect_natural", [
     # The two fields the threshold was calibrated to separate. Both must land
     # on the SAME side in EVERY baked language.
-    ("i-90", "p7_checkbox7", False),
+    # p7_checkbox7 is RETIRED from the shipped kit (applicant-only v2) and is
+    # loaded from a frozen fixture -- see _retired_p7_checkbox7. It stays in this
+    # matrix because it is the only known real field on the False side; dropping
+    # it would leave this guard testing one branch of a two-branch rule.
+    (None, "p7_checkbox7", False),
     ("w7", "previously_received_itin_or_irsn", True),
 ])
 def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_natural):
@@ -756,15 +880,7 @@ def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_
     # Parametrized over EVERY language the kit actually bakes, not a sample:
     # the two failures above hit disjoint language sets, so any fixed sample
     # would have missed one of them.
-    from pathlib import Path
-
-    if not (Path(__file__).resolve().parents[3] / "form-kits" / kit /
-            "schema.json").exists():
-        pytest.skip(f"form-kits/{kit}/schema.json not present (kit "
-                     "deprecated, bd polyglot-pdf-hydb0)"
-                     if kit == "i-90" else
-                     f"form-kits/{kit}/schema.json not present in this checkout")
-    f = _load_kit_field(kit, fid)
+    f = _retired_p7_checkbox7() if kit is None else _load_kit_field(kit, fid)
     languages = sorted({
         lang
         for opt in f["options"]
@@ -1013,7 +1129,7 @@ def test_legacy_options_bearing_checkbox_is_treated_as_a_multi_select():
     # Latent: no shipped kit carries this shape (repair retypes it), but a
     # hand-authored, editor-drafted, or pre-repair kit does.
     field = {
-        "id": "p3_race", "name": "Race", "spoken_name": "race",
+        "id": "race", "name": "Race", "spoken_name": "race",
         "type": "checkbox",
         "options": [{"value": "x", "label": "Deaf or hard of hearing"},
                     {"value": "y", "label": "Blind or low vision"}],
@@ -1072,15 +1188,8 @@ def test_f1040_line_reference_pair_still_asks_a_natural_question():
 def test_real_multi_option_lists_keep_the_unconditional_recital():
     # bd 41fi + c2jy criterion 2: the two fields the original bug was about
     # still get the read-ALL imperative, kit-backed so a schema re-type or a
-    # marker regression cannot slip through on synthetic fields alone. i-90's
-    # case is skipped (not dropped) once its kit is absent (deprecated, bd
-    # polyglot-pdf-hydb0), so w7's pin still holds even when i-90 is gone.
-    from pathlib import Path
-
-    _kits_root = Path(__file__).resolve().parents[3] / "form-kits"
-    for kit, fid, n in (("w7", "reason", 8), ("i-90", "p2_checkbox2[5]", 12)):
-        if not (_kits_root / kit / "schema.json").exists():
-            continue
+    # marker regression cannot slip through on synthetic fields alone.
+    for kit, fid, n in (("w7", "reason", 8),):
         f = _load_kit_field(kit, fid)
         text = render_field_guidance(f)
         assert f"Options ({n} -- read ALL {n} aloud when asking; " in text, fid

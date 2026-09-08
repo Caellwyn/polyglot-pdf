@@ -271,62 +271,62 @@ I90_QUESTIONS = [
     # "A..."-prefixed answer fails the ^\d{7,9}$ pattern and adds validation noise to
     # the cost measurement. Bare digits validate cleanly today; revert to a natural
     # "A12345678" phrasing once cn0e lands.
-    {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is one two three four five six seven eight.",
+    {"field_id": "a_number", "say": "My alien registration number is one two three four five six seven eight.",
      "wrong": "My alien registration number is eight seven six five four three two one."},
     # USCIS online account number is EXACTLY 12 digits (the field's min/max_length).
     # The old 10-digit fixture was itself invalid and would fail length even with
     # clean transcription (bd polyglot-pdf-jnjj.40 -- the harness answer, not just
     # the model, was wrong on this field).
-    {"field_id": "p1_line2_acctidentifier", "say": "My USCIS online account number is 1 2 3 4 5 6 7 8 9 0 1 2.",
+    {"field_id": "uscis_account", "say": "My USCIS online account number is 1 2 3 4 5 6 7 8 9 0 1 2.",
      "wrong": "My USCIS online account number is 9 8 7 6 5 4 3 2 1 0 9 8."},
-    {"field_id": "p1_line3a_familyname", "say": "My current family name is Vasquez.",
+    {"field_id": "family_name", "say": "My current family name is Vasquez.",
      "wrong": "My current family name is Vargas."},
-    {"field_id": "p1_line3b_givenname", "say": "My current given name is Maria.",
+    {"field_id": "given_name", "say": "My current given name is Maria.",
      "wrong": "My current given name is Mario."},
-    {"field_id": "p1_line3c_middlename", "say": "My current middle name is Elena.",
+    {"field_id": "middle_name", "say": "My current middle name is Elena.",
      "wrong": "My current middle name is Elaine."},
-    {"field_id": "p1_checkbox4", "say": "No, my name has not changed.",
+    {"field_id": "name_changed", "say": "No, my name has not changed.",
      "wrong": "Yes, my name has changed."},
     # --- Section 2: mailing address ---
-    {"field_id": "p1_line6a_incareofname", "say": "In care of Daniel Vasquez.",
+    {"field_id": "mail_in_care_of", "say": "In care of Daniel Vasquez.",
      "wrong": "In care of David Vasquez."},
-    {"field_id": "p1_line6b_streetnumbername", "say": "Twelve thirty four Maple Street.",
+    {"field_id": "mail_street", "say": "Twelve thirty four Maple Street.",
      "wrong": "Fifty six seventy eight Oak Street."},
-    {"field_id": "p1_unit_type6c_unit", "say": "Apartment.",
+    {"field_id": "mail_unit_type", "say": "Apartment.",
      "wrong": "Suite."},
     # apt-number is show_if (unit_type is_not_empty) -- now visible, so scripted.
-    {"field_id": "p1_line6c_aptsteflrnumber", "say": "Apartment number twelve B.",
+    {"field_id": "mail_unit_number", "say": "Apartment number twelve B.",
      "wrong": "Apartment number fourteen C."},
-    {"field_id": "p1_line6d_cityortown", "say": "My mailing city is Austin.",
+    {"field_id": "mail_city", "say": "My mailing city is Austin.",
      "wrong": "My mailing city is Houston."},
-    {"field_id": "p1_line6e_state", "say": "Texas.",
+    {"field_id": "mail_state", "say": "Texas.",
      "wrong": "Florida."},
-    {"field_id": "p1_line6f_zipcode", "say": "My mailing zip code is seven three seven zero one.",
+    {"field_id": "mail_zip", "say": "My mailing zip code is seven three seven zero one.",
      "wrong": "My mailing zip code is seven seven zero zero one."},
-    {"field_id": "p1_line6g_province", "say": "I do not have a province, I am in the United States.",
+    {"field_id": "mail_province", "say": "I do not have a province, I am in the United States.",
      "wrong": "My province is Ontario."},
-    {"field_id": "p1_line6h_postalcode", "say": "I do not have a postal code, I am in the United States.",
+    {"field_id": "mail_postal_code", "say": "I do not have a postal code, I am in the United States.",
      "wrong": "My postal code is K1A 0B1."},
-    {"field_id": "p1_line6i_country", "say": "United States.",
+    {"field_id": "mail_country", "say": "United States.",
      "wrong": "Canada."},
     # --- Section 3: physical address (schema order: ...zipcode, province, postalcode, country) ---
-    {"field_id": "p1_line7a_streetnumbername", "say": "Twelve thirty four Maple Street.",
+    {"field_id": "phys_street", "say": "Twelve thirty four Maple Street.",
      "wrong": "Ninety nine Pine Avenue."},
-    {"field_id": "p1_unit_type7b_unit", "say": "Apartment.",
+    {"field_id": "phys_unit_type", "say": "Apartment.",
      "wrong": "Floor."},
-    {"field_id": "p1_line7b_aptsteflrnumber", "say": "Apartment number twelve B.",
+    {"field_id": "phys_unit_number", "say": "Apartment number twelve B.",
      "wrong": "Apartment number fifteen D."},
-    {"field_id": "p1_line7c_cityortown", "say": "My physical city is Austin.",
+    {"field_id": "phys_city", "say": "My physical city is Austin.",
      "wrong": "My physical city is Dallas."},
-    {"field_id": "p1_line7d_state", "say": "Texas.",
+    {"field_id": "phys_state", "say": "Texas.",
      "wrong": "Arizona."},
-    {"field_id": "p1_line7e_zipcode", "say": "My physical zip code is seven three seven zero one.",
+    {"field_id": "phys_zip", "say": "My physical zip code is seven three seven zero one.",
      "wrong": "My physical zip code is eight five zero zero one."},
-    {"field_id": "p1_line7f_province", "say": "I do not have a province, I am in the United States.",
+    {"field_id": "phys_province", "say": "I do not have a province, I am in the United States.",
      "wrong": "My province is Quebec."},
-    {"field_id": "p1_line7g_postalcode", "say": "I do not have a postal code, I am in the United States.",
+    {"field_id": "phys_postal_code", "say": "I do not have a postal code, I am in the United States.",
      "wrong": "My postal code is K1A 0B1."},
-    {"field_id": "p1_line7h_country", "say": "United States.",
+    {"field_id": "phys_country", "say": "United States.",
      "wrong": "Mexico."},
     # --- Section 4: Part 1.4 Additional Information (bd polyglot-pdf-ctu8) ---
     # Added to take the plan past 30 questions so a 30-question CONTINUOUS run
@@ -334,25 +334,25 @@ I90_QUESTIONS = [
     # scripted (no field skipped) to keep the every-visible-field invariant for
     # the section-reset arms; none of these fields is show_if-conditional.
     # Same fictional Maria Vasquez persona (no real PII).
-    {"field_id": "p1_line8_male", "say": "I am female.",
+    {"field_id": "sex", "say": "I am female.",
      "wrong": "I am male."},
-    {"field_id": "p1_line9_dateofbirth", "say": "My date of birth is March fifth, nineteen ninety.",
+    {"field_id": "date_of_birth", "say": "My date of birth is March fifth, nineteen ninety.",
      "wrong": "My date of birth is April sixth, nineteen ninety one."},
-    {"field_id": "p1_line10_citytownofbirth", "say": "I was born in Guadalajara.",
+    {"field_id": "city_of_birth", "say": "I was born in Guadalajara.",
      "wrong": "I was born in Monterrey."},
-    {"field_id": "p1_line11_countryofbirth", "say": "My country of birth is Mexico.",
+    {"field_id": "country_of_birth", "say": "My country of birth is Mexico.",
      "wrong": "My country of birth is Guatemala."},
-    {"field_id": "p1_line12_mothergivenname", "say": "My mother's given name is Rosa.",
+    {"field_id": "mother_given_name", "say": "My mother's given name is Rosa.",
      "wrong": "My mother's given name is Rita."},
-    {"field_id": "p1_line13_fathergivenname", "say": "My father's given name is Carlos.",
+    {"field_id": "father_given_name", "say": "My father's given name is Carlos.",
      "wrong": "My father's given name is Miguel."},
     # Class of admission is a 3-character code (help.instructions); IR6 is a real
     # LPR category, spoken letter-by-letter so gTTS renders it cleanly.
-    {"field_id": "p1_line14_classofadmission", "say": "My class of admission is I R six.",
+    {"field_id": "class_of_admission", "say": "My class of admission is I R six.",
      "wrong": "My class of admission is C R one."},
-    {"field_id": "p1_line15_dateofadmission", "say": "My date of admission was June tenth, twenty fifteen.",
+    {"field_id": "date_of_admission", "say": "My date of admission was June tenth, twenty fifteen.",
      "wrong": "My date of admission was July ninth, twenty sixteen."},
-    {"field_id": "p1_line16_ssn", "say": "My social security number is one two three four five six seven eight nine.",
+    {"field_id": "ssn", "say": "My social security number is one two three four five six seven eight nine.",
      "wrong": "My social security number is nine eight seven six five four three two one."},
 ]
 
@@ -363,11 +363,11 @@ I90_QUESTIONS = [
 # so "Apartment" vs "apartment" or "737 01" vs "73701" match. Keyed by field_id;
 # any I90 field absent here is scored leniently (non-empty == filled) and flagged.
 I90_EXPECTED = {
-    "p1_line1_aliennumber": "12345678",
-    "p1_line2_acctidentifier": "123456789012",
-    "p1_line3a_familyname": "Vasquez",
-    "p1_line3b_givenname": "Maria",
-    "p1_line3c_middlename": "Elena",
+    "a_number": "12345678",
+    "uscis_account": "123456789012",
+    "family_name": "Vasquez",
+    "given_name": "Maria",
+    "middle_name": "Elena",
     # Radio/select fields store the CANONICAL option VALUE -- that is what the
     # frontend writes and what get_form_state returns. Scoring against the spoken
     # label would mark a CORRECT structured fill as wrong (the first-draft fixture
@@ -379,36 +379,36 @@ I90_EXPECTED = {
     # _assert_expected_canon_matches_schema (called at startup) fails loudly if
     # the kit's option vocabulary drifts again (bd jnjj.7 -- the stale canon
     # silently under-scored the 2026-07-11 baseline arm by ~5 fields).
-    "p1_checkbox4": "no_proceed_to_item_numbers_6_a_6_c",  # "No, name has not changed"
-    "p1_line6a_incareofname": "Daniel Vasquez",
-    "p1_line6b_streetnumbername": "1234 Maple Street",
-    "p1_unit_type6c_unit": "apartment",
-    "p1_line6c_aptsteflrnumber": "12B",
-    "p1_line6d_cityortown": "Austin",
-    "p1_line6e_state": "texas",                    # select stores the option slug
-    "p1_line6f_zipcode": "73701",
-    "p1_line6g_province": "",
-    "p1_line6h_postalcode": "",
-    "p1_line6i_country": ["United States", "USA"],
-    "p1_line7a_streetnumbername": "1234 Maple Street",
-    "p1_unit_type7b_unit": "apartment",
-    "p1_line7b_aptsteflrnumber": "12B",
-    "p1_line7c_cityortown": "Austin",
-    "p1_line7d_state": "texas",                    # select stores the option slug
-    "p1_line7e_zipcode": "73701",
-    "p1_line7f_province": "",
-    "p1_line7g_postalcode": "",
-    "p1_line7h_country": ["United States", "USA"],
+    "name_changed": "no",  # "No, name has not changed"
+    "mail_in_care_of": "Daniel Vasquez",
+    "mail_street": "1234 Maple Street",
+    "mail_unit_type": "apt",
+    "mail_unit_number": "12B",
+    "mail_city": "Austin",
+    "mail_state": "TX",                    # select stores the option slug
+    "mail_zip": "73701",
+    "mail_province": "",
+    "mail_postal_code": "",
+    "mail_country": ["United States", "USA"],
+    "phys_street": "1234 Maple Street",
+    "phys_unit_type": "apt",
+    "phys_unit_number": "12B",
+    "phys_city": "Austin",
+    "phys_state": "TX",                    # select stores the option slug
+    "phys_zip": "73701",
+    "phys_province": "",
+    "phys_postal_code": "",
+    "phys_country": ["United States", "USA"],
     # Section 4 (Part 1.4 Additional Information, bd polyglot-pdf-ctu8).
-    "p1_line8_male": "female",                     # radio stores the option slug
-    "p1_line9_dateofbirth": "03/05/1990",          # MM/DD/YYYY (validation.hint)
-    "p1_line10_citytownofbirth": "Guadalajara",
-    "p1_line11_countryofbirth": "Mexico",
-    "p1_line12_mothergivenname": "Rosa",
-    "p1_line13_fathergivenname": "Carlos",
-    "p1_line14_classofadmission": "IR6",
-    "p1_line15_dateofadmission": "06/10/2015",
-    "p1_line16_ssn": "123456789",
+    "sex": "female",                     # radio stores the option slug
+    "date_of_birth": "03/05/1990",          # MM/DD/YYYY (validation.hint)
+    "city_of_birth": "Guadalajara",
+    "country_of_birth": "Mexico",
+    "mother_given_name": "Rosa",
+    "father_given_name": "Carlos",
+    "class_of_admission": "IR6",
+    "date_of_admission": "06/10/2015",
+    "ssn": "123456789",
 }
 
 _WORD_DIGITS = {

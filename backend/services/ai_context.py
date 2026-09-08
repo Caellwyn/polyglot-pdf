@@ -59,15 +59,21 @@ MULTI_SELECT_OPTION_TYPES = {
 }
 
 # The same marker also assumes both labels are short enough to fold into one
-# natural question. Two shipped-kit pairs are not (bd polyglot-pdf-575i): I-90
-# 'p7_checkbox7' carries ~23- and ~27-word legal declarations whose
-# representation-scope clause a single question drops outright. Above this word
-# count the pair falls back to the normal recital, so the full substance of both
-# options is still read aloud.
+# natural question. The calibrating case (bd polyglot-pdf-575i) was I-90
+# 'p7_checkbox7' -- ~23- and ~27-word legal declarations whose
+# representation-scope clause a single question drops outright. That field is
+# RETIRED (the applicant-only v2 i-90 drops the preparer block), so no SHIPPED
+# kit now exceeds the threshold -- the longest 2-option label left is W-7's 17
+# words. The threshold is still live and still calibrated on that field, which
+# is frozen at backend/tests/unit/fixtures/i90_p7_checkbox7_retired.json.
+# Above this word count the pair falls back to the normal recital, so the full
+# substance of both options is still read aloud.
 #
-# 20 sits in the gap this corpus actually shows. Measured over every 2-option
-# field in the three shipped kits, the longest label of each pair runs
-# 1,1,1,1,1,2,2,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
+# 20 sits in the gap this corpus actually shows. Measured 2026-09-03 over every
+# 2-option field in the GIT-TRACKED kits (w7, f1040 -- kits are
+# bucket-canonical, CLAUDE.md scar #10, so that is what any CI run can see),
+# the longest label of each pair runs
+# 1,1,1,3,3,5,6 words for the plainly-either/or fields, then 17 for W-7
 # 'previously_received_itin_or_irsn' -- a genuine yes/no whose labels are padded
 # with the printed-form navigation the SI already tells the model not to speak
 # ("Yes. Complete line 6f. ...") -- and then 27 for the I-90 declaration. The

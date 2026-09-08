@@ -38,6 +38,76 @@ def load_kit(kit: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def discovered_kits() -> list:
+    """Every kit present on disk, discovered -- never a hardcoded list.
+
+    Kits are authored and republished continuously and the canonical collection
+    lives in the GCS bucket, not git (see .gitignore's form-kits note), so any
+    literal list here is wrong the moment an author adds, renames or retires a
+    form. Scanning means these guards cover whatever is actually present --
+    including a kit someone pulled down locally -- and need no edit when the
+    set changes (bd polyglot-pdf-1mgkq).
+
+    EVERY kit on disk, draft included. These guards are about STRUCTURAL
+    validity -- valid v2 shape, no dangling references, an unlockable read_only
+    field -- and those must hold for a draft exactly as much as for a published
+    kit. An earlier version filtered to status:complete and thereby dropped
+    f1040 (draft), silently halving this file's coverage from 6 parametrizations
+    to 3 while .gitignore still justified tracking f1040 on the grounds that it
+    "backs kit-coupled tests" (caught by the Opus cross-surface review). The
+    publish gate belongs on tests about PUBLISHABILITY, not about schema shape.
+
+    The cost of including drafts is that a maintainer with a genuinely broken
+    kit in their scratch tree sees these fail -- which is the correct signal:
+    the schema IS malformed. CI only ever sees what git tracks.
+
+    KNOWN LIMIT: git tracks only w7 and f1040, while the CANONICAL collection is
+    the GCS bucket (.gitignore's form-kits note). So this guard is real but
+    NARROW -- it proves the invariant holds for the two kits CI can see, not for
+    every published kit. Closing that means running against a pulled or
+    synthetic corpus, which is bd polyglot-pdf-1mgkq's job. Do NOT "fix" the
+    narrowness by hardcoding kit names back in; that is the coupling 1mgkq
+    exists to remove.
+    """
+    import subprocess
+
+    # EVERY exit asserts. The guard below is worthless if a failure can return []
+    # around it -- and the two paths that could are exactly the ones its comment
+    # names (no form-kits/ dir, git unavailable), so an early `return []` here
+    # would reproduce the silent-skip it exists to stop (fresh-eyes round 2).
+    root = REPO_ROOT / "form-kits"
+    assert root.is_dir(), (
+        f"{root} is not a directory -- the kit-discovery guards below would "
+        "silently collect zero cases instead of failing"
+    )
+    try:
+        tracked = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files", "form-kits/"],
+            capture_output=True, text=True, timeout=30, check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise AssertionError(
+            f"`git ls-files form-kits/` failed ({exc!r}) -- a broken harness, not "
+            "'no kits to check'; the guards below would silently collect zero cases"
+        ) from exc
+    names = {
+        line.split("/")[1] for line in tracked.splitlines()
+        if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
+    }
+    found = sorted(n for n in names if (root / n / "schema.json").is_file())
+    # NON-VACUITY GUARD, matching the sibling helpers in test_translation_lint.py
+    # and test_dti_si_voice_rules.py. An empty list here does NOT fail the three
+    # consumers below -- pytest turns an empty parametrize into an implicit
+    # "got empty parameter set" SKIP, which is precisely the look-alive-but-dead
+    # signal scar #10 warns about. Fail loudly instead: git being unavailable or
+    # the ls-files parse breaking is a broken harness, not "no kits to check".
+    assert found, (
+        "no git-tracked kit with a schema.json found -- `git ls-files form-kits/` "
+        "returned nothing usable, so these guards would silently skip"
+    )
+    return found
+
+
 def v2_schema(fields: list, source: str = "pdf") -> dict:
     """Minimal valid v2 schema scaffold around the given fields."""
     doc = {
@@ -129,17 +199,16 @@ def assert_v2_error(doc: dict, *needles: str):
 # Exit criterion 1: shipped v1 kits validate UNCHANGED
 # ---------------------------------------------------------------------------
 
-# Post the P6.2 strictness flip (bd h76m.16), EVERY shipped kit is v2: w7/f1040
-# (migrated at P6.2; i-90 was also v2 from P6.1b but is now deprecated/removed,
-# bd polyglot-pdf-hydb0). There is no v1-acceptance path left -- the model
-# applies v2 rules to every schema.
-@pytest.mark.parametrize("kit", ["w7", "f1040"])
+# Post the P6.2 strictness flip (bd h76m.16), EVERY kit is v2 -- there is no
+# v1-acceptance path left, the model applies v2 rules to every schema. The kit
+# set is DISCOVERED, not listed: see discovered_kits().
+@pytest.mark.parametrize("kit", discovered_kits())
 def test_shipped_kit_is_v2_and_validates(kit):
     schema = validate(load_kit(kit))
     assert schema.schema_version == "2"
 
 
-@pytest.mark.parametrize("kit", ["w7", "f1040"])
+@pytest.mark.parametrize("kit", discovered_kits())
 def test_shipped_kit_has_no_dangling_references(kit):
     # Every id a section's fields[] (or a show_if/require_if) names must exist.
     # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4] as
@@ -151,7 +220,7 @@ def test_shipped_kit_has_no_dangling_references(kit):
     assert result["errors"] == [], result["errors"]
 
 
-@pytest.mark.parametrize("kit", ["w7", "f1040"])
+@pytest.mark.parametrize("kit", discovered_kits())
 def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
     # A field that is read_only AND carries a show_if is only editable once shown
     # if it ALSO declares an unlock_method -- FieldRenderer's isDisabled falls back

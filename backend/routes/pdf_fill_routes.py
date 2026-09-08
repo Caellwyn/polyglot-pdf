@@ -1104,20 +1104,26 @@ async def resume_form(
 				value = widget.field_value
 
 				# RESOLVE THE MAPPING FIRST. The /AS read below was gated on an
-				# EXACT key match, but the i-90's widgets match only by suffix
-				# -- so the read was skipped for every one of them and 7 real
-				# radio answers stayed lost even after the fallback was added.
+				# EXACT key match, but the PRE-V2 i-90's widgets matched only
+				# by suffix -- so the read was skipped for every one of them and
+				# 7 real radio answers stayed lost even after the fallback was
+				# added. (That kit is gone; see the note below.)
 				# Resolve, then read.
 				mapped = by_widget.get(name)
 				if not mapped:
 					# SUFFIX FALLBACK, mirroring find_widget in the FILL path:
 					# XFA PDFs name widgets with a full path
 					# ("form1[0].#subform[0].P1_Line1_AlienNumber[0]") while a
-					# schema may map the bare leaf. On the i-90 that is ALL 114
-					# direct mappings -- 0 exact, 114 suffix-only -- so an
-					# exact-key lookup lost every text answer on the only
-					# status:complete kit, while the fill path wrote them
-					# correctly. Exact wins first, the same precedence
+					# schema may map the bare leaf. That WAS all 114 of the
+					# pre-v2 i-90's mappings -- 0 exact, 114 suffix-only -- so
+					# an exact-key lookup lost every text answer on the only
+					# status:complete kit while the fill path wrote them
+					# correctly. Measured 2026-09-02, no shipped kit still
+					# relies on it (i-90 79/79 exact, w7 47/47, f1040 167/167):
+					# the applicant-only v2 schema stores fully-qualified names.
+					# The fallback stays -- a kit MAY map the bare leaf, and
+					# nothing forbids it -- but it is now unexercised by
+					# committed data. Exact wins first, the same precedence
 					# find_widget uses.
 					mapped = next(
 						(m for widget_name, m in by_widget.items()

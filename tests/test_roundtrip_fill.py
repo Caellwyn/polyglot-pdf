@@ -42,7 +42,7 @@ sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
 import roundtrip_fill as rf  # noqa: E402
 
 _I90_ROOT = _REPO / "form-kits" / "i-90"
-_RACE_FIELD_ID = "p3_race"
+_RACE_FIELD_ID = "race"
 
 _i90_present = pytest.mark.skipif(
     not (_I90_ROOT / "form.pdf").exists(), reason="i-90 kit not present"

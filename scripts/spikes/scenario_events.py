@@ -63,69 +63,77 @@ import g1b_scoring  # noqa: E402  (ids_match / _group_covered -- prefix-tolerant
 # plants. after_field_id anchors an event AFTER that question's confirm.
 STANDARD_EVENTS: list = [
     # The user forgets what they said their A-number was, two sections later.
-    {"after_field_id": "p1_line16_ssn",
+    {"after_field_id": "ssn",
      "event": "recall",
      "say": "Wait, what did I say my alien registration number was earlier?",
-     "expect_field_ids": ["p1_line1_aliennumber"],
+     "expect_field_ids": ["a_number"],
      "expect_contains": "123456789"},
     # Cross-page recall while in Part 3.
-    {"after_field_id": "p3_line3a1_cityandstate",
+    {"after_field_id": "p3_poe_city_state",
      "event": "recall",
      "say": "Can you check which city I gave for my mailing address?",
-     "expect_field_ids": ["p1_line6d_cityortown"],
+     "expect_field_ids": ["mail_city"],
      "expect_contains": "Houston"},
     # Navigate back and CHANGE a standalone field (no cross-field constraint,
     # so the correction cannot manufacture a validator conflict).
-    {"after_field_id": "p3_hair_color",
+    {"after_field_id": "hair_color",
      "event": "navigate_back",
      "say": "Please go back to my mother's given name, I want to change it.",
-     "target_field_id": "p1_line12_mothergivenname",
+     "target_field_id": "mother_given_name",
      "correction_say": "Her name should be Lan Anh.",
      "expected_after": "Lan Anh"},
     # Navigate back and RE-CONFIRM the same value (the "did I get that right"
     # flow -- measures the seam without changing state).
-    {"after_field_id": "p5_line5_emailaddress",
+    {"after_field_id": "applicant_email",
      "event": "navigate_back",
      "say": "Go back to my street address for a moment, I want to check it.",
-     "target_field_id": "p1_line6b_streetnumbername",
+     "target_field_id": "mail_street",
      "correction_say": "Yes, it is four two zero zero Westheimer Road, that is right.",
      "expected_after": None},  # None = keep the plan's expected canon
     # The user cannot answer the USCIS account number -> voice skip
     # (replaces that question's fill; expect-empty via the skipped flag).
-    {"field_id": "p1_line2_acctidentifier",
+    {"field_id": "uscis_account",
      "event": "skip",
      "say": "I do not know my USCIS online account number, please skip it."},
     # Plant 1 (near pair, same page): Seattle ZIP against the Texas state.
-    {"field_id": "p1_line6f_zipcode",
+    {"field_id": "mail_zip",
      "event": "plant",
      "planted_say": "My zip code is nine eight one zero one.",
-     "conflict_group": ["p1_line6f_zipcode", "p1_line6e_state"],
+     "conflict_group": ["mail_zip", "mail_state"],
      "correct_say": "Sorry, my zip code is seven seven zero two seven.",
      "expected_after": "77027"},
-    # Plant 2 (far pair, page 4 vs page 5): the interpreter's language
-    # contradicts the language the applicant said the form was read in.
-    {"field_id": "p6_language",
+    # Plant 2 (far pair, page 1 vs page 7): the Part-8 continuation sheet's
+    # copy of the A-Number contradicts the one given on page 1.
+    #
+    # REPLACES the pre-v2 plant, which paired the interpreter's language against
+    # the applicant's (p6_language, page 4 vs 5). The applicant-only v2 kit drops
+    # Part 6 entirely, so that pair cannot exist -- and the point of this plant is
+    # the DISTANCE between the two mentions, not the interpreter specifically.
+    # a_number -> p8_a_number is the widest span the kit still offers and is
+    # copy_to-linked, so a mismatch between them is a real contradiction rather
+    # than two unrelated answers.
+    {"field_id": "p8_a_number",
      "event": "plant",
-     "planted_say": "The interpreter speaks Spanish.",
-     "conflict_group": ["p5_line1b_language", "p6_language"],
-     "correct_say": "Sorry, I meant Vietnamese.",
-     "expected_after": "Vietnamese"},
+     "planted_say": "On the extra pages my A number is A nine eight seven six five four three two one.",
+     "conflict_group": ["a_number", "p8_a_number"],
+     "correct_say": "Sorry, it is the same as before, one two three four five six seven eight nine.",
+     "expected_after": "123456789"},
 ]
 
 # E3 adds two more plants on top of STANDARD_EVENTS' two (4 total, 1 far).
 UNHAPPY_EXTRA_PLANTS: list = [
     # Admission date BEFORE the date of birth (both Part 1).
-    {"field_id": "p1_line15_dateofadmission",
+    {"field_id": "date_of_admission",
      "event": "plant",
      "planted_say": "My date of admission was June twentieth, nineteen eighty.",
-     "conflict_group": ["p1_line9_dateofbirth", "p1_line15_dateofadmission"],
+     "conflict_group": ["date_of_birth", "date_of_admission"],
      "correct_say": "Sorry, it was June twentieth, twenty fifteen.",
      "expected_after": "06/20/2015"},
     # City/state mismatch on the mailing address.
-    {"field_id": "p1_line6d_cityortown",
+    {"field_id": "mail_city",
      "event": "plant",
      "planted_say": "My mailing city is Seattle.",
-     "conflict_group": ["p1_line6d_cityortown", "p1_line6e_state"],
+     "conflict_group": ["mail_city", "mail_state"],
      "correct_say": "Sorry, my city is Houston.",
      "expected_after": "Houston"},
 ]
@@ -136,41 +144,41 @@ REACTIVITY_SUITE: list = [
     {"name": "nav-by-name", "questions": 16, "event": {
         "event": "navigate_back",
         "say": "Go back to my mailing city please.",
-        "target_field_id": "p1_line6d_cityortown",
+        "target_field_id": "mail_city",
         "correction_say": "It is Houston, that is correct.",
         "expected_after": None}},
     {"name": "nav-change-value", "questions": 16, "event": {
         "event": "navigate_back",
         "say": "I need to fix my apartment number, can we go back to it?",
-        "target_field_id": "p1_line6c_aptsteflrnumber",
+        "target_field_id": "mail_unit_number",
         "correction_say": "It is apartment twelve A.",
         "expected_after": "12A"}},
     {"name": "nav-vague-address", "questions": 16, "event": {
         "event": "navigate_back",
         "say": "Can we go back to my address? I want to double check the street.",
-        "target_field_id": "p1_line6b_streetnumbername",
+        "target_field_id": "mail_street",
         "correction_say": "Yes, four two zero zero Westheimer Road is right.",
         "expected_after": None}},
     {"name": "nav-first-field", "questions": 16, "event": {
         "event": "navigate_back",
         "say": "Go back to the very first question, the alien number.",
-        "target_field_id": "p1_line1_aliennumber",
+        "target_field_id": "a_number",
         "correction_say": "Yes, A one two three four five six seven eight nine is correct.",
         "expected_after": None}},
     {"name": "recall-value", "questions": 16, "event": {
         "event": "recall",
         "say": "What did I say my alien registration number was?",
-        "expect_field_ids": ["p1_line1_aliennumber"],
+        "expect_field_ids": ["a_number"],
         "expect_contains": "123456789"}},
     {"name": "recall-empty", "questions": 16, "event": {
         "event": "recall",
         "say": "Did I give an in care of name for my mailing address?",
-        "expect_field_ids": ["p1_line6a_incareofname"],
+        "expect_field_ids": ["mail_in_care_of"],
         "expect_contains": None}},
     {"name": "recall-option", "questions": 16, "event": {
         "event": "recall",
         "say": "Remind me, did I say my name has changed since my card was issued?",
-        "expect_field_ids": ["p1_checkbox4"],
+        "expect_field_ids": ["name_changed"],
         "expect_contains": "no"}},
     {"name": "recall-progress", "questions": 16, "event": {
         "event": "recall",

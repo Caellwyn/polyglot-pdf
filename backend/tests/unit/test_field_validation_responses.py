@@ -19,6 +19,8 @@ The REAL validator behavior IS covered, deliberately, elsewhere:
   validation against the real validator.
 So the formatter tests below are honest formatter coverage, not validator coverage.
 """
+import re
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from backend.services.callback_handler import CallbackHandler
@@ -50,8 +52,8 @@ def validation_handler_valid():
     """Mock handler that accepts valid field updates."""
     handler = MagicMock()
     handler.return_value = {
-        "form_state": {"p1_line1_aliennumber": "1234567"},
-        "applied_fields": ["p1_line1_aliennumber"],
+        "form_state": {"a_number": "1234567"},
+        "applied_fields": ["a_number"],
         "unknown_fields": [],
         "validation_errors": []
     }
@@ -68,7 +70,7 @@ def validation_handler_invalid_pattern():
         "unknown_fields": [],
         "validation_errors": [
             {
-                "field_id": "p1_line1_aliennumber",
+                "field_id": "a_number",
                 "field_name": "Alien Registration Number",
                 "value": "1234",
                 "constraint": "pattern",
@@ -130,12 +132,12 @@ class TestUpdateResponseShaping_Valid:
         # Gemini sends valid A-number
         tool_response = await handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"field_id": "p1_line1_aliennumber", "value": "1234567"}
+            arguments={"field_id": "a_number", "value": "1234567"}
         )
 
         # Verify tool response to Gemini indicates success
         assert tool_response["success"] is True
-        assert "p1_line1_aliennumber" in tool_response["applied_fields"]
+        assert "a_number" in tool_response["applied_fields"]
         assert "validation_errors" not in tool_response or len(tool_response.get("validation_errors", [])) == 0
 
         # Note: WebSocket send_json is called asynchronously during execution
@@ -163,7 +165,7 @@ class TestUpdateResponseShaping_Invalid:
         # Gemini sends invalid A-number (too short)
         tool_response = await handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"field_id": "p1_line1_aliennumber", "value": "1234"}
+            arguments={"field_id": "a_number", "value": "1234"}
         )
 
         # Verify tool response indicates failure
@@ -174,7 +176,7 @@ class TestUpdateResponseShaping_Invalid:
         # Verify error message is informative
         error_message = tool_response["message"]
         assert "ERRORS:" in error_message, "Error message should be clearly marked"
-        assert "Alien Registration Number" in error_message or "p1_line1_aliennumber" in error_message
+        assert "Alien Registration Number" in error_message or "a_number" in error_message
         assert "1234" in error_message, "Error should mention the invalid value"
         assert "pattern" in error_message or "\\d{7,9}" in error_message, "Error should explain the pattern requirement"
 
@@ -235,7 +237,7 @@ class TestUpdateErrorMessageFormatting:
 
         tool_response = await handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"field_id": "p1_line1_aliennumber", "value": "1234"}
+            arguments={"field_id": "a_number", "value": "1234"}
         )
 
         # Verify constraint value is in error message
@@ -254,7 +256,7 @@ class TestUpdateErrorMessageFormatting:
 
         tool_response = await handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"field_id": "p1_line1_aliennumber", "value": "1234"}
+            arguments={"field_id": "a_number", "value": "1234"}
         )
 
         error_message = tool_response["message"]
@@ -313,7 +315,7 @@ class TestANumberNormalization:
     """
 
     A_NUMBER_FIELD = {
-        "id": "p1_line1_aliennumber",
+        "id": "a_number",
         "name": "Alien Registration Number",
         "type": "text",
         "pattern": r"^\d{7,9}$",
@@ -331,9 +333,9 @@ class TestANumberNormalization:
     ])
     def test_a_number_normalized_and_accepted(self, raw, expected):
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([self.A_NUMBER_FIELD], {"p1_line1_aliennumber": raw})
-        assert "p1_line1_aliennumber" in result["valid_fields"], f"{raw!r} should be accepted"
-        assert result["form_state"]["p1_line1_aliennumber"] == expected, \
+        result = validate_updates([self.A_NUMBER_FIELD], {"a_number": raw})
+        assert "a_number" in result["valid_fields"], f"{raw!r} should be accepted"
+        assert result["form_state"]["a_number"] == expected, \
             f"{raw!r} should store canonical {expected!r}"
         assert result["validation_errors"] == []
 
@@ -344,8 +346,8 @@ class TestANumberNormalization:
     ])
     def test_a_number_still_rejects_wrong_digit_count(self, raw):
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([self.A_NUMBER_FIELD], {"p1_line1_aliennumber": raw})
-        assert "p1_line1_aliennumber" not in result["valid_fields"], f"{raw!r} should be rejected"
+        result = validate_updates([self.A_NUMBER_FIELD], {"a_number": raw})
+        assert "a_number" not in result["valid_fields"], f"{raw!r} should be rejected"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
     @pytest.mark.parametrize("raw", [
@@ -359,9 +361,9 @@ class TestANumberNormalization:
         # stored as empty (which would write blank to the PDF). bd 0zr / PR #98
         # fresh-eyes finding.
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([self.A_NUMBER_FIELD], {"p1_line1_aliennumber": raw})
-        assert "p1_line1_aliennumber" not in result["valid_fields"], f"{raw!r} should be rejected"
-        assert "p1_line1_aliennumber" not in result["form_state"], f"{raw!r} must NOT be stored"
+        result = validate_updates([self.A_NUMBER_FIELD], {"a_number": raw})
+        assert "a_number" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert "a_number" not in result["form_state"], f"{raw!r} must NOT be stored"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
@@ -381,7 +383,7 @@ class TestANumberNestedFormatPreset:
     # Field shaped exactly like form-kits/i-90/schema.json: format_preset lives
     # under `validation`, with NO top-level format_preset.
     SCHEMA_SHAPED_FIELD = {
-        "id": "p1_line1_aliennumber",
+        "id": "a_number",
         "name": "Alien Registration Number",
         "type": "text",
         "validation": {"pattern": r"^\d{7,9}$", "format_preset": "a_number"},
@@ -397,10 +399,10 @@ class TestANumberNestedFormatPreset:
     def test_nested_preset_normalizes_and_accepts(self, raw, expected):
         from backend.utils.field_validator import validate_updates
         result = validate_updates([self.SCHEMA_SHAPED_FIELD],
-                                  {"p1_line1_aliennumber": raw})
-        assert "p1_line1_aliennumber" in result["valid_fields"], \
+                                  {"a_number": raw})
+        assert "a_number" in result["valid_fields"], \
             f"{raw!r} should be accepted with a nested format_preset"
-        assert result["form_state"]["p1_line1_aliennumber"] == expected
+        assert result["form_state"]["a_number"] == expected
         assert result["validation_errors"] == []
 
     def test_real_i90_schema_field_normalizes_a_number(self):
@@ -416,15 +418,15 @@ class TestANumberNestedFormatPreset:
         with open(schema_path, encoding="utf-8") as f:
             schema = json.load(f)
         anum = next(fld for fld in schema["fields"]
-                    if fld["id"] == "p1_line1_aliennumber")
+                    if fld["id"] == "a_number")
         # Sanity: confirm the schema really nests it (guards the test's premise).
         assert anum.get("format_preset") is None
         assert anum["validation"]["format_preset"] == "a_number"
 
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([anum], {"p1_line1_aliennumber": "A12345678"})
-        assert "p1_line1_aliennumber" in result["valid_fields"]
-        assert result["form_state"]["p1_line1_aliennumber"] == "12345678"
+        result = validate_updates([anum], {"a_number": "A12345678"})
+        assert "a_number" in result["valid_fields"]
+        assert result["form_state"]["a_number"] == "12345678"
         assert result["validation_errors"] == []
 
 
@@ -442,7 +444,7 @@ class TestUSCISAccountNormalization:
     """
 
     ACCT_FIELD = {
-        "id": "p1_line2_acctidentifier",
+        "id": "uscis_account",
         "name": "USCIS Online Account Number",
         "type": "text",
         "minLength": 12,
@@ -459,9 +461,9 @@ class TestUSCISAccountNormalization:
     ])
     def test_uscis_account_normalized_and_accepted(self, raw, expected):
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
-        assert "p1_line2_acctidentifier" in result["valid_fields"], f"{raw!r} should be accepted"
-        assert result["form_state"]["p1_line2_acctidentifier"] == expected, \
+        result = validate_updates([self.ACCT_FIELD], {"uscis_account": raw})
+        assert "uscis_account" in result["valid_fields"], f"{raw!r} should be accepted"
+        assert result["form_state"]["uscis_account"] == expected, \
             f"{raw!r} should store canonical {expected!r}"
         assert result["validation_errors"] == []
 
@@ -473,8 +475,8 @@ class TestUSCISAccountNormalization:
         # Stripping punctuation must NOT relax the exactly-12-digit rule -- a wrong
         # digit COUNT is still rejected (so the fix tolerates formatting, not bad data).
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
-        assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
+        result = validate_updates([self.ACCT_FIELD], {"uscis_account": raw})
+        assert "uscis_account" not in result["valid_fields"], f"{raw!r} should be rejected"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
     def test_uscis_account_rejects_non_ascii_digits(self):
@@ -486,8 +488,8 @@ class TestUSCISAccountNormalization:
         # 12 fullwidth digits (U+FF10..U+FF19); written as escapes to keep this
         # source file ASCII-only (CLAUDE.md scar #6 -- cp1252 crash risk).
         fullwidth = "".join(chr(0xFF10 + d) for d in [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2])
-        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": fullwidth})
-        assert "p1_line2_acctidentifier" not in result["valid_fields"]
+        result = validate_updates([self.ACCT_FIELD], {"uscis_account": fullwidth})
+        assert "uscis_account" not in result["valid_fields"]
         assert result["validation_errors"]
 
     @pytest.mark.parametrize("raw", [
@@ -503,8 +505,8 @@ class TestUSCISAccountNormalization:
         # The letter must survive normalization (not be stripped to digits).
         assert any(c.isalpha() for c in str(normalize_value(self.ACCT_FIELD, raw))), \
             f"{raw!r} letters must be KEPT, not stripped"
-        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
-        assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
+        result = validate_updates([self.ACCT_FIELD], {"uscis_account": raw})
+        assert "uscis_account" not in result["valid_fields"], f"{raw!r} should be rejected"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
@@ -544,19 +546,28 @@ class TestNestedValidationConstraints:
         """The ACTUAL i-90 aliennumber field nests pattern under `validation`
         (no top-level pattern) -- these values passed before the fix."""
         from backend.utils.field_validator import validate_updates
-        anum = self._load_real_i90_field("p1_line1_aliennumber")
+        anum = self._load_real_i90_field("a_number")
         # Sanity: the schema really nests the pattern (guards the test's premise).
+        # Assert the PROPERTY, not the spelling: the kit has expressed this as
+        # both r"^\d{7,9}$" (pre-v2) and "^[0-9]{7,9}$" (v2) -- semantically
+        # identical, and an equality check on either literal fails on the other
+        # for no behavioral reason. What the premise needs is that the pattern is
+        # NESTED (not top-level) and is a 7-9 digit rule.
         assert anum.get("pattern") is None
-        assert anum["validation"]["pattern"] == r"^\d{7,9}$"
-        result = validate_updates([anum], {"p1_line1_aliennumber": raw})
-        assert "p1_line1_aliennumber" not in result["valid_fields"], \
+        nested_pattern = anum["validation"]["pattern"]
+        assert nested_pattern, "the a_number field must carry a nested pattern"
+        assert re.fullmatch(nested_pattern, "12345678"), nested_pattern
+        assert not re.fullmatch(nested_pattern, "12"), nested_pattern
+        assert not re.fullmatch(nested_pattern, "A12345678"), nested_pattern
+        result = validate_updates([anum], {"a_number": raw})
+        assert "a_number" not in result["valid_fields"], \
             f"{raw!r} should be rejected via the nested pattern"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
     # The validation_handler pre-flattened shape (top-level camelCase) must keep
     # rejecting the same values -- no regression from adding the nested fallback.
     FLATTENED_FIELD = {
-        "id": "p1_line1_aliennumber",
+        "id": "a_number",
         "name": "Alien Registration Number",
         "type": "text",
         "pattern": r"^\d{7,9}$",
@@ -567,21 +578,21 @@ class TestNestedValidationConstraints:
     @pytest.mark.parametrize("raw", ["A12", "ABCDEF12345"])
     def test_flattened_shape_still_rejects(self, raw):
         from backend.utils.field_validator import validate_updates
-        result = validate_updates([self.FLATTENED_FIELD], {"p1_line1_aliennumber": raw})
-        assert "p1_line1_aliennumber" not in result["valid_fields"], \
+        result = validate_updates([self.FLATTENED_FIELD], {"a_number": raw})
+        assert "a_number" not in result["valid_fields"], \
             f"{raw!r} should still be rejected in the pre-flattened shape"
         assert result["validation_errors"]
 
     def test_real_i90_nested_min_max_length_enforced(self):
         """p1_line2_acctidentifier nests min_length/max_length (snake_case)."""
         from backend.utils.field_validator import validate_updates
-        acct = self._load_real_i90_field("p1_line2_acctidentifier")
+        acct = self._load_real_i90_field("uscis_account")
         assert acct["validation"]["min_length"] == 12  # premise guard
-        result = validate_updates([acct], {"p1_line2_acctidentifier": "12345"})
-        assert "p1_line2_acctidentifier" not in result["valid_fields"], \
+        result = validate_updates([acct], {"uscis_account": "12345"})
+        assert "uscis_account" not in result["valid_fields"], \
             "5 digits should fail the nested min_length=12"
-        result = validate_updates([acct], {"p1_line2_acctidentifier": "123456789012"})
-        assert "p1_line2_acctidentifier" in result["valid_fields"], \
+        result = validate_updates([acct], {"uscis_account": "123456789012"})
+        assert "uscis_account" in result["valid_fields"], \
             "12 digits should pass the nested length bounds"
 
     def test_nested_number_min_max_enforced(self):
@@ -620,17 +631,17 @@ class TestUnknownFieldRecoveryGuidance:
         update_handler = MagicMock(return_value={
             "form_state": {},
             "applied_fields": [],
-            "unknown_fields": ["p1_line3a_familyname"],
+            "unknown_fields": ["family_name"],
             "validation_errors": [],
         })
         handler = create_callback_handler(
             mock_websocket, mock_coordinator, update_handler,
-            is_known_field=lambda fid: fid == "p1_line3a_familyname",
+            is_known_field=lambda fid: fid == "family_name",
         )
 
         tool_response = await handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"field_id": "p1_line3a_familyname", "value": "Nguyen"},
+            arguments={"field_id": "family_name", "value": "Nguyen"},
         )
 
         assert tool_response["success"] is False
@@ -749,7 +760,7 @@ class TestUnknownFieldRecoveryGuidance:
                    "validation_errors": []}
         val_err = {"form_state": {}, "applied_fields": [], "unknown_fields": [],
                    "validation_errors": [{
-                       "field_id": "p1_line1_aliennumber",
+                       "field_id": "a_number",
                        "field_name": "Alien Registration Number",
                        "value": "1234", "constraint": "pattern",
                        "constraint_value": "^\\d{7,9}$"}]}
@@ -764,7 +775,7 @@ class TestUnknownFieldRecoveryGuidance:
         await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
         await handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"field_id": "p1_line1_aliennumber", "value": "1234"})
+            arguments={"field_id": "a_number", "value": "1234"})
         after = await handler.on_tool_call(
             tool_name="update_form_fields", arguments=args)
 
