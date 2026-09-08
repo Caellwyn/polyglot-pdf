@@ -1,8 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py admin_backend/services/admin_auth.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/credit_ledger.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py admin_backend/services/admin_auth.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -361,8 +361,72 @@ cache, and an `expire_at` for the Firestore TTL policy declared by
 `record_mint()` write -- NOT yet wired into the mint route. The ATOMIC
 "reserve a credit + ledger entry + this record" transaction, the
 open-requires-a-mint-record gate, and the revoke/sweep/refund paths that
-transition `status` all land in later Epic 2 beads (A2/A3/A5); until then
-nothing calls `record_mint()` from a route.
+transition `status` all land in later Epic 2 beads (A3/A5); until then
+nothing calls `record_mint()` from a route. The ATOMIC transaction it will
+join now exists -- see the next section.
+
+### The credit ledger (`firms/{firm_id}/ledger/{auto}`, Epic 2 bead A2, `backend/services/credit_ledger.py`)
+
+**One helper writes the balance, and nothing else does.**
+`credit_ledger.append_entry()` is the only code that writes
+`firms/{firm_id}.balance_credits` after the firm is created, and the only
+producer of the per-firm ledger subcollection. Subscription grants, prepaid
+purchases, promotional grants, mint debits, expiry refunds and operator
+adjustments all go through it, so the invariant `balance_credits ==
+sum(amount)` holds by construction. Nothing recomputes the balance from the
+ledger on a read, so a second writer would break it silently -- the one
+deliberate other site is `firms.upsert_firm()`, which 0-initializes the
+field on first create only, and a set-derived test fails on any third.
+
+**The entry.** `type` (one of `subscription_grant`, `purchase`,
+`promo_grant`, `mint_debit`, `expiry_refund`, `adjustment`), signed
+`amount`, nullable `usd_amount`, a `firm_kind` snapshot, nullable `channel`,
+`balance_after`, `actor` (a uid or `system:<origin>`, never blank),
+`reason`, `link_jti`, `kit_id`, `ts`. The rules run BOTH ways: `purchase`
+and `subscription_grant` REQUIRE `usd_amount` (that is the income figure),
+and the other four REFUSE it, because a dollar figure on a promo or a debit
+would be double-counted by a view that sums the column. The four
+credit-adding types refuse a negative amount, `mint_debit` refuses a
+positive one, and `adjustment` -- the one signed escape hatch -- requires a
+non-blank `reason`. `firm_kind` is SNAPSHOTTED rather than joined at read
+time so a firm later promoted from `mock` to `live` does not retroactively
+turn its test grants into revenue, and it falls back to `"live"` on a
+missing key, the same fail-closed polarity as `firms.firm_kind()`.
+
+**Reads before writes, nothing hoisted.** This is a Firestore transaction:
+every read must precede every write, and the body is RE-RUN on contention.
+The balance, the kind snapshot, the sufficiency verdict and `balance_after`
+are therefore all computed inside the body from the same snapshot on every
+run -- a value read before the transaction would be stale on the retry, and
+that retry is exactly the double-mint race (two debits against one credit
+leave one entry and a balance of 0). The helper is SYNC on the Admin SDK, so
+async callers wrap it in `asyncio.to_thread`.
+
+**Enforcement is a caller's switch, not a default.**
+`require_sufficient_balance=False` (the default) WRITES a debit past zero
+and lets the balance go negative -- the metered soft-launch mode; `True`
+raises `InsufficientCredits` with nothing committed. Epic 2 bead A3's mint
+route passes it from the `CREDITS_ENFORCED` runtime-config flag and maps the
+refusal to `402`. That bead also passes `extra_writes`, which joins the
+`links[_<channel>]/{jti}` mint record above to the SAME transaction, so the
+debit, the entry and the record commit together or not at all.
+
+**Every committed write emits one `ledger_export` structured log line**
+(`event_type`, `type`, `amount`, `usd_amount`, `firm_id`, `firm_kind`,
+`channel`, `link_jti`) -- the income and spend feed Epic 3's Cloud Logging
+sink filters on. It is emitted AFTER the commit, so an aborted transaction
+leaves no line, and it carries no field values, PII or PHI: `reason` is
+operator free text and stays out of the log while being stored on the entry.
+
+**`scripts/grant_credits.py`** is the operator CLI on the same helper, so
+credits can be granted and rolled back before the console exists. `grant`
+(positive only; `--type` promo/purchase/subscription, the paid two requiring
+`--usd`) and `adjust` (either sign, `--reason` required) both take a
+REQUIRED `--project` whose resolved project is asserted before any write,
+refuse the dead project and a zero delta, and support `--dry-run`. Grants
+carry no channel, and stamp `actor` as
+`system:grant_credits_cli:<operator>` -- deliberately distinguishable from a
+console grant's Firebase uid.
 
 ### The firm WRITE path: authorization is not authentication
 
@@ -424,8 +488,9 @@ The firm tier's identity backbone (bd `polyglot-pdf-lo88`, epic
   operator-chosen slug): `name`, `contact_email`, `allowed_kits: [kit_id]`,
   `status: "active" | "suspended"`, `kind: "mock" | "live"` (Epic 2 bead A1;
   required on create), `balance_credits: int` and `balance_updated_at`
-  (also A1; 0-initialized on create, thereafter written ONLY by the
-  transactional credit-ledger helper landing in Epic 2 bead A2 — NOT
+  (also A1; 0-initialized on create, thereafter written ONLY by
+  `backend/services/credit_ledger.py`'s single transactional helper (Epic 2
+  bead A2 — see "The credit ledger" below) — NOT
   channel-partitioned, one balance per firm regardless of which channel's
   mint debits it, safe only because a `live` firm can mint only on the
   explicit demo channel), `created_at`/`updated_at`. Accessed ONLY via
