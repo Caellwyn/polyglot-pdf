@@ -113,10 +113,22 @@ export function stripTrailingCode(label: string): string {
  * a semantic slug; its PDF export code lives in pdf_on_value. A code that is
  * ALREADY a valid slug ('5') IS the value -- the label for the number five is
  * "5". Kept codes are reserved first so a minted sibling cannot collide.
- * Mirrors conditional_vocabulary.mint_select_slugs; keep them in step. */
+ * Mirrors `conditional_vocabulary.mint_select_slugs`'s KEEP rules (a slug-shaped
+ * code is the value; only its first occurrence; kept codes reserved before
+ * minting) with shared fixtures. The Python `reserved` parameter has no TS
+ * counterpart on purpose: every editor call passes the field's WHOLE option
+ * list, so there is never a second set to reserve against (the migration
+ * tool is the only caller that splits v2 from legacy). Keep the rules in step. */
 export function mintSelectSlugs(labels: string[], codes: (string | undefined)[]): string[] {
   const isSlug = (c: unknown) => typeof c === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(c);
-  const keep = codes.map(c => (isSlug(c) ? (c as string) : null));
+  // Only the FIRST occurrence of a slug-shaped code is kept as the value; a
+  // later sibling with the same code is minted from its label (mirrors the
+  // Python minter; two options coded '5' must not share a value).
+  const taken = new Set<string>();
+  const keep = codes.map(c => {
+    if (isSlug(c) && !taken.has(c as string)) { taken.add(c as string); return c as string; }
+    return null;
+  });
   const reserved = keep.filter((k): k is string => k !== null);
   const toMint = labels.filter((_, i) => keep[i] === null).map(stripTrailingCode);
   const minted = mintUniqueSlugs([...reserved, ...toMint]).slice(reserved.length);

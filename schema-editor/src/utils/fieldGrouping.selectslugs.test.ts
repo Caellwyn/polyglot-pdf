@@ -45,6 +45,11 @@ describe('mintSelectSlugs', () => {
       .toEqual(['other', 'other_2', 'other_2_2']);
   });
 
+  it('only the FIRST occurrence of a kept code is kept (shared fixture with the Python minter)', () => {
+    expect(mintSelectSlugs(['5', 'Five North'], ['5', '5'])).toEqual(['5', 'five_north']);
+    expect(mintSelectSlugs(['5', '5'], ['5', '5'])).toEqual(['5', '5_2']);
+  });
+
   it('a missing code is never kept', () => {
     expect(mintSelectSlugs(['Alabama (AL)', 'Alaska'], [undefined, undefined]))
       .toEqual(['alabama', 'alaska']);

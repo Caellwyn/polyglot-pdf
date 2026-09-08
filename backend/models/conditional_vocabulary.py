@@ -21,7 +21,7 @@ P1.2 contract test adds the rendered-contract layer on top.
 """
 
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, List
+from typing import Dict, FrozenSet, List, Optional, Sequence
 import re
 import unicodedata
 
@@ -171,7 +171,9 @@ def strip_trailing_code(label: str) -> str:
     return _TRAILING_CODE.sub("", label or "")
 
 
-def mint_select_slugs(labels: List[str], codes: List[str]) -> List[str]:
+def mint_select_slugs(
+    labels: List[str], codes: List[str], reserved: Sequence[str] = (),
+) -> List[str]:
     """Slugs for a SELECT's options (bd polyglot-pdf-g2fpr).
 
     A select's value is a semantic slug and its PDF export code lives in
@@ -180,15 +182,32 @@ def mint_select_slugs(labels: List[str], codes: List[str]) -> List[str]:
         label for the number five is "5", and re-minting it from a label
         would invent a word for a number;
       - a label's trailing "(CODE)" is stripped before minting.
-    Uniqueness is enforced across the WHOLE set (kept codes are reserved
-    first, so a minted sibling cannot collide with one).
+    Uniqueness is enforced across the WHOLE set: kept codes are reserved
+    first, so a minted sibling cannot collide with one -- and so are any
+    `reserved` slugs the caller passes (the migration tool passes a field's
+    ALREADY-v2 option values, so a newly minted legacy sibling cannot collide
+    with an existing slug either; bd polyglot-pdf-g2fpr PR 3a).
     """
     assert len(labels) == len(codes)
-    keep = [c if (isinstance(c, str) and is_valid_option_slug(c)) else None
-            for c in codes]
-    reserved = [c for c in keep if c is not None]
+    # A code is kept as the value only when it is slug-shaped AND not already
+    # taken by a reserved sibling: fresh-eyes (g2fpr.3) showed the keep
+    # fast-path handing a legacy '5' the same value as an already-v2 '5' in
+    # the same field. Such a code is minted from its label instead.
+    taken = set(reserved)
+    keep: List[Optional[str]] = []
+    for c in codes:
+        # ...and only its FIRST occurrence: two legacy options coded '5' both
+        # passed the fast-path and shared a value (fresh-eyes round 2). The
+        # second is minted from its label; both still carry the code in
+        # pdf_on_value, which the migration report and lint flag.
+        if isinstance(c, str) and is_valid_option_slug(c) and c not in taken:
+            keep.append(c)
+            taken.add(c)
+        else:
+            keep.append(None)
+    held = list(reserved) + [c for c in keep if c is not None]
     to_mint = [strip_trailing_code(l) for l, k in zip(labels, keep) if k is None]
-    minted = iter(mint_unique_slugs(reserved + to_mint)[len(reserved):])
+    minted = iter(mint_unique_slugs(held + to_mint)[len(held):])
     return [k if k is not None else next(minted) for k in keep]
 
 

@@ -66,3 +66,27 @@ def test_a_missing_or_non_string_code_is_never_kept():
 def test_length_mismatch_is_a_bug_not_a_silent_truncation():
     with pytest.raises(AssertionError):
         mint_select_slugs(["a", "b"], ["A"])
+
+
+def test_reserved_slugs_are_held_before_minting():
+    """The migration tool passes a field's ALREADY-v2 values as reserved."""
+    assert mint_select_slugs(["Other"], ["X"], reserved=["other"]) == ["other_2"]
+
+
+def test_a_kept_code_that_collides_with_a_reserved_slug_is_minted_instead():
+    """Fresh-eyes (g2fpr.3): the keep fast-path handed a legacy '5' the same
+    value as an already-v2 '5' in the same field. It is minted from its label."""
+    assert mint_select_slugs(["Five"], ["5"], reserved=["5"]) == ["five"]
+    # ...and the mint still avoids the reserved set.
+    assert mint_select_slugs(["5"], ["5"], reserved=["5"]) == ["5_2"]
+
+
+def test_reserved_defaults_to_nothing():
+    assert mint_select_slugs(["5"], ["5"]) == ["5"]
+
+
+def test_only_the_FIRST_occurrence_of_a_kept_code_is_kept():
+    """Fresh-eyes round 2: two legacy options coded '5' both passed the keep
+    fast-path and shared a value. Uniqueness is across the WHOLE set."""
+    assert mint_select_slugs(["5", "Five North"], ["5", "5"]) == ["5", "five_north"]
+    assert mint_select_slugs(["5", "5"], ["5", "5"]) == ["5", "5_2"]
