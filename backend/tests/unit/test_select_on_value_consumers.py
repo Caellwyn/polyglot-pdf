@@ -110,6 +110,8 @@ REVIEWED: dict[str, str] = {
         "the extraction prompt: a select condition references the SLUG; the code lives in pdf_on_value (g2fpr.2)",
     "scripts/migrate_schema_v2.py":
         "already writes {value: slug, pdf_on_value: code} for selects built from the dump (c5r8) -- the channel the filler never read",
+    "scripts/migrate_select_on_values.py":
+        "the g2fpr.3 MIGRATION: writes pdf_on_value = old value and mints the slug via mint_select_slugs for every legacy select option; retargets conditions (bd polyglot-pdf-ub7om)",
 }
 
 

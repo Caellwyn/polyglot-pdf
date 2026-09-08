@@ -21,7 +21,7 @@ P1.2 contract test adds the rendered-contract layer on top.
 """
 
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, List
+from typing import Dict, FrozenSet, List, Sequence
 import re
 import unicodedata
 
@@ -171,7 +171,9 @@ def strip_trailing_code(label: str) -> str:
     return _TRAILING_CODE.sub("", label or "")
 
 
-def mint_select_slugs(labels: List[str], codes: List[str]) -> List[str]:
+def mint_select_slugs(
+    labels: List[str], codes: List[str], reserved: Sequence[str] = (),
+) -> List[str]:
     """Slugs for a SELECT's options (bd polyglot-pdf-g2fpr).
 
     A select's value is a semantic slug and its PDF export code lives in
@@ -180,15 +182,18 @@ def mint_select_slugs(labels: List[str], codes: List[str]) -> List[str]:
         label for the number five is "5", and re-minting it from a label
         would invent a word for a number;
       - a label's trailing "(CODE)" is stripped before minting.
-    Uniqueness is enforced across the WHOLE set (kept codes are reserved
-    first, so a minted sibling cannot collide with one).
+    Uniqueness is enforced across the WHOLE set: kept codes are reserved
+    first, so a minted sibling cannot collide with one -- and so are any
+    `reserved` slugs the caller passes (the migration tool passes a field's
+    ALREADY-v2 option values, so a newly minted legacy sibling cannot collide
+    with an existing slug either; bd polyglot-pdf-g2fpr PR 3a).
     """
     assert len(labels) == len(codes)
     keep = [c if (isinstance(c, str) and is_valid_option_slug(c)) else None
             for c in codes]
-    reserved = [c for c in keep if c is not None]
+    held = list(reserved) + [c for c in keep if c is not None]
     to_mint = [strip_trailing_code(l) for l, k in zip(labels, keep) if k is None]
-    minted = iter(mint_unique_slugs(reserved + to_mint)[len(reserved):])
+    minted = iter(mint_unique_slugs(held + to_mint)[len(held):])
     return [k if k is not None else next(minted) for k in keep]
 
 
