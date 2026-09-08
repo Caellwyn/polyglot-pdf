@@ -1018,21 +1018,36 @@ def test_both_system_instructions_state_the_confirmation_rule():
             f"{name} no longer instructs a confirmation step"
         )
 
+def test_confirm_field_tool_description_is_pinned_EXACTLY():
+    """The tool schema ships to the model every session, and it once said
+    'manual: user edited field' -- editing IS confirming, asserted in the schema
+    of the very tool that RECORDS confirmations.
 
-def test_confirm_field_tool_description_makes_no_claim_about_HOW_a_value_ARRIVED():
-    """The tool schema ships every session, and it said 'manual: user edited
-    field' -- i.e. editing IS confirming, asserted in the schema of the very tool
-    that RECORDS confirmations.
+    EXACT-MATCH ON PURPOSE, and this is the one place that is right. A reviewer
+    defeated the previous four-word blacklist here with the exact wording that
+    shipped on dev and the maintainer then rejected ("manual: user edited AND
+    verified it in the UI). Typing alone is not a confirmation.") -- 'edited' was
+    followed by ' AND' not ' field', and 'Typing' is a gerund, not 'typed'. The
+    single most likely regression is a revert to that text, and the blacklist
+    waved it through.
 
-    Narrow on purpose: this is a SHORT, stable, enumerable string, so checking it
-    for the specific false claims is meaningful here in a way the same technique
-    is not against 15k chars of SI prose.
+    Exact matching is defensible here and NOT for the SIs: this is a 95-char
+    string with a fixed shape, so the enumeration is genuinely closed and any
+    change is a deliberate act that should come here and think. Fifteen thousand
+    characters of SI prose is the opposite, which is why the SI guard next door
+    pins PRESENCE only.
     """
     from backend.config import Settings
     cf = [t for t in Settings().TOOL_DECLARATIONS if t["name"] == "confirm_field"][0]
     prop = cf["parameters"]["properties"]["confirmation_method"]
-    desc = prop["description"].lower()
-    for claim in ("edited field", "manual edit", "typed", "auto-confirm"):
-        assert claim not in desc, f"confirm_field description claims {claim!r}"
+    assert prop["description"] == (
+        "How the field was confirmed "
+        "(verbal: user said yes/correct, manual: user verified it in the UI)"
+    ), (
+        "The confirm_field description changed. It must describe what the enum "
+        "VALUE means, never how the value arrived -- the model gets a field's "
+        "state, not its provenance (bd polyglot-pdf-gaxnf). If this change is "
+        "deliberate, update the expected string here."
+    )
     # The enum is a wire contract and must not drift with the prose.
     assert prop["enum"] == ["verbal", "manual"]
