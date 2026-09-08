@@ -299,11 +299,20 @@ def test_shipped_kit_required_fields_are_not_read_only(kit):
     # dead code. It passed only because no git-tracked kit uses copy_to; the
     # I-90 that does is bucket-only. The failure mode was the bad one: the guard
     # would have flagged the very case the rule sanctions (Opus cross-surface).
+    # isinstance(list) on copy_to, matching the two real consumers
+    # (schemaFormState's `Array.isArray(field?.copy_to) ? ... : []` and
+    # copyLinks' `if (!Array.isArray(raw)) return []`). Without it a copy_to
+    # authored as a bare STRING iterates character-by-character, so a single
+    # character matching a field id would silently excuse that field -- the
+    # wrong direction for a guard, since at runtime a string copy_to fans out
+    # to nothing and the target really is unfillable. FormField does not
+    # declare copy_to and the model is extra="ignore", so validate() accepts
+    # the malformed shape without complaint (Opus cross-surface).
     written_from_elsewhere = {
         target
         for field in raw.get("fields", [])
-        if isinstance(field, dict)
-        for target in (field.get("copy_to") or [])
+        if isinstance(field, dict) and isinstance(field.get("copy_to"), list)
+        for target in field["copy_to"]
     }
     offenders = []
     for field in raw.get("fields", []):
