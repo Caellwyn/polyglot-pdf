@@ -27,12 +27,15 @@ flagged possible per-form pricing (a $5 form and a $15 form under one firm).
 `link_cost_ceiling_usd` key when the kit carries one, falling back to the
 global default. A kit that omits it behaves exactly as before.
 
-Two kits DO set it now -- w7 and i-90 at $3 (bd polyglot-pdf-gob8l) -- but
-their links are still bounded by the GLOBAL default, because the only caller
-that matters (websocket_routes' check_budget at client-connect) passes no kit
-metadata. Resolving it there costs a kit load on every connect, so it is its
-own bead: polyglot-pdf-4tjt7. Until that lands, this function's per-form
-branch is exercised only by tests. Fails safe -- a higher ceiling, never an
+Two kits DO set it now -- w7 and i-90 at $3 (bd polyglot-pdf-gob8l). AT THE
+SOCKET (bd polyglot-pdf-ah5d3 / A4, closing polyglot-pdf-4tjt7) the per-form
+number reaches a connecting client through a DIFFERENT path than this
+function: `cost_ceiling_usd_for_claims` reads the token's own `cap_usd`
+claim, resolved once at MINT time (by A3) from the kit's price commercial and
+signed in -- never a per-connect kit metadata load. `cost_ceiling_usd_for_kit`
+itself is unchanged and still real: it is what A3's mint route calls to
+resolve that claim in the first place, and it is what any future caller that
+DOES hold kit metadata (not a token) should keep using. Fails safe -- a higher ceiling, never an
 absent one.
 
 WHAT THIS MODULE DOES NOT DO. It holds no counters and reaches no datastore.
@@ -143,6 +146,53 @@ def cost_ceiling_usd_for_kit(kit_metadata: Optional[dict[str, Any]]) -> float:
         # kept: the two together survive either being removed alone, which a
         # mutation check confirmed. Delete both and a `true` silently caps that
         # form at a fifth of one normal session.
+        return fallback
+    if isinstance(raw, (int, float)):
+        return _positive_float(str(raw), fallback)
+    if isinstance(raw, str):
+        return _positive_float(raw.strip(), fallback)
+    return fallback
+
+
+# The token-payload key carrying the per-link cap, once signed in at mint
+# (bd polyglot-pdf-ah5d3 / A4; `services/link_tokens.py`'s `mint_link_token`).
+CLAIM_COST_CEILING_KEY = "cap_usd"
+
+
+def cost_ceiling_usd_for_claims(claims: Optional[dict[str, Any]]) -> float:
+    """The spend ceiling for a CLIENT LINK socket connection.
+
+    PRECEDENCE, AND NOTHING ELSE: token `cap_usd` beats the global ceiling.
+    No per-connect Firestore kit read exists here or anywhere upstream of it
+    -- deliberately, because after the open-requires-a-mint-record cutover
+    (A3) every token that CAN open already carries `cap_usd` (it was resolved
+    once from the kit's `burn_cap_usd`, at mint, by A3). A per-connect kit
+    load would therefore pay a Firestore read on every client connect for a
+    case -- "an openable token with no cap claim" -- that cannot occur once
+    A3 has shipped. Before A3 ships, or for a token minted without a resolvable
+    kit ceiling, the claim is simply absent and this function falls through to
+    the global -- the SAME safe default `cost_ceiling_usd_for_kit` uses for a
+    kit with no opinion. The global is a defensive floor, never "no ceiling":
+    a malformed or missing claim must never read as unlimited spend.
+
+    Uses the SAME parsing helper as `cost_ceiling_usd_for_kit` (both funnel
+    an untrusted numeric-ish value through `_positive_float`), so a bad
+    `cap_usd` fails exactly the way a bad per-kit override does -- one
+    defensive-parsing rule for "a spend ceiling read from outside this
+    module", not two that could drift.
+    """
+    fallback = default_cost_ceiling_usd()
+    if not isinstance(claims, dict):
+        return fallback
+    raw = claims.get(CLAIM_COST_CEILING_KEY)
+    if raw is None:
+        return fallback
+    if isinstance(raw, bool):
+        # bool is an int subclass -- see cost_ceiling_usd_for_kit's identical
+        # carve-out. link_tokens.mint_link_token already refuses to sign a
+        # bool in as cap_usd, so this is belt-and-braces against a claims
+        # dict assembled by a future caller that did not go through minting
+        # (e.g. a test, or a later reconciliation path).
         return fallback
     if isinstance(raw, (int, float)):
         return _positive_float(str(raw), fallback)

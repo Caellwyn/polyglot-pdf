@@ -169,6 +169,23 @@ def link_channel() -> str:
     return os.getenv("LINK_CHANNEL", "").strip() or DEFAULT_CHANNEL
 
 
+def new_jti() -> str:
+    """Mint a fresh, unguessable jti -- WITHOUT signing a token.
+
+    Split out of `mint_link_token` for bead polyglot-pdf-ah5d3 / A3: the mint
+    ROUTE must reserve the credit (write the ledger debit + the `links/{jti}`
+    record) BEFORE signing, so a refused reservation never leaves a signed
+    token that would open. That requires the jti to exist before the sign
+    step, not be generated inside it.
+
+    Same 16 random bytes as the inline generation `mint_link_token` used
+    before this split -- collision-free in practice, and unguessable, because
+    the jti is the firm's join key and a predictable one would let an
+    outsider correlate links to sessions.
+    """
+    return _b64u(secrets.token_bytes(16))
+
+
 def mint_link_token(
     firm_id: str,
     kit_id: str,
@@ -176,6 +193,8 @@ def mint_link_token(
     open_window_s: int = DEFAULT_OPEN_WINDOW_S,
     complete_window_s: int = DEFAULT_COMPLETE_WINDOW_S,
     now: Optional[float] = None,
+    jti: Optional[str] = None,
+    cap_usd: Optional[float] = None,
 ) -> tuple[str, str]:
     """Mint one client link token. Returns (token, jti).
 
@@ -184,18 +203,29 @@ def mint_link_token(
     can be matched later WITHOUT us ever holding the identity. The caller
     must return it to the minting employee.
 
-    `complete_window_s` rides in the token but is enforced at REDEMPTION
-    (the completion clock starts when the link is first opened, which has not
-    happened yet at mint time).
+    `jti`: caller-supplied (bd polyglot-pdf-ah5d3 / A3), generated with
+    `new_jti()` BEFORE this call so the mint route can reserve the credit --
+    write the ledger debit and the `links/{jti}` record -- before the token
+    is signed. Omit it (the default) and this function generates one itself,
+    which is every caller that does not need the reserve-before-sign order
+    (tests, and any future non-billed mint path).
+
+    `cap_usd`: the per-link spend ceiling, resolved ONCE at mint from the
+    kit's `burn_cap_usd` (A3) and signed into the token. Optional and
+    DELIBERATELY so: A3 (which resolves and passes it) has not landed yet,
+    and a token minted without it must keep working exactly as today --
+    `link_budget.cost_ceiling_usd_for_claims` falls back to the global
+    ceiling for a token with no `cap_usd`, the same fallback a malformed
+    per-kit value gets. A caller-supplied value must be a real, finite,
+    positive number or it is dropped rather than signed in: a bad number
+    baked into a token cannot be fixed by retuning the global default, so
+    "no claim" (safe fallback) is the only acceptable failure shape here.
     """
     if not all(isinstance(v, str) and v for v in (firm_id, kit_id, employee_id)):
         raise LinkTokenError("firm_id, kit_id and employee_id are required")
 
     issued = int(now if now is not None else time.time())
-    # 16 bytes: collision-free in practice, and unguessable -- the jti is the
-    # firm's join key, so a predictable one would let an outsider correlate
-    # links to sessions.
-    jti = _b64u(secrets.token_bytes(16))
+    resolved_jti = jti if isinstance(jti, str) and jti else new_jti()
 
     payload = {
         "v": TOKEN_VERSION,
@@ -203,16 +233,32 @@ def mint_link_token(
         "firm_id": firm_id,
         "kit_id": kit_id,
         "employee_id": employee_id,
-        "jti": jti,
+        "jti": resolved_jti,
         "iat": issued,
         "exp": issued + int(open_window_s),      # deadline to OPEN
         "cw": int(complete_window_s),            # completion window, once opened
     }
+    # bool excluded explicitly: bool is an int subclass, so a stray `True`
+    # would otherwise sign in as a $1.00 ceiling. NaN and +/-inf excluded
+    # because `value != value` / `math.isinf` both indicate "not a real
+    # number" and neither belongs in a spend cap. A rejected value is
+    # DROPPED, not substituted with a default -- the field is optional
+    # precisely so an absent claim reads as "use the global", the same
+    # fallback a malformed one gets at read time.
+    if (
+        isinstance(cap_usd, (int, float))
+        and not isinstance(cap_usd, bool)
+        and cap_usd == cap_usd  # NaN check
+        and cap_usd not in (float("inf"), float("-inf"))
+        and cap_usd > 0
+    ):
+        payload["cap_usd"] = float(cap_usd)
+
     # sort_keys + compact separators: the signature covers these exact bytes,
     # so the encoding must be deterministic or a re-serialization breaks it.
     payload_b64 = _b64u(json.dumps(payload, sort_keys=True,
                                    separators=(",", ":")).encode("utf-8"))
-    return payload_b64 + "." + _sign(payload_b64), jti
+    return payload_b64 + "." + _sign(payload_b64), resolved_jti
 
 
 def verify_link_token(token: str, now: Optional[float] = None) -> dict:
@@ -279,6 +325,27 @@ def verify_link_token(token: str, now: Optional[float] = None) -> dict:
         # `true` cannot pass as a timestamp.
         if not isinstance(payload[key], int) or isinstance(payload[key], bool):
             raise LinkTokenError("field must be an integer: " + key)
+
+    # `cap_usd` is OPTIONAL (see mint_link_token) -- a token minted before A3
+    # wired this in, or minted with no resolvable kit ceiling, carries none,
+    # and that must keep verifying exactly as before this field existed. When
+    # present it must be a real, finite, positive number: this module already
+    # rejected a bad value at MINT (never signed it in), so a payload that
+    # both verifies (signature holds) and carries a malformed `cap_usd` would
+    # mean the module's own mint-time guard has a hole. Refusing the whole
+    # token here is the fail-closed answer to a state that should not be
+    # reachable -- the caller in link_budget.py refuses to trust it either
+    # way, but this catches the anomaly at the source.
+    if "cap_usd" in payload:
+        raw_cap = payload["cap_usd"]
+        if (
+            isinstance(raw_cap, bool)
+            or not isinstance(raw_cap, (int, float))
+            or raw_cap != raw_cap
+            or raw_cap in (float("inf"), float("-inf"))
+            or raw_cap <= 0
+        ):
+            raise LinkTokenError("field must be a positive number: cap_usd")
 
     if int(now if now is not None else time.time()) >= payload["exp"]:
         raise LinkTokenError("link expired before it was opened")

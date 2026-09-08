@@ -129,3 +129,74 @@ def test_a_kit_ceiling_beats_the_global_default(monkeypatch):
     assert link_budget.cost_ceiling_usd_for_kit({"link_cost_ceiling_usd": 5}) == 5.0
     # ...and a kit with no opinion still follows the retuned global
     assert link_budget.cost_ceiling_usd_for_kit({}) == 20.0
+
+
+# ---------------------------------------------------------------------------
+# Per-link cap FROM THE TOKEN (bd polyglot-pdf-ah5d3 / A4, closing 4tjt7).
+# Precedence at the socket: token cap_usd > global ceiling, and NOTHING else
+# -- no per-connect kit read. Same defensive parsing as cost_ceiling_usd_for_kit
+# above, funnelled through the same _positive_float helper.
+# ---------------------------------------------------------------------------
+
+
+def test_a_token_WITH_a_cap_overrides_the_global():
+    """The precedence this bead exists to add: the socket honours the link's
+    OWN ceiling, resolved once at mint, not the global."""
+    assert link_budget.cost_ceiling_usd_for_claims({"cap_usd": 3.0}) == 3.0
+    assert link_budget.cost_ceiling_usd_for_claims({"cap_usd": 15}) == 15.0
+
+
+def test_a_token_WITHOUT_a_cap_uses_the_global():
+    """A token minted before A3 wires cap_usd through, or for a kit with no
+    resolvable ceiling, carries no claim -- and must fall through exactly
+    like a kit with no per-form opinion does."""
+    assert link_budget.cost_ceiling_usd_for_claims({}) == 10.0
+    assert link_budget.cost_ceiling_usd_for_claims(None) == 10.0
+    assert link_budget.cost_ceiling_usd_for_claims({"firm_id": "f1"}) == 10.0
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        None,
+        {},
+        {"other_key": 3},
+        "not-a-dict",
+        {"cap_usd": None},
+        {"cap_usd": "free"},
+        {"cap_usd": -4},
+        {"cap_usd": 0},
+        {"cap_usd": True},
+        {"cap_usd": []},
+    ],
+)
+def test_a_MALFORMED_cap_usd_claim_falls_through_to_the_global(claims):
+    """The property that matters most: a bad claim must never read as
+    unlimited spend. Mirrors cost_ceiling_usd_for_kit's own malformed-value
+    parametrization -- this is the same defensive-parsing rule applied to a
+    different source dict."""
+    assert link_budget.cost_ceiling_usd_for_claims(claims) == 10.0
+
+
+def test_a_BOOLEAN_cap_usd_claim_does_not_become_a_ONE_DOLLAR_ceiling():
+    """bool subclasses int, so a stray `True` would otherwise resolve to a
+    $1.00 ceiling -- link_tokens.mint_link_token already refuses to sign a
+    bool in, but this function does not trust that alone."""
+    assert link_budget.cost_ceiling_usd_for_claims({"cap_usd": True}) == 10.0
+    assert link_budget.cost_ceiling_usd_for_claims({"cap_usd": False}) == 10.0
+
+
+def test_a_token_cap_beats_a_RETUNED_global(monkeypatch):
+    """Precedence holds even when the global itself has been retuned -- the
+    token's number is not "the default at mint time", it wins outright."""
+    monkeypatch.setattr(link_budget, "_rc_link_cost_ceiling_usd", lambda: 20.0)
+    assert link_budget.cost_ceiling_usd_for_claims({"cap_usd": 3.0}) == 3.0
+    assert link_budget.cost_ceiling_usd_for_claims({}) == 20.0
+
+
+def test_a_cap_usd_string_survives_a_JSON_round_trip():
+    """A claims dict decoded from JSON (verify_link_token's json.loads) can
+    hand back either an int/float or -- if some future caller stringifies --
+    a numeric string; both must resolve the same way as the per-kit override
+    does."""
+    assert link_budget.cost_ceiling_usd_for_claims({"cap_usd": "7.25"}) == 7.25

@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- new Surface contract 18, `backend/services/credit_ledger.py`'s `append_entry()` as the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`, the `ledger_export` structured log line Epic 3's BigQuery sink filters on, and the `scripts/grant_credits.py` operator CLI on the same helper.) (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4, closing polyglot-pdf-4tjt7 -- the socket's client-link spend ceiling is now TOKEN `cap_usd` (a signed claim) over the global default, resolved by `link_budget.cost_ceiling_usd_for_claims`; the earlier "socket passes no kit metadata" / "not yet threaded through the handshake" claims are gone.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -773,14 +773,20 @@ system that is NOT a Firebase account. Five coupled pieces:
   contradict it. On desktop it yields to the save nudge, which carries the same
   words plus a working Save button.
 
-  Scope today: the socket passes the GLOBAL ceiling. Per-form ceilings resolve
-  and are tested in `link_budget.cost_ceiling_usd_for_kit`, but the socket
-  passes no kit metadata, so a kit's own `link_cost_ceiling_usd` is INERT --
-  and w7 now declares one (at $3, bd polyglot-pdf-gob8l), so
-  that link is bounded by the GLOBAL default rather than the declared $3.
-  Fails safe: a higher ceiling, never an absent one. Threading it through
-  costs a metadata load on every client connect, so it is its own bead
-  (polyglot-pdf-4tjt7). And the check is at CONNECT, so a single session that
+  Scope today (bd polyglot-pdf-ah5d3 / Epic 2 A4, closing polyglot-pdf-4tjt7):
+  the socket's spend ceiling is the TOKEN's own `cap_usd` claim when present,
+  else the GLOBAL default -- `link_budget.cost_ceiling_usd_for_claims(claims)`
+  resolves it, and the socket passes that resolved number into `check_budget`
+  as `{KIT_COST_CEILING_KEY: ceiling_usd}`. No per-connect kit metadata read
+  happens here or upstream of it: after the open-requires-a-mint-record
+  cutover (Epic 2 bead A3) every token that CAN open already carries `cap_usd`
+  for a kit that has one, resolved once at mint from the kit's price
+  commercial. Before A3 ships (or for a kit with no resolvable ceiling), the
+  claim is simply absent and the socket falls through to the global -- w7 and
+  i-90 both declare a per-form ceiling (at $3, bd polyglot-pdf-gob8l), but
+  until A3 lands their links carry no `cap_usd` claim and stay bounded by the
+  GLOBAL default rather than the declared $3. Fails safe: a higher ceiling,
+  never an absent one. And the check is at CONNECT, so a single session that
   blows the ceiling mid-call is caught on the NEXT connect -- overrun is
   bounded by one session.
 
@@ -842,10 +848,13 @@ and parses it the same way the pre-bg313 call site did, before falling back
 further to the compiled default (`false`). An operator overrides it per
 channel by seeding `app_config/{channel}` with `scripts/set_runtime_config.py`,
 or the admin console's own config route once it lands (bd polyglot-pdf-li9x0).
-The ceiling in force is the global one (also runtime-config-backed now, with
-the same env-var fallback); per-form
-`link_cost_ceiling_usd` is declared by the shipped kits but not yet threaded
-through the handshake (bd polyglot-pdf-4tjt7).
+The GLOBAL ceiling is runtime-config-backed (same env-var fallback); the
+ceiling actually in force at connect is TOKEN `cap_usd` > that global, via
+`link_budget.cost_ceiling_usd_for_claims` (bd polyglot-pdf-ah5d3 / Epic 2 A4,
+closing polyglot-pdf-4tjt7) -- carried on the signed link token's claims, not
+the handshake. A kit's own `link_cost_ceiling_usd` reaches a token's `cap_usd`
+only once Epic 2 bead A3's mint-time resolve lands; until then every link
+stays bounded by the global.
 
 ### 10. Intro agree-label mirror (bd polyglot-pdf-s1iex.3)
 

@@ -1174,6 +1174,10 @@ from ..services.link_spend import (
 	check_budget,
 	record_spend,
 )
+from ..services.link_budget import (
+	KIT_COST_CEILING_KEY,
+	cost_ceiling_usd_for_claims,
+)
 
 
 async def _bank_link_spend(link_jti, service, log) -> float:
@@ -1227,7 +1231,7 @@ def _verify_ws_credential(token: str) -> dict:
 	"""
 	if isinstance(token, str) and token.count(".") == 1:
 		payload = verify_link_token(token)   # raises LinkTokenError
-		return {
+		claims = {
 			"uid": None,                     # a client has NO account
 			"firm_id": payload["firm_id"],
 			"link_kit_id": payload["kit_id"],
@@ -1236,6 +1240,14 @@ def _verify_ws_credential(token: str) -> dict:
 			"cw": payload["cw"],          # completion window, enforced at the socket
 			"is_client_link": True,
 		}
+		# cap_usd IS OPTIONAL on the payload (bd polyglot-pdf-ah5d3 / A4) --
+		# only carried through when the token actually has one, so
+		# cost_ceiling_usd_for_claims sees a claims dict shaped exactly like
+		# the verified payload (no synthetic `cap_usd: None` that would need
+		# its own carve-out downstream).
+		if "cap_usd" in payload:
+			claims["cap_usd"] = payload["cap_usd"]
+		return claims
 	return verify_token(token)
 
 @router.websocket("/fill")
@@ -1421,17 +1433,52 @@ async def fill_form_from_schema(
 		# The client keeps everything else: retrieval never redeems, so their
 		# download, print and preview still work and they can finish the
 		# remaining fields by typing (maintainer, 2026-08-27).
-		# NOTE: the global ceiling, not a per-form one. cost_ceiling_usd_for_kit
-		# supports per-form values and is tested, but no kit metadata is passed
-		# here, so a kit's own link_cost_ceiling_usd is INERT.
 		#
-		# Two kits now declare one (w7 and i-90 at $3, bd polyglot-pdf-gob8l),
-		# so this is no longer hypothetical: those links are bounded at the
-		# GLOBAL default, not $3. Fails safe -- a higher ceiling, never an
-		# absent one. Threading the metadata through costs a kit load on EVERY
-		# client connect, which is why it is its own bead: polyglot-pdf-4tjt7.
+		# THE TOKEN'S OWN CEILING, NOT A PER-CONNECT KIT READ (bd
+		# polyglot-pdf-ah5d3 / A4, closing polyglot-pdf-4tjt7). Precedence is
+		# token `cap_usd` > the global default, and NOTHING ELSE:
+		# `cost_ceiling_usd_for_claims` reads the claim A3's mint route
+		# resolves once (from the kit's price commercial) and signs into the
+		# token, so a per-connect Firestore kit load is never needed --
+		# after the open-requires-a-mint-record cutover, every token that can
+		# reach this line already carries `cap_usd` for a kit that has one.
+		# A token minted before that (or for a kit with no resolvable
+		# ceiling) carries no claim and falls through to the global, the same
+		# safe default a malformed value gets.
+		#
+		# Two kits declare a per-form ceiling today (w7 and i-90 at $3, bd
+		# polyglot-pdf-gob8l), but A3 -- the mint-time resolve-from-kit-
+		# metadata step that would actually put `cap_usd` on their tokens --
+		# is still open and blocked by this bead. Until A3 lands, w7/i-90
+		# links carry no `cap_usd` claim and stay bounded by the $10 global,
+		# exactly like any other uncapped token.
+		#
+		# `check_budget`'s own parameter is `kit_metadata` (it calls
+		# `cost_ceiling_usd_for_kit` under the KIT_COST_CEILING_KEY name) --
+		# reusing that SAME key here, with the value already resolved by
+		# `cost_ceiling_usd_for_claims`, means check_budget's re-parse is a
+		# no-op idempotent pass over an already-good number rather than a
+		# second, divergent resolution path.
+		#
+		# BOTH resolved inside the SAME to_thread call (Opus cross-surface,
+		# bd polyglot-pdf-ah5d3 finding 1). `cost_ceiling_usd_for_claims`
+		# falls through to `default_cost_ceiling_usd()` for every token until
+		# A3 lands, which on a cold runtime_config cache (45s TTL) is a
+		# blocking sync Admin-SDK Firestore read -- the exact hazard
+		# link_routes.py:141-147 and auth.py:293-296 document for this same
+		# runtime_config call. Calling it directly on the event loop (as
+		# opposed to inside the thread below, where check_budget's own
+		# resolution already lived pre-A4) would stall every OTHER concurrent
+		# request on this Cloud Run instance, in-flight audio included, for
+		# every token that has no cap_usd claim.
+		def _resolve_ceiling_and_check_budget() -> float:
+			ceiling_usd = cost_ceiling_usd_for_claims(claims)
+			return check_budget(
+				claims.get("jti"), {KIT_COST_CEILING_KEY: ceiling_usd}
+			)
+
 		try:
-			await asyncio.to_thread(check_budget, claims.get("jti"))
+			await asyncio.to_thread(_resolve_ceiling_and_check_budget)
 		except LinkBudgetExhausted as exc:
 			log.warning("ws_link_budget_exhausted", jti=claims.get("jti"),
 						firm_id=claims.get("firm_id"), error=str(exc))
