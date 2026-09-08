@@ -33,6 +33,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Per-firm credit ledger (firms/{firm_id}/ledger/{auto}): Admin-SDK-only
+    // (Epic 2 bead A1, epic polyglot-pdf-e374w). One row per credit
+    // movement -- subscription/purchase/promo grants, mint debits, expiry
+    // refunds, adjustments -- written by the single transactional ledger
+    // helper (backend/services/credit_ledger.py, bead A2). A client-SDK
+    // write here could fabricate a grant or hide a debit; a client-SDK read
+    // would leak a firm's spend history to any browser holding a Firebase
+    // token. Nested under firms/{firmId} but pinned by its OWN match block
+    // -- a parent's deny does not cascade to its subcollections in
+    // Firestore's rules language, so this block is load-bearing on its own,
+    // not redundant with the firms/{firmId} block above.
+    match /firms/{firmId}/ledger/{entryId} {
+      allow read, write: if false;
+    }
+
     // Admin audit log (admin_audit_log/{auto}): Admin-SDK-only
     // (bd polyglot-pdf-li9x0). Written by admin_backend/services/audit_log.py
     // -- inside the mutation's own transaction for Firestore mutations, and
@@ -50,6 +65,52 @@ service cloud.firestore {
     // backend/services/runtime_config.py). Client-writable config would let
     // a browser raise its own per-link USD spend ceiling.
     match /app_config/{channel} {
+      allow read, write: if false;
+    }
+
+    // Kit commercial docs (kits/{kit_id}): Admin-SDK-only (Epic 2 bead A1).
+    // credit_cost, burn_cap_usd and display metadata, written by
+    // PUT /admin/kits/{kit_id}/commercial (Epic 2 Track B). A client-SDK
+    // write could set its own credit_cost to zero; a client-SDK read is
+    // unnecessary since the priced catalogue is served through the existing
+    // public form-kit routes, not this collection.
+    match /kits/{kitId} {
+      allow read, write: if false;
+    }
+
+    // Client-link mint records (links/{jti} and links_<channel>/{jti}):
+    // Admin-SDK-only (Epic 2 bead A1, backend/services/links_store.py).
+    // Written at mint time by the mint transaction (bead A2/A3) with the
+    // firm, kit, employee, credit_cost/cap_usd snapshots, and the status
+    // cache the open/revoke/sweep paths update. Kept as a SEPARATE
+    // collection from link_redemptions/link_redemptions_<channel> below --
+    // see links_store.py's module docstring for why. The demo channel keeps
+    // the bare `links` name (links_store._collection_name()'s
+    // DEFAULT_CHANNEL rule); every other channel gets its own suffixed
+    // collection, so both are pinned here.
+    match /links/{jti} {
+      allow read, write: if false;
+    }
+    match /links_staging/{jti} {
+      allow read, write: if false;
+    }
+
+    // Client-link one-time-use redemption records
+    // (link_redemptions/{jti} and link_redemptions_<channel>/{jti}):
+    // Admin-SDK-only (bd polyglot-pdf-ugm6, channel isolation bd
+    // polyglot-pdf-3q9qn). Fold-in by Epic 2 bead A1: this collection
+    // predates the rules-set test (bd polyglot-pdf-li9x0) and had NO deny
+    // block until now, even though it has always been Admin-SDK-only by
+    // access pattern (backend/services/link_redemptions.py, get_db() only).
+    // Written on a client's first open (open_link) and on completion
+    // (complete_link); a client-SDK write here could forge a link as
+    // already-used (denying a real client) or already-completed (spoofing a
+    // second free session), and a client-SDK read would let a browser probe
+    // whether a specific jti has been burned.
+    match /link_redemptions/{jti} {
+      allow read, write: if false;
+    }
+    match /link_redemptions_staging/{jti} {
       allow read, write: if false;
     }
   }
