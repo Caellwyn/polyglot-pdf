@@ -46,7 +46,7 @@ def discovered_kits() -> list:
     literal list here is wrong the moment an author adds, renames or retires a
     form. Scanning means these guards cover whatever is actually present --
     including a kit someone pulled down locally -- and need no edit when the
-    set changes (bd polyglot-pdf-o9zwe).
+    set changes (bd polyglot-pdf-1mgkq).
 
     EVERY kit on disk, draft included. These guards are about STRUCTURAL
     validity -- valid v2 shape, no dangling references, an unlockable read_only
@@ -65,8 +65,8 @@ def discovered_kits() -> list:
     the GCS bucket (.gitignore's form-kits note). So this guard is real but
     NARROW -- it proves the invariant holds for the two kits CI can see, not for
     every published kit. Closing that means running against a pulled or
-    synthetic corpus, which is bd polyglot-pdf-o9zwe's job. Do NOT "fix" the
-    narrowness by hardcoding kit names back in; that is the coupling o9zwe
+    synthetic corpus, which is bd polyglot-pdf-1mgkq's job. Do NOT "fix" the
+    narrowness by hardcoding kit names back in; that is the coupling 1mgkq
     exists to remove.
     """
     import subprocess
@@ -85,7 +85,18 @@ def discovered_kits() -> list:
         line.split("/")[1] for line in tracked.splitlines()
         if line.count("/") >= 2 and not line.split("/")[1].startswith("_")
     }
-    return sorted(n for n in names if (root / n / "schema.json").is_file())
+    found = sorted(n for n in names if (root / n / "schema.json").is_file())
+    # NON-VACUITY GUARD, matching the sibling helpers in test_translation_lint.py
+    # and test_dti_si_voice_rules.py. An empty list here does NOT fail the three
+    # consumers below -- pytest turns an empty parametrize into an implicit
+    # "got empty parameter set" SKIP, which is precisely the look-alive-but-dead
+    # signal scar #10 warns about. Fail loudly instead: git being unavailable or
+    # the ls-files parse breaking is a broken harness, not "no kits to check".
+    assert found, (
+        "no git-tracked kit with a schema.json found -- `git ls-files form-kits/` "
+        "returned nothing usable, so these guards would silently skip"
+    )
+    return found
 
 
 def v2_schema(fields: list, source: str = "pdf") -> dict:

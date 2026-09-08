@@ -378,7 +378,7 @@ def test_lint_kits_sweeps_real_repo_kits():
     # Assert the RELATIONSHIP, not a literal kit list: kits are authored and
     # retired continuously and the canonical collection is the GCS bucket, so a
     # hardcoded set here is wrong the moment an author changes one
-    # (bd polyglot-pdf-o9zwe). Every kit git tracks must be swept.
+    # (bd polyglot-pdf-1mgkq). Every kit git tracks must be swept.
     # Only real kits: "_"-prefixed dirs are shared authoring data (the
     # _translation glossary), and a dir without a schema.json is not a kit
     # (w9-heldout is a deliberately held-out PDF, see its NOTE.md).

@@ -83,7 +83,7 @@ def test_w7_date_of_birth_rejects_iso_and_names_the_right_format():
 def test_layout_resolves_from_validation_hint_not_just_help():
     """The layout may live in validation.hint as well as help.format_hint.
 
-    SYNTHETIC on purpose (bd polyglot-pdf-o9zwe): this is a fact about the
+    SYNTHETIC on purpose (bd polyglot-pdf-1mgkq): this is a fact about the
     RESOLVER's precedence, not about any one form. It used to read the i-90's
     date_of_birth, which coupled a generic rule to a kit that authors republish
     continuously -- and duly broke when that kit's field ids changed.

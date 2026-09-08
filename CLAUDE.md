@@ -222,11 +222,18 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    `Unexpected token '<', "<!DOCTYPE"`.
    **The corollary is a TESTING rule**, and it is the expensive half. This is
    heading for hundreds-to-thousands of kits, authored and republished
-   constantly, so **a test must never assert a named field id, a per-form count,
-   or a hardcoded kit list.** Measured on ONE kit swap: the **22** test files
+   constantly, so **a new test must not assert a named field id, a per-form
+   count, or a hardcoded kit list** -- and the existing ones that still do are a
+   tracked debt (bd `polyglot-pdf-1mgkq`, NEEDS PLANNING), not a licence. Live
+   examples of the debt, so this rule is not read as describing a clean tree:
+   `_MIN_POSITIONS_CHECKED` (test_kit_line_binding.py), `_READONLY_FIELD_ID`
+   (test_pdf_fill_readonly_unlock.py) and `_RACE_FIELD_ID`
+   (test_pdf_fill_checkbox_group_comma.py) all still name an i-90 field or count,
+   and all currently SKIP because no i-90 is tracked. Do not "fix" one in
+   passing; 1mgkq decides their fate together. Measured on ONE kit swap: the **22** test files
    that read a real kit ALL broke; the **16** that hardcode the same ids as
    SYNTHETIC fixtures needed nothing -- the coupling costs, not the specificity
-   (bd `polyglot-pdf-o9zwe`). So: assert PROPERTIES over DISCOVERED kits --
+   (bd `polyglot-pdf-1mgkq`). So: assert PROPERTIES over DISCOVERED kits --
    discover them from **`git ls-files form-kits/`**, NOT by scanning the
    directory and NOT by publish status. Tracked is what CI actually sees; an
    untracked dir is someone's scratch work, and a helper that scans the tree

@@ -712,7 +712,7 @@ def _shipped_fields():
     """(kit_id, field) for every field of every GIT-TRACKED kit.
 
     One walker for all the discovery helpers here, so none of them names a form
-    (bd polyglot-pdf-o9zwe).
+    (bd polyglot-pdf-1mgkq).
 
     TRACKED, not on-disk. An earlier version walked every directory and said
     "what is on disk is whatever the developer pulled, which is exactly the
@@ -769,7 +769,7 @@ def _short_two_option_fields():
     Short = under the render's fold-into-one-question threshold, so these are the
     fields the natural-question marker must fire on. Discovered rather than
     named, so an author adding or retiring a form never edits this test
-    (bd polyglot-pdf-o9zwe), and sourced from _shipped_fields() so it uses the
+    (bd polyglot-pdf-1mgkq), and sourced from _shipped_fields() so it uses the
     SAME git-tracked scope as every other discovery helper here.
     """
     out = []
@@ -785,7 +785,7 @@ def test_real_yes_no_fields_get_the_natural_question_marker():
     # bd 41fi criterion 1: a real 2-option yes/no renders the two-option marker,
     # not the list recital.
     #
-    # DISCOVERED, not named (bd polyglot-pdf-o9zwe): kits are republished
+    # DISCOVERED, not named (bd polyglot-pdf-1mgkq): kits are republished
     # continuously and the canonical collection is the bucket, so naming a kit
     # field here breaks on the next author edit -- it already did once, when
     # this said i-90 'p3_checkbox4[1]'. Any shipped 2-option field whose labels

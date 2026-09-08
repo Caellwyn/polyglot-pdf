@@ -159,7 +159,7 @@ pitch/ignored_pitch/
 #   - LocalFormKitStore synthesizes its manifest by SCANNING directories and
 #     treats absent metadata as public, so a half-finished kit becomes a phantom
 #     form in every developer's local catalogue;
-#   - it binds tests to a specific form, which is the churn bd polyglot-pdf-o9zwe
+#   - it binds tests to a specific form, which is the churn bd polyglot-pdf-1mgkq
 #     exists to remove. At the hundreds-to-thousands of kits this is heading for,
 #     a per-form artifact in git does not scale.
 #
@@ -171,7 +171,7 @@ pitch/ignored_pitch/
 # data rather than a form):
 # f1040 is NOT in the bucket (git is currently its only copy, so untracking it
 # would delete it), and both still back kit-coupled tests. Migrating them --
-# publish to the bucket, then untrack -- is bd polyglot-pdf-o9zwe's job, since
+# publish to the bucket, then untrack -- is bd polyglot-pdf-1mgkq's job, since
 # it has to land with the test work that stops depending on them. Do NOT add a
 # third.
 form-kits/*/
