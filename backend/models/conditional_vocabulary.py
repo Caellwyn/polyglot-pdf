@@ -21,7 +21,7 @@ P1.2 contract test adds the rendered-contract layer on top.
 """
 
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, List, Sequence
+from typing import Dict, FrozenSet, List, Optional, Sequence
 import re
 import unicodedata
 
@@ -194,8 +194,17 @@ def mint_select_slugs(
     # fast-path handing a legacy '5' the same value as an already-v2 '5' in
     # the same field. Such a code is minted from its label instead.
     taken = set(reserved)
-    keep = [c if (isinstance(c, str) and is_valid_option_slug(c) and c not in taken)
-            else None for c in codes]
+    keep: List[Optional[str]] = []
+    for c in codes:
+        # ...and only its FIRST occurrence: two legacy options coded '5' both
+        # passed the fast-path and shared a value (fresh-eyes round 2). The
+        # second is minted from its label; both still carry the code in
+        # pdf_on_value, which the migration report and lint flag.
+        if isinstance(c, str) and is_valid_option_slug(c) and c not in taken:
+            keep.append(c)
+            taken.add(c)
+        else:
+            keep.append(None)
     held = list(reserved) + [c for c in keep if c is not None]
     to_mint = [strip_trailing_code(l) for l, k in zip(labels, keep) if k is None]
     minted = iter(mint_unique_slugs(held + to_mint)[len(held):])

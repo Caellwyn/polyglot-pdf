@@ -108,11 +108,17 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
     codes = [str(options[i].get("value", "")) for i in legacy_idx]
     labels = [str(options[i].get("label") or codes[k])
               for k, i in enumerate(legacy_idx)]
-    # A code two legacy options share cannot be retargeted unambiguously.
+    # A code claimed by more than one option cannot be retargeted
+    # unambiguously: two legacy options sharing it, OR a legacy code that is
+    # also an already-v2 sibling's VALUE (a condition naming '5' may mean the
+    # v2 option, not the legacy one -- fresh-eyes round 2). Both are reported
+    # and left for a human; neither is guessed.
     seen: Dict[str, int] = {}
     for c in codes:
         seen[c] = seen.get(c, 0) + 1
-    entry["duplicate_codes"] = sorted(c for c, n in seen.items() if n > 1)
+    reserved_set = set(reserved)
+    entry["duplicate_codes"] = sorted(
+        c for c, n in seen.items() if n > 1 or c in reserved_set)
 
     slugs = vocab.mint_select_slugs(labels, codes, reserved=reserved)
     old_to_new: Dict[str, str] = {}
@@ -128,7 +134,7 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
         else:
             entry["slug_map"][code] = slug
             # Only an UNAMBIGUOUS code is retargeted.
-            if seen[code] == 1:
+            if seen[code] == 1 and code not in reserved_set:
                 old_to_new[code] = slug
     return old_to_new, entry
 

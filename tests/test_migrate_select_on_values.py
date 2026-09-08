@@ -335,3 +335,39 @@ def test_an_id_less_select_migrates_its_options_but_is_never_a_retarget_key():
     assert [f["options"][0]["pdf_on_value"] for f in out["fields"][:2]] == ["AL", "AL"]
     assert out["fields"][2]["show_if"]["value"] == "AL"      # not retargeted via "None"
     assert report["conditions_retargeted"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Fresh-eyes round 2 (g2fpr.3)
+# ---------------------------------------------------------------------------
+
+def test_a_legacy_code_equal_to_a_v2_siblings_VALUE_is_ambiguous_and_not_retargeted():
+    """A condition naming '5' may mean the v2 option whose value is '5', not
+    the legacy option coded '5'. Report it; do not repoint it to the new slug."""
+    kit = {"schema_version": "2", "fields": [
+        {"id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+         "options": [
+             {"value": "5", "label": "5", "pdf_on_value": "5"},   # v2
+             {"value": "5", "label": "Five"},                     # legacy, same code
+         ]},
+        {"id": "dep", "type": "text", "pdf_field_name": "d[0]", "section_id": "s",
+         "show_if": {"field": "f", "operator": "equals", "value": "5"}},
+    ], "sections": []}
+    out, report = migrate_selects(kit)
+    assert out["fields"][1]["show_if"]["value"] == "5"            # left for a human
+    assert report["conditions_retargeted"] == 0
+    assert report["fields"][0]["duplicate_codes"] == ["5"]
+    assert report["fields_with_duplicate_codes"] == ["f"]
+    assert [o["value"] for o in out["fields"][0]["options"]] == ["5", "five"]
+
+
+def test_two_legacy_options_sharing_a_slug_shaped_code_do_not_share_a_value():
+    kit = {"schema_version": "2", "fields": [{
+        "id": "f", "type": "select", "pdf_field_name": "f[0]", "section_id": "s",
+        "options": [{"value": "5", "label": "5"}, {"value": "5", "label": "Five North"}]}],
+        "sections": []}
+    out, report = migrate_selects(kit)
+    values = [o["value"] for o in out["fields"][0]["options"]]
+    assert values == ["5", "five_north"] and len(set(values)) == 2
+    assert [o["pdf_on_value"] for o in out["fields"][0]["options"]] == ["5", "5"]
+    assert report["fields"][0]["duplicate_codes"] == ["5"]

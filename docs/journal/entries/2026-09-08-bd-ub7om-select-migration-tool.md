@@ -72,8 +72,23 @@ the retarget map, so two such fields would merge maps and a condition on a
 field literally named "None" would be rewritten. Guarded; the test that
 reproduced it failed for exactly that reason before the guard landed.
 
+**"Pre-existing" has to mean pre-existing on `dev`.** Round 2 filed two
+bugs as out of scope because they reproduced on `9a8555a0` -- this PR's own
+feature commit. Both were this diff's to fix, and both were: (1) the
+ambiguity guard considered only legacy-vs-legacy duplicates, so a legacy code
+equal to an already-v2 sibling's VALUE was retargeted -- a condition naming
+'5' that meant the v2 option was repointed to the newcomer's slug; such a code
+is now reported and left for a human. (2) Two legacy options sharing a
+slug-shaped code both passed the keep fast-path and were WRITTEN with the same
+value, contradicting the minter's own "uniqueness across the whole set"; only
+the first occurrence is kept now, in the Python minter and in the editor's
+TypeScript mirror, with the fixture shared. When a reviewer's "pre-existing"
+commit hash is inside the diff under review, the finding is in scope.
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)
 - `backend/models/conditional_vocabulary.py` -- `mint_select_slugs(..., reserved=())`
 - `tests/test_migrate_select_on_values.py` (new)
+- `schema-editor/src/utils/fieldGrouping.ts` -- `mintSelectSlugs` keeps only the first occurrence of a code
+- `schema-editor/src/utils/fieldGrouping.selectslugs.test.ts` -- the shared fixture

@@ -83,3 +83,10 @@ def test_a_kept_code_that_collides_with_a_reserved_slug_is_minted_instead():
 
 def test_reserved_defaults_to_nothing():
     assert mint_select_slugs(["5"], ["5"]) == ["5"]
+
+
+def test_only_the_FIRST_occurrence_of_a_kept_code_is_kept():
+    """Fresh-eyes round 2: two legacy options coded '5' both passed the keep
+    fast-path and shared a value. Uniqueness is across the WHOLE set."""
+    assert mint_select_slugs(["5", "Five North"], ["5", "5"]) == ["5", "five_north"]
+    assert mint_select_slugs(["5", "5"], ["5", "5"]) == ["5", "5_2"]

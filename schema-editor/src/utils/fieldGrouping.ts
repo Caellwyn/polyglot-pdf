@@ -116,7 +116,14 @@ export function stripTrailingCode(label: string): string {
  * Mirrors conditional_vocabulary.mint_select_slugs; keep them in step. */
 export function mintSelectSlugs(labels: string[], codes: (string | undefined)[]): string[] {
   const isSlug = (c: unknown) => typeof c === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(c);
-  const keep = codes.map(c => (isSlug(c) ? (c as string) : null));
+  // Only the FIRST occurrence of a slug-shaped code is kept as the value; a
+  // later sibling with the same code is minted from its label (mirrors the
+  // Python minter; two options coded '5' must not share a value).
+  const taken = new Set<string>();
+  const keep = codes.map(c => {
+    if (isSlug(c) && !taken.has(c as string)) { taken.add(c as string); return c as string; }
+    return null;
+  });
   const reserved = keep.filter((k): k is string => k !== null);
   const toMint = labels.filter((_, i) => keep[i] === null).map(stripTrailingCode);
   const minted = mintUniqueSlugs([...reserved, ...toMint]).slice(reserved.length);
