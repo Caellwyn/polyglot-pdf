@@ -102,6 +102,15 @@ export interface ConnectionManager {
 	setPushToTalkMode: (enabled: boolean) => void  // Enable/disable PTT mode
 	getPushToTalkMode: () => boolean  // Current PTT mode (so a remounted overlay restores the user's choice; bd polyglot-pdf-6vo)
 	setPushToTalkHeld: (held: boolean) => void  // Track whether PTT is CURRENTLY held down (bd polyglot-pdf-qt7w), so a reconnect's audio rehydration does not re-mute an active hold
+	/**
+	 * Notify the model of a field's current STATE through the established
+	 * manual_field_update protocol (bd polyglot-pdf-96um6). Exposed because a
+	 * VERIFY does not reach the model on its own: the internal notify fires from
+	 * a DOM change listener, and verifying changes only a flag, not the input's
+	 * value -- measured, 0 notify calls after a pure verify. The React verify
+	 * modal therefore has to call this itself.
+	 */
+	sendManualFieldUpdate: (fieldId: string, fieldName: string, value: any, verified?: boolean) => void
 	getFieldManager: () => FieldManager | null
 	getAudioManager: () => AudioManager | null
 	startRecording: () => Promise<void>
@@ -1123,6 +1132,14 @@ export function createConnectionManager(
 
 		// Lets the UI (VoiceOverlay PTT effect) read the mode the audio layer is
 		// configured with. Always true since bd polyglot-pdf-v1m8g.
+
+		sendManualFieldUpdate(fieldId: string, fieldName: string, value: any, verified?: boolean) {
+			// Guarded: a verify can land while the socket is down (the form is
+			// usable offline -- the client owns all field state). The verification is
+			// still recorded locally; only the model's copy is missed, and the
+			// handshake re-syncs it on reconnect.
+			connection?.sendManualFieldUpdate(fieldId, fieldName, value, verified)
+		},
 
 		getFieldManager() {
 			return fieldManager

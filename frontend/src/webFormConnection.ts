@@ -3875,7 +3875,7 @@ export class WebFormConnection {
    * Send manual field update notification to Gemini
    * Notifies AI when user manually edits a field
    */
-  sendManualFieldUpdate(fieldId: string, fieldName: string, value: any): void {
+  sendManualFieldUpdate(fieldId: string, fieldName: string, value: any, verified = false): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -3933,6 +3933,9 @@ export class WebFormConnection {
       field_id: fieldId,
       field_name: fieldName,
       value: value,
+      // Whether the user has VERIFIED this value (bd polyglot-pdf-96um6). The
+      // backend phrases the two cases as STATE, never provenance.
+      verified: verified,
       next_field_hint: nextFieldHint,  // Include next field guidance
       ...(nextFieldSchema ? { next_field_schema: nextFieldSchema } : {}),
     });

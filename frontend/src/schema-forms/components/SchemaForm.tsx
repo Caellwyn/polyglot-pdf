@@ -23,6 +23,8 @@ import { PdfPreviewFallback } from "./PdfPreviewFallback";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
 import { unwrapFieldValue } from "../utils/fieldValue";
+import { isBlankFieldValue } from "../utils/fieldValue";
+import { VerifyFieldModal } from "./VerifyFieldModal";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
@@ -131,6 +133,11 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const isMobileRef = useRef(false);
 
   // Voice overlay state
+  // The field awaiting explicit verification (bd polyglot-pdf-96um6). null = no
+  // modal. Holds only the id; the value and name are read from live state when
+  // rendering, so a background AI fill cannot leave the modal showing a stale
+  // value the user would then "verify".
+  const [verifyingFieldId, setVerifyingFieldId] = useState<string | null>(null);
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const connectionManagerRef = useRef<ConnectionManager | null>(null);
   const [status, setStatus] = useState<string>('Ready');
@@ -629,6 +636,72 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
     setState(newState);
   };
 
+  /**
+   * Enter on a FILLED field opens the verify modal (bd polyglot-pdf-96um6).
+   *
+   * This is the keyboard path to an audit claim. Typing stopped producing one in
+   * bd polyglot-pdf-uum5g, so without this gesture a typing-only user cannot
+   * finish a form at all.
+   *
+   * Bound at the FORM, not threaded through every field component: Enter bubbles
+   * from whichever input has focus, and every field type renders id={field.id}
+   * (TextField, TextAreaField, DateField, SelectField, CheckboxField), so one
+   * handler covers them all with no prop drilling.
+   *
+   * SCOPE, deliberately narrow: only a field holding a real value opens the
+   * modal. On an empty or whitespace-only field Enter keeps its existing
+   * behaviour, because there is nothing to verify -- and because Enter today
+   * reaches <form onSubmit> and advances the section, which is a shortcut people
+   * may rely on. Where the modal DOES open we preventDefault, so that submit
+   * never fires and the section cannot move out from under the dialog.
+   */
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== 'Enter') return;
+    const target = e.target as HTMLElement | null;
+    const fieldId = target?.id;
+    if (!fieldId) return;
+    // A textarea's Enter is a newline, not a submit -- leave it alone.
+    if (target?.tagName === 'TEXTAREA') return;
+    const field = state.schema.fields.find(f => f.id === fieldId);
+    if (!field) return;
+
+    const value = unwrapFieldValue(state.fieldValues[fieldId]);
+    if (isBlankFieldValue(value)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setVerifyingFieldId(fieldId);
+  };
+
+  /**
+   * The user asserted the answer is correct. Writes through the SAME path the
+   * verbal confirm uses (confirmField), so the audit record has one shape
+   * whatever gesture produced it, then tells the model the new STATE through the
+   * established manual_field_update protocol -- a verify does not reach the model
+   * on its own (measured: the notify fires on a DOM value change, and verifying
+   * changes no value).
+   */
+  const handleVerifyConfirmed = () => {
+    const fieldId = verifyingFieldId;
+    if (!fieldId) return;
+    setState(prevState => {
+      const next = SchemaFormStateManager.confirmField(prevState, fieldId, 'manual_edit');
+      SchemaFormStateManager.save(next);
+      const field = next.schema.fields.find(f => f.id === fieldId);
+      const conn = connectionManagerRef.current;
+      if (conn?.sendManualFieldUpdate) {
+        conn.sendManualFieldUpdate(
+          fieldId,
+          field?.name || fieldId,
+          unwrapFieldValue(next.fieldValues[fieldId]),
+          true
+        );
+      }
+      return next;
+    });
+    setVerifyingFieldId(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     console.log('[handleSubmit] Form submit triggered! isNavigating:', isNavigating);
     e.preventDefault();
@@ -859,7 +932,22 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
           </React.Suspense>
         </PdfViewErrorBoundary>
       ) : (
-      <form className="schema-form" onSubmit={handleSubmit}>
+      <form className="schema-form" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown}>
+      {verifyingFieldId && (() => {
+        const vField = state.schema.fields.find(f => f.id === verifyingFieldId);
+        const vValue = unwrapFieldValue(state.fieldValues[verifyingFieldId]);
+        return (
+          <VerifyFieldModal
+            isOpen
+            fieldName={vField?.name || verifyingFieldId}
+            value={vValue == null ? '' : String(vValue)}
+            selectedLanguage={initialLanguage || 'English'}
+            onVerify={handleVerifyConfirmed}
+            onCancel={() => setVerifyingFieldId(null)}
+          />
+        );
+      })()}
+
         {/* Form Header */}
         <div className="schema-form__header">
           <h1 className="schema-form__title">{state.schema.form_metadata.title}</h1>
