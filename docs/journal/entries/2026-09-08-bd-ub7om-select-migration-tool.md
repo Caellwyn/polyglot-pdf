@@ -143,6 +143,23 @@ a fourth kind cannot be added without deciding how it prints, and dropping a
 kind from the tuple reddens exactly its case. I should have enumerated at
 round 4 the moment the second sibling appeared.
 
+**"Idempotent" has to cover the artifacts, not just the schema.** The
+cross-surface pass ran `--kit` twice on a copy: the second run left the
+schema alone, printed "nothing to do", and silently overwrote the rollback
+archive with the migrated schema and the report with zeros. Eight inner rounds
+had checked the schema after run 2 and the archive only after run 1. A no-op
+run now writes nothing; an existing archive is never overwritten, even by a
+later run that migrates something; the test reads both artifacts AFTER run 2.
+
+**Two of the filed findings were this PR's own choices, so they were mine to
+fix here.** The artifact names are now `_`-prefixed, because
+`deploy-form-kit.sh` uploads every kit file NOT so prefixed (the exact leak bd
+983wp closed on the frontend side). And quarantined fields
+(`_ignored_fields[].field`) are migrated too: the editor's un-ignore restores
+a field verbatim, so a legacy select left there would fail PR 3b's gate the
+moment it came back -- and the real kit's two quarantined state selects are
+the "missing" two of the plan's four (267 options in all, not 143).
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)

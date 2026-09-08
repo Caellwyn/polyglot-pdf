@@ -455,19 +455,65 @@ def test_cli_kit_mode_rewrites_in_place_archives_reports_and_leaves_metadata_alo
     migrated = json.loads((kit_dir / "schema.json").read_text(encoding="utf-8"))
     assert migrated["fields"][0]["options"][0] == {
         "value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"}
-    archived = json.loads((kit_dir / "schema_pre_select_migration.json").read_text(encoding="utf-8"))
+    # The artifacts are "_"-prefixed so deploy-form-kit.sh never uploads them.
+    assert mod.ARCHIVE_NAME.startswith("_") and mod.REPORT_NAME.startswith("_")
+    archive_path = kit_dir / mod.ARCHIVE_NAME
+    report_path = kit_dir / mod.REPORT_NAME
+    archived = json.loads(archive_path.read_text(encoding="utf-8"))
     assert archived == _kit_like_i90()
-    report = json.loads((kit_dir / "select_migration_report.json").read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["options_migrated"] == 37 and report["conditions_retargeted"] == 4
     # metadata.json: byte-identical AND never opened for writing.
     assert json.loads((kit_dir / "metadata.json").read_text(encoding="utf-8")) == meta
     assert os.stat(kit_dir / "metadata.json").st_mtime_ns == meta_mtime
 
-    # Second run: no-op, says so.
+    # Second run: no-op, says so -- and CLOBBERS NEITHER ARTIFACT (the
+    # cross-surface pass caught the first cut rewriting the archive with the
+    # migrated schema and the report with zeros, while printing "nothing to
+    # do"). Byte-identical, checked AFTER run 2.
+    archive_bytes = archive_path.read_bytes()
+    report_bytes = report_path.read_bytes()
     r2 = subprocess.run([PY, str(SCRIPT), "--kit", str(kit_dir)],
                         capture_output=True, text=True, cwd=str(REPO))
     assert r2.returncode == 0 and "nothing to do" in r2.stdout
     assert json.loads((kit_dir / "schema.json").read_text(encoding="utf-8")) == migrated
+    assert archive_path.read_bytes() == archive_bytes
+    assert report_path.read_bytes() == report_bytes
+    assert json.loads(archive_path.read_text(encoding="utf-8")) == _kit_like_i90()
+
+    # A later run that DOES migrate (a new legacy option appeared) writes the
+    # schema and a fresh report but keeps the ORIGINAL archive.
+    later = json.loads((kit_dir / "schema.json").read_text(encoding="utf-8"))
+    later["fields"][0]["options"].append({"value": "ZZ", "label": "Zeta (ZZ)"})
+    (kit_dir / "schema.json").write_text(json.dumps(later), encoding="utf-8")
+    r3 = subprocess.run([PY, str(SCRIPT), "--kit", str(kit_dir)],
+                        capture_output=True, text=True, cwd=str(REPO))
+    assert r3.returncode == 0 and "archive already exists, kept" in r3.stdout
+    assert archive_path.read_bytes() == archive_bytes
+    assert json.loads(report_path.read_text(encoding="utf-8"))["options_migrated"] == 1
+
+
+def test_quarantined_selects_are_migrated_reported_and_idempotent():
+    """_ignored_fields[].field: the editor's un-ignore restores a quarantined
+    field VERBATIM, so a legacy select left there fails PR 3b's gate the
+    moment it comes back. i-90_v2 has two such 62-option state selects."""
+    kit = _kit_like_i90()
+    kit["_ignored_fields"] = [
+        {"field": _legacy_select("interp_state", STATES), "ignoredAt": "t", "index": 9, "sectionId": "s1"},
+        {"field": {"id": "note", "type": "text", "pdf_field_name": "n[0]"}, "ignoredAt": "t", "index": 10, "sectionId": "s1"},
+    ]
+    out, report = migrate_selects(kit)
+    q = out["_ignored_fields"][0]["field"]
+    assert [o["pdf_on_value"] for o in q["options"]] == [c for c, _ in STATES]
+    assert q["options"][0]["value"] == "alabama"
+    assert out["_ignored_fields"][0]["ignoredAt"] == "t"           # wrapper untouched
+    assert out["_ignored_fields"][1] == kit["_ignored_fields"][1]  # non-select untouched
+    entry = next(e for e in report["fields"] if e["field"] == "interp_state")
+    assert entry["quarantined"] is True and entry["migrated"] == len(STATES)
+    assert all(e["quarantined"] is False for e in report["fields"] if e["field"] != "interp_state")
+    assert report["options_migrated"] == 4 * len(STATES) + 5 + 12 + len(STATES)
+    twice, r2 = migrate_selects(out)
+    assert twice == out and r2["options_migrated"] == 0
 
 
 def test_cli_in_out_mode(tmp_path):

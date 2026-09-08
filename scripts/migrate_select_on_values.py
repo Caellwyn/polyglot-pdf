@@ -13,9 +13,18 @@ EXISTING kit across:
   every show_if / require_if atom on that field is retargeted old -> new,
   on fields AND sections, scalar and list values alike.
 
+Quarantined fields (``_ignored_fields[].field``) are migrated too: the
+editor's un-ignore restores such a field verbatim, so a legacy select left
+there would fail the v2 gate the moment it came back (PR 3b). They are
+reported with ``quarantined: true``.
+
 Idempotent: an option that already carries ``pdf_on_value`` is never touched,
-so a second run migrates nothing and retargets nothing. What a second run
-DOES still report is the outstanding human work -- every kind in
+so a second run migrates nothing and retargets nothing -- and writes NO
+artifacts: the archive is the rollback and the report the audit trail, and a
+second run must not clobber either (the cross-surface pass caught the first
+cut doing exactly that while printing "nothing to do"). An existing archive is
+never overwritten, even by a later run that does migrate something. What a
+second run DOES still report is the outstanding human work -- every kind in
 ``_HUMAN_WORK``: ``no_code`` (a cleared code the tool cannot supply),
 ``duplicate_codes`` (a code more than one option claims) and
 ``non_dict_options`` (plain-string options it cannot migrate) -- and the CLI
@@ -37,8 +46,10 @@ Usage (the maintainer runs this on a COPY first, then on the kit):
 
     python scripts/migrate_select_on_values.py --kit form-kits/i-90_v2
         # rewrites <kit>/schema.json in place, archives the pre-migration
-        # schema to <kit>/schema_pre_select_migration.json and writes
-        # <kit>/select_migration_report.json
+        # schema to <kit>/_schema_pre_select_migration.json and writes
+        # <kit>/_select_migration_report.json -- the "_" prefix keeps both
+        # out of the kit upload (deploy-form-kit.sh publishes everything
+        # NOT so prefixed; bd polyglot-pdf-mtbdq)
 
     python scripts/migrate_select_on_values.py --in a.json --out b.json \
         --archive a.bak.json --report report.json
@@ -102,7 +113,10 @@ _HUMAN_WORK_KEYS = tuple(k for k, _, _, _ in _HUMAN_WORK)
 # the pin cannot judge is CLASSIFICATION: a fact that really needs a human,
 # filed here as an "outcome", would never warn. Ask, before adding a key
 # here: can the maintainer act on it? If yes, it belongs in _HUMAN_WORK.
-_OUTCOME_KEYS = ("field", "migrated", "already_v2", "kept_as_slug", "kept_codes", "slug_map")
+_OUTCOME_KEYS = ("field", "quarantined", "migrated", "already_v2", "kept_as_slug",
+                 "kept_codes", "slug_map")
+ARCHIVE_NAME = "_schema_pre_select_migration.json"
+REPORT_NAME = "_select_migration_report.json"
 _WARN_CAP = 10
 
 
@@ -120,6 +134,7 @@ def _migrate_field(field: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Any
     options = field.get("options")
     entry: Dict[str, Any] = {
         "field": field.get("id"),
+        "quarantined": False,
         "migrated": 0,
         "already_v2": 0,
         "kept_as_slug": 0,
@@ -221,11 +236,16 @@ def migrate_selects(schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
         "fields_with_duplicate_codes": [],
     }
     fields = migrated.get("fields") or []
+    # Quarantined fields ride along: (field dict, quarantined?) in one pass.
+    quarantined = [e.get("field") for e in (migrated.get("_ignored_fields") or [])
+                   if isinstance(e, dict)]
+    candidates = [(f, False) for f in fields] + [(f, True) for f in quarantined]
     maps: Dict[str, Dict[str, str]] = {}
-    for f in fields:
+    for f, is_q in candidates:
         if not isinstance(f, dict) or f.get("type") != "select":
             continue
         old_to_new, entry = _migrate_field(f)
+        entry["quarantined"] = is_q
         # A field reaches the report when the tool did something OR a human
         # still must -- the second half derived from _HUMAN_WORK, not restated.
         if entry["migrated"] or _has_human_work(entry):
@@ -297,8 +317,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             ap.error("--kit and --in/--out are alternatives")
         inp = os.path.join(args.kit, "schema.json")
         out = inp
-        archive = args.archive or os.path.join(args.kit, "schema_pre_select_migration.json")
-        report_path = args.report or os.path.join(args.kit, "select_migration_report.json")
+        archive = args.archive or os.path.join(args.kit, ARCHIVE_NAME)
+        report_path = args.report or os.path.join(args.kit, REPORT_NAME)
     else:
         if not (args.inp and args.out):
             ap.error("give --kit DIR, or both --in and --out")
@@ -307,11 +327,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     with open(inp, encoding="utf-8") as fh:
         schema = json.load(fh)
     migrated, report = migrate_selects(schema)
-    if archive:
-        _write_json(archive, schema)
-    _write_json(out, migrated)
-    if report_path:
-        _write_json(report_path, report)
+    if report["options_migrated"] == 0:
+        # A no-op run writes NOTHING: the archive is the rollback and the
+        # report the audit trail of the run that did the work.
+        print(f"[select-migration] {inp}: nothing migrated; existing archive/report kept")
+    else:
+        if archive and os.path.exists(archive):
+            print(f"  archive already exists, kept: {archive}")
+        elif archive:
+            _write_json(archive, schema)
+        _write_json(out, migrated)
+        if report_path:
+            _write_json(report_path, report)
 
     print(f"[select-migration] {inp} -> {out}")
     print(f"  options migrated: {report['options_migrated']}; "
