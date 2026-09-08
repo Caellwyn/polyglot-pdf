@@ -3,6 +3,7 @@
  */
 
 import type { FormSection, FormField } from "../types/schema";
+import { isBlankFieldValue } from '../utils/fieldValue';
 import { FieldRenderer } from "./FieldRenderer";
 import { isFieldRequired, shouldShowField } from "../utils/validation";
 import { unwrapFieldValue } from "../utils/fieldValue";
@@ -23,16 +24,12 @@ export interface SectionRendererProps {
   disabled?: boolean;
 }
 
-// Whether a value counts as "empty" for the skip affordance (mirrors the
-// isSectionValid empty check).
-function isEmptyValue(raw: any): boolean {
-  return (
-    raw === null ||
-    raw === undefined ||
-    raw === "" ||
-    (Array.isArray(raw) && raw.length === 0)
-  );
-}
+// Whether a value counts as "empty" for the skip affordance. Shares ONE
+// definition with isSectionValid and validateField (bd polyglot-pdf-5ovod)
+// rather than restating it -- the three copies had drifted on whitespace, so a
+// field containing only spaces hid its own skip button: it read as answered
+// here while being blank everywhere that matters.
+const isEmptyValue = isBlankFieldValue;
 
 export function SectionRenderer({
   section,
