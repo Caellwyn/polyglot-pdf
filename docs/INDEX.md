@@ -1,6 +1,8 @@
 # Doc index -- polyglot-pdf
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-ybwjw: sprint 22 admin-console program
+*Last updated: 2026-09-08 (bd polyglot-pdf-2cwja: added the `components/admin-service.md`
+row -- the admin service and console as a surface of their own; no code changed
+in this bead.) (bd polyglot-pdf-ybwjw: sprint 22 admin-console program
 plan added to the active sprint plans row).*
 
 The canonical map of this project's docs. Tier 1 (this file + CLAUDE.md) is
@@ -41,6 +43,7 @@ ground truth -- fix the doc first as a separate commit.
 | Preview mode / pdf-view (flag-gated in-browser PDF surface) | [`components/pdf-view.md`](components/pdf-view.md) | `frontend/src/pdf-view/` |
 | Auth | [`components/auth.md`](components/auth.md) | `frontend/src/contexts/AuthContext.tsx`, `backend/services/auth.py`, `firestore.rules` |
 | Config + deployment | [`components/config-deployment.md`](components/config-deployment.md) | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
+| Admin service + console (privileged control plane: config, audit log, deploy) | [`components/admin-service.md`](components/admin-service.md) | `admin_backend/`, `admin-console/`, `scripts/bootstrap_admin_user.py` |
 | Beads remote bootstrap (hydrate `bd` in a fresh remote/web session) | [`components/beads-remote-bootstrap.md`](components/beads-remote-bootstrap.md) | `scripts/beads_remote_bootstrap.py`, `scripts/bd_prime.py` |
 
 ## Standards (tier 2 -- cross-cutting)

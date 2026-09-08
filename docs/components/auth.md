@@ -1,8 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py admin_backend/services/admin_auth.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -192,18 +192,63 @@ customer's customer; they have no account and must never have one (maintainer,
 2026-08-17, who also explicitly rejected the alternative of a client working on
 a staff-signed-in machine). Their entry is a one-time link.
 
-**Three credential systems now exist, and they must not merge:**
+**Four credential systems now exist, and they must not merge:**
 
 | # | Who | Credential | Where |
 |---|-----|-----------|-------|
 | 1 | Firm STAFF (voice app) | per-user Firebase ID token + `firm_id`/`firm_role` claims | `services/auth.py` |
 | 2 | Schema EDITOR | its own per-user identity (epic `polyglot-pdf-ijntk`) | `services/editor_auth.py` |
 | 3 | Firm CLIENT | a signed magic-link token | `services/link_tokens.py` |
+| 4 | App ADMIN (admin console) | per-user Firebase ID token + boolean `app_admin` claim | `admin_backend/services/admin_auth.py` |
 
 They are kept apart STRUCTURALLY, not by convention: a link token has ONE
 dot, a Firebase JWT has two, so neither verifier can silently accept the
 other's token. `/ws/fill` dispatches on that shape (`_verify_ws_credential`),
 so a caller cannot opt into the weaker check by labelling their credential.
+The fourth system lives on a SEPARATE Cloud Run service entirely (see below),
+so it never reaches `/ws/fill`'s dispatch at all -- the separation is by
+deployment, not by a shape check.
+
+### App admin -- the FOURTH credential system (bd polyglot-pdf-7w17m)
+
+**Who:** an operator of the app itself (not a firm's staff, not a firm's
+client) -- runs the admin console to manage runtime config, read the audit
+log, and (in later Epic 2/3/4 beads) firms, credits, and deploys.
+
+**Where it lives, and why it is not a fifth claim on the same token shape
+as firm staff.** The admin gate runs on a SEPARATE FastAPI app
+(`admin_backend/`, Cloud Run service `polyglot-admin`), not on
+`backend/`'s `/ws/fill` or any public-backend route. Mirrors
+`backend/services/editor_auth.py`'s shape almost exactly:
+`APP_ADMIN_CLAIM = "app_admin"` (a plain boolean -- there is no admin role
+gradient, unlike firm staff's `firm_role`), `verify_id_token` with **no**
+`check_revoked` (same CLAUDE.md scar #7 reasoning as the other two
+verifiers: it would force a Firebase user-record fetch needing
+`firebaseauth.users.get`; `admin-backend-sa` actually HOLDS
+`roles/firebaseauth.admin` and so could afford it, but it stays off for
+symmetry until something measures a need for instant revocation), and the
+same 401/403 split with a machine-readable `NO_ADMIN_ACCESS:` prefix
+(`NO_ADMIN_ACCESS_PREFIX`) on the "valid account, no admin claim" case --
+the same idiom `editor_auth.NO_EDITOR_ACCESS_PREFIX` uses, so a client can
+route that specific 403 to a refused screen without string-matching prose.
+
+**Granting access:** `scripts/bootstrap_admin_user.py --email <addr>
+--project <p>` is the ONLY way to stamp the claim -- there is no self-serve
+signup and no in-console user management yet. It mirrors
+`scripts/bootstrap_editor_user.py`'s `--email`/`--revoke`/`--list` shape and
+borrows `scripts/bootstrap_firm.py`'s REQUIRED `--project` (the script
+asserts the resolved Firebase project matches it and aborts otherwise,
+rather than trusting the operator's gcloud ADC to resolve the right one). It
+runs under the operator's OWN gcloud ADC, not the deployed
+`admin-backend-sa`.
+
+**Auth project:** the SAME Firebase project as the voice app and the
+schema editor (`polyglot-demo-aa709`) -- a separate admin-only project is a
+future separation epic's call.
+
+Full route inventory, the service's own IAM envelope, and the console that
+consumes this credential are in
+[admin-service.md](admin-service.md).
 
 **The `jti` reaches our records, or the split key is not a key.** Both
 session events (`form_session_started` / `form_session_ended`) carry

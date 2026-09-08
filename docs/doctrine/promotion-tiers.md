@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> staging -> demo
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-2cwja: added the admin-tier row -- the admin service and console's OWN tagged-revision + candidate-site staging, distinct from the public app's staging/demo split above. No code changed in this bead.) (bd polyglot-pdf-t7drr: recorded the shared-surface decisions for LINK_TOKEN_SECRET and the form-kit editing lock -- both shared on purpose. Earlier the same day, bd polyglot-pdf-3q9qn: client links are isolated per channel -- every token names the channel that may open it and each channel keeps its own redemption ledger, so a staging link no longer opens or burns on the demo.)*
 
 How code promotes from a working branch to the running demo. **This project has
 NO production environment** -- `deploy-production.sh` targets a DEAD, unreachable
@@ -228,6 +228,43 @@ bd `polyglot-pdf-je6iy`) and now **refuses to run**, printing a pointer to the t
 live channels. Reviving a real prod channel is a maintainer decision requiring a
 reachable project, a full `scripts/setup-gcp-project.sh` bootstrap, real
 `VITE_FIREBASE_*` values in `.env.production`, and its own Auth user set.
+
+## The admin tier: its own staging, not a third channel
+
+The admin service (`admin_backend/`, Cloud Run `polyglot-admin`) and console
+(`admin-console/`, Hosting) are a SEPARATE control plane from the two tiers
+above -- they are not a "third channel" alongside staging and demo. There is
+ONE admin service and ONE console backing BOTH staging's AND the demo's
+data (the admin service has no channel of its own), so this tier needs a
+staging mechanism of its own, shaped differently from the public app's
+staging/demo split: a bad admin deploy would otherwise take the control
+plane down for both channels at once, and there is no second Cloud Run
+service to rehearse against first the way the public backend has staging.
+
+- **Backend (`deploy-admin.sh`):** every deploy lands as a Cloud Run
+  revision with `--no-traffic --tag candidate`, is health-checked at ITS
+  OWN stable tagged URL, and only on success receives traffic via
+  `gcloud run services update-traffic --to-latest`. A failing health check
+  aborts before any traffic shifts, so the previously-live revision keeps
+  serving. This is that service's own staging tier, expressed as a
+  tagged-revision gate rather than a second deployed service.
+- **Console (`deploy-admin-console.sh`):** every deploy lands on the
+  permanent `polyglot-admin-candidate` Hosting site first; a SEPARATE
+  explicit run with `--live` promotes the same build to
+  `polyglot-admin-demo`, the site operators actually use. A fixed second
+  site is used instead of a Hosting preview channel because a preview
+  channel's random-hash URL would have to be re-added to Firebase Auth's
+  authorized domains and to the admin service's CORS allowlist on every
+  single deploy.
+- **Gating:** the SAME three-part gate as the public app's demo/staging
+  deploys above (local test first, explicit per-instance maintainer
+  permission before each run, post-deploy test-drive) applies to both
+  `deploy-admin.sh` and `deploy-admin-console.sh` -- neither is on any
+  standing pre-authorization.
+
+Full detail (routes, the service account's IAM envelope, the console's
+pages, one-time per-project setup) is in
+[`../components/admin-service.md`](../components/admin-service.md).
 
 ## Environment detection
 
