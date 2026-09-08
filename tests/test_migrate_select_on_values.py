@@ -481,16 +481,35 @@ def test_cli_kit_mode_rewrites_in_place_archives_reports_and_leaves_metadata_alo
     assert report_path.read_bytes() == report_bytes
     assert json.loads(archive_path.read_text(encoding="utf-8")) == _kit_like_i90()
 
-    # A later run that DOES migrate (a new legacy option appeared) writes the
-    # schema and a fresh report but keeps the ORIGINAL archive.
+    # A later run that DOES migrate (the human added a field in the editor,
+    # then a new legacy option appeared) writes ITS OWN archive + report pair
+    # (.2): the archive is exactly the schema that run started from -- with
+    # the human's edit -- so rolling it back never deletes editor work; the
+    # first pair is untouched (cross-surface round 2).
     later = json.loads((kit_dir / "schema.json").read_text(encoding="utf-8"))
+    later["fields"].append({"id": "added_in_editor", "type": "text", "pdf_field_name": "x[0]",
+                            "section_id": "s1"})
     later["fields"][0]["options"].append({"value": "ZZ", "label": "Zeta (ZZ)"})
     (kit_dir / "schema.json").write_text(json.dumps(later), encoding="utf-8")
     r3 = subprocess.run([PY, str(SCRIPT), "--kit", str(kit_dir)],
                         capture_output=True, text=True, cwd=str(REPO))
-    assert r3.returncode == 0 and "archive already exists, kept" in r3.stdout
-    assert archive_path.read_bytes() == archive_bytes
-    assert json.loads(report_path.read_text(encoding="utf-8"))["options_migrated"] == 1
+    assert r3.returncode == 0, r3.stderr
+    assert archive_path.read_bytes() == archive_bytes            # run-1 pair untouched
+    assert report_path.read_bytes() == report_bytes
+    archive2 = kit_dir / mod.ARCHIVE_NAME.replace(".json", ".2.json")
+    report2 = kit_dir / mod.REPORT_NAME.replace(".json", ".2.json")
+    assert json.loads(archive2.read_text(encoding="utf-8")) == later   # pre-run-2, WITH the edit
+    rep2 = json.loads(report2.read_text(encoding="utf-8"))
+    assert rep2["options_migrated"] == 1 and rep2["fields"][0]["slug_map"] == {"ZZ": "zeta"}
+    assert str(archive2) in r3.stdout and str(report2) in r3.stdout
+    # ...and a fourth, no-op run writes neither pair nor a third.
+    r4 = subprocess.run([PY, str(SCRIPT), "--kit", str(kit_dir)],
+                        capture_output=True, text=True, cwd=str(REPO))
+    assert r4.returncode == 0 and "nothing to do" in r4.stdout
+    assert not (kit_dir / mod.ARCHIVE_NAME.replace(".json", ".3.json")).exists()
+    assert sorted(p.name for p in kit_dir.iterdir()) == sorted([
+        "schema.json", "metadata.json", mod.ARCHIVE_NAME, mod.REPORT_NAME,
+        archive2.name, report2.name])
 
 
 def test_quarantined_selects_are_migrated_reported_and_idempotent():
@@ -525,6 +544,24 @@ def test_cli_in_out_mode(tmp_path):
     assert r.returncode == 0, r.stderr
     assert json.loads(src.read_text(encoding="utf-8")) == _kit_like_i90()   # input untouched
     assert json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))["options_migrated"] == 37
+
+
+def test_cli_in_out_no_op_still_writes_out_and_never_leaves_it_stale(tmp_path):
+    """A copy transform always produces its output (cross-surface round 2:
+    a no-op left --out missing, or STALE from a previous run, under exit 0)."""
+    migrated, _ = migrate_selects(_kit_like_i90())
+    src = tmp_path / "a.json"
+    src.write_text(json.dumps(migrated), encoding="utf-8")
+    out = tmp_path / "b.json"
+    out.write_text(json.dumps({"stale": "PREVIOUS RUN OUTPUT"}), encoding="utf-8")
+    r = subprocess.run([PY, str(SCRIPT), "--in", str(src), "--out", str(out),
+                        "--archive", str(tmp_path / "arch.json"), "--report", str(tmp_path / "r.json")],
+                       capture_output=True, text=True, cwd=str(REPO))
+    assert r.returncode == 0, r.stderr
+    assert json.loads(out.read_text(encoding="utf-8")) == migrated       # fresh, not stale
+    assert not (tmp_path / "arch.json").exists()                          # no-op: no pair
+    assert not (tmp_path / "r.json").exists()
+    assert "nothing to do" in r.stdout
 
 
 def test_cli_refuses_both_modes_at_once(tmp_path):

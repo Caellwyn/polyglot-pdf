@@ -160,6 +160,23 @@ a field verbatim, so a legacy select left there would fail PR 3b's gate the
 moment it came back -- and the real kit's two quarantined state selects are
 the "missing" two of the plan's four (267 options in all, not 143).
 
+**A rollback is only a rollback of the run that wrote it.** Round 2 of the
+outer review showed my "never overwrite the archive" rule producing a stale
+one: run 1 archives, the human edits in the editor, run 2 migrates the new
+field and keeps run 1's archive -- restoring it would delete the edit. Each
+migrating run now writes its own archive + report PAIR (base names, then
+`.2`, `.3`...), so every archive is exactly the schema that run started from
+and every report names exactly that run's changes. The other half of the same
+finding: a no-op `--in/--out` run left `--out` missing or stale under exit 0;
+a copy transform always produces its output now.
+
+**A by-design consequence still has to be in the handover.** Migration moves
+`option.value`, which is bound into the readiness fingerprint, so the editor
+shows `mail_state` and `phys_state` as needing re-review afterwards. Not a
+broken kit, not a blocker (a WARNING) -- but the maintainer reading a
+not-ready card cannot tell that without being told. The docstring and the PR
+body now say it.
+
 ## Files touched
 
 - `scripts/migrate_select_on_values.py` (new)

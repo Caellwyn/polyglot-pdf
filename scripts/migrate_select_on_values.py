@@ -19,12 +19,18 @@ there would fail the v2 gate the moment it came back (PR 3b). They are
 reported with ``quarantined: true``.
 
 Idempotent: an option that already carries ``pdf_on_value`` is never touched,
-so a second run migrates nothing and retargets nothing -- and writes NO
-artifacts: the archive is the rollback and the report the audit trail, and a
-second run must not clobber either (the cross-surface pass caught the first
-cut doing exactly that while printing "nothing to do"). An existing archive is
-never overwritten, even by a later run that does migrate something. What a
-second run DOES still report is the outstanding human work -- every kind in
+so a second run migrates nothing and retargets nothing. ARTIFACTS: every run
+that migrates something writes its own archive + report PAIR -- the base
+names for the first, ``.2``, ``.3``... for later runs -- so each archive is
+exactly the schema that run started from (rolling one back never deletes
+work done in the editor between runs) and each report names exactly that
+run's changes; nothing is ever overwritten. A run that migrates nothing writes
+no archive and no report (``--out`` is still written when it is a different
+file from ``--in``: a copy transform always produces its output). The
+cross-surface pass caught the first cut overwriting the archive with the
+migrated schema on a no-op run, and then keeping a stale archive across a
+later migrating run. What a second run DOES still report is the outstanding
+human work -- every kind in
 ``_HUMAN_WORK``: ``no_code`` (a cleared code the tool cannot supply),
 ``duplicate_codes`` (a code more than one option claims) and
 ``non_dict_options`` (plain-string options it cannot migrate) -- and the CLI
@@ -35,7 +41,11 @@ legacy sibling cannot collide.
 Deliberately NOT done here:
   * metadata.json is never opened. The schema's SHA changes, so a readiness
     stamp goes stale by design -- a human re-verify in the editor mints a
-    fresh one. That is the audit trail, not a bug.
+    fresh one. That is the audit trail, not a bug. CONCRETELY, on i-90_v2:
+    the editor will show mail_state and phys_state as needing re-review
+    after migration (their acknowledgements were pinned to the old option
+    values; guidance-identity-stale is a WARNING, so publishing is not
+    blocked) -- expected, not a broken kit. Re-verify those two.
   * Radio / checkbox_group values are untouched (they already carry
     pdf_on_value; migrate_schema_v2.py owns their v1 -> v2 path).
   * Duplicate codes inside one field are reported, not resolved: the
@@ -294,6 +304,25 @@ def _warn_outstanding_work(report: Dict[str, Any]) -> bool:
     return any_work
 
 
+def _fresh_pair(archive: Optional[str], report: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """The archive + report paths for THIS run: the base names if the archive
+    does not exist yet, else the first free ``.N`` suffix (N >= 2), applied
+    to BOTH so the pair stays together. Never returns an existing archive."""
+    if not archive or not os.path.exists(archive):
+        return archive, report
+
+    def suffixed(path: Optional[str], n: int) -> Optional[str]:
+        if not path:
+            return None
+        stem, ext = os.path.splitext(path)
+        return f"{stem}.{n}{ext}"
+
+    n = 2
+    while os.path.exists(suffixed(archive, n)):
+        n += 1
+    return suffixed(archive, n), suffixed(report, n)
+
+
 def _write_json(path: str, obj: Any) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(obj, fh, indent=2, ensure_ascii=False)
@@ -328,17 +357,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         schema = json.load(fh)
     migrated, report = migrate_selects(schema)
     if report["options_migrated"] == 0:
-        # A no-op run writes NOTHING: the archive is the rollback and the
-        # report the audit trail of the run that did the work.
-        print(f"[select-migration] {inp}: nothing migrated; existing archive/report kept")
+        # A no-op run writes no archive and no report (each pair belongs to
+        # the run that did the work) -- but a COPY transform always produces
+        # its output, or a caller piping --out onward reads a missing or
+        # stale file under a success exit (cross-surface round 2).
+        if os.path.abspath(out) != os.path.abspath(inp):
+            _write_json(out, migrated)
+        print(f"[select-migration] {inp}: nothing migrated; no archive/report written")
     else:
-        if archive and os.path.exists(archive):
-            print(f"  archive already exists, kept: {archive}")
-        elif archive:
+        archive, report_path = _fresh_pair(archive, report_path)
+        if archive:
             _write_json(archive, schema)
+            print(f"  archive: {archive}")
         _write_json(out, migrated)
         if report_path:
             _write_json(report_path, report)
+            print(f"  report:  {report_path}")
 
     print(f"[select-migration] {inp} -> {out}")
     print(f"  options migrated: {report['options_migrated']}; "
