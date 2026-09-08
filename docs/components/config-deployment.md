@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/services/audit_log.py admin_backend/routes/whoami.py admin_backend/routes/config_routes.py admin_backend/routes/audit_routes.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-li9x0: the admin audit log lands with its first consumers -- `GET /admin/audit` and `GET`/`PUT /admin/config/{channel}`, the audited producer for `app_config/{channel}`; see `technical_guide.md` contract 15.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED`, `LINK_COST_CEILING_USD` and `LINK_FIRM_CAP` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the `deploy-demo.sh`/`deploy-staging.sh` env lines for them staying live as the fallback below that; see `technical_guide.md` contract 14.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 
 How the backend is configured (settings, feature flags, env vars) and how both
@@ -182,9 +182,12 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
     `deploy-staging.sh` still carry `LINK_MINTING_ENABLED=true` in
     `BACKEND_EXTRA_ENV` (predating bg313) and that line is exactly what keeps
     a freshly deployed process minting-enabled with no `app_config/{channel}`
-    doc seeded yet -- an operator can override it per channel with
-    `scripts/set_runtime_config.py`, or the admin console's own config route
-    once it lands (bd `polyglot-pdf-li9x0`). See
+    doc seeded yet -- an operator can override it per channel either through
+    the admin service's `PUT /admin/config/{channel}` (bd
+    `polyglot-pdf-li9x0`), which validates the key and the value before
+    writing and records the change in the audit log inside the SAME Firestore
+    transaction, or with `scripts/set_runtime_config.py`, the un-audited
+    break-glass CLI that needs no deployed admin service. See
     [`technical_guide.md`](../technical_guide.md) contract 14 for the full
     fallback order and call-site details. The ceiling actually in force is
     the global `LINK_COST_CEILING_USD` (also runtime-config-backed now): a
@@ -492,8 +495,13 @@ app-level gate on every OTHER route is the whole access control.
 `backend/services/editor_auth.py`: a boolean `app_admin` custom claim,
 `require_app_admin` (dev bypass refused on `K_SERVICE`, `verify_id_token` with
 `check_revoked` deliberately off, a 401/403 split with a machine-readable
-`NO_ADMIN_ACCESS:` prefix on the "no admin claim at all" 403). Its first route
-is `GET /admin/whoami`. `admin_backend/tests/unit/test_admin_route_auth.py`
+`NO_ADMIN_ACCESS:` prefix on the "no admin claim at all" 403). The gate's
+first route was `GET /admin/whoami`; bd `polyglot-pdf-li9x0` added
+`GET /admin/audit` and `GET`/`PUT /admin/config/{channel}` behind the same
+gate, and with them the audit log every mutating admin route must write
+(`admin_backend/services/audit_log.py`; see
+[`technical_guide.md`](../technical_guide.md) contract 15).
+`admin_backend/tests/unit/test_admin_route_auth.py`
 derives the registered route set from the live app and asserts every
 business route (everything but `/health` and `/version`) carries exactly one
 of four gate names -- `require_app_admin` is the only one that exists yet; the
