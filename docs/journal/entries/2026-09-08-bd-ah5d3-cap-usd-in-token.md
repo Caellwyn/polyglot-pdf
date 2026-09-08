@@ -71,6 +71,25 @@ uncapped exactly as before this bead, and `cost_ceiling_usd_for_claims`
 falls through to the global for all of them -- verified by the "uncapped
 token uses the global" test pair.
 
+**Cross-surface (Opus) fresh-eyes review, round 1: 1 blocker, fixed.** Both
+rubric items (the socket-precedence test intent, the malformed-mint/read-time
+exact-set tripwire) scored PASS, independently mutation-verified by the
+reviewer against a scratch copy of the passthrough bug. One blocker: the
+"Two kits declare a per-form ceiling today... their links are now bounded at
+$3" comment added at `websocket_routes.py:1449-1451` stated present-tense
+production behavior that this diff does not deliver -- `link_routes.py`
+(untouched by this PR) still calls `mint_link_token` with no `cap_usd=`
+argument, so w7/i-90 links remain on the $10 global until A3 lands, exactly
+as this same entry's "Deferred, on purpose" paragraph and `link_budget.py`'s
+own docstring both already said. Fixed by rewriting the comment to match:
+it now says the two kits declare a ceiling but A3 (still open, blocked by
+this bead) is what would actually put `cap_usd` on their tokens, and until
+then they fall through to the global like any uncapped token. No other
+findings; no beads filed (the one finding was this diff's own added text,
+fixed inline rather than deferred). Full backend suite (3331 passed, 72
+skipped) and root suite (1397 passed, 46 skipped) re-run clean after the
+fix; comment-only change, no test/mutation-verify needed.
+
 ## Lessons
 
 Nothing new generalizes beyond what CLAUDE.md scar tissue #9 (test the

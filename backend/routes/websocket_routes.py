@@ -1447,8 +1447,11 @@ async def fill_form_from_schema(
 		# safe default a malformed value gets.
 		#
 		# Two kits declare a per-form ceiling today (w7 and i-90 at $3, bd
-		# polyglot-pdf-gob8l): their links are now bounded at $3, not the
-		# $10 global, because their tokens carry that claim from mint.
+		# polyglot-pdf-gob8l), but A3 -- the mint-time resolve-from-kit-
+		# metadata step that would actually put `cap_usd` on their tokens --
+		# is still open and blocked by this bead. Until A3 lands, w7/i-90
+		# links carry no `cap_usd` claim and stay bounded by the $10 global,
+		# exactly like any other uncapped token.
 		#
 		# `check_budget`'s own parameter is `kit_metadata` (it calls
 		# `cost_ceiling_usd_for_kit` under the KIT_COST_CEILING_KEY name) --
