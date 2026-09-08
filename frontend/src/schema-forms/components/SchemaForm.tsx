@@ -22,7 +22,7 @@ import { PdfViewErrorBoundary } from "./PdfViewErrorBoundary";
 import { PdfPreviewFallback } from "./PdfPreviewFallback";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
-import { unwrapFieldValue, isBlankFieldValue } from "../utils/fieldValue";
+import { unwrapFieldValue } from "../utils/fieldValue";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
@@ -446,35 +446,45 @@ export function SchemaForm({ schema, kitId, pdfUrl, pdfFile, onSubmit, onSection
   const handleFieldChange = (fieldId: string, value: any) => {
     // Use functional update to avoid stale closure issues
     setState(prevState => {
-      // Manual edits from the React UI are auto-confirmed -- the user explicitly
-      // typed or selected the value -- EXCEPT when it is blank (bd
-      // polyglot-pdf-5ovod). This fires on every keystroke, so without the guard
-      // typing spaces produced a CONFIRMED whitespace entry: the completion gate
-      // and the confirm gate both reject blankness now, but this write path
-      // could still stamp confirmed:true on one, leaving the exact
-      // confirmed-but-blank state that the navigation recovery arm then has to
-      // rescue. Leaving it unconfirmed keeps the field in the next-field search
-      // where it belongs.
+      // Typing does NOT verify (bd polyglot-pdf-uum5g). This fires on EVERY
+      // KEYSTROKE, so it was writing a full audit record -- confirmed:true with
+      // confirmationMethod:'manual_edit' -- while the user was still mid-word.
+      // Measured before the fix: typing "Maria" with no blur and no Tab already
+      // stored {"value":"Maria","confirmed":true,
+      // "confirmationMethod":"manual_edit"}. "Verified" is load-bearing in this
+      // product's audit record (docs/standards/confirmation-and-audit.md); a
+      // keystroke is not an assertion.
       //
-      // Note this is the LAST of the two manual-edit write paths to get the
-      // guard: fieldManager.ts's onManualEdit (the vanilla-JS surface) has
-      // gated on `value && value.trim()` all along, so the two disagreed.
-      const manualEditIsBlank = isBlankFieldValue(value);
+      // This is the surface the bead's premise MISSED: blur here only validates
+      // (handleFieldBlur -> setValidationError), so a fix aimed at "blur" alone
+      // would have left the schema form AND the PDF-view popover -- which both
+      // route through this handler -- still auto-verifying.
+      //
+      // The VALUE is still stored; only the verification is withheld, so the
+      // field stays in the next-field search (bd polyglot-pdf-a08po re-offers
+      // it) until an explicit act verifies it.
       let newState = SchemaFormStateManager.updateField(prevState, fieldId, value, {
-        confirmed: !manualEditIsBlank,
-        confirmationMethod: manualEditIsBlank ? undefined : 'manual_edit'
+        confirmed: false
       });
 
       // Handle copy_to logic: auto-copy value to target fields
       const field = prevState.schema.fields.find(f => f.id === fieldId);
       if (field?.copy_to && field.copy_to.length > 0) {
-        // Copy value to all target fields (also auto-confirmed)
+        // NOTE this loop is REDUNDANT with the fan-out inside updateField's own
+        // write chokepoint (schemaFormState.ts), which already copies to every
+        // target on EVERY path. Measured: the chokepoint stamps the target
+        // confirmed:true regardless of what is passed here, so this loop cannot
+        // change the target's verification either way.
+        //
+        // And that stamp is CORRECT, deliberately: a copy target is read_only,
+        // so the model can neither fill nor skip it -- an UNVERIFIED target is a
+        // trap that strands computeNextField on a field nobody can act on. The
+        // human did answer the value, on the source; the target inherits that.
+        // Left in place because it also keeps the target's VALUE in sync within
+        // this reducer's local newState (bd polyglot-pdf-uum5g).
         field.copy_to.forEach(targetFieldId => {
-          // Same blankness guard as the source write above: a fan-out of a blank
-          // value must not arrive at the target pre-confirmed either.
           newState = SchemaFormStateManager.updateField(newState, targetFieldId, value, {
-            confirmed: !manualEditIsBlank,
-            confirmationMethod: manualEditIsBlank ? undefined : 'manual_edit'
+            confirmed: false
           });
         });
       }

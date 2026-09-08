@@ -26,7 +26,13 @@ doc (the handler reads the arg without validating against the enum). If you edit
 enum, re-check this section by hand. The two confirmation methods:
 
 - **`verbal`** — the user said "yes" to the proposed value.
-- **`manual`** — the user typed/selected the value directly.
+- **`manual`** — the user typed/selected the value directly **and then verified
+  it by an explicit act**. Typing alone does NOT produce a confirmation (bd
+  polyglot-pdf-uum5g): a manually-typed field is stored unverified and stays in
+  the next-field search until the user verifies it, precisely so a keystroke
+  cannot stand behind a per-field audit claim. Note this enum is the BACKEND
+  `confirm_field` tool's, distinct from the client-side
+  `FieldValue.confirmationMethod` (`ai_voice` / `manual_edit`).
 
 `CallbackHandler._handle_confirm_field_tool` (`backend/services/callback_handler.py`)
 reads `confirmation_method` from the tool arguments (defaulting to `"verbal"` if
@@ -526,7 +532,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-08-28 (bd polyglot-pdf-6zhaf: the delete guard
-ESCALATES rather than refusing forever -- an unrunnable check is a warning to
-acknowledge, not a permanent block, and what a delete costs is the revision
-archive the records NAME, never the records themselves.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: `manual` means typed AND explicitly verified -- typing alone no longer produces a confirmation, so a keystroke cannot stand behind a per-field audit claim).*

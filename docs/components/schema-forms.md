@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: blankness has ONE definition for "answered" (`isBlankFieldValue`) and a NARROWER one for "settled" (`isConfirmedButBlank`, which keeps a confirmed optional `''` settled); every gating consumer shares them, and whitespace no longer deadlocks the voice path).*
+*Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: typing no longer verifies a field on either surface -- blur, tab, keystroke and checkbox click all store the value UNVERIFIED, so a keystroke stops writing an audit record; the copy_to target keeps its inherited confirmation deliberately).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -367,13 +367,26 @@ render through `CheckboxField`, which branches on `options[]` (a bare boolean bo
 vs. a multi-select group). **Not yet implemented** (render a placeholder):
 `signature`, `address_group`, `table`. Unknown types render an error block.
 
-Manual edits from the React UI are **auto-confirmed** as `manual_edit`
-(`handleFieldChange`). `field.copy_to` auto-copies the value to listed target
+**Typing does NOT verify a field** (bd polyglot-pdf-uum5g). `handleFieldChange`
+stores the value with `confirmed: false`, and so does the vanilla-DOM surface's
+`onManualEdit` (`connection.ts`) -- which is registered on `blur` AND `change`,
+so before this, tabbing through three fields wrote three audit records. The rule
+is the same for EVERY field type, checkbox and select clicks included: one rule,
+nothing to teach, and every audit record has identical provenance. Verification
+now comes only from an explicit act -- the verbal confirm, the skip control, or
+(bd polyglot-pdf-96um6) the Enter->verify modal. An unverified field keeps its
+value and stays in the next-field search (`computeNextField`), so it is re-offered
+rather than stranded.
+
+`field.copy_to` auto-copies the value to listed target
 fields at the **write chokepoint** -- `SchemaFormStateManager.updateField` --
 so EVERY path fans out, the voice path included (bd polyglot-pdf-gpaed). A
 fanned target is always stamped confirmed, even when the source write was not:
 a copy target is read_only, so the AI can neither fill nor skip it, and leaving
-it unconfirmed would strand `computeNextField` on it. Validation runs on blur (`validateField`).
+it unconfirmed would strand `computeNextField` on it. That stamp survives the
+uum5g change deliberately -- the human did answer the value, on the source.
+
+Validation runs on blur (`validateField`) -- blur VALIDATES, it does not verify.
 **AI-applied values are validated too** (bd polyglot-pdf-wpw.3): the voice layer
 runs `validateField` on every value the model fills *before* it lands (see
 [tool-call-flow.md](tool-call-flow.md)), so an invalid enum/format/required value

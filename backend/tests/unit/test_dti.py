@@ -864,9 +864,15 @@ def test_update_coercion_does_not_log_raw_sent_id(monkeypatch):
 
 
 def test_manual_field_update_clears_current_field_pointer():
-    """P0: a manual edit is auto-confirmed by the FE, so the current-field pointer
-    must be invalidated -- else the NEXT spoken answer (for a different, hinted field)
-    is coerced onto the just-edited field, overwriting it."""
+    """P0: a manual edit moves the user off the current field, so the pointer must
+    be invalidated -- else the NEXT spoken answer (for a different, hinted field) is
+    coerced onto the just-edited field, overwriting it.
+
+    The BEHAVIOUR here is unchanged by bd polyglot-pdf-uum5g; only the old reason
+    was. This used to say the edit is "auto-confirmed by the FE", which stopped
+    being true when typing stopped verifying -- but the pointer must clear either
+    way, because what makes it stale is the user having MOVED, not the field having
+    been confirmed."""
     import asyncio
     from backend.services.form_filling_service import FormFillingService
     from backend.config import Settings

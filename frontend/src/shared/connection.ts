@@ -437,11 +437,23 @@ export function createConnectionManager(
 			// every other field's value and badge disappear until Gemini's next
 			// message re-fills them.
 			const currentState = SchemaFormStateManager.load() || state
+			// Typing does NOT verify (bd polyglot-pdf-uum5g). This handler is
+			// registered on 'blur' AND 'change' (fieldManager.ts), so confirming
+			// here meant TABBING THROUGH THREE FIELDS WROTE THREE AUDIT RECORDS --
+			// a keystroke nobody intends as an assertion, standing behind a
+			// per-field verification claim the firm relies on
+			// (docs/standards/confirmation-and-audit.md).
+			//
+			// The VALUE is still stored; only the verification is withheld. The
+			// field then stays in the next-field search (bd polyglot-pdf-a08po
+			// already re-offers it) until an explicit act verifies it: the verbal
+			// confirm, the skip control, or the Enter->modal gesture
+			// (bd polyglot-pdf-96um6).
 			const edited = SchemaFormStateManager.updateField(
 				currentState,
 				fieldId,
 				value,
-				{ confirmed: true, confirmationMethod: 'manual_edit' }
+				{ confirmed: false }
 			)
 			// Resume the next-field search from the field the user just filled,
 			// not the top of the form (bd polyglot-pdf-a08po). Without this the
@@ -776,11 +788,16 @@ export function createConnectionManager(
 							// Load latest persisted state so this edit lands on top of any
 							// AI fills saved since the closure's `state` was last refreshed.
 							const currentState = SchemaFormStateManager.load() || state
+							// Typing does NOT verify (bd polyglot-pdf-uum5g) -- same rule
+							// as the primary onManualEdit above. These two closures are
+							// duplicates and must stay in step; this is the RECONNECT
+							// one, so missing it would mean typing silently verified
+							// again after any reconnection.
 							const edited = SchemaFormStateManager.updateField(
 								currentState,
 								fieldId,
 								value,
-								{ confirmed: true, confirmationMethod: 'manual_edit' }
+								{ confirmed: false }
 							)
 							// Same search-origin move as the primary onManualEdit above
 							// (bd polyglot-pdf-a08po) -- these two closures are duplicates

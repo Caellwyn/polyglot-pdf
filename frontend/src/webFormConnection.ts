@@ -3884,8 +3884,12 @@ export class WebFormConnection {
     // field (bd polyglot-pdf-ezg2). The manual-edit path (connection.ts
     // onManualEdit) applies the edit to a separate state object and SAVES it to
     // sessionStorage, but does NOT mutate this.state -- so a stale this.state
-    // would compute the just-edited (auto-confirmed) field as still "next" and
-    // point Gemini back at it. load() is the same source-of-truth sessionStorage
+    // would compute a pre-edit next field and point Gemini at the wrong one.
+    // (This used to say the just-edited field is "auto-confirmed"; that stopped
+    // being true in bd polyglot-pdf-uum5g -- typing no longer verifies. The
+    // refresh is still required: the edit handler wrote the authoritative
+    // post-edit state, including the SEARCH ORIGIN, and computing from a stale
+    // copy ignores both.) load() is the same source-of-truth sessionStorage
     // read this class uses elsewhere; the edit handler just wrote the
     // authoritative post-edit state there. (The refresh is ALSO required by the
     // maybeEmitFormComplete dirty-check below -- fresh-eyes finding, jnjj.16.)

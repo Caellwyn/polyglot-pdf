@@ -631,8 +631,12 @@ class FormFillingService:
                                        next_field_hint: Optional[str] = None,
                                        next_field_schema: Optional[Dict[str, Any]] = None):
         """Notify Gemini of manual field update. Delegates to AudioHandler."""
-        # A manual edit is auto-confirmed by the frontend, so the field the DTI
-        # current-field pointer names is now DONE. Invalidate the pointer (Codex PR
+        # A manual edit moves the user OFF the field the DTI current-field pointer
+        # names, so that pointer is stale. (This used to say the edit is
+        # "auto-confirmed by the frontend"; bd polyglot-pdf-uum5g ended that --
+        # typing no longer verifies. The pointer must still be invalidated: what
+        # makes it stale is the user having MOVED, not the field being confirmed.)
+        # Invalidate the pointer (Codex PR
         # #264 P0): otherwise the next spoken answer -- which is for the field
         # next_field_hint points at, NOT this manually-edited one -- would be coerced
         # by update_form_fields onto the just-edited+confirmed field, overwriting it.
