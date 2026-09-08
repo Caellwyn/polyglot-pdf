@@ -1,4 +1,4 @@
-# Informational CI -- runs the three test suites on every PR.
+# Informational CI -- runs the four test suites on every PR.
 #
 # NON-BLOCKING BY DESIGN (bd polyglot-pdf-uov.3): this workflow reports status
 # but is NOT a required check. The merge gate (auto-merge for a routine low-risk
@@ -85,4 +85,26 @@ jobs:
         run: npm run typecheck
       - name: Test (schema-editor)
         working-directory: schema-editor
+        run: npm run test:run
+
+  admin-console-tests:
+    name: admin-console vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install (admin-console)
+        working-directory: admin-console
+        run: npm ci
+      - name: Type-check (admin-console)
+        # Same reasoning as the schema-editor job above: tsc --noEmit catches
+        # a type-error class vitest's transpile-only run cannot (the
+        # polyglot-pdf-1rgr lesson, applied to this new suite from day one --
+        # bd polyglot-pdf-b6943).
+        working-directory: admin-console
+        run: npm run typecheck
+      - name: Test (admin-console)
+        working-directory: admin-console
         run: npm run test:run
