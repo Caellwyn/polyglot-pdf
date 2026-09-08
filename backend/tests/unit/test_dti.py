@@ -952,3 +952,102 @@ def test_manual_field_update_non_dti_ignores_next_field_schema():
                                                         "type": "text"}))
     assert svc._current_field_id is None
     assert "f2" not in svc._dti_extra_fields
+
+
+# ---------------------------------------------------------------------------
+# The confirmation rule must SURVIVE in both system instructions
+# (bd polyglot-pdf-uum5g / polyglot-pdf-gaxnf).
+#
+# Why this exists: while removing the provenance language I deleted the DTI
+# confirmation rule ENTIRELY by accident (a line-based edit matched text an
+# earlier step had inserted). NO TEST WENT RED -- nothing pinned the rule, so a
+# shipped instruction that no longer told the model to confirm anything would
+# have passed CI. Caught by eye, which is not a control.
+#
+# Pins PRESENCE, not wording: a future reword is free to change the phrasing.
+# It does NOT check for re-added provenance framing -- see the block below for
+# why that guard was tried twice and abandoned.
+# ---------------------------------------------------------------------------
+
+# WHAT THIS GUARD CAN AND CANNOT DO -- read before extending it.
+#
+# It CANNOT detect a contradiction. This suite's sibling
+# (test_dti_si_voice_rules.py) states the same limit from measurement: 163
+# substring assertions passed while the live model dropped a binding obligation,
+# because a substring test sees PRESENCE, never MEANING.
+#
+# Two guards were tried and both were defeated, by a reviewer and then by me:
+#   1. a banned-words blacklist -- beaten by "A value the user enters on screen
+#      counts as already agreed" (none of the banned words);
+#   2. a generic carve-out-marker scan near the rule -- beaten by "Values the
+#      user supplies on screen are treated as settled on arrival" (no markers).
+# A third attempt would be beaten by a fourth phrasing. Chasing it is the
+# blacklist trap one level up, so this guard does NOT try.
+#
+# What it DOES pin is the accident that actually happened and that no test caught:
+# the rule VANISHING. I deleted it by a line-based edit that matched text an
+# earlier step had inserted, and CI stayed green. That is a presence question,
+# which is exactly what a substring test answers reliably.
+#
+# A SEMANTIC contradiction in the SI needs live validation, not a unit test --
+# docs/standards/si-reduction.md ("Editing the SI: REWRITE the block").
+
+_ASSENT = ("is NOT confirmed until the user", "NOT confirmed until user")
+
+
+def _si_pair():
+    from backend.config import Settings
+    s = Settings()
+    return (("DTI_SYSTEM_INSTRUCTION", s.DTI_SYSTEM_INSTRUCTION),
+            ("SYSTEM_INSTRUCTION", s.SYSTEM_INSTRUCTION))
+
+
+def test_both_system_instructions_state_the_confirmation_rule():
+    """Neither SI may LOSE the rule the whole confirm_field flow rests on.
+
+    Pins the rule's PRESENCE, not its wording -- either SI's phrasing of the
+    assent is accepted, so a meaning-preserving reword does not turn this red.
+    """
+    for name, si in _si_pair():
+        assert any(a in si for a in _ASSENT), (
+            f"{name} no longer states that a field needs the user's assent. "
+            "This is the rule the whole confirm_field flow rests on, and it was "
+            "once deleted by accident with every test still green."
+        )
+        assert ("confirm_field" in si) or ("CONFIRM with" in si), (
+            f"{name} no longer instructs a confirmation step"
+        )
+
+def test_confirm_field_tool_description_is_pinned_EXACTLY():
+    """The tool schema ships to the model every session, and it once said
+    'manual: user edited field' -- editing IS confirming, asserted in the schema
+    of the very tool that RECORDS confirmations.
+
+    EXACT-MATCH ON PURPOSE, and this is the one place that is right. A reviewer
+    defeated the previous four-word blacklist here with the exact wording that
+    shipped on dev and the maintainer then rejected ("manual: user edited AND
+    verified it in the UI). Typing alone is not a confirmation.") -- 'edited' was
+    followed by ' AND' not ' field', and 'Typing' is a gerund, not 'typed'. The
+    single most likely regression is a revert to that text, and the blacklist
+    waved it through.
+
+    Exact matching is defensible here and NOT for the SIs: this is a 95-char
+    string with a fixed shape, so the enumeration is genuinely closed and any
+    change is a deliberate act that should come here and think. Fifteen thousand
+    characters of SI prose is the opposite, which is why the SI guard next door
+    pins PRESENCE only.
+    """
+    from backend.config import Settings
+    cf = [t for t in Settings().TOOL_DECLARATIONS if t["name"] == "confirm_field"][0]
+    prop = cf["parameters"]["properties"]["confirmation_method"]
+    assert prop["description"] == (
+        "How the field was confirmed "
+        "(verbal: user said yes/correct, manual: user verified it in the UI)"
+    ), (
+        "The confirm_field description changed. It must describe what the enum "
+        "VALUE means, never how the value arrived -- the model gets a field's "
+        "state, not its provenance (bd polyglot-pdf-gaxnf). If this change is "
+        "deliberate, update the expected string here."
+    )
+    # The enum is a wire contract and must not drift with the prose.
+    assert prop["enum"] == ["verbal", "manual"]

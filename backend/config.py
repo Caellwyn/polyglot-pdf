@@ -703,7 +703,7 @@ class Settings(BaseModel):
 					"confirmation_method": {
 						"type": "string",
 						"enum": ["verbal", "manual"],
-						"description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited AND verified it in the UI). Typing alone is not a confirmation."
+						"description": "How the field was confirmed (verbal: user said yes/correct, manual: user verified it in the UI)"
 					}
 				},
 				"required": ["field_id", "confirmation_method"]
@@ -1032,9 +1032,8 @@ class Settings(BaseModel):
     "5. Call confirm_field tool with confirmation_method='verbal'\n"
     "6. Move to next field (hint provided in confirm_field response)\n"
     "If user says no/incorrect: ask for correct value and repeat from step 2\n"
-    "CRITICAL: Fields filled by you (AI) are NOT confirmed until user explicitly says yes. "
-    "Never skip confirmation. Never move to next field without calling confirm_field. "
-    "A value the user TYPED is not confirmed either -- read it back and confirm it.\n\n"
+    "CRITICAL: A field is NOT confirmed until the user explicitly says yes. "
+    "Never skip confirmation. Never move to next field without calling confirm_field.\n\n"
 
     "TOOLS:\n"
     "- update_form_fields: Fill ONE field. Returns success or validation error.\n"
@@ -1172,7 +1171,7 @@ class Settings(BaseModel):
 		"4. WAIT for explicit agreement (yes / correct / that's right).\n"
 		"5. CONFIRM with confirmation_method='verbal'.\n"
 		"6. The confirmation returns the NEXT field's guidance: ask for that field, following ITS instructions and copying ITS field_id.\n"
-		"If the user says no, ask for the correct value and repeat from 2. A field you filled is NOT confirmed until the user explicitly agrees -- never skip confirmation, never advance without it. A value the user TYPED is not confirmed either: read it back and confirm it like any other.\n"
+		"If the user says no, ask for the correct value and repeat from 2. A field is NOT confirmed until the user explicitly agrees -- never skip confirmation, never advance without it.\n"
 		"\n"
 		"TOOL PROTOCOL:\n"
 		"Use the tool whose declared purpose matches your intent and pass arguments exactly as declared. Fill exactly ONE field per call. Act on what a tool returns: on a validation error, retry with a corrected value or ask the user to clarify -- never proceed until the field updates successfully. You FILL in the current section only; to fill a field in another section, navigate there first -- but that limit is about WRITING: get_form_status and ask_secretary read across the WHOLE form and are always available.\n"

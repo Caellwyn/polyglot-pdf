@@ -44,7 +44,11 @@ class MockWebSocket {
   })
 }
 
-// One section, two fields: editing f_a manually makes f_b the next field.
+// One section, two fields. Editing f_a manually leaves it FILLED BUT UNVERIFIED
+// (bd polyglot-pdf-uum5g), and Priority 1 (confirm a filled field) outranks
+// Priority 2 (fill an empty one) -- so f_a is offered again, not f_b. These tests
+// still do their real job: proving the hint is computed from POST-edit state
+// rather than a stale copy.
 const ONE_SECTION_SCHEMA: FormSchema = {
   source: 'web',
   fields: [
@@ -101,27 +105,37 @@ describe('WebFormConnection manual_field_update next-field rider (bd polyglot-pd
   }
 
   /** Simulate connection.ts onManualEdit: apply the edit to the PERSISTED state
-   * (confirmed via manual_edit) and save -- without touching conn.state. */
+   * (UNVERIFIED, with the search origin moved) and save -- without touching
+   * conn.state. */
   function persistManualEdit(fieldId: string, value: string): void {
     const persisted = SchemaFormStateManager.load()!
+    // Mirror what PRODUCTION's onManualEdit actually does (connection.ts): store
+    // the value UNVERIFIED (bd polyglot-pdf-uum5g -- typing is not an assertion)
+    // and move the search origin to the edited field (bd polyglot-pdf-a08po).
+    //
+    // This helper used to hard-code confirmed:true and skip setSearchOrigin, so
+    // it SUPPLIED the very state production is supposed to supply -- and kept
+    // three tests green through a behaviour change that altered every hint they
+    // assert on.
     const edited = SchemaFormStateManager.updateField(persisted, fieldId, value, {
-      confirmed: true,
-      confirmationMethod: 'manual_edit',
+      confirmed: false,
     })
-    SchemaFormStateManager.save(edited)
+    SchemaFormStateManager.save(SchemaFormStateManager.setSearchOrigin(edited, fieldId))
   }
 
-  it('computes the hint from the POST-edit state (points at f_b, not the just-edited f_a)', async () => {
+  it('computes the hint from the POST-edit state (re-offers the unverified f_a)', async () => {
     const ws = await connected(ONE_SECTION_SCHEMA)
     persistManualEdit('f_a', 'AA')
     conn!.sendManualFieldUpdate('f_a', 'Field A', 'AA')
 
     const msgs = ofType(ws, 'manual_field_update')
     expect(msgs).toHaveLength(1)
-    // The just-edited f_a is auto-confirmed, so the next field is f_b; a stale
-    // this.state would have produced a hint for f_a.
-    expect(msgs[0].next_field_hint).toContain("field_id: 'f_b'")
-    expect(msgs[0].next_field_hint).not.toContain("field_id: 'f_a'")
+    // f_a is filled but UNVERIFIED, so it is re-offered to be confirmed --
+    // Priority 1 beats the empty f_b. This asserted f_b until uum5g, when the
+    // helper still hard-coded confirmed:true and so simulated the old behaviour.
+    // The hint being computed from POST-edit state is what this test pins, and
+    // that still holds: a stale this.state carries no search origin at all.
+    expect(msgs[0].next_field_hint).toContain("field_id: 'f_a'")
   })
 
   it('in DTI mode, rides the NEXT field full schema on the message', async () => {
@@ -133,9 +147,11 @@ describe('WebFormConnection manual_field_update next-field rider (bd polyglot-pd
     const msgs = ofType(ws, 'manual_field_update')
     expect(msgs).toHaveLength(1)
     expect(msgs[0].next_field_schema).toBeDefined()
-    expect(msgs[0].next_field_schema.id).toBe('f_b')
+    // f_a again, for the same reason as above: filled but unverified outranks
+    // empty. What this test actually pins is the PAIRING rule below.
+    expect(msgs[0].next_field_schema.id).toBe('f_a')
     // Hint and schema must refer to the SAME field (the Codex PR #229 rule).
-    expect(msgs[0].next_field_hint).toContain("field_id: 'f_b'")
+    expect(msgs[0].next_field_hint).toContain("field_id: 'f_a'")
   })
 
   it('outside DTI mode, sends NO next_field_schema key', async () => {
@@ -151,8 +167,17 @@ describe('WebFormConnection manual_field_update next-field rider (bd polyglot-pd
   it('in DTI mode with the form complete, sends no schema and a null hint', async () => {
     const ws = await connected(ONE_SECTION_SCHEMA)
     ;(conn as any).dtiModeEnabled = true
+    // TYPING both fields no longer completes the form (bd polyglot-pdf-uum5g) --
+    // that is the whole point of the bead, so they must be VERIFIED here. This
+    // test used to reach "complete" by typing, which silently stopped testing
+    // the complete-form branch the moment typing stopped verifying.
     persistManualEdit('f_a', 'AA')
     persistManualEdit('f_b', 'BB')
+    let st = SchemaFormStateManager.load()!
+    st = SchemaFormStateManager.confirmField(st, 'f_a', 'ai_voice')
+    st = SchemaFormStateManager.confirmField(st, 'f_b', 'ai_voice')
+    SchemaFormStateManager.save(st)
+    conn!.reloadState()
     conn!.sendManualFieldUpdate('f_b', 'Field B', 'BB')
 
     const msgs = ofType(ws, 'manual_field_update')

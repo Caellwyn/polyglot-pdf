@@ -134,7 +134,14 @@ def _full_minus_workflow() -> str:
 # the fill.
 def _full_minus_critical() -> str:
     si = _full_si()
-    anchor = "CRITICAL: Fields filled by you"
+    # Anchor updated for bd polyglot-pdf-uum5g, which reworded this sentence:
+    # the rule is about a field's STATE, not about who filled it ("Fields
+    # filled by you (AI) are NOT confirmed..." -> "A field is NOT
+    # confirmed..."). _full_si() reads the LIVE Settings, so a stale anchor
+    # makes this variant raise rather than run. Same treatment bd
+    # polyglot-pdf-qw0p gave the sibling anchor when it reworded
+    # "Medical assistant:" -> "Form assistant:".
+    anchor = "CRITICAL: A field is NOT confirmed"
     start = si.find(anchor)
     if start == -1:
         raise RuntimeError("could not locate CRITICAL anchor for ablation")
