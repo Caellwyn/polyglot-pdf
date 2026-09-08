@@ -15,6 +15,7 @@ ASCII only.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -195,6 +196,58 @@ async def test_the_resolved_ceiling_ACTUALLY_STOPS_A_CAPPED_LINK(
     kwargs = mock_websocket.close.await_args.kwargs
     assert kwargs.get("code") == 1013
     assert kwargs.get("reason") == "budget_exhausted"
+
+
+@pytest.mark.asyncio
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_ceiling_resolution_runs_OFF_the_event_loop_thread(
+    mock_fill_session, mock_websocket, mock_service, handshake_message, monkeypatch,
+):
+    """Opus cross-surface finding 1 (bd polyglot-pdf-ah5d3): resolving the
+    ceiling is a synchronous call that can hit a blocking Admin-SDK Firestore
+    read on a cold runtime_config cache. It must run inside the SAME
+    `asyncio.to_thread` call as `check_budget`, never directly on the
+    coroutine's own (event-loop) thread -- a synchronous read on the loop
+    thread would stall every OTHER concurrent request on this Cloud Run
+    instance, in-flight audio included.
+
+    This test captures the thread `cost_ceiling_usd_for_claims` actually runs
+    on and asserts it is NOT the thread running this test coroutine. A
+    regression that hoists the resolution back onto the event loop (calling
+    it directly in `fill_form_from_schema` instead of inside the threaded
+    closure) makes this fail, because the coroutine's own thread IS the
+    thread pytest-asyncio drives this test from.
+    """
+    monkeypatch.setenv("LINK_TOKEN_SECRET", "w" * 40)
+    monkeypatch.setattr(
+        "backend.services.link_budget._rc_link_cost_ceiling_usd", lambda: 10.0
+    )
+    _stub_open_link(monkeypatch)
+
+    token, _jti = mint_link_token("firm-a", "i-90", "u-emp-7", cap_usd=3.0)
+
+    caller_thread_id = threading.get_ident()
+    captured = {}
+
+    def _spy_cost_ceiling_usd_for_claims(claims):
+        captured["thread_id"] = threading.get_ident()
+        return 3.0
+
+    monkeypatch.setattr(
+        "backend.routes.websocket_routes.cost_ceiling_usd_for_claims",
+        _spy_cost_ceiling_usd_for_claims,
+    )
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token=token)
+
+    assert captured, "cost_ceiling_usd_for_claims was never called"
+    assert captured["thread_id"] != caller_thread_id, (
+        "cost_ceiling_usd_for_claims ran on the event-loop thread -- a "
+        "cold-cache resolution here blocks every concurrent request on "
+        "this Cloud Run instance"
+    )
+    mock_fill_session.assert_awaited()
 
 
 @pytest.mark.asyncio

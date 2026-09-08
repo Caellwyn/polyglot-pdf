@@ -1459,12 +1459,26 @@ async def fill_form_from_schema(
 		# `cost_ceiling_usd_for_claims`, means check_budget's re-parse is a
 		# no-op idempotent pass over an already-good number rather than a
 		# second, divergent resolution path.
-		_ceiling_usd = cost_ceiling_usd_for_claims(claims)
-		try:
-			await asyncio.to_thread(
-				check_budget, claims.get("jti"),
-				{KIT_COST_CEILING_KEY: _ceiling_usd},
+		#
+		# BOTH resolved inside the SAME to_thread call (Opus cross-surface,
+		# bd polyglot-pdf-ah5d3 finding 1). `cost_ceiling_usd_for_claims`
+		# falls through to `default_cost_ceiling_usd()` for every token until
+		# A3 lands, which on a cold runtime_config cache (45s TTL) is a
+		# blocking sync Admin-SDK Firestore read -- the exact hazard
+		# link_routes.py:141-147 and auth.py:293-296 document for this same
+		# runtime_config call. Calling it directly on the event loop (as
+		# opposed to inside the thread below, where check_budget's own
+		# resolution already lived pre-A4) would stall every OTHER concurrent
+		# request on this Cloud Run instance, in-flight audio included, for
+		# every token that has no cap_usd claim.
+		def _resolve_ceiling_and_check_budget() -> float:
+			ceiling_usd = cost_ceiling_usd_for_claims(claims)
+			return check_budget(
+				claims.get("jti"), {KIT_COST_CEILING_KEY: ceiling_usd}
 			)
+
+		try:
+			await asyncio.to_thread(_resolve_ceiling_and_check_budget)
 		except LinkBudgetExhausted as exc:
 			log.warning("ws_link_budget_exhausted", jti=claims.get("jti"),
 						firm_id=claims.get("firm_id"), error=str(exc))

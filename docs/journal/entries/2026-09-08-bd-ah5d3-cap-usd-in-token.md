@@ -90,6 +90,69 @@ fixed inline rather than deferred). Full backend suite (3331 passed, 72
 skipped) and root suite (1397 passed, 46 skipped) re-run clean after the
 fix; comment-only change, no test/mutation-verify needed.
 
+**Cross-surface (Opus) outer review, round 2: 1 blocker + 2 nits, blocker
+fixed, both nits ADOPTED as filed beads (no code change here).**
+
+- **ADOPT (fixed): `websocket_routes.py:1462` resolved the ceiling directly
+  on the event-loop thread.** `cost_ceiling_usd_for claims(claims)` was a
+  bare synchronous call sitting outside the `asyncio.to_thread(check_budget,
+  ...)` call immediately below it -- for an uncapped token (every token
+  until A3 lands) it falls through to `default_cost_ceiling_usd()` ->
+  `runtime_config.link_cost_ceiling_usd()`, which on a cold 45s-TTL cache is
+  a blocking sync Admin-SDK Firestore read. This is the exact hazard
+  `link_routes.py:141-147` and `auth.py:293-296` already document for the
+  same `runtime_config` call, and pre-this-bead the same resolution happened
+  *inside* `check_budget`'s own `to_thread` call -- so the diff had hoisted
+  a previously-threaded blocking read onto the shared Cloud Run loop,
+  stalling every other concurrent request (in-flight audio included) on a
+  cold-cache connect. Fixed by folding both calls into ONE local closure,
+  `_resolve_ceiling_and_check_budget`, passed as the single callable to
+  `asyncio.to_thread` -- the ceiling resolution and the budget check now run
+  together, off the loop, exactly as they did before this bead touched the
+  call site. New test
+  `test_ceiling_resolution_runs_OFF_the_event_loop_thread` in
+  `test_websocket_link_budget.py` captures the thread id
+  `cost_ceiling_usd_for_claims` actually runs on and asserts it differs from
+  the test coroutine's own thread; mutation-verified by reverting to the
+  bare pre-fix call (ceiling resolved outside the thread) and confirming the
+  new test reddens (`AssertionError: ... assert 38652 != 38652`), then
+  restoring.
+- **DEFER (filed, not fixed here): the global ceiling is resolved twice per
+  client connect.** `cost_ceiling_usd_for_claims` calls
+  `default_cost_ceiling_usd()`, then `check_budget` -> `_ceiling_for` ->
+  `cost_ceiling_usd_for_kit` calls it again unconditionally before even
+  looking at the key -- correctness is unaffected (idempotent parse of an
+  already-good number) but it doubles cold-cache Firestore reads on the paid
+  gate. Filed as `polyglot-pdf-ysg9e`; the cheapest fix (an
+  already-resolved `ceiling_usd:` parameter on `check_budget` that
+  short-circuits `_ceiling_for`) also cleans up the `{KIT_COST_CEILING_KEY:
+  ...}` shape the reviewer separately called cosmetic-but-misleading, folded
+  into that bead's exit criteria rather than raised twice.
+- **DEFER (filed, not fixed here): three untouched tier-2 doc passages
+  restated the pre-A4 contract and were now wrong about the code.**
+  `docs/technical_guide.md:776-783` and `:845-848`, plus
+  `docs/components/config-deployment.md:192-196`, all asserted the socket
+  "passes no kit metadata" / per-form caps are "declared-but-inert" /
+  the mechanism is "the handshake" -- all three were true before this bead
+  and false after it (bead `polyglot-pdf-4tjt7`, which those passages named
+  as still-open, is closed by this one). `docs/components/auth.md` was
+  updated thoroughly by the original diff; these two files restating the
+  same contract were missed (CLAUDE.md scar #8 -- the set, not the
+  instance). Reported as a GAP (a tier-1/2 doc making a wrong current-state
+  claim), not merely filed: fixed directly in this round rather than only
+  filing `polyglot-pdf-ebm6a` -- both passages in `technical_guide.md` and
+  the one in `config-deployment.md` now describe the token-`cap_usd`-over-
+  global precedence and name bead `ah5d3`/`4tjt7` correctly; both files'
+  `Last updated:` parentheticals gained an `ah5d3` entry.
+  `check_doc_freshness.py` confirms both files `OK` and the wrong-claim
+  strings (`grep -rn "passes no kit metadata\|declared-but-inert\|not yet
+  threaded through the handshake" docs/`) no longer appear anywhere in
+  `docs/`.
+
+Full backend suite re-run clean after the round-2 fixes: 3332 passed, 72
+skipped, 3 deselected (was 3331/72 before this round's one added test).
+Root suite: 1397 passed, 46 skipped, unchanged.
+
 ## Lessons
 
 Nothing new generalizes beyond what CLAUDE.md scar tissue #9 (test the
@@ -139,8 +202,19 @@ Review outcomes recorded in the closeout ping.
 - `backend/tests/unit/test_link_budget.py` -- precedence + malformed-value
   coverage for the new resolver.
 - `backend/routes/websocket_routes.py` -- `cap_usd` claims passthrough,
-  socket ceiling resolution wired into `check_budget`.
+  socket ceiling resolution wired into `check_budget`; round-2 fix folds
+  the ceiling resolution and `check_budget` into one `to_thread`-run
+  closure so neither runs on the event loop.
 - `backend/tests/unit/test_websocket_link_budget.py` (new) -- end-to-end
-  precedence tests through the real socket handshake path.
+  precedence tests through the real socket handshake path; round-2 adds a
+  thread-identity test pinning the off-loop-thread property.
 - `docs/components/auth.md` -- `cap_usd` claim + socket precedence
   documented; Tracks line + Last-updated bumped.
+- `docs/technical_guide.md` -- round-2: two passages (`:776-783`,
+  `:845-848`) rewritten from the stale pre-A4 "socket passes no kit
+  metadata" / "not yet threaded through the handshake" claims to the actual
+  token-`cap_usd`-over-global precedence; `Last updated:` gained an `ah5d3`
+  entry.
+- `docs/components/config-deployment.md` -- round-2: the "declared-but-
+  inert" passage (`:192-196`) rewritten the same way; `Last updated:`
+  gained an `ah5d3` entry.
