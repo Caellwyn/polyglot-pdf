@@ -108,11 +108,20 @@ def _actor(explicit):
     username, and to "unknown" only if even that is unavailable -- an
     unattributable entry is still better than a refused correction, but it
     should look conspicuously unattributable in the console.
+
+    Every candidate is STRIPPED before the truthiness test, and the OPERATOR
+    SEGMENT is what has to survive it. The helper's own blank-actor guard
+    tests actor.strip() on the WHOLE stamped string, which is non-empty for
+    any prefix at all -- so "--actor '   '" would sail past it and write an
+    entry whose operator segment is blank, exactly the unattributable
+    movement this module exists to prevent. Stripping here is what actually
+    closes that, since this is the only place the two halves are still
+    separable.
     """
-    who = explicit
+    who = explicit.strip() if isinstance(explicit, str) else explicit
     if not who:
         try:
-            who = getpass.getuser()
+            who = getpass.getuser().strip()
         except Exception:  # noqa: BLE001 -- no username on some hosts
             who = None
     return "{}:{}".format(ACTOR_PREFIX, who or "unknown")

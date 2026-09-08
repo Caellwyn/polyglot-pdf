@@ -379,6 +379,37 @@ def test_the_actor_survives_a_failing_getuser(
     assert kwargs["actor"] == "system:grant_credits_cli:unknown"
 
 
+@pytest.mark.parametrize("blank", ["   ", "\t", "\n", " \t\n ", ""])
+def test_a_whitespace_only_actor_falls_back_instead_of_stamping_a_blank(
+        firebase_stub, ledger_spy, monkeypatch, blank):
+    """The helper's blank-actor guard cannot catch this one, so the CLI must.
+
+    credit_ledger._validate tests actor.strip() on the WHOLE stamped string,
+    and "system:grant_credits_cli:   " is non-blank after strip purely
+    because of the literal prefix. So a whitespace-only --actor would commit
+    an entry whose OPERATOR SEGMENT -- the half that says who moved the
+    credits -- is empty, which is precisely the unattributable movement the
+    module docstring calls the one thing the ledger exists to make
+    impossible. Whitespace must therefore be treated as absent and take the
+    same fallback path as an omitted flag.
+
+    Parametrized over the whole blank dimension rather than one sample:
+    a fix that stripped only " " would leave tabs and newlines through.
+
+    Mutation: drop the .strip() in _actor (who = explicit) -- every case
+    except "" goes red, since argparse's own default already handles "".
+    Verified 2026-09-08 per parametrization."""
+    monkeypatch.setattr(grant_credits.getpass, "getuser", lambda: "operator1")
+    grant_credits.main(
+        ["grant", "acme", "--credits", "5", "--project", PROJECT,
+         "--actor", blank])
+    _, kwargs = ledger_spy.calls[0]
+    assert kwargs["actor"] == "system:grant_credits_cli:operator1"
+    operator_segment = kwargs["actor"].split(":")[-1]
+    assert operator_segment.strip(), (
+        "the operator segment is blank: {!r}".format(kwargs["actor"]))
+
+
 # --------------------------------------------- literals match the service
 
 

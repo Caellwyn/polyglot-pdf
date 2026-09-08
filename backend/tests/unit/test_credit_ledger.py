@@ -976,23 +976,79 @@ def test_credit_ledger_is_the_only_module_that_writes_balance_credits():
     0-initializes the field on FIRST CREATE and never touches it again.
     Everything else that mentions the key must be a READER.
 
-    Mutation: add a `ref.update({"balance_credits": n})` to any backend
-    service other than these two -- red. Verified 2026-09-08 by adding one to
-    backend/services/links_store.py."""
+    Detection is an AST walk, NOT a source grep, and that is the whole point
+    of the test. A literal substring like '"balance_credits":' pins one
+    SPELLING rather than the SET (scar #8): it misses a single-quoted dict
+    key, a payload["balance_credits"] = n subscript assignment, and an
+    update(balance_credits=n) kwarg -- all of which write the field just as
+    effectively. The miss is not hypothetical: firms.upsert_firm() writes the
+    field as payload["balance_credits"] = 0, which that substring does not
+    match, so the grep version was already blind to the one legitimate second
+    writer it named in this very docstring.
+
+    A WRITE here means any of the four shapes below; a bare read
+    (snap.get("balance_credits")) is deliberately not one, since readers are
+    unlimited.
+
+    Mutation: add ANY of these to a backend service outside the allowlist and
+    this must go red -- ref.update({"balance_credits": n}),
+    ref.update({'balance_credits': n}), payload["balance_credits"] = n, or
+    ref.update(balance_credits=n). Verified 2026-09-08 by adding each of the
+    four, one at a time, to backend/services/links_store.py."""
+    import ast
     import pathlib
+
+    KEY = "balance_credits"
+
+    def _writes_the_key(tree):
+        for node in ast.walk(tree):
+            # payload["balance_credits"] = n  /  del payload["balance_credits"]
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+                targets = [node.target]
+            for tgt in targets:
+                if (isinstance(tgt, ast.Subscript)
+                        and isinstance(tgt.slice, ast.Constant)
+                        and tgt.slice.value == KEY):
+                    return True
+            # {"balance_credits": n} and {'balance_credits': n} alike --
+            # ast.Constant has no memory of which quote character was typed.
+            if isinstance(node, ast.Dict):
+                for k in node.keys:
+                    if isinstance(k, ast.Constant) and k.value == KEY:
+                        return True
+            # f(balance_credits=n)
+            if isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    if kw.arg == KEY:
+                        return True
+        return False
 
     backend_dir = pathlib.Path(credit_ledger.__file__).resolve().parents[1]
     allowed = {"credit_ledger.py", "firms.py"}
     offenders = []
+    seen_allowed = set()
     for path in sorted(backend_dir.rglob("*.py")):
         if "tests" in path.parts or "scripts" in path.parts:
             continue
-        text = path.read_text(encoding="utf-8")
-        if '"balance_credits":' not in text:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if not _writes_the_key(tree):
             continue
-        if path.name not in allowed:
+        if path.name in allowed:
+            seen_allowed.add(path.name)
+        else:
             offenders.append(str(path.relative_to(backend_dir)))
     assert offenders == [], (
         "balance_credits is written outside the ledger helper: {}".format(
             offenders)
+    )
+    # The allowlist is pinned in BOTH directions. A stale entry -- a module
+    # that no longer writes the field, or was renamed -- would silently widen
+    # the guard for whatever later takes that filename, so an unused
+    # exemption is a failure too, not a tidiness nit.
+    assert seen_allowed == allowed, (
+        "allowlist is stale: {} no longer write balance_credits".format(
+            sorted(allowed - seen_allowed))
     )

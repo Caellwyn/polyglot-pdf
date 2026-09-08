@@ -164,4 +164,50 @@ one that does not and why.
 - `backend/tests/unit/test_grant_credits_cli.py` (new) -- the CLI contract.
 - `docs/technical_guide.md`, `docs/components/auth.md` -- as above.
 
+## Fresh-eyes round 1 -- adopt / reject / defer
+
+The reviewer scored all three exit criteria PASS and returned GAPS-FOUND with
+three findings. Two adopted, one deferred.
+
+**Adopted -- the one-writer guard was pinning a spelling, not the set.**
+`test_credit_ledger_is_the_only_module_that_writes_balance_credits` detected
+offenders with the literal substring `"balance_credits":`, so a second writer
+using single quotes, a `payload["balance_credits"] = n` subscript assignment,
+or an `update(balance_credits=n)` kwarg would not be caught. This was worse
+than the reviewer's read: `firms.upsert_firm()` -- the one legitimate second
+writer the test's own docstring names -- writes the field as
+`payload["balance_credits"] = 0`, which that substring never matched, so the
+allowlist entry for `firms.py` was dead weight and the repo's actual write
+idiom was already invisible to the guard. Detection is now an AST walk over
+subscript assignments, dict-literal keys and call kwargs, and the allowlist is
+pinned in both directions so a stale exemption fails too. Mutation-verified by
+injecting each of the four write shapes into `links_store.py` one at a time:
+all four now red, where the old pattern caught only one. This is scar #8's
+own failure mode, in the test that cites scar #8.
+
+**Adopted -- a whitespace-only `--actor` stamped an unattributable entry.**
+`_actor()` treated any truthy string as an explicit actor, and the helper's
+blank-actor guard tests `actor.strip()` on the whole stamped string, which is
+non-empty for any prefix at all. So `--actor "   "` committed an entry whose
+operator segment -- the half naming who moved the credits -- was blank, which
+is exactly what this module's docstring calls the one thing the ledger exists
+to make impossible. `_actor()` now strips before the truthiness test, so
+whitespace takes the same fallback path as an omitted flag. Pinned by a new
+test parametrized over the whole blank dimension (spaces, tab, newline, mixed,
+empty) rather than one sample; mutation-verified per parametrization -- the
+four whitespace cases go red without the strip, and `""` stays green because
+argparse's default already covers it.
+
+**Deferred -- dry-run conflates "no such firm" with "could not read".**
+Filed as bd `polyglot-pdf-73ze5`. The `--dry-run` path prints "a real run
+would be REFUSED" and exits 0 both when the firm document is genuinely absent
+and when the balance read raised. The message already hedges with "(or could
+not be read)" and the blast radius is operator confusion in an internal CLI
+run under the operator's own credentials -- no ledger-integrity impact -- so
+it was carried out of this PR as a nit rather than fixed here.
+
+Suite after the round: 3389 backend passed / 72 skipped, 1397 root passed /
+46 skipped. The two changed test files went 89 -> 94 tests (+5 from the new
+parametrization).
+
 Review outcomes recorded in the closeout ping.
