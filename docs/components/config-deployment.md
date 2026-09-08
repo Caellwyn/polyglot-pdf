@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py admin_backend/main.py admin_backend/services/admin_auth.py admin_backend/routes/whoami.py scripts/bootstrap_admin_user.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-admin.sh deploy-demo.sh deploy-staging.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-09-02 (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
+*Last updated: 2026-09-04 (bd polyglot-pdf-3l2vp: deploy-all.sh's backend stage sets APP_MODULE + GIT_SHA as runtime env on every backend deploy and, when BACKEND_NO_TRAFFIC_TAG is set, deploys a no-traffic tagged revision verified at its own health endpoint before shifting traffic -- new deploy-admin.sh bridge is the one caller that sets both.) (bd polyglot-pdf-9hzod: `GET /version` on both services now returns `{version, git_sha}` -- `git_sha` reads the `GIT_SHA` runtime env var, falling back to `"unknown"` when unset OR empty, the same `${VAR:-default}`-shaped guard as `APP_MODULE` below. The deploy-side env wiring that actually sets `GIT_SHA` is bead 1.3, not yet landed.) (bd polyglot-pdf-7w17m: the admin service's first gate -- `require_app_admin` + `GET /admin/whoami` + `scripts/bootstrap_admin_user.py` -- lands.) (bd polyglot-pdf-pnoik: one image now serves TWO Cloud Run services -- the ASGI module is the runtime env var `APP_MODULE`, defaulting to the public backend.) (bd polyglot-pdf-3q9qn: client links are isolated per channel via LINK_CHANNEL -- a staging link no longer opens or burns on the demo.) See [the 9qn64 journal entry](../journal/entries/2026-08-31-bd-9qn64-staging-channel.md) for the staging split, [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for the `FIRMS_FIRESTORE_ENABLED` deploy wiring, [the s1iex.5 journal entry](../journal/entries/2026-08-17-bd-s1iex.5-intro-clip-player.md) for the frontend intro-clip flag, and [the lo88 journal entry](../journal/entries/2026-08-14-bd-lo88-firms-datastore-bootstrap.md) for the firms store itself; earlier same-week changes are in their own entries.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -255,8 +255,8 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   so quality beats per-call cost). Extraction runs
   `scripts/authoring/extract_form.py` as a subprocess — the image is built from
   the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
-  `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
-  Cloud Build upload lean. Needs `GEMINI_API_KEY` on the AI Studio path — which
+  `scripts/authoring` + `scripts/bakeoff` ship in it, alongside `backend/` and
+  `admin_backend/`; `.gcloudignore` keeps the Cloud Build upload lean. Needs `GEMINI_API_KEY` on the AI Studio path — which
   no deploy script binds today (`--set-secrets` carries `LINK_TOKEN_SECRET`
   alone); the deployed channels run Vertex, where the key is unused.
 - **`OPTION_TRANSLATION_MODEL`** — the authoring-time option-label translation
@@ -343,8 +343,10 @@ the gate crying wolf. The counts are pinned per script.
   secret block** — gcloud's own help says "All existing secrets will be removed
   first" — so a channel must list every binding it wants to survive, not just
   the one it is adding. The
-  container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
-  backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
+  container (the ROOT `Dockerfile`, `python:3.12-slim`) runs
+  `uvicorn ${APP_MODULE:-backend.main:app}` on `$PORT` (8080) -- see
+  **One image, two services** below for why the module is a runtime variable.
+  `--timeout=3600` (the Cloud Run maximum)
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,
   live WebSockets included, and the 300s default terminated every voice session
   at exactly 5 minutes (bd polyglot-pdf-9w5k).
@@ -402,6 +404,121 @@ the gate crying wolf. The counts are pinned per script.
   deploy would apply to the live demo. A project left on default-deny
   breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
   profile sync -- see [auth.md](auth.md).
+
+### One image, two services (`APP_MODULE`)
+
+The root `Dockerfile` copies BOTH top-level Python packages -- `backend/` (the
+public voice app) and `admin_backend/` (the privileged admin API, bd
+`polyglot-pdf-pnoik`) -- and its `CMD` picks which one to serve at RUNTIME:
+
+```
+CMD uvicorn ${APP_MODULE:-backend.main:app} --host 0.0.0.0 --port ${PORT}
+```
+
+**Why a runtime env var and not a build arg.** `deploy-all.sh` builds with
+`gcloud builds submit --tag`, which has no way to pass `--build-arg`. An `ARG`
+here would freeze at its default in every image while the deploy-time value was
+silently ignored. `APP_MODULE` rides in through `gcloud run deploy
+--set-env-vars` instead, so one image can back both Cloud Run services.
+
+Rules the pin test `tests/test_dockerfile_app_module.py` enforces:
+
+- **The default is `backend.main:app`.** Every existing deploy passes no
+  `APP_MODULE` at all, so an unset value must keep serving the public backend.
+- **`:-`, not `-`.** A deploy that passes an EMPTY `APP_MODULE` (a real shape
+  when a bash variable is unset inside a `--set-env-vars` block) must fall back
+  too, or the container crash-loops with an empty uvicorn target.
+- **No `ENV APP_MODULE=`.** An `ENV` default satisfies the `:-` expansion with
+  its own value, making the fallback dead code and hiding exactly the
+  empty-string case above.
+- **No build `ARG`s**, and **both packages copied**, since `APP_MODULE` can only
+  point at a package the image actually contains.
+
+The two services differ in IDENTITY, not in image: `polyglot-backend` runs as
+the narrow `polyglot-backend-sa`, `polyglot-admin` as `admin-backend-sa`
+(provisioned by `scripts/setup-admin-service.sh`, role list pinned offline by
+`admin_backend/tests/unit/test_admin_sa_iam_envelope.py`). Shipping both
+packages in one image is safe because the deployed service account -- not what
+is present on disk -- is what actually gates a privileged call
+(CLAUDE.md scar #7). `admin_backend/` imports `backend.services.*` and `backend.config` but
+**never `backend.routes`**: the services share business logic, not HTTP
+surface, and that direction is pinned by the same test. The **reverse**
+direction -- `backend/` importing `admin_backend` -- is pinned separately by
+`backend/tests/unit/test_deployed_iam_envelope.py`, because that is the one
+that would put a privileged call under the NARROW service account in a file
+the scar-#7 scan never opens.
+
+The admin service's `/health` reports the `app_module` it is actually running,
+because a service pointed at the wrong module otherwise looks perfectly healthy
+while serving the wrong app. It resolves an EMPTY `APP_MODULE` to the default,
+matching the `:-` expansion above -- a plain `os.getenv(name, default)` would
+report an empty string in exactly that case. `verify_service_publicly_reachable()`
+itself still never calls this route -- it reads the Cloud Run IAM policy, not
+HTTP -- but `deploy-admin.sh`'s tagged flow (below) now DOES issue a real
+`GET .../health` against this exact route and gates traffic on its response,
+so it is no longer true that this route has no deploy-time behavioral
+coverage; that coverage exists only for the admin service's own deploy path,
+not for a bare `deploy-all.sh --backend` run.
+
+**`GET /version` on both services** (bd `polyglot-pdf-9hzod`) returns
+`{"version": app.version, "git_sha": ...}`. `git_sha` reads the `GIT_SHA`
+runtime env var, falling back to `"unknown"` on the SAME two shapes
+`APP_MODULE` guards above -- unset, and set-but-empty (`os.getenv("GIT_SHA")
+or "unknown"`, not a plain getenv default, for the same `--set-env-vars`
+reason). Nothing sets `GIT_SHA` on a deployed service yet -- that wiring
+(`--set-env-vars GIT_SHA=$(git rev-parse HEAD)` in the deploy bridge) is bead
+1.3; until it lands, every deployed `/version` reports `"unknown"`. Cloud
+Build's `$COMMIT_SHA` supersedes the bash-computed value in Epic 4. The admin
+console's "what is live per channel" view (bead 1.7) reads this field on
+both services via a Vite define carrying the same value at console build
+time.
+
+Cloud Run runs `polyglot-admin` with `--allow-unauthenticated`, so the
+app-level gate on every OTHER route is the whole access control.
+`admin_backend/services/admin_auth.py` mirrors
+`backend/services/editor_auth.py`: a boolean `app_admin` custom claim,
+`require_app_admin` (dev bypass refused on `K_SERVICE`, `verify_id_token` with
+`check_revoked` deliberately off, a 401/403 split with a machine-readable
+`NO_ADMIN_ACCESS:` prefix on the "no admin claim at all" 403). Its first route
+is `GET /admin/whoami`. `admin_backend/tests/unit/test_admin_route_auth.py`
+derives the registered route set from the live app and asserts every
+business route (everything but `/health` and `/version`) carries exactly one
+of four gate names -- `require_app_admin` is the only one that exists yet; the
+other three (`require_firm_manager`, `require_app_admin_or_owning_manager`,
+`require_google_oidc`) ship with their first consuming routes. The FIRST
+admin account is stamped by `scripts/bootstrap_admin_user.py`
+(`--email`/`--revoke`/`--list`, `--project` required with the same
+deterministic-project-pin + dead-project-refusal machinery as
+`scripts/bootstrap_firm.py`) -- there is no other way to create one.
+
+**`deploy-admin.sh` (bd `polyglot-pdf-3l2vp`, sprint-22 plan bead 1.3)** is the
+admin backend's own deploy bridge. It sets `BACKEND_SERVICE_NAME=polyglot-admin`,
+`BACKEND_SERVICE_ACCOUNT=admin-backend-sa@...`,
+`APP_MODULE=admin_backend.main:app`, and `CORS_EXTRA_ORIGINS` (both admin
+Hosting sites plus both channels' app origins, since the admin console -- and
+the main app's firm-manager `/console/*` pages -- always call this service
+cross-origin), then calls `deploy-all.sh --backend` with
+`BACKEND_NO_TRAFFIC_TAG=candidate` set. That variable is what makes
+`deploy-all.sh`'s backend stage deploy a **no-traffic tagged revision**
+(`--no-traffic --tag candidate`) instead of shifting traffic immediately: it
+verifies the tag's own stable URL's `/health` first (that URL is built by
+inserting `candidate---` ahead of the service's base host -- `gcloud run
+services describe` reports no revision-scoped address of its own), and only on
+a 200 response runs `gcloud run services update-traffic --to-latest`. A failed
+health check aborts WITHOUT shifting traffic, leaving the previous revision
+live. Unset (every other channel), the flag is a no-op: the same `--backend`
+call it wraps produces the identical `gcloud run deploy` invocation it always
+has. This exists because there is ONE admin service backing BOTH channels'
+data -- a bad admin deploy would otherwise take the control plane down for
+staging and the demo at once, and this sequence is that service's own staging
+tier. `deploy-all.sh` also computes `GIT_SHA=$(git rev-parse HEAD)` and passes
+it alongside `APP_MODULE` as runtime env on every backend deploy (feeding the
+eventual `GET /version` git-sha field, bead 1.6 -- not read by any route yet).
+Pinned by `tests/test_deploy_admin_tag_flow.py`. **What this script does NOT
+do:** deploy the admin-console Vite app -- its candidate + live Hosting sites
+are bead 1.7's `deploy-admin-console.sh`; running `deploy-admin.sh` alone
+stands the API up with no UI in front of it, which is a legitimate
+intermediate state.
 
 ### Hosted schema editor (second Hosting site)
 

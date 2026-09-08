@@ -412,28 +412,67 @@ def check_docs(py: Path, WT: Path) -> dict:
     return _result("docs", STATUS_OK, "all tracked docs fresh", out)
 
 
-def check_tests(py: Path, WT: Path) -> dict:
-    """Step 4: pytest backend/tests/ from the worktree, excluding flaky externals.
+# Wall-clock ceiling for the full-suite run. Measured 706s for all three
+# testpaths roots (4494 tests) on the reference machine; this is that with room
+# for a slower box and future growth, so the gate returns a VERDICT rather than
+# dying on its own timeout.
+_TESTS_TIMEOUT_S = 1800
 
-    PYTHONPATH and the test path point at the WORKTREE so this branch's code is
-    what runs (the `-m "not external"` matches the project's flaky live-Gemini
+
+def check_tests(py: Path, WT: Path) -> dict:
+    """Step 4: run EVERY collected suite from the worktree, minus flaky externals.
+
+    Deliberately passes NO suite paths: with cwd at the worktree root, a bare
+    pytest collects every root in the worktree's own pytest.ini `testpaths`, so
+    a NEW top-level suite is gated by closeout the day it is added rather than
+    the day someone remembers to edit this function. Hardcoding
+    `WT/backend/tests` here made the pre-PR gate blind to `admin_backend/tests`
+    the moment that package landed (bd polyglot-pdf-pnoik), which is the same
+    shape as the CI miss journaled in bd polyglot-pdf-3ave.
+
+    PYTHONPATH and cwd point at the WORKTREE so this branch's code is what runs
+    (the `-m "not external"` matches the project's flaky live-Gemini
     exclusion). A non-zero pytest exit is ATTENTION (the orchestrator must fix a
     red suite before a PR); a launch failure is FAIL.
+
+    THE TIMEOUT IS SIZED TO THE WIDENED RUN, AND IS REPORTED SEPARATELY.
+    Widening this from `backend/tests` to every testpaths root grew the
+    measured wall time from 590s (3139 tests) to 706s (4494 tests) on the
+    reference machine, which the previous 600s ceiling cut off 106s short. A
+    timeout here is NOT a red suite and must never read as one:
+    subprocess.TimeoutExpired subclasses SubprocessError, so an `except
+    SubprocessError` that lumps it in with a launch failure renders every
+    closeout as "a check could not run" -- a tooling error the orchestrator
+    reads past -- and the suite gate then verifies nothing while looking like
+    it ran. So it is caught FIRST and named, and the ceiling carries real
+    headroom (_TESTS_TIMEOUT_S) over the measurement rather than sitting just
+    above it, because a slower machine or a few hundred new tests would
+    otherwise re-open exactly that hole.
     """
+    # Sanity-check that WT really is a checkout before shelling out -- a bare
+    # pytest in an empty dir "passes" with zero tests, which would render this
+    # gate a silent no-op.
     tests_dir = WT / "backend" / "tests"
     if not tests_dir.exists():
         return _result("tests", STATUS_FAIL, "backend/tests/ not found")
     try:
         proc = subprocess.run(
-            [str(py), "-m", "pytest", str(tests_dir), "-q", "-m", "not external"],
+            [str(py), "-m", "pytest", "-q", "-m", "not external"],
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             cwd=str(WT),
             env=_pytest_env(WT),
-            timeout=600,
+            timeout=_TESTS_TIMEOUT_S,
         )
+    except subprocess.TimeoutExpired:
+        # Ordered BEFORE the SubprocessError arm below, which would otherwise
+        # swallow this (TimeoutExpired subclasses it) and mislabel a suite that
+        # merely ran long as a check that could not run at all.
+        return _result("tests", STATUS_ATTENTION,
+                       "test suite exceeded {}s and was killed -- no verdict; "
+                       "re-run it by hand".format(_TESTS_TIMEOUT_S))
     except (OSError, subprocess.SubprocessError) as exc:
         return _result("tests", STATUS_FAIL, "could not run pytest: {}".format(exc))
     out = (proc.stdout or "").strip()

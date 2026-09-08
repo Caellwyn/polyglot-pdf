@@ -77,9 +77,13 @@ at `backend/.venv` (git worktrees do NOT have their own venv). Run the backend
 test suite with `PYTHONPATH` at the repo root:
 
 ```bash
-PYTHONPATH=. backend/.venv/Scripts/python.exe -m pytest backend/tests/ -q   # Windows
-# macOS/Linux: PYTHONPATH=. backend/.venv/bin/python -m pytest backend/tests/ -q
+PYTHONPATH=. backend/.venv/Scripts/python.exe -m pytest -q   # Windows
+# macOS/Linux: PYTHONPATH=. backend/.venv/bin/python -m pytest -q
 ```
+
+Pass no suite paths: a bare `pytest` from the repo root collects every root in
+`pytest.ini`'s `testpaths` (`backend/tests`, `admin_backend/tests`, `tests`).
+Naming one is how a whole suite ships un-run.
 
 The live-Gemini `external` test is flaky; exclude it with `-m "not external"`
 unless you are specifically exercising the real adapter.

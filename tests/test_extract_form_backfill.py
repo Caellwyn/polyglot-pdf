@@ -1876,7 +1876,7 @@ def test_dropdown_options_are_backfilled_from_the_dump(tmp_path):
     schema = _select_schema()  # no options at all, as extraction leaves it
     report = ef._backfill_dropdown_options(schema, dump)
     opts = schema["fields"][0]["options"]
-    assert [o["value"] for o in opts] == ["WY", "AL", "AK"]
+    assert [o["pdf_on_value"] for o in opts] == ["WY", "AL", "AK"]
     assert report == {"fields_filled": 1, "options_written": 3, "unmatched": [],
                       "unspeakable": []}
 
@@ -1888,7 +1888,7 @@ def test_the_blank_placeholder_choice_is_dropped(tmp_path):
                               [" ", "", "WY"])
     schema = _select_schema()
     ef._backfill_dropdown_options(schema, dump)
-    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY"]
+    assert [o["pdf_on_value"] for o in schema["fields"][0]["options"]] == ["WY"]
 
 
 def test_the_dump_OVERWRITES_a_model_invented_option_set(tmp_path):
@@ -1900,7 +1900,7 @@ def test_the_dump_OVERWRITES_a_model_invented_option_set(tmp_path):
     schema = _select_schema([{"value": "wyoming", "label": "Wyoming"},
                              {"value": "alabama", "label": "Alabama"}])
     ef._backfill_dropdown_options(schema, dump)
-    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
+    assert [o["pdf_on_value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
 
 
 def test_a_model_label_for_the_SAME_code_is_preserved(tmp_path):
@@ -1912,12 +1912,13 @@ def test_a_model_label_for_the_SAME_code_is_preserved(tmp_path):
     schema = _select_schema([{"value": "AA", "label": "Armed Forces Americas (AA)"}])
     ef._backfill_dropdown_options(schema, dump)
     opts = schema["fields"][0]["options"]
-    assert opts[0] == {"value": "AA", "label": "Armed Forces Americas (AA)"}
+    assert opts[0] == {"value": "armed_forces_americas", "label": "Armed Forces Americas (AA)",
+                       "pdf_on_value": "AA"}
     # No prior label -> the CODE TABLE now supplies a speakable one. This line
     # asserted {"WY": "WY"} until bd polyglot-pdf-jpjcv: the test had pinned the
     # defect as correct behaviour, with a comment ("no prior label -> code")
     # explaining the bug rather than questioning it.
-    assert opts[1] == {"value": "WY", "label": "Wyoming (WY)"}
+    assert opts[1] == {"value": "wyoming", "label": "Wyoming (WY)", "pdf_on_value": "WY"}
 
 
 def test_only_select_fields_are_touched(tmp_path):
@@ -1979,7 +1980,7 @@ def test_a_duplicate_value_in_one_Opt_list_is_written_once(tmp_path):
                               ["WY", "AL", "WY"])
     schema = _select_schema()
     ef._backfill_dropdown_options(schema, dump)
-    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
+    assert [o["pdf_on_value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
 
 
 def test_the_FIRST_widget_with_choices_owns_the_list(tmp_path):
@@ -1997,7 +1998,7 @@ def test_the_FIRST_widget_with_choices_owns_the_list(tmp_path):
     p.write_text(json.dumps(dump), encoding="utf-8")
     schema = _select_schema()
     ef._backfill_dropdown_options(schema, str(p))
-    assert [o["value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
+    assert [o["pdf_on_value"] for o in schema["fields"][0]["options"]] == ["WY", "AL"]
 
 
 def test_the_FIRST_matching_dump_entry_wins(tmp_path):
@@ -2015,7 +2016,7 @@ def test_the_FIRST_matching_dump_entry_wins(tmp_path):
     p.write_text(json.dumps(dump), encoding="utf-8")
     schema = _select_schema()
     ef._backfill_dropdown_options(schema, str(p))
-    assert [o["value"] for o in schema["fields"][0]["options"]] == ["FIRST"]
+    assert [o["pdf_on_value"] for o in schema["fields"][0]["options"]] == ["FIRST"]
 
 
 def test_a_select_with_no_pdf_field_name_is_reported_unmatched(tmp_path):
@@ -2112,10 +2113,10 @@ def test_a_bare_state_code_becomes_a_name_the_model_can_say(tmp_path):
         [{"value": "", "display": ""},
          {"value": "AL", "display": "AL"},
          {"value": "AA", "display": "AA"}], tmp=tmp_path)
-    labels = {o["value"]: o["label"] for o in options}
+    labels = {o["pdf_on_value"]: o["label"] for o in options}
     assert labels == {"AL": "Alabama (AL)", "AA": "Armed Forces Americas (AA)"}
     # The VALUE is untouched -- it is the export code that prints (bd hmkas).
-    assert [o["value"] for o in options] == ["AL", "AA"]
+    assert [o["pdf_on_value"] for o in options] == ["AL", "AA"]
     assert report["unspeakable"] == []
 
 
@@ -2234,7 +2235,7 @@ def test_a_REAL_pdf_dropdown_gets_speakable_labels_end_to_end(tmp_path):
     assert report["fields_filled"] == 1
     # NON-VACUITY FLOOR: a real /Opt list was actually read off the PDF.
     assert len(options) == 4, options
-    labels = {o["value"]: o["label"] for o in options}
+    labels = {o["pdf_on_value"]: o["label"] for o in options}
     assert labels == {
         "AL": "Alabama (AL)", "AK": "Alaska (AK)",
         "AA": "Armed Forces Americas (AA)", "WY": "Wyoming (WY)",
@@ -2286,6 +2287,88 @@ def test_the_unspeakable_report_ROUND_TRIPS_to_the_saved_schema(tmp_path, monkey
     # The POPULATED report survived the save.
     assert authoring["dropdown_labels_unspeakable"] == ["region:ABCD"]
     # ...and the mappable code was labelled rather than reported.
-    labels = {o["value"]: o["label"]
+    labels = {o["pdf_on_value"]: o["label"]
               for o in saved["fields"][0]["options"]}
     assert labels == {"AL": "Alabama (AL)", "ABCD": "ABCD"}
+
+
+
+# ---------------------------------------------------------------------------
+# The v2 select shape: value is a SLUG, the export code is pdf_on_value
+# (bd polyglot-pdf-g2fpr, PR 2 -- the writer side)
+# ---------------------------------------------------------------------------
+
+
+def test_backfill_writes_slug_value_and_pdf_on_value_code(tmp_path):
+    """Exit criterion 1 of g2fpr.2. The docstring promised this change "at
+    which point"; the filler now reads pdf_on_value (PR 1), so the extractor
+    writes it. The trailing "(CODE)" the speakable label carries is stripped
+    before minting: 'Alabama (AL)' -> 'alabama', not 'alabama_al'."""
+    _report, options = _one_select(
+        [{"value": "", "display": ""},
+         {"value": "AL", "display": "AL"},
+         {"value": "AA", "display": "AA"},
+         {"value": "WY", "display": "WY"}], tmp=tmp_path)
+    assert options == [
+        {"value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"},
+        {"value": "armed_forces_americas", "label": "Armed Forces Americas (AA)",
+         "pdf_on_value": "AA"},
+        {"value": "wyoming", "label": "Wyoming (WY)", "pdf_on_value": "WY"},
+    ]
+
+
+def test_a_numeric_code_is_ALREADY_a_slug_and_stays_the_value(tmp_path):
+    """height_feet: '5' is a valid slug, so value == pdf_on_value == '5'.
+    Minting it from the label would invent a word for a number."""
+    _report, options = _one_select(
+        [{"value": "5", "display": "5"}, {"value": "11", "display": "11"}],
+        fid="height_feet", tmp=tmp_path)
+    assert options == [{"value": "5", "label": "5", "pdf_on_value": "5"},
+                       {"value": "11", "label": "11", "pdf_on_value": "11"}]
+
+
+def test_slugs_are_unique_across_the_whole_option_set(tmp_path):
+    """Two choices whose display strings collide after the (CODE) strip must
+    not share a slug -- the second gets the positional suffix, and a kept
+    numeric code is reserved first so a minted sibling cannot collide with it."""
+    _report, options = _one_select(
+        [{"value": "OT1", "display": "Other"}, {"value": "OT2", "display": "Other"},
+         {"value": "5", "display": "5"}], fid="f", tmp=tmp_path)
+    assert [o["value"] for o in options] == ["other", "other_2", "5"]
+    assert [o["pdf_on_value"] for o in options] == ["OT1", "OT2", "5"]
+
+
+def test_a_prior_option_in_the_v2_shape_keeps_its_label(tmp_path):
+    """prior_labels is keyed on the export CODE, so a kit already migrated
+    (value slug, code in pdf_on_value) still wins over the table on re-run."""
+    import json as _json
+    dump = {"fields": [{"name": "form1.x[0]",
+                        "widgets": [{"choices": [{"value": "AL", "display": "AL"}]}]}]}
+    schema = {"fields": [{"id": "s", "type": "select", "pdf_field_name": "x[0]",
+                          "options": [{"value": "alabama", "label": "Alabama, USA",
+                                       "pdf_on_value": "AL"}]}]}
+    path = tmp_path / "acroform.json"
+    path.write_text(_json.dumps(dump), encoding="utf-8")
+    ef._backfill_dropdown_options(schema, str(path))
+    assert schema["fields"][0]["options"] == [
+        {"value": "alabama_usa", "label": "Alabama, USA", "pdf_on_value": "AL"}]
+
+
+def test_an_ILLEGAL_prior_shape_cannot_keep_its_label_and_says_so(tmp_path):
+    """A prior option with a slug value and NO pdf_on_value is the shape PR 1's
+    select-on-value-missing lint rule rejects. It has no export code to join
+    on, so its hand-written label is NOT preserved -- the code table wins.
+    Pinned so the behaviour is a documented decision, not a surprise: a kit in
+    this shape cannot publish, and re-extracting over it is unsupported.
+    (A slug-of-display join would not help the kits this matters for: the
+    i-90's display strings ARE the codes.)"""
+    import json as _json
+    dump = {"fields": [{"name": "form1.x[0]",
+                        "widgets": [{"choices": [{"value": "AL", "display": "AL"}]}]}]}
+    schema = {"fields": [{"id": "s", "type": "select", "pdf_field_name": "x[0]",
+                          "options": [{"value": "alabama", "label": "Alabama, USA"}]}]}
+    path = tmp_path / "acroform.json"
+    path.write_text(_json.dumps(dump), encoding="utf-8")
+    ef._backfill_dropdown_options(schema, str(path))
+    assert schema["fields"][0]["options"] == [
+        {"value": "alabama", "label": "Alabama (AL)", "pdf_on_value": "AL"}]

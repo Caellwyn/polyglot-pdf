@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-08-31 (bd polyglot-pdf-a08po: `searchOriginFieldId` -- the next-field search resumes from the user's last-acted field and wraps, and a click moves focus only while NO audio is playing).*
+*Last updated: 2026-09-03 (bd polyglot-pdf-5ovod: blankness has ONE definition for "answered" (`isBlankFieldValue`) and a NARROWER one for "settled" (`isConfirmedButBlank`, which keeps a confirmed optional `''` settled); every gating consumer shares them, and whitespace no longer deadlocks the voice path).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -82,6 +82,63 @@ instances) operating on a `SchemaFormState` value:
   mis-fill the spoken answer. Typing is unambiguous intent and moves the origin
   either way. Completion is unchanged: an empty search still means every shown
   field is confirmed.
+- **Blankness has one definition where it GATES: `isBlankFieldValue`**
+  (`utils/fieldValue.ts`, bd polyglot-pdf-5ovod). The predicates that decide
+  whether a field is answered -- and so whether the form can complete, whether
+  the model may confirm, and what it asks next -- all route through it:
+  `isSectionValid` (the section gate), `isFormComplete` (the form gate, which
+  fires the paid end-of-form validator), `getProgressCounts` (the progress bar
+  and the overlay's field counter), `validateField`'s required check,
+  `SectionRenderer`'s skip affordance, `hasUsableValue` (the confirm gate),
+  `SchemaForm`'s manual-edit write, `computeReadyWindows`' settled test, and BOTH
+  `hasValue` predicates in `computeNextField`.
+
+  `computeReadyWindows` carries the highest stakes of the set: a window it calls
+  ready is recorded in `validatedWindowIndices`, which PERSISTS, so settling on a
+  blank retires that field from validation permanently -- even after a real
+  answer arrives.
+
+  **They must agree with each other, and a test pins that they do.** Each fix
+  here was found in the PREVIOUS fix's sibling: adding the confirmed-blank
+  recovery arm to `computeNextField` alone made it contradict `isFormComplete`
+  (navigation asking for a field the form called done -- and spending the
+  validator fee), and fixing those two left the progress bar reading 100% on the
+  same form. The invariant test is parametrized over entry shapes and asserts all
+  four consumers give the SAME answer, so a fifth consumer added later fails
+  there rather than drifting quietly.
+
+  The two VOICE-TOOL acks (`skip_field`, `switch_field`) share it too, and had
+  to: leaving `skip_field` untrimmed while the confirm gate tightened removed the
+  last exit from a whitespace field -- the model could not confirm it, skip it or
+  clear it, and the backend marks that skip refusal non-retryable. `switch_field`
+  is the same class: telling the model a whitespace field "already holds a value,
+  read it back" points it at a closed exit.
+
+  **This is still NOT every value-presence check in the frontend.** The
+  resume-section scan (`applyResume`, bd polyglot-pdf-dctry), the preview
+  painter, and the DOM pre-fill capture (bd polyglot-pdf-rm9x8) remain untrimmed.
+  None gates completion, confirmation, progress or a voice exit, which is why
+  they stayed out of scope; tracked as bd polyglot-pdf-qpz11. Do not read the
+  list above as the complete set.
+  Whitespace-only counts as BLANK: typing spaces is not a decision, and leaving a
+  field blank on a legal intake draft has to be explicit -- said aloud, or via the
+  skip control.
+
+  Every one of those sites once hand-wrote the check, and every copy tested `=== ''`
+  without trimming, so a space-filled field satisfied the completion gate, passed
+  the required check, hid its own skip button, and was confirmable -- while
+  printing blank on the PDF and never reaching the backend at all -- the notify
+  path (`fieldManager`) trims, so the two sides disagreed about whether the field
+  even existed. (The backend's own predicates mostly `.strip()`, but not
+  universally: `field_validator.py`'s early-out tests a bare `value == ""`. Do
+  not rely on the backend to normalise blankness for you.) The
+  sharpest case was `computeNextField`, where BOTH priorities rejected it and the
+  field became invisible to navigation entirely.
+
+  Distinct from a genuine `''`: on an OPTIONAL field a confirmed empty string
+  means "the user said this does not apply" (bd polyglot-pdf-6oe6 / w3ic), which
+  is a real verbal answer and still confirms. Whitespace is NOT normalised to
+  `''` -- doing so would make that path reachable by typing spaces.
 - `formSessionId` — persistent `fss_<base36-ts>_<random>`, survives reconnects
   (the durability boundary; see stateless-architecture).
 - `validationErrors`, `loadedFieldIds`/`jitModeEnabled` (JIT token-reduction),

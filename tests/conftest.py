@@ -1,7 +1,8 @@
 """Shared pytest setup for the harness-tooling suite (bd polyglot-pdf-5xhbb).
 
-This is the SECOND of pytest.ini's two testpaths (backend/tests is the
-other, with its own conftest.py). tests/test_stress_harness_units.py
+This is one of pytest.ini's three testpaths (backend/tests and
+admin_backend/tests are the others, each carrying this same module-level
+guard in its own conftest.py). tests/test_stress_harness_units.py
 constructs backend.config.Settings() directly (e.g. via
 scripts/spikes/measure_form_session_costs.py's CLI-arg-to-Settings path),
 so it inherits the same K_SERVICE-from-the-ambient-shell exposure

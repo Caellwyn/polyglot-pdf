@@ -78,22 +78,22 @@ REVIEWED: dict[str, str] = {
     "backend/services/schema_repair.py":
         "_mint_slugs preserves a select code in value today; g2fpr.3 moves it, g2fpr.4 retires the branch",
     "backend/services/widget_picker.py":
-        "radio-kid claim resolution; not a select reader",
+        "_claimed_widgets reads EVERY option's pdf_on_value type-agnostically, so since g2fpr.2 a select option enters the claimed set keyed (name, code) instead of (name, None); harmless because unclaimed_button_widgets filters candidates to _BUTTON_TYPES (comboboxes excluded) -- cross-surface, g2fpr.2",
     "frontend/src/pdf-view/valuePainting.ts":
-        "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
+        "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
     "frontend/src/schema-forms/state/schemaFormState.ts":
         "READER (session restore): reconcileSelectValues maps a stored select value that matches no fresh option through the option whose pdf_on_value it equals (claimant = non-empty string value, the /resume-form predicate) or clears it; the stale-session guard, bd polyglot-pdf-f2a8k (g2fpr PR 3c)",
     "frontend/src/schema-forms/types/schema.ts":
         "FieldOption type declares pdf_on_value",
     "schema-editor/src/components/FieldEditor.tsx":
-        "displays it on radio kids; g2fpr.2 makes the select export-code input write it",
+        "displays it on radio kids; the select export-code input WRITES it and the select mint reads it (g2fpr.2)",
     "schema-editor/src/types/schema.ts":
         "FieldOption type declares pdf_on_value",
     "schema-editor/src/utils/lintFindings.ts":
         "RULE_REMEDIES prose names pdf_on_value in the select-value-not-slug remedy; labels only, not a reader "
         "(this file joined the set when the remedy was reworded in g2fpr.1 round 2 -- the pin caught it)",
     "schema-editor/src/utils/fieldGrouping.ts":
-        "grouping rules: pdf_on_value alone is not a checkbox_group; not a select reader",
+        "grouping rules (pdf_on_value alone is not a checkbox_group) and mintSelectSlugs, which reserves codes already slug-shaped (g2fpr.2)",
     "schema-editor/src/utils/remoteKitStore.ts":
         "WidgetPicker on_value plumbing; not a select reader",
     "scripts/authoring/backfill_option_positions.py":
@@ -101,13 +101,13 @@ REVIEWED: dict[str, str] = {
     "scripts/authoring/eval_extraction.py":
         "counts options lacking both pdf_field_name and pdf_on_value as unmapped",
     "scripts/authoring/extract_form.py":
-        "reads it for radio positions; g2fpr.2 makes _backfill_dropdown_options write it for selects",
+        "reads it for radio positions; _backfill_dropdown_options WRITES {value: slug, pdf_on_value: code} for selects (g2fpr.2)",
     "scripts/bakeoff/group_candidates.py":
         "grouping heuristic over widget on-states; not a select reader",
     "scripts/bakeoff/roundtrip_fill.py":
         "the BAKEOFF filler: reads it for shared-field radios; must learn the select rule in g2fpr.4 or its scores lie",
     "scripts/bakeoff/schema_contract.py":
-        "the extraction prompt; g2fpr.2 changes the select condition-reference rule to the slug",
+        "the extraction prompt: a select condition references the SLUG; the code lives in pdf_on_value (g2fpr.2)",
     "scripts/migrate_schema_v2.py":
         "already writes {value: slug, pdf_on_value: code} for selects built from the dump (c5r8) -- the channel the filler never read",
 }

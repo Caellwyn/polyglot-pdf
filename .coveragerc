@@ -7,7 +7,7 @@
 #
 # Coverage is opt-in via the --cov flag (not in pytest.ini addopts) so a bare
 # `pytest` and the closeout gate stay fast. Run the backend baseline with:
-#   pytest backend/tests -m "not external" --cov --cov-report=term-missing
+#   pytest -m "not external" --cov --cov-report=term-missing
 [run]
 # Measure the backend SOURCE only -- tests in the denominator inflate the
 # number and obscure the real source-coverage signal.

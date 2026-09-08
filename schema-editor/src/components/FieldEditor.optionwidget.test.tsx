@@ -252,11 +252,13 @@ describe('FieldEditor option widget -- select fields have no per-option widget (
     expect(screen.queryByLabelText('Option 1 PDF widget')).toBeNull();
     // and NOT the misleading shared-name-kid 'widget: X' line either
     expect(screen.queryByText(/widget: form1\[0\]\.state\[0\]/)).toBeNull();
-    // The value is still shown -- but for a select it is the PDF EXPORT CODE
-    // and is EDITABLE (bd polyglot-pdf-alzbr), not a read-only minted slug:
-    // the filler writes it verbatim into the combobox, so it cannot be derived
-    // from the label and this is the only place to author it.
-    expect(screen.getByDisplayValue('ca')).toBeInTheDocument();
+    // This fixture is a LEGACY select (code in value, no pdf_on_value). The
+    // value is shown read-only, and the export-code input SHOWS that legacy
+    // code -- it lives in value until the option is touched, at which point
+    // it converts to the v2 shape (bd polyglot-pdf-g2fpr).
+    expect(screen.getByText('ca')).toBeInTheDocument();
+    const code = screen.getAllByTitle(/code this dropdown writes/)[0] as HTMLInputElement;
+    expect(code.value).toBe('ca');
   });
 });
 
