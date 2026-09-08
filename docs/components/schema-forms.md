@@ -384,7 +384,9 @@ so EVERY path fans out, the voice path included (bd polyglot-pdf-gpaed). A
 fanned target is always stamped confirmed, even when the source write was not:
 a copy target is read_only, so the AI can neither fill nor skip it, and leaving
 it unconfirmed would strand `computeNextField` on it. That stamp survives the
-uum5g change deliberately -- the human did answer the value, on the source. Validation runs on blur (`validateField`).
+uum5g change deliberately -- the human did answer the value, on the source.
+
+Validation runs on blur (`validateField`) -- blur VALIDATES, it does not verify.
 **AI-applied values are validated too** (bd polyglot-pdf-wpw.3): the voice layer
 runs `validateField` on every value the model fills *before* it lands (see
 [tool-call-flow.md](tool-call-flow.md)), so an invalid enum/format/required value

@@ -533,6 +533,3 @@ Audit logs are runtime artifacts, not source — keep them out of version contro
 (this was the subject of bd `polyglot-pdf-0rx`).
 
 *Last updated: 2026-09-08 (bd polyglot-pdf-uum5g: `manual` means typed AND explicitly verified -- typing alone no longer produces a confirmation, so a keystroke cannot stand behind a per-field audit claim).*
-ESCALATES rather than refusing forever -- an unrunnable check is a warning to
-acknowledge, not a permanent block, and what a delete costs is the revision
-archive the records NAME, never the records themselves.)*
