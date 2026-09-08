@@ -151,6 +151,10 @@ describe('the mirror above cannot drift from the real write site', () => {
 })
 
 describe('an unverified field is still OFFERED, and does not complete the form', () => {
+  // updateField SAVES to sessionStorage, so without this a previous test's
+  // searchOrigin leaks in and moves where the sweep starts -- which is exactly
+  // how my first version of the last test in this block failed.
+  beforeEach(() => { sessionStorage.clear() })
   it('the typed-but-unverified field is what the model is pointed at next', () => {
     // Exit criterion 2. Withholding the verification is only safe because the
     // next-field search re-offers the field (the path bd polyglot-pdf-a08po
@@ -171,5 +175,53 @@ describe('an unverified field is still OFFERED, and does not complete the form',
     state = applyManualEditLikeProduction(state, 'agree', 'yes')
 
     expect(isFormComplete(state)).toBe(false)
+  })
+})
+
+describe('the EXPLICIT verification paths still verify (bd polyglot-pdf-uum5g)', () => {
+  // updateField SAVES to sessionStorage, so without this a previous test's
+  // searchOrigin leaks in and moves where the sweep starts -- which is exactly
+  // how my first version of the last test in this block failed.
+  beforeEach(() => { sessionStorage.clear() })
+  it('the verbal confirm still marks the field verified', () => {
+    // Criterion 2's other half. Withholding verification from TYPING is only
+    // correct if the deliberate paths still work -- otherwise the form becomes
+    // impossible to finish. confirmField is the path confirm_field drives
+    // (webFormConnection.ts), untouched by this diff; asserted here so a future
+    // change cannot quietly take it away too.
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = applyManualEditLikeProduction(st, 'f1', 'Maria')
+    expect((st.fieldValues['f1'] as any).confirmed).not.toBe(true)
+
+    st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
+
+    const entry = st.fieldValues['f1'] as any
+    expect(entry.confirmed, 'saying yes DOES verify').toBe(true)
+    expect(entry.confirmationMethod).toBe('ai_voice')
+  })
+
+  it('the skip control still settles the field', () => {
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = SchemaFormStateManager.markFieldSkipped(st, 'f1', 'manual_edit')
+
+    expect((st.fieldValues['f1'] as any).confirmed, 'a skip is a settled decision').toBe(true)
+  })
+
+  it('a VERIFIED field is skipped by the search, an unverified one is not', () => {
+    // The two halves meeting. Note this asserts on the SWEEP, not on "what comes
+    // next after an edit": after a manual edit the search deliberately resumes
+    // AFTER the edited field (searchOriginIncludesSelf=false, bd
+    // polyglot-pdf-a08po), so "next" is the following field even when the edited
+    // one is unverified -- it is picked up on the wrap. My first version of this
+    // test asserted the wrong thing and failed correctly.
+    //
+    // With no search origin set, the sweep runs from the top: an unverified f1 is
+    // offered, and verifying it moves the offer on.
+    let st = SchemaFormStateManager.init(SCHEMA)
+    st = SchemaFormStateManager.updateField(st, 'f1', 'Maria', { confirmed: false })
+    expect(computeNextField(st, { skipConfirmed: true })?.id).toBe('f1')
+
+    st = SchemaFormStateManager.confirmField(st, 'f1', 'ai_voice')
+    expect(computeNextField(st, { skipConfirmed: true })?.id).not.toBe('f1')
   })
 })
