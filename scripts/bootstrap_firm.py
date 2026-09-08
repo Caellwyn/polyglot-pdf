@@ -12,6 +12,7 @@ Usage (from the repo root, with the backend venv):
     backend/.venv/Scripts/python.exe scripts/bootstrap_firm.py acme-legal \
         --name "Acme Legal Aid" --contact intake@acme-legal.example \
         --allowed-kits w7,i-90 \
+        --kind live \
         --manager-email ada@acme-legal.example \
         --employee-email bo@acme-legal.example \
         --project polyglot-demo-aa709
@@ -19,6 +20,18 @@ Usage (from the repo root, with the backend venv):
     # Preview: performs the READ-ONLY email lookups (so unknown addresses
     # surface before the real run) but writes NOTHING:
     ... --dry-run
+
+--kind is REQUIRED (Epic 2 bead A1): "mock" firms can mint credits on
+staging without moving real money; "live" firms are the paying customers,
+gated to minting only on the explicit demo channel
+(backend/routes/link_routes.py's mint gate). There is no default -- an
+operator who has not decided which this firm is must not silently get
+"live" (which mints for free until credit enforcement is switched on) or
+"mock" (which would make a real firm invisible to production billing). A
+firm doc with no `kind` key at all -- pre-migration docs only -- is treated
+as "live" by the fail-closed service-layer reader
+(backend/services/firms.py:firm_kind()); local minting needs the dev
+account's own firm created with --kind mock.
 
 --project is REQUIRED and pins the target DETERMINISTICALLY: firebase_admin
 otherwise resolves the project from the operator's gcloud ADC credential
@@ -78,6 +91,12 @@ ROLE_EMPLOYEE = "employee"
 # test_status_choices_match_service_constants pins these against the
 # service's FIRM_STATUS_* constants so drift fails CI instead of silently.
 STATUS_CHOICES = ["active", "suspended"]
+
+# Same reasoning as STATUS_CHOICES: literals, not an import, pinned against
+# backend.services.firms.FIRM_KIND_* by test_kind_choices_match_service_constants.
+# No default -- --kind is a REQUIRED argparse argument (Epic 2 bead A1); see
+# the module docstring for why an implicit default is wrong here.
+KIND_CHOICES = ["mock", "live"]
 
 
 def stamp_firm_claims(email: str, firm_id: str, firm_role: str) -> tuple[str, str]:
@@ -145,6 +164,14 @@ def main(argv=None) -> int:
     )
     parser.add_argument(
         "--status", default=STATUS_CHOICES[0], choices=STATUS_CHOICES
+    )
+    parser.add_argument(
+        "--kind",
+        required=True,
+        choices=KIND_CHOICES,
+        help="mock (staging test firm, no real money) or live (paying "
+        "customer, mints only on the explicit demo channel) -- REQUIRED, "
+        "no default (see the module docstring for why)",
     )
     parser.add_argument(
         "--project",
@@ -223,7 +250,7 @@ def main(argv=None) -> int:
     if args.dry_run:
         print(
             f"DRY RUN: would upsert firms/{args.firm_id} "
-            f"(name={args.name!r}, status={args.status}, "
+            f"(name={args.name!r}, status={args.status}, kind={args.kind}, "
             f"allowed_kits={kits})"
         )
     else:
@@ -231,7 +258,8 @@ def main(argv=None) -> int:
 
         try:
             result = upsert_firm(
-                args.firm_id, args.name, args.contact, kits, args.status
+                args.firm_id, args.name, args.contact, kits, args.kind,
+                status=args.status,
             )
         except Exception as e:
             print(f"firm write FAILED: {e}", file=sys.stderr)
