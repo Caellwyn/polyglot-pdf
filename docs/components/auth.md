@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py firestore.rules firebase.json
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -386,12 +386,17 @@ backend/.venv/Scripts/python.exe scripts/bootstrap_firm.py acme-legal \
     --project polyglot-demo-aa709
 ```
 
-Rules for `firms/**` reach the live project only via a frontend/full deploy or
-an explicit
+Rules for the Admin-SDK-only collections — `firms/{firmId}`,
+`admin_audit_log/{rowId}` and `app_config/{channel}` (the last two added by bd
+`polyglot-pdf-li9x0`) — reach the live project only via a frontend/full deploy
+or an explicit
 `firebase deploy --only firestore:rules --project polyglot-demo-aa709` — a
-backend-only deploy does NOT ship rules. Manual verify of the deny: from a
-signed-in browser console, a client-SDK `getDoc(doc(db, "firms", "x"))` must
-return `permission-denied`.
+backend-only deploy does NOT ship rules. Note that `firestore.rules` is
+**project-wide**, so it is a demo action whichever channel you ran it from
+(staging and the demo share the project). Manual verify of a deny: from a
+signed-in browser console, a client-SDK
+`getDoc(doc(db, "admin_audit_log", "x"))` must return `permission-denied`, and
+likewise for `firms` and `app_config`.
 
 ## Testing
 
@@ -409,8 +414,16 @@ The firm-identity layer is covered by
 `backend/tests/unit/test_firms_service.py` (fail-closed reads, upsert
 idempotency), `backend/tests/unit/test_bootstrap_firm_cli.py` (claims merge,
 role stamping, wrong-project abort, dead-project refusal), and
-`backend/tests/unit/test_firestore_rules_text.py` (the `firms/**` deny block's
-presence in the shipped rules file).
+`backend/tests/unit/test_firestore_rules_text.py`, which since bd
+`polyglot-pdf-li9x0` is ONE set-derived test over EVERY Admin-SDK-only
+collection rather than a single assertion about `firms/**`: the list lives in
+one constant (`ADMIN_SDK_ONLY_COLLECTIONS` — currently `firms`,
+`admin_audit_log`, `app_config`), a later bead extends the LIST rather than
+adding another copy of the assertion, and the test fails in both directions —
+a listed collection with no deny block, and a deny block for a collection
+nobody listed. It also rejects a WEAKENED block (one that keeps
+`allow read, write: if false;` but adds a second `allow`), not only a deleted
+one.
 `frontend/src/contexts/AuthContext.test.tsx` covers
 `AuthContext` (the authorized_emails allowlist gate, sign-in/out/reset delegation,
 the loading lifecycle, and the test-harness bypass) and `ProtectedRoute` (both gate

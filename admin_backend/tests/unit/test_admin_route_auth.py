@@ -98,7 +98,12 @@ def test_the_registered_route_set_is_pinned():
         (tuple(sorted(getattr(r, "methods", None) or [])), r.path)
         for r in _business_routes()
     }
-    assert actual == {(("GET",), "/admin/whoami")}, (
+    assert actual == {
+        (("GET",), "/admin/whoami"),
+        (("GET",), "/admin/config/{channel}"),
+        (("PUT",), "/admin/config/{channel}"),
+        (("GET",), "/admin/audit"),
+    }, (
         f"registered admin business routes changed: {sorted(actual)} -- "
         "update this set deliberately, and confirm the new route carries "
         "one of the four gates (see test_every_business_route_carries_"
@@ -108,9 +113,13 @@ def test_the_registered_route_set_is_pinned():
 
 def test_whoami_is_gated_by_require_app_admin_specifically():
     """The set pin above only proves ONE of the four names is present; this
-    pins WHICH one for the one route that exists. Mutation: swap
+    pins WHICH one for the route the gate first shipped with. Mutation: swap
     require_app_admin for a different (even if valid-shaped) dependency on
-    the whoami route -- red."""
+    the whoami route -- red.
+
+    The config and audit routes (bd polyglot-pdf-li9x0) carry the same gate;
+    it is pinned per-route in test_config_routes.py rather than duplicated
+    here."""
     route = next(r for r in app.routes if r.path == "/admin/whoami")
     assert _dependency_names_for(route) == {"require_app_admin"}
     dependant = route.dependant

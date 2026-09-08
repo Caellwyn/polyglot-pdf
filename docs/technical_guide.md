@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-09-04 (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
+*Last updated: 2026-09-08 (bd polyglot-pdf-li9x0: the admin audit log -- new Surface contract 15, three new Admin service routes (GET /admin/audit, GET+PUT /admin/config/{channel}), and firestore.rules deny blocks for admin_audit_log and app_config pinned by ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-6p77c: the kit path rewrite is keyed on the STORE being authoritative, not on privacy -- see "The API-path rewrite" below.) (bd polyglot-pdf-7w17m: the admin service's first gated route, GET /admin/whoami, behind require_app_admin -- see the Admin service routes table below.) (bd polyglot-pdf-pnoik: two new surface contracts -- APP_MODULE selects which ASGI app the ONE image serves, and admin_backend/ may import backend.services/config but never backend.routes.) (bd polyglot-pdf-wurj8: the Pause button is replaced by a sticky manual/voice mode toggle -- manual suppresses the model's proactive speech at the ADAPTER while the session stays live and the mic stays usable; a PTT press unmutes at both ends; the mode is client-owned and re-asserted on every reconnect. bd polyglot-pdf-3q9qn: client links are isolated per channel -- each channel keeps its own redemption ledger.)*
 
 > **Line-number citations in this file are not trustworthy without re-verifying
 > against source.** This doc has drifted the same way repeatedly -- bd
@@ -160,6 +160,9 @@ its own table).
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by `deploy-demo.sh`) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
+| GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
+| PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
 | GET | `/admin/whoami` | The FIRST gated route (bd `polyglot-pdf-7w17m`): returns `{uid, email}` for the caller, gated by `require_app_admin`. Exists to prove the gate end to end before any business logic lands -- a stamped account passes, a valid unstamped account 403s with the `NO_ADMIN_ACCESS:` prefix, a tokenless caller 401s. `admin_backend/routes/whoami.py`, `admin_backend/services/admin_auth.py` |
 | GET | `/health` | Liveness + identity. Deliberately THIN next to the public backend's: this service proxies no model and owns no confirmation sink. Reports `app_module` -- the ASGI target the container actually launched -- because `APP_MODULE` is a runtime env var, so a service pointed at the wrong module would otherwise look healthy while serving the wrong app. **Unauthenticated by design** (the liveness probe; it reports nothing an unauthenticated caller could not infer) and, together with `/version`, the ONLY routes that stay so -- every other route on this service carries one of the four gates named in `admin_backend/tests/unit/test_admin_route_auth.py`. `deploy-all.sh`'s IAM-based reachability check still issues no HTTP request against it, but `deploy-admin.sh`'s tagged flow (bd `polyglot-pdf-3l2vp`) DOES curl this exact route at the tagged candidate revision's stable URL and aborts the traffic shift on anything but a 200 -- so for the admin service, this route is now exercised by a real deploy gate, not just by an operator's manual curl. `admin_backend/main.py` |
 | GET | `/version` | `{version, git_sha}` (bd `polyglot-pdf-9hzod`, same GIT_SHA env var and "unknown" fallback as the public backend's `/version`) -- the admin app's own `version`, not the public backend's. `admin_backend/main.py` |
@@ -949,12 +952,17 @@ between their packages is one-directional and partial.
 Four backend settings moved off deploy-time env to a per-channel Firestore
 doc, so an operator retunes them with no redeploy.
 
-- **Producer (future):** the admin console's config route,
-  `PUT /admin/config/{channel}` (bd polyglot-pdf-li9x0), and, until that
-  ships or for direct verification, the operator CLI
-  `scripts/set_runtime_config.py <channel> set <KEY> <value> --project <p>`.
-  Both write `app_config/{channel}` with Admin-SDK `set(..., merge=True)`
-  (the console route additionally audits the write in the SAME transaction).
+- **Producers -- TWO, and only one of them audits.** The admin service's
+  config route `PUT /admin/config/{channel}`
+  (`admin_backend/routes/config_routes.py`, bd polyglot-pdf-li9x0) is the
+  operational path: it validates the key against `RUNTIME_CONFIG_KEYS` and
+  the value through `runtime_config.coerce_value` BEFORE writing, and writes
+  the value and its audit row in ONE Firestore transaction (contract 15).
+  The operator CLI `scripts/set_runtime_config.py <channel> set <KEY>
+  <value> --project <p>` is the un-audited break-glass path, kept because it
+  needs no console and no deployed admin service. Both write
+  `app_config/{channel}` with Admin-SDK `set(..., merge=True)`, so a write
+  never drops the channel's other keys.
 - **Consumer:** `backend/services/runtime_config.py` -- the ONLY reader.
   `RUNTIME_CONFIG_KEYS` = `LINK_MINTING_ENABLED` (bool),
   `LINK_COST_CEILING_USD` (float), `LINK_FIRM_CAP` (int), `CREDITS_ENFORCED`
@@ -1000,6 +1008,89 @@ doc, so an operator retunes them with no redeploy.
   redeploy; it is not required just to keep the deploy scripts' setting
   working. `CREDITS_ENFORCED` is the one key with no env fallback (it is
   brand new); it stays compiled `false` until a channel's doc sets it.
-- **`firestore.rules` deny block for `app_config/**`** ships with bd
-  polyglot-pdf-li9x0, alongside `admin_audit_log`, as part of that bead's
-  set-derived rules test -- not here, since this bead never writes rules.
+- **`firestore.rules` carries a full client deny for `app_config/{channel}`**
+  (bd polyglot-pdf-li9x0), alongside `admin_audit_log` and `firms`. The set
+  of Admin-SDK-only collections lives in ONE constant,
+  `ADMIN_SDK_ONLY_COLLECTIONS` in
+  `backend/tests/unit/test_firestore_rules_text.py`; a later bead extends
+  that list rather than adding another copy of the assertion, and the test
+  fails in BOTH directions (a listed collection with no block, and a block
+  for a collection nobody listed). A client-writable copy of this doc would
+  let a browser raise its own per-link USD spend ceiling.
+
+### 15. Admin audit log: `admin_audit_log/{auto}` (bd polyglot-pdf-li9x0)
+
+One row per privileged mutation on the admin service: WHO did it, WHAT they
+did, to WHAT, and the before/after metadata. Unlike the confirmation sink
+(contract 6), which is deliberately fire-and-forget, this log's job is
+preventing a DOUBLE APPLY -- an operator who sees a 500 retries -- so both
+write forms BIND the row to the mutation rather than firing it alongside.
+
+- **Producer:** `admin_backend/services/audit_log.py`, the only writer. Two
+  forms, and they are NOT interchangeable:
+  - **`record_in_transaction(tx, db, ...)`** for FIRESTORE mutations. The row
+    is written with `tx.set` inside the CALLER'S transaction, so either both
+    commit or neither does; the helper takes the transaction rather than
+    opening one, and deliberately has no `try/except` (swallowing an audit
+    failure would let the mutation commit unaudited). First consumer:
+    `PUT /admin/config/{channel}`.
+  - **`record_pending(db, ...)` then `mark_committed(ref, ...)` /
+    `mark_failed(ref, error=...)`** for mutations Firestore cannot wrap
+    (`firebase_admin.auth` user create/disable, claim stamps, Cloud Build
+    triggers -- Epic 1's user routes and Epic 4's build triggers are its
+    first consumers). Note the deliberate ASYMMETRY: `record_pending` RAISES
+    (if the intent cannot be recorded, the action must not happen), while
+    both closeouts are best-effort (the action already happened; raising
+    would surface an error for a success, and a caller that retried on it
+    would double-apply). A row stuck at `pending` reads as "this may have
+    taken effect", which is true.
+- **Row shape** -- built in ONE place (`build_row`) so the two forms cannot
+  drift: `actor_uid`, `actor_email`, `action`, `target`, `before`, `after`,
+  `channel` (nullable -- the admin service has no channel of its own),
+  `request_id`, `state` (`committed` | `pending` | `failed`), `ts` (a plain
+  epoch float, NOT `SERVER_TIMESTAMP`: the pending form needs the value to
+  exist before the action runs). `ROW_FIELDS` pins the set. The closeouts add
+  `committed_ts`, and `mark_failed` adds a truncated `error`.
+- **Consumer:** `GET /admin/audit`
+  (`admin_backend/routes/audit_routes.py`), newest first, cursor-paginated.
+  The admin console's audit-log page (bead 1.7) is its first UI consumer.
+- **Composite indexes are a REQUIRED part of this contract, not an
+  optimization.** Each of the route's four filters produces an equality
+  filter plus an `order_by` on a *different* field (`ts`), which Firestore
+  serves ONLY from a composite index; unindexed, the query fails at runtime
+  with `FAILED_PRECONDITION`. The unfiltered default view needs no composite
+  (single-field auto-index on `ts`), so an operator's FIRST use of a filter
+  is where the gap would surface. The four indexes ship in
+  `firestore.indexes.json`, wired via `firebase.json` and deployed by
+  `deploy-demo.sh` (`firebase deploy --only firestore:indexes`) -- indexes
+  are PROJECT-wide exactly like rules, so the demo deploy lands them for
+  staging too, and index builds are asynchronous (a freshly added index is
+  not READY the moment the command returns).
+  `admin_backend/tests/unit/test_firestore_indexes.py` derives the filter
+  set from the route's own AST and pins it against the shipped artifact in
+  both directions, so a fifth filter added without its index fails CI rather
+  than in production. This is CLAUDE.md scar #7 applied to indexes rather
+  than IAM: the route's tests substitute an in-memory query that filters and
+  sorts in Python, and a fake cannot tell you the real datastore will refuse
+  the query.
+- **The coverage pin:**
+  `admin_backend/tests/unit/test_admin_audit_coverage.py` derives every
+  MUTATING route off the live `app.routes` and asserts the form each one's
+  mutation REQUIRES -- not merely that some audit call is present, which
+  would pass a Firestore mutation auditing outside its transaction. Every
+  mutating route must declare its form in `MUTATION_KINDS`; a new one that
+  does not fails there, and the declaration is checked in both directions
+  against the live route set.
+- **What never goes in a row:** field values, PII, or PHI
+  (`standards/hipaa-pii-policy.md`). `before`/`after` carry config and
+  commercial metadata only. The admin service has no access to field values
+  in the first place -- it serves operators, not form sessions.
+- **`firestore.rules` denies `admin_audit_log/{rowId}` to all clients.**
+  Append-only is a property of the WRITERS (nothing here deletes or rewrites
+  a row's identity fields; the one legal transition is `pending` ->
+  `committed` | `failed`); the deny block is what stops a client-SDK caller
+  regardless. The Admin SDK bypasses rules, so the discipline lives in the
+  helper.
+- **IAM:** the writes need `roles/datastore.user`, which `admin-backend-sa`
+  already holds and which `test_admin_sa_iam_envelope.py` pins by name AND
+  justification. This contract added no new permission (CLAUDE.md scar #7).

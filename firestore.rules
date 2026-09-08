@@ -32,5 +32,25 @@ service cloud.firestore {
     match /firms/{firmId} {
       allow read, write: if false;
     }
+
+    // Admin audit log (admin_audit_log/{auto}): Admin-SDK-only
+    // (bd polyglot-pdf-li9x0). Written by admin_backend/services/audit_log.py
+    // -- inside the mutation's own transaction for Firestore mutations, and
+    // pending-then-committed for the ones Firestore cannot wrap -- and read
+    // by GET /admin/audit on the admin SERVICE, never by a browser. The log
+    // is append-only by writer discipline; this block is what stops a
+    // client-SDK caller rewriting or deleting rows regardless.
+    match /admin_audit_log/{rowId} {
+      allow read, write: if false;
+    }
+
+    // Runtime config (app_config/{channel}): Admin-SDK-only
+    // (bd polyglot-pdf-bg313, written by PUT /admin/config/{channel} and by
+    // scripts/set_runtime_config.py; read by
+    // backend/services/runtime_config.py). Client-writable config would let
+    // a browser raise its own per-link USD spend ceiling.
+    match /app_config/{channel} {
+      allow read, write: if false;
+    }
   }
 }

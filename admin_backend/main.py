@@ -3,7 +3,9 @@
 The app, CORS, /health and /version were the skeleton stage (bd
 polyglot-pdf-pnoik). bd polyglot-pdf-7w17m adds the first gate
 (require_app_admin, admin_backend/services/admin_auth.py) and the first
-route (GET /admin/whoami) -- every OTHER route added to this service from
+route (GET /admin/whoami); bd polyglot-pdf-li9x0 adds the audit log and its
+first consumers (GET/PUT /admin/config/{channel}, GET /admin/audit) -- every
+OTHER route added to this service from
 here on must carry one of the four gates named in the plan
 (require_app_admin; require_firm_manager; require_app_admin_or_owning_
 manager; require_google_oidc), which admin_backend/tests/unit/
@@ -45,6 +47,7 @@ load_dotenv()
 from backend.config import get_settings, parse_extra_origins
 from backend.utils.logging import configure_logging
 
+from admin_backend.routes import audit_routes, config_routes
 from admin_backend.routes import whoami as whoami_routes
 
 # The ASGI target the container actually launched, and the default the
@@ -133,3 +136,5 @@ async def version():
 
 
 app.include_router(whoami_routes.router)
+app.include_router(config_routes.router)
+app.include_router(audit_routes.router)
