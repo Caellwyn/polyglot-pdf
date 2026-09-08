@@ -160,7 +160,7 @@ its own table).
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. `admin_backend/routes/audit_routes.py` |
+| GET | `/admin/audit` | The admin audit log, newest first (bd `polyglot-pdf-li9x0`). Optional equality filters `action`, `actor_uid`, `channel`, `state`; page size `limit` (default 50, max 200) and an opaque `cursor`. The cursor is the last row's `ts` and document id joined by a pipe -- Firestore's `offset` still reads and bills the skipped documents, so a deep page would get slower and dearer the further back an operator scrolled. Ordered by `ts` then `__name__` DESCENDING: the document-id tiebreaker is what makes a page boundary total, so a walk can neither repeat nor drop a row when two rows share a timestamp. The response is `{rows, next_cursor}`, `next_cursor` null on the last page. Reads are NOT audited; a row per read would bury the mutations. Each filter needs a composite index (`firestore.indexes.json`, deployed by `deploy-demo.sh`) -- see Surface contract 15. `admin_backend/routes/audit_routes.py` |
 | GET | `/admin/config/{channel}` | The channel's stored `app_config/{channel}` doc (bd `polyglot-pdf-li9x0`), returned RAW rather than coerced -- a malformed value `runtime_config` would ignore stays visible on the one screen meant to diagnose it, with `unknown_keys` naming entries no backend reads. `channel` must be one of `KNOWN_CHANNELS` (`demo`, `staging`), else 404. `admin_backend/routes/config_routes.py` |
 | PUT | `/admin/config/{channel}` | Set ONE runtime-config key for one channel, **audited in the same Firestore transaction as the write** (bd `polyglot-pdf-li9x0`) -- the first consumer of `audit_log.record_in_transaction`. Body `{key, value}`; refuses BEFORE any write on an unknown channel (404), a key outside `runtime_config.RUNTIME_CONFIG_KEYS` (400), or a value `runtime_config.coerce_value` rejects (400 -- storing one would look like success in the console while the backend kept the old value). Writes with `merge=True`, so the channel's other keys survive. See Surface contracts 14 (runtime config) and 15 (the audit log). `admin_backend/routes/config_routes.py` |
 | GET | `/admin/whoami` | The FIRST gated route (bd `polyglot-pdf-7w17m`): returns `{uid, email}` for the caller, gated by `require_app_admin`. Exists to prove the gate end to end before any business logic lands -- a stamped account passes, a valid unstamped account 403s with the `NO_ADMIN_ACCESS:` prefix, a tokenless caller 401s. `admin_backend/routes/whoami.py`, `admin_backend/services/admin_auth.py` |
@@ -1054,6 +1054,25 @@ write forms BIND the row to the mutation rather than firing it alongside.
 - **Consumer:** `GET /admin/audit`
   (`admin_backend/routes/audit_routes.py`), newest first, cursor-paginated.
   The admin console's audit-log page (bead 1.7) is its first UI consumer.
+- **Composite indexes are a REQUIRED part of this contract, not an
+  optimization.** Each of the route's four filters produces an equality
+  filter plus an `order_by` on a *different* field (`ts`), which Firestore
+  serves ONLY from a composite index; unindexed, the query fails at runtime
+  with `FAILED_PRECONDITION`. The unfiltered default view needs no composite
+  (single-field auto-index on `ts`), so an operator's FIRST use of a filter
+  is where the gap would surface. The four indexes ship in
+  `firestore.indexes.json`, wired via `firebase.json` and deployed by
+  `deploy-demo.sh` (`firebase deploy --only firestore:indexes`) -- indexes
+  are PROJECT-wide exactly like rules, so the demo deploy lands them for
+  staging too, and index builds are asynchronous (a freshly added index is
+  not READY the moment the command returns).
+  `admin_backend/tests/unit/test_firestore_indexes.py` derives the filter
+  set from the route's own AST and pins it against the shipped artifact in
+  both directions, so a fifth filter added without its index fails CI rather
+  than in production. This is CLAUDE.md scar #7 applied to indexes rather
+  than IAM: the route's tests substitute an in-memory query that filters and
+  sorts in Python, and a fake cannot tell you the real datastore will refuse
+  the query.
 - **The coverage pin:**
   `admin_backend/tests/unit/test_admin_audit_coverage.py` derives every
   MUTATING route off the live `app.routes` and asserts the form each one's

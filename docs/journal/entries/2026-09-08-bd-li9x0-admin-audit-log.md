@@ -64,6 +64,57 @@ already holds and whose pin in `test_admin_sa_iam_envelope.py` already names
 `admin_audit_log` and `app_config` in its justification. Asking the question
 was the point (CLAUDE.md scar #7); the answer happened to be "already covered".
 
+### Cross-surface review round 1 — adopt 2, defer 2
+
+**Adopted (blockers, both one root cause).** The reviewer traced the *query
+shape* out to the deploy surface — a contract the handoff list had not named —
+and found that every filtered `GET /admin/audit` query is an equality filter
+plus an `order_by` on a different field, the one shape Firestore serves only
+from a **composite index**. This repo shipped no `firestore.indexes.json` at
+all (`git log --all` on the path is empty), `firebase.json` declared only
+rules, and no deploy script ran `firebase deploy --only firestore:indexes`. So
+three of the four filters plus every state-filtered query would have failed in
+production with `FAILED_PRECONDITION` while all 135 local tests stayed green —
+because `test_audit_log.py` substitutes an in-memory `_Query` that filters and
+sorts in Python. That is **CLAUDE.md scar #7 with indexes in place of IAM**: a
+fake proves the code *makes* the query, never that the datastore will *accept*
+it. The second finding was the tell rather than a separate defect — the module
+docstring called the requirement "a simple composite index", documenting as
+solved the very thing that was missing.
+
+The fix ships the artifact rather than removing the ordering: a new
+`firestore.indexes.json` with the four `(<field> ASC, ts DESC, __name__ DESC)`
+composites, wired through `firebase.json`, and deployed by `deploy-demo.sh`
+beside the rules — indexes are project-wide exactly as rules are, so they
+belong to the protected channel and not to disposable staging. The docstring,
+Surface contract 15, and the route table now all state the prerequisite.
+
+The guard is **set-derived, not four hand-written assertions** (CLAUDE.md scar
+#8). `test_firestore_indexes.py` reads the filter field names out of the
+route's **AST** — the literal tuple the route iterates to build its filters —
+so the test tracks the route instead of a copy of it. Mutation-verified five
+ways: dropping the `state` index reddens three assertions including
+`[state]` specifically; flipping one index's `ts` direction to ASCENDING
+reddens only `[channel]`; unwiring `firebase.json` and deleting the deploy line
+each redden their own guard; and adding a **fifth filter to the route** made
+the parametrization expand to `[target]` on its own and fail — which is the
+regression that actually matters, and the proof the derivation is real.
+
+**Deferred (already filed by the reviewer, not fixed here).** The 503 that
+masks `FAILED_PRECONDITION` and `INVALID_ARGUMENT` as "audit store
+unavailable" is a diagnosability defect independent of the correctness one —
+`polyglot-pdf-xdbqm`. And `scripts/set_runtime_config.py` accepting any
+channel string while the new route rejects one outside `KNOWN_CHANNELS`
+reproduces unchanged on `origin/dev`, so it is pre-existing —
+`polyglot-pdf-3rvwm`.
+
+**Nothing refuted.** Both blockers were independently confirmed here before
+fixing: the missing artifact by `git log --all -- firestore.indexes.json`
+returning empty, and the constraint itself by this repo's own two prior
+records of it (`backend/utils/confirmation_logger.py:934-937`, which avoids
+`order_by` entirely for this reason, and
+`docs/standards/confirmation-and-audit.md:204-205`).
+
 ## Lessons
 
 **A fake that is more helpful than the real dependency hides the bug.** Twenty
@@ -142,6 +193,13 @@ straight through.
 - `backend/tests/unit/test_firestore_rules_text.py` — rewritten as one
   set-derived test over `ADMIN_SDK_ONLY_COLLECTIONS`.
 - `firestore.rules` — deny blocks for `admin_audit_log` and `app_config`.
+- `firestore.indexes.json` — **new** (review round 1); the repo's first index
+  artifact. The four composites `GET /admin/audit`'s filters require.
+- `firebase.json` — wires `firestore.indexes` alongside `firestore.rules`.
+- `deploy-demo.sh` — ships `firestore:indexes` beside the rules (both are
+  project-wide, so both belong to the protected channel).
+- `admin_backend/tests/unit/test_firestore_indexes.py` — **new** (review round
+  1); the set-derived index guard, filter names read from the route's AST.
 - `docs/technical_guide.md`, `docs/components/auth.md`,
   `docs/components/config-deployment.md` — see Doc freshness.
 

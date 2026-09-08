@@ -219,6 +219,20 @@ if [ "$DEPLOY_FIREBASE" = true ]; then
     echo -e "${GREEN}[INFO]${NC} 🔒 Stage 2a: Deploying Firestore rules to Firebase ($FIREBASE_PROJECT)..."
     firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT"
 
+    # Composite indexes (firestore.indexes.json, wired via firebase.json).
+    # A Firestore query combining an equality filter with an order_by on a
+    # DIFFERENT field is served ONLY from a composite index -- without one it
+    # fails at runtime with FAILED_PRECONDITION, and no local test catches it
+    # because a fake query object filters and sorts in Python (CLAUDE.md scar
+    # #7, applied to indexes rather than IAM). GET /admin/audit emits exactly
+    # that shape for each of its four filters, so the index set ships with the
+    # rules. Indexes are PROJECT-wide, like rules: deploying them here lands
+    # them for the staging channel too. Index builds are ASYNCHRONOUS -- the
+    # command returns before a new index is READY, so a freshly added filter
+    # can still fail for a few minutes after this deploy completes.
+    echo -e "${GREEN}[INFO]${NC} Stage 2a2: Deploying Firestore indexes to Firebase ($FIREBASE_PROJECT)..."
+    firebase deploy --only firestore:indexes --project "$FIREBASE_PROJECT"
+
     # Build in demo mode so Vite loads .env.demo (the demo Firebase keys).
     # A bare "npm run build" loads .env.production, which has no Firebase config
     # for this project -- the app then dies with "auth/invalid-api-key".

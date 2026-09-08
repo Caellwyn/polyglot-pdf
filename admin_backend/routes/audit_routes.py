@@ -14,10 +14,21 @@ when two rows share a millisecond, so a page boundary can neither repeat nor
 drop a row.
 
 FILTERS are deliberately few: action, actor_uid, channel, state. Each is an
-equality filter Firestore can serve alongside the ts ordering with a simple
-composite index. Free-text search over `target` is NOT offered -- Firestore
-cannot do it, and faking it with a client-side scan over an unbounded
-collection is how a console page becomes a bill.
+equality filter combined with the ts ordering, which Firestore serves ONLY
+from a COMPOSITE INDEX -- an unindexed one fails at runtime with
+FAILED_PRECONDITION while every local test passes, because the test fake
+filters and sorts in Python (CLAUDE.md scar #7, applied to indexes rather
+than IAM). The four indexes therefore SHIP, in firestore.indexes.json, wired
+through firebase.json and deployed by deploy-demo.sh; the set is pinned
+against this route's filter list by
+admin_backend/tests/unit/test_firestore_indexes.py, so a FIFTH filter added
+here without its index fails CI. The unfiltered default view needs no
+composite (single-field auto-index on ts), which is exactly why the gap
+would otherwise stay invisible until an operator first used a filter.
+
+Free-text search over `target` is NOT offered -- Firestore cannot do it, and
+faking it with a client-side scan over an unbounded collection is how a
+console page becomes a bill.
 
 READS ARE NOT AUDITED. The log records mutations; a row per read would bury
 them under the console's own polling.
