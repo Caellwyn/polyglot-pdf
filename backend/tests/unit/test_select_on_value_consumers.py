@@ -81,6 +81,8 @@ REVIEWED: dict[str, str] = {
         "_claimed_widgets reads EVERY option's pdf_on_value type-agnostically, so since g2fpr.2 a select option enters the claimed set keyed (name, code) instead of (name, None); harmless because unclaimed_button_widgets filters candidates to _BUTTON_TYPES (comboboxes excluded) -- cross-surface, g2fpr.2",
     "frontend/src/pdf-view/valuePainting.ts":
         "paints pdf_on_value ?? raw for a select (g2fpr.1) -- mirrors the filler",
+    "frontend/src/schema-forms/state/schemaFormState.ts":
+        "READER (session restore): reconcileSelectValues maps a stored select value that matches no fresh option through the option whose pdf_on_value it equals (claimant = non-empty string value, the /resume-form predicate) or clears it; the stale-session guard, bd polyglot-pdf-f2a8k (g2fpr PR 3c)",
     "frontend/src/schema-forms/types/schema.ts":
         "FieldOption type declares pdf_on_value",
     "schema-editor/src/components/FieldEditor.tsx":

@@ -19,6 +19,24 @@ single sessionStorage key **`schema_form_state`**. It's a static class (no
 instances) operating on a `SchemaFormState` value:
 
 - `fieldValues: Record<string, FieldValue>` — the answers (see FieldValue below).
+- **Session reuse and the stale-session guard.** `init(schema)` reuses a stored
+  session under an hour old with the same form number + version, and now ADOPTS
+  the fresh schema and runs `reconcileSelectValues` over it: a select value that
+  matches no fresh option is mapped through the option whose `pdf_on_value` it
+  equals (the migration case, lossless, confirmation kept) or cleared and
+  un-confirmed so it is re-asked; a code two options claim is cleared, never
+  guessed. Adopting the fresh schema also resets `pinnedFieldId` /
+  `searchOriginFieldId` / `currentSectionId` when they name something the fresh
+  schema no longer has. The vanilla-JS path (`shared/connection.ts`), which skips
+  `init()` when a session exists, reconciles too and, AT CONSTRUCTION, persists
+  only when a value or one of those three ids actually changed. That
+  construction-time restraint is all it promises: its `connect()` then builds a
+  `WebFormConnection`, whose constructor calls `init()`, and `init()`'s reuse
+  branch saves whenever the reconcile returned a new object -- which, because
+  `deduplicateSections` always returns a fresh schema object, is every reuse.
+  So after `connect()` the session is re-persisted regardless (with the correct,
+  already-reconciled values; `load()`'s key migrations are idempotent). (bd
+  `polyglot-pdf-g2fpr`, PR 3c.)
 - `currentSectionId` + `completedSections: Set<string>` — **section**-based
   navigation state (not parts; see terminology). In production continuous mode
   `completedSections` never grows and manual prev/next is suppressed, but

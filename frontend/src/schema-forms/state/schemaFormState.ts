@@ -120,6 +120,90 @@ export class SchemaFormStateManager {
   }
 
   /**
+   * Reconcile a STORED session against a FRESH schema (bd polyglot-pdf-g2fpr,
+   * PR 3c -- the stale-session guard).
+   *
+   * A session persisted under one shape of the kit can be resumed under
+   * another: the select migration turns option values from export codes
+   * ('AL') into slugs ('alabama') while a browser still holds 'AL' in
+   * sessionStorage. Left alone, that value matches no option: the <select>
+   * renders EMPTY, the field stays confirmed so it is never re-asked, and the
+   * filler writes 'AL' verbatim -- right only because the old value happens
+   * to equal the new pdf_on_value. So, for every select whose stored value is
+   * not one of the fresh schema's option values:
+   *   - if it equals some option's pdf_on_value, map it to that option's
+   *     value (the migration case, lossless, confirmation kept);
+   *   - otherwise clear the field and drop its confirmation, so it is asked
+   *     again rather than silently kept.
+   * Non-select fields and values that already match are untouched. Pure:
+   * returns a new state; the caller saves.
+   *
+   * Also ADOPTS the fresh schema. init() reused the stored schema wholesale
+   * for an hour after any kit edit, so a migrated kit's new options never met
+   * the stored values until fill time.
+   */
+  static reconcileSelectValues(state: SchemaFormState, freshSchema: FormSchema): SchemaFormState {
+    const fields = freshSchema.fields || [];
+    const next: Record<string, FieldValue> = { ...state.fieldValues };
+    let changed = false;
+    for (const field of fields) {
+      if (field.type !== 'select' || !Array.isArray(field.options)) continue;
+      const entry = next[field.id];
+      if (!entry || typeof entry.value !== 'string' || entry.value === '') continue;
+      const opts = field.options.filter((o): o is any => !!o && typeof o === 'object');
+      if (opts.some((o) => o.value === entry.value)) continue;       // already current
+      // A CLAIMANT is an option carrying this code in pdf_on_value AND a real
+      // (non-empty string) value -- the same filter /resume-form applies
+      // (pdf_fill_routes.resolve_select_resume_value). Fresh-eyes found the
+      // first cut accepting an empty-valued option and mapping the field to
+      // '' while keeping it confirmed.
+      const byCode = opts.filter(
+        (o) => (o as any).pdf_on_value === entry.value
+          && typeof o.value === 'string' && o.value !== '',
+      );
+      if (byCode.length === 1) {
+        next[field.id] = { ...entry, value: byCode[0].value };      // lossless map
+      } else {
+        // Unmappable (or ambiguous -- never guess between two claimants):
+        // clear it and let the session ask again.
+        delete next[field.id];
+      }
+      changed = true;
+    }
+    const schemaChanged = state.schema !== freshSchema;
+    if (!changed && !schemaChanged) return state;
+    // Adopting a fresh schema can strand ids the stored session computed
+    // against the old one. Reset the three that name a single field/section
+    // and would otherwise dangle; the id Sets (loadedFieldIds,
+    // validatedWindowIndices) tolerate extras and are left alone.
+    const fieldIds = new Set(fields.map((f) => f.id));
+    const sectionIds = new Set((freshSchema.sections || []).map((s) => s.id));
+    // Leave an id UNTOUCHED unless it dangles, so a caller comparing before
+    // and after sees a change only when one really happened. (load() already
+    // normalizes a missing id to null, so this is the cleaner contract rather
+    // than something the persist gate depends on -- a mutant that rewrote
+    // undefined to null reddened nothing.)
+    const pinned = state.pinnedFieldId && !fieldIds.has(state.pinnedFieldId)
+      ? null : state.pinnedFieldId;
+    const origin = state.searchOriginFieldId && !fieldIds.has(state.searchOriginFieldId)
+      ? null : state.searchOriginFieldId;
+    const section = sectionIds.has(state.currentSectionId)
+      ? state.currentSectionId
+      : (this.getFirstSection(freshSchema)?.id ?? state.currentSectionId);
+    return {
+      ...state,
+      schema: freshSchema,
+      // Identity is the contract: a caller persists only when VALUES changed,
+      // never for a bare schema swap (the vanilla path's load migrations are
+      // lazy by contract; a value change is a real migration worth persisting).
+      fieldValues: changed ? next : state.fieldValues,
+      pinnedFieldId: pinned,
+      searchOriginFieldId: origin,
+      currentSectionId: section,
+    };
+  }
+
+  /**
    * Initialize or load existing form state
    */
   static init(schema: FormSchema): SchemaFormState {
@@ -149,6 +233,15 @@ export class SchemaFormStateManager {
           existing.selectedLanguage = onboardingLanguage;
           this.save(existing);
         }
+      }
+      // The stored session meets the FRESH schema here and nowhere else
+      // (bd polyglot-pdf-g2fpr, PR 3c): adopt it and map every select value
+      // through it, so a session saved under the pre-migration shape does
+      // not resume with values no option carries.
+      const reconciled = this.reconcileSelectValues(existing, cleanedSchema);
+      if (reconciled !== existing) {
+        this.save(reconciled);
+        return reconciled;
       }
       return existing;
     }
