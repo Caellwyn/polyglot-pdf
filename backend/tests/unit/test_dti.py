@@ -955,8 +955,8 @@ def test_manual_field_update_non_dti_ignores_next_field_schema():
 
 
 # ---------------------------------------------------------------------------
-# The confirmation rule must SURVIVE in both system instructions, and must not
-# reacquire provenance framing (bd polyglot-pdf-uum5g).
+# The confirmation rule must SURVIVE in both system instructions
+# (bd polyglot-pdf-uum5g / polyglot-pdf-gaxnf).
 #
 # Why this exists: while removing the provenance language I deleted the DTI
 # confirmation rule ENTIRELY by accident (a line-based edit matched text an
@@ -964,9 +964,9 @@ def test_manual_field_update_non_dti_ignores_next_field_schema():
 # shipped instruction that no longer told the model to confirm anything would
 # have passed CI. Caught by eye, which is not a control.
 #
-# Pins the PROPERTY, not the wording: the rule must be present in some form, and
-# provenance framing must be absent. A future reword is free to change the
-# phrasing as long as both hold.
+# Pins PRESENCE, not wording: a future reword is free to change the phrasing.
+# It does NOT check for re-added provenance framing -- see the block below for
+# why that guard was tried twice and abandoned.
 # ---------------------------------------------------------------------------
 
 # WHAT THIS GUARD CAN AND CANNOT DO -- read before extending it.
