@@ -439,6 +439,36 @@ def test_collection_with_no_channel_arg_DEFAULTS_to_link_channel(monkeypatch):
     assert asked == ["link_redemptions_staging"]
 
 
+def test_collection_with_no_channel_arg_and_UNSET_env_resolves_to_demo(
+        monkeypatch):
+    """The companion case: an UNSET LINK_CHANNEL must not silently move the
+    demo's ledger -- link_channel() itself defaults to "demo"
+    (DEFAULT_CHANNEL), and _collection()'s no-argument default must chain
+    through to that, landing on the BARE `link_redemptions` name. This is
+    the direct replacement for the pre-A1
+    test_an_UNSET_channel_also_keeps_the_bare_name, which drove
+    _collection_name() itself with no argument -- now that channel is
+    required there, this test re-homes the same guarantee at the
+    _collection() default-resolution layer instead.
+
+    Mutation: hardcode a non-demo fallback (or skip the link_channel() call
+    entirely) when channel is None -- red."""
+    asked: list[str] = []
+
+    class _RecordingDb:
+        def collection(self, name):
+            asked.append(name)
+            return object()
+
+    monkeypatch.setenv("LINK_REDEMPTIONS_FIRESTORE_ENABLED", "true")
+    monkeypatch.delenv("LINK_CHANNEL", raising=False)
+    monkeypatch.setattr("backend.services.auth.get_db", lambda: _RecordingDb())
+
+    lrd._collection()
+
+    assert asked == ["link_redemptions"]
+
+
 def test_an_explicit_channel_argument_OVERRIDES_link_channel(monkeypatch):
     """A caller that DOES name a channel (a future admin-service reconciler)
     must not be silently redirected to this process's own LINK_CHANNEL.

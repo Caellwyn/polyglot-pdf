@@ -112,6 +112,17 @@ def test_collection_with_no_channel_arg_DEFAULTS_to_link_channel(
     assert fake_db.asked == ["links_staging"]
 
 
+def test_collection_with_no_channel_arg_and_UNSET_env_resolves_to_demo(
+        fake_db, monkeypatch):
+    """The companion case: an UNSET LINK_CHANNEL must not silently move the
+    demo's collection -- link_channel() itself defaults to "demo", and
+    _collection()'s no-argument default must chain through to that.
+    Mutation: hardcode a non-demo fallback when channel is None -- red."""
+    monkeypatch.delenv("LINK_CHANNEL", raising=False)
+    links_store._collection()
+    assert fake_db.asked == ["links"]
+
+
 def test_an_explicit_channel_argument_OVERRIDES_link_channel(
         fake_db, monkeypatch):
     """A caller that DOES name a channel (the admin service) must not be
