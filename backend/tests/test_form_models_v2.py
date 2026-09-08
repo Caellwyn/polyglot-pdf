@@ -289,22 +289,32 @@ def test_shipped_kit_required_fields_are_not_read_only(kit):
     target, with no unlock at all and an unlocked PDF widget, i.e. pure schema
     drift on a shipped kit (bd polyglot-pdf-38p0y).
     """
-    schema = validate(load_kit(kit))
+    raw = load_kit(kit)
+    validate(raw)  # the schema must still be valid v2; we read copy_to from raw
+
+    # copy_to is read from the RAW dict, NOT the parsed model. FormField does
+    # not DECLARE copy_to and the model is extra="ignore", so pydantic silently
+    # drops it -- `getattr(field, "copy_to", None)` is unconditionally None, and
+    # an earlier version of this guard used exactly that, making the carve-out
+    # dead code. It passed only because no git-tracked kit uses copy_to; the
+    # I-90 that does is bucket-only. The failure mode was the bad one: the guard
+    # would have flagged the very case the rule sanctions (Opus cross-surface).
     written_from_elsewhere = {
         target
-        for field in schema.fields
-        for target in (getattr(field, "copy_to", None) or [])
+        for field in raw.get("fields", [])
+        if isinstance(field, dict)
+        for target in (field.get("copy_to") or [])
     }
     offenders = []
-    for field in schema.fields:
-        if not field.read_only:
+    for field in raw.get("fields", []):
+        if not isinstance(field, dict) or not field.get("read_only"):
             continue
-        validation = getattr(field, "validation", None)
-        required = bool(getattr(validation, "required", False)) or (
-            getattr(field, "require_if", None) is not None
-        )
-        if required and field.id not in written_from_elsewhere:
-            offenders.append(field.id)
+        validation = field.get("validation")
+        required = bool(
+            isinstance(validation, dict) and validation.get("required")
+        ) or (field.get("require_if") is not None)
+        if required and field.get("id") not in written_from_elsewhere:
+            offenders.append(field.get("id"))
     assert sorted(offenders) == sorted(_KNOWN_REQUIRED_READONLY.get(kit, [])), (
         f"{kit}: REQUIRED fields marked read_only with nothing writing them "
         f"(the voice model is told they are system-managed and never fillable, "
