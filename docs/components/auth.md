@@ -1,8 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/credit_ledger.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py admin_backend/services/admin_auth.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/services/firms.py backend/services/kit_gates.py backend/services/link_redemptions.py backend/services/links_store.py backend/services/link_tokens.py backend/services/link_budget.py backend/services/credit_ledger.py backend/routes/websocket_routes.py scripts/bootstrap_firm.py scripts/grant_credits.py admin_backend/services/admin_auth.py scripts/bootstrap_admin_user.py firestore.rules firebase.json
 
-*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
+*Last updated: 2026-09-08 (bd polyglot-pdf-vnxew: the credit ledger -- `backend/services/credit_ledger.py`'s `append_entry()` is the ONE transactional writer of `firms/{firm_id}.balance_credits` and the only producer of `firms/{firm_id}/ledger/{auto}`; typed signed entries with a snapshotted `firm_kind`, a two-way `usd_amount` rule and a required `reason` on adjustments; a `ledger_export` log line per committed write; and `scripts/grant_credits.py`, the operator grant/adjust CLI on the same helper.) (bd polyglot-pdf-2cwja: documented the FOURTH credential system -- `app_admin`, `admin_backend/services/admin_auth.py` -- alongside the existing three; no code changed in this bead.) (bd polyglot-pdf-4rkrx: Epic 2 data-model bead A1 -- `firms/{firm_id}` gains `kind` (`mock`|`live`, required on create, missing-key treated as live) and `balance_credits`/`balance_updated_at`; `scripts/bootstrap_firm.py` gains a required `--kind`; `link_redemptions.py`'s collection-name helper and the new `backend/services/links_store.py` mint-record store take `channel` as an EXPLICIT argument rather than reading it from the environment; `firestore.rules` gains deny blocks for `kits`, `links`/`links_staging`, `link_redemptions`/`link_redemptions_staging` (fold-in), and the nested `firms/{firmId}/ledger`.) (bd polyglot-pdf-li9x0: `firestore.rules` gains client deny blocks for `admin_audit_log` and `app_config`, and the rules test becomes ONE set-derived test over every Admin-SDK-only collection.) (bd polyglot-pdf-kdp6b: the runtime-config env fallback is a live os.getenv read, so the deploy scripts' LINK_* lines stay in force.) (bd polyglot-pdf-bg313: `LINK_MINTING_ENABLED` moved off a compiled deploy-time default to the runtime-config Firestore doc `app_config/{channel}`, with the deploy-time env var kept as its fallback -- see config-deployment.md.) (bd polyglot-pdf-3q9qn: client links are isolated per channel -- the token carries an `aud` claim naming the channel that may open it.) (bd polyglot-pdf-ah5d3: Epic 2 Track A bead A4 -- the token payload gains an OPTIONAL `cap_usd` per-link spend ceiling, signed in only for a real finite positive number; `link_tokens.py` gains `new_jti()` and a caller-supplied `jti=` on `mint_link_token` so Epic 2 bead A3 can reserve a credit before signing; new `link_budget.cost_ceiling_usd_for_claims(claims)` resolves the socket's spend ceiling with the same defensive parsing as `cost_ceiling_usd_for_kit`; the socket's client-link gate now calls `check_budget` with that resolved ceiling instead of the bare global.). See [the xwlt journal entry](../journal/entries/2026-08-20-bd-xwlt-firm-telemetry.md) for the firm-keyed voice telemetry (the claim's second consumer), [the vccy journal entry](../journal/entries/2026-08-18-bd-vccy-firm-scoped-kit-visibility.md) for firm-scoped kit visibility (the first consumer of the firm claims), [the knmp journal entry](../journal/entries/2026-08-08-bd-knmp-auth-bypass-fail-closed.md) for the fail-closed bypass work, and [the round-8 entry](../journal/entries/2026-08-13-bd-8bjdx-bug-hunt-round-8.md) for the require_auth route enumeration fix.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -260,8 +260,18 @@ session satisfy the telemetry requirement (firm + form + originating
 employee) despite there being no account anywhere.
 
 **The token carries `{v, aud, firm_id, kit_id, employee_id, jti, iat, exp,
-cw}` and DELIBERATELY no client identifier.** (`aud` names the CHANNEL that may
-open the link -- an environment, never a person; see bd `polyglot-pdf-3q9qn`.) That absence is the product's legal
+cw}`, plus an OPTIONAL `cap_usd`, and DELIBERATELY no client identifier.**
+(`aud` names the CHANNEL that may
+open the link -- an environment, never a person; see bd `polyglot-pdf-3q9qn`.) `cap_usd` (bd `polyglot-pdf-ah5d3` / Epic 2 A4) is a per-link USD
+spend ceiling -- a MONEY LIMIT, not a person, so its addition does not touch
+the split-key invariant below. It is OPTIONAL: `services/link_tokens.py`'s
+`mint_link_token` signs it in only when the caller passes a real, finite,
+positive number (bool, NaN, +/-inf, zero and negative are DROPPED rather than
+signed in -- there is no way to fix a bad number baked into a signed token,
+so "no claim" is the only safe failure). A token minted with no resolvable
+kit ceiling, or minted before Epic 2 bead A3 wires `cap_usd` through the mint
+route, carries no claim and behaves exactly as a pre-A4 token did. That
+absence is the product's legal
 posture, not privacy hygiene: WE hold a pseudonymous record keyed by `jti`,
 THE FIRM holds the identity mapping, and neither side alone can connect a
 record to a person. Re-identification requires the firm to act, which puts
@@ -342,6 +352,25 @@ Staff mint from `/console/links` (bd `polyglot-pdf-gob8l`), behind
 `ProtectedRoute`. The page is only the door: `firm_id` and `employee_id` come
 from the VERIFIED token, never from anything the page sends, so a reachable
 page cannot grant itself a firm.
+
+**The socket's spend ceiling comes from the TOKEN, not a per-connect kit
+read (bd `polyglot-pdf-ah5d3` / Epic 2 A4, closing `polyglot-pdf-4tjt7`).**
+Precedence at `/ws/fill`'s client-link gate is `services/link_budget.py`'s
+`cost_ceiling_usd_for_claims(claims)`: the token's own `cap_usd` claim wins
+over the global default (`LINK_COST_CEILING_USD` via `runtime_config`), and
+nothing else -- there is no Firestore kit metadata load on connect. That is
+safe once Epic 2 bead A3 lands (open requires a mint record, so every token
+that CAN open already carries `cap_usd`, resolved once at mint from the
+kit's price commercial); until then, or for a kit with no resolvable
+ceiling, the claim is simply absent and the global applies, exactly as
+before this bead. `_verify_ws_credential` carries `cap_usd` through into the
+claims dict only when the verified payload has it -- there is no synthetic
+`cap_usd: None` for an uncapped link. `websocket_routes.check_budget` still
+takes a `kit_metadata`-shaped dict (unchanged signature); the socket now
+passes it `{link_budget.KIT_COST_CEILING_KEY: <the already-resolved
+ceiling>}`, so `check_budget`'s own parse is a no-op pass over a known-good
+number rather than a second, divergent resolution path. `cost_ceiling_usd_for_kit` itself is untouched and still real: A3's mint
+route calls it to resolve `cap_usd` from kit metadata in the first place.
 
 **The mint record (`links[_<channel>]/{jti}`, Epic 2 bead A1,
 `backend/services/links_store.py`) -- a SEPARATE collection from
