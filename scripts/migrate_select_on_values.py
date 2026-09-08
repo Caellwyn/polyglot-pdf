@@ -305,11 +305,12 @@ def _warn_outstanding_work(report: Dict[str, Any]) -> bool:
 
 
 def _fresh_pair(archive: Optional[str], report: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
-    """The archive + report paths for THIS run: the base names if the archive
-    does not exist yet, else the first free ``.N`` suffix (N >= 2), applied
-    to BOTH so the pair stays together. Never returns an existing archive."""
-    if not archive or not os.path.exists(archive):
-        return archive, report
+    """The archive + report paths for THIS run: the base names if NEITHER
+    exists yet, else the first ``.N`` suffix (N >= 2) at which NEITHER
+    exists, applied to both so the pair stays together. Never returns an
+    existing path for either member -- the cross-surface pass (round 3) found
+    freshness judged from the archive alone, so a deleted or redirected
+    archive let a later run overwrite run 1's report."""
 
     def suffixed(path: Optional[str], n: int) -> Optional[str]:
         if not path:
@@ -317,8 +318,13 @@ def _fresh_pair(archive: Optional[str], report: Optional[str]) -> Tuple[Optional
         stem, ext = os.path.splitext(path)
         return f"{stem}.{n}{ext}"
 
+    def taken(*paths: Optional[str]) -> bool:
+        return any(p and os.path.exists(p) for p in paths)
+
+    if not taken(archive, report):
+        return archive, report
     n = 2
-    while os.path.exists(suffixed(archive, n)):
+    while taken(suffixed(archive, n), suffixed(report, n)):
         n += 1
     return suffixed(archive, n), suffixed(report, n)
 

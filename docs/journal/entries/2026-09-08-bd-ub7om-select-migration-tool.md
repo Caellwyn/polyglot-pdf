@@ -170,6 +170,16 @@ and every report names exactly that run's changes. The other half of the same
 finding: a no-op `--in/--out` run left `--out` missing or stale under exit 0;
 a copy transform always produces its output now.
 
+**A pair's freshness is judged from BOTH members.** Round 3 of the outer
+review: `_fresh_pair` looked only at the archive, so with the archive
+deleted, redirected by `--archive`, or never requested (`--in/--out` with
+`--report` only), a later migrating run overwrote run 1's report -- the sole
+record of which code became which slug -- while the docstring said "nothing
+is ever overwritten". The suffix now advances until NEITHER member exists.
+Three reproductions are the test; the archive-only mutant reddens all three.
+Same lesson as the enumeration rounds in a smaller frame: when a rule
+protects a set of things, check the rule against every member of the set.
+
 **A by-design consequence still has to be in the handover.** Migration moves
 `option.value`, which is bound into the readiness fingerprint, so the editor
 shows `mail_state` and `phys_state` as needing re-review afterwards. Not a

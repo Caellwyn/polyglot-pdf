@@ -546,6 +546,52 @@ def test_cli_in_out_mode(tmp_path):
     assert json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))["options_migrated"] == 37
 
 
+@pytest.mark.parametrize("scenario", ["archive_deleted", "archive_redirected", "report_only"])
+def test_a_report_is_never_overwritten_even_when_the_archive_is_absent_or_elsewhere(tmp_path, scenario):
+    """Cross-surface round 3: the pair's freshness was judged from the
+    ARCHIVE alone, so with the archive deleted, redirected, or never asked
+    for, a later migrating run silently overwrote run 1's report -- the sole
+    record of which codes became which slugs."""
+    kit_dir = tmp_path / "kit"
+    kit_dir.mkdir()
+    (kit_dir / "schema.json").write_text(json.dumps(_kit_like_i90()), encoding="utf-8")
+    report1 = kit_dir / mod.REPORT_NAME
+    if scenario == "report_only":
+        # --in/--out with --report and NO --archive: run 1 on the legacy kit.
+        run1 = [PY, str(SCRIPT), "--in", str(kit_dir / "schema.json"),
+                "--out", str(kit_dir / "out.json"), "--report", str(report1)]
+    else:
+        run1 = [PY, str(SCRIPT), "--kit", str(kit_dir)]
+    r = subprocess.run(run1, capture_output=True, text=True, cwd=str(REPO))
+    assert r.returncode == 0, r.stderr
+    first = report1.read_bytes()
+    assert json.loads(first)["options_migrated"] == 37
+
+    # A new legacy option appears; the archive is deleted / redirected / absent.
+    target = kit_dir / ("out.json" if scenario == "report_only" else "schema.json")
+    later = json.loads(target.read_text(encoding="utf-8"))
+    later["fields"][0]["options"].append({"value": "ZZ", "label": "Zeta (ZZ)"})
+    if scenario == "report_only":
+        (kit_dir / "schema.json").write_text(json.dumps(later), encoding="utf-8")
+        run2 = run1
+    else:
+        target.write_text(json.dumps(later), encoding="utf-8")
+        if scenario == "archive_deleted":
+            (kit_dir / mod.ARCHIVE_NAME).unlink()
+            run2 = run1
+        else:
+            run2 = run1 + ["--archive", str(kit_dir / "custom_arch.json")]
+    r2 = subprocess.run(run2, capture_output=True, text=True, cwd=str(REPO))
+    assert r2.returncode == 0, r2.stderr
+    assert report1.read_bytes() == first                      # run 1's record survives
+    report2 = kit_dir / mod.REPORT_NAME.replace(".json", ".2.json")
+    assert json.loads(report2.read_text(encoding="utf-8"))["options_migrated"] == 1
+    if scenario == "archive_redirected":
+        # ...and the pair stays together: the redirected archive gets .2 too.
+        assert (kit_dir / "custom_arch.2.json").exists()
+        assert not (kit_dir / "custom_arch.json").exists()
+
+
 def test_cli_in_out_no_op_still_writes_out_and_never_leaves_it_stale(tmp_path):
     """A copy transform always produces its output (cross-surface round 2:
     a no-op left --out missing, or STALE from a previous run, under exit 0)."""
